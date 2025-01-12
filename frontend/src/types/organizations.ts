@@ -3,7 +3,7 @@ export interface OrganizationMember {
   role: 'admin' | 'user';
 }
 
-export type OrganizationType = 'personal' | 'team' | 'enterprise';
+export type OrganizationType = 'team' | 'enterprise';
 
 export interface Organization {
   id: string;

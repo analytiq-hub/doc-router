@@ -1,11 +1,18 @@
 import { NextResponse } from 'next/server';
 import mongoClient from '@/utils/mongodb';
 import { hash } from 'bcryptjs';
-import { createDefaultOrganization } from '@/utils/organization';
 
 export async function POST(req: Request) {
     try {
-        const { email, password, name } = await req.json();
+        const { email, password, name, organizationName, organizationType } = await req.json();
+        
+        if (!organizationName || !organizationType || !['team', 'enterprise'].includes(organizationType)) {
+            return NextResponse.json(
+                { error: 'Organization name and valid type (team/enterprise) are required' },
+                { status: 400 }
+            );
+        }
+
         const db = mongoClient.db();
 
         // Check if user exists
@@ -28,8 +35,19 @@ export async function POST(req: Request) {
             createdAt: new Date(),
         });
 
-        // Create personal organization
-        await createDefaultOrganization(result.insertedId.toString(), email);
+        // Create organization
+        const organization = {
+            name: organizationName,
+            type: organizationType,
+            members: [{
+                user_id: result.insertedId.toString(),
+                role: "admin"
+            }],
+            created_at: new Date(),
+            updated_at: new Date()
+        };
+
+        await db.collection("organizations").insertOne(organization);
 
         return NextResponse.json({ success: true });
     } catch (error) {

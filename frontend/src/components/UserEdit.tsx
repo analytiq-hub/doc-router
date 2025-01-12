@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { getUserApi, updateUserApi, deleteUserApi, sendVerificationEmailApi } from '@/utils/api';
-import { UserResponse, UserUpdate } from '@/types/index';
+import { getUserApi, updateUserApi, deleteUserApi, sendVerificationEmailApi, getOrganizationsApi } from '@/utils/api';
+import { UserResponse, UserUpdate, Organization } from '@/types/index';
 import { useSession, signOut } from 'next-auth/react';
 import { toast } from 'react-hot-toast';
 
@@ -145,11 +145,16 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
   const [success, setSuccess] = useState(false);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [organizations, setOrganizations] = useState<Organization[]>([]);
+  const [selectedOrganizationId, setSelectedOrganizationId] = useState<string>('');
+  const [organizationType, setOrganizationType] = useState<'team' | 'enterprise'>('team');
 
   const [originalValues, setOriginalValues] = useState({
     name: '',
     role: 'user',
-    emailVerified: false
+    emailVerified: false,
+    organization_id: '',
+    organization_type: 'team' as const
   });
 
   const hasChanges = () => {
@@ -169,7 +174,9 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
         setOriginalValues({
           name: userData.name || '',
           role: userData.role,
-          emailVerified: userData.emailVerified || false
+          emailVerified: userData.emailVerified || false,
+          organization_id: '',
+          organization_type: 'team' as const
         });
       } catch (error) {
         setError('Failed to load user');
@@ -179,6 +186,19 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
 
     fetchUser();
   }, [userId]);
+
+  useEffect(() => {
+    const fetchOrganizations = async () => {
+      try {
+        const response = await getOrganizationsApi();
+        setOrganizations(response.organizations);
+      } catch (error) {
+        console.error('Error fetching organizations:', error);
+      }
+    };
+
+    fetchOrganizations();
+  }, []);
 
   const handlePasswordUpdate = async (newPassword: string) => {
     try {
@@ -199,7 +219,9 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
       const update: UserUpdate = {
         name: name || undefined,
         role,
-        emailVerified
+        emailVerified,
+        organization_id: selectedOrganizationId || undefined,
+        organization_type: organizationType
       };
 
       await updateUserApi(userId, update);
@@ -209,7 +231,9 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
       setOriginalValues({
         name: name || '',
         role,
-        emailVerified
+        emailVerified,
+        organization_id: selectedOrganizationId,
+        organization_type: organizationType
       });
     } catch (error) {
       setError('Failed to update user');
@@ -318,6 +342,38 @@ const UserEdit: React.FC<UserEditProps> = ({ userId }) => {
 
         {isAdmin && (
           <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Organization
+              </label>
+              <select
+                value={selectedOrganizationId}
+                onChange={(e) => setSelectedOrganizationId(e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">Select an organization</option>
+                {organizations.map((org) => (
+                  <option key={org.id} value={org.id}>
+                    {org.name} ({org.type})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Organization Type
+              </label>
+              <select
+                value={organizationType}
+                onChange={(e) => setOrganizationType(e.target.value as 'team' | 'enterprise')}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="team">Team</option>
+                <option value="enterprise">Enterprise</option>
+              </select>
+            </div>
+
             <div className="flex items-center space-x-2">
               <label className="relative inline-flex items-center cursor-pointer">
                 <input

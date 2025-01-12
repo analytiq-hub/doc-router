@@ -3,6 +3,11 @@ export interface UserCreate {
   name: string;
   password: string;
   role?: string;
+  organization_type: 'team' | 'enterprise';
+  organizations: {
+    id: string;
+    role: 'admin' | 'user';
+  }[];
 }
 
 export interface UserUpdate {
@@ -10,6 +15,8 @@ export interface UserUpdate {
   role?: string;
   emailVerified?: boolean;
   password?: string;
+  organization_id?: string;
+  organization_type?: 'team' | 'enterprise';
 }
 
 export interface UserResponse {

@@ -49,7 +49,7 @@ async def setup_admin(analytiq_client):
         await db.organizations.insert_one({
             "_id": ObjectId(admin_id),
             "name": "Admin",
-            "type": "personal",
+            "type": "enterprise",
             "members": [{
                 "user_id": admin_id,
                 "role": "admin"

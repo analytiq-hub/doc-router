@@ -11,7 +11,6 @@ import { JWT } from "next-auth/jwt";
 import { AppSession } from '@/types/AppSession';
 import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
-import { createDefaultOrganization } from '@/utils/organization';
 
 interface CustomUser extends DefaultUser {
     emailVerified?: Date | null;
@@ -124,7 +123,7 @@ export const authOptions: NextAuthOptions = {
                             createdAt: new Date()
                         });
 
-                        // Create the OAuth account record
+                        // Create OAuth account record
                         await accounts.insertOne({
                             userId: result.insertedId.toString(),
                             type: account.type,
@@ -138,8 +137,17 @@ export const authOptions: NextAuthOptions = {
                             refresh_token: account.refresh_token
                         });
 
-                        // Create personal organization using email as name
-                        await createDefaultOrganization(result.insertedId.toString(), user.email as string);
+                        // Create team organization
+                        await db.collection("organizations").insertOne({
+                            name: `${user.name}'s Team`,
+                            type: "team",
+                            members: [{
+                                user_id: result.insertedId.toString(),
+                                role: "admin"
+                            }],
+                            created_at: new Date(),
+                            updated_at: new Date()
+                        });
                     }
                 }
                 return true;

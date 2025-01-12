@@ -20,7 +20,7 @@ interface AddOrganizationModalProps {
 
 const AddOrganizationModal: React.FC<AddOrganizationModalProps> = ({ open, onClose, onAdd }) => {
   const [name, setName] = useState('');
-  const [type, setType] = useState<'personal' | 'team' | 'enterprise'>('team');
+  const [type, setType] = useState<'team' | 'enterprise'>('team');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -93,7 +93,7 @@ const AddOrganizationModal: React.FC<AddOrganizationModalProps> = ({ open, onClo
               <select
                 id="type"
                 value={type}
-                onChange={(e) => setType(e.target.value as 'personal' | 'team' | 'enterprise')}
+                onChange={(e) => setType(e.target.value as 'team' | 'enterprise')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 <option value="team">Team</option>
@@ -213,7 +213,6 @@ const OrganizationManager: React.FC = () => {
       flex: 1,
       renderCell: (params) => {
         const typeColors = {
-          personal: 'bg-gray-100 text-gray-800',
           team: 'bg-blue-100 text-blue-800',
           enterprise: 'bg-purple-100 text-purple-800'
         };

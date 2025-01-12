@@ -33,50 +33,16 @@ async def update_organization_type(
     if not first_admin:
         raise HTTPException(status_code=400, detail="Organization must have at least one admin")
 
-    # Validate parameters based on new type
-    if update.type == "personal":
-        # Get user details for setting organization name
-        user = await db.users.find_one({"_id": ObjectId(first_admin["user_id"])})
-        if not user:
-            raise HTTPException(status_code=404, detail="User not found")
-            
-        # Delete personal organizations of the user
-        await db.organizations.delete_many({
-            "members.user_id": first_admin["user_id"],
-            "type": "personal"
-        })
-        
-        # Set up personal organization data
-        update_data = {
-            "type": "personal",
-            "name": user["email"],
-            "members": [{
-                "user_id": first_admin["user_id"],
-                "role": "admin"
-            }]
-        }
+    if not update.members:
+        raise HTTPException(status_code=400, detail="members required for team/enterprise organizations")
+    if not any(m.role == "admin" for m in update.members):
+        raise HTTPException(status_code=400, detail="Organization must have at least one admin")
 
-        logging.info(f"Updated organization {organization_id} to type {update.type} for first admin user {first_admin['user_id']}")
-    else:  # team or enterprise
-        if not update.members:
-            raise HTTPException(status_code=400, detail="members required for team/enterprise organizations")
-        if not any(m.role == "admin" for m in update.members):
-            raise HTTPException(status_code=400, detail="Organization must have at least one admin")
-            
-        # Delete personal organizations of all new team members
-        member_ids = [m.user_id for m in update.members]
-        if member_ids:
-            result = await db.organizations.delete_many({
-                "members.user_id": {"$in": member_ids},
-                "type": "personal"
-            })
-            logging.info(f"Deleted {result.deleted_count} personal organizations")
-            
-        # Set up team/enterprise organization data
-        update_data = {
-            "type": update.type,
-            "members": [m.dict() for m in update.members]
-        }
+    # Set up team/enterprise organization data
+    update_data = {
+        "type": update.type,
+        "members": [m.dict() for m in update.members]
+    }
 
     # Update the organization
     update_data["updated_at"] = datetime.now(UTC)

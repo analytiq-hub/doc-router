@@ -62,9 +62,7 @@ export default function OrganizationSwitcher() {
                   >
                     <span>{organization.name}</span>
                     <span className={`text-xs ml-2 px-2 py-1 rounded-full ${
-                      organization.type === 'personal' 
-                        ? 'bg-gray-100 text-gray-600'
-                        : organization.type === 'team'
+                      organization.type === 'team'
                         ? 'bg-blue-100 text-blue-600'
                         : 'bg-purple-100 text-purple-600'
                     }`}>

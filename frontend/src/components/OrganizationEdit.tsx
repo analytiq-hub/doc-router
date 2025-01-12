@@ -103,7 +103,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const { refreshOrganizations } = useOrganization()
   const [organization, setOrganization] = useState<Organization | null>(null)
   const [name, setName] = useState('')
-  const [type, setType] = useState<OrganizationType>('personal')
+  const [type, setType] = useState<OrganizationType>('team')
   const [members, setMembers] = useState<OrganizationMember[]>([])
   const [availableUsers, setAvailableUsers] = useState<UserResponse[]>([])
   const [loading, setLoading] = useState(true)
@@ -112,7 +112,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [memberSearch, setMemberSearch] = useState('');
   const [originalName, setOriginalName] = useState('')
-  const [originalType, setOriginalType] = useState<OrganizationType>('personal')
+  const [originalType, setOriginalType] = useState<OrganizationType>('team')
   const [originalMembers, setOriginalMembers] = useState<OrganizationMember[]>([])
   const { data: session } = useSession();
   const [isOrgAdmin, setIsOrgAdmin] = useState(false);
@@ -396,10 +396,8 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                   name="type"
                   value={type}
                   onChange={(e) => setType(e.target.value as OrganizationType)}
-                  disabled={type === 'personal'} // Can't change personal organizations
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
-                  <option value="personal">Personal</option>
                   <option value="team">Team</option>
                   <option value="enterprise">Enterprise</option>
                 </select>

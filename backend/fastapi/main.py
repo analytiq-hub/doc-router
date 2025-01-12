@@ -8,7 +8,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from datetime import datetime, timedelta, UTC
 from jose import JWTError, jwt
-from typing import Optional, List
+from typing import Optional, List, Literal
 import os
 import sys
 import json
@@ -1753,7 +1753,7 @@ async def create_user(
     user_doc["id"] = str(result.inserted_id)
     user_doc["hasPassword"] = True
     
-    # Create default personal organization for new user
+    # Create default organization for new user
     await db.organizations.insert_one({
         "_id": result.inserted_id,
         "name": "Default",
@@ -1761,7 +1761,7 @@ async def create_user(
             "user_id": str(result.inserted_id),
             "role": "admin"
         }],
-        "type": "personal",  # Default organization is personal type
+        "type": "team",  # Default organization
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow()
     })
@@ -1795,10 +1795,7 @@ async def update_user(
             update_data["password"] = hashpw(user.password.encode(), gensalt(12)).decode()
     else:
         # Admin can update all fields
-        update_data = {
-            k: v for k, v in user.model_dump().items() 
-            if v is not None
-        }
+        update_data = user.dict(exclude_unset=True)
         
         # If password is included, hash it
         if "password" in update_data:
@@ -1812,6 +1809,49 @@ async def update_user(
                 raise HTTPException(
                     status_code=400,
                     detail="Cannot remove admin role from the last admin user"
+                )
+        
+        # Handle organization updates
+        if "organization_id" in update_data:
+            org_id = update_data.pop("organization_id")
+            org_type = update_data.pop("organization_type", None)
+            
+            if org_id:
+                # Check if this would remove the last admin from any organization
+                user_orgs = await db.organizations.find({
+                    "members": {
+                        "$elemMatch": {
+                            "user_id": user_id,
+                            "role": "admin"
+                        }
+                    }
+                }).to_list(None)
+                
+                for org in user_orgs:
+                    admin_count = sum(1 for m in org["members"] if m["role"] == "admin")
+                    if admin_count == 1 and str(org["_id"]) != org_id:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Cannot remove the last admin from organization {org['name']}"
+                        )
+                
+                # Remove user from all existing organizations
+                await db.organizations.update_many(
+                    {"members.user_id": user_id},
+                    {"$pull": {"members": {"user_id": user_id}}}
+                )
+                
+                # Add user to new organization
+                await db.organizations.update_one(
+                    {"_id": ObjectId(org_id)},
+                    {
+                        "$push": {
+                            "members": {
+                                "user_id": user_id,
+                                "role": "user"  # Default to user role
+                            }
+                        }
+                    }
                 )
     
     if not update_data:
@@ -1827,11 +1867,8 @@ async def update_user(
     )
     
     if not result:
-        raise HTTPException(
-            status_code=404,
-            detail="User not found"
-        )
-    
+        raise HTTPException(status_code=404, detail="User not found")
+        
     return UserResponse(
         id=str(result["_id"]),
         email=result["email"],
@@ -1841,7 +1878,6 @@ async def update_user(
         createdAt=result.get("createdAt", datetime.now(UTC)),
         hasPassword=bool(result.get("password"))
     )
-
 
 @app.delete("/account/users/{user_id}")
 async def delete_user(
@@ -2120,14 +2156,16 @@ async def list_invitations(
 
 @app.post("/account/email/invitations/{token}/accept")
 async def accept_invitation(
-    token: str,
+    invitation_id: str,
+    name: str = Body(...),
     password: str = Body(...),
-    name: str = Body(...)
+    organization_name: str = Body(...),
+    organization_type: Literal["team", "enterprise"] = Body(...)
 ):
     """Accept an invitation and create user account"""
     # Find and validate invitation
     invitation = await db.invitations.find_one({
-        "token": token,
+        "token": invitation_id,
         "status": "pending"
     })
     
@@ -2196,8 +2234,8 @@ async def accept_invitation(
         "email": invitation["email"],
         "name": name,
         "password": hashed_password.decode(),
-        "role": "user",  # Default all invited users to regular user role
-        "emailVerified": True,  # Auto-verify since it's from invitation
+        "role": "user",
+        "emailVerified": True,
         "createdAt": datetime.now(UTC)
     }
     
@@ -2205,18 +2243,18 @@ async def accept_invitation(
         result = await db.users.insert_one(user_doc)
         user_id = str(result.inserted_id)
         
-        # Create default personal organization
-        await db.organizations.insert_one({
-            "_id": result.inserted_id,
-            "name": "Default",
-            "members": [{
-                "user_id": user_id,
-                "role": "admin"  # User is admin of their personal org
-            }],
-            "type": "personal",
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
-        })
+        # Create team/enterprise organization if no organization specified in invitation
+        if not invitation.get("organization_id"):
+            await db.organizations.insert_one({
+                "name": organization_name,
+                "type": organization_type,
+                "members": [{
+                    "user_id": user_id,
+                    "role": "admin"
+                }],
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow()
+            })
         
         # If organization invitation, add to organization
         if invitation.get("organization_id"):
@@ -2226,7 +2264,7 @@ async def accept_invitation(
                     "$push": {
                         "members": {
                             "user_id": user_id,
-                            "role": "user"  # Default all invited users to regular member role
+                            "role": "user"
                         }
                     }
                 }
