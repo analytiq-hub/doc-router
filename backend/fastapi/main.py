@@ -177,62 +177,6 @@ async def create_auth_token(user_data: dict = Body(...)):
     )
     return {"token": token}
 
-
-# Add this helper function near the top of the file with other functions
-async def get_next_schema_version(schema_name: str) -> int:
-    """Atomically get the next version number for a schema"""
-    result = await schema_versions_collection.find_one_and_update(
-        {"_id": schema_name},
-        {"$inc": {"version": 1}},
-        upsert=True,
-        return_document=True
-    )
-    return result["version"]
-
-# Schema management endpoints
-@app.post("/schemas", response_model=Schema)
-async def create_schema(
-    schema: SchemaCreate,
-    current_user: User = Depends(get_current_user)
-):
-    """Create a schema"""
-    # Check if schema with this name already exists (case-insensitive)
-    existing_schema = await schemas_collection.find_one({
-        "name": {"$regex": f"^{schema.name}$", "$options": "i"}
-    })
-    
-    # If schema exists, treat this as an update operation
-    if existing_schema:
-        # Get the next version
-        new_version = await get_next_schema_version(schema.name)
-        
-        # Create new version of the schema
-        schema_dict = {
-            "name": existing_schema["name"],  # Use existing name to preserve case
-            "fields": [field.model_dump() for field in schema.fields],
-            "version": new_version,
-            "created_at": datetime.utcnow(),
-            "created_by": current_user.user_id
-        }
-    else:
-        # This is a new schema
-        new_version = await get_next_schema_version(schema.name)
-        schema_dict = {
-            "name": schema.name,
-            "fields": [field.model_dump() for field in schema.fields],
-            "version": new_version,
-            "created_at": datetime.utcnow(),
-            "created_by": current_user.user_id
-        }
-    
-    # Insert into MongoDB
-    result = await schemas_collection.insert_one(schema_dict)
-    
-    # Return complete schema
-    schema_dict["id"] = str(result.inserted_id)
-    return Schema(**schema_dict)
-
-
 @app.post("/account/llm_tokens", response_model=LLMToken)
 async def llm_token_create(
     request: CreateLLMTokenRequest,
