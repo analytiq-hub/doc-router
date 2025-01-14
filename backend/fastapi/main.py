@@ -171,26 +171,6 @@ async def create_auth_token(user_data: dict = Body(...)):
     )
     return {"token": token}
 
-@app.get("/ocr/download/blocks/{document_id}")
-async def download_ocr_blocks(
-    document_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Download OCR blocks for a document"""
-    ad.log.debug(f"download_ocr_blocks() start: document_id: {document_id}")
-
-    document = await ad.common.get_doc(analytiq_client, document_id)
-    
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-    
-    # Get the OCR JSON data from mongodb
-    ocr_list = ad.common.get_ocr_list(analytiq_client, document_id)
-    if ocr_list is None:
-        raise HTTPException(status_code=404, detail="OCR data not found")
-    
-    return JSONResponse(content=ocr_list)
-
 # LLM Run Endpoints
 @app.post("/llm/run/{document_id}", response_model=LLMRunResponse)
 async def run_llm_analysis(
