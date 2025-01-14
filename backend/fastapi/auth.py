@@ -8,7 +8,7 @@ from datetime import datetime
 
 
 import analytiq_data as ad
-from globals import get_db
+from setup import get_db
 from schemas import User
 
 # Initialize security
