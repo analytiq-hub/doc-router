@@ -175,17 +175,32 @@ async def startup_event():
 @app.post("/auth/token")
 async def create_auth_token(user_data: dict = Body(...)):
     """Create an authentication token"""
+    fastapi_secret = os.getenv("FASTAPI_SECRET")
+    if not fastapi_secret:
+        ad.log.error("FASTAPI_SECRET environment variable not set")
+        raise HTTPException(
+            status_code=500,
+            detail="Server configuration error"
+        )
+        
     ad.log.debug(f"create_auth_token(): user_data: {user_data}")
-    token = jwt.encode(
-        {
-            "userId": user_data["id"],
-            "userName": user_data["name"],
-            "email": user_data["email"]
-        },
-        FASTAPI_SECRET,
-        algorithm=ALGORITHM
-    )
-    return {"token": token}
+    try:
+        token = jwt.encode(
+            {
+                "userId": user_data["id"],
+                "userName": user_data["name"],
+                "email": user_data["email"]
+            },
+            fastapi_secret,
+            algorithm=ALGORITHM
+        )
+        return {"token": token}
+    except Exception as e:
+        ad.log.error(f"Error creating auth token: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error creating auth token: {str(e)}"
+        )
 
 if __name__ == "__main__":
     import uvicorn

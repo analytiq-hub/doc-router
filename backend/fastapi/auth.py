@@ -19,46 +19,63 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(
     token = credentials.credentials
     db = get_async_db()
     fastapi_secret = os.getenv("FASTAPI_SECRET")
+    if not fastapi_secret:
+        ad.log.error("FASTAPI_SECRET environment variable not set")
+        raise HTTPException(
+            status_code=500,
+            detail="Server configuration error"
+        )
+    
     algorithm = "HS256"
     
     try:
         # First, try to validate as JWT
+        ad.log.debug(f"Attempting to validate JWT token")
         payload = jwt.decode(token, fastapi_secret, algorithms=[algorithm])
         userId: str = payload.get("userId")
         userName: str = payload.get("userName")
         email: str = payload.get("email")
         ad.log.debug(f"get_current_user(): userId: {userId}, userName: {userName}, email: {email}")
-        if userName is None:
+        
+        if not userId or not userName:
+            ad.log.error("Missing userId or userName in token payload")
             raise HTTPException(status_code=401, detail="Invalid authentication credentials")
         
         # Validate that userId exists in database
         user = await db.users.find_one({"_id": ObjectId(userId)})
         if not user:
+            ad.log.error(f"User {userId} not found in database")
             raise HTTPException(status_code=401, detail="User not found in database")
             
+        ad.log.debug(f"Successfully validated JWT token for user {userName}")
         return User(user_id=userId,
                    user_name=userName,
                    token_type="jwt")
                    
-    except JWTError:
-        ad.log.debug(f"get_current_user(): JWT validation failed")
+    except JWTError as e:
+        ad.log.debug(f"JWT validation failed: {str(e)}")
         # If JWT validation fails, check if it's an API token
-        access_token_collection = db.access_tokens
-        encrypted_token = ad.crypto.encrypt_token(token)
-        stored_token = await access_token_collection.find_one({"token": encrypted_token})
-        
-        if stored_token:
-            # Validate that user_id from stored token exists in database
-            user = await db.users.find_one({"_id": ObjectId(stored_token["user_id"])})
-            if not user:
-                raise HTTPException(status_code=401, detail="User not found in database")
-                
-            return User(
-                user_id=stored_token["user_id"],
-                user_name=stored_token["name"],
-                token_type="api"
-            )
-                
+        try:
+            access_token_collection = db.access_tokens
+            encrypted_token = ad.crypto.encrypt_token(token)
+            stored_token = await access_token_collection.find_one({"token": encrypted_token})
+            
+            if stored_token:
+                # Validate that user_id from stored token exists in database
+                user = await db.users.find_one({"_id": ObjectId(stored_token["user_id"])})
+                if not user:
+                    ad.log.error(f"User {stored_token['user_id']} from API token not found in database")
+                    raise HTTPException(status_code=401, detail="User not found in database")
+                    
+                ad.log.debug(f"Successfully validated API token for user {stored_token['name']}")
+                return User(
+                    user_id=stored_token["user_id"],
+                    user_name=stored_token["name"],
+                    token_type="api"
+                )
+        except Exception as e:
+            ad.log.error(f"Error validating API token: {str(e)}")
+            
         raise HTTPException(status_code=401, detail="Invalid authentication credentials")
 
 async def get_admin_user(credentials: HTTPAuthorizationCredentials = Security(security)) -> User:
@@ -67,6 +84,7 @@ async def get_admin_user(credentials: HTTPAuthorizationCredentials = Security(se
     db = get_async_db()
     
     if not await is_sys_admin(db, user.user_id):
+        ad.log.error(f"get_admin_user(): User {user.user_id} is not an admin")
         raise HTTPException(
             status_code=403,
             detail="Admin access required"
