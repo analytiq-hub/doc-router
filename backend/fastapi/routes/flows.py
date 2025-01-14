@@ -4,7 +4,7 @@ from datetime import datetime
 from bson import ObjectId
 
 import analytiq_data as ad
-from setup import get_db, get_analytiq_client, get_env
+from setup import get_db, get_analytiq_client
 from auth import get_current_user
 from schemas import (
     SaveFlowRequest,
@@ -39,7 +39,7 @@ async def create_flow(
         }
         
         analytiq_client = get_analytiq_client()
-        env = get_env()
+        env = analytiq_client.env
         
         # Save to MongoDB
         await analytiq_client.mongodb_async[env].flows.insert_one(flow_data)
@@ -62,7 +62,7 @@ async def list_flows(
     current_user: User = Depends(get_current_user)
 ) -> ListFlowsResponse:
     analytiq_client = get_analytiq_client()
-    env = get_env()
+    env = analytiq_client.env
     
     cursor = analytiq_client.mongodb_async[env].flows.find(
     ).skip(skip).limit(limit)
@@ -102,7 +102,7 @@ async def get_flow(
 ) -> Flow:
     try:
         analytiq_client = get_analytiq_client()
-        env = get_env()
+        env = analytiq_client.env
         
         # Find the flow in MongoDB
         flow = await analytiq_client.mongodb_async[env].flows.find_one({
@@ -147,7 +147,7 @@ async def delete_flow(
 ) -> dict:
     try:
         analytiq_client = get_analytiq_client()
-        env = get_env()
+        env = analytiq_client.env
         
         # Find and delete the flow, ensuring user can only delete their own flows
         result = await analytiq_client.mongodb_async[env].flows.delete_one({
@@ -180,7 +180,7 @@ async def update_flow(
 ) -> Flow:
     try:
         analytiq_client = get_analytiq_client()
-        env = get_env()
+        env = analytiq_client.env
         
         # Find the flow and verify ownership
         existing_flow = await analytiq_client.mongodb_async[env].flows.find_one({
