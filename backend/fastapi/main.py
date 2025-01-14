@@ -2400,7 +2400,6 @@ async def list_flows(
     current_user: User = Depends(get_current_user)
 ) -> ListFlowsResponse:
     cursor = analytiq_client.mongodb_async[ENV].flows.find(
-        {"created_by": current_user.user_name}
     ).skip(skip).limit(limit)
     
     flows = await cursor.to_list(None)
