@@ -87,11 +87,11 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 UPLOAD_DIR = "data"
 
-from setup import init_globals, get_db, get_analytiq_client
+from setup import get_db, get_analytiq_client
 from auth import get_current_user, get_admin_user
 
 # Initialize globals first (instead of dependencies)
-init_globals(env=ENV)
+setup.setup_globals(env=ENV)
 
 app = FastAPI(
     root_path=FASTAPI_ROOT_PATH,

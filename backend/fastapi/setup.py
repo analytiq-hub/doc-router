@@ -17,7 +17,7 @@ ANALYTIQ_CLIENT: Optional[ad.common.AnalytiqClient] = None
 DB: Optional[AsyncIOMotorDatabase] = None
 ENV: Optional[str] = None
 
-def init_globals(env: str):
+def setup_globals(env: str):
     """Initialize global variables"""
     ad.log.debug(f"Initializing globals for env: {env}")  # This will only print once
     
