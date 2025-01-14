@@ -6,25 +6,24 @@ from typing import Optional
 import os
 from datetime import datetime
 
+
 import analytiq_data as ad
-from globals import get_db, get_fastapi_secret
+from globals import get_db
 from schemas import User
 
 # Initialize security
 security = HTTPBearer()
 
-# JWT settings
-ALGORITHM = "HS256"
-
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)) -> User:
     """Validate user from JWT token or API token"""
     token = credentials.credentials
     db = get_db()
-    fastapi_secret = get_fastapi_secret()
+    fastapi_secret = os.getenv("FASTAPI_SECRET")
+    algorithm = "HS256"
     
     try:
         # First, try to validate as JWT
-        payload = jwt.decode(token, fastapi_secret, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, fastapi_secret, algorithms=[algorithm])
         userId: str = payload.get("userId")
         userName: str = payload.get("userName")
         email: str = payload.get("email")

@@ -8,7 +8,6 @@ import analytiq_data as ad
 ANALYTIQ_CLIENT: Optional[ad.common.AnalytiqClient] = None
 DB: Optional[AsyncIOMotorDatabase] = None
 ENV: Optional[str] = None
-FASTAPI_SECRET: Optional[str] = None
 
 def init_globals(env: str):
     """Initialize global variables"""
@@ -20,11 +19,6 @@ def init_globals(env: str):
     # Get MongoDB client
     ANALYTIQ_CLIENT = ad.common.get_analytiq_client(env=env)
     DB = ANALYTIQ_CLIENT.mongodb_async[env]
-    
-    # Get FastAPI secret
-    FASTAPI_SECRET = os.getenv("FASTAPI_SECRET")
-    if not FASTAPI_SECRET:
-        raise RuntimeError("FASTAPI_SECRET environment variable not set")
 
 def get_db() -> AsyncIOMotorDatabase:
     """Get database instance"""
@@ -43,9 +37,4 @@ def get_env() -> str:
     if ENV is None:
         raise RuntimeError("Environment not initialized. Call init_globals() first.")
     return ENV 
-
-def get_fastapi_secret() -> str:
-    """Get FastAPI secret"""
-    if FASTAPI_SECRET is None:
-        raise RuntimeError("FASTAPI_SECRET not initialized. Call init_globals() first.")
-    return FASTAPI_SECRET 
+    
