@@ -57,7 +57,13 @@ from schemas import (
     ListFlowsResponse, FlowMetadata
 )
 
-from routes import flows_router
+from routes import (
+    access_tokens_router,
+    documents_router,
+    flows_router,
+    llm_router,
+    ocr_router
+)
 
 # Set up the path
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -98,6 +104,10 @@ app = FastAPI(
 )
 
 # Add routes
+app.include_router(documents_router)
+app.include_router(access_tokens_router)
+app.include_router(ocr_router)
+app.include_router(llm_router)
 app.include_router(flows_router)
 
 security = HTTPBearer()
@@ -146,290 +156,6 @@ async def startup_event():
     await setup.setup_admin(analytiq_client)
     await setup.setup_api_creds(analytiq_client)
 
-# PDF management endpoints
-@app.post("/documents")
-async def upload_document(
-    documents_upload: DocumentsUpload = Body(...),
-    current_user: User = Depends(get_current_user)
-):
-    """Upload one or more documents"""
-    ad.log.debug(f"upload_document(): documents: {[doc.name for doc in documents_upload.files]}")
-    uploaded_documents = []
-
-    # Validate all tag IDs first
-    all_tag_ids = set()
-    for document in documents_upload.files:
-        all_tag_ids.update(document.tag_ids)
-    
-    if all_tag_ids:
-        # Check if all tags exist and belong to the user
-        tags_cursor = tags_collection.find({
-            "_id": {"$in": [ObjectId(tag_id) for tag_id in all_tag_ids]},
-            "created_by": current_user.user_id
-        })
-        existing_tags = await tags_cursor.to_list(None)
-        existing_tag_ids = {str(tag["_id"]) for tag in existing_tags}
-        
-        invalid_tags = all_tag_ids - existing_tag_ids
-        if invalid_tags:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid tag IDs: {list(invalid_tags)}"
-            )
-
-    for document in documents_upload.files:
-        if not document.name.endswith('.pdf'):
-            raise HTTPException(status_code=400, detail=f"Document {document.name} is not a PDF")
-        
-        # Decode and save the document
-        content = base64.b64decode(document.content.split(',')[1])
-
-        # Create a unique id for the document
-        document_id = ad.common.create_id()
-        mongo_file_name = f"{document_id}.pdf"
-
-        metadata = {
-            "document_id": document_id,
-            "type": "application/pdf",
-            "size": len(content),
-            "user_file_name": document.name
-        }
-
-        # Save the document to mongodb
-        ad.common.save_file(analytiq_client,
-                            file_name=mongo_file_name,
-                            blob=content,
-                            metadata=metadata)
-
-        document_metadata = {
-            "_id": ObjectId(document_id),
-            "user_file_name": document.name,
-            "mongo_file_name": mongo_file_name,
-            "document_id": document_id,
-            "upload_date": datetime.utcnow(),
-            "uploaded_by": current_user.user_name,
-            "state": ad.common.doc.DOCUMENT_STATE_UPLOADED,
-            "tag_ids": document.tag_ids  # Add tags to the document metadata
-        }
-        
-        await ad.common.save_doc(analytiq_client, document_metadata)
-        uploaded_documents.append({
-            "document_name": document.name,
-            "document_id": document_id,
-            "tag_ids": document.tag_ids
-        })
-
-        # Post a message to the ocr job queue
-        msg = {"document_id": document_id}
-        await ad.queue.send_msg(analytiq_client, "ocr", msg=msg)
-    
-    return {"uploaded_documents": uploaded_documents}
-
-@app.put("/documents/{document_id}")
-async def update_document(
-    document_id: str,
-    update: DocumentUpdate,
-    current_user: User = Depends(get_current_user)
-):
-    """Update a document"""
-    ad.log.debug(f"Updating document {document_id} with data: {update}")
-
-    # Validate the document exists and user has access
-    document = await ad.common.get_doc(analytiq_client, document_id)
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-    
-    if document["uploaded_by"] != current_user.user_name:
-        raise HTTPException(
-            status_code=403,
-            detail="Not authorized to modify this document"
-        )
-
-    # Validate all tag IDs
-    if update.tag_ids:
-        tags_cursor = tags_collection.find({
-            "_id": {"$in": [ObjectId(tag_id) for tag_id in update.tag_ids]},
-            "created_by": current_user.user_id
-        })
-        existing_tags = await tags_cursor.to_list(None)
-        existing_tag_ids = {str(tag["_id"]) for tag in existing_tags}
-        
-        invalid_tags = set(update.tag_ids) - existing_tag_ids
-        if invalid_tags:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid tag IDs: {list(invalid_tags)}"
-            )
-
-    # Update the document
-    updated_doc = await db.docs.find_one_and_update(
-        {"_id": ObjectId(document_id)},
-        {"$set": {"tag_ids": update.tag_ids}},
-        return_document=True
-    )
-
-    if not updated_doc:
-        raise HTTPException(
-            status_code=404,
-            detail="Document not found"
-        )
-
-    return {"message": "Document tags updated successfully"}
-
-
-@app.get("/documents", response_model=ListDocumentsResponse)
-async def list_documents(
-    skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100),
-    tag_ids: str = Query(None, description="Comma-separated list of tag IDs"),
-    user: User = Depends(get_current_user)
-):
-    """List documents"""
-    # Build the query filter
-    query_filter = {}
-    
-    # Add tag filtering if tag_ids are provided
-    if tag_ids:
-        tag_id_list = [tid.strip() for tid in tag_ids.split(",")]
-        query_filter["tag_ids"] = {"$all": tag_id_list}
-    
-    # Get total count with filters
-    total_count = await db.docs.count_documents(query_filter)
-    
-    # Get paginated documents with sorting and filters
-    cursor = db.docs.find(query_filter).sort("_id", -1).skip(skip).limit(limit)
-    documents = await cursor.to_list(length=None)
-    
-    return ListDocumentsResponse(
-        documents=[
-            {
-                "id": str(doc["_id"]),
-                "document_name": doc["user_file_name"],
-                "upload_date": doc["upload_date"].isoformat(),
-                "uploaded_by": doc["uploaded_by"],
-                "state": doc.get("state", ""),
-                "tag_ids": doc.get("tag_ids", [])
-            }
-            for doc in documents
-        ],
-        total_count=total_count,
-        skip=skip
-    )
-
-@app.get("/documents/{document_id}", response_model=DocumentResponse)
-async def get_document(
-    document_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Get a document"""
-    ad.log.debug(f"get_document() start: document_id: {document_id}")
-    document = await ad.common.get_doc(analytiq_client, document_id)
-    
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-        
-    ad.log.debug(f"get_document() found document: {document}")
-
-    # Get the file from mongodb
-    file = ad.common.get_file(analytiq_client, document["mongo_file_name"])
-    if file is None:
-        raise HTTPException(status_code=404, detail="File not found")
-
-    ad.log.debug(f"get_document() got file: {document}")
-
-    # Create metadata response
-    metadata = DocumentMetadata(
-        id=str(document["_id"]),
-        document_name=document["user_file_name"],
-        upload_date=document["upload_date"],
-        uploaded_by=document["uploaded_by"],
-        state=document.get("state", ""),
-        tag_ids=document.get("tag_ids", [])
-    )
-
-    # Return using the DocumentResponse model
-    return DocumentResponse(
-        metadata=metadata,
-        content=base64.b64encode(file["blob"]).decode('utf-8')
-    )
-
-@app.delete("/documents/{document_id}")
-async def delete_document(
-    document_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Delete a document"""
-    document = await ad.common.get_doc(analytiq_client, document_id)
-    
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-
-    if "mongo_file_name" not in document:
-        raise HTTPException(
-            status_code=500, 
-            detail="Document metadata is corrupted: missing mongo_file_name"
-        )
-
-    ad.common.delete_file(analytiq_client, file_name=document["mongo_file_name"])
-    await ad.common.delete_doc(analytiq_client, document_id)
-
-    return {"message": "Document deleted successfully"}
-
-@app.post("/access_tokens", response_model=AccessToken)
-async def access_token_create(
-    request: CreateAccessTokenRequest,
-    current_user: User = Depends(get_current_user)
-):
-    """Create an API token"""
-    ad.log.debug(f"Creating API token for user: {current_user} request: {request}")
-    token = secrets.token_urlsafe(32)
-    new_token = {
-        "user_id": current_user.user_id,
-        "name": request.name,
-        "token": ad.crypto.encrypt_token(token),  # Store encrypted token
-        "created_at": datetime.now(UTC),
-        "lifetime": request.lifetime
-    }
-    result = await access_token_collection.insert_one(new_token)
-
-    # Return the new token with the id
-    new_token["token"] = token  # Return plaintext token to user
-    new_token["id"] = str(result.inserted_id)
-    return new_token
-
-@app.get("/access_tokens", response_model=ListAccessTokensResponse)
-async def access_token_list(current_user: User = Depends(get_current_user)):
-    """List API tokens"""
-    cursor = access_token_collection.find({"user_id": current_user.user_id})
-    tokens = await cursor.to_list(length=None)
-    ret = [
-        {
-            "id": str(token["_id"]),
-            "user_id": token["user_id"],
-            "name": token["name"],
-            "token": token["token"],
-            "created_at": token["created_at"],
-            "lifetime": token["lifetime"]
-        }
-        for token in tokens
-    ]
-    ad.log.debug(f"list_access_tokens(): {ret}")
-    return ListAccessTokensResponse(access_tokens=ret)
-
-@app.delete("/access_tokens/{token_id}")
-async def access_token_delete(
-    token_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Delete an API token"""
-    result = await access_token_collection.delete_one({
-        "_id": ObjectId(token_id),
-        "user_id": current_user.user_id
-    })
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Token not found")
-    return {"message": "Token deleted successfully"}
-
 @app.post("/auth/token")
 async def create_auth_token(user_data: dict = Body(...)):
     """Create an authentication token"""
@@ -464,53 +190,6 @@ async def download_ocr_blocks(
         raise HTTPException(status_code=404, detail="OCR data not found")
     
     return JSONResponse(content=ocr_list)
-
-@app.get("/ocr/download/text/{document_id}", response_model=str)
-async def download_ocr_text(
-    document_id: str,
-    page_num: Optional[int] = Query(None, description="Specific page number to retrieve"),
-    current_user: User = Depends(get_current_user)
-):
-    """Download OCR text for a document"""
-    ad.log.debug(f"download_ocr_text() start: document_id: {document_id}, page_num: {page_num}")
-    document = await ad.common.get_doc(analytiq_client, document_id)
-    
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-    
-    # Page number is 1-based, but the OCR text page_idx is 0-based
-    page_idx = None
-    if page_num is not None:
-        page_idx = page_num - 1
-
-    # Get the OCR text data from mongodb
-    text = ad.common.get_ocr_text(analytiq_client, document_id, page_idx)
-    if text is None:
-        raise HTTPException(status_code=404, detail="OCR text not found")
-    
-    return Response(content=text, media_type="text/plain")
-
-@app.get("/ocr/download/metadata/{document_id}", response_model=OCRMetadataResponse)
-async def get_ocr_metadata(
-    document_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Get OCR metadata for a document"""
-    ad.log.debug(f"get_ocr_metadata() start: document_id: {document_id}")
-    
-    document = await ad.common.get_doc(analytiq_client, document_id)
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-    
-    # Get the OCR metadata from mongodb
-    metadata = ad.common.get_ocr_metadata(analytiq_client, document_id)
-    if metadata is None:
-        raise HTTPException(status_code=404, detail="OCR metadata not found")
-    
-    return OCRMetadataResponse(
-        n_pages=metadata["n_pages"],
-        ocr_date=metadata["ocr_date"].isoformat()
-    )
 
 # LLM Run Endpoints
 @app.post("/llm/run/{document_id}", response_model=LLMRunResponse)
