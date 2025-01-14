@@ -66,11 +66,47 @@ async def get_admin_user(credentials: HTTPAuthorizationCredentials = Security(se
     user = await get_current_user(credentials)
     db = get_async_db()
     
-    # Check if user has admin role in database
-    db_user = await db.users.find_one({"_id": ObjectId(user.user_id)})
-    if not db_user or db_user.get("role") != "admin":
+    if not await is_sys_admin(db, user.user_id):
         raise HTTPException(
             status_code=403,
             detail="Admin access required"
         )
     return user
+
+async def is_org_admin(db, org_id: str, user_id: str) -> bool:
+    """Check if user is an admin of the organization
+    
+    Args:
+        db: Database connection
+        org_id: Organization ID
+        user_id: User ID to check
+        
+    Returns:
+        bool: True if user is admin, False otherwise
+    """
+    org = await db.organizations.find_one({
+        "_id": ObjectId(org_id),
+        "members": {
+            "$elemMatch": {
+                "user_id": user_id,
+                "role": "admin"
+            }
+        }
+    })
+    return org is not None
+
+async def is_sys_admin(db, user_id: str) -> bool:
+    """Check if user is a system admin
+    
+    Args:
+        db: Database connection
+        user_id: User ID to check
+        
+    Returns:
+        bool: True if user is system admin, False otherwise
+    """
+    user = await db.users.find_one({
+        "_id": ObjectId(user_id),
+        "role": "admin"
+    })
+    return user is not None

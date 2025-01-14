@@ -5,7 +5,7 @@ from typing import Optional
 
 import analytiq_data as ad
 from setup import get_async_db
-from auth import get_current_user
+from auth import get_current_user, is_sys_admin, is_org_admin
 from schemas import (
     Organization,
     OrganizationCreate,
@@ -58,10 +58,15 @@ async def list_organizations(
 ):
     """List organizations the user is a member of"""
     db = get_async_db()
+
+    # If admin, list all organizations
+    if await is_sys_admin(db, current_user.user_id):
+        cursor = db.organizations.find({})
+    else:
+        cursor = db.organizations.find({
+            "members.user_id": current_user.user_id
+        })
     
-    cursor = db.organizations.find({
-        "members.user_id": current_user.user_id
-    })
     orgs = await cursor.to_list(None)
     
     # Convert _id to id in each organization
@@ -77,6 +82,9 @@ async def get_organization(
 ):
     """Get organization details"""
     db = get_async_db()
+
+    if not await is_org_admin(db, org_id, current_user.user_id) and not await is_sys_admin(db, current_user.user_id):
+        raise HTTPException(status_code=403, detail="Not authorized to access this organization")
     
     org = await db.organizations.find_one({
         "_id": ObjectId(org_id),
@@ -99,17 +107,7 @@ async def update_organization(
     db = get_async_db()
     
     # Check if user is admin of the organization
-    org = await db.organizations.find_one({
-        "_id": ObjectId(org_id),
-        "members": {
-            "$elemMatch": {
-                "user_id": current_user.user_id,
-                "role": "admin"
-            }
-        }
-    })
-    
-    if not org:
+    if not await is_org_admin(db, org_id, current_user.user_id) and not await is_sys_admin(db, current_user.user_id):
         raise HTTPException(
             status_code=403,
             detail="Not authorized to update this organization"
@@ -144,28 +142,16 @@ async def delete_organization(
     db = get_async_db()
     
     # Check if user is admin of the organization
-    org = await db.organizations.find_one({
-        "_id": ObjectId(org_id),
-        "members": {
-            "$elemMatch": {
-                "user_id": current_user.user_id,
-                "role": "admin"
-            }
-        }
-    })
-    
-    if not org:
+    if not await is_org_admin(db, org_id, current_user.user_id) and not await is_sys_admin(db, current_user.user_id):
         raise HTTPException(
             status_code=403,
             detail="Not authorized to delete this organization"
         )
     
-    # Cannot delete individual organizations
-    if org["type"] == "individual":
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot delete individual organizations"
-        )
+    # Get the organization first
+    org = await db.organizations.find_one({"_id": ObjectId(org_id)})
+    if not org:
+        raise HTTPException(status_code=404, detail="Organization not found")
     
     result = await db.organizations.delete_one({"_id": ObjectId(org_id)})
     if result.deleted_count == 0:
