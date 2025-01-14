@@ -87,7 +87,7 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 UPLOAD_DIR = "data"
 
-from setup import get_db, get_analytiq_client
+from setup import get_async_db, get_analytiq_client
 from auth import get_current_user, get_admin_user
 
 # Initialize globals first (instead of dependencies)
@@ -121,7 +121,7 @@ app.add_middleware(
 )
 
 # Get db reference if needed
-db = get_db()
+db = get_async_db()
 
 # Get analytiq client reference
 analytiq_client = get_analytiq_client()

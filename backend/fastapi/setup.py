@@ -3,7 +3,7 @@ from datetime import datetime, UTC
 from bcrypt import hashpw, gensalt
 from bson import ObjectId
 from typing import Optional
-from motor.motor_asyncio import AsyncIOMotorClient, AsyncIOMotorDatabase
+from motor.motor_asyncio import AsyncIOMotorDatabase
 import os
 
 # Set up the path
@@ -13,24 +13,32 @@ sys.path.append(f"{cwd}/..")
 import analytiq_data as ad
 
 # Module-level variables
-ANALYTIQ_CLIENT: Optional[ad.common.AnalytiqClient] = None
-DB: Optional[AsyncIOMotorDatabase] = None
+ANALYTIQ_CLIENT = None
+DB = None
+ASYNC_DB = None
 
 def setup_globals(env: str):
     """Initialize global variables"""
     ad.log.debug(f"Initializing globals for env: {env}")  # This will only print once
     
-    global ANALYTIQ_CLIENT, DB
+    global ANALYTIQ_CLIENT, DB, ASYNC_DB
     
     # Get MongoDB client
     ANALYTIQ_CLIENT = ad.common.get_analytiq_client(env=env)
-    DB = ANALYTIQ_CLIENT.mongodb_async[env]
+    DB = ANALYTIQ_CLIENT.mongodb[env]
+    ASYNC_DB = ANALYTIQ_CLIENT.mongodb_async[env]
 
 def get_db() -> AsyncIOMotorDatabase:
     """Get database instance"""
     if DB is None:
         raise RuntimeError("Database not initialized. Call init_globals() first.")
     return DB
+
+def get_async_db() -> AsyncIOMotorDatabase:
+    """Get async database instance"""
+    if ASYNC_DB is None:
+        raise RuntimeError("Async database not initialized. Call init_globals() first.")
+    return ASYNC_DB
 
 def get_analytiq_client():
     """Get analytiq client instance"""

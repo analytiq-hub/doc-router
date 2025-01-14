@@ -8,7 +8,7 @@ from datetime import datetime
 
 
 import analytiq_data as ad
-from setup import get_db
+from setup import get_async_db
 from schemas import User
 
 # Initialize security
@@ -17,7 +17,7 @@ security = HTTPBearer()
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security)) -> User:
     """Validate user from JWT token or API token"""
     token = credentials.credentials
-    db = get_db()
+    db = get_async_db()
     fastapi_secret = os.getenv("FASTAPI_SECRET")
     algorithm = "HS256"
     
@@ -64,7 +64,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(
 async def get_admin_user(credentials: HTTPAuthorizationCredentials = Security(security)) -> User:
     """Validate user has admin role"""
     user = await get_current_user(credentials)
-    db = get_db()
+    db = get_async_db()
     
     # Check if user has admin role in database
     db_user = await db.users.find_one({"_id": ObjectId(user.user_id)})

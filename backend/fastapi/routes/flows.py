@@ -4,7 +4,7 @@ from datetime import datetime
 from bson import ObjectId
 
 import analytiq_data as ad
-from setup import get_db, get_analytiq_client
+from setup import get_async_db
 from auth import get_current_user
 from schemas import (
     SaveFlowRequest,
@@ -38,11 +38,10 @@ async def create_flow(
             "created_by": current_user.user_name
         }
         
-        analytiq_client = get_analytiq_client()
-        env = analytiq_client.env
+        db = get_async_db()
         
         # Save to MongoDB
-        await analytiq_client.mongodb_async[env].flows.insert_one(flow_data)
+        await db.flows.insert_one(flow_data)
         
         # Convert _id to string for response
         flow_data["id"] = str(flow_data.pop("_id"))
@@ -61,15 +60,14 @@ async def list_flows(
     limit: int = 10,
     current_user: User = Depends(get_current_user)
 ) -> ListFlowsResponse:
-    analytiq_client = get_analytiq_client()
-    env = analytiq_client.env
+    db = get_async_db()
     
-    cursor = analytiq_client.mongodb_async[env].flows.find(
+    cursor = db.flows.find(
     ).skip(skip).limit(limit)
     
     flows = await cursor.to_list(None)
     
-    total_count = await analytiq_client.mongodb_async[env].flows.count_documents(
+    total_count = await db.flows.count_documents(
         {"created_by": current_user.user_name}
     )
     
@@ -101,11 +99,10 @@ async def get_flow(
     current_user: User = Depends(get_current_user)
 ) -> Flow:
     try:
-        analytiq_client = get_analytiq_client()
-        env = analytiq_client.env
+        db = get_async_db()
         
         # Find the flow in MongoDB
-        flow = await analytiq_client.mongodb_async[env].flows.find_one({
+        flow = await db.flows.find_one({
             "_id": ObjectId(flow_id),
             "created_by": current_user.user_name  # Ensure user can only access their own flows
         })
@@ -146,11 +143,10 @@ async def delete_flow(
     current_user: User = Depends(get_current_user)
 ) -> dict:
     try:
-        analytiq_client = get_analytiq_client()
-        env = analytiq_client.env
+        db = get_async_db()
         
         # Find and delete the flow, ensuring user can only delete their own flows
-        result = await analytiq_client.mongodb_async[env].flows.delete_one({
+        result = await db.flows.delete_one({
             "_id": ObjectId(flow_id),
             "created_by": current_user.user_name
         })
@@ -179,11 +175,10 @@ async def update_flow(
     current_user: User = Depends(get_current_user)
 ) -> Flow:
     try:
-        analytiq_client = get_analytiq_client()
-        env = analytiq_client.env
+        db = get_async_db()
         
         # Find the flow and verify ownership
-        existing_flow = await analytiq_client.mongodb_async[env].flows.find_one({
+        existing_flow = await db.flows.find_one({
             "_id": ObjectId(flow_id),
             "created_by": current_user.user_name
         })
@@ -206,7 +201,7 @@ async def update_flow(
         }
         
         # Update the flow
-        result = await analytiq_client.mongodb_async[env].flows.find_one_and_update(
+        result = await db.flows.find_one_and_update(
             {
                 "_id": ObjectId(flow_id),
                 "created_by": current_user.user_name
