@@ -26,7 +26,7 @@ from bcrypt import hashpw, gensalt
 import asyncio
 from email_utils import get_verification_email_content, get_email_subject, get_invitation_email_content
 
-import startup
+import setup
 import organizations
 from schemas import (
     User,
@@ -143,8 +143,8 @@ from pydantic import BaseModel
 # Add to startup
 @app.on_event("startup")
 async def startup_event():
-    await startup.setup_admin(analytiq_client)
-    await startup.setup_api_creds(analytiq_client)
+    await setup.setup_admin(analytiq_client)
+    await setup.setup_api_creds(analytiq_client)
 
 # PDF management endpoints
 @app.post("/documents")
