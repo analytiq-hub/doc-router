@@ -58,6 +58,7 @@ from schemas import (
 )
 
 from routes import (
+    account_llm_tokens_router,
     access_tokens_router,
     documents_router,
     flows_router,
@@ -115,6 +116,7 @@ app.include_router(flows_router)
 app.include_router(schemas_router)
 app.include_router(prompts_router)
 app.include_router(tags_router)
+app.include_router(account_llm_tokens_router)
 
 security = HTTPBearer()
 
@@ -176,75 +178,6 @@ async def create_auth_token(user_data: dict = Body(...)):
         algorithm=ALGORITHM
     )
     return {"token": token}
-
-@app.post("/account/llm_tokens", response_model=LLMToken)
-async def llm_token_create(
-    request: CreateLLMTokenRequest,
-    current_user: User = Depends(get_admin_user)
-):
-    """Create or update an LLM token (admin only)"""
-    ad.log.debug(f"Creating/Updating LLM token for user: {current_user} request: {request}")
-    
-    # Check if a token for this vendor already exists
-    existing_token = await llm_token_collection.find_one({
-        "user_id": current_user.user_id,
-        "llm_vendor": request.llm_vendor
-    })
-
-    new_token = {
-        "user_id": current_user.user_id,
-        "llm_vendor": request.llm_vendor,
-        "token": ad.crypto.encrypt_token(request.token),
-        "created_at": datetime.now(UTC),
-    }
-
-    if existing_token:
-        # Update the existing token
-        result = await llm_token_collection.replace_one(
-            {"_id": existing_token["_id"]},
-            new_token
-        )
-        new_token["id"] = str(existing_token["_id"])
-        ad.log.debug(f"Updated existing LLM token for {request.llm_vendor}")
-    else:
-        # Insert a new token
-        result = await llm_token_collection.insert_one(new_token)
-        new_token["id"] = str(result.inserted_id)
-        new_token["token"] = ad.crypto.decrypt_token(new_token["token"])
-        ad.log.debug(f"Created new LLM token for {request.llm_vendor}")
-
-    return new_token
-
-@app.get("/account/llm_tokens", response_model=ListLLMTokensResponse)
-async def llm_token_list(current_user: User = Depends(get_admin_user)):
-    """List LLM tokens (admin only)"""
-    cursor = llm_token_collection.find({"user_id": current_user.user_id})
-    tokens = await cursor.to_list(length=None)
-    llm_tokens = [
-        {
-            "id": str(token["_id"]),
-            "user_id": token["user_id"],
-            "llm_vendor": token["llm_vendor"],
-            "token": ad.crypto.decrypt_token(token["token"]),
-            "created_at": token["created_at"],
-        }
-        for token in tokens
-    ]
-    return ListLLMTokensResponse(llm_tokens=llm_tokens)
-
-@app.delete("/account/llm_tokens/{token_id}")
-async def llm_token_delete(
-    token_id: str,
-    current_user: User = Depends(get_admin_user)
-):
-    """Delete an LLM token (admin only)"""
-    result = await llm_token_collection.delete_one({
-        "_id": ObjectId(token_id),
-        "user_id": current_user.user_id
-    })
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Token not found")
-    return {"message": "Token deleted successfully"}
 
 @app.post("/account/aws_credentials")
 async def create_aws_credentials(
