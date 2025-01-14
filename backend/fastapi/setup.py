@@ -4,6 +4,7 @@ from bcrypt import hashpw, gensalt
 from bson import ObjectId
 from typing import Optional
 from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo import MongoClient
 import os
 
 # Set up the path
@@ -28,7 +29,7 @@ def setup_globals(env: str):
     DB = ANALYTIQ_CLIENT.mongodb[env]
     ASYNC_DB = ANALYTIQ_CLIENT.mongodb_async[env]
 
-def get_db() -> AsyncIOMotorDatabase:
+def get_db() -> MongoClient:
     """Get database instance"""
     if DB is None:
         raise RuntimeError("Database not initialized. Call init_globals() first.")
