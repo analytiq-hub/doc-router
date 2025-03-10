@@ -1,0 +1,111 @@
+{
+  "name": "Resume Schema",
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "resume_extraction",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "personal_info": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Full name of the candidate"
+              },
+              "email": {
+                "type": "string",
+                "description": "Email address of the candidate"
+              },
+              "phone": {
+                "type": "string",
+                "description": "Contact phone number"
+              },
+              "location": {
+                "type": "string",
+                "description": "Current location/address"
+              },
+              "linkedin": {
+                "type": "string",
+                "description": "LinkedIn profile URL"
+              }
+            },
+            "required": ["name"]
+          },
+          "education": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "institution": {
+                  "type": "string",
+                  "description": "Name of the educational institution"
+                },
+                "degree": {
+                  "type": "string",
+                  "description": "Degree obtained or pursued"
+                },
+                "field_of_study": {
+                  "type": "string",
+                  "description": "Major or field of study"
+                },
+                "date_range": {
+                  "type": "string",
+                  "description": "Start and end dates of education"
+                },
+                "gpa": {
+                  "type": "string",
+                  "description": "GPA or academic achievements"
+                }
+              },
+              "required": ["institution"]
+            }
+          },
+          "experience": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "company": {
+                  "type": "string",
+                  "description": "Company or organization name"
+                },
+                "title": {
+                  "type": "string",
+                  "description": "Job title or position"
+                },
+                "date_range": {
+                  "type": "string",
+                  "description": "Start and end dates of employment"
+                },
+                "location": {
+                  "type": "string",
+                  "description": "Job location"
+                },
+                "description": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "List of responsibilities or achievements"
+                }
+              },
+              "required": ["company", "title"]
+            }
+          },
+          "skills": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of professional skills"
+          }
+        },
+        "required": ["personal_info"],
+        "additionalProperties": false
+      },
+      "strict": true
+    }
+  }
+}

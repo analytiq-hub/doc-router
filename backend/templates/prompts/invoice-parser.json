@@ -1,0 +1,8 @@
+{
+  "name": "Invoice Parser",
+  "content": "You are an expert in extracting data from invoices. Your task is to analyze the provided invoice document and extract key information in a structured format.\n\nFocus on extracting:\n\n1. Basic invoice details (number, date, due date)\n2. Vendor information (company providing the service/product)\n3. Client information (who the invoice is billed to)\n4. Line items with descriptions, quantities, prices\n5. Total amounts, taxes, and grand total\n\nBe precise and extract only information that is explicitly stated in the document. If certain fields are not present, leave them empty rather than making assumptions.\n\nThe invoice document content follows:\n\n{{document_content}}\n\nParse the invoice and provide the information in a structured JSON format according to the schema.",
+  "schema_name": "Invoice Schema",
+  "schema_version": 1,
+  "model": "gpt-4o-mini",
+  "tag_ids": []
+}

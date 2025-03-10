@@ -1,0 +1,130 @@
+{
+  "name": "Invoice Schema",
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "invoice_extraction",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "invoice_info": {
+            "type": "object",
+            "properties": {
+              "invoice_number": {
+                "type": "string",
+                "description": "Unique identifier for the invoice"
+              },
+              "invoice_date": {
+                "type": "string",
+                "description": "Date the invoice was issued (YYYY-MM-DD format preferred)"
+              },
+              "due_date": {
+                "type": "string",
+                "description": "Date the payment is due (YYYY-MM-DD format preferred)"
+              },
+              "purchase_order": {
+                "type": "string",
+                "description": "Purchase order number if available"
+              },
+              "payment_terms": {
+                "type": "string",
+                "description": "Terms of payment (e.g., 'Net 30')"
+              }
+            },
+            "required": ["invoice_number", "invoice_date"]
+          },
+          "vendor": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Company name of the vendor"
+              },
+              "address": {
+                "type": "string",
+                "description": "Full address of the vendor"
+              },
+              "phone": {
+                "type": "string",
+                "description": "Contact phone number"
+              },
+              "email": {
+                "type": "string",
+                "description": "Contact email"
+              },
+              "tax_id": {
+                "type": "string",
+                "description": "Tax ID or VAT number"
+              }
+            },
+            "required": ["name"]
+          },
+          "client": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Client or customer name"
+              },
+              "address": {
+                "type": "string",
+                "description": "Client address"
+              }
+            },
+            "required": ["name"]
+          },
+          "line_items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "description": {
+                  "type": "string",
+                  "description": "Description of the product or service"
+                },
+                "quantity": {
+                  "type": "number",
+                  "description": "Quantity of items"
+                },
+                "unit_price": {
+                  "type": "number",
+                  "description": "Price per unit"
+                },
+                "amount": {
+                  "type": "number",
+                  "description": "Total amount for the line item"
+                }
+              },
+              "required": ["description", "amount"]
+            }
+          },
+          "totals": {
+            "type": "object",
+            "properties": {
+              "subtotal": {
+                "type": "number",
+                "description": "Sum before tax and other adjustments"
+              },
+              "tax_amount": {
+                "type": "number",
+                "description": "Tax amount"
+              },
+              "total": {
+                "type": "number",
+                "description": "Final total amount due"
+              },
+              "currency": {
+                "type": "string",
+                "description": "Currency code (e.g., USD, EUR)"
+              }
+            },
+            "required": ["total"]
+          }
+        },
+        "required": ["invoice_info", "vendor", "totals"],
+        "additionalProperties": false
+      },
+      "strict": true
+    }
+  }
+}
