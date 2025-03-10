@@ -168,12 +168,14 @@ class ResponseFormat(BaseModel):
 class SchemaConfig(BaseModel):
     name: str
     response_format: ResponseFormat
+    is_template: bool = False
 
 class Schema(SchemaConfig):
     id: str
     version: int
     created_at: datetime
     created_by: str
+    parent_id: Optional[str] = None
 
 class ListSchemasResponse(BaseModel):
     schemas: List[Schema]
@@ -187,13 +189,15 @@ class PromptConfig(BaseModel):
     schema_name: Optional[str] = None
     schema_version: Optional[int] = None
     tag_ids: List[str] = []
-    model: str = "gpt-4o-mini"  # Default to gpt-4o-mini
+    model: str = "gpt-4o-mini"
+    is_template: bool = False
 
 class Prompt(PromptConfig):
     id: str
     version: int
     created_at: datetime
     created_by: str
+    parent_id: Optional[str] = None
 
 class ListPromptsResponse(BaseModel):
     prompts: List[Prompt]

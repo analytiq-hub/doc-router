@@ -15,6 +15,7 @@ import hashlib
 import asyncio
 from typing import Optional, List
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 # Set up the path first, before other imports
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -117,6 +118,9 @@ async def lifespan(app):
     analytiq_client = ad.common.get_analytiq_client()
     await startup.setup_admin(analytiq_client)
     await startup.setup_api_creds(analytiq_client)
+    
+    # Sync templates from Git to database
+    await startup.sync_templates(analytiq_client)
     
     yield  # This is where the app runs
     
@@ -853,6 +857,8 @@ async def list_schemas(
     organization_id: str,
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
+    templates_only: bool = Query(False, description="Filter to only include templates"),
+    user_only: bool = Query(False, description="Filter to only include user created/modified schemas"),
     current_user: User = Depends(get_current_user)
 ):
     """List schemas within an organization"""
@@ -965,6 +971,37 @@ async def update_schema(
     # Return updated schema
     new_schema["id"] = str(result.inserted_id)
     return Schema(**new_schema)
+
+@app.post("/v0/orgs/{organization_id}/schemas/{schema_id}/clone", response_model=Schema, tags=["schemas"])
+async def clone_schema(
+    organization_id: str,
+    schema_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Clone an existing schema template"""
+    # Check if user has access to this org
+    await validate_user_access(current_user.user_id, organization_id)
+    
+    # Get the original schema
+    original_schema = await db.schemas.find_one({"id": schema_id, "organization_id": organization_id})
+    if not original_schema:
+        raise HTTPException(status_code=404, detail="Schema not found")
+    
+    # Create a new schema as a copy
+    new_schema = {
+        "id": str(uuid.uuid4()),
+        "name": f"{original_schema['name']} (Copy)",
+        "organization_id": organization_id,
+        "response_format": original_schema["response_format"],
+        "version": await get_next_schema_version(original_schema["name"]),
+        "created_at": datetime.now(),
+        "created_by": current_user.user_id,
+        "is_template": False,
+        "parent_id": schema_id
+    }
+    
+    await db.schemas.insert_one(new_schema)
+    return new_schema
 
 @app.delete("/v0/orgs/{organization_id}/schemas/{schema_id}", tags=["schemas"])
 async def delete_schema(
@@ -1182,6 +1219,8 @@ async def list_prompts(
     limit: int = Query(10, ge=1, le=100),
     document_id: str = Query(None, description="Filter prompts by document's tags"),
     tag_ids: str = Query(None, description="Comma-separated list of tag IDs"),
+    templates_only: bool = Query(False, description="Filter to only include templates"),
+    user_only: bool = Query(False, description="Filter to only include user created/modified prompts"),
     current_user: User = Depends(get_current_user)
 ):
     """List prompts within an organization"""
@@ -1351,6 +1390,41 @@ async def update_prompt(
     # Return updated prompt
     new_prompt["id"] = str(result.inserted_id)
     return Prompt(**new_prompt)
+
+@app.post("/v0/orgs/{organization_id}/prompts/{prompt_id}/clone", response_model=Prompt, tags=["prompts"])
+async def clone_prompt(
+    organization_id: str,
+    prompt_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    """Clone an existing prompt template"""
+    # Check if user has access to this org
+    await validate_user_access(current_user.user_id, organization_id)
+    
+    # Get the original prompt
+    original_prompt = await db.prompts.find_one({"id": prompt_id, "organization_id": organization_id})
+    if not original_prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found")
+    
+    # Create a new prompt as a copy
+    new_prompt = {
+        "id": str(uuid.uuid4()),
+        "name": f"{original_prompt['name']} (Copy)",
+        "organization_id": organization_id,
+        "content": original_prompt["content"],
+        "schema_name": original_prompt.get("schema_name"),
+        "schema_version": original_prompt.get("schema_version"),
+        "tag_ids": original_prompt.get("tag_ids", []),
+        "model": original_prompt.get("model", "gpt-4o-mini"),
+        "version": await get_next_prompt_version(original_prompt["name"]),
+        "created_at": datetime.now(),
+        "created_by": current_user.user_id,
+        "is_template": False,
+        "parent_id": prompt_id
+    }
+    
+    await db.prompts.insert_one(new_prompt)
+    return new_prompt
 
 @app.delete("/v0/orgs/{organization_id}/prompts/{prompt_id}", tags=["prompts"])
 async def delete_prompt(
@@ -3156,6 +3230,7 @@ async def delete_account_token(
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Token not found")
     return {"message": "Token deleted successfully"}
+
 
 if __name__ == "__main__":
     import uvicorn

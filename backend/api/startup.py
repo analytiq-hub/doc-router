@@ -2,6 +2,8 @@ import sys, os
 from datetime import datetime, UTC
 from bcrypt import hashpw, gensalt
 from bson import ObjectId
+import json
+from pathlib import Path
 
 # Set up the path
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -268,3 +270,92 @@ async def setup_api_creds(analytiq_client):
             
     except Exception as e:
         ad.log.error(f"Failed to set up API credentials: {e}")
+
+async def sync_templates(analytiq_client):
+    """Synchronize templates from filesystem to database"""
+    env = analytiq_client.env
+    db = analytiq_client.mongodb_async[env]
+    
+    template_dir = Path(__file__).parent.parent / "templates"
+    
+    # Sync schema templates
+    schema_templates_path = template_dir / "schemas"
+    if schema_templates_path.exists():
+        for template_file in schema_templates_path.glob("*.json"):
+            try:
+                with open(template_file, "r") as f:
+                    template_data = json.load(f)
+                
+                template_id = template_file.stem
+                
+                # Check if template exists
+                existing = await db.schemas.find_one({"id": template_id, "is_template": True})
+                
+                if existing:
+                    # Only update if template hasn't been modified
+                    await db.schemas.update_one(
+                        {"id": template_id, "is_template": True},
+                        {"$set": {
+                            "name": template_data["name"],
+                            "response_format": template_data["response_format"]
+                        }}
+                    )
+                else:
+                    # Create new template
+                    await db.schemas.insert_one({
+                        "id": template_id,
+                        "name": template_data["name"],
+                        "response_format": template_data["response_format"],
+                        "version": 1,
+                        "created_at": datetime.now(UTC),
+                        "created_by": "system",
+                        "is_template": True,
+                        "organization_id": None  # System-wide template
+                    })
+            except Exception as e:
+                ad.log.error(f"Error syncing schema template {template_file}: {e}")
+    
+    # Sync prompt templates
+    prompt_templates_path = template_dir / "prompts"
+    if prompt_templates_path.exists():
+        for template_file in prompt_templates_path.glob("*.json"):
+            try:
+                with open(template_file, "r") as f:
+                    template_data = json.load(f)
+                
+                template_id = template_file.stem
+                
+                # Check if template exists
+                existing = await db.prompts.find_one({"id": template_id, "is_template": True})
+                
+                if existing:
+                    # Only update if template hasn't been modified
+                    await db.prompts.update_one(
+                        {"id": template_id, "is_template": True},
+                        {"$set": {
+                            "name": template_data["name"],
+                            "content": template_data["content"],
+                            "schema_name": template_data.get("schema_name"),
+                            "schema_version": template_data.get("schema_version"),
+                            "tag_ids": template_data.get("tag_ids", []),
+                            "model": template_data.get("model", "gpt-4o-mini")
+                        }}
+                    )
+                else:
+                    # Create new template
+                    await db.prompts.insert_one({
+                        "id": template_id,
+                        "name": template_data["name"],
+                        "content": template_data["content"],
+                        "schema_name": template_data.get("schema_name"),
+                        "schema_version": template_data.get("schema_version"),
+                        "tag_ids": template_data.get("tag_ids", []),
+                        "model": template_data.get("model", "gpt-4o-mini"),
+                        "version": 1,
+                        "created_at": datetime.now(UTC),
+                        "created_by": "system",
+                        "is_template": True,
+                        "organization_id": None  # System-wide template
+                    })
+            except Exception as e:
+                ad.log.error(f"Error syncing prompt template {template_file}: {e}")
