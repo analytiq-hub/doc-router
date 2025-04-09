@@ -12,17 +12,20 @@ export interface Organization {
   members: OrganizationMember[];
   created_at: string;
   updated_at: string;
+  mcp_enabled?: boolean;
 }
 
 export interface CreateOrganizationRequest {
   name: string;
   type?: OrganizationType;
+  mcp_enabled?: boolean;
 }
 
 export interface UpdateOrganizationRequest {
   name?: string;
   type?: OrganizationType;
   members?: OrganizationMember[];
+  mcp_enabled?: boolean;
 }
 
 export interface ListOrganizationsResponse {

@@ -234,11 +234,13 @@ OrganizationType = Literal["individual", "team", "enterprise"]
 class OrganizationCreate(BaseModel):
     name: str
     type: OrganizationType = "individual"
+    mcp_enabled: bool = False  # Add this field
 
 class OrganizationUpdate(BaseModel):
     name: str | None = None
     type: OrganizationType = "individual"
     members: List[OrganizationMember] | None = None
+    mcp_enabled: bool | None = None  # Add this field
 
 class Organization(BaseModel):
     id: str
@@ -247,6 +249,7 @@ class Organization(BaseModel):
     type: OrganizationType = "individual"
     created_at: datetime
     updated_at: datetime
+    mcp_enabled: bool = False  # New field to track MCP status
 
 class ListOrganizationsResponse(BaseModel):
     organizations: List[Organization]

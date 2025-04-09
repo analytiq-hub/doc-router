@@ -17,6 +17,7 @@ import DeleteIcon from '@mui/icons-material/Delete'
 import { useSession } from 'next-auth/react'
 import UserAddToOrgModal from './UserAddToOrgModal'
 import { toast } from 'react-hot-toast'
+import InfoTooltip from '@/components/InfoTooltip'
 
 interface OrganizationEditProps {
   organizationId: string
@@ -52,6 +53,8 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const [isOrgAdmin, setIsOrgAdmin] = useState(false);
   const [isSysAdmin, setIsSysAdmin] = useState(false);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [mcpEnabled, setMcpEnabled] = useState(false);
+  const [originalMcpEnabled, setOriginalMcpEnabled] = useState(false);
 
   // Filter current organization members
   const filteredMembers = members.filter(member => {
@@ -70,6 +73,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
         setName(organization.name);
         setType(organization.type);
         setMembers(organization.members);
+        setMcpEnabled(organization.mcp_enabled || false);
 
         // Check if current user is system admin or organization admin
         if (session?.user?.id) {
@@ -86,6 +90,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
         setOriginalName(organization.name);
         setOriginalType(organization.type);
         setOriginalMembers(organization.members);
+        setOriginalMcpEnabled(organization.mcp_enabled || false);
       } catch (err) {
         toast.error('Failed to load organization data');
         console.error(err);
@@ -131,7 +136,8 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       await updateOrganizationApi(organizationId, { 
         name,
         type,
-        members 
+        members,
+        mcp_enabled: mcpEnabled
       });
       await refreshOrganizations();
       
@@ -139,6 +145,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       setOriginalName(name);
       setOriginalType(type);
       setOriginalMembers(members);
+      setOriginalMcpEnabled(mcpEnabled);
     } catch (err) {
       if (isAxiosError(err)) {
         toast.error(err.response?.data?.detail || 'Failed to update organization');
@@ -251,6 +258,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const hasChanges = () => {
     if (name !== originalName) return true;
     if (type !== originalType) return true;
+    if (mcpEnabled !== originalMcpEnabled) return true;
     if (members.length !== originalMembers.length) return true;
     
     // Compare each member and their roles
@@ -355,6 +363,38 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                     </option>
                   ))}
                 </select>
+              </div>
+
+              <div className="mt-4">
+                <div className="flex items-center">
+                  <Switch
+                    checked={mcpEnabled}
+                    onChange={(e) => setMcpEnabled(e.target.checked)}
+                    color="primary"
+                    id="mcp_enabled"
+                  />
+                  <label htmlFor="mcp_enabled" className="ml-2 text-sm font-medium text-gray-700 flex items-center gap-2">
+                    Enable MCP Server
+                    <InfoTooltip 
+                      title="MCP Server"
+                      content={
+                        <>
+                          <p className="mb-2">
+                            Enables Machine Communication Protocol server for this organization, allowing API access through MCP.
+                          </p>
+                          <p className="mb-2">
+                            <strong>Note:</strong> When enabled, any user with a valid token and organization membership can use MCP to access:
+                          </p>
+                          <ul className="list-disc list-inside space-y-1">
+                            <li>Documents</li>
+                            <li>Prompts</li>
+                            <li>Extractions</li>
+                          </ul>
+                        </>
+                      }
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           </div>

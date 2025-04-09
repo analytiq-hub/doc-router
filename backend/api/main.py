@@ -127,10 +127,23 @@ async def lifespan(app):
     # Initialize payments
     await init_payments()
     
+    # Start MCP servers for organizations with MCP enabled
+    from api.mcp_server import mcp_server_manager
+    
+    # Find organizations with MCP enabled
+    organizations_with_mcp = await ad.common.get_async_db().organizations.find({"mcp_enabled": True}).to_list(None)
+    
+    for org in organizations_with_mcp:
+        # Start the MCP server
+        await mcp_server_manager.start_server(org["_id"])
+    
     yield  # This is where the app runs
     
     # Shutdown code (if any) would go here
     # For example: await some_client.close()
+    
+    # Shutdown all MCP servers
+    mcp_server_manager.shutdown_all()
 
 # Create the FastAPI app with the lifespan
 app = FastAPI(
@@ -2278,22 +2291,27 @@ async def create_organization(
             detail=f"An organization named '{organization.name}' already exists"
         )
 
-    organization_doc = {
+    # Create organization document
+    org_doc = {
         "name": organization.name,
-        "members": [{
-            "user_id": current_user.user_id,
-            "role": "admin"
-        }],
-        "type": organization.type or "team",  # Default to team if not specified
-        "created_at": datetime.now(UTC),
-        "updated_at": datetime.now(UTC)
+        "type": organization.type,
+        "members": [{"user_id": current_user["user_id"], "role": "admin"}],
+        "created_at": now,
+        "updated_at": now,
+        "mcp_enabled": organization.mcp_enabled  # Add this field
     }
     
-    result = await db.organizations.insert_one(organization_doc)
+    result = await db.organizations.insert_one(org_doc)
     return Organization(**{
-        **organization_doc,
+        **org_doc,
         "id": str(result.inserted_id)
     })
+
+    # If MCP is enabled, start the server
+    if organization.mcp_enabled:
+        from api.mcp_server import mcp_server_manager
+        await mcp_server_manager.start_server(org_id)
+    
 
 @app.put("/v0/account/organizations/{organization_id}", response_model=Organization, tags=["account/organizations"])
 async def update_organization(
@@ -2330,10 +2348,12 @@ async def update_organization(
             update=organization_update
         )
 
-    update_data = {}
+    # Build update document
+    update_doc = {"updated_at": datetime.utcnow()}
     if organization_update.name is not None:
-        update_data["name"] = organization_update.name
-    
+        update_doc["name"] = organization_update.name
+    if organization_update.type is not None:
+        update_doc["type"] = organization_update.type
     if organization_update.members is not None:
         # Ensure at least one admin remains
         if not any(m.role == "admin" for m in organization_update.members):
@@ -2342,24 +2362,30 @@ async def update_organization(
                 status_code=400,
                 detail="Organization must have at least one admin"
             )
-        update_data["members"] = [m.dict() for m in organization_update.members]
+        update_doc["members"] = [m.dict() for m in organization_update.members]
 
-    if update_data:
-        update_data["updated_at"] = datetime.now(UTC)
-        # Use find_one_and_update instead of update_one to get the updated document atomically
-        updated_organization = await db.organizations.find_one_and_update(
-            {"_id": ObjectId(organization_id)},
-            {"$set": update_data},
-            return_document=True  # Return the updated document
-        )
-        
-        if not updated_organization:
-            ad.log.error(f"Organization not found after update: {organization_id}")
-            raise HTTPException(status_code=404, detail="Organization not found")
-    else:
-        # If no updates were needed, just return the current organization
-        updated_organization = organization
+    if organization_update.mcp_enabled is not None:
+        update_doc["mcp_enabled"] = organization_update.mcp_enabled
+    
+    # Use find_one_and_update instead of update_one to get the updated document atomically
+    updated_organization = await db.organizations.find_one_and_update(
+        {"_id": ObjectId(organization_id)},
+        {"$set": update_doc},
+        return_document=True  # Return the updated document
+    )
+    
+    if not updated_organization:
+        ad.log.error(f"Organization not found after update: {organization_id}")
+        raise HTTPException(status_code=404, detail="Organization not found")
 
+    # Check if MCP enabled status changed
+    mcp_changed = False
+    if organization_update.mcp_enabled is not None:
+        # Get current MCP status
+        org = await db.organizations.find_one({"_id": organization_id})
+        if org and org.get("mcp_enabled", False) != organization_update.mcp_enabled:
+            mcp_changed = True
+    
     return Organization(**{
         "id": str(updated_organization["_id"]),
         "name": updated_organization["name"],
@@ -2368,6 +2394,18 @@ async def update_organization(
         "created_at": updated_organization["created_at"],
         "updated_at": updated_organization["updated_at"]
     })
+
+    # Handle MCP server if status changed
+    if mcp_changed:
+        from api.mcp_server import mcp_server_manager
+        
+        if organization_update.mcp_enabled:
+            # Start the MCP server
+            await mcp_server_manager.start_server(organization_id)
+        else:
+            # Stop the MCP server
+            mcp_server_manager.stop_server(organization_id)
+    
 
 @app.delete("/v0/account/organizations/{organization_id}", tags=["account/organizations"])
 async def delete_organization(

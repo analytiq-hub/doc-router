@@ -15,6 +15,7 @@ jose==1.0.0
 python-jose==3.4.0
 legacy-cgi==2.6.2; python_version >= "3.13"
 litellm==1.63.3
+mcp==1.6.0
 mongomock-motor==0.0.35
 motor==3.7.0
 passlib==1.7.4
