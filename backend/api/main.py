@@ -76,6 +76,7 @@ from api.payments import (
     delete_payments_customer
 )
 import analytiq_data as ad
+from api.mcp_server import OrganizationMCP
 
 # Set up the environment variables. This reads the .env file.
 ad.common.setup()
@@ -113,37 +114,45 @@ async def check_mongodb_connection(uri):
 
 UPLOAD_DIR = "data"
 
+# Global dictionary to track active MCP servers
+active_mcp_servers = {}
+
 @asynccontextmanager
-async def lifespan(app):
-    # Startup code (previously in @app.on_event("startup"))
-    
-    # Check MongoDB connectivity first
-    await check_mongodb_connection(MONGODB_URI)
-    
-    analytiq_client = ad.common.get_analytiq_client()
-    await startup.setup_admin(analytiq_client)
-    await startup.setup_api_creds(analytiq_client)
-    
-    # Initialize payments
-    await init_payments()
-    
-    # Start MCP servers for organizations with MCP enabled
-    from api.mcp_server import mcp_server_manager
-    
-    # Find organizations with MCP enabled
-    organizations_with_mcp = await ad.common.get_async_db().organizations.find({"mcp_enabled": True}).to_list(None)
-    
-    for org in organizations_with_mcp:
-        # Start the MCP server
-        await mcp_server_manager.start_server(org["_id"])
-    
-    yield  # This is where the app runs
-    
-    # Shutdown code (if any) would go here
-    # For example: await some_client.close()
-    
-    # Shutdown all MCP servers
-    mcp_server_manager.shutdown_all()
+async def lifespan(app: FastAPI):
+    # Startup: Initialize resources
+    try:
+        # Fetch organizations with MCP enabled
+        organizations = await fetch_organizations_with_mcp_enabled()
+        
+        for org in organizations:
+            await start_mcp_server(org["_id"])
+            
+        yield  # Application runs here
+        
+    finally:
+        # Shutdown: Clean up resources
+        for org_id in list(active_mcp_servers.keys()):
+            await stop_mcp_server(org_id)
+
+async def fetch_organizations_with_mcp_enabled():
+    # Implement this function to fetch organizations with MCP enabled
+    # This is a placeholder for demonstration purposes
+    return [{"_id": "org1"}, {"_id": "org2"}]
+
+async def start_mcp_server(organization_id: str):
+    """Start an MCP server for an organization if not already running"""
+    if organization_id not in active_mcp_servers:
+        mcp_server = OrganizationMCP(organization_id)
+        await mcp_server.start()
+        active_mcp_servers[organization_id] = mcp_server
+        print(f"Started MCP server for organization {organization_id}")
+
+async def stop_mcp_server(organization_id: str):
+    """Stop an MCP server for an organization if running"""
+    if organization_id in active_mcp_servers:
+        mcp_server = active_mcp_servers.pop(organization_id)
+        await mcp_server.stop()
+        print(f"Stopped MCP server for organization {organization_id}")
 
 # Create the FastAPI app with the lifespan
 app = FastAPI(
@@ -2307,10 +2316,9 @@ async def create_organization(
         "id": str(result.inserted_id)
     })
 
-    # If MCP is enabled, start the server
+    # Start MCP server if enabled
     if organization.mcp_enabled:
-        from api.mcp_server import mcp_server_manager
-        await mcp_server_manager.start_server(org_id)
+        await start_mcp_server(organization.id)
     
 
 @app.put("/v0/account/organizations/{organization_id}", response_model=Organization, tags=["account/organizations"])
@@ -2386,6 +2394,12 @@ async def update_organization(
         if org and org.get("mcp_enabled", False) != organization_update.mcp_enabled:
             mcp_changed = True
     
+    # Start or stop MCP server based on the updated status
+    if organization_update.mcp_enabled:
+        await start_mcp_server(organization_id)
+    else:
+        await stop_mcp_server(organization_id)
+    
     return Organization(**{
         "id": str(updated_organization["_id"]),
         "name": updated_organization["name"],
@@ -2432,6 +2446,11 @@ async def delete_organization(
         
     await db.organizations.delete_one({"_id": ObjectId(organization_id)})
     return {"status": "success"}
+
+    # Stop MCP server if it was running
+    await stop_mcp_server(organization_id)
+
+    return {"message": "Organization deleted"}
 
 # Add these new endpoints after the existing ones
 @app.get("/v0/account/users", response_model=ListUsersResponse, tags=["account/users"])

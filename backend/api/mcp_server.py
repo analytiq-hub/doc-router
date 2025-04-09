@@ -9,53 +9,8 @@ from datetime import datetime
 
 import analytiq_data as ad
 from mcp.server.fastmcp import FastMCP
-from api.main import get_current_user
 from api.schemas import User, DocumentMetadata, DocumentResponse, Prompt
 
-
-# Add this class to manage MCP server processes
-class MCPServerManager:
-    def __init__(self):
-        self.server_processes = {}  # organization_id -> process
-        atexit.register(self.shutdown_all)
-    
-    async def start_server(self, organization_id: str):
-        """Start an MCP server for an organization if not already running"""
-        if organization_id in self.server_processes and self.server_processes[organization_id].poll() is None:
-            # Server already running
-            return
-        
-        # Start the server as a subprocess
-        process = subprocess.Popen(
-            ["python", "-m", "api.mcp_server", organization_id],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
-        )
-        
-        self.server_processes[organization_id] = process
-        print(f"Started MCP server for organization {organization_id}")
-    
-    def stop_server(self, organization_id: str):
-        """Stop an MCP server for an organization if running"""
-        if organization_id in self.server_processes:
-            process = self.server_processes[organization_id]
-            if process.poll() is None:  # Process is still running
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-            
-            del self.server_processes[organization_id]
-            print(f"Stopped MCP server for organization {organization_id}")
-    
-    def shutdown_all(self):
-        """Shutdown all running MCP servers"""
-        for org_id in list(self.server_processes.keys()):
-            self.stop_server(org_id)
-
-# Create a singleton instance
-mcp_server_manager = MCPServerManager()
 
 class OrganizationMCP:
     def __init__(self, organization_id: str):
@@ -69,37 +24,6 @@ class OrganizationMCP:
         self.mcp.tool()(self.get_prompt)
         self.mcp.tool()(self.list_prompts)
         self.mcp.tool()(self.get_extraction)
-        
-        # Register authentication middleware
-        self.mcp.authentication_middleware(self.authenticate_user)
-    
-    async def authenticate_user(self, token: str) -> bool:
-        """Authenticate a user based on their token"""
-        try:
-            # Use the existing authentication function
-            from fastapi import Request
-            from starlette.datastructures import Headers
-            
-            mock_headers = Headers({
-                "Authorization": f"Bearer {token}"
-            })
-            mock_request = Request({
-                "type": "http",
-                "headers": mock_headers,
-                "method": "GET",
-                "path": "/mcp"
-            })
-            
-            # Use the existing authentication function
-            from api.main import get_current_user
-            user = await get_current_user(None, mock_request)
-            
-            # Check if user has access to this organization
-            from api.database import is_user_in_organization
-            return await is_user_in_organization(user["user_id"], self.organization_id)
-            
-        except Exception:
-            return False
     
     async def get_document(self, document_id: str) -> Dict[str, Any]:
         """
@@ -266,20 +190,12 @@ class OrganizationMCP:
         """Run the MCP server with the specified transport"""
         self.mcp.run(transport=transport)
 
-# Example usage in a separate script
-if __name__ == "__main__":
-    import asyncio
-    import sys
-    
-    async def main():
-        if len(sys.argv) < 2:
-            print("Usage: python -m api.mcp_server <organization_id>")
-            return
-            
-        organization_id = sys.argv[1]
-        
-        # Create and run the MCP server
-        mcp_server = OrganizationMCP(organization_id)
-        mcp_server.run()
-    
-    asyncio.run(main()) 
+    async def start(self):
+        """Initialize resources or connections needed for the MCP server."""
+        # Add any initialization logic here
+        print(f"Starting MCP server for organization {self.organization_id}")
+
+    async def stop(self):
+        """Clean up resources or connections when stopping the MCP server."""
+        # Add any cleanup logic here
+        print(f"Stopping MCP server for organization {self.organization_id}") 
