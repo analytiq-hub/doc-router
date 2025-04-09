@@ -135,9 +135,22 @@ async def lifespan(app: FastAPI):
             await stop_mcp_server(org_id)
 
 async def fetch_organizations_with_mcp_enabled():
-    # Implement this function to fetch organizations with MCP enabled
-    # This is a placeholder for demonstration purposes
-    return [{"_id": "org1"}, {"_id": "org2"}]
+    """Fetch all organizations that have MCP enabled"""
+    db = ad.common.get_async_db()
+    
+    # Query organizations collection for documents where mcp_enabled is True
+    cursor = db.organizations.find({"mcp_enabled": True})
+    
+    # Convert cursor to list of organizations
+    organizations = []
+    async for org in cursor:
+        organizations.append({
+            "_id": str(org["_id"]),  # Convert ObjectId to string
+            "name": org["name"]
+        })
+    
+    ad.log.info(f"Found {len(organizations)} organizations with MCP enabled")
+    return organizations
 
 async def start_mcp_server(organization_id: str):
     """Start an MCP server for an organization if not already running"""
@@ -145,14 +158,14 @@ async def start_mcp_server(organization_id: str):
         mcp_server = OrganizationMCP(organization_id)
         await mcp_server.start()
         active_mcp_servers[organization_id] = mcp_server
-        print(f"Started MCP server for organization {organization_id}")
+        ad.log.info(f"Started MCP server for organization {organization_id}")
 
 async def stop_mcp_server(organization_id: str):
     """Stop an MCP server for an organization if running"""
     if organization_id in active_mcp_servers:
         mcp_server = active_mcp_servers.pop(organization_id)
         await mcp_server.stop()
-        print(f"Stopped MCP server for organization {organization_id}")
+        ad.log.info(f"Stopped MCP server for organization {organization_id}")
 
 # Create the FastAPI app with the lifespan
 app = FastAPI(

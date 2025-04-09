@@ -193,9 +193,9 @@ class OrganizationMCP:
     async def start(self):
         """Initialize resources or connections needed for the MCP server."""
         # Add any initialization logic here
-        print(f"Starting MCP server for organization {self.organization_id}")
+        ad.log.info(f"Starting MCP server for organization {self.organization_id}")
 
     async def stop(self):
         """Clean up resources or connections when stopping the MCP server."""
         # Add any cleanup logic here
-        print(f"Stopping MCP server for organization {self.organization_id}") 
+        ad.log.info(f"Stopping MCP server for organization {self.organization_id}") 
