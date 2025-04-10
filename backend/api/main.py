@@ -113,9 +113,29 @@ async def check_mongodb_connection(uri):
 
 UPLOAD_DIR = "data"
 
+@asynccontextmanager
+async def lifespan(app):
+    # Startup code (previously in @app.on_event("startup"))
+    
+    # Check MongoDB connectivity first
+    await check_mongodb_connection(MONGODB_URI)
+    
+    analytiq_client = ad.common.get_analytiq_client()
+    await startup.setup_admin(analytiq_client)
+    await startup.setup_api_creds(analytiq_client)
+    
+    # Initialize payments
+    await init_payments()
+    
+    yield  # This is where the app runs
+    
+    # Shutdown code (if any) would go here
+    # For example: await some_client.close()
+
 # Create the FastAPI app with the lifespan
 app = FastAPI(
     root_path=FASTAPI_ROOT_PATH,
+    lifespan=lifespan
 )
 security = HTTPBearer()
 
