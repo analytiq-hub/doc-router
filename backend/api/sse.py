@@ -18,8 +18,8 @@ def create_sse_server(mcp: FastMCP):
 
     # Create Starlette routes for SSE and message handling
     routes = [
-        Route("/sse/", endpoint=handle_sse),
-        Mount("/messages/", app=transport.handle_post_message),
+        Route("/sse", endpoint=handle_sse),
+        Mount("/messages", app=transport.handle_post_message),
     ]
 
     # Create a Starlette app

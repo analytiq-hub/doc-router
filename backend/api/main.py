@@ -3292,7 +3292,7 @@ async def delete_account_token(
 # Include payments router only if STRIPE_SECRET_KEY is set
 if os.getenv("STRIPE_SECRET_KEY"):
     app.include_router(payments_router)
-    
+
 app.mount("/", create_sse_server(mcp))
 
 if __name__ == "__main__":
