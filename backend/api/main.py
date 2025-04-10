@@ -41,6 +41,9 @@ from jsonschema import validate, ValidationError, Draft7Validator
 
 # This import will register MCP handlers with the app
 import mcp_server
+# For MCP SSE support
+from api.mcp_server import mcp
+from api.sse import create_sse_server
 
 # Local imports
 from api import email_utils, startup, organizations, users, limits
@@ -3289,10 +3292,8 @@ async def delete_account_token(
 # Include payments router only if STRIPE_SECRET_KEY is set
 if os.getenv("STRIPE_SECRET_KEY"):
     app.include_router(payments_router)
-
-# Mount the MCP SSE server
-# See https://github.com/AnalytiqAI/mcp/blob/main/docs/server/fastmcp.md#sse-support
-app.routes.append(Mount('/v0/mcp', app=mcp_sse_app))
+    
+app.mount("/", create_sse_server(mcp))
 
 if __name__ == "__main__":
     import uvicorn
