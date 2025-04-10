@@ -36,6 +36,9 @@ from bcrypt import hashpw, gensalt
 from dotenv import load_dotenv
 from jsonschema import validate, ValidationError, Draft7Validator
 
+# This import will register MCP handlers with the app
+import mcp_server
+
 # Local imports
 from api import email_utils, startup, organizations, users, limits
 from api.schemas import (
@@ -75,6 +78,8 @@ from api.payments import (
     update_payments_customer,
     delete_payments_customer
 )
+from api.mcp_server import router as mcp_router
+
 import analytiq_data as ad
 
 # Set up the environment variables. This reads the .env file.
@@ -3282,6 +3287,9 @@ async def delete_account_token(
 # Include payments router only if STRIPE_SECRET_KEY is set
 if os.getenv("STRIPE_SECRET_KEY"):
     app.include_router(payments_router)
+
+# Include MCP router
+app.include_router(mcp_router)
 
 if __name__ == "__main__":
     import uvicorn
