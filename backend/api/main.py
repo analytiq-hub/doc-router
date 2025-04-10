@@ -20,7 +20,8 @@ from contextlib import asynccontextmanager
 cwd = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(f"{cwd}/..")
 
-# Third-party imports
+# Starlette and FastAPI imports
+from starlette.routing import Mount
 from fastapi import (
     FastAPI, File, UploadFile, HTTPException, Query, 
     Depends, status, Body, Security, Response, 
@@ -29,6 +30,8 @@ from fastapi import (
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+
+# Other third-party imports
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from jose import JWTError, jwt
@@ -78,8 +81,7 @@ from api.payments import (
     update_payments_customer,
     delete_payments_customer
 )
-from api.mcp_server import router as mcp_router
-
+from api.mcp_server import sse_app as mcp_sse_app
 import analytiq_data as ad
 
 # Set up the environment variables. This reads the .env file.
@@ -3288,8 +3290,9 @@ async def delete_account_token(
 if os.getenv("STRIPE_SECRET_KEY"):
     app.include_router(payments_router)
 
-# Include MCP router
-app.include_router(mcp_router)
+# Mount the MCP SSE server
+# See https://github.com/AnalytiqAI/mcp/blob/main/docs/server/fastmcp.md#sse-support
+app.routes.append(Mount('/v0/mcp', app=mcp_sse_app))
 
 if __name__ == "__main__":
     import uvicorn
