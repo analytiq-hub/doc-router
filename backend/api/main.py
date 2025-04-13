@@ -906,7 +906,7 @@ async def create_schema(
     
     # Return complete schema
     schema_dict["name"] = schema.name
-    schema_dict["id"] = str(result.inserted_id)
+    schema_dict["schema_revid"] = str(result.inserted_id)
     return Schema(**schema_dict)
 
 @app.get("/v0/orgs/{organization_id}/schemas", response_model=ListSchemasResponse, tags=["schemas"])
@@ -968,9 +968,9 @@ async def list_schemas(
     total_count = result["total"][0]["count"] if result["total"] else 0
     schemas = result["schemas"]
     
-    # Convert _id to id in each schema and add name from schemas collection
+    # Convert _id to schema_revid in each schema and add name from schemas collection
     for schema in schemas:
-        schema['id'] = str(schema.pop('_id'))
+        schema['schema_revid'] = str(schema.pop('_id'))
         schema['name'] = schema_id_to_name.get(schema['schema_id'], "Unknown")
     
     return ListSchemasResponse(
@@ -982,7 +982,7 @@ async def list_schemas(
 @app.get("/v0/orgs/{organization_id}/schemas/{schema_id}", response_model=Schema, tags=["schemas"])
 async def get_schema(
     organization_id: str,
-    schema_id: str,
+    schema_revid: str,
     current_user: User = Depends(get_current_user)
 ):
     """Get a schema"""
@@ -990,7 +990,7 @@ async def get_schema(
     
     # Get the schema revision
     revision = await db.schema_revisions.find_one({
-        "_id": ObjectId(schema_id)
+        "_id": ObjectId(schema_revid)
     })
     if not revision:
         raise HTTPException(status_code=404, detail="Schema not found")
@@ -1004,26 +1004,27 @@ async def get_schema(
         raise HTTPException(status_code=404, detail="Schema not found or not in this organization")
     
     # Combine the data
-    revision['id'] = str(revision.pop('_id'))
+    revision['schema_revid'] = str(revision.pop('_id'))
+    revision['schema_id'] = str(revision.pop('schema_id'))
     revision['name'] = schema['name']
     
     return Schema(**revision)
 
-@app.put("/v0/orgs/{organization_id}/schemas/{schema_id}", response_model=Schema, tags=["schemas"])
+@app.put("/v0/orgs/{organization_id}/schemas/{schema_revid}", response_model=Schema, tags=["schemas"])
 async def update_schema(
     organization_id: str,
-    schema_id: str,
+    schema_revid: str,
     schema: SchemaConfig,
     current_user: User = Depends(get_current_user)
 ):
     """Update a schema"""
-    ad.log.info(f"update_schema() start: organization_id: {organization_id}, schema_id: {schema_id}, schema: {schema}")
+    ad.log.info(f"update_schema() start: organization_id: {organization_id}, schema_revid: {schema_revid}, schema: {schema}")
     
     db = ad.common.get_async_db()
     
     # Get the existing schema revision
     existing_revision = await db.schema_revisions.find_one({
-        "_id": ObjectId(schema_id)
+        "_id": ObjectId(schema_revid)
     })
     if not existing_revision:
         raise HTTPException(status_code=404, detail="Schema not found")
@@ -1061,7 +1062,7 @@ async def update_schema(
         if result.modified_count > 0:
             # Return the updated schema
             updated_revision = existing_revision.copy()
-            updated_revision["id"] = str(updated_revision.pop("_id"))
+            updated_revision["schema_revid"] = str(updated_revision.pop("_id"))
             updated_revision["name"] = schema.name
             return Schema(**updated_revision)
         else:
@@ -1091,14 +1092,14 @@ async def update_schema(
     result = await db.schema_revisions.insert_one(new_schema)
     
     # Return updated schema
-    new_schema["id"] = str(result.inserted_id)
+    new_schema["schema_revid"] = str(result.inserted_id)
     new_schema["name"] = schema.name
     return Schema(**new_schema)
 
-@app.delete("/v0/orgs/{organization_id}/schemas/{schema_id}", tags=["schemas"])
+@app.delete("/v0/orgs/{organization_id}/schemas/{schema_revid}", tags=["schemas"])
 async def delete_schema(
     organization_id: str,
-    schema_id: str,
+    schema_revid: str,
     current_user: User = Depends(get_current_user)
 ):
     """Delete a schema"""
@@ -1106,7 +1107,7 @@ async def delete_schema(
     
     # Get the schema revision
     revision = await db.schema_revisions.find_one({
-        "_id": ObjectId(schema_id)
+        "_id": ObjectId(schema_revid)
     })
     if not revision:
         raise HTTPException(status_code=404, detail="Schema not found")
@@ -1122,10 +1123,16 @@ async def delete_schema(
     # Check if user has permission to delete
     if revision["created_by"] != current_user.user_id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this schema")
-    
-    # Check for dependent prompts by schema_id
-    dependent_prompts = await db.prompt_revisions.find({
+
+    # This would be simpler if the prompt_revisions had a schema_id field
+    rev_id_elems = await db.schema_revisions.find({
         "schema_id": revision["schema_id"]
+    }).to_list(None)
+    rev_ids = [str(rev["_id"]) for rev in rev_id_elems]
+    
+    # Check for dependent prompts by schema_revid for all revisions of the schema
+    dependent_prompts = await db.prompt_revisions.find({
+        "schema_revid": {"$in": rev_ids}
     }).to_list(None)
     
     if dependent_prompts:
@@ -1162,21 +1169,21 @@ async def delete_schema(
         
     return {"message": "Schema deleted successfully"}
 
-@app.post("/v0/orgs/{organization_id}/schemas/{schema_id}/validate", tags=["schemas"])
+@app.post("/v0/orgs/{organization_id}/schemas/{schema_revid}/validate", tags=["schemas"])
 async def validate_against_schema(
     organization_id: str,
-    schema_id: str,
+    schema_revid: str,
     data: dict = Body(...),
     current_user: User = Depends(get_current_user)
 ):
     """Validate data against a schema"""
-    ad.log.info(f"validate_against_schema() start: organization_id: {organization_id}, schema_id: {schema_id}")
+    ad.log.info(f"validate_against_schema() start: organization_id: {organization_id}, schema_revid: {schema_revid}")
     
     db = ad.common.get_async_db()
     
     # Get the schema
     schema_doc = await db.schema_revisions.find_one({
-        "_id": ObjectId(schema_id),
+        "_id": ObjectId(schema_revid),
     })
     
     if not schema_doc:
