@@ -6,7 +6,8 @@ import { useSession } from 'next-auth/react';
 import { 
   Person as UserIcon,
   Business as OrganizationsIcon,
-  Settings as SystemIcon
+  Settings as SystemIcon,
+  ApiRounded as ApiIcon
 } from '@mui/icons-material';
 
 interface SettingsLayoutProps {
@@ -76,6 +77,22 @@ const SettingsLayout: React.FC<SettingsLayoutProps> = ({
           href: '/settings/account/development',
           id: 'system_development',
           adminOnly: true,
+        },
+      ],
+    },
+    {
+      title: 'Integrations',
+      icon: ApiIcon,
+      items: [
+        {
+          name: 'Manage Integrations',
+          href: '/settings/integrations',
+          id: 'integrations',
+        },
+        {
+          name: 'API Documentation',
+          href: '/settings/integrations/api-docs',
+          id: 'integrations_api',
         },
       ],
     },
