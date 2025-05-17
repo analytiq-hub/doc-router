@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doc-router"
+version = "0.1.0"
+description = "Smart Document Router - AI-powered document processing and routing system"
+readme = "README.md"
+authors = [
+    {name = "Analytiq Hub", email = "andrei@analytiqhub.com"}
+]
+license = "Apache-2.0"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11"
+]
+requires-python = ">=3.9"
+
+[project.urls]
+"Homepage" = "https://github.com/analytiq/doc-router"
+"Bug Tracker" = "https://github.com/analytiq/doc-router/issues"
+
+[tool.mypy]
+python_version = "3.9"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true 
