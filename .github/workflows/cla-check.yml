@@ -4,6 +4,10 @@ on:
   issue_comment:
     types: [created]
 
+permissions:
+  contents: write
+  pull-requests: read
+
 jobs:
   check-cla:
     if: github.event.issue.pull_request != null
