@@ -19,7 +19,7 @@ import FormNodeEditModal from '@/components/FormNodeEditModal';
 
 // --- Custom node components will go here (see next steps) ---
 
-const initialNodes: Node<FormNodeData>[] = [
+const initialNodes: Node<FormNodeData & { onDelete?: (id: string) => void }>[] = [
   {
     id: '1',
     type: 'noteNode',
@@ -30,7 +30,8 @@ const initialNodes: Node<FormNodeData>[] = [
       name: "I'm a note",
       key: 'note_1',
       position: { x: 100, y: 100 },
-      noteContent: 'Double click to edit me. Guide'
+      noteContent: 'Double click to edit me. Guide',
+      onDelete: () => {}, // will be replaced
     }
   },
   {
@@ -44,7 +45,8 @@ const initialNodes: Node<FormNodeData>[] = [
       key: 'insured_name',
       position: { x: 200, y: 200 },
       placeholder: 'insured_full_name',
-      required: true
+      required: true,
+      onDelete: () => {}, // will be replaced
     }
   }
 ];
@@ -61,6 +63,10 @@ const FormCanvasBuilder: React.FC = () => {
   const [editNode, setEditNode] = useState<FormNodeData | null>(null);
   const [editOpen, setEditOpen] = useState(false);
 
+  const handleDeleteNode = (id: string) => {
+    setNodes(nds => nds.filter(n => n.id !== id));
+  };
+
   // Add node handler
   const handleAddNode = (type: string) => {
     setPanelOpen(false);
@@ -74,7 +80,8 @@ const FormCanvasBuilder: React.FC = () => {
         name: 'Sticky Note',
         key: `note_${id}`,
         position,
-        noteContent: 'Double click to edit me.'
+        noteContent: 'Double click to edit me.',
+        onDelete: handleDeleteNode, // <-- pass the handler here
       };
     } else if (type === 'text') {
       data = {
@@ -84,7 +91,8 @@ const FormCanvasBuilder: React.FC = () => {
         key: `text_${id}`,
         position,
         placeholder: 'Enter text...',
-        required: false
+        required: false,
+        onDelete: handleDeleteNode, // <-- pass the handler here
       };
     }
     // Add more types as needed...
@@ -95,7 +103,10 @@ const FormCanvasBuilder: React.FC = () => {
         id,
         type: type === 'note' ? 'noteNode' : 'inputNode',
         position,
-        data
+        data: {
+          ...data,
+          onDelete: handleDeleteNode, // <-- pass the handler here
+        }
       }
     ]);
   };
@@ -117,6 +128,15 @@ const FormCanvasBuilder: React.FC = () => {
     );
     setEditOpen(false);
   };
+
+  React.useEffect(() => {
+    setNodes(nds =>
+      nds.map(n => ({
+        ...n,
+        data: { ...n.data, onDelete: handleDeleteNode }
+      }))
+    );
+  }, []);
 
   return (
     <ReactFlowProvider>
