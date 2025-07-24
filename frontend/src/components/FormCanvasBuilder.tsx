@@ -4,19 +4,18 @@ import ReactFlow, {
   Background,
   Controls,
   MiniMap,
-  addEdge,
   Node,
-  Edge,
-  Connection,
   ReactFlowProvider,
   useNodesState,
-  useEdgesState,
   NodeTypes
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { FormNodeData, FormElementType } from '@/types/forms';
 import FormNoteNodeComponent from '@/components/FormNoteNodeComponent';
 import FormInputNodeComponent from '@/components/FormInputNodeComponent';
+import FormNodePanel from '@/components/FormNodePanel';
+import { nanoid } from 'nanoid'; // For unique node ids (npm install nanoid)
+import FormNodeEditModal from '@/components/FormNodeEditModal';
 
 // --- Custom node components will go here (see next steps) ---
 
@@ -50,8 +49,6 @@ const initialNodes: Node<FormNodeData>[] = [
   }
 ];
 
-const initialEdges: Edge[] = [];
-
 const nodeTypes: NodeTypes = {
   noteNode: FormNoteNodeComponent,   // To be implemented
   inputNode: FormInputNodeComponent, // To be implemented
@@ -60,25 +57,91 @@ const nodeTypes: NodeTypes = {
 
 const FormCanvasBuilder: React.FC = () => {
   const [nodes, setNodes, onNodesChange] = useNodesState<FormNodeData>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [editNode, setEditNode] = useState<FormNodeData | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
 
-  // Add edge handler (optional, for connecting nodes)
-  const onConnect = useCallback(
-    (params: Edge | Connection) => setEdges((eds) => addEdge(params, eds)),
-    [setEdges]
-  );
+  // Add node handler
+  const handleAddNode = (type: string) => {
+    setPanelOpen(false);
+    const id = nanoid();
+    const position = { x: 300, y: 200 }; // You can randomize or center
+    let data: FormNodeData;
+    if (type === 'note') {
+      data = {
+        id,
+        type: 'note',
+        name: 'Sticky Note',
+        key: `note_${id}`,
+        position,
+        noteContent: 'Double click to edit me.'
+      };
+    } else if (type === 'text') {
+      data = {
+        id,
+        type: 'text',
+        name: 'Text Field',
+        key: `text_${id}`,
+        position,
+        placeholder: 'Enter text...',
+        required: false
+      };
+    }
+    // Add more types as needed...
+
+    setNodes((nds) => [
+      ...nds,
+      {
+        id,
+        type: type === 'note' ? 'noteNode' : 'inputNode',
+        position,
+        data
+      }
+    ]);
+  };
+
+  // Double-click handler
+  const onNodeDoubleClick = (_: any, node: any) => {
+    setEditNode(node.data);
+    setEditOpen(true);
+  };
+
+  // Save handler
+  const handleEditSave = (updated: FormNodeData) => {
+    setNodes(nds =>
+      nds.map(n =>
+        n.id === updated.id
+          ? { ...n, data: { ...n.data, ...updated } }
+          : n
+      )
+    );
+    setEditOpen(false);
+  };
 
   return (
     <ReactFlowProvider>
-      <div style={{ width: '100vw', height: '80vh' }}>
+      <div style={{ width: '100vw', height: '80vh', position: 'relative' }}>
+        {/* Floating Add Button */}
+        <button
+          className="absolute top-4 right-4 z-50 bg-white border border-gray-300 rounded-full w-12 h-12 flex items-center justify-center shadow hover:bg-gray-100 text-2xl"
+          onClick={() => setPanelOpen(true)}
+          title="Open nodes panel"
+        >
+          +
+        </button>
+        <FormNodePanel isOpen={panelOpen} onAddNode={handleAddNode} onClose={() => setPanelOpen(false)} />
+        <FormNodeEditModal
+          node={editNode}
+          isOpen={editOpen}
+          onClose={() => setEditOpen(false)}
+          onSave={handleEditSave}
+        />
         <ReactFlow
           nodes={nodes}
-          edges={edges}
           onNodesChange={onNodesChange}
-          onEdgesChange={onEdgesChange}
-          onConnect={onConnect}
           nodeTypes={nodeTypes}
           fitView
+          onNodeDoubleClick={onNodeDoubleClick}
         >
           <Background />
           <MiniMap />
