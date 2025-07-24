@@ -11,6 +11,7 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/navigation';
+import FormCanvasBuilder from '@/components/FormCanvasBuilder';
 
 interface NestedFieldsEditorProps {
   fields: FormField[];
@@ -1001,6 +1002,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
           </div>
         </form>
       </div>
+      <FormCanvasBuilder />
     </div>
   );
 };

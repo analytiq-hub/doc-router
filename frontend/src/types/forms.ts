@@ -31,13 +31,32 @@ export interface Form {
   created_by: string;
 }
 
-export interface FormField {
-  name: string;
-  type: 'str' | 'int' | 'float' | 'bool' | 'object' | 'array';
-  description?: string;
-  nestedFields?: FormField[]; // For object types
-  arrayItemType?: 'str' | 'int' | 'float' | 'bool' | 'object'; // For array types
-  arrayObjectFields?: FormField[]; // For array of objects
+export type FormElementType =
+  | 'text'
+  | 'number'
+  | 'dropdown'
+  | 'checkbox'
+  | 'textarea'
+  | 'table'
+  | 'note'; // Add note type
+
+export interface FormNodeData {
+  id: string; // unique node id
+  type: FormElementType;
+  name: string; // label or note title
+  key: string; // for data binding (not needed for notes)
+  position: { x: number; y: number };
+  width?: number;
+  height?: number;
+  // --- Field-specific properties ---
+  placeholder?: string;
+  required?: boolean;
+  requiredExpression?: string;
+  defaultValue?: string | number | boolean;
+  helpText?: string;
+  options?: { label: string; value: string }[]; // For dropdowns
+  columns?: FormNodeData[]; // For table type: columns definition
+  noteContent?: string; // For note type
 }
 
 export interface FormConfig {
