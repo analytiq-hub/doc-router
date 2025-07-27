@@ -119,15 +119,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
         });
       }
 
-      // Only clear and redirect if this was an explicit save action
-      // Don't clear the form if we're just editing
-      if (currentFormId) {
-        // Don't clear the form or redirect - stay on the edit page
-        return;
-      }
-
       // Clear the form only for new forms
-      console.log('FormCreate: Clearing form after save (new form)');
       setCurrentForm({
         name: '',
         response_format: {
@@ -146,16 +138,6 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!currentForm.name) {
-      toast.error('Please fill in the form name');
-      return;
-    }
-
-    saveForm();
   };
 
   return (
