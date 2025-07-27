@@ -119,7 +119,15 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
         });
       }
 
-      // Clear the form
+      // Only clear and redirect if this was an explicit save action
+      // Don't clear the form if we're just editing
+      if (currentFormId) {
+        // Don't clear the form or redirect - stay on the edit page
+        return;
+      }
+
+      // Clear the form only for new forms
+      console.log('FormCreate: Clearing form after save (new form)');
       setCurrentForm({
         name: '',
         response_format: {
@@ -185,12 +193,18 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                 onChange={e => setCurrentForm({ ...currentForm, name: e.target.value })}
                 placeholder="Form Name"
                 disabled={isLoading}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                  }
+                }}
               />
             </div>
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => {
+                  console.log('FormCreate: Clear button clicked');
                   setCurrentFormId(null);
                   setCurrentForm({
                     name: '',

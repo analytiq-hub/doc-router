@@ -55,7 +55,7 @@ const FormioBuilder: React.FC<FormioBuilderProps> = ({ jsonFormio, onChange }) =
         const parsedComponents = JSON.parse(currentJsonFormio);
         form = { components: parsedComponents };
       } catch (error) {
-        console.error('Error parsing jsonFormio:', error);
+        console.error('FormioBuilder: Error parsing jsonFormio:', error);
         form = { components: [] };
       }
     }
