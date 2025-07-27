@@ -1,4 +1,8 @@
 import "@/styles/globals.css";
+import 'formiojs/dist/formio.full.min.css';
+import '@tsed/tailwind-formio/styles/index.css';
+import '@/styles/formio-custom.css';
+import 'boxicons/css/boxicons.min.css';
 import React from 'react';
 import SessionProvider from "@/components/SessionProvider"
 import ThemeRegistry from '@/components/ThemeRegistry';

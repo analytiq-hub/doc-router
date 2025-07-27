@@ -1,14 +1,9 @@
 /* Import Boxicons for Formio Tailwind icons */
 @import 'boxicons/css/boxicons.min.css';
 
-/* Import Bootstrap and Formio before Tailwind */
-@import 'formiojs/dist/formio.full.min.css';
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-@import "~@tsed/tailwind-formio/styles/index.css";
-@import './formio-custom.css';
 
 @import 'react-toastify/dist/ReactToastify.css';
 
