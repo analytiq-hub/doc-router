@@ -182,7 +182,8 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
           />
         </div>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {/* REMOVE the <form> wrapper and just use a div */}
+        <div className="space-y-4">
           {/* Form Name Input */}
           <div className="flex items-center gap-4 mb-4">
             <div className="flex-1 md:w-1/2 md:max-w-[calc(50%-1rem)]">
@@ -221,7 +222,8 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                 Clear
               </button>
               <button
-                type="submit"
+                type="button"
+                onClick={saveForm}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                 disabled={isLoading}
               >
@@ -313,7 +315,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
               />
             </div>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );
