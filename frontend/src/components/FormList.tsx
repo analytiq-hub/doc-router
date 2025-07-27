@@ -75,7 +75,7 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
     loadData();
   }, [loadForms, loadTags]);
 
-  // Update the edit handler
+  // Update the edit handler to route to formio route group
   const handleEdit = (form: Form) => {
     router.push(`/orgs/${organizationId}/forms/${form.form_revid}`);
     handleMenuClose();
