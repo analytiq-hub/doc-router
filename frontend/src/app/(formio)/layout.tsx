@@ -5,6 +5,7 @@ import '@/styles/formio-custom.css';
 import 'boxicons/css/boxicons.min.css';
 import React from 'react';
 import SessionProvider from "@/components/SessionProvider"
+import Layout from '@/components/Layout';
 import ThemeRegistry from '@/components/ThemeRegistry';
 import { OrganizationProvider } from '@/contexts/OrganizationContext';
 import { getAppServerSession } from '@/utils/session';
@@ -33,7 +34,7 @@ export default async function FormioLayout({
           <SessionProvider session={appSession}>
             <OrganizationProvider>
               <FormioProvider>
-                {children}
+                <Layout>{children}</Layout>
               </FormioProvider>
             </OrganizationProvider>
           </SessionProvider>

@@ -8,9 +8,6 @@ const config: Config = {
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/utils/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/styles/**/*.{js,ts,jsx,tsx,mdx}",
-    "./src/libs/**/*.{js,ts,jsx,tsx,mdx}",
   ],
   theme: {
     extend: {
@@ -164,8 +161,16 @@ const config: Config = {
     extend: {}
   },
   corePlugins: {
-    borderCollapse: true
+    // Disable specific utilities that conflict with Formio
+    grid: false,
+    flexbox: false,
+    spacing: false,
+    // Keep others enabled
   },
   plugins: [],
+  // Alternative: set screens to only include 'base'
+  screens: {
+    'base': '0px',
+  },
 };
 export default config;
