@@ -24,7 +24,6 @@
     "@mui/material": "^6.1.1",
     "@mui/x-data-grid": "^7.21.0",
     "@tsed/react-formio": "^2.3.6",
-    "@tsed/tailwind-formio": "^2.3.6",
     "autoprefixer": "^10.4.21",
     "axios": "^1.7.7",
     "bcryptjs": "^2.4.3",
