@@ -1,6 +1,6 @@
 import "@/styles/globals.css";
-import 'formiojs/dist/formio.full.min.css';
-// import '@tsed/tailwind-formio/styles/index.css';
+import '@/vendor/formiojs/dist/formio.full.min.css';
+//import '@/styles/formio/formio.full.min.css';
 import '@/styles/formio/index.css';
 import '@/styles/formio-custom.css';
 import 'boxicons/css/boxicons.min.css';

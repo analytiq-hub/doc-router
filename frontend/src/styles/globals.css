@@ -7,10 +7,6 @@
 
 @import 'react-toastify/dist/ReactToastify.css';
 
-/* Commented out, we're using the FormioProvider component to load the FormIO CSS */
-/* @import 'formiojs/dist/formio.full.min.css'; */
-/* @import './formio/index.css'; */
-
 :root {
   --background: #ecf0f1;
   --foreground: #2c3e50;
