@@ -1,0 +1,158 @@
+:root {
+  --tw-ring-inset: 'var(--tw-empty,/*!*/ /*!*/)';
+  --tw-ring-offset-width: 0px;
+  --tw-ring-offset-color: #fff;
+  --tw-ring-color: theme('colors.blue.600');
+  --tw-ring-offset-shadow: var(--tw-ring-inset) 0 0 0 var(--tw-ring-offset-width) var(--tw-ring-offset-color);
+  --tw-ring-shadow: var(--tw-ring-inset) 0 0 0 calc(1px + var(--tw-ring-offset-width)) var(--tw-ring-color);
+}
+
+.form-group {
+  @apply mb-5;
+
+  &:last-child {
+    @apply mb-0;
+  }
+
+  &.formio-hidden {
+    @apply hidden;
+  }
+}
+
+.builder-component > .form-group {
+  @apply mb-5;
+}
+
+.form-control {
+  @apply appearance-none bg-white leading-normal px-3 py-2 block w-full rounded-md border-1 border-gray-300 shadow-sm;
+
+  &.form-control-sm {
+    @apply px-2 py-1 text-sm;
+  }
+}
+
+.form-control:disabled, .form-control[readonly] {
+  @apply bg-gray-200 border-transparent shadow-none;
+}
+
+.formio-modified:not(.has-error) {
+  label {
+    @apply text-green-600;
+  }
+
+  .form-control {
+    @apply border-green-600;
+
+    &:focus {
+      @apply outline-none border-green-300 ring ring-green-200 ring-opacity-50;
+      outline-offset: theme('outline.none[1]');
+      box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+      border-color: theme('colors.green.600');
+    }
+  }
+}
+.help-block {
+  @apply block text-sm text-center;
+}
+
+.has-error {
+  label, .error {
+    @apply text-red-600;
+  }
+
+  .help-block {
+    @apply p-3 block;
+    @apply text-red-700;
+  }
+
+  .form-control {
+    @apply border-red-600;
+
+    &:focus {
+      @apply outline-none border-red-300 ring ring-red-200 ring-opacity-50;
+      outline-offset: theme('outline.none[1]');
+      box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+      border-color: theme('colors.red.600');
+    }
+  }
+}
+
+input.form-control::placeholder,
+textarea.form-control::placeholder {
+  @apply text-gray-500 opacity-100;
+}
+
+.form-control:focus {
+  @apply outline-none border-primary-300 ring ring-primary-50 ring-opacity-50;
+  outline-offset: theme('outline.none[1]');
+  box-shadow: var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow, 0 0 #0000);
+  border-color: theme('colors.blue.600');
+}
+
+.form-control:disabled, .form-control[readonly] {
+  @apply bg-gray-300 opacity-100;
+}
+
+::-webkit-datetime-edit-fields-wrapper {
+  @apply p-0;
+}
+
+::-webkit-date-and-time-value {
+  min-height: 1.5em;
+}
+
+select.form-control {
+  @apply bg-no-repeat pr-10;
+  print-color-adjust: exact;
+  background-size: 1.5em 1.5em;
+  background-position: right theme('spacing.2') center;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+
+  &:focus::-ms-value {
+    @apply text-base bg-white;
+  }
+}
+
+select.form-control[size],
+select.form-control[multiple] {
+  @apply h-auto pr-3;
+  background-image: none;
+}
+
+textarea.form-control {
+  @apply h-auto;
+}
+
+.form-control-file,
+.form-control-range {
+  @apply block w-full;
+}
+
+.form-text {
+  @apply block mt-1;
+
+  &.error {
+    @apply text-red-600 text-sm;
+  }
+}
+
+.text-muted {
+  @apply text-gray-500;
+  &[ref="tooltip"] {
+    @apply text-white;
+  }
+}
+
+.col-form-label {
+  @apply flex items-center pt-1 pb-2 m-0;
+}
+
+.field-required:after {
+  @apply z-1 ml-1;
+}
+
+.formio-component hr,
+hr {
+  @apply border-gray-300 mx-20 mb-5;
+}
+

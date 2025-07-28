@@ -1,0 +1,162 @@
+.input-group {
+  @apply flex relative flex-wrap items-stretch w-full shadow-sm rounded;
+  > .choices {
+    @apply flex-1 mb-0;
+    .choices__inner {
+      @apply shadow-none;
+    }
+  }
+}
+
+.input-group > .form-control:not([type=hidden]),
+.input-group > .form-control-plaintext,
+.input-group > .custom-select,
+.input-group > .custom-file {
+  @apply relative flex-auto mb-0 mt-0 shadow-none;
+  width: 1%;
+
+  + .form-control,
+  + .custom-select,
+  + .custom-file {
+    @apply -m-px;
+  }
+}
+
+.input-group > .form-control:focus,
+.input-group > .custom-select:focus,
+.input-group > .custom-file .custom-file-input:focus ~ .custom-file-label {
+  @apply z-3;
+}
+
+.input-group > .custom-file .custom-file-input:focus {
+  @apply z-4;
+}
+
+.input-group > .form-control,
+.input-group > .choices,
+.input-group > .custom-select {
+  &:not(:last-child) {
+    @apply rounded-r-none;
+    .choices__inner {
+      @apply rounded-r-none;
+    }
+  }
+
+  &:not(:first-child) {
+    @apply rounded-l-none;
+    .choices__inner {
+      @apply rounded-l-none;
+    }
+  }
+}
+
+.input-group > [type=hidden]:first-child ~ .form-control {
+  @apply rounded-l-md;
+}
+
+.input-group > .custom-file {
+  @apply flex items-center;
+}
+
+.input-group > .custom-file:not(:last-child) .custom-file-label,
+.input-group > .custom-file:not(:last-child) .custom-file-label::after {
+  @apply rounded-r-none;
+}
+
+.input-group > .custom-file:not(:first-child) .custom-file-label {
+  @apply rounded-l-none;
+}
+
+.input-group-prepend,
+.input-group-append {
+  @apply flex;
+
+  .btn {
+    @apply relative z-2;
+
+    &:focus {
+      @apply z-3;
+    }
+  }
+
+  .btn + .btn,
+  .btn + .input-group-text,
+  .input-group-text + .input-group-text,
+  .input-group-text + .btn {
+    @apply -ml-px;
+  }
+}
+
+.input-group-prepend {
+  @apply -mr-px;
+}
+
+.input-group-append {
+  @apply -ml-px;
+}
+
+.input-group-text {
+  @apply flex items-center py-1 px-3 m-0 text-base font-normal text-gray-700 text-center whitespace-nowrap bg-gray-200 border-solid border-1 border-gray-300 rounded-md;
+
+  input[type="radio"],
+  input[type="checkbox"] {
+    @apply mt-0;
+  }
+}
+
+/*.input-group-lg > .form-control:not(textarea),
+.input-group-lg > .custom-select {
+  height: $input-height-lg;
+}*/
+
+/*.input-group-lg > .form-control,
+.input-group-lg > .custom-select,
+.input-group-lg > .input-group-prepend > .input-group-text,
+.input-group-lg > .input-group-append > .input-group-text,
+.input-group-lg > .input-group-prepend > .btn,
+.input-group-lg > .input-group-append > .btn {
+  padding: $input-padding-y-lg $input-padding-x-lg;
+  @include font-size($input-font-size-lg);
+  line-height: $input-line-height-lg;
+  @include border-radius($input-border-radius-lg);
+}
+
+.input-group-sm > .form-control:not(textarea),
+.input-group-sm > .custom-select {
+  height: $input-height-sm;
+}
+
+.input-group-sm > .form-control,
+.input-group-sm > .custom-select,
+.input-group-sm > .input-group-prepend > .input-group-text,
+.input-group-sm > .input-group-append > .input-group-text,
+.input-group-sm > .input-group-prepend > .btn,
+.input-group-sm > .input-group-append > .btn {
+  padding: $input-padding-y-sm $input-padding-x-sm;
+  @include font-size($input-font-size-sm);
+  line-height: $input-line-height-sm;
+  @include border-radius($input-border-radius-sm);
+}
+
+.input-group-lg > .custom-select,
+.input-group-sm > .custom-select {
+  padding-right: $custom-select-padding-x + $custom-select-indicator-padding;
+}*/
+
+.input-group > .input-group-prepend > .btn,
+.input-group > .input-group-prepend > .input-group-text,
+.input-group > .input-group-append:not(:last-child) > .btn,
+.input-group > .input-group-append:not(:last-child) > .input-group-text,
+.input-group > .input-group-append:last-child > .btn:not(:last-child):not(.dropdown-toggle),
+.input-group > .input-group-append:last-child > .input-group-text:not(:last-child) {
+  @apply rounded-r-none;
+}
+
+.input-group > .input-group-append > .btn,
+.input-group > .input-group-append > .input-group-text,
+.input-group > .input-group-prepend:not(:first-child) > .btn,
+.input-group > .input-group-prepend:not(:first-child) > .input-group-text,
+.input-group > .input-group-prepend:first-child > .btn:not(:first-child),
+.input-group > .input-group-prepend:first-child > .input-group-text:not(:first-child) {
+  @apply rounded-l-none;
+}

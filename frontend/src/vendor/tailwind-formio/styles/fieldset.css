@@ -1,0 +1,5 @@
+.formio-component-fieldset {
+  legend {
+    @apply text-lg border-b-1 border-solid border-gray-300 w-full mb-3 pb-1;
+  }
+}

@@ -1,0 +1,62 @@
+<div class="flex flex-col w-full h-full">
+  <div>
+    <div class="grid grid-cols-12 gap-4">
+      <div class="col-span-6">
+        <div class="text-md px-3 py-3">
+          {{ctx.t(ctx.componentInfo.title, { _userInput: true })}}
+          {{ctx.t('Component')}}
+        </div>
+      </div>
+      {% if (ctx.helplinks) { %}
+      <div class="col-span-6 flex justify-end items-center pr-15">
+        <a class="reset-link inline-flex items-center text-secondary text-decoration-none hover:text-primary"
+           href="{{ctx.t(ctx.helplinks + ctx.componentInfo.documentation)}}" target="_blank">
+          <i class="{{ctx.iconClass('new-window')}} mr-1"></i> {{ctx.t('Help')}}
+        </a>
+      </div>
+      {% } %}
+    </div>
+  </div>
+  <div class="overflow-auto flex-1 p-3 pt-0" style="max-height: calc(90vh - 95px)">
+    <div class="grid grid-cols-12 gap-4">
+      <div class="{% if (ctx.preview) { %}col-span-12 sm:col-span-6{% } else { %}col-span-12{% } %}">
+        <div ref="editForm">
+          {{ctx.editForm}}
+        </div>
+      </div>
+      {% if (ctx.preview) { %}
+      <div class="col-span-12 sm:col-span-6">
+        <div class="card panel preview-panel">
+          <div class="card-header">
+            <div class="text-sm">{{ctx.t('Preview')}}</div>
+          </div>
+          <div class="card-body">
+            <div class="component-preview" ref="preview">
+              {{ctx.preview}}
+            </div>
+          </div>
+        </div>
+        {% if (ctx.componentInfo.help) { %}
+        <div class="card card-body bg-light formio-settings-help">
+          {{ ctx.t(ctx.componentInfo.help) }}
+        </div>
+        {% } %}
+      </div>
+      {% } %}
+    </div>
+  </div>
+  <div class="bg-white p-2 flex justify-center">
+    <button class="btn btn-primary mx-2" ref="saveButton">
+      {{ctx.t('Save')}}
+    </button>
+    <button class="btn btn-dark mx-2" ref="cancelButton">
+      {{ctx.t('Cancel')}}
+    </button>
+    <button class="btn btn-danger mx-2" ref="removeButton">
+      <i class="{{ctx.iconClass('remove')}} sm:mr-2"></i>
+      <span class="hidden sm:inline">{{ctx.t('Remove')}}</span>
+    </button>
+  </div>
+</div>
+
+

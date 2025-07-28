@@ -1,0 +1,54 @@
+{
+  "name": "@tsed/tailwind-formio",
+  "version": "2.3.6",
+  "description": "Tailwind templates for form.io forms.",
+  "main": "dist/index.js",
+  "module": "dist/index.modern.js",
+  "source": "src/index.ts",
+  "type": "commonjs",
+  "exports": {
+    ".": {
+      "tsed-source": "./src/index.ts",
+      "import": "./dist/index.modern.js",
+      "require": "./dist/index.js",
+      "default": "./dist/index.modern.js"
+    },
+    "./styles/*.css": "./styles/*.css"
+  },
+  "scripts": {
+    "watch": "nodemon --watch ./src --ext ts,js,ejs --exec \"yarn build\"",
+    "build:templates": "gulp templates",
+    "build:source": "microbundle --no-compress --format modern,cjs --jsx React.createElement --jsxFragment React.Fragment --globals react/jsx-runtime=jsx",
+    "build": "gulp templates && yarn build:source"
+  },
+  "devDependencies": {
+    "@tsed/config": "2.3.6",
+    "@tsed/tailwind": "2.3.6",
+    "cross-env": "7.0.3",
+    "gulp": "^4.0.2",
+    "gulp-insert": "^0.5.0",
+    "gulp-rename": "^2.0.0",
+    "gulp-template": "^5.0.0",
+    "nodemon": "2.0.20"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "dependencies": {},
+  "peerDependencies": {},
+  "repository": "https://github.com/TypedProject/tsed-formio",
+  "bugs": {
+    "url": "https://github.com/TypedProject/tsed-formio/issues"
+  },
+  "homepage": "https://github.com/TypedProject/tsed-formio/tree/master/packages/tailwind-formio",
+  "author": "Romain Lenzotti"
+}

@@ -1,0 +1,14 @@
+**/node_modules
+docs
+docs-references
+**/lib
+**/build
+**/dist
+**/coverage
+**/.nyc_output
+**/node_modules
+*-lock.json
+*.lock
+benchmarks.*
+**/generated
+src/**/*.ejs.js

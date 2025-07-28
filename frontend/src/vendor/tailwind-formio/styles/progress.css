@@ -1,0 +1,7 @@
+.progress {
+  @apply flex h-4 overflow-hidden text-xs bg-gray-200 rounded shadow-sm;
+}
+
+.progress-bar {
+  @apply flex flex-col justify-center text-white text-center whitespace-nowrap bg-primary transition-all duration-500 ease-linear;
+}
