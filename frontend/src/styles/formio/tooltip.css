@@ -1,0 +1,82 @@
+
+.tooltip {
+  @apply absolute z-50 block m-0 font-normal break-words;
+
+  .tooltip-arrow {
+    @apply absolute block w-arrow h-arrow border-r-0;
+
+    &::before {
+      @apply absolute border-transparent border-solid;
+      content: "";
+    }
+  }
+
+  &[x-placement^="top"] {
+    @apply mb-1;
+    padding: theme('height.arrow') 0;
+
+    .tooltip-arrow {
+      @apply bottom-0;
+
+      &::before {
+        @apply top-0;
+        border-width: theme('height.arrow') calc(theme('width.arrow') / 2) 0;
+        border-top-color: theme('colors.black');
+      }
+    }
+  }
+  &[x-placement^="right"] {
+    @apply ml-1;
+    padding: 0 theme('height.arrow');
+
+    .tooltip-arrow {
+      @apply left-0;
+      border-right: 0 !important;
+      width: theme('height.arrow');
+      height: theme('width.arrow');
+
+      &::before {
+        @apply right-0;
+        border-right-color: theme('colors.black');
+        border-width: calc(theme('width.arrow') / 2) theme('height.arrow') calc(theme('width.arrow') / 2) 0;
+      }
+    }
+    .tooltip-inner {
+      @apply ml-0
+    }
+  }
+  &[x-placement^="bottom"] {
+    @apply mt-1;
+    padding: theme('height.arrow') 0;
+
+    .tooltip-arrow {
+      @apply top-0;
+
+      &::before {
+        @apply bottom-0;
+        border-width: 0 calc(theme('width.arrow') / 2) theme('height.arrow');
+        border-bottom-color: theme('colors.black');
+      }
+    }
+  }
+  &[x-placement^="left"] {
+    @apply mr-1;
+    padding: 0 theme('height.arrow');
+
+    .tooltip-arrow {
+      @apply right-0;
+      width: theme('height.arrow');
+      height: theme('width.arrow');
+
+      &::before {
+        @apply left-0;
+        border-width: calc(theme('width.arrow') / 2) 0 calc(theme('width.arrow') / 2) theme('height.arrow');
+        border-left-color: theme('colors.black');
+      }
+    }
+  }
+}
+
+.tooltip-inner {
+  @apply px-2 py-1 text-white text-center text-sm bg-black rounded-sm max-w-xs;
+}

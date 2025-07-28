@@ -1,0 +1,31 @@
+.breadcrumb {
+  @apply flex flex-wrap items-center py-2 px-4 mb-4 list-none rounded;
+
+  .badge {
+    @apply inline-flex items-center my-1;
+  }
+
+  .breadcrumb-item {
+    @apply flex items-center;
+
+    .badge {
+      @apply m-0;
+    }
+  }
+}
+
+.breadcrumb-item {
+  /* The separator between breadcrumbs (by default, a forward-slash: "/") */
+  + .breadcrumb-item {
+    @apply pl-2;
+
+    &::before {
+      @apply inline-block pr-2 text-secondary;
+      content: ">";
+    }
+  }
+
+  &.active {
+    @apply text-gray-600;
+  }
+}

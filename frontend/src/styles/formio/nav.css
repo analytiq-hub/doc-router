@@ -1,0 +1,42 @@
+.card-tabs {
+  .card-header-tabs {
+    @apply p-0;
+
+    .nav {
+      @apply relative flex flex-wrap items-center px-1 pt-1 -mb-px;
+
+      &-item {
+        @apply relative mr-1;
+
+        &:last-child {
+          @apply mr-0;
+        }
+
+        &.active {
+          .nav-link {
+            @apply bg-white border-gray-300 text-secondary;
+          }
+
+          .nav-border {
+            @apply border-primary;
+          }
+        }
+      }
+
+      &-link {
+        @apply relative inline-flex flex-col items-stretch overflow-hidden text-xs transition-colors;
+        @apply bg-transparent border-transparent text-gray-darker;
+        @apply cursor-pointer border-1 border-solid rounded-none border-b-0 relative;
+        @apply px-3 py-2;
+      }
+
+      &-border {
+        @apply z-1 absolute top-0 right-0 left-0 border-t-2 border-transparent;
+      }
+    }
+  }
+
+  .card-body {
+    @apply p-3;
+  }
+}

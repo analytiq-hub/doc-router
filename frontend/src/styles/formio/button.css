@@ -1,0 +1,241 @@
+.btn {
+  @apply text-primary bg-transparent border-solid border-1 border-transparent px-5 py-2 transition-colors ease-linear duration-300 rounded font-bold text-center inline-flex justify-center items-center;
+  text-decoration: none;
+  user-select: none;
+
+  > span.bx, > span.fa {
+    @apply mx-2;
+  }
+
+  > span.bx:first-child, > span.fa:first-child {
+    @apply ml-0;
+  }
+
+  > span.bx:last-child, > span.fa:last-child {
+    @apply mr-0;
+  }
+
+  &:focus,
+  &.focus {
+    @apply outline-none shadow-md;
+  }
+
+  &.disabled,
+  &:disabled {
+    @apply opacity-50 shadow-none cursor-default;
+  }
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-secondary cursor-pointer;
+  }
+
+  &:not(:disabled):not(.disabled):active,
+  &:not(:disabled):not(.disabled).active {
+    @include box-shadow($btn-active-box-shadow);
+
+    &:focus {
+      @include box-shadow($btn-focus-box-shadow, $btn-active-box-shadow);
+    }
+  }
+
+  &.btn-sm {
+    @apply px-3 py-1 text-sm;
+  }
+
+  &.btn-xs {
+    @apply px-2 py-0 text-xs;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+}
+
+a.btn.disabled,
+fieldset:disabled a.btn {
+  pointer-events: none;
+}
+
+.btn.btn-primary {
+  @apply text-white bg-primary border-primary;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-secondary focus:bg-secondary hover:border-secondary focus:border-secondary;
+  }
+}
+
+.btn.btn-secondary {
+  @apply text-white bg-secondary border-secondary;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-secondary-500 focus:bg-secondary-500 hover:border-secondary-500 focus:border-secondary-500 focus:text-white;
+  }
+}
+
+.btn.btn-success {
+  @apply text-white bg-green-600 border-green-600;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-green-500 focus:bg-green-500 hover:border-green-500 focus:border-green-500 focus:text-white;
+  }
+}
+
+.btn.btn-danger {
+  @apply text-white bg-red-600 border-red-600;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-red-500 focus:bg-red-500 hover:border-red-500 focus:border-red-500 focus:text-white;
+  }
+}
+
+.btn.btn-warning {
+  @apply text-white bg-yellow-600 border-yellow-600;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-yellow-500 focus:bg-yellow-500 hover:border-yellow-500 focus:border-yellow-500 focus:text-white;
+  }
+}
+
+.btn.btn-info {
+  @apply text-white bg-blue-600 border-blue-600;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-blue-500 focus:bg-blue-500 hover:border-blue-500 focus:border-blue-500 focus:text-white;
+  }
+}
+
+.btn.btn-light {
+  @apply text-gray-600 bg-gray-100 border-gray-100;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-gray-800 hover:bg-gray-300 focus:bg-gray-300 hover:border-gray-300 focus:border-gray-300 focus:text-white;
+  }
+}
+
+.btn.btn-dark {
+  @apply text-white bg-gray-600 border-gray-600;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-gray-500 focus:bg-gray-500 hover:border-gray-500 focus:border-gray-500 focus:text-white;
+  }
+}
+
+.btn.btn-outline-primary {
+  @apply text-primary bg-transparent border-primary;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-secondary focus:bg-secondary hover:border-secondary focus:border-white;
+  }
+}
+
+.btn.btn-outline-secondary {
+  @apply text-secondary bg-transparent border-secondary;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-secondary focus:bg-secondary hover:border-secondary focus:border-secondary focus:text-white;
+  }
+}
+
+.btn.btn-outline-success {
+  @apply text-green-600 bg-transparent border-green-600;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-green-600 focus:bg-green-600 hover:border-green-600 focus:border-green-600 focus:text-white;
+  }
+}
+
+.btn.btn-outline-danger {
+  @apply text-red-600 bg-transparent border-red-600;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-red-600 focus:bg-red-600 hover:border-red-600 focus:border-red-600 focus:text-white;
+  }
+}
+
+.btn.btn-outline-warning {
+  @apply text-yellow-600 bg-transparent border-yellow-600;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-yellow-600 focus:bg-yellow-600 hover:border-yellow-600 focus:border-yellow-600 focus:text-white;
+  }
+}
+
+.btn.btn-outline-info {
+  @apply text-blue-600 bg-transparent border-blue-600;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-blue-600 focus:bg-blue-600 hover:border-blue-600 focus:border-blue-600 focus:text-white;
+  }
+}
+
+.btn.btn-outline-light {
+  @apply text-gray-200 bg-transparent border-gray-100;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-gray-800 hover:bg-gray-300 focus:bg-gray-300 hover:border-gray-300 focus:border-gray-300 focus:text-white;
+  }
+}
+
+.btn.btn-outline-dark {
+  @apply text-gray-600 bg-transparent border-gray-600;
+
+  &:not(:disabled):not(.disabled) {
+    @apply hover:text-white hover:bg-gray-800 focus:bg-gray-800 hover:border-gray-800 focus:border-gray-800 focus:text-white;
+  }
+}
+
+.btn.gu-mirror {
+  @apply justify-center;
+}
+
+.btn-block {
+  @apply w-full flex justify-start;
+
+  + .btn-block {
+    @apply mt-1;
+  }
+}
+
+input[type="submit"],
+input[type="reset"],
+input[type="button"] {
+  &.btn-block {
+    @apply w-full;
+  }
+}
+
+.builder-component {
+  .component-btn-group {
+    .component-settings-button {
+      @apply shadow-md;
+      height: 24px;
+      width: 24px;
+      display: flex;
+      align-items: center;
+      align-content: center;
+      justify-content: center;
+      border-radius: 2px !important;
+    }
+
+    .component-settings-button-move,
+    .component-settings-button-edit-json,
+    .component-settings-button-paste,
+    .component-settings-button-copy {
+      background: white;
+    }
+  }
+}
+
+.btn-group {
+  @apply flex align-middle justify-end;
+
+  .btn {
+    @apply flex items-center mx-1;
+
+    &:first-child {
+      @apply ml-0;
+    }
+
+    &:last-child {
+      @apply mr-0;
+    }
+  }
+}

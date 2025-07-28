@@ -1,0 +1,41 @@
+.formio-dialog.formio-dialog-theme-default,
+.formio-dialog.formio-dialog-theme-default.component-settings{
+  .formio-dialog-close.btn {
+    @apply px-4 text-xs text-gray-500 bg-transparent hover:bg-red-600 focus:bg-red-600 hover:text-white focus:text-white focus:shadow-none;
+
+    &:before {
+      @apply text-md p-0 text-current;
+      line-height: normal;
+    }
+  }
+
+  .formio-dialog-content {
+    @apply p-0 text-xs;
+
+    .component-edit-container {
+      @apply overflow-visible;
+    }
+  }
+
+  .formio-dialog-wrapper {
+    @apply flex flex-col w-full h-full;
+  }
+
+  .formio-dialog-body {
+    @apply overflow-auto;
+  }
+
+  .formio-dialog-title {
+    @apply text-md px-3 py-3;
+  }
+}
+
+.formio-dialog.formio-dialog-theme-default.component-settings {
+  .formio-dialog-content {
+    @apply p-0 text-xs w-full sm:w-9/10;
+
+    .component-edit-container {
+      @apply overflow-visible;
+    }
+  }
+}
