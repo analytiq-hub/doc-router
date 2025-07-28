@@ -9,6 +9,7 @@ import TagSelector from './TagSelector';
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/navigation';
 import FormioBuilder from './FormioBuilder';
+import FormioShadowWrapper from './FormioShadowWrapper';
 import Editor from "@monaco-editor/react";
 import InfoTooltip from '@/components/InfoTooltip';
 
@@ -247,18 +248,23 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
             {activeTab === 'builder' ? (
               // Form Builder Tab
               <div className="border rounded-lg overflow-hidden bg-white">
-                <FormioBuilder
-                  jsonFormio={JSON.stringify(currentForm.response_format.json_formio || [])}
-                  onChange={(components) => {
-                    setCurrentForm(prev => ({
-                      ...prev,
-                      response_format: {
-                        ...prev.response_format,
-                        json_formio: components
-                      }
-                    }));
-                  }}
-                />
+                <FormioShadowWrapper
+                  onReady={() => console.log('FormioShadowWrapper ready for FormioBuilder')}
+                >
+                  <FormioBuilder
+                    jsonFormio={JSON.stringify(currentForm.response_format.json_formio || [])}
+                    onChange={(components) => {
+                      console.log('FormioBuilder onChange in shadow DOM:', components);
+                      setCurrentForm(prev => ({
+                        ...prev,
+                        response_format: {
+                          ...prev.response_format,
+                          json_formio: components
+                        }
+                      }));
+                    }}
+                  />
+                </FormioShadowWrapper>
               </div>
             ) : (
               // JSON Form Tab
