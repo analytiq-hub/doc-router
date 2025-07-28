@@ -1,131 +1,104 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
+import { Templates } from '@tsed/react-formio';
+import { FormBuilder } from 'formiojs';
+import type { Form } from 'formiojs';
 
 interface FormioBuilderProps {
   jsonFormio?: string;
-  onChange?: (components: unknown[]) => void;
+  onChange?: (schema: Form | object) => void;
+}
+
+interface FormWithComponents extends Form {
+  components: unknown[];
 }
 
 const FormioBuilder: React.FC<FormioBuilderProps> = ({ jsonFormio, onChange }) => {
-  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const builderRef = useRef<HTMLDivElement>(null);
+  const builderInstance = useRef<FormBuilder | null>(null);
   const onChangeRef = useRef(onChange);
-  const [iframeReady, setIframeReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [iframeHeight, setIframeHeight] = useState(600);
+  const isInitializing = useRef(false);
+  const lastJsonFormio = useRef<string>('');
+  const isUpdatingFromProps = useRef(false);
 
   // Keep the onChange ref updated
   useEffect(() => {
     onChangeRef.current = onChange;
   }, [onChange]);
 
-  // Listen for messages from iframe
   useEffect(() => {
-    const handleMessage = (event: MessageEvent) => {
-      // Security: In production, check event.origin
-      if (!event.data || typeof event.data !== 'object') return;
+    // Ensure we're using the Tailwind template
+    Templates.framework = 'tailwind';
 
-      switch (event.data.type) {
-        case 'BUILDER_READY':
-          console.log('FormioBuilder: Iframe ready');
-          setIframeReady(true);
-          setError(null);
-          break;
+    if (!builderRef.current) return;
 
-        case 'FORM_CHANGED':
-          console.log('FormioBuilder: Form changed', event.data.components);
-          if (onChangeRef.current) {
-            onChangeRef.current(event.data.components);
-          }
-          break;
+    // Normalize jsonFormio for comparison (handle undefined/null)
+    const currentJsonFormio = jsonFormio || '';
+    
+    // Only recreate if jsonFormio actually changed
+    if (currentJsonFormio === lastJsonFormio.current) return;
+    
+    lastJsonFormio.current = currentJsonFormio;
 
-        case 'ERROR':
-          console.error('FormioBuilder: Iframe error', event.data.message);
-          setError(event.data.message);
-          break;
+    // Destroy existing builder if it exists
+    if (builderInstance.current) {
+      builderInstance.current.destroy();
+      builderInstance.current = null;
+    }
 
-        case 'RESIZE_NEEDED':
-          if (event.data.height && event.data.height !== iframeHeight) {
-            setIframeHeight(Math.max(400, event.data.height + 50)); // Add some padding
-          }
-          break;
+    isInitializing.current = true;
+    isUpdatingFromProps.current = true;
+
+    // Parse the form data
+    let form = {};
+    if (currentJsonFormio.trim() !== '') {
+      try {
+        const parsedComponents = JSON.parse(currentJsonFormio);
+        form = { components: parsedComponents };
+      } catch (error) {
+        console.error('FormioBuilder: Error parsing jsonFormio:', error);
+        form = { components: [] };
+      }
+    }
+
+    // Create the Formio builder
+    const builder = new FormBuilder(builderRef.current, form, {});
+    builderInstance.current = builder;
+    
+    // Listen to the correct FormBuilder events
+    const handleFormChange = () => {
+      // Don't trigger onChange if we're updating from props to prevent loops
+      if (onChangeRef.current && !isInitializing.current && !isUpdatingFromProps.current) {
+        const currentForm: FormWithComponents = (builder as FormBuilder & { _form: FormWithComponents })._form;
+        const currentComponents = JSON.stringify(currentForm.components);
+        
+        // Only call onChange if the components actually changed from what we have
+        if (currentComponents !== lastJsonFormio.current) {
+          onChangeRef.current(currentForm.components);
+        }
       }
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
-  }, [iframeHeight]);
-
-  // Send form data to iframe when it changes
-  useEffect(() => {
-    if (!iframeReady || !iframeRef.current?.contentWindow) return;
-
-    console.log('FormioBuilder: Sending form data to iframe', jsonFormio);
-    
-    try {
-      iframeRef.current.contentWindow.postMessage({
-        type: 'LOAD_FORM',
-        jsonFormio: jsonFormio || '[]'
-      }, '*');
-    } catch (error) {
-      console.error('FormioBuilder: Error sending message to iframe', error);
+    // Listen via the events emitter directly
+    if (builder.events) {
+      (builder.events as { on: (event: string, handler: () => void) => void }).on('formio.change', handleFormChange);
     }
-  }, [jsonFormio, iframeReady]);
 
-  // Handle iframe load
-  const handleIframeLoad = () => {
-    console.log('FormioBuilder: Iframe loaded');
-    // The iframe will send BUILDER_READY message when actually ready
-  };
+    // Trigger initial change after builder is ready to sync the actual form structure
+    setTimeout(() => {
+      isInitializing.current = false;
+      isUpdatingFromProps.current = false;
+    }, 100);
 
-  if (error) {
-    return (
-      <div className="p-4 border border-red-200 rounded-lg bg-red-50">
-        <h3 className="text-red-800 font-semibold mb-2">Formio Builder Error</h3>
-        <p className="text-red-600 text-sm">{error}</p>
-        <button 
-          onClick={() => {
-            setError(null);
-            setIframeReady(false);
-            // Force iframe reload
-            if (iframeRef.current) {
-              iframeRef.current.src = iframeRef.current.src;
-            }
-          }}
-          className="mt-2 px-3 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700"
-        >
-          Retry
-        </button>
-      </div>
-    );
-  }
+    // Cleanup on unmount
+    return () => {
+      if (builderInstance.current) {
+        builderInstance.current.destroy();
+        builderInstance.current = null;
+      }
+    };
+  }, [jsonFormio]);
 
-  return (
-    <div className="relative">
-      {!iframeReady && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-50 border border-gray-200 rounded-lg z-10">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-            <p className="mt-2 text-sm text-gray-600">Loading Form Builder...</p>
-          </div>
-        </div>
-      )}
-      
-      <iframe
-        ref={iframeRef}
-        src="/formio-builder.html"
-        onLoad={handleIframeLoad}
-        style={{
-          width: '100%',
-          height: `${iframeHeight}px`,
-          border: 'none',
-          borderRadius: '0.5rem',
-          opacity: iframeReady ? 1 : 0,
-          transition: 'opacity 0.3s ease-in-out'
-        }}
-        title="Formio Form Builder"
-        sandbox="allow-scripts allow-same-origin allow-forms allow-modals"
-      />
-    </div>
-  );
+  return <div ref={builderRef} />;
 };
 
 export default FormioBuilder;
