@@ -30,10 +30,10 @@ tests: setup
 	. .venv/bin/activate && pytest -n auto packages/tests/
 
 tests-ui:
-	npm run test:ui
+	cd tests && npm run test:ui
 
 tests-ui-debug:
-	npm run test:ui:debug
+	cd tests && npm run test:ui:debug
 
 clean:
 	rm -rf .venv
