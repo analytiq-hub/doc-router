@@ -92,11 +92,9 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   const [error, setError] = useState<string | null>(null);
   const [file, setFile] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const [baseScale, setBaseScale] = useState(1); // Fixed rendering scale
-  const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
   const [transformScale, setTransformScale] = useState(1); // CSS transform scale
   const [transformOrigin, setTransformOrigin] = useState('center center');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -279,14 +277,12 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   const zoomIn = () => {
     const newTransformScale = Math.min(transformScale + 0.25, 3);
     setTransformScale(newTransformScale);
-    setScale(baseScale * newTransformScale);
     setFitMode('manual');
     saveFitMode('manual');
   };
   const zoomOut = () => {
     const newTransformScale = Math.max(transformScale - 0.25, 0.1);
     setTransformScale(newTransformScale);
-    setScale(baseScale * newTransformScale);
     setFitMode('manual');
     saveFitMode('manual');
   };
@@ -320,9 +316,6 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
         const containerElement = containerRef.current;
         const containerWidth = containerElement.clientWidth - 32;
         const containerHeight = containerElement.clientHeight - 32;
-
-        // Update container dimensions for positioning calculations
-        setContainerDimensions({ width: containerWidth, height: containerHeight });
 
         let effectiveWidth = pdfDimensions.width * baseScale;
         let effectiveHeight = pdfDimensions.height * baseScale;
@@ -362,9 +355,6 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
         });
         setTransformScale(newTransformScale);
         setTransformOrigin(newTransformOrigin);
-        
-        // Update the legacy scale for compatibility with other components
-        setScale(baseScale * newTransformScale);
       }
     });
     
