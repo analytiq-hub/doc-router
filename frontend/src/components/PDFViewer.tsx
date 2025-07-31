@@ -179,7 +179,17 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   const [ocrText, setOcrText] = useState<string>('');
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
-  const [fitMode, setFitMode] = useState<'width' | 'page' | 'manual'>('width');
+  const FIT_MODE_STORAGE_KEY = 'pdf-viewer-fit-mode';
+  const [fitMode, setFitMode] = useState<'width' | 'page' | 'manual'>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(FIT_MODE_STORAGE_KEY);
+      return (saved as 'width' | 'page' | 'manual') || 'width';
+    }
+    return 'width';
+  });
+
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
@@ -264,10 +274,12 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   const zoomIn = () => {
     setScale(prevScale => Math.min(prevScale + 0.25, 3));
     setFitMode('manual');
+    saveFitMode('manual');
   };
   const zoomOut = () => {
     setScale(prevScale => Math.max(prevScale - 0.25, 0.5));
     setFitMode('manual');
+    saveFitMode('manual');
   };
   const rotateLeft = () => setRotation(prevRotation => (prevRotation - 90) % 360);
   const rotateRight = () => setRotation(prevRotation => (prevRotation + 90) % 360);
@@ -276,7 +288,70 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
     setAnchorEl(null);
   }, []);
 
-  // Fit to page - scales to fit entire page in container
+  // Function to save fit mode to localStorage
+  const saveFitMode = useCallback((mode: 'width' | 'page' | 'manual') => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(FIT_MODE_STORAGE_KEY, mode);
+    }
+  }, []);
+
+  // Debounced resize handler
+  const handleResize = useCallback(() => {
+    if (resizeTimeoutRef.current) {
+      clearTimeout(resizeTimeoutRef.current);
+    }
+    
+    resizeTimeoutRef.current = setTimeout(() => {
+      if (fitMode !== 'manual' && pdfDimensions.width && pdfDimensions.height && containerRef.current) {
+        const containerElement = containerRef.current;
+        const containerWidth = containerElement.clientWidth - 32;
+        const containerHeight = containerElement.clientHeight - 32;
+
+        let effectiveWidth = pdfDimensions.width;
+        let effectiveHeight = pdfDimensions.height;
+        
+        if (Math.abs(rotation) === 90 || Math.abs(rotation) === 270) {
+          effectiveWidth = pdfDimensions.height;
+          effectiveHeight = pdfDimensions.width;
+        }
+
+        let adjustedScale;
+        if (fitMode === 'page') {
+          // Fit to page - use smaller scale to fit both dimensions
+          const widthScale = containerWidth / effectiveWidth;
+          const heightScale = containerHeight / effectiveHeight;
+          const optimalScale = Math.min(widthScale, heightScale) * 0.9;
+          adjustedScale = Math.max(optimalScale, 0.1);
+        } else {
+          // Fit to width
+          const widthScale = containerWidth / effectiveWidth;
+          const optimalScale = widthScale * 0.95;
+          adjustedScale = Math.max(optimalScale, 0.1);
+        }
+
+        setScale(adjustedScale);
+      }
+    }, 150); // 150ms debounce
+  }, [fitMode, pdfDimensions, rotation]);
+
+  // Set up resize observer
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    resizeObserverRef.current = new ResizeObserver(handleResize);
+    resizeObserverRef.current.observe(containerRef.current);
+
+    return () => {
+      if (resizeObserverRef.current) {
+        resizeObserverRef.current.disconnect();
+      }
+      if (resizeTimeoutRef.current) {
+        clearTimeout(resizeTimeoutRef.current);
+      }
+    };
+  }, [handleResize]);
+
+  // Update fitToPage function to save to localStorage
   const fitToPage = useCallback(() => {
     if (pdfDimensions.width && pdfDimensions.height && containerRef.current) {
       const containerElement = containerRef.current;
@@ -297,11 +372,12 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
       
       setScale(Math.max(optimalScale, 0.1));
       setFitMode('page');
+      saveFitMode('page');
     }
     handleMenuClose();
-  }, [pdfDimensions, rotation, handleMenuClose]);
+  }, [pdfDimensions, rotation, handleMenuClose, saveFitMode]);
 
-  // Fit to width - scales to fit page width in container
+  // Update fitToWidth function to save to localStorage
   const fitToWidth = useCallback(() => {
     if (pdfDimensions.width && pdfDimensions.height && containerRef.current) {
       const containerElement = containerRef.current;
@@ -318,9 +394,10 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
       
       setScale(Math.max(optimalScale, 0.1));
       setFitMode('width');
+      saveFitMode('width');
     }
     handleMenuClose();
-  }, [pdfDimensions, rotation, handleMenuClose]);
+  }, [pdfDimensions, rotation, handleMenuClose, saveFitMode]);
 
   // Auto-zoom based on current fit mode
   useEffect(() => {
