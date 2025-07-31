@@ -392,19 +392,17 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   const fitToPage = useCallback(() => {
     setFitMode('page');
     saveFitMode('page');
-    // Trigger resize calculation with new fit mode
-    setTimeout(() => handleResize(), 0);
+
     handleMenuClose();
-  }, [handleResize, handleMenuClose, saveFitMode]);
+  }, [handleMenuClose, saveFitMode]);
 
   // Update fitToWidth function to use transform scaling
   const fitToWidth = useCallback(() => {
     setFitMode('width');
     saveFitMode('width');
     // Trigger resize calculation with new fit mode
-    setTimeout(() => handleResize(), 0);
     handleMenuClose();
-  }, [handleResize, handleMenuClose, saveFitMode]);
+  }, [handleMenuClose, saveFitMode]);
 
   // Initialize base scale and trigger initial resize calculation
   useEffect(() => {
