@@ -95,6 +95,10 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
+  const [baseScale, setBaseScale] = useState(1); // Fixed rendering scale
+  const [containerDimensions, setContainerDimensions] = useState({ width: 0, height: 0 });
+  const [transformScale, setTransformScale] = useState(1); // CSS transform scale
+  const [transformOrigin, setTransformOrigin] = useState('center center');
   const containerRef = useRef<HTMLDivElement>(null);
   
   // Use a fileRef to store the file URL, which doesn't trigger re-renders when it changes.
@@ -189,9 +193,8 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   });
 
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
-
-  // Add this ref for throttling:
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const resizeRAFRef = useRef<number | null>(null);
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
@@ -274,12 +277,16 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   };
 
   const zoomIn = () => {
-    setScale(prevScale => Math.min(prevScale + 0.25, 3));
+    const newTransformScale = Math.min(transformScale + 0.25, 3);
+    setTransformScale(newTransformScale);
+    setScale(baseScale * newTransformScale);
     setFitMode('manual');
     saveFitMode('manual');
   };
   const zoomOut = () => {
-    setScale(prevScale => Math.max(prevScale - 0.25, 0.5));
+    const newTransformScale = Math.max(transformScale - 0.25, 0.1);
+    setTransformScale(newTransformScale);
+    setScale(baseScale * newTransformScale);
     setFitMode('manual');
     saveFitMode('manual');
   };
@@ -297,44 +304,79 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
     }
   }, []);
 
-  // Replace the handleResize function with:
+  // Optimized resize handler using RAF + debouncing for smooth performance
   const handleResize = useCallback(() => {
+    // Cancel any pending RAF or timeout
+    if (resizeRAFRef.current) {
+      cancelAnimationFrame(resizeRAFRef.current);
+    }
     if (resizeTimeoutRef.current) {
       clearTimeout(resizeTimeoutRef.current);
     }
     
-    resizeTimeoutRef.current = setTimeout(() => {
+    // Use RAF for immediate visual updates during active resizing
+    resizeRAFRef.current = requestAnimationFrame(() => {
       if (fitMode !== 'manual' && pdfDimensions.width && pdfDimensions.height && containerRef.current) {
         const containerElement = containerRef.current;
         const containerWidth = containerElement.clientWidth - 32;
         const containerHeight = containerElement.clientHeight - 32;
 
-        let effectiveWidth = pdfDimensions.width;
-        let effectiveHeight = pdfDimensions.height;
+        // Update container dimensions for positioning calculations
+        setContainerDimensions({ width: containerWidth, height: containerHeight });
+
+        let effectiveWidth = pdfDimensions.width * baseScale;
+        let effectiveHeight = pdfDimensions.height * baseScale;
         
         if (Math.abs(rotation) === 90 || Math.abs(rotation) === 270) {
-          effectiveWidth = pdfDimensions.height;
-          effectiveHeight = pdfDimensions.width;
+          effectiveWidth = pdfDimensions.height * baseScale;
+          effectiveHeight = pdfDimensions.width * baseScale;
         }
 
-        let adjustedScale;
+        let newTransformScale;
+        let newTransformOrigin;
+        
         if (fitMode === 'page') {
-          // Fit to page - use smaller scale to fit both dimensions
+          // Fit to page - center the PDF in the container
           const widthScale = containerWidth / effectiveWidth;
           const heightScale = containerHeight / effectiveHeight;
-          const optimalScale = Math.min(widthScale, heightScale) * 0.9;
-          adjustedScale = Math.max(optimalScale, 0.1);
+          newTransformScale = Math.min(widthScale, heightScale) * 0.9;
+          newTransformOrigin = 'center center';
         } else {
-          // Fit to width
+          // Fit to width - align to top-center
           const widthScale = containerWidth / effectiveWidth;
-          const optimalScale = widthScale * 0.95;
-          adjustedScale = Math.max(optimalScale, 0.1);
+          newTransformScale = widthScale * 0.95;
+          newTransformOrigin = 'center top';
         }
 
-        setScale(adjustedScale);
+        // Allow very small scales for proper fit-to-width behavior
+        newTransformScale = Math.max(newTransformScale, 0.05);
+        
+        console.log('Transform calculation:', {
+          containerWidth,
+          containerHeight,
+          effectiveWidth,
+          effectiveHeight,
+          baseScale,
+          newTransformScale,
+          fitMode
+        });
+        setTransformScale(newTransformScale);
+        setTransformOrigin(newTransformOrigin);
+        
+        // Update the legacy scale for compatibility with other components
+        setScale(baseScale * newTransformScale);
       }
-    }, 50); // 20fps throttle - much smoother
-  }, [fitMode, pdfDimensions, rotation]);
+    });
+    
+    // Add a debounced timeout for any final adjustments after resizing stops
+    resizeTimeoutRef.current = setTimeout(() => {
+      // Final adjustment if needed - this runs after user stops resizing
+      if (fitMode !== 'manual' && containerRef.current) {
+        // Force a final recalculation to ensure precision
+        handleResize();
+      }
+    }, 150);
+  }, [fitMode, pdfDimensions, rotation, baseScale]);
 
   // Update the useEffect for resize observer (around line 340):
   useEffect(() => {
@@ -350,89 +392,50 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
       if (resizeTimeoutRef.current) {
         clearTimeout(resizeTimeoutRef.current);
       }
+      if (resizeRAFRef.current) {
+        cancelAnimationFrame(resizeRAFRef.current);
+      }
     };
   }, [handleResize]);
 
-  // Update fitToPage function to save to localStorage
+  // Update fitToPage function to use transform scaling
   const fitToPage = useCallback(() => {
-    if (pdfDimensions.width && pdfDimensions.height && containerRef.current) {
-      const containerElement = containerRef.current;
-      const containerWidth = containerElement.clientWidth - 32;
-      const containerHeight = containerElement.clientHeight - 32;
-
-      let effectiveWidth = pdfDimensions.width;
-      let effectiveHeight = pdfDimensions.height;
-      
-      if (Math.abs(rotation) === 90 || Math.abs(rotation) === 270) {
-        effectiveWidth = pdfDimensions.height;
-        effectiveHeight = pdfDimensions.width;
-      }
-
-      const widthScale = containerWidth / effectiveWidth;
-      const heightScale = containerHeight / effectiveHeight;
-      const optimalScale = Math.min(widthScale, heightScale) * 0.9;
-      
-      setScale(Math.max(optimalScale, 0.1));
-      setFitMode('page');
-      saveFitMode('page');
-    }
+    setFitMode('page');
+    saveFitMode('page');
+    // Trigger resize calculation with new fit mode
+    setTimeout(() => handleResize(), 0);
     handleMenuClose();
-  }, [pdfDimensions, rotation, handleMenuClose, saveFitMode]);
+  }, [handleResize, handleMenuClose, saveFitMode]);
 
-  // Update fitToWidth function to save to localStorage
+  // Update fitToWidth function to use transform scaling
   const fitToWidth = useCallback(() => {
-    if (pdfDimensions.width && pdfDimensions.height && containerRef.current) {
-      const containerElement = containerRef.current;
-      const containerWidth = containerElement.clientWidth - 32;
-
-      let effectiveWidth = pdfDimensions.width;
-      
-      if (Math.abs(rotation) === 90 || Math.abs(rotation) === 270) {
-        effectiveWidth = pdfDimensions.height;
-      }
-
-      const widthScale = containerWidth / effectiveWidth;
-      const optimalScale = widthScale * 0.95;
-      
-      setScale(Math.max(optimalScale, 0.1));
-      setFitMode('width');
-      saveFitMode('width');
-    }
+    setFitMode('width');
+    saveFitMode('width');
+    // Trigger resize calculation with new fit mode
+    setTimeout(() => handleResize(), 0);
     handleMenuClose();
-  }, [pdfDimensions, rotation, handleMenuClose, saveFitMode]);
+  }, [handleResize, handleMenuClose, saveFitMode]);
 
-  // Auto-zoom based on current fit mode
+  // Initialize base scale and trigger initial resize calculation
   useEffect(() => {
-    if (pdfDimensions.width && pdfDimensions.height && containerRef.current && fitMode !== 'manual') {
-      const containerElement = containerRef.current;
-      const containerWidth = containerElement.clientWidth - 32;
-      const containerHeight = containerElement.clientHeight - 32;
-
-      let effectiveWidth = pdfDimensions.width;
-      let effectiveHeight = pdfDimensions.height;
+    if (pdfDimensions.width && pdfDimensions.height && containerRef.current) {
+      // Use a more conservative base scale to ensure we can scale down properly
+      // Start with 1.0 (native PDF size) to avoid minimum size constraints
+      const calculatedBaseScale = 1.0;
       
-      if (Math.abs(rotation) === 90 || Math.abs(rotation) === 270) {
-        effectiveWidth = pdfDimensions.height;
-        effectiveHeight = pdfDimensions.width;
-      }
-
-      let adjustedScale;
-      if (fitMode === 'page') {
-        // Fit to page - use smaller scale to fit both dimensions
-        const widthScale = containerWidth / effectiveWidth;
-        const heightScale = containerHeight / effectiveHeight;
-        const optimalScale = Math.min(widthScale, heightScale) * 0.9;
-        adjustedScale = Math.max(optimalScale, 0.1);
-      } else {
-        // Fit to width (default)
-        const widthScale = containerWidth / effectiveWidth;
-        const optimalScale = widthScale * 0.95;
-        adjustedScale = Math.max(optimalScale, 0.1);
-      }
-
-      setScale(adjustedScale);
+      setBaseScale(calculatedBaseScale);
+      
+      // Trigger initial resize calculation
+      handleResize();
     }
-  }, [pdfDimensions, rotation, fitMode]);
+  }, [pdfDimensions, handleResize]);
+  
+  // Handle fit mode changes
+  useEffect(() => {
+    if (fitMode !== 'manual') {
+      handleResize();
+    }
+  }, [fitMode, rotation, handleResize]);
 
   const [inputPageNumber, setInputPageNumber] = useState('1');
 
@@ -849,7 +852,18 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
       <OCRProvider>
         <PanelGroup direction="horizontal" style={{ flexGrow: 1 }}>
           <Panel defaultSize={70}>
-            <div ref={containerRef} style={{ height: '100%', overflowY: 'auto', padding: '16px' }}>
+            <div 
+              ref={containerRef} 
+              style={{ 
+                height: '100%', 
+                overflowY: 'auto', 
+                overflowX: fitMode === 'width' ? 'hidden' : 'auto',
+                padding: '16px',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: fitMode === 'page' ? 'center' : 'stretch'
+              }}
+            >
               {loading ? (
                 <div>Loading PDF...</div>
               ) : error ? (
@@ -860,31 +874,45 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
                   onLoadSuccess={handleLoadSuccess}
                   onLoadError={handleLoadError}
                 >
-                  {Array.from(new Array(numPages), (el, index) => (
-                    <div 
-                      key={`page_container_${index + 1}`}
-                      ref={el => { pageRefs.current[index] = el; }}
-                      style={{ 
-                        position: 'relative',
-                        width: pdfDimensions.width * scale,
-                        height: pdfDimensions.height * scale,
-                        transform: `rotate(${rotation}deg)`,
-                        transformOrigin: 'center center',
-                        margin: 'auto'
-                      }}
-                    >
-                      <Page 
-                        key={`page_${index + 1}`} 
-                        pageNumber={index + 1} 
-                        width={pdfDimensions.width * scale}
-                        height={pdfDimensions.height * scale}
-                        rotate={originalRotation}
+                  <div
+                    style={{
+                      transform: `scale(${transformScale}) rotate(${rotation}deg)`,
+                      transformOrigin: transformOrigin,
+                      transition: fitMode === 'manual' ? 'none' : 'transform 0.2s ease-out',
+                      width: 'fit-content',
+                      margin: fitMode === 'page' ? 'auto' : (fitMode === 'width' ? '0 auto' : 'auto'),
+                      // Ensure the transform wrapper can scale below natural size
+                      minWidth: 0,
+                      minHeight: 0,
+                    }}
+                  >
+                    {Array.from(new Array(numPages), (el, index) => (
+                      <div 
+                        key={`page_container_${index + 1}`}
+                        ref={el => { pageRefs.current[index] = el; }}
+                        style={{ 
+                          position: 'relative',
+                          width: pdfDimensions.width * baseScale,
+                          height: pdfDimensions.height * baseScale,
+                          margin: '0 auto 16px auto', // Center pages horizontally with bottom margin
+                          minWidth: 0, // Allow scaling below natural size
+                          minHeight: 0, // Allow scaling below natural size
+                          flexShrink: 0 // Prevent flex shrinking that might interfere with transforms
+                        }}
                       >
-                        {renderHighlights(index + 1)}
-                      </Page>
-                      {index < numPages! - 1 && <hr style={{ border: '2px solid black' }} />}
-                    </div>
-                  ))}
+                        <Page 
+                          key={`page_${index + 1}`} 
+                          pageNumber={index + 1} 
+                          width={pdfDimensions.width * baseScale}
+                          height={pdfDimensions.height * baseScale}
+                          rotate={originalRotation}
+                        >
+                          {renderHighlights(index + 1)}
+                        </Page>
+                        {index < numPages! - 1 && <hr style={{ border: '1px solid #ddd', margin: '8px 0' }} />}
+                      </div>
+                    ))}
+                  </div>
                 </Document>
               ) : (
                 <Typography color="error" align="center">
