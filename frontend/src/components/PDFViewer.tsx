@@ -189,6 +189,8 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   });
 
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+
+  // Add this ref for throttling:
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const formatFileSize = (bytes: number): string => {
@@ -295,7 +297,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
     }
   }, []);
 
-  // Debounced resize handler
+  // Replace the handleResize function with:
   const handleResize = useCallback(() => {
     if (resizeTimeoutRef.current) {
       clearTimeout(resizeTimeoutRef.current);
@@ -331,10 +333,10 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
 
         setScale(adjustedScale);
       }
-    }, 150); // 150ms debounce
+    }, 50); // 20fps throttle - much smoother
   }, [fitMode, pdfDimensions, rotation]);
 
-  // Set up resize observer
+  // Update the useEffect for resize observer (around line 340):
   useEffect(() => {
     if (!containerRef.current) return;
 
