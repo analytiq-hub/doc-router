@@ -329,13 +329,22 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
         let newTransformOrigin;
         
         if (fitMode === 'page') {
-          // Fit to page - center the PDF in the container
-          const widthScale = containerWidth / effectiveWidth;
-          const heightScale = containerHeight / effectiveHeight;
-          newTransformScale = Math.min(widthScale, heightScale) * 0.9;
+          // For fit-to-page, we need to account for:
+          // - Container padding (16px on each side)
+          // - Page margins (16px bottom margin per page)
+          // - Ensure the PDF fits entirely within the visible area
+          
+          const availableWidth = containerWidth - 32; // Account for padding
+          const availableHeight = containerHeight - 32; // Account for padding
+          
+          const widthScale = availableWidth / effectiveWidth;
+          const heightScale = availableHeight / effectiveHeight;
+          
+          // Use the smaller scale to ensure the PDF fits entirely
+          newTransformScale = Math.min(widthScale, heightScale);
           newTransformOrigin = 'center center';
         } else {
-          // Fit to width - align to top-center
+          // Fit to width logic remains the same
           const widthScale = containerWidth / effectiveWidth;
           newTransformScale = widthScale * 0.95;
           newTransformOrigin = 'center top';
