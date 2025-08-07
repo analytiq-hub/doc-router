@@ -20,7 +20,7 @@ import {
   LocalOffer as LocalOfferIcon,
   DataObject as SchemaIcon,
   Chat as PromptIcon,
-  ViewQuilt as FormsIcon,
+  DynamicForm as FormsIcon,
   TableChart as TablesIcon,
   InfoOutlined as AboutIcon
 } from '@mui/icons-material';
