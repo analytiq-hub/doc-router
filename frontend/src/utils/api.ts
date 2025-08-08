@@ -151,11 +151,7 @@ import {
   ListTablesResponse,
   GetTableParams,
   UpdateTableParams,
-  DeleteTableParams,
-  SubmitTableParams as SubmitTableParamsTable,
-  GetTableSubmissionParams,
-  TableSubmission,
-  DeleteTableSubmissionParams
+  DeleteTableParams
 } from '@/types/tables';
 
 // These APIs execute from the frontend
@@ -996,31 +992,5 @@ export const updateTableApi = async (params: UpdateTableParams): Promise<Table> 
 export const deleteTableApi = async (params: DeleteTableParams) => {
   const { organizationId, tableId } = params;
   const response = await api.delete(`/v0/orgs/${organizationId}/tables/${tableId}`);
-  return response.data;
-};
-
-// Table submissions
-export const submitTableApi = async (params: SubmitTableParamsTable): Promise<TableSubmission> => {
-  const { organizationId, documentId, submission } = params;
-  const response = await api.post<TableSubmission>(
-    `/v0/orgs/${organizationId}/tables/submissions/${documentId}`,
-    submission
-  );
-  return response.data;
-};
-
-export const getTableSubmissionApi = async (params: GetTableSubmissionParams): Promise<TableSubmission | null> => {
-  const { organizationId, documentId, tableRevId } = params;
-  const response = await api.get<TableSubmission | null>(
-    `/v0/orgs/${organizationId}/tables/submissions/${documentId}?table_revid=${tableRevId}`
-  );
-  return response.data;
-};
-
-export const deleteTableSubmissionApi = async (params: DeleteTableSubmissionParams): Promise<void> => {
-  const { organizationId, documentId, tableRevId } = params;
-  const response = await api.delete(`/v0/orgs/${organizationId}/tables/submissions/${documentId}`, {
-    params: { table_revid: tableRevId }
-  });
   return response.data;
 };

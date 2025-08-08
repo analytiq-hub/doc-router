@@ -476,16 +476,3 @@ class ListTablesResponse(BaseModel):
     tables: List[Table]
     total_count: int
     skip: int
-
-
-class TableSubmissionData(BaseModel):
-    table_revid: str
-    submission_data: List[dict]  # rows submitted for the table
-    submitted_by: Optional[str] = None
-
-
-class TableSubmission(TableSubmissionData):
-    id: str
-    organization_id: str
-    created_at: datetime
-    updated_at: datetime
