@@ -1,7 +1,7 @@
 'use client'
 
 import TableList from '@/components/TableList';
-import FormCreate from '@/components/FormCreate';
+import TableCreate from '@/components/TableCreate';
 import { useSearchParams, useRouter } from 'next/navigation';
 
 export default function TablesPage({ params }: { params: { organizationId: string } }) {
@@ -28,13 +28,12 @@ export default function TablesPage({ params }: { params: { organizationId: strin
               Tables
             </button>
             <button
-              onClick={() => handleTabChange('form-create')}
+              onClick={() => handleTabChange('table-create')}
               className={`pb-4 px-1 relative font-semibold text-base ${
-                tab === 'form-create'
+                tab === 'table-create'
                   ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
-              data-tour="form-create"
             >
               Create Table
             </button>
@@ -46,7 +45,7 @@ export default function TablesPage({ params }: { params: { organizationId: strin
             {tab === 'tables' && <TableList organizationId={params.organizationId} />}
           </div>
           <div role="tabpanel" hidden={tab !== 'table-create'}>
-            {tab === 'table-create' && <FormCreate organizationId={params.organizationId} />}
+            {tab === 'table-create' && <TableCreate organizationId={params.organizationId} />}
           </div>
         </div>
       </div>
