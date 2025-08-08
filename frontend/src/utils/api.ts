@@ -144,6 +144,19 @@ import {
   FormSubmission,
   DeleteFormSubmissionParams
 } from '@/types/forms';
+import {
+  CreateTableParams,
+  Table,
+  ListTablesParams,
+  ListTablesResponse,
+  GetTableParams,
+  UpdateTableParams,
+  DeleteTableParams,
+  SubmitTableParams as SubmitTableParamsTable,
+  GetTableSubmissionParams,
+  TableSubmission,
+  DeleteTableSubmissionParams
+} from '@/types/tables';
 
 // These APIs execute from the frontend
 const NEXT_PUBLIC_FASTAPI_FRONTEND_URL = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || "http://localhost:8000";
@@ -947,4 +960,67 @@ export const proxyRequestApi = async (targetUrl: string, options?: {
 export const getSessionToken = async (): Promise<string | null> => {
   const session = await getCachedSession();
   return session?.apiAccessToken || null;
+};
+
+// Table APIs
+export const createTableApi = async (table: CreateTableParams): Promise<Table> => {
+  const { organizationId, ...tableConfig } = table;
+  const response = await api.post<Table>(`/v0/orgs/${organizationId}/tables`, tableConfig);
+  return response.data;
+};
+
+export const listTablesApi = async (params: ListTablesParams): Promise<ListTablesResponse> => {
+  const { organizationId, ...rest } = params;
+  const response = await api.get<ListTablesResponse>(`/v0/orgs/${organizationId}/tables`, {
+    params: {
+      skip: rest?.skip || 0,
+      limit: rest?.limit || 10,
+      tag_ids: rest?.tag_ids
+    }
+  });
+  return response.data;
+};
+
+export const getTableApi = async (params: GetTableParams): Promise<Table> => {
+  const { organizationId, tableRevId } = params;
+  const response = await api.get<Table>(`/v0/orgs/${organizationId}/tables/${tableRevId}`);
+  return response.data;
+};
+
+export const updateTableApi = async (params: UpdateTableParams): Promise<Table> => {
+  const { organizationId, tableId, table } = params;
+  const response = await api.put<Table>(`/v0/orgs/${organizationId}/tables/${tableId}`, table);
+  return response.data;
+};
+
+export const deleteTableApi = async (params: DeleteTableParams) => {
+  const { organizationId, tableId } = params;
+  const response = await api.delete(`/v0/orgs/${organizationId}/tables/${tableId}`);
+  return response.data;
+};
+
+// Table submissions
+export const submitTableApi = async (params: SubmitTableParamsTable): Promise<TableSubmission> => {
+  const { organizationId, documentId, submission } = params;
+  const response = await api.post<TableSubmission>(
+    `/v0/orgs/${organizationId}/tables/submissions/${documentId}`,
+    submission
+  );
+  return response.data;
+};
+
+export const getTableSubmissionApi = async (params: GetTableSubmissionParams): Promise<TableSubmission | null> => {
+  const { organizationId, documentId, tableRevId } = params;
+  const response = await api.get<TableSubmission | null>(
+    `/v0/orgs/${organizationId}/tables/submissions/${documentId}?table_revid=${tableRevId}`
+  );
+  return response.data;
+};
+
+export const deleteTableSubmissionApi = async (params: DeleteTableSubmissionParams): Promise<void> => {
+  const { organizationId, documentId, tableRevId } = params;
+  const response = await api.delete(`/v0/orgs/${organizationId}/tables/submissions/${documentId}`, {
+    params: { table_revid: tableRevId }
+  });
+  return response.data;
 };
