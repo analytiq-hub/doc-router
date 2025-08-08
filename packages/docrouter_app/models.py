@@ -422,3 +422,70 @@ class FormSubmission(FormSubmissionData):
     organization_id: str
     created_at: datetime
     updated_at: datetime
+
+# Add after Form/ListFormsResponse models, before FormSubmission models (or grouped logically)
+
+class TableResponseFormat(BaseModel):
+    columns: Optional[List[dict]] = Field(
+        default=None,
+        description="React-Data-Grid columns definition"
+    )
+    row_schema: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional schema describing a row's shape"
+    )
+    column_mapping: Optional[Dict[str, dict]] = Field(
+        default=None,
+        description="Optional mapping for columns to source fields"
+    )
+
+    @field_validator('columns')
+    def validate_columns(cls, v):
+        if v is not None and not isinstance(v, list):
+            raise ValueError("columns must be a list")
+        return v
+
+    @field_validator('row_schema')
+    def validate_row_schema(cls, v):
+        if v is not None and not isinstance(v, dict):
+            raise ValueError("row_schema must be a dictionary")
+        return v
+
+    @field_validator('column_mapping')
+    def validate_column_mapping(cls, v):
+        if v is not None and not isinstance(v, dict):
+            raise ValueError("column_mapping must be a dictionary")
+        return v
+
+
+class TableConfig(BaseModel):
+    name: str
+    response_format: TableResponseFormat
+    tag_ids: List[str] = []
+
+
+class Table(TableConfig):
+    table_revid: str    # MongoDB's _id of the revision
+    table_id: str       # Stable identifier
+    table_version: int
+    created_at: datetime
+    created_by: str
+
+
+class ListTablesResponse(BaseModel):
+    tables: List[Table]
+    total_count: int
+    skip: int
+
+
+class TableSubmissionData(BaseModel):
+    table_revid: str
+    submission_data: List[dict]  # rows submitted for the table
+    submitted_by: Optional[str] = None
+
+
+class TableSubmission(TableSubmissionData):
+    id: str
+    organization_id: str
+    created_at: datetime
+    updated_at: datetime

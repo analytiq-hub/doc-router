@@ -89,6 +89,9 @@ from docrouter_app.models import (
     FlowConfig,
     Flow,
     ListFlowsResponse,
+    # Add these:
+    Table, TableConfig, ListTablesResponse,
+    TableSubmissionData, TableSubmission,
 )
 from docrouter_app.payments import payments_router
 from docrouter_app.payments import (
@@ -3951,3 +3954,407 @@ async def proxy_request(
         raise HTTPException(status_code=502, detail=f"Request failed: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+
+# Add near other helper functions (around where get_form_id_and_version is first defined)
+async def get_table_id_and_version(table_id: Optional[str] = None) -> tuple[str, int]:
+    """
+    Get the next version for an existing table or create a new table identifier.
+    Returns: (table_id, table_version)
+    """
+    db = ad.common.get_async_db()
+
+    if table_id is None:
+        result = await db.tables.insert_one({"table_version": 1})
+        table_id = str(result.inserted_id)
+        table_version = 1
+    else:
+        result = await db.tables.find_one_and_update(
+            {"_id": ObjectId(table_id)},
+            {"$inc": {"table_version": 1}},
+            upsert=True,
+            return_document=True
+        )
+        table_version = result["table_version"]
+
+    return table_id, table_version
+
+# Tables management endpoints
+@app.post("/v0/orgs/{organization_id}/tables", response_model=Table, tags=["tables"])
+async def create_table(
+    organization_id: str,
+    table: TableConfig,
+    current_user: User = Depends(get_org_user)
+):
+    """Create a table"""
+    logger.info(f"create_table() start: organization_id: {organization_id}, table: {table}")
+    db = ad.common.get_async_db()
+
+    # Check if table with this name already exists (case-insensitive)
+    existing_table = await db.tables.find_one({
+        "name": {"$regex": f"^{re.escape(table.name)}$", "$options": "i"},
+        "organization_id": organization_id
+    })
+
+    # Generate table_id and version
+    if existing_table:
+        table_id, new_table_version = await get_table_id_and_version(str(existing_table["_id"]))
+    else:
+        table_id, new_table_version = await get_table_id_and_version(None)
+
+    # Update the tables collection with name and organization_id
+    await db.tables.update_one(
+        {"_id": ObjectId(table_id)},
+        {"$set": {
+            "name": table.name,
+            "organization_id": organization_id,
+        }},
+        upsert=True
+    )
+
+    # Create table document for table_revisions
+    table_doc = {
+        "table_id": table_id,
+        "response_format": table.response_format.model_dump(),
+        "table_version": new_table_version,
+        "tag_ids": table.tag_ids,
+        "created_at": datetime.now(UTC),
+        "created_by": current_user.user_id
+    }
+
+    result = await db.table_revisions.insert_one(table_doc)
+
+    # Return complete table
+    table_doc["name"] = table.name
+    table_doc["table_revid"] = str(result.inserted_id)
+    return Table(**table_doc)
+
+
+@app.get("/v0/orgs/{organization_id}/tables", response_model=ListTablesResponse, tags=["tables"])
+async def list_tables(
+    organization_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    tag_ids: str = Query(None, description="Comma-separated list of tag IDs to filter by"),
+    current_user: User = Depends(get_org_user)
+):
+    """List latest table revisions within an organization, optionally filtered by tags"""
+    logger.info(f"list_tables() start: organization_id: {organization_id}, skip: {skip}, limit: {limit}, tag_ids: {tag_ids}")
+    db = ad.common.get_async_db()
+
+    filter_tag_ids = []
+    if tag_ids:
+        filter_tag_ids = [tag_id.strip() for tag_id in tag_ids.split(',') if tag_id.strip()]
+
+    # Get all tables that belong to the organization
+    org_tables = await db.tables.find({"organization_id": organization_id}).to_list(None)
+    if not org_tables:
+        return ListTablesResponse(tables=[], total_count=0, skip=skip)
+
+    table_ids = [t["_id"] for t in org_tables]
+    table_id_to_name = {str(t["_id"]): t["name"] for t in org_tables}
+
+    pipeline = [
+        {"$match": {"table_id": {"$in": [str(tid) for tid in table_ids]}}},
+    ]
+
+    if filter_tag_ids:
+        pipeline.append({"$match": {"tag_ids": {"$in": filter_tag_ids}}})
+
+    pipeline.extend([
+        {"$sort": {"_id": -1}},
+        {"$group": {"_id": "$table_id", "doc": {"$first": "$$ROOT"}}},
+        {"$replaceRoot": {"newRoot": "$doc"}},
+        {"$sort": {"_id": -1}},
+        {"$facet": {
+            "total": [{"$count": "count"}],
+            "tables": [{"$skip": skip}, {"$limit": limit}]
+        }}
+    ])
+
+    result = await db.table_revisions.aggregate(pipeline).to_list(length=1)
+    result = result[0] if result else {"total": [], "tables": []}
+
+    total_count = result["total"][0]["count"] if result["total"] else 0
+    tables = result["tables"]
+
+    for t in tables:
+        t["table_revid"] = str(t.pop("_id"))
+        t["name"] = table_id_to_name.get(t["table_id"], "Unknown")
+
+    return ListTablesResponse(
+        tables=tables,
+        total_count=total_count,
+        skip=skip
+    )
+
+
+@app.get("/v0/orgs/{organization_id}/tables/{table_revid}", response_model=Table, tags=["tables"])
+async def get_table(
+    organization_id: str,
+    table_revid: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Get a table revision"""
+    logger.info(f"get_table() start: organization_id: {organization_id}, table_revid: {table_revid}")
+    db = ad.common.get_async_db()
+
+    revision = await db.table_revisions.find_one({"_id": ObjectId(table_revid)})
+    if not revision:
+        raise HTTPException(status_code=404, detail="Table revision not found")
+
+    table = await db.tables.find_one({
+        "_id": ObjectId(revision["table_id"]),
+        "organization_id": organization_id
+    })
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found or not in this organization")
+
+    ret = {
+        "name": table["name"],
+        "response_format": revision["response_format"],
+        "table_revid": str(revision["_id"]),
+        "table_id": revision["table_id"],
+        "table_version": revision["table_version"],
+        "tag_ids": revision.get("tag_ids", []),
+        "created_at": revision["created_at"],
+        "created_by": revision["created_by"],
+    }
+    return Table(**ret)
+
+
+@app.put("/v0/orgs/{organization_id}/tables/{table_id}", response_model=Table, tags=["tables"])
+async def update_table(
+    organization_id: str,
+    table_id: str,
+    table: TableConfig,
+    current_user: User = Depends(get_org_user)
+):
+    """Update an existing table"""
+    logger.info(f"update_table() start: organization_id: {organization_id}, table_id: {table_id}")
+    db = ad.common.get_async_db()
+
+    existing_table = await db.tables.find_one({"_id": ObjectId(table_id), "organization_id": organization_id})
+    if not existing_table:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    latest_revision = await db.table_revisions.find_one(
+        {"table_id": table_id},
+        sort=[("table_version", -1)]
+    )
+    if not latest_revision:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    current_rf = latest_revision.get("response_format", {})
+    new_rf = table.response_format.model_dump()
+
+    rf_changed = current_rf != new_rf
+    tag_ids_changed = set(latest_revision.get("tag_ids", [])) != set(table.tag_ids)
+
+    # Update metadata (name) on the table
+    await db.tables.update_one(
+        {"_id": ObjectId(table_id)},
+        {"$set": {"name": table.name}},
+        upsert=True
+    )
+
+    if rf_changed or tag_ids_changed:
+        new_table_version = latest_revision["table_version"] + 1
+        new_revision = {
+            "table_id": table_id,
+            "response_format": new_rf,
+            "tag_ids": table.tag_ids,
+            "table_version": new_table_version,
+            "created_at": datetime.now(UTC),
+            "created_by": current_user.user_id
+        }
+        result = await db.table_revisions.insert_one(new_revision)
+        return Table(
+            table_revid=str(result.inserted_id),
+            table_id=new_revision["table_id"],
+            table_version=new_revision["table_version"],
+            name=table.name,
+            response_format=new_revision["response_format"],
+            tag_ids=new_revision["tag_ids"],
+            created_at=new_revision["created_at"],
+            created_by=new_revision["created_by"],
+        )
+    else:
+        # No revision change, just return the existing table with updated name
+        return Table(
+            table_revid=str(latest_revision["_id"]),
+            table_id=table_id,
+            name=table.name,
+            response_format=latest_revision["response_format"],
+            table_version=latest_revision["table_version"],
+            tag_ids=latest_revision.get("tag_ids", []),
+            created_at=latest_revision["created_at"],
+            created_by=latest_revision["created_by"],
+        )
+
+
+@app.delete("/v0/orgs/{organization_id}/tables/{table_id}", tags=["tables"])
+async def delete_table(
+    organization_id: str,
+    table_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Delete a table"""
+    logger.info(f"delete_table() start: organization_id: {organization_id}, table_id: {table_id}")
+    db = ad.common.get_async_db()
+
+    table = await db.tables.find_one({
+        "_id": ObjectId(table_id),
+        "organization_id": organization_id
+    })
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found or not in this organization")
+
+    # Optional: check dependent prompts (parity with forms code pattern; adjust if not needed)
+    dependent_prompts = await db.prompt_revisions.find({
+        "table_id": table_id
+    }).to_list(None)
+
+    if dependent_prompts:
+        prompt_names = {}
+        for prompt_revision in dependent_prompts:
+            prompt = await db.prompts.find_one({"_id": ObjectId(prompt_revision["prompt_id"])})
+            if prompt:
+                prompt_names[str(prompt_revision["_id"])] = prompt["name"]
+
+        prompt_list = [
+            {
+                "name": prompt_names.get(str(p["_id"]), "Unknown"),
+                "table_version": p.get("table_version")
+            }
+            for p in dependent_prompts
+        ]
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete table because it has dependent prompts:{json.dumps(prompt_list)}"
+        )
+
+    # Delete revisions and table entry
+    result = await db.table_revisions.delete_many({"table_id": table_id})
+    await db.tables.delete_one({"_id": ObjectId(table_id)})
+
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="No table revisions found")
+
+    return {"message": "Table deleted successfully"}
+
+
+# Table submission endpoints
+@app.post("/v0/orgs/{organization_id}/tables/submissions/{document_id}", response_model=TableSubmission, tags=["table-submissions"])
+async def submit_table(
+    organization_id: str,
+    document_id: str,
+    submission: TableSubmissionData,
+    current_user: User = Depends(get_org_user)
+):
+    """Submit a table for a specific document - updates existing submission if found"""
+    logger.info(f"submit_table() start: organization_id: {organization_id}, document_id: {document_id}, table_revid: {submission.table_revid}")
+    db = ad.common.get_async_db()
+
+    # Verify the table revision exists
+    table_revision = await db.table_revisions.find_one({"_id": ObjectId(submission.table_revid)})
+    if not table_revision:
+        raise HTTPException(status_code=404, detail="Table revision not found")
+
+    # Verify the table belongs to the organization
+    table = await db.tables.find_one({
+        "_id": ObjectId(table_revision["table_id"]),
+        "organization_id": organization_id
+    })
+    if not table:
+        raise HTTPException(status_code=404, detail="Table not found or not in this organization")
+
+    # Verify the document exists and belongs to the organization
+    document = await db.docs.find_one({
+        "_id": ObjectId(document_id),
+        "organization_id": organization_id
+    })
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found or not in this organization")
+
+    # Check for existing submission
+    existing_submission = await db.table_submissions.find_one({
+        "table_revid": submission.table_revid,
+        "document_id": document_id,
+        "organization_id": organization_id
+    })
+
+    now = datetime.now(UTC)
+
+    if existing_submission:
+        update_data = {
+            "submission_data": submission.submission_data,
+            "submitted_by": submission.submitted_by or current_user.user_id,
+            "updated_at": now
+        }
+        await db.table_submissions.update_one(
+            {"_id": existing_submission["_id"]},
+            {"$set": update_data}
+        )
+        updated_submission = await db.table_submissions.find_one({"_id": existing_submission["_id"]})
+        updated_submission["id"] = str(updated_submission.pop("_id"))
+        return TableSubmission(**updated_submission)
+    else:
+        submission_doc = {
+            "table_revid": submission.table_revid,
+            "document_id": document_id,
+            "organization_id": organization_id,
+            "submission_data": submission.submission_data,
+            "submitted_by": submission.submitted_by or current_user.user_id,
+            "created_at": now,
+            "updated_at": now
+        }
+        result = await db.table_submissions.insert_one(submission_doc)
+        submission_doc["id"] = str(result.inserted_id)
+        return TableSubmission(**submission_doc)
+
+
+@app.get("/v0/orgs/{organization_id}/tables/submissions/{document_id}", response_model=Optional[TableSubmission], tags=["table-submissions"])
+async def get_table_submission(
+    organization_id: str,
+    document_id: str,
+    table_revid: str = Query(..., description="The table revision ID"),
+    current_user: User = Depends(get_org_user)
+):
+    """Get the table submission for a specific document and table combination"""
+    logger.info(f"get_table_submission() start: organization_id: {organization_id}, document_id: {document_id}, table_revid: {table_revid}")
+    db = ad.common.get_async_db()
+
+    submission = await db.table_submissions.find_one({
+        "document_id": document_id,
+        "table_revid": table_revid,
+        "organization_id": organization_id
+    })
+
+    if submission:
+        submission["id"] = str(submission.pop("_id"))
+        return TableSubmission(**submission)
+
+    return None
+
+
+@app.delete("/v0/orgs/{organization_id}/tables/submissions/{document_id}", tags=["table-submissions"])
+async def delete_table_submission(
+    organization_id: str,
+    document_id: str,
+    table_revid: str = Query(..., description="The table revision ID"),
+    current_user: User = Depends(get_org_user)
+):
+    """Delete a table submission"""
+    logger.info(f"delete_table_submission() start: organization_id: {organization_id}, document_id: {document_id}, table_revid: {table_revid}")
+    db = ad.common.get_async_db()
+
+    result = await db.table_submissions.delete_one({
+        "document_id": document_id,
+        "table_revid": table_revid,
+        "organization_id": organization_id
+    })
+
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Table submission not found")
+
+    return {"message": "Table submission deleted successfully"}
