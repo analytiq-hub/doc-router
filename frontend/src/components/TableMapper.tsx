@@ -58,12 +58,12 @@ const TableMapper: React.FC<TableMapperProps> = ({
     }
     setLoading(true);
     try {
-      const allSchemas = await listSchemasApi({ organizationId, limit: 200 });
+      const allSchemas = await listSchemasApi({ organizationId });
 
       const promptsMap = new Map<string, { prompt_revid: string; name: string; schema_id?: string }>();
       for (const tagId of selectedTagIds) {
         try {
-          const resp = await listPromptsApi({ organizationId, tag_ids: tagId, limit: 200 });
+          const resp = await listPromptsApi({ organizationId, tag_ids: tagId});
           resp.prompts.forEach(p => promptsMap.set(p.prompt_revid, p));
         } catch {
           // ignore per-tag errors
@@ -71,7 +71,7 @@ const TableMapper: React.FC<TableMapperProps> = ({
       }
 
       const prompts = Array.from(promptsMap.values()).filter(p => p.schema_id);
-      const schemaById: Record<string, any> = {};
+      const schemaById: Record<string, unknown> = {};
       await Promise.all(
         prompts.map(async (p) => {
           const match = allSchemas.schemas.find(s => s.schema_id === p.schema_id);
