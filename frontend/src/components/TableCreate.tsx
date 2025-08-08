@@ -10,6 +10,7 @@ import { toast } from 'react-toastify';
 import { useRouter } from 'next/navigation';
 import Editor from '@monaco-editor/react';
 import InfoTooltip from '@/components/InfoTooltip';
+import TableMapper from '@/components/TableMapper';
 
 const defaultResponseFormat: TableResponseFormat = {
   columns: [],
@@ -31,7 +32,7 @@ const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'columns' | 'json'>('columns');
+  const [activeTab, setActiveTab] = useState<'columns' | 'mapper' | 'json'>('columns');
   const [jsonConfig, setJsonConfig] = useState('');
 
   // Load editing table if available (tableId is a table revision id)
@@ -80,6 +81,22 @@ const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
   useEffect(() => {
     setJsonConfig(JSON.stringify(currentTable.response_format, null, 2));
   }, [currentTable]);
+
+  // Prune column mappings if columns changed (remove orphaned mappings)
+  useEffect(() => {
+    const colKeys = new Set((currentTable.response_format.columns || []).map(c => c.key));
+    const mappings = currentTable.response_format.column_mapping || {};
+    const pruned = Object.fromEntries(Object.entries(mappings).filter(([k]) => colKeys.has(k)));
+    if (Object.keys(pruned).length !== Object.keys(mappings).length) {
+      setCurrentTable(prev => ({
+        ...prev,
+        response_format: {
+          ...prev.response_format,
+          column_mapping: pruned
+        }
+      }));
+    }
+  }, [currentTable.response_format.columns]);
 
   const handleJsonChange = (value: string | undefined) => {
     if (!value) return;
@@ -271,6 +288,17 @@ const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
               </button>
               <button
                 type="button"
+                onClick={() => setActiveTab('mapper')}
+                className={`pb-4 px-1 relative font-semibold text-base ${
+                  activeTab === 'mapper'
+                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Mapper
+              </button>
+              <button
+                type="button"
                 onClick={() => setActiveTab('json')}
                 className={`pb-4 px-1 relative font-semibold text-base ${
                   activeTab === 'json'
@@ -359,7 +387,7 @@ const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
                         currentTable.response_format.columns.length === 0) && (
                         <tr>
                           <td colSpan={5} className="py-6 text-center text-gray-500">
-                            No columns defined. Click "Add Column" to create your first column.
+                            No columns defined. Click &quot;Add Column&quot; to create your first column.
                           </td>
                         </tr>
                       )}
@@ -367,11 +395,26 @@ const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
                   </table>
                 </div>
 
-                {/* Note: Advanced mapping and row schema can be edited in JSON tab */}
                 <div className="mt-4 text-xs text-gray-600">
                   Tip: Use the JSON Config tab to edit row_schema and column_mapping.
                 </div>
               </div>
+            ) : activeTab === 'mapper' ? (
+              <TableMapper
+                organizationId={organizationId}
+                selectedTagIds={selectedTagIds}
+                columns={currentTable.response_format.columns || []}
+                columnMappings={currentTable.response_format.column_mapping || {}}
+                onMappingChange={(mappings) => {
+                  setCurrentTable(prev => ({
+                    ...prev,
+                    response_format: {
+                      ...prev.response_format,
+                      column_mapping: mappings
+                    }
+                  }));
+                }}
+              />
             ) : (
               <div className="h-[calc(100vh-300px)] border rounded">
                 <Editor
