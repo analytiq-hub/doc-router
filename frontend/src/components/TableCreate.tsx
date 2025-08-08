@@ -1,66 +1,70 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { createFormApi, updateFormApi, listTagsApi, getFormApi } from '@/utils/api';
-import { FormConfig } from '@/types/forms';
+import { createTableApi, updateTableApi, listTagsApi, getTableApi } from '@/utils/api';
+import { TableConfig, TableColumn, TableResponseFormat } from '@/types/tables';
 import { Tag } from '@/types/index';
 import { getApiErrorMsg } from '@/utils/api';
 import TagSelector from './TagSelector';
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/navigation';
-import FormioBuilder from './FormioBuilder';
-import FormioMapper from './FormioMapper';
-import Editor from "@monaco-editor/react";
+import Editor from '@monaco-editor/react';
 import InfoTooltip from '@/components/InfoTooltip';
-import { FormComponent } from '@/types/forms';
 
-const TableCreate: React.FC<{ organizationId: string, formId?: string }> = ({ organizationId, formId }) => {
+const defaultResponseFormat: TableResponseFormat = {
+  columns: [],
+  row_schema: {},
+  column_mapping: {}
+};
+
+const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
+  organizationId,
+  tableId
+}) => {
   const router = useRouter();
-  const [currentFormId, setCurrentFormId] = useState<string | null>(null);
-  const [currentForm, setCurrentForm] = useState<FormConfig>({
+  const [currentTableId, setCurrentTableId] = useState<string | null>(null);
+  const [currentTable, setCurrentTable] = useState<TableConfig>({
     name: '',
-    response_format: {
-      json_formio: [],
-      json_formio_mapping: {}
-    },
-    tag_ids: [] // Initialize with empty array
+    response_format: defaultResponseFormat,
+    tag_ids: []
   });
   const [isLoading, setIsLoading] = useState(false);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [activeTab, setActiveTab] = useState<'builder' | 'mapper' | 'json'>('builder');
-  const [jsonForm, setJsonForm] = useState('');
+  const [activeTab, setActiveTab] = useState<'columns' | 'json'>('columns');
+  const [jsonConfig, setJsonConfig] = useState('');
 
-  // Load editing form if available
+  // Load editing table if available (tableId is a table revision id)
   useEffect(() => {
-    const loadForm = async () => {
-      if (formId) {
+    const loadTable = async () => {
+      if (tableId) {
         try {
           setIsLoading(true);
-          const form = await getFormApi({ organizationId, formRevId: formId });
-          setCurrentFormId(form.form_id);
-          setCurrentForm({
-            name: form.name,
+          const table = await getTableApi({ organizationId, tableRevId: tableId });
+          setCurrentTableId(table.table_id);
+          setCurrentTable({
+            name: table.name,
             response_format: {
-              ...form.response_format,
-              json_formio_mapping: form.response_format.json_formio_mapping || {}
+              columns: table.response_format?.columns || [],
+              row_schema: table.response_format?.row_schema || {},
+              column_mapping: table.response_format?.column_mapping || {}
             },
-            tag_ids: form.tag_ids || []
+            tag_ids: table.tag_ids || []
           });
-          setSelectedTagIds(form.tag_ids || []);
+          setSelectedTagIds(table.tag_ids || []);
         } catch (error) {
-          toast.error(`Error loading form for editing: ${getApiErrorMsg(error)}`);
+          toast.error(`Error loading table for editing: ${getApiErrorMsg(error)}`);
         } finally {
           setIsLoading(false);
         }
       }
     };
-    loadForm();
-  }, [formId, organizationId]);
+    loadTable();
+  }, [tableId, organizationId]);
 
   const loadTags = useCallback(async () => {
     try {
-      const response = await listTagsApi({ organizationId: organizationId });
+      const response = await listTagsApi({ organizationId });
       setAvailableTags(response.tags);
     } catch (error) {
       const errorMsg = getApiErrorMsg(error) || 'Error loading tags';
@@ -72,82 +76,112 @@ const TableCreate: React.FC<{ organizationId: string, formId?: string }> = ({ or
     loadTags();
   }, [loadTags]);
 
-  // Update jsonForm when currentForm changes
+  // Keep JSON editor in sync
   useEffect(() => {
-    setJsonForm(JSON.stringify(currentForm.response_format, null, 2));
-  }, [currentForm]);
+    setJsonConfig(JSON.stringify(currentTable.response_format, null, 2));
+  }, [currentTable]);
 
-  // Add handler for JSON form changes
-  const handleJsonFormChange = (value: string | undefined) => {
+  const handleJsonChange = (value: string | undefined) => {
     if (!value) return;
     try {
-      const parsedForm = JSON.parse(value);
-      
-      // Validate form structure
-      if (!parsedForm.json_formio) {
-        toast.error('Error: Invalid form format. Must contain json_formio');
+      const parsed = JSON.parse(value) as TableResponseFormat;
+
+      // Basic validation
+      if (parsed.columns && !Array.isArray(parsed.columns)) {
+        toast.error('Error: response_format.columns must be an array');
         return;
       }
-      
-      // Update form (preserve existing mapping if not provided in JSON)
-      setCurrentForm(prev => ({
+
+      setCurrentTable(prev => ({
         ...prev,
         response_format: {
-          json_formio: parsedForm.json_formio,
-          json_formio_mapping: parsedForm.json_formio_mapping || prev.response_format.json_formio_mapping || {}
+          columns: parsed.columns || [],
+          row_schema: parsed.row_schema || {},
+          column_mapping: parsed.column_mapping || {}
         }
       }));
     } catch (error) {
-      // Invalid JSON - don't update
       toast.error(`Error: Invalid JSON syntax: ${error}`);
     }
   };
 
-  const saveForm = async () => {
+  const saveTable = async () => {
     try {
       setIsLoading(true);
-      
-      // Create the form object with tag_ids
-      const formToSave = {
-        ...currentForm,
+
+      const tableToSave: TableConfig = {
+        ...currentTable,
         tag_ids: selectedTagIds
       };
 
-      if (currentFormId) {
-        // Update existing form
-        await updateFormApi({
-          organizationId: organizationId, 
-          formId: currentFormId, 
-          form: formToSave
+      if (currentTableId) {
+        await updateTableApi({
+          organizationId,
+          tableId: currentTableId,
+          table: tableToSave
         });
       } else {
-        // Create new form
-        await createFormApi({
-          organizationId: organizationId, 
-          ...formToSave
+        await createTableApi({
+          organizationId,
+          ...tableToSave
         });
       }
 
-      // Clear the form
-      setCurrentForm({
+      // Reset form
+      setCurrentTable({
         name: '',
-        response_format: {
-          json_formio: [],
-          json_formio_mapping: {}
-        },
+        response_format: defaultResponseFormat,
         tag_ids: []
       });
-      setCurrentFormId(null);
+      setCurrentTableId(null);
       setSelectedTagIds([]);
 
-      router.push(`/orgs/${organizationId}/forms`);
-      
+      router.push(`/orgs/${organizationId}/tables`);
     } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error saving form';
+      const errorMsg = getApiErrorMsg(error) || 'Error saving table';
       toast.error('Error: ' + errorMsg);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  // Columns builder UI handlers
+  const addColumn = () => {
+    const newCol: TableColumn = {
+      key: `col_${Date.now()}`,
+      name: 'New Column',
+      width: 150,
+      editable: true
+    };
+    setCurrentTable(prev => ({
+      ...prev,
+      response_format: {
+        ...prev.response_format,
+        columns: [...(prev.response_format.columns || []), newCol]
+      }
+    }));
+  };
+
+  const updateColumn = (index: number, updates: Partial<TableColumn>) => {
+    setCurrentTable(prev => {
+      const cols = [...(prev.response_format.columns || [])];
+      cols[index] = { ...cols[index], ...updates };
+      return {
+        ...prev,
+        response_format: { ...prev.response_format, columns: cols }
+      };
+    });
+  };
+
+  const deleteColumn = (index: number) => {
+    setCurrentTable(prev => {
+      const cols = [...(prev.response_format.columns || [])];
+      cols.splice(index, 1);
+      return {
+        ...prev,
+        response_format: { ...prev.response_format, columns: cols }
+      };
+    });
   };
 
   return (
@@ -155,35 +189,35 @@ const TableCreate: React.FC<{ organizationId: string, formId?: string }> = ({ or
       <div className="bg-white p-6 rounded-lg shadow mb-6">
         <div className="hidden md:flex items-center gap-2 mb-4">
           <h2 className="text-xl font-bold">
-            {currentFormId ? 'Edit Form' : 'Create Form'}
+            {currentTableId ? 'Edit Table' : 'Create Table'}
           </h2>
-          <InfoTooltip 
-            title="About Forms"
+          <InfoTooltip
+            title="About Tables"
             content={
               <>
                 <p className="mb-2">
-                  Forms are used to validate and structure data extracted from documents.
+                  Tables define columnar outputs and row schema for structured document data.
                 </p>
                 <ul className="list-disc list-inside space-y-1 mb-2">
-                  <li>Use descriptive field names</li>
-                  <li>Choose appropriate data types for each field</li>
-                  <li>All fields defined in a form are required by default</li>
+                  <li>Define clear keys and labels for each column</li>
+                  <li>Mark columns editable when they should be user-correctable</li>
+                  <li>Use JSON editor for advanced row schema and mappings</li>
                 </ul>
               </>
             }
           />
         </div>
-        
+
         <div className="space-y-4">
-          {/* Form Name Input */}
+          {/* Table Name + Actions */}
           <div className="flex items-center gap-4 mb-4">
             <div className="flex-1 md:w-1/2 md:max-w-[calc(50%-1rem)]">
               <input
                 type="text"
                 className="w-full p-2 border rounded"
-                value={currentForm.name}
-                onChange={e => setCurrentForm({ ...currentForm, name: e.target.value })}
-                placeholder="Form Name"
+                value={currentTable.name}
+                onChange={e => setCurrentTable({ ...currentTable, name: e.target.value })}
+                placeholder="Table Name"
                 disabled={isLoading}
               />
             </div>
@@ -191,13 +225,10 @@ const TableCreate: React.FC<{ organizationId: string, formId?: string }> = ({ or
               <button
                 type="button"
                 onClick={() => {
-                  setCurrentFormId(null);
-                  setCurrentForm({
+                  setCurrentTableId(null);
+                  setCurrentTable({
                     name: '',
-                    response_format: {
-                      json_formio: [],
-                      json_formio_mapping: {}
-                    },
+                    response_format: defaultResponseFormat,
                     tag_ids: []
                   });
                   setSelectedTagIds([]);
@@ -210,16 +241,16 @@ const TableCreate: React.FC<{ organizationId: string, formId?: string }> = ({ or
               <button
                 type="button"
                 onClick={() => {
-                  if (!currentForm.name) {
-                    toast.error('Please fill in the form name');
+                  if (!currentTable.name) {
+                    toast.error('Please fill in the table name');
                     return;
                   }
-                  saveForm();
+                  saveTable();
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                 disabled={isLoading}
               >
-                {currentFormId ? 'Update Form' : 'Save Form'}
+                {currentTableId ? 'Update Table' : 'Save Table'}
               </button>
             </div>
           </div>
@@ -229,25 +260,14 @@ const TableCreate: React.FC<{ organizationId: string, formId?: string }> = ({ or
             <div className="flex gap-8">
               <button
                 type="button"
-                onClick={() => setActiveTab('builder')}
+                onClick={() => setActiveTab('columns')}
                 className={`pb-4 px-1 relative font-semibold text-base ${
-                  activeTab === 'builder'
+                  activeTab === 'columns'
                     ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                Form Builder
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('mapper')}
-                className={`pb-4 px-1 relative font-semibold text-base ${
-                  activeTab === 'mapper'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
-                    : 'text-gray-500 hover:text-gray-700'
-                }`}
-              >
-                Form Mapper
+                Columns Builder
               </button>
               <button
                 type="button"
@@ -258,62 +278,114 @@ const TableCreate: React.FC<{ organizationId: string, formId?: string }> = ({ or
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                JSON Form
+                JSON Config
               </button>
             </div>
           </div>
 
           {/* Tab Content */}
           <div className="space-y-4">
-            {activeTab === 'builder' ? (
-              // Form Builder Tab
-              <div className="border rounded-lg overflow-hidden bg-white">
-                <FormioBuilder
-                  jsonFormio={JSON.stringify(currentForm.response_format.json_formio || [])}
-                  onChange={(components) => {
-                    setCurrentForm(prev => ({
-                      ...prev,
-                      response_format: {
-                        ...prev.response_format,
-                        json_formio: components
-                      }
-                    }));
-                  }}
-                />
+            {activeTab === 'columns' ? (
+              <div className="border rounded-lg bg-white p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h3 className="font-semibold">Columns</h3>
+                  <button
+                    type="button"
+                    onClick={addColumn}
+                    className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  >
+                    Add Column
+                  </button>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead>
+                      <tr className="text-left text-gray-600 border-b">
+                        <th className="py-2 pr-4">Key</th>
+                        <th className="py-2 pr-4">Label</th>
+                        <th className="py-2 pr-4">Width</th>
+                        <th className="py-2 pr-4">Editable</th>
+                        <th className="py-2 pr-4 w-24">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(currentTable.response_format.columns || []).map((col, idx) => (
+                        <tr key={col.key} className="border-b">
+                          <td className="py-2 pr-4">
+                            <input
+                              type="text"
+                              value={col.key}
+                              onChange={e => updateColumn(idx, { key: e.target.value })}
+                              className="w-full p-2 border rounded"
+                            />
+                          </td>
+                          <td className="py-2 pr-4">
+                            <input
+                              type="text"
+                              value={col.name}
+                              onChange={e => updateColumn(idx, { name: e.target.value })}
+                              className="w-full p-2 border rounded"
+                            />
+                          </td>
+                          <td className="py-2 pr-4">
+                            <input
+                              type="number"
+                              value={col.width ?? 150}
+                              onChange={e => updateColumn(idx, { width: Number(e.target.value) })}
+                              className="w-24 p-2 border rounded"
+                              min={50}
+                            />
+                          </td>
+                          <td className="py-2 pr-4">
+                            <input
+                              type="checkbox"
+                              checked={!!col.editable}
+                              onChange={e => updateColumn(idx, { editable: e.target.checked })}
+                            />
+                          </td>
+                          <td className="py-2 pr-4">
+                            <button
+                              type="button"
+                              onClick={() => deleteColumn(idx)}
+                              className="px-3 py-1 bg-red-50 text-red-600 rounded hover:bg-red-100"
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                      {(!currentTable.response_format.columns ||
+                        currentTable.response_format.columns.length === 0) && (
+                        <tr>
+                          <td colSpan={5} className="py-6 text-center text-gray-500">
+                            No columns defined. Click "Add Column" to create your first column.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Note: Advanced mapping and row schema can be edited in JSON tab */}
+                <div className="mt-4 text-xs text-gray-600">
+                  Tip: Use the JSON Config tab to edit row_schema and column_mapping.
+                </div>
               </div>
-            ) : activeTab === 'mapper' ? (
-              // Form Mapper Tab
-              <FormioMapper
-                organizationId={organizationId}
-                selectedTagIds={selectedTagIds}
-                formComponents={currentForm.response_format.json_formio as FormComponent[] || []}
-                fieldMappings={currentForm.response_format.json_formio_mapping || {}}
-                onMappingChange={(mappings) => {
-                  setCurrentForm(prev => ({
-                    ...prev,
-                    response_format: {
-                      ...prev.response_format,
-                      json_formio_mapping: mappings
-                    }
-                  }));
-                }}
-              />
             ) : (
-              // JSON Form Tab
               <div className="h-[calc(100vh-300px)] border rounded">
                 <Editor
                   height="100%"
                   defaultLanguage="json"
-                  value={jsonForm}
-                  onChange={handleJsonFormChange}
+                  value={jsonConfig}
+                  onChange={handleJsonChange}
                   options={{
                     minimap: { enabled: false },
                     scrollBeyondLastLine: false,
-                    wordWrap: "on",
-                    wrappingIndent: "indent",
-                    lineNumbers: "on",
+                    wordWrap: 'on',
+                    lineNumbers: 'on',
                     folding: true,
-                    renderValidationDecorations: "on"
+                    renderValidationDecorations: 'on'
                   }}
                   theme="vs-light"
                 />
@@ -321,11 +393,9 @@ const TableCreate: React.FC<{ organizationId: string, formId?: string }> = ({ or
             )}
           </div>
 
-          {/* Tags Section - moved to bottom like in PromptCreate */}
+          {/* Tags */}
           <div className="space-y-2">
-            <label className="block text-sm font-medium text-gray-700">
-              Tags
-            </label>
+            <label className="block text-sm font-medium text-gray-700">Tags</label>
             <div className="w-full md:w-1/4">
               <TagSelector
                 availableTags={availableTags}

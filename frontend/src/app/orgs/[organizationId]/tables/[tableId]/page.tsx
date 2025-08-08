@@ -1,23 +1,22 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import FormCreate from '@/components/FormCreate';
+import TableCreate from '@/components/TableCreate';
 
-export default function FormEditPage() {
-  const { organizationId, formId } = useParams();
+export default function TableEditPage() {
+  const { organizationId, tableId } = useParams();
   const router = useRouter();
 
   return (
     <div className="p-4 max-w-4xl mx-auto">
-      {/* Back to Forms Button */}
       <button
-        onClick={() => router.push(`/orgs/${organizationId}/forms`)}
+        onClick={() => router.push(`/orgs/${organizationId}/tables`)}
         className="mb-4 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
       >
-        ← Back to Forms
+        ← Back to Tables
       </button>
 
-      <FormCreate organizationId={organizationId as string} formId={formId as string} />
+      <TableCreate organizationId={organizationId as string} tableId={tableId as string} />
     </div>
   );
-} 
+}
