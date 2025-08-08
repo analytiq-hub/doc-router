@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { listPromptsApi, listSchemasApi, getSchemaApi } from '@/utils/api';
 import { TableColumn } from '@/types/tables';
 import { FieldMapping, FieldMappingSource } from '@/types/forms';
+import { Schema, SchemaProperty } from '@/types/index';
 import { toast } from 'react-toastify';
 import { getApiErrorMsg } from '@/utils/api';
 
@@ -19,15 +20,7 @@ type SchemaField = {
   parentPath?: string;
 };
 
-type SchemaFieldDef = {
-  type: string;
-  properties?: Record<string, SchemaFieldDef>;
-  items?: {
-    type: string;
-    properties?: Record<string, SchemaFieldDef>;
-  };
-  description?: string;
-};
+// Using backend Schema definitions
 
 interface TableMapperProps {
   organizationId: string;
@@ -71,7 +64,7 @@ const TableMapper: React.FC<TableMapperProps> = ({
       }
 
       const prompts = Array.from(promptsMap.values()).filter(p => p.schema_id);
-      const schemaById: Record<string, unknown> = {};
+      const schemaById: Record<string, Schema> = {};
       await Promise.all(
         prompts.map(async (p) => {
           const match = allSchemas.schemas.find(s => s.schema_id === p.schema_id);
@@ -88,12 +81,12 @@ const TableMapper: React.FC<TableMapperProps> = ({
       const out: SchemaField[] = [];
       prompts.forEach(p => {
         const schema = p.schema_id ? schemaById[p.schema_id] : null;
-        const props = schema?.response_format?.json_schema?.schema?.properties || {};
-        const parse = (defs: Record<string, SchemaFieldDef>, basePath = '', depth = 0, parentPath?: string) => {
+        const props = (schema?.response_format?.json_schema?.schema?.properties ?? {}) as Record<string, SchemaProperty>;
+        const parse = (defs: Record<string, SchemaProperty>, basePath = '', depth = 0, parentPath?: string) => {
           Object.entries(defs).forEach(([fieldName, def]) => {
             const fullPath = basePath ? `${basePath}.${fieldName}` : fieldName;
             const hasObj = def.type === 'object' && def.properties;
-            const hasArrayObj = def.type === 'array' && def.items?.type === 'object' && def.items.properties;
+            const hasArrayObj = def.type === 'array' && def.items?.type === 'object' && (def.items as SchemaProperty).properties;
             const isExpandable = Boolean(hasObj || hasArrayObj);
 
             out.push({
@@ -109,7 +102,7 @@ const TableMapper: React.FC<TableMapperProps> = ({
             });
 
             if (hasObj && def.properties) parse(def.properties, fullPath, depth + 1, fullPath);
-            if (hasArrayObj && def.items?.properties) parse(def.items.properties, `${fullPath}[0]`, depth + 1, fullPath);
+            if (hasArrayObj && (def.items as SchemaProperty)?.properties) parse((def.items as SchemaProperty).properties!, `${fullPath}[0]`, depth + 1, fullPath);
           });
         };
         parse(props);
@@ -144,7 +137,11 @@ const TableMapper: React.FC<TableMapperProps> = ({
     const key = `${f.promptRevId}-${f.path}`;
     setExpandedFields(prev => {
       const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
       return next;
     });
   };
@@ -164,8 +161,9 @@ const TableMapper: React.FC<TableMapperProps> = ({
     e.preventDefault();
     const raw = e.dataTransfer.getData('text/plain');
     if (!raw) return;
-    let data: any;
-    try { data = JSON.parse(raw); } catch { return; }
+    type DragData = { type: 'schema-field'; field: SchemaField };
+    let data: DragData;
+    try { data = JSON.parse(raw) as DragData; } catch { return; }
     if (data?.type !== 'schema-field') return;
     const field = data.field as SchemaField;
 
@@ -255,11 +253,15 @@ const TableMapper: React.FC<TableMapperProps> = ({
                 <div key={promptRevId} className="border rounded">
                   <button
                     onClick={() =>
-                      setExpandedPrompts(prev =>
-                        prev.has(promptRevId)
-                          ? new Set([...prev].filter(x => x !== promptRevId))
-                          : new Set([...prev, promptRevId])
-                      )
+                      setExpandedPrompts(prev => {
+                        const next = new Set(prev);
+                        if (next.has(promptRevId)) {
+                          next.delete(promptRevId);
+                        } else {
+                          next.add(promptRevId);
+                        }
+                        return next;
+                      })
                     }
                     className="w-full px-3 py-2 flex items-center justify-between bg-gray-50 hover:bg-gray-100 text-left"
                   >
