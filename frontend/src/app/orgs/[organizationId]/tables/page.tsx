@@ -1,6 +1,6 @@
 'use client'
 
-import FormList from '@/components/FormList';
+import TableList from '@/components/TableList';
 import FormCreate from '@/components/FormCreate';
 import { useSearchParams, useRouter } from 'next/navigation';
 
@@ -43,7 +43,7 @@ export default function TablesPage({ params }: { params: { organizationId: strin
 
         <div className="max-w-6xl mx-auto">
           <div role="tabpanel" hidden={tab !== 'tables'}>
-            {tab === 'tables' && <FormList organizationId={params.organizationId} />}
+            {tab === 'tables' && <TableList organizationId={params.organizationId} />}
           </div>
           <div role="tabpanel" hidden={tab !== 'table-create'}>
             {tab === 'table-create' && <FormCreate organizationId={params.organizationId} />}
