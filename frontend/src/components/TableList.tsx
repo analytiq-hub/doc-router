@@ -74,6 +74,10 @@ const TableList: React.FC<{ organizationId: string }> = ({ organizationId }) => 
     loadData();
   }, [loadTables, loadTags]);
 
+  const handleView = (table: Table) => {
+    router.push(`/orgs/${organizationId}/tables/${table.table_revid}/view`);
+  };
+
   const handleEdit = (table: Table) => {
     router.push(`/orgs/${organizationId}/tables/${table.table_revid}`);
     handleMenuClose();
@@ -191,7 +195,7 @@ const TableList: React.FC<{ organizationId: string }> = ({ organizationId }) => 
       headerAlign: 'left',
       align: 'left',
       renderCell: params => (
-        <div className="text-blue-600 cursor-pointer hover:underline" onClick={() => handleEdit(params.row)}>
+        <div className="text-blue-600 cursor-pointer hover:underline" onClick={() => handleView(params.row)}>
           {params.row.name}
         </div>
       )
