@@ -96,7 +96,7 @@ const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
         }
       }));
     }
-  }, [currentTable.response_format.columns]);
+  }, [currentTable.response_format.columns, currentTable.response_format.column_mapping]);
 
   const handleJsonChange = (value: string | undefined) => {
     if (!value) return;

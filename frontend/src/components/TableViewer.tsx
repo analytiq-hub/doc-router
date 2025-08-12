@@ -1,120 +1,195 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Chip, InputAdornment, TextField, Checkbox } from '@mui/material';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import Link from 'next/link';
+import { Box, InputAdornment, TextField } from '@mui/material';
+import { DataGrid, GridColDef, GridPaginationModel } from '@mui/x-data-grid';
 import SearchIcon from '@mui/icons-material/Search';
 import { useRouter } from 'next/navigation';
-import { getTableApi, listTagsApi } from '@/utils/api';
-import { Table, TableColumn } from '@/types/tables';
-import { Tag } from '@/types';
-import { FieldMapping } from '@/types/forms';
+import { getTableApi, listTagsApi, listDocumentsApi, getLLMResultApi, runLLMApi } from '@/utils/api';
+import { Table } from '@/types/tables';
+import { Tag, DocumentMetadata, GetLLMResultResponse } from '@/types';
 import { isColorLight } from '@/utils/colors';
-import colors from 'tailwindcss/colors';
 
 type Props = {
   organizationId: string;
   tableRevId: string;
 };
 
-type Row = {
-  id: string;
-  key: string;
-  name: string;
-  width?: number;
-  aggregate?: boolean;
-  mapping?: FieldMapping;
-};
+type Row = { id: string; document_name: string } & Record<string, unknown>;
+
+function getValueByPath(data: Record<string, unknown> | undefined, path: string): string {
+  if (!data) return '';
+  // Convert bracket notation to dot, e.g. items[0].name -> items.0.name
+  const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean);
+  let cur: any = data;
+  for (const p of parts) {
+    if (cur == null) return '';
+    cur = cur[p];
+  }
+  if (cur === undefined || cur === null) return '';
+  if (typeof cur === 'object') return JSON.stringify(cur);
+  return String(cur);
+}
 
 const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
   const router = useRouter();
   const [table, setTable] = useState<Table | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [tags, setTags] = useState<Tag[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [isLoading, setIsLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      const [t, tagResp] = await Promise.all([
-        getTableApi({ organizationId, tableRevId }),
-        listTagsApi({ organizationId })
-      ]);
-      setTable(t);
-      setTags(tagResp.tags);
-    } finally {
-      setIsLoading(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [documents, setDocuments] = useState<DocumentMetadata[]>([]);
+  const [totalRows, setTotalRows] = useState(0);
+  const [paginationModel, setPaginationModel] = useState<GridPaginationModel>(() => {
+    if (typeof window !== 'undefined') {
+      const isSmall = window.innerWidth < 768;
+      return { page: 0, pageSize: isSmall ? 5 : 25 };
     }
+    return { page: 0, pageSize: 25 };
+  });
+  const [docLoading, setDocLoading] = useState(false);
+
+  // Cache of LLM results: docId -> promptRevId -> result
+  const [llmCache, setLlmCache] = useState<Record<string, Record<string, GetLLMResultResponse | null>>>({});
+
+  // Load table + tags once
+  useEffect(() => {
+    (async () => {
+      try {
+        setIsLoading(true);
+        const [t, tagResp] = await Promise.all([
+          getTableApi({ organizationId, tableRevId }),
+          listTagsApi({ organizationId })
+        ]);
+        setTable(t);
+        setTags(tagResp.tags);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   }, [organizationId, tableRevId]);
 
-  useEffect(() => {
-    load();
-  }, [load]);
-
-  const columnsDef: GridColDef<Row>[] = useMemo(() => [
-    { field: 'key', headerName: 'Key', flex: 1 },
-    { field: 'name', headerName: 'Name', flex: 1.5 },
-    {
-      field: 'width',
-      headerName: 'Width',
-      width: 100,
-      valueFormatter: ({ value }) => (value === undefined || value === null ? '' : String(value))
-    },
-    {
-      field: 'aggregate',
-      headerName: 'Aggregate',
-      width: 120,
-      sortable: false,
-      renderCell: ({ value }) => <Checkbox size="small" checked={Boolean(value)} disabled />
-    },
-    {
-      field: 'mapping',
-      headerName: 'Mapping',
-      flex: 2,
-      sortable: false,
-      renderCell: (params) => {
-        const mapping = params.value as FieldMapping | undefined;
-
-        if (!mapping) return <span className="text-gray-400">—</span>;
-
-        return (
-          <div className="flex gap-1 flex-wrap items-center">
-            {mapping.sources.map((s, idx) => (
-              <Chip
-                key={`${s.promptName}-${s.schemaFieldName}-${idx}`}
-                label={`${s.promptName}: ${s.schemaFieldName}`}
-                size="small"
-                sx={{ backgroundColor: colors.gray[100] }}
-              />
-            ))}
-            {mapping.mappingType === 'concatenated' && (
-              <span className="text-xs text-gray-500 ml-1">
-                sep: {'"'}{mapping.concatenationSeparator || ' '}{'"'}
-              </span>
-            )}
-          </div>
-        );
-      }
-    }
-  ], []);
-
-  const rows: Row[] = useMemo(() => {
-    const cols = table?.response_format?.columns || [];
+  // Unique promptRevIds needed by this table
+  const promptRevIds = useMemo(() => {
     const mapping = table?.response_format?.column_mapping || {};
-    const filtered = cols.filter(
-      (c: TableColumn) =>
-        c.key.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
-    );
-    return filtered.map((c: TableColumn) => ({
-      id: c.key,
-      key: c.key,
-      name: c.name,
-      width: c.width,
-      aggregate: Boolean((c as Record<string, unknown>).aggregate),
-      mapping: mapping[c.key] as FieldMapping | undefined
-    }));
-  }, [table, searchTerm]);
+    const set = new Set<string>();
+    Object.values(mapping).forEach((m: any) => {
+      (m?.sources || []).forEach((s: any) => {
+        if (s?.promptRevId) set.add(s.promptRevId);
+      });
+    });
+    return Array.from(set);
+  }, [table]);
+
+  // Build grid columns: Document column + one per table column
+  const gridColumns: GridColDef<Row>[] = useMemo(() => {
+    const cols: GridColDef<Row>[] = [
+      {
+        field: 'document_name',
+        headerName: 'Document',
+        flex: 1.5,
+        renderCell: (params) => (
+          <Link href={`/orgs/${organizationId}/docs/${params.row.id}`} style={{ color: 'blue', textDecoration: 'underline' }}>
+            {String(params.value ?? '')}
+          </Link>
+        )
+      }
+    ];
+    const tableCols = table?.response_format?.columns || [];
+    for (const c of tableCols) {
+      cols.push({
+        field: c.key,
+        headerName: c.name,
+        width: c.width ?? undefined,
+        flex: c.width ? undefined as any : 1,
+        sortable: false,
+      });
+    }
+    return cols;
+  }, [organizationId, table?.response_format?.columns]);
+
+  // Paginated documents fetch
+  const loadDocuments = useCallback(async () => {
+    try {
+      setDocLoading(true);
+      const resp = await listDocumentsApi({
+        organizationId,
+        skip: paginationModel.page * paginationModel.pageSize,
+        limit: paginationModel.pageSize,
+        nameSearch: searchTerm.trim() || undefined
+      });
+      setDocuments(resp.documents);
+      setTotalRows(resp.total_count);
+    } finally {
+      setDocLoading(false);
+    }
+  }, [organizationId, paginationModel.page, paginationModel.pageSize, searchTerm]);
+
+  useEffect(() => {
+    loadDocuments();
+  }, [loadDocuments]);
+
+  // Load (and if missing, run) required LLM results for current page documents
+  useEffect(() => {
+    if (!documents.length || !promptRevIds.length) return;
+
+    const loadOrRun = async () => {
+      const next = { ...llmCache } as Record<string, Record<string, GetLLMResultResponse | null>>;
+
+      await Promise.all(
+        documents.map(async (doc) => {
+          next[doc.id] ||= {};
+          await Promise.all(
+            promptRevIds.map(async (prid) => {
+              if (next[doc.id][prid] !== undefined) return;
+              // 1) try to read latest
+              try {
+                const r = await getLLMResultApi({ organizationId, documentId: doc.id, promptRevId: prid, latest: true });
+                next[doc.id][prid] = r;
+                return;
+              } catch {}
+              // 2) if missing, run then fetch
+              try {
+                await runLLMApi({ organizationId, documentId: doc.id, promptRevId: prid, force: true });
+                const r2 = await getLLMResultApi({ organizationId, documentId: doc.id, promptRevId: prid, latest: true });
+                next[doc.id][prid] = r2;
+              } catch {
+                next[doc.id][prid] = null;
+              }
+            })
+          );
+        })
+      );
+      setLlmCache(next);
+    };
+
+    loadOrRun();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documents, promptRevIds, organizationId]);
+
+  // Compute rows with extracted values
+  const rows: Row[] = useMemo(() => {
+    const mapping = table?.response_format?.column_mapping || {};
+    return documents.map((doc) => {
+      const row: Row = { id: doc.id, document_name: doc.document_name };
+      Object.entries(mapping).forEach(([colKey, m]: [string, any]) => {
+        const parts: string[] = [];
+        const sep = m?.concatenationSeparator ?? ' ';
+        const sources = Array.isArray(m?.sources) ? m.sources : [];
+        for (const s of sources) {
+          const res = llmCache[doc.id]?.[s.promptRevId] || null;
+          const data = res?.updated_llm_result && Object.keys(res.updated_llm_result).length
+            ? (res.updated_llm_result as Record<string, unknown>)
+            : (res?.llm_result as Record<string, unknown> | undefined);
+          const v = getValueByPath(data, s.schemaFieldPath || s.schemaFieldName || '');
+          if (v) parts.push(v);
+        }
+        row[colKey] = parts.join(sep).trim();
+      });
+      return row;
+    });
+  }, [documents, llmCache, table?.response_format?.column_mapping]);
 
   const tableTags = useMemo(
     () => tags.filter(tag => (table?.tag_ids ?? []).includes(tag.id)),
@@ -160,7 +235,7 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
         <TextField
           fullWidth
           variant="outlined"
-          placeholder="Search columns..."
+          placeholder="Search documents or values..."
           value={searchTerm}
           onChange={e => setSearchTerm(e.target.value)}
           InputProps={{
@@ -176,10 +251,15 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
       <div style={{ height: 500, width: '100%' }}>
         <DataGrid
           rows={rows}
-          columns={columnsDef}
+          columns={gridColumns}
           getRowId={(row) => row.id}
-          loading={isLoading}
+          loading={isLoading || docLoading}
           disableRowSelectionOnClick
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          paginationMode="server"
+          rowCount={totalRows}
+          pageSizeOptions={[5, 25, 50, 100]}
           sx={{
             '& .MuiDataGrid-row:nth-of-type(odd)': {
               backgroundColor: 'rgba(0, 0, 0, 0.04)',
