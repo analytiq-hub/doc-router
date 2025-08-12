@@ -8,7 +8,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import { useRouter } from 'next/navigation';
 import { getTableApi, listTagsApi, listDocumentsApi, getLLMResultApi, runLLMApi } from '@/utils/api';
 import { Table } from '@/types/tables';
-import { Tag, DocumentMetadata, GetLLMResultResponse } from '@/types';
+import { Tag, DocumentMetadata, GetLLMResultResponse, FieldMapping, FieldMappingSource } from '@/types';
 import { isColorLight } from '@/utils/colors';
 
 type Props = {
@@ -19,17 +19,28 @@ type Props = {
 type Row = { id: string; document_name: string } & Record<string, unknown>;
 
 function getValueByPath(data: Record<string, unknown> | undefined, path: string): string {
-  if (!data) return '';
+  if (!data || !path) return '';
   // Convert bracket notation to dot, e.g. items[0].name -> items.0.name
   const parts = path.replace(/\[(\d+)\]/g, '.$1').split('.').filter(Boolean);
-  let cur: any = data;
-  for (const p of parts) {
-    if (cur == null) return '';
-    cur = cur[p];
+  let current: unknown = data;
+  for (const part of parts) {
+    if (current == null) return '';
+    if (Array.isArray(current)) {
+      const index = Number(part);
+      if (!Number.isInteger(index) || index < 0 || index >= current.length) return '';
+      current = current[index];
+      continue;
+    }
+    if (typeof current === 'object') {
+      const obj = current as Record<string, unknown>;
+      current = obj[part];
+      continue;
+    }
+    return '';
   }
-  if (cur === undefined || cur === null) return '';
-  if (typeof cur === 'object') return JSON.stringify(cur);
-  return String(cur);
+  if (current === undefined || current === null) return '';
+  if (typeof current === 'object') return JSON.stringify(current);
+  return String(current);
 }
 
 const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
@@ -72,10 +83,10 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
 
   // Unique promptRevIds needed by this table
   const promptRevIds = useMemo(() => {
-    const mapping = table?.response_format?.column_mapping || {};
+    const mapping: Record<string, FieldMapping> = table?.response_format?.column_mapping ?? ({} as Record<string, FieldMapping>);
     const set = new Set<string>();
-    Object.values(mapping).forEach((m: any) => {
-      (m?.sources || []).forEach((s: any) => {
+    Object.values(mapping).forEach((m: FieldMapping) => {
+      (m.sources ?? []).forEach((s: FieldMappingSource) => {
         if (s?.promptRevId) set.add(s.promptRevId);
       });
     });
@@ -102,7 +113,7 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
         field: c.key,
         headerName: c.name,
         width: c.width ?? undefined,
-        flex: c.width ? undefined as any : 1,
+        flex: c.width ? undefined : 1,
         sortable: false,
       });
     }
@@ -170,19 +181,22 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
 
   // Compute rows with extracted values
   const rows: Row[] = useMemo(() => {
-    const mapping = table?.response_format?.column_mapping || {};
+    const mapping: Record<string, FieldMapping> = table?.response_format?.column_mapping ?? ({} as Record<string, FieldMapping>);
     return documents.map((doc) => {
       const row: Row = { id: doc.id, document_name: doc.document_name };
-      Object.entries(mapping).forEach(([colKey, m]: [string, any]) => {
+      Object.entries(mapping).forEach(([colKey, mappingConfig]) => {
         const parts: string[] = [];
-        const sep = m?.concatenationSeparator ?? ' ';
-        const sources = Array.isArray(m?.sources) ? m.sources : [];
-        for (const s of sources) {
-          const res = llmCache[doc.id]?.[s.promptRevId] || null;
+        const sep = mappingConfig?.concatenationSeparator ?? ' ';
+        const sources = Array.isArray(mappingConfig?.sources) ? mappingConfig.sources : [];
+        for (const source of sources) {
+          const res = llmCache[doc.id]?.[source.promptRevId] || null;
           const data = res?.updated_llm_result && Object.keys(res.updated_llm_result).length
             ? (res.updated_llm_result as Record<string, unknown>)
             : (res?.llm_result as Record<string, unknown> | undefined);
-          const v = getValueByPath(data, s.schemaFieldPath || s.schemaFieldName || '');
+          const v = getValueByPath(
+            data,
+            source.schemaFieldPath || source.schemaFieldName || ''
+          );
           if (v) parts.push(v);
         }
         row[colKey] = parts.join(sep).trim();
