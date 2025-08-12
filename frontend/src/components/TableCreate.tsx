@@ -168,7 +168,8 @@ const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
       key: `col_${Date.now()}`,
       name: 'New Column',
       width: 150,
-      editable: true
+      // custom column flag for viewer/usage
+      aggregate: false
     };
     setCurrentTable(prev => ({
       ...prev,
@@ -217,7 +218,7 @@ const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
                 </p>
                 <ul className="list-disc list-inside space-y-1 mb-2">
                   <li>Define clear keys and labels for each column</li>
-                  <li>Mark columns editable when they should be user-correctable</li>
+                  <li>Use the Aggregate flag to indicate rollup/grouping columns</li>
                   <li>Use JSON editor for advanced row schema and mappings</li>
                 </ul>
               </>
@@ -331,9 +332,9 @@ const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
                     <thead>
                       <tr className="text-left text-gray-600 border-b">
                         <th className="py-2 pr-4">Key</th>
-                        <th className="py-2 pr-4">Label</th>
+                        <th className="py-2 pr-4">Name</th>
                         <th className="py-2 pr-4">Width</th>
-                        <th className="py-2 pr-4">Editable</th>
+                        <th className="py-2 pr-4">Aggregate</th>
                         <th className="py-2 pr-4 w-24">Actions</th>
                       </tr>
                     </thead>
@@ -368,8 +369,8 @@ const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
                           <td className="py-2 pr-4">
                             <input
                               type="checkbox"
-                              checked={!!col.editable}
-                              onChange={e => updateColumn(idx, { editable: e.target.checked })}
+                              checked={Boolean((col as Record<string, unknown>).aggregate)}
+                              onChange={e => updateColumn(idx, { aggregate: e.target.checked } as Partial<TableColumn>)}
                             />
                           </td>
                           <td className="py-2 pr-4">

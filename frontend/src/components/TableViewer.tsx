@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Box, Chip, InputAdornment, TextField } from '@mui/material';
+import { Box, Chip, InputAdornment, TextField, Checkbox } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import SearchIcon from '@mui/icons-material/Search';
 import { useRouter } from 'next/navigation';
@@ -22,7 +22,7 @@ type Row = {
   key: string;
   name: string;
   width?: number;
-  editable?: boolean;
+  aggregate?: boolean;
   mapping?: FieldMapping;
 };
 
@@ -53,7 +53,7 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
 
   const columnsDef: GridColDef<Row>[] = useMemo(() => [
     { field: 'key', headerName: 'Key', flex: 1 },
-    { field: 'name', headerName: 'Label', flex: 1.5 },
+    { field: 'name', headerName: 'Name', flex: 1.5 },
     {
       field: 'width',
       headerName: 'Width',
@@ -61,10 +61,11 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
       valueFormatter: ({ value }) => (value === undefined || value === null ? '' : String(value))
     },
     {
-      field: 'editable',
-      headerName: 'Editable',
+      field: 'aggregate',
+      headerName: 'Aggregate',
       width: 120,
-      valueFormatter: ({ value }) => (value ? 'Yes' : 'No')
+      sortable: false,
+      renderCell: ({ value }) => <Checkbox size="small" checked={Boolean(value)} disabled />
     },
     {
       field: 'mapping',
@@ -110,15 +111,14 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
       key: c.key,
       name: c.name,
       width: c.width,
-      editable: c.editable,
+      aggregate: Boolean((c as Record<string, unknown>).aggregate),
       mapping: mapping[c.key] as FieldMapping | undefined
     }));
   }, [table, searchTerm]);
 
-  const tableTagIdsKey = useMemo(() => (table?.tag_ids ?? []).join(','), [table?.tag_ids]);
   const tableTags = useMemo(
     () => tags.filter(tag => (table?.tag_ids ?? []).includes(tag.id)),
-    [tags, tableTagIdsKey]
+    [tags, table?.tag_ids]
   );
 
   return (
