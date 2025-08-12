@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { createTableApi, updateTableApi, listTagsApi, getTableApi } from '@/utils/api';
-import { TableConfig, TableColumn, TableResponseFormat } from '@/types/tables';
+import { TableConfig, TableColumn, TableResponseFormat, Table } from '@/types/tables';
 import { Tag } from '@/types/index';
 import { getApiErrorMsg } from '@/utils/api';
 import TagSelector from './TagSelector';
@@ -131,14 +131,16 @@ const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
         tag_ids: selectedTagIds
       };
 
+      let updatedTable: Table;
+
       if (currentTableId) {
-        await updateTableApi({
+        updatedTable = await updateTableApi({
           organizationId,
           tableId: currentTableId,
           table: tableToSave
         });
       } else {
-        await createTableApi({
+        updatedTable = await createTableApi({
           organizationId,
           ...tableToSave
         });
@@ -153,7 +155,12 @@ const TableCreate: React.FC<{ organizationId: string; tableId?: string }> = ({
       setCurrentTableId(null);
       setSelectedTagIds([]);
 
-      router.push(`/orgs/${organizationId}/tables`);
+      // Navigate to table view if updating, table list if creating
+      if (currentTableId) {
+        router.push(`/orgs/${organizationId}/tables/${updatedTable.table_revid}/view`);
+      } else {
+        router.push(`/orgs/${organizationId}/tables`);
+      }
     } catch (error) {
       const errorMsg = getApiErrorMsg(error) || 'Error saving table';
       toast.error('Error: ' + errorMsg);
