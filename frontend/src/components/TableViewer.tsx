@@ -8,12 +8,22 @@ import { useRouter } from 'next/navigation';
 import { getTableApi, listTagsApi } from '@/utils/api';
 import { Table, TableColumn } from '@/types/tables';
 import { Tag } from '@/types';
+import { FieldMapping } from '@/types/forms';
 import { isColorLight } from '@/utils/colors';
 import colors from 'tailwindcss/colors';
 
 type Props = {
   organizationId: string;
   tableRevId: string;
+};
+
+type Row = {
+  id: string;
+  key: string;
+  name: string;
+  width?: number;
+  editable?: boolean;
+  mapping?: FieldMapping;
 };
 
 const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
@@ -41,20 +51,20 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
     load();
   }, [load]);
 
-  const columnsDef: GridColDef[] = useMemo(() => [
+  const columnsDef: GridColDef<Row>[] = useMemo(() => [
     { field: 'key', headerName: 'Key', flex: 1 },
     { field: 'name', headerName: 'Label', flex: 1.5 },
     {
       field: 'width',
       headerName: 'Width',
       width: 100,
-      valueFormatter: params => (params.value ?? '') as string
+      valueFormatter: ({ value }) => (value === undefined || value === null ? '' : String(value))
     },
     {
       field: 'editable',
       headerName: 'Editable',
       width: 120,
-      valueFormatter: params => (params.value ? 'Yes' : 'No')
+      valueFormatter: ({ value }) => (value ? 'Yes' : 'No')
     },
     {
       field: 'mapping',
@@ -62,11 +72,7 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
       flex: 2,
       sortable: false,
       renderCell: (params) => {
-        const mapping = params.value as {
-          sources: Array<{ schemaFieldName: string; promptName: string }>;
-          mappingType: 'direct' | 'concatenated';
-          concatenationSeparator?: string;
-        } | undefined;
+        const mapping = params.value as FieldMapping | undefined;
 
         if (!mapping) return <span className="text-gray-400">—</span>;
 
@@ -82,7 +88,7 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
             ))}
             {mapping.mappingType === 'concatenated' && (
               <span className="text-xs text-gray-500 ml-1">
-                sep: "{mapping.concatenationSeparator || ' '}"
+                sep: {'"'}{mapping.concatenationSeparator || ' '}{'"'}
               </span>
             )}
           </div>
@@ -91,11 +97,11 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
     }
   ], []);
 
-  const rows = useMemo(() => {
+  const rows: Row[] = useMemo(() => {
     const cols = table?.response_format?.columns || [];
     const mapping = table?.response_format?.column_mapping || {};
     const filtered = cols.filter(
-      c =>
+      (c: TableColumn) =>
         c.key.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (c.name || '').toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -105,13 +111,14 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
       name: c.name,
       width: c.width,
       editable: c.editable,
-      mapping: mapping[c.key]
+      mapping: mapping[c.key] as FieldMapping | undefined
     }));
   }, [table, searchTerm]);
 
+  const tableTagIdsKey = useMemo(() => (table?.tag_ids ?? []).join(','), [table?.tag_ids]);
   const tableTags = useMemo(
-    () => tags.filter(tag => table?.tag_ids?.includes(tag.id)),
-    [tags, table?.tag_ids]
+    () => tags.filter(tag => (table?.tag_ids ?? []).includes(tag.id)),
+    [tags, tableTagIdsKey]
   );
 
   return (
@@ -170,6 +177,7 @@ const TableViewer: React.FC<Props> = ({ organizationId, tableRevId }) => {
         <DataGrid
           rows={rows}
           columns={columnsDef}
+          getRowId={(row) => row.id}
           loading={isLoading}
           disableRowSelectionOnClick
           sx={{
