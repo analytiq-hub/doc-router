@@ -543,7 +543,19 @@ async def get_document(
 
     logger.debug(f"get_document() got file: {file_name}")
 
-    # Create metadata response
+    # Determine MIME type for the file being returned
+    # Prefer stored metadata.type; fall back to inferring from original name
+    try:
+        returned_mime = file["metadata"].get("type")
+    except Exception:
+        returned_mime = None
+    if not returned_mime:
+        try:
+            returned_mime = get_mime_type(document["user_file_name"])
+        except Exception:
+            returned_mime = None
+
+    # Create metadata response, including MIME type
     metadata = DocumentMetadata(
         id=str(document["_id"]),
         pdf_id=document.get("pdf_id", document["document_id"]),
@@ -551,7 +563,8 @@ async def get_document(
         upload_date=document["upload_date"],
         uploaded_by=document["uploaded_by"],
         state=document.get("state", ""),
-        tag_ids=document.get("tag_ids", [])
+        tag_ids=document.get("tag_ids", []),
+        type=returned_mime
     )
 
     # Return using the DocumentResponse model

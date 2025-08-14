@@ -29,6 +29,7 @@ export interface DocumentMetadata {
     uploaded_by: string;
     state: string;
     tag_ids: string[];  // List of tag IDs
+    type?: string;      // MIME type of the returned file
 }
 
 export interface ListDocumentsResponse {

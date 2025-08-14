@@ -41,6 +41,7 @@ class DocumentMetadata(BaseModel):
     uploaded_by: str
     state: str
     tag_ids: List[str] = []  # List of tag IDs
+    type: str | None = None   # MIME type of the returned file (original/pdf)
 
 class DocumentResponse(BaseModel):
     metadata: DocumentMetadata

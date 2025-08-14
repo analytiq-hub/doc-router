@@ -24,7 +24,15 @@ EXTENSION_TO_MIME = {
     ".xls":  "application/vnd.ms-excel",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".txt":  "text/plain",
-    ".md":   "text/markdown"
+    ".md":   "text/markdown",
+    ".jpg":  "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png":  "image/png",
+    ".gif":  "image/gif",
+    ".webp": "image/webp",
+    ".bmp":  "image/bmp",
+    ".tiff": "image/tiff",
+    ".tif":  "image/tiff"
 }
 
 def get_mime_type(file_name: str) -> str:
@@ -247,5 +255,8 @@ def is_pdf_or_image(mime_type):
         "application/pdf",
         "image/jpeg",
         "image/png",
+        "image/gif",
+        "image/webp",
+        "image/bmp",
         "image/tiff"
     ]

@@ -179,7 +179,11 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
       });
       
       // Create a blob from the array buffer
-      const blob = new Blob([response.content], { type: 'application/pdf' });
+      // Infer MIME type from file extension to avoid forcing .pdf downloads
+      const fileName = doc.document_name || response.metadata.document_name;
+      // Use server-reported MIME type when available
+      const serverType: string | undefined = response.metadata?.type as string | undefined;
+      const blob = new Blob([response.content], { type: serverType });
       
       // Create a URL for the blob
       const url = URL.createObjectURL(blob);
@@ -187,7 +191,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
       // Create a temporary anchor element to trigger the download
       const a = document.createElement('a');
       a.href = url;
-      a.download = doc.document_name;
+      a.download = fileName;
       
       // Append to the document, click, and remove
       document.body.appendChild(a);

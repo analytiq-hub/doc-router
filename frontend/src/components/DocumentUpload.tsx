@@ -9,6 +9,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DescriptionIcon from '@mui/icons-material/Description';
 import TableChartIcon from '@mui/icons-material/TableChart';
 import ArticleIcon from '@mui/icons-material/Article';
+import ImageIcon from '@mui/icons-material/Image';
 import { 
   uploadDocumentsApi,
   listTagsApi
@@ -74,7 +75,13 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
       'application/vnd.ms-excel': ['.xls'],
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
       'text/plain': ['.txt'],
-      'text/markdown': ['.md']
+      'text/markdown': ['.md'],
+      'image/jpeg': ['.jpg', '.jpeg'],
+      'image/png': ['.png'],
+      'image/gif': ['.gif'],
+      'image/webp': ['.webp'],
+      'image/bmp': ['.bmp'],
+      'image/tiff': ['.tiff', '.tif']
     },
     multiple: true
   });
@@ -164,10 +171,11 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
                 <li><strong>Word documents</strong> (.doc, .docx)</li>
                 <li><strong>Excel files</strong> (.xls, .xlsx)</li>
                 <li><strong>CSV files</strong> (.csv)</li>
-                <li><strong>Text files</strong> (.txt)</li>
+                <li><strong>Text files</strong> (.txt, .md)</li>
+                <li><strong>Image files</strong> (.jpg, .jpeg, .png, .gif, .webp, .bmp, .tiff, .tif)</li>
               </ul>
               <p className="mb-2">
-                <strong>Note:</strong> Select appropriate tags for your documents to control which prompts are run.
+                <strong>Note:</strong> Select appropriate tags for your documents to control which prompts are run. Images will be processed using OCR to extract text.
               </p>
             </>
           }
@@ -232,6 +240,10 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
               <div className="flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2">
                 <ArticleIcon className="text-gray-700 mr-1" fontSize="small" />
                 <span className="text-sm">TXT,MD</span>
+              </div>
+              <div className="flex items-center bg-gray-100 rounded-full px-3 py-1 mr-2">
+                <ImageIcon className="text-purple-700 mr-1" fontSize="small" />
+                <span className="text-sm">JPG,PNG,GIF</span>
               </div>
             </div>
             
