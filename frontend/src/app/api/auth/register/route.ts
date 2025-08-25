@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import mongoClient from '@/utils/mongodb';
+import { getDatabase } from '@/utils/mongodb';
 import { hash } from 'bcryptjs';
 import { createDefaultOrganization } from '@/utils/organization';
 import { sendRegistrationVerificationEmailApi } from '@/utils/api';
@@ -7,7 +7,7 @@ import { sendRegistrationVerificationEmailApi } from '@/utils/api';
 export async function POST(req: Request) {
     try {
         const { email, password, name } = await req.json();
-        const db = mongoClient.db();
+        const db = getDatabase();
 
         // Check if user exists
         const existingUser = await db.collection('users').findOne({ email });

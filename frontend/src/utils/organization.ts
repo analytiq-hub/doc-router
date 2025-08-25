@@ -1,8 +1,8 @@
 import { ObjectId } from "mongodb";
-import mongoClient from "./mongodb";
+import { getDatabase } from "./mongodb";
 
 export async function createDefaultOrganization(userId: string, email: string) {
-    const db = mongoClient.db();
+    const db = getDatabase();
     
     // Delete any existing individual organizations for this user
     await db.collection("organizations").deleteMany({

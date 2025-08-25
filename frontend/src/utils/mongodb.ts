@@ -6,22 +6,35 @@ const env = process.env.ENV || "dev"
 
 const mongodbUri = process.env.MONGODB_URI || "mongodb://localhost:27017"
 
-
 // Parse the URI to handle authentication and database name correctly
-const uri = mongodbUri.includes('?') 
-  ? mongodbUri.replace('?', `/${env}?`) // Insert database name before query params
-  : `${mongodbUri}/${env}`
-  
-//
-// Result should be, for example:
-// mongodb//user:pass@host:port/env
-// or
-// mongodb//user:pass@host:port/env?authSource=admin
-//
-// The docker mongo user/pass requires authSource, but only for nextjs.
-//
+// For authenticated connections, we need to insert the database name after the host/port but before query params
+let uri: string
+if (mongodbUri.includes('@') && mongodbUri.includes('?')) {
+  // Authenticated connection with query params: mongodb://user:pass@host:port/?authSource=admin
+  // Check if there's already a trailing slash before the query params
+  const beforeQuery = mongodbUri.split('?')[0]
+  const queryParams = mongodbUri.split('?')[1]
+  const separator = beforeQuery.endsWith('/') ? '' : '/'
+  uri = `${beforeQuery}${separator}${env}?${queryParams}`
+} else if (mongodbUri.includes('@') && !mongodbUri.includes('?')) {
+  // Authenticated connection without query params: mongodb://user:pass@host:port
+  const separator = mongodbUri.endsWith('/') ? '' : '/'
+  uri = `${mongodbUri}${separator}${env}`
+} else if (!mongodbUri.includes('@') && mongodbUri.includes('?')) {
+  // Non-authenticated connection with query params: mongodb://host:port/?param=value
+  const beforeQuery = mongodbUri.split('?')[0]
+  const queryParams = mongodbUri.split('?')[1]
+  const separator = beforeQuery.endsWith('/') ? '' : '/'
+  uri = `${beforeQuery}${separator}${env}?${queryParams}`
+} else {
+  // Non-authenticated connection without query params: mongodb://host:port
+  const separator = mongodbUri.endsWith('/') ? '' : '/'
+  uri = `${mongodbUri}${separator}${env}`
+}
+
 // console.log(`MONGODB_URI: ${mongodbUri}`)
-// console.log(`uri: ${uri}`)
+// console.log(`ENV: ${env}`)
+// console.log(`Final URI: ${uri}`)
 
 const options = {}
  
@@ -41,6 +54,11 @@ if (process.env.NODE_ENV === "development") {
 } else {
   // In production mode, it's best to not use a global variable.
   mongoClient = new MongoClient(uri, options)
+}
+
+// Function to get the database with the correct name
+export function getDatabase() {
+  return mongoClient.db(env)
 }
  
 // Export a module-scoped MongoClient. By doing this in a

@@ -1,7 +1,7 @@
 import axios from 'axios';
 import NextAuth, { NextAuthOptions, Session } from "next-auth"
 import { MongoDBAdapter } from "@auth/mongodb-adapter"
-import mongoClient from "@/utils/mongodb"
+import mongoClient, { getDatabase } from "@/utils/mongodb"
 import { Adapter } from "next-auth/adapters"
 import type { Account, DefaultUser } from "next-auth"
 
@@ -38,7 +38,7 @@ export const authOptions: NextAuthOptions = {
                 }
 
                 try {
-                    const db = mongoClient.db();
+                    const db = getDatabase();
                     const user = await db.collection("users").findOne({ 
                         email: credentials.email 
                     });
@@ -91,7 +91,7 @@ export const authOptions: NextAuthOptions = {
         async signIn({ user, account }: { user: CustomUser, account: Account | null }) {
             try {
                 if (account?.provider === 'google' || account?.provider === 'github') {
-                    const db = mongoClient.db();
+                    const db = getDatabase();
                     const users = db.collection("users");
                     const accounts = db.collection("accounts");
 
