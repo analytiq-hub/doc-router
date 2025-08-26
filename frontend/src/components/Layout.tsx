@@ -21,6 +21,7 @@ import {
   DataObject as SchemaIcon,
   Chat as PromptIcon,
   ViewQuilt as FormsIcon,
+  Functions as LambdaIcon,
   InfoOutlined as AboutIcon
 } from '@mui/icons-material';
 import { SvgIconProps } from '@mui/material';
@@ -91,6 +92,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     { text: 'Schemas', icon: SchemaIcon, tooltip: 'Schemas', href: `/orgs/${currentOrganization?.id}/schemas`},
     { text: 'Prompts', icon: PromptIcon, tooltip: 'Prompts', href: `/orgs/${currentOrganization?.id}/prompts`},
     { text: 'Forms', icon: FormsIcon, tooltip: 'Forms', href: `/orgs/${currentOrganization?.id}/forms`},
+    { text: 'Lambda', icon: LambdaIcon, tooltip: 'Lambda Functions', href: `/orgs/${currentOrganization?.id}/lambda`},
   ];
 
   // const modelMenuItems = [

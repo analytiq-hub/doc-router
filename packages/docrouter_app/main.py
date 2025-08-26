@@ -44,6 +44,8 @@ from jsonschema import validate, ValidationError, Draft7Validator
 from fastapi.encoders import jsonable_encoder
 import httpx
 from urllib.parse import urlparse
+import boto3
+import json as json_lib
 
 # Local imports
 from docrouter_app import email_utils, startup, organizations, users, limits
@@ -4037,3 +4039,301 @@ async def proxy_request(
         raise HTTPException(status_code=502, detail=f"Request failed: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Proxy error: {str(e)}")
+
+@app.post("/v0/orgs/{organization_id}/lambda/invoke", tags=["lambda"])
+async def invoke_lambda_function(
+    organization_id: str,
+    function_name: str = Query(..., description="Name of the Lambda function to invoke"),
+    payload: dict = Body(..., description="JSON payload to send to the Lambda function"),
+    current_user: User = Depends(get_org_user)
+):
+    """
+    Invoke an AWS Lambda function with a JSON payload and return the response
+    
+    Args:
+        organization_id: Organization ID (for auth)
+        function_name: Name of the Lambda function to invoke
+        payload: JSON object to send as the Lambda function payload
+        
+    Returns:
+        JSON response from the Lambda function
+    """
+    logger.info(f"invoke_lambda_function() start: organization_id: {organization_id}, function_name: {function_name}")
+    
+    try:
+        # Initialize AWS Lambda client
+        # You may want to configure AWS credentials via environment variables or IAM roles
+        lambda_client = boto3.client('lambda', region_name=os.getenv('AWS_REGION', 'us-east-1'))
+        
+        # Convert payload to JSON string
+        json_payload = json_lib.dumps(payload)
+        
+        # Invoke the Lambda function
+        response = lambda_client.invoke(
+            FunctionName=function_name,
+            InvocationType='RequestResponse',  # Synchronous invocation
+            Payload=json_payload
+        )
+        
+        # Read the response payload
+        response_payload = response['Payload'].read()
+        
+        # Parse the response
+        if response_payload:
+            result = json_lib.loads(response_payload.decode('utf-8'))
+        else:
+            result = {}
+        
+        # Check if there was an error in the Lambda function execution
+        if response.get('FunctionError'):
+            logger.error(f"Lambda function error: {response['FunctionError']}")
+            raise HTTPException(
+                status_code=500, 
+                detail=f"Lambda function error: {response['FunctionError']}"
+            )
+        
+        return {
+            "status": "success",
+            "function_name": function_name,
+            "result": result,
+            "status_code": response['StatusCode']
+        }
+        
+    except Exception as e:
+        logger.error(f"Error invoking Lambda function {function_name}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to invoke Lambda function: {str(e)}"
+        )
+
+@app.post("/v0/orgs/{organization_id}/lambda/functions", tags=["lambda"])
+async def create_lambda_function(
+    organization_id: str,
+    function_name: str = Body(..., description="Name of the Lambda function"),
+    runtime: str = Body(..., description="Runtime (e.g., 'python3.9', 'nodejs18.x')"),
+    handler: str = Body(..., description="Handler (e.g., 'lambda_function.lambda_handler')"),
+    zip_file: str = Body(..., description="Base64-encoded ZIP file containing the function code"),
+    role_arn: str = Body(..., description="IAM role ARN for the Lambda function"),
+    description: str = Body("", description="Function description"),
+    timeout: int = Body(30, description="Timeout in seconds"),
+    memory_size: int = Body(128, description="Memory size in MB"),
+    current_user: User = Depends(get_org_user)
+):
+    """Create a new AWS Lambda function"""
+    logger.info(f"create_lambda_function() start: organization_id: {organization_id}, function_name: {function_name}")
+    
+    try:
+        lambda_client = boto3.client('lambda', region_name=os.getenv('AWS_REGION', 'us-east-1'))
+        
+        response = lambda_client.create_function(
+            FunctionName=function_name,
+            Runtime=runtime,
+            Role=role_arn,
+            Handler=handler,
+            Code={'ZipFile': base64.b64decode(zip_file)},
+            Description=description,
+            Timeout=timeout,
+            MemorySize=memory_size,
+            Publish=True
+        )
+        
+        return {
+            "status": "success",
+            "function_name": response['FunctionName'],
+            "function_arn": response['FunctionArn'],
+            "runtime": response['Runtime'],
+            "handler": response['Handler'],
+            "code_size": response['CodeSize'],
+            "description": response['Description'],
+            "timeout": response['Timeout'],
+            "memory_size": response['MemorySize'],
+            "last_modified": response['LastModified'],
+            "version": response['Version']
+        }
+        
+    except Exception as e:
+        logger.error(f"Error creating Lambda function {function_name}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to create Lambda function: {str(e)}"
+        )
+
+@app.get("/v0/orgs/{organization_id}/lambda/functions", tags=["lambda"])
+async def list_lambda_functions(
+    organization_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """List all AWS Lambda functions"""
+    logger.info(f"list_lambda_functions() start: organization_id: {organization_id}")
+    
+    try:
+        lambda_client = boto3.client('lambda', region_name=os.getenv('AWS_REGION', 'us-east-1'))
+        
+        response = lambda_client.list_functions()
+        
+        functions = []
+        for func in response['Functions']:
+            functions.append({
+                "function_name": func['FunctionName'],
+                "function_arn": func['FunctionArn'],
+                "runtime": func['Runtime'],
+                "handler": func['Handler'],
+                "code_size": func['CodeSize'],
+                "description": func.get('Description', ''),
+                "timeout": func['Timeout'],
+                "memory_size": func['MemorySize'],
+                "last_modified": func['LastModified'],
+                "version": func['Version']
+            })
+        
+        return {
+            "status": "success",
+            "functions": functions,
+            "count": len(functions)
+        }
+        
+    except Exception as e:
+        logger.error(f"Error listing Lambda functions: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to list Lambda functions: {str(e)}"
+        )
+
+@app.get("/v0/orgs/{organization_id}/lambda/functions/{function_name}", tags=["lambda"])
+async def get_lambda_function(
+    organization_id: str,
+    function_name: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Get details of a specific AWS Lambda function"""
+    logger.info(f"get_lambda_function() start: organization_id: {organization_id}, function_name: {function_name}")
+    
+    try:
+        lambda_client = boto3.client('lambda', region_name=os.getenv('AWS_REGION', 'us-east-1'))
+        
+        response = lambda_client.get_function(FunctionName=function_name)
+        
+        func = response['Configuration']
+        code = response['Code']
+        
+        return {
+            "status": "success",
+            "function_name": func['FunctionName'],
+            "function_arn": func['FunctionArn'],
+            "runtime": func['Runtime'],
+            "handler": func['Handler'],
+            "code_size": func['CodeSize'],
+            "description": func.get('Description', ''),
+            "timeout": func['Timeout'],
+            "memory_size": func['MemorySize'],
+            "last_modified": func['LastModified'],
+            "version": func['Version'],
+            "code_sha256": func['CodeSha256'],
+            "code_location": code.get('Location', ''),
+            "role": func['Role'],
+            "environment": func.get('Environment', {})
+        }
+        
+    except lambda_client.exceptions.ResourceNotFoundException:
+        raise HTTPException(status_code=404, detail="Lambda function not found")
+    except Exception as e:
+        logger.error(f"Error getting Lambda function {function_name}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to get Lambda function: {str(e)}"
+        )
+
+@app.put("/v0/orgs/{organization_id}/lambda/functions/{function_name}", tags=["lambda"])
+async def update_lambda_function(
+    organization_id: str,
+    function_name: str,
+    zip_file: Optional[str] = Body(None, description="Base64-encoded ZIP file containing updated function code"),
+    handler: Optional[str] = Body(None, description="Updated handler"),
+    runtime: Optional[str] = Body(None, description="Updated runtime"),
+    description: Optional[str] = Body(None, description="Updated description"),
+    timeout: Optional[int] = Body(None, description="Updated timeout in seconds"),
+    memory_size: Optional[int] = Body(None, description="Updated memory size in MB"),
+    environment: Optional[dict] = Body(None, description="Environment variables"),
+    current_user: User = Depends(get_org_user)
+):
+    """Update an existing AWS Lambda function"""
+    logger.info(f"update_lambda_function() start: organization_id: {organization_id}, function_name: {function_name}")
+    
+    try:
+        lambda_client = boto3.client('lambda', region_name=os.getenv('AWS_REGION', 'us-east-1'))
+        
+        # Update function code if provided
+        if zip_file:
+            lambda_client.update_function_code(
+                FunctionName=function_name,
+                ZipFile=base64.b64decode(zip_file)
+            )
+        
+        # Update function configuration if any config parameters provided
+        config_updates = {}
+        if handler: config_updates['Handler'] = handler
+        if runtime: config_updates['Runtime'] = runtime
+        if description is not None: config_updates['Description'] = description
+        if timeout: config_updates['Timeout'] = timeout
+        if memory_size: config_updates['MemorySize'] = memory_size
+        if environment is not None: config_updates['Environment'] = {'Variables': environment}
+        
+        if config_updates:
+            response = lambda_client.update_function_configuration(
+                FunctionName=function_name,
+                **config_updates
+            )
+        else:
+            # If no config updates, just get the current configuration
+            response = lambda_client.get_function_configuration(FunctionName=function_name)
+        
+        return {
+            "status": "success",
+            "function_name": response['FunctionName'],
+            "function_arn": response['FunctionArn'],
+            "runtime": response['Runtime'],
+            "handler": response['Handler'],
+            "code_size": response['CodeSize'],
+            "description": response.get('Description', ''),
+            "timeout": response['Timeout'],
+            "memory_size": response['MemorySize'],
+            "last_modified": response['LastModified'],
+            "version": response['Version']
+        }
+        
+    except lambda_client.exceptions.ResourceNotFoundException:
+        raise HTTPException(status_code=404, detail="Lambda function not found")
+    except Exception as e:
+        logger.error(f"Error updating Lambda function {function_name}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to update Lambda function: {str(e)}"
+        )
+
+@app.delete("/v0/orgs/{organization_id}/lambda/functions/{function_name}", tags=["lambda"])
+async def delete_lambda_function(
+    organization_id: str,
+    function_name: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Delete an AWS Lambda function"""
+    logger.info(f"delete_lambda_function() start: organization_id: {organization_id}, function_name: {function_name}")
+    
+    try:
+        lambda_client = boto3.client('lambda', region_name=os.getenv('AWS_REGION', 'us-east-1'))
+        
+        lambda_client.delete_function(FunctionName=function_name)
+        
+        return {
+            "status": "success",
+            "message": f"Lambda function '{function_name}' deleted successfully"
+        }
+        
+    except lambda_client.exceptions.ResourceNotFoundException:
+        raise HTTPException(status_code=404, detail="Lambda function not found")
+    except Exception as e:
+        logger.error(f"Error deleting Lambda function {function_name}: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"Failed to delete Lambda function: {str(e)}"
+        )

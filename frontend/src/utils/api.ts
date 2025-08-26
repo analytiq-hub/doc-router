@@ -962,3 +962,101 @@ export const getSessionToken = async (): Promise<string | null> => {
   const session = await getCachedSession();
   return session?.apiAccessToken || null;
 };
+
+// Lambda Function APIs
+export interface LambdaFunction {
+  function_name: string;
+  function_arn: string;
+  runtime: string;
+  handler: string;
+  code_size: number;
+  description: string;
+  timeout: number;
+  memory_size: number;
+  last_modified: string;
+  version: string;
+  role?: string;
+  environment?: {
+    Variables?: Record<string, string>;
+  };
+}
+
+export interface CreateLambdaFunctionParams {
+  organizationId: string;
+  function_name: string;
+  runtime: string;
+  handler: string;
+  zip_file: string;
+  role_arn: string;
+  description?: string;
+  timeout?: number;
+  memory_size?: number;
+  environment?: Record<string, string>;
+}
+
+export interface UpdateLambdaFunctionParams {
+  organizationId: string;
+  function_name: string;
+  zip_file?: string;
+  handler?: string;
+  runtime?: string;
+  description?: string;
+  timeout?: number;
+  memory_size?: number;
+  environment?: Record<string, string>;
+}
+
+export interface ListLambdaFunctionsResponse {
+  status: string;
+  functions: LambdaFunction[];
+  count: number;
+}
+
+export interface InvokeLambdaFunctionParams {
+  organizationId: string;
+  function_name: string;
+  payload: Record<string, any>;
+}
+
+export interface InvokeLambdaFunctionResponse {
+  status: string;
+  function_name: string;
+  result: any;
+  status_code: number;
+}
+
+export const createLambdaFunctionApi = async (params: CreateLambdaFunctionParams): Promise<LambdaFunction> => {
+  const { organizationId, ...functionData } = params;
+  const response = await api.post<LambdaFunction>(`/v0/orgs/${organizationId}/lambda/functions`, functionData);
+  return response.data;
+};
+
+export const listLambdaFunctionsApi = async (organizationId: string): Promise<ListLambdaFunctionsResponse> => {
+  const response = await api.get<ListLambdaFunctionsResponse>(`/v0/orgs/${organizationId}/lambda/functions`);
+  return response.data;
+};
+
+export const getLambdaFunctionApi = async (organizationId: string, functionName: string): Promise<LambdaFunction> => {
+  const response = await api.get<LambdaFunction>(`/v0/orgs/${organizationId}/lambda/functions/${functionName}`);
+  return response.data;
+};
+
+export const updateLambdaFunctionApi = async (params: UpdateLambdaFunctionParams): Promise<LambdaFunction> => {
+  const { organizationId, function_name, ...updateData } = params;
+  const response = await api.put<LambdaFunction>(`/v0/orgs/${organizationId}/lambda/functions/${function_name}`, updateData);
+  return response.data;
+};
+
+export const deleteLambdaFunctionApi = async (organizationId: string, functionName: string): Promise<{ status: string; message: string }> => {
+  const response = await api.delete<{ status: string; message: string }>(`/v0/orgs/${organizationId}/lambda/functions/${functionName}`);
+  return response.data;
+};
+
+export const invokeLambdaFunctionApi = async (params: InvokeLambdaFunctionParams): Promise<InvokeLambdaFunctionResponse> => {
+  const { organizationId, function_name, payload } = params;
+  const response = await api.post<InvokeLambdaFunctionResponse>(
+    `/v0/orgs/${organizationId}/lambda/invoke?function_name=${function_name}`,
+    payload
+  );
+  return response.data;
+};
