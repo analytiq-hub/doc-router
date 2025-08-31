@@ -1819,7 +1819,7 @@ async def create_lambda_function(
     function_dict = {
         "_id": ObjectId(function_id),
         "organization_id": organization_id,
-        "latest_revision_id": function_revid,
+        "latest_revision_id": ObjectId(function_revid),
         "latest_version": function_version,
         "created_at": datetime.now(UTC),
         "created_by": current_user.user_id
@@ -1860,8 +1860,7 @@ async def list_lambda_functions(
                 "from": "lambda_function_revisions",
                 "localField": "latest_revision_id", 
                 "foreignField": "_id",
-                "as": "latest_revision",
-                "pipeline": [{"$project": {"_id": 0}}]
+                "as": "latest_revision"
             }
         },
         {"$unwind": "$latest_revision"},
@@ -1991,7 +1990,7 @@ async def update_lambda_function(
         {"_id": ObjectId(function_id)},
         {
             "$set": {
-                "latest_revision_id": function_revid,
+                "latest_revision_id": ObjectId(function_revid),
                 "latest_version": function_version
             }
         }
@@ -2119,7 +2118,7 @@ async def run_lambda_function(
     }
     
     msg_id = await ad.queue.send_msg(
-        ad.common.get_analytiq_client(env=ad.common.get_env()), 
+        ad.common.get_analytiq_client(env=ENV), 
         "lambda",
         msg_data
     )
