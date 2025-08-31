@@ -2116,9 +2116,12 @@ async def run_lambda_function(
         "function_revid": function_revid,
         "organization_id": organization_id
     }
+
+    analytiq_client = ad.common.get_analytiq_client()
     
+    # Use fresh environment reading for queue operations
     msg_id = await ad.queue.send_msg(
-        ad.common.get_analytiq_client(env=ENV), 
+        analytiq_client,
         "lambda",
         msg_data
     )
