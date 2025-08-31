@@ -470,3 +470,218 @@ async def test_lambda_environment_variable_isolation(test_db, mock_auth, setup_t
                 os.environ[key] = original_value
     
     logger.info(f"test_lambda_environment_variable_isolation() end")
+
+@pytest.mark.asyncio
+async def test_lambda_execution_result_update(test_db, mock_auth, setup_test_models):
+    """Test updating a lambda execution result"""
+    logger.info(f"test_lambda_execution_result_update() start")
+    
+    # Create a lambda function
+    function_data = {
+        "name": "update_test_function",
+        "description": "Test function for result updates",
+        "code": '''def lambda_handler(event, context):
+    return {"status": "success", "data": event.get("data")}''',
+        "timeout": 30,
+        "memory_size": 128,
+        "environment_variables": {},
+        "tag_ids": []
+    }
+    
+    create_response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/lambda_functions",
+        json=function_data,
+        headers=get_auth_headers()
+    )
+    
+    assert create_response.status_code == 200
+    function_result = create_response.json()
+    function_id = function_result["function_id"]
+    
+    # Execute the function
+    execution_request = {
+        "event": {"data": "test_data"},
+        "context": {}
+    }
+    
+    run_response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}/run",
+        json=execution_request,
+        headers=get_auth_headers()
+    )
+    
+    assert run_response.status_code == 200
+    execution_result = run_response.json()
+    execution_id = execution_result["execution_id"]
+    
+    # Process the execution
+    from analytiq_data.msg_handlers.lambda_executor import process_lambda_msg
+    analytiq_client = ad.common.get_analytiq_client()
+    msg = await ad.queue.recv_msg(analytiq_client, "lambda")
+    await process_lambda_msg(analytiq_client, msg)
+    
+    # Get the original result to verify it exists
+    get_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}/results/{execution_id}",
+        headers=get_auth_headers()
+    )
+    
+    assert get_response.status_code == 200
+    original_result = get_response.json()
+    assert original_result["status"] == "completed"
+    
+    # Update the execution result
+    update_data = {
+        "status": "failed",  # Use a valid status value
+        "result": {"custom": "updated_result", "modified": True},
+        "error": "Manually updated for testing",
+        "logs": ["Custom log entry", "Updated via API"]
+    }
+    
+    update_response = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}/results/{execution_id}",
+        json=update_data,
+        headers=get_auth_headers()
+    )
+    
+    assert update_response.status_code == 200
+    updated_result = update_response.json()
+    
+    # Verify the update was successful
+    assert updated_result["execution_id"] == execution_id
+    assert updated_result["status"] == "failed"
+    assert updated_result["result"]["custom"] == "updated_result"
+    assert updated_result["result"]["modified"] is True
+    assert updated_result["error"] == "Manually updated for testing"
+    assert "Custom log entry" in updated_result["logs"]
+    assert "Updated via API" in updated_result["logs"]
+    
+    # Get the result again to verify persistence
+    verify_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}/results/{execution_id}",
+        headers=get_auth_headers()
+    )
+    
+    assert verify_response.status_code == 200
+    verified_result = verify_response.json()
+    assert verified_result["status"] == "failed"
+    assert verified_result["result"]["custom"] == "updated_result"
+    
+    # Clean up
+    client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}",
+        headers=get_auth_headers()
+    )
+    
+    logger.info(f"test_lambda_execution_result_update() end")
+
+@pytest.mark.asyncio
+async def test_lambda_execution_result_delete(test_db, mock_auth, setup_test_models):
+    """Test deleting a lambda execution result"""
+    logger.info(f"test_lambda_execution_result_delete() start")
+    
+    # Create a lambda function
+    function_data = {
+        "name": "delete_test_function", 
+        "description": "Test function for result deletion",
+        "code": '''def lambda_handler(event, context):
+    return {"status": "success", "message": "will be deleted"}''',
+        "timeout": 30,
+        "memory_size": 128,
+        "environment_variables": {},
+        "tag_ids": []
+    }
+    
+    create_response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/lambda_functions",
+        json=function_data,
+        headers=get_auth_headers()
+    )
+    
+    assert create_response.status_code == 200
+    function_result = create_response.json()
+    function_id = function_result["function_id"]
+    
+    # Execute the function multiple times to create multiple results
+    execution_ids = []
+    for i in range(3):
+        execution_request = {
+            "event": {"iteration": i},
+            "context": {}
+        }
+        
+        run_response = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}/run",
+            json=execution_request,
+            headers=get_auth_headers()
+        )
+        
+        assert run_response.status_code == 200
+        execution_result = run_response.json()
+        execution_ids.append(execution_result["execution_id"])
+        
+        # Process the execution
+        from analytiq_data.msg_handlers.lambda_executor import process_lambda_msg
+        analytiq_client = ad.common.get_analytiq_client()
+        msg = await ad.queue.recv_msg(analytiq_client, "lambda")
+        await process_lambda_msg(analytiq_client, msg)
+    
+    # Verify all executions exist
+    list_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}/results",
+        headers=get_auth_headers()
+    )
+    
+    assert list_response.status_code == 200
+    results_list = list_response.json()
+    assert len(results_list["results"]) == 3
+    
+    # Delete the second execution result
+    target_execution_id = execution_ids[1]
+    
+    delete_response = client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}/results/{target_execution_id}",
+        headers=get_auth_headers()
+    )
+    
+    assert delete_response.status_code == 200
+    
+    # Verify the specific result was deleted
+    get_deleted_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}/results/{target_execution_id}",
+        headers=get_auth_headers()
+    )
+    
+    assert get_deleted_response.status_code == 404
+    
+    # Verify other results still exist
+    for exec_id in [execution_ids[0], execution_ids[2]]:
+        get_response = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}/results/{exec_id}",
+            headers=get_auth_headers()
+        )
+        assert get_response.status_code == 200
+    
+    # Verify the list now shows only 2 results
+    list_after_delete_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}/results",
+        headers=get_auth_headers()
+    )
+    
+    assert list_after_delete_response.status_code == 200
+    remaining_results = list_after_delete_response.json()
+    assert len(remaining_results["results"]) == 2
+    
+    # Ensure the deleted execution ID is not in the remaining results
+    remaining_execution_ids = [r["execution_id"] for r in remaining_results["results"]]
+    assert target_execution_id not in remaining_execution_ids
+    assert execution_ids[0] in remaining_execution_ids
+    assert execution_ids[2] in remaining_execution_ids
+    
+    # Clean up - delete the function (this should also clean up remaining results)
+    client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}",
+        headers=get_auth_headers()
+    )
+    
+    logger.info(f"test_lambda_execution_result_delete() end")
