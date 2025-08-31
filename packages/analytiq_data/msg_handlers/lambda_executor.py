@@ -6,6 +6,8 @@ import traceback
 import logging
 import time
 import resource
+import subprocess
+import tempfile
 from datetime import datetime, UTC
 from typing import Dict, Any
 from bson import ObjectId
@@ -63,6 +65,168 @@ class LambdaExecutionEnvironment:
                 return usage // (1024 * 1024)  # bytes to MB
         except:
             return 0
+    
+    async def execute_function_subprocess(self, code: str, event: Dict[str, Any], context: Dict[str, str]) -> Dict[str, Any]:
+        """Execute the lambda function in an isolated subprocess with controlled environment"""
+        self.start_time = time.time()
+        
+        # Create lambda context object
+        lambda_context = create_lambda_context(
+            self.execution_id, 
+            self.function_name, 
+            self.timeout, 
+            self.memory_size
+        )
+        
+        # Merge provided context
+        lambda_context.update(context)
+        
+        # Create a temporary Python script to execute
+        script_content = f'''
+import json
+import os
+import sys
+import time
+from datetime import datetime
+
+# Load the event and context from command line args
+event = json.loads(sys.argv[1])
+context = json.loads(sys.argv[2])
+
+# Define the lambda function
+{code}
+
+# Execute the function
+try:
+    result = lambda_handler(event, context)
+    print("__RESULT_START__")
+    print(json.dumps(result))
+    print("__RESULT_END__")
+except Exception as e:
+    print("__ERROR_START__")
+    print(str(e))
+    print("__ERROR_END__")
+    sys.exit(1)
+'''
+        
+        try:
+            # Write the script to a temporary file
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.py', delete=False) as f:
+                f.write(script_content)
+                script_path = f.name
+            
+            # Prepare the isolated environment (only explicitly passed variables)
+            isolated_env = dict(self.environment_variables)
+            
+            # Execute the script in subprocess with isolated environment
+            process = await asyncio.create_subprocess_exec(
+                sys.executable, script_path,
+                json.dumps(event),
+                json.dumps(lambda_context),
+                env=isolated_env,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            # Wait for completion with timeout
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(),
+                    timeout=self.timeout
+                )
+                
+                self.end_time = time.time()
+                
+                # Parse stdout to extract logs and result
+                stdout_str = stdout.decode('utf-8')
+                stderr_str = stderr.decode('utf-8')
+                
+                # Capture all output as logs
+                all_output = []
+                if stdout_str.strip():
+                    all_output.extend(stdout_str.strip().split('\n'))
+                if stderr_str.strip():
+                    all_output.extend(stderr_str.strip().split('\n'))
+                
+                # Filter out our result markers from logs
+                logs = []
+                result = None
+                error = None
+                capture_result = False
+                capture_error = False
+                
+                for line in all_output:
+                    if line == "__RESULT_START__":
+                        capture_result = True
+                        continue
+                    elif line == "__RESULT_END__":
+                        capture_result = False
+                        continue
+                    elif line == "__ERROR_START__":
+                        capture_error = True
+                        continue
+                    elif line == "__ERROR_END__":
+                        capture_error = False
+                        continue
+                    elif capture_result:
+                        result = json.loads(line)
+                    elif capture_error:
+                        error = line
+                    else:
+                        # Add timestamp to logs
+                        timestamp = datetime.now(UTC).isoformat()
+                        logs.append(f"[{timestamp}] {line}")
+                
+                if process.returncode == 0 and result is not None:
+                    return {
+                        "success": True,
+                        "result": result,
+                        "execution_time_ms": int((self.end_time - self.start_time) * 1000),
+                        "memory_used_mb": self.get_memory_usage_mb(),
+                        "logs": logs
+                    }
+                else:
+                    error_msg = error or f"Function execution failed with return code {process.returncode}"
+                    return {
+                        "success": False,
+                        "error": error_msg,
+                        "execution_time_ms": int((self.end_time - self.start_time) * 1000),
+                        "memory_used_mb": self.get_memory_usage_mb(),
+                        "logs": logs
+                    }
+                    
+            except asyncio.TimeoutError:
+                process.kill()
+                await process.wait()
+                self.end_time = time.time()
+                error_msg = f"Function execution timed out after {self.timeout} seconds"
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "execution_time_ms": int((self.end_time - self.start_time) * 1000),
+                    "memory_used_mb": self.get_memory_usage_mb(),
+                    "logs": [f"[ERROR] {error_msg}"]
+                }
+                
+        except Exception as e:
+            self.end_time = time.time()
+            error_msg = f"Function execution setup failed: {str(e)}"
+            error_trace = traceback.format_exc()
+            
+            return {
+                "success": False,
+                "error": error_msg,
+                "execution_time_ms": int((self.end_time - self.start_time) * 1000) if self.end_time else 0,
+                "memory_used_mb": self.get_memory_usage_mb(),
+                "logs": [f"[ERROR] {error_msg}", f"[ERROR] {error_trace}"]
+            }
+            
+        finally:
+            # Clean up temporary file
+            try:
+                os.unlink(script_path)
+            except:
+                pass
     
     async def execute_function(self, code: str, event: Dict[str, Any], context: Dict[str, str]) -> Dict[str, Any]:
         """Execute the lambda function code safely"""
@@ -219,8 +383,8 @@ async def process_lambda_msg(analytiq_client, msg):
         
         logger.info(f"Executing lambda function {function_revision['name']} for execution {execution_id}")
         
-        # Execute the function
-        execution_response = await executor.execute_function(
+        # Execute the function with environment isolation
+        execution_response = await executor.execute_function_subprocess(
             code=function_revision["code"],
             event=execution_result["event"],
             context=execution_result["context"]

@@ -333,3 +333,140 @@ async def test_lambda_function_with_error(test_db, mock_auth, setup_test_models)
     )
     
     logger.info(f"test_lambda_function_with_error() end")
+
+@pytest.mark.asyncio
+async def test_lambda_environment_variable_isolation(test_db, mock_auth, setup_test_models):
+    """Test that lambda functions don't inherit parent process environment variables"""
+    logger.info(f"test_lambda_environment_variable_isolation() start")
+    
+    # Set some environment variables in the parent process that should NOT be inherited
+    test_env_vars = {
+        "PARENT_ONLY_VAR": "should_not_be_visible",
+        "SECRET_KEY": "secret_value_123",
+        "DATABASE_URL": "parent_db_connection"
+    }
+    
+    original_env = {}
+    for key, value in test_env_vars.items():
+        original_env[key] = os.environ.get(key)
+        os.environ[key] = value
+    
+    try:
+        # Create a lambda function that checks environment variables
+        function_data = {
+            "name": "env_test_function",
+            "description": "Test environment variable isolation",
+            "code": '''def lambda_handler(event, context):
+    import os
+    
+    # Get all environment variables
+    all_env = dict(os.environ)
+    
+    # Check which test variables are present
+    test_vars = ["PARENT_ONLY_VAR", "SECRET_KEY", "DATABASE_URL"]
+    inherited_vars = {var: all_env.get(var) for var in test_vars if var in all_env}
+    
+    # Check which explicitly passed variables are present
+    explicit_vars = {
+        "LAMBDA_VAR": all_env.get("LAMBDA_VAR"),
+        "FUNCTION_ENV": all_env.get("FUNCTION_ENV")
+    }
+    
+    print(f"Total environment variables: {len(all_env)}")
+    print(f"Inherited test variables: {inherited_vars}")
+    print(f"Explicit variables: {explicit_vars}")
+    
+    return {
+        "total_env_count": len(all_env),
+        "inherited_test_vars": inherited_vars,
+        "explicit_vars": explicit_vars,
+        "has_parent_vars": len(inherited_vars) > 0
+    }''',
+            "timeout": 30,
+            "memory_size": 128,
+            "environment_variables": {
+                "LAMBDA_VAR": "lambda_value",
+                "FUNCTION_ENV": "function_specific"
+            },
+            "tag_ids": []
+        }
+        
+        create_response = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/lambda_functions",
+            json=function_data,
+            headers=get_auth_headers()
+        )
+        
+        assert create_response.status_code == 200
+        function_result = create_response.json()
+        function_id = function_result["function_id"]
+        
+        # Execute the function
+        execution_request = {
+            "event": {"test": "environment_isolation"},
+            "context": {"test_type": "env_isolation"}
+        }
+        
+        run_response = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}/run",
+            json=execution_request,
+            headers=get_auth_headers()
+        )
+        
+        assert run_response.status_code == 200
+        execution_result = run_response.json()
+        execution_id = execution_result["execution_id"]
+        
+        # Process the execution
+        from analytiq_data.msg_handlers.lambda_executor import process_lambda_msg
+        analytiq_client = ad.common.get_analytiq_client()
+        msg = await ad.queue.recv_msg(analytiq_client, "lambda")
+        await process_lambda_msg(analytiq_client, msg)
+        
+        # Get the result
+        result_response = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}/results/{execution_id}",
+            headers=get_auth_headers()
+        )
+        
+        assert result_response.status_code == 200
+        result_data = result_response.json()
+        assert result_data["status"] == "completed"
+        
+        result = result_data["result"]
+        
+        # Verify environment variable isolation
+        assert result["has_parent_vars"] is False, f"Lambda function inherited parent environment variables: {result['inherited_test_vars']}"
+        
+        # Verify that no test environment variables were inherited
+        inherited_vars = result["inherited_test_vars"]
+        for var_name, var_value in inherited_vars.items():
+            assert var_value is None, f"Parent environment variable '{var_name}' was inherited with value '{var_value}'"
+        
+        # Verify that explicitly passed environment variables are present
+        explicit_vars = result["explicit_vars"]
+        assert explicit_vars["LAMBDA_VAR"] == "lambda_value", "Explicitly passed LAMBDA_VAR not found or incorrect"
+        assert explicit_vars["FUNCTION_ENV"] == "function_specific", "Explicitly passed FUNCTION_ENV not found or incorrect"
+        
+        # The lambda should have some basic environment variables but not our test ones
+        assert result["total_env_count"] >= 2, "Lambda should have at least the 2 explicitly passed environment variables"
+        
+        # Check logs for debugging info
+        logs_content = " ".join(result_data["logs"])
+        assert "Inherited test variables: {}" in logs_content or "Inherited test variables: {'PARENT_ONLY_VAR': None, 'SECRET_KEY': None, 'DATABASE_URL': None}" in logs_content, "Lambda should not inherit parent test variables"
+        
+        # Clean up
+        client.delete(
+            f"/v0/orgs/{TEST_ORG_ID}/lambda_functions/{function_id}",
+            headers=get_auth_headers()
+        )
+        
+    finally:
+        # Restore original environment variables
+        for key, original_value in original_env.items():
+            if original_value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = original_value
+    
+    logger.info(f"test_lambda_environment_variable_isolation() end")
