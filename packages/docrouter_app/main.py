@@ -14,7 +14,7 @@ import hmac
 import hashlib
 import asyncio
 import warnings
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from contextlib import asynccontextmanager
 # Defer litellm import to avoid event loop warnings
 # import litellm
@@ -72,6 +72,8 @@ from docrouter_app.models import (
     UpdateLLMResultRequest,
     Schema, SchemaConfig, ListSchemasResponse,
     Prompt, PromptConfig, ListPromptsResponse,
+    LambdaFunction, LambdaFunctionConfig, ListLambdaFunctionsResponse,
+    LambdaExecutionRequest, LambdaExecutionResult, ListLambdaExecutionResultsResponse,
     Form, FormConfig, ListFormsResponse,
     FormSubmissionData, FormSubmission,
     TagConfig, Tag, ListTagsResponse,
@@ -1743,6 +1745,507 @@ async def delete_prompt(
         raise HTTPException(status_code=404, detail="No prompt revisions found")
         
     return {"message": "Prompt deleted successfully"}
+
+# Lambda function helper
+async def get_lambda_function_id_and_version(function_id: Optional[str] = None) -> tuple[str, int]:
+    """
+    Get the next version for an existing lambda function or create a new function identifier.
+    
+    Args:
+        function_id: Existing function ID, or None to create a new one
+        
+    Returns:
+        Tuple of (function_id, function_version)
+    """
+    db = ad.common.get_async_db()
+
+    if function_id is None:
+        # Insert a placeholder document to get MongoDB-generated ID
+        result = await db.lambda_functions.insert_one({
+            "function_version": 1
+        })
+        function_id = str(result.inserted_id)
+        
+        # Delete the placeholder
+        await db.lambda_functions.delete_one({"_id": result.inserted_id})
+        
+        return function_id, 1
+    else:
+        # Find the latest version for this function
+        latest_function = await db.lambda_function_revisions.find_one(
+            {"function_id": function_id},
+            sort=[("function_version", -1)]
+        )
+        
+        if latest_function:
+            return function_id, latest_function["function_version"] + 1
+        else:
+            return function_id, 1
+
+# Lambda function management endpoints
+@app.post("/v0/orgs/{organization_id}/lambda_functions", response_model=LambdaFunction, tags=["lambda_functions"])
+async def create_lambda_function(
+    organization_id: str,
+    lambda_function: LambdaFunctionConfig,
+    current_user: User = Depends(get_org_user)
+):
+    """Create a lambda function"""
+    logger.info(f"create_lambda_function() start: organization_id: {organization_id}, lambda_function: {lambda_function.name}")
+    db = ad.common.get_async_db()
+    
+    function_id, function_version = await get_lambda_function_id_and_version()
+    
+    # Create the function revision
+    function_revid = str(ObjectId())
+    function_revision = {
+        "_id": ObjectId(function_revid),
+        "function_id": function_id,
+        "function_version": function_version,
+        "organization_id": organization_id,
+        "name": lambda_function.name,
+        "code": lambda_function.code,
+        "description": lambda_function.description,
+        "timeout": lambda_function.timeout,
+        "memory_size": lambda_function.memory_size,
+        "environment_variables": lambda_function.environment_variables,
+        "tag_ids": lambda_function.tag_ids,
+        "created_at": datetime.now(UTC),
+        "created_by": current_user.user_id
+    }
+    
+    await db.lambda_function_revisions.insert_one(function_revision)
+    
+    # Create or update the main function entry
+    function_dict = {
+        "_id": ObjectId(function_id),
+        "organization_id": organization_id,
+        "latest_revision_id": function_revid,
+        "latest_version": function_version,
+        "created_at": datetime.now(UTC),
+        "created_by": current_user.user_id
+    }
+    
+    await db.lambda_functions.replace_one(
+        {"_id": ObjectId(function_id)},
+        function_dict,
+        upsert=True
+    )
+    
+    function_dict = {
+        **function_revision,
+        "function_revid": function_revid
+    }
+    del function_dict["_id"]
+    
+    return LambdaFunction(**function_dict)
+
+@app.get("/v0/orgs/{organization_id}/lambda_functions", response_model=ListLambdaFunctionsResponse, tags=["lambda_functions"])
+async def list_lambda_functions(
+    organization_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    document_id: Optional[str] = Query(None, description="Filter by document ID"),
+    tag_ids: Optional[str] = Query(None, description="Comma-separated list of tag IDs"),
+    current_user: User = Depends(get_org_user)
+):
+    """List lambda functions"""
+    logger.info(f"list_lambda_functions() start: organization_id: {organization_id}")
+    db = ad.common.get_async_db()
+    
+    # Build aggregation pipeline
+    pipeline = [
+        {"$match": {"organization_id": organization_id}},
+        {
+            "$lookup": {
+                "from": "lambda_function_revisions",
+                "localField": "latest_revision_id", 
+                "foreignField": "_id",
+                "as": "latest_revision",
+                "pipeline": [{"$project": {"_id": 0}}]
+            }
+        },
+        {"$unwind": "$latest_revision"},
+        {
+            "$addFields": {
+                "function_revid": {"$toString": "$latest_revision._id"},
+                "function_id": {"$toString": "$_id"},
+                "name": "$latest_revision.name",
+                "code": "$latest_revision.code", 
+                "description": "$latest_revision.description",
+                "timeout": "$latest_revision.timeout",
+                "memory_size": "$latest_revision.memory_size",
+                "environment_variables": "$latest_revision.environment_variables",
+                "tag_ids": "$latest_revision.tag_ids",
+                "function_version": "$latest_revision.function_version",
+                "created_at": "$latest_revision.created_at",
+                "created_by": "$latest_revision.created_by"
+            }
+        }
+    ]
+    
+    # Apply filters
+    if document_id:
+        # Get document tag IDs if filtering by document
+        doc = await db.documents.find_one({"_id": ObjectId(document_id)})
+        if doc:
+            document_tag_ids = doc.get("tag_ids", [])
+            pipeline.append({
+                "$match": {"tag_ids": {"$in": document_tag_ids}}
+            })
+    elif tag_ids:
+        tag_id_list = [tag_id.strip() for tag_id in tag_ids.split(",") if tag_id.strip()]
+        pipeline.append({
+            "$match": {"tag_ids": {"$in": tag_id_list}}
+        })
+    
+    # Get total count
+    count_pipeline = pipeline + [{"$count": "total"}]
+    count_result = await db.lambda_functions.aggregate(count_pipeline).to_list(None)
+    total_count = count_result[0]["total"] if count_result else 0
+    
+    # Apply pagination and get results
+    pipeline.extend([
+        {"$sort": {"created_at": -1}},
+        {"$skip": skip},
+        {"$limit": limit}
+    ])
+    
+    functions = await db.lambda_functions.aggregate(pipeline).to_list(None)
+    
+    ret = {
+        "functions": [LambdaFunction(**func) for func in functions],
+        "total_count": total_count,
+        "skip": skip
+    }
+    
+    return ret
+
+@app.get("/v0/orgs/{organization_id}/lambda_functions/{function_id}", response_model=LambdaFunction, tags=["lambda_functions"])
+async def get_lambda_function(
+    organization_id: str,
+    function_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Get a lambda function"""
+    logger.info(f"get_lambda_function() start: organization_id: {organization_id}, function_id: {function_id}")
+    db = ad.common.get_async_db()
+    
+    # Get the latest revision
+    revision = await db.lambda_function_revisions.find_one(
+        {"function_id": function_id, "organization_id": organization_id},
+        sort=[("function_version", -1)]
+    )
+    
+    if not revision:
+        raise HTTPException(status_code=404, detail="Lambda function not found")
+    
+    revision["function_revid"] = str(revision["_id"])
+    del revision["_id"]
+    
+    return LambdaFunction(**revision)
+
+@app.put("/v0/orgs/{organization_id}/lambda_functions/{function_id}", response_model=LambdaFunction, tags=["lambda_functions"])
+async def update_lambda_function(
+    organization_id: str,
+    function_id: str,
+    lambda_function: LambdaFunctionConfig,
+    current_user: User = Depends(get_org_user)
+):
+    """Update a lambda function"""
+    logger.info(f"update_lambda_function() start: organization_id: {organization_id}, function_id: {function_id}")
+    db = ad.common.get_async_db()
+    
+    # Check if function exists
+    existing_function = await db.lambda_functions.find_one({
+        "_id": ObjectId(function_id),
+        "organization_id": organization_id
+    })
+    if not existing_function:
+        raise HTTPException(status_code=404, detail="Lambda function not found")
+    
+    # Get next version
+    _, function_version = await get_lambda_function_id_and_version(function_id)
+    
+    # Create new revision
+    function_revid = str(ObjectId())
+    function_revision = {
+        "_id": ObjectId(function_revid),
+        "function_id": function_id,
+        "function_version": function_version,
+        "organization_id": organization_id,
+        "name": lambda_function.name,
+        "code": lambda_function.code,
+        "description": lambda_function.description,
+        "timeout": lambda_function.timeout,
+        "memory_size": lambda_function.memory_size,
+        "environment_variables": lambda_function.environment_variables,
+        "tag_ids": lambda_function.tag_ids,
+        "created_at": datetime.now(UTC),
+        "created_by": current_user.user_id
+    }
+    
+    await db.lambda_function_revisions.insert_one(function_revision)
+    
+    # Update main function entry
+    await db.lambda_functions.update_one(
+        {"_id": ObjectId(function_id)},
+        {
+            "$set": {
+                "latest_revision_id": function_revid,
+                "latest_version": function_version
+            }
+        }
+    )
+    
+    new_function = {
+        **function_revision,
+        "function_revid": function_revid
+    }
+    del new_function["_id"]
+    
+    return LambdaFunction(**new_function)
+
+@app.delete("/v0/orgs/{organization_id}/lambda_functions/{function_id}", tags=["lambda_functions"])
+async def delete_lambda_function(
+    organization_id: str,
+    function_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Delete a lambda function"""
+    logger.info(f"delete_lambda_function() start: organization_id: {organization_id}, function_id: {function_id}")
+    db = ad.common.get_async_db()
+    
+    # Get the function revision   
+    function_revision = await db.lambda_function_revisions.find_one({
+        "function_id": function_id
+    })
+    if not function_revision:
+        raise HTTPException(status_code=404, detail="Lambda function not found")
+    
+    # Get the function and verify organization
+    function = await db.lambda_functions.find_one({
+        "_id": ObjectId(function_id),
+        "organization_id": organization_id
+    })
+    if not function:
+        raise HTTPException(status_code=404, detail="Lambda function not found or not in this organization")
+  
+    # Delete all revisions of this function
+    result = await db.lambda_function_revisions.delete_many({
+        "function_id": function_id
+    })
+    
+    # Delete the function entry
+    await db.lambda_functions.delete_one({"_id": ObjectId(function_id)})
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="No lambda function revisions found")
+        
+    return {"message": "Lambda function deleted successfully"}
+
+# Lambda execution endpoints
+@app.post("/v0/orgs/{organization_id}/lambda_functions/{function_id}/run", response_model=LambdaExecutionResult, tags=["lambda_functions"])
+async def run_lambda_function(
+    organization_id: str,
+    function_id: str,
+    execution_request: LambdaExecutionRequest,
+    function_revid: str = Query(default="latest", description="The function revision ID to use"),
+    force: bool = Query(default=False, description="Force new run even if result exists"),
+    current_user: User = Depends(get_org_user)
+):
+    """Run a lambda function"""
+    logger.info(f"run_lambda_function() start: organization_id: {organization_id}, function_id: {function_id}")
+    db = ad.common.get_async_db()
+    
+    # Get the function revision
+    if function_revid == "latest":
+        revision = await db.lambda_function_revisions.find_one(
+            {"function_id": function_id, "organization_id": organization_id},
+            sort=[("function_version", -1)]
+        )
+    else:
+        revision = await db.lambda_function_revisions.find_one({
+            "_id": ObjectId(function_revid),
+            "function_id": function_id,
+            "organization_id": organization_id
+        })
+    
+    if not revision:
+        raise HTTPException(status_code=404, detail="Lambda function not found")
+    
+    function_revid = str(revision["_id"])
+    
+    # Check if execution already exists (unless force is True)
+    if not force:
+        existing_execution = await db.lambda_execution_results.find_one({
+            "function_revid": function_revid,
+            "event": execution_request.event,
+            "context": execution_request.context,
+            "status": {"$in": ["completed", "running", "pending"]}
+        })
+        if existing_execution:
+            existing_execution["execution_id"] = str(existing_execution["_id"])
+            del existing_execution["_id"]
+            return LambdaExecutionResult(**existing_execution)
+    
+    # Create execution result entry
+    execution_id = str(ObjectId())
+    execution_result = {
+        "_id": ObjectId(execution_id),
+        "function_revid": function_revid,
+        "function_id": function_id,
+        "function_version": revision["function_version"],
+        "event": execution_request.event,
+        "context": execution_request.context,
+        "status": "pending",
+        "result": None,
+        "error": None,
+        "logs": [],
+        "execution_time_ms": None,
+        "memory_used_mb": None,
+        "started_at": None,
+        "completed_at": None,
+        "created_at": datetime.now(UTC),
+        "created_by": current_user.user_id
+    }
+    
+    await db.lambda_execution_results.insert_one(execution_result)
+    
+    # Send message to lambda worker queue
+    msg_data = {
+        "execution_id": execution_id,
+        "function_revid": function_revid,
+        "organization_id": organization_id
+    }
+    
+    msg_id = await ad.queue.send_msg(
+        ad.common.get_analytiq_client(env=ad.common.get_env()), 
+        "lambda",
+        msg_data
+    )
+    logger.info(f"Sent lambda execution message: {msg_id}")
+    
+    execution_result["execution_id"] = execution_id
+    del execution_result["_id"]
+    
+    return LambdaExecutionResult(**execution_result)
+
+@app.get("/v0/orgs/{organization_id}/lambda_functions/{function_id}/results", response_model=ListLambdaExecutionResultsResponse, tags=["lambda_functions"])
+async def list_lambda_execution_results(
+    organization_id: str,
+    function_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    status: Optional[str] = Query(None, description="Filter by status"),
+    current_user: User = Depends(get_org_user)
+):
+    """List lambda execution results for a function"""
+    logger.info(f"list_lambda_execution_results() start: organization_id: {organization_id}, function_id: {function_id}")
+    db = ad.common.get_async_db()
+    
+    # Build query
+    query = {"function_id": function_id}
+    if status:
+        query["status"] = status
+    
+    # Get total count
+    total_count = await db.lambda_execution_results.count_documents(query)
+    
+    # Get results with pagination
+    results = await db.lambda_execution_results.find(query)\
+        .sort("created_at", -1)\
+        .skip(skip)\
+        .limit(limit)\
+        .to_list(None)
+    
+    # Convert ObjectId to string
+    for result in results:
+        result["execution_id"] = str(result["_id"])
+        del result["_id"]
+    
+    return {
+        "results": [LambdaExecutionResult(**result) for result in results],
+        "total_count": total_count,
+        "skip": skip
+    }
+
+@app.get("/v0/orgs/{organization_id}/lambda_functions/{function_id}/results/{execution_id}", response_model=LambdaExecutionResult, tags=["lambda_functions"])
+async def get_lambda_execution_result(
+    organization_id: str,
+    function_id: str,
+    execution_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Get a lambda execution result"""
+    logger.info(f"get_lambda_execution_result() start: organization_id: {organization_id}, function_id: {function_id}, execution_id: {execution_id}")
+    db = ad.common.get_async_db()
+    
+    result = await db.lambda_execution_results.find_one({
+        "_id": ObjectId(execution_id),
+        "function_id": function_id
+    })
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Lambda execution result not found")
+    
+    result["execution_id"] = str(result["_id"])
+    del result["_id"]
+    
+    return LambdaExecutionResult(**result)
+
+@app.put("/v0/orgs/{organization_id}/lambda_functions/{function_id}/results/{execution_id}", response_model=LambdaExecutionResult, tags=["lambda_functions"])
+async def update_lambda_execution_result(
+    organization_id: str,
+    function_id: str,
+    execution_id: str,
+    update_data: Dict[str, Any],
+    current_user: User = Depends(get_org_user)
+):
+    """Update a lambda execution result (typically used by workers)"""
+    logger.info(f"update_lambda_execution_result() start: organization_id: {organization_id}, function_id: {function_id}, execution_id: {execution_id}")
+    db = ad.common.get_async_db()
+    
+    # Only allow certain fields to be updated
+    allowed_fields = ["status", "result", "error", "logs", "execution_time_ms", "memory_used_mb", "started_at", "completed_at"]
+    update_fields = {k: v for k, v in update_data.items() if k in allowed_fields}
+    
+    if not update_fields:
+        raise HTTPException(status_code=400, detail="No valid fields to update")
+    
+    result = await db.lambda_execution_results.find_one_and_update(
+        {"_id": ObjectId(execution_id), "function_id": function_id},
+        {"$set": update_fields},
+        return_document=True
+    )
+    
+    if not result:
+        raise HTTPException(status_code=404, detail="Lambda execution result not found")
+    
+    result["execution_id"] = str(result["_id"])
+    del result["_id"]
+    
+    return LambdaExecutionResult(**result)
+
+@app.delete("/v0/orgs/{organization_id}/lambda_functions/{function_id}/results/{execution_id}", tags=["lambda_functions"])
+async def delete_lambda_execution_result(
+    organization_id: str,
+    function_id: str,
+    execution_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Delete a lambda execution result"""
+    logger.info(f"delete_lambda_execution_result() start: organization_id: {organization_id}, function_id: {function_id}, execution_id: {execution_id}")
+    db = ad.common.get_async_db()
+    
+    result = await db.lambda_execution_results.delete_one({
+        "_id": ObjectId(execution_id),
+        "function_id": function_id
+    })
+    
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Lambda execution result not found")
+    
+    return {"message": "Lambda execution result deleted successfully"}
 
 # Add this helper function near the top of the file with other functions
 async def get_form_id_and_version(form_id: Optional[str] = None) -> tuple[str, int]:

@@ -241,6 +241,56 @@ class ListPromptsResponse(BaseModel):
     total_count: int
     skip: int
 
+# Lambda function models
+class LambdaFunctionConfig(BaseModel):
+    name: str
+    code: str
+    description: Optional[str] = None
+    timeout: int = Field(default=30, ge=1, le=900, description="Timeout in seconds (1-900)")
+    memory_size: int = Field(default=128, ge=128, le=3008, description="Memory in MB (128-3008)")
+    environment_variables: Optional[Dict[str, str]] = Field(default_factory=dict)
+    tag_ids: List[str] = []
+
+class LambdaFunction(LambdaFunctionConfig):
+    function_revid: str           # MongoDB's _id
+    function_id: str              # Stable identifier
+    function_version: int
+    created_at: datetime
+    created_by: str
+
+class ListLambdaFunctionsResponse(BaseModel):
+    functions: List[LambdaFunction]
+    total_count: int
+    skip: int
+
+# Lambda execution models
+class LambdaExecutionRequest(BaseModel):
+    event: Optional[Dict[str, Any]] = Field(default_factory=dict, description="Event payload for lambda function")
+    context: Optional[Dict[str, str]] = Field(default_factory=dict, description="Context information for lambda function")
+
+class LambdaExecutionResult(BaseModel):
+    execution_id: str
+    function_revid: str
+    function_id: str
+    function_version: int
+    event: Dict[str, Any]
+    context: Dict[str, str]
+    status: Literal["pending", "running", "completed", "failed", "timeout"]
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
+    logs: List[str] = []
+    execution_time_ms: Optional[int] = None
+    memory_used_mb: Optional[int] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    created_at: datetime
+    created_by: str
+
+class ListLambdaExecutionResultsResponse(BaseModel):
+    results: List[LambdaExecutionResult]
+    total_count: int
+    skip: int
+
 class FormResponseFormat(BaseModel):
     json_formio: Optional[List[dict]] = Field(  # Changed from Optional[dict] to Optional[List[dict]]
         default=None,
