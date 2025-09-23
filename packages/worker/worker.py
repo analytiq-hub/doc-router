@@ -41,7 +41,8 @@ async def worker_ocr(worker_id: str) -> None:
                 logger.info(f"Worker {worker_id} heartbeat")
                 last_heartbeat = now
 
-            msg = await ad.queue.recv_msg(analytiq_client, "ocr")
+            # Wait up to 30 seconds for a message to become available
+            msg = await ad.queue.recv_msg_w_tmo(analytiq_client, "ocr", 30)
             if msg:
                 logger.info(f"Worker {worker_id} processing OCR msg: {msg}")
                 try:
@@ -50,8 +51,7 @@ async def worker_ocr(worker_id: str) -> None:
                     logger.error(f"Error processing OCR message {msg.get('_id')}: {str(e)}")
                     # Mark message as failed
                     await ad.queue.delete_msg(analytiq_client, "ocr", str(msg["_id"]), status="failed")
-            else:
-                await asyncio.sleep(0.2)  # Avoid tight loop when no messages
+            # If no msg arrived in the timeout, loop and wait again
                 
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
@@ -81,12 +81,12 @@ async def worker_llm(worker_id: str) -> None:
                 logger.info(f"Worker {worker_id} heartbeat")
                 last_heartbeat = now
 
-            msg = await ad.queue.recv_msg(analytiq_client, "llm")
+            # Wait up to 30 seconds for a message to become available
+            msg = await ad.queue.recv_msg_w_tmo(analytiq_client, "llm", 30)
             if msg:
                 logger.info(f"Worker {worker_id} processing LLM msg: {msg}")
                 await ad.msg_handlers.process_llm_msg(analytiq_client, msg)
-            else:
-                await asyncio.sleep(0.2)  # Avoid tight loop
+            # If no msg arrived in the timeout, loop and wait again
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)  # Sleep longer on errors to prevent tight loop
