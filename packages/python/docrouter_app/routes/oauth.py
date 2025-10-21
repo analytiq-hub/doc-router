@@ -21,7 +21,7 @@ from docrouter_app.routes.payments import sync_customer
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI router
-oauth_router = APIRouter(tags=["oauth"])
+oauth_router = APIRouter()
 
 # OAuth models
 class OAuthAccountData(BaseModel):

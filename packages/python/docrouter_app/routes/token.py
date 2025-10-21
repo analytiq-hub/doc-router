@@ -31,7 +31,7 @@ from docrouter_app.models import User
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI router
-token_router = APIRouter(tags=["tokens"])
+token_router = APIRouter()
 
 class AccessToken(BaseModel):
     id: str

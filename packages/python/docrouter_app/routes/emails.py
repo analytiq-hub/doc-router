@@ -26,7 +26,7 @@ from docrouter_app.routes.payments import sync_customer
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI router
-emails_router = APIRouter(tags=["emails"])
+emails_router = APIRouter()
 
 # Environment variables
 NEXTAUTH_URL = os.getenv("NEXTAUTH_URL")

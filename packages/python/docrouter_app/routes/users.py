@@ -26,7 +26,7 @@ from docrouter_app.routes.payments import sync_customer, delete_payments_custome
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI router
-users_router = APIRouter(tags=["users"])
+users_router = APIRouter()
 
 # User models
 class UserCreate(BaseModel):
