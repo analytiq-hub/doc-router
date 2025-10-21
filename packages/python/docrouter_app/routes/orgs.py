@@ -26,7 +26,7 @@ from docrouter_app.routes.payments import sync_customer, delete_payments_custome
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI router
-orgs_router = APIRouter(tags=["organizations"])
+orgs_router = APIRouter()
 
 # Organization models
 class OrganizationMember(BaseModel):
