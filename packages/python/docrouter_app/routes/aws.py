@@ -18,7 +18,7 @@ from docrouter_app.models import User
 logger = logging.getLogger(__name__)
 
 # Initialize FastAPI router
-aws_router = APIRouter(tags=["aws"])
+aws_router = APIRouter(tags=["account/aws"])
 
 # AWS models
 class AWSConfig(BaseModel):
