@@ -35,8 +35,15 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const { session, status } = useAppSession()
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
 
-  // Extract organization ID from pathname if we're on an organization-specific settings page
+  // Extract organization ID from pathname if we're on an organization-specific page
   const getOrganizationIdFromPath = useCallback(() => {
+    // Check for /orgs/[organizationId] paths (telemetry, analytics, etc.)
+    const orgsMatch = pathname.match(/^\/orgs\/([^\/]+)/)
+    if (orgsMatch) {
+      return orgsMatch[1]
+    }
+    
+    // Check for /settings/organizations/[organizationId] paths
     const settingsMatch = pathname.match(/^\/settings\/organizations\/([^\/]+)/)
     return settingsMatch ? settingsMatch[1] : null
   }, [pathname])
@@ -85,7 +92,7 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
   useEffect(() => {
     const initializeCurrentOrganization = () => {
-      // Check if we're on an organization-specific settings page
+      // Check if we're on an organization-specific page (/orgs/[organizationId] or /settings/organizations/[organizationId])
       const orgIdFromPath = getOrganizationIdFromPath()
       
       if (orgIdFromPath) {
@@ -124,12 +131,23 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setCurrentOrganization(organization)
       localStorage.setItem('currentOrganizationId', organizationId)
       
-      // If we're on an organization-specific settings page, update the URL
+      // If we're on an organization-specific page, update the URL
       const orgIdFromPath = getOrganizationIdFromPath()
       if (orgIdFromPath && orgIdFromPath !== organizationId) {
-        // We're switching to a different organization while on a settings page
-        // Redirect to the same settings page for the new organization
-        const newPath = pathname.replace(`/settings/organizations/${orgIdFromPath}`, `/settings/organizations/${organizationId}`)
+        // We're switching to a different organization while on an org-specific page
+        // Redirect to the same page for the new organization
+        let newPath: string
+        
+        if (pathname.startsWith('/orgs/')) {
+          // Handle /orgs/[organizationId] paths
+          newPath = pathname.replace(`/orgs/${orgIdFromPath}`, `/orgs/${organizationId}`)
+        } else if (pathname.startsWith('/settings/organizations/')) {
+          // Handle /settings/organizations/[organizationId] paths
+          newPath = pathname.replace(`/settings/organizations/${orgIdFromPath}`, `/settings/organizations/${organizationId}`)
+        } else {
+          return // No URL update needed
+        }
+        
         window.location.href = newPath
       }
     }

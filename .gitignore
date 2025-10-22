@@ -166,4 +166,4 @@ cython_debug/
 .global-bundle.pem.gpg
 node_modules
 .test-server-config.json
-.mcp.json
+.mcp*.json
