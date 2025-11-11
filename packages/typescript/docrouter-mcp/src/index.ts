@@ -9,7 +9,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { DocRouterOrg, DocRouterAccount } from '@docrouter/sdk';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -22,6 +22,43 @@ const ConfigSchema = z.object({
 });
 
 type Config = z.infer<typeof ConfigSchema>;
+
+// Helper function to resolve knowledge base file paths
+// Works both in development (src/) and production (dist/ from npm package)
+function resolveKnowledgeBasePath(filename: string): string {
+  const currentFile = fileURLToPath(import.meta.url);
+  const currentDir = dirname(currentFile);
+  
+  // If running from dist/ (production/npm package), use dist/docs/knowledge_base/
+  if (currentDir.endsWith('dist')) {
+    return join(currentDir, 'docs/knowledge_base', filename);
+  }
+  
+  // If running from src/ (development), try to find dist/ relative to package root
+  if (currentDir.endsWith('src')) {
+    const distPath = join(currentDir, '..', 'dist', 'docs/knowledge_base', filename);
+    if (existsSync(distPath)) {
+      return distPath;
+    }
+    // If dist doesn't exist, provide helpful error
+    throw new Error(
+      `Knowledge base file not found: ${filename}\n` +
+      `Expected at: ${distPath}\n` +
+      `Please run 'npm run build' first to generate the knowledge base files.`
+    );
+  }
+  
+  // Fallback: try relative to current directory
+  const fallbackPath = join(currentDir, 'docs/knowledge_base', filename);
+  if (existsSync(fallbackPath)) {
+    return fallbackPath;
+  }
+  
+  throw new Error(
+    `Knowledge base file not found: ${filename}\n` +
+    `Searched in: ${join(currentDir, 'docs/knowledge_base', filename)}`
+  );
+}
 
 // Show list of supported MCP tools
 function showTools() {
@@ -1972,12 +2009,7 @@ This server provides access to DocRouter resources and tools.
 
       case 'help_prompts': {
         try {
-          // Get the directory of the current file
-          const currentFile = fileURLToPath(import.meta.url);
-          const currentDir = dirname(currentFile);
-          
-          // Navigate to the knowledge base directory within the package
-          const promptsPath = join(currentDir, 'docs/knowledge_base/prompts.md');
+          const promptsPath = resolveKnowledgeBasePath('prompts.md');
           const promptsContent = readFileSync(promptsPath, 'utf-8');
           
           return {
@@ -2003,12 +2035,7 @@ This server provides access to DocRouter resources and tools.
 
       case 'help_schemas': {
         try {
-          // Get the directory of the current file
-          const currentFile = fileURLToPath(import.meta.url);
-          const currentDir = dirname(currentFile);
-
-          // Navigate to the knowledge base directory within the package
-          const schemasPath = join(currentDir, 'docs/knowledge_base/schemas.md');
+          const schemasPath = resolveKnowledgeBasePath('schemas.md');
           const schemasContent = readFileSync(schemasPath, 'utf-8');
 
           return {
@@ -2034,12 +2061,7 @@ This server provides access to DocRouter resources and tools.
 
       case 'help_forms': {
         try {
-          // Get the directory of the current file
-          const currentFile = fileURLToPath(import.meta.url);
-          const currentDir = dirname(currentFile);
-
-          // Navigate to the knowledge base directory within the package
-          const formsPath = join(currentDir, 'docs/knowledge_base/forms.md');
+          const formsPath = resolveKnowledgeBasePath('forms.md');
           const formsContent = readFileSync(formsPath, 'utf-8');
 
           return {
