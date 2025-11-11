@@ -609,7 +609,7 @@ async def sync_all_customers(db) -> Tuple[int, int, List[str]]:
         return 0, 0, [f"Global error: {str(e)}"]
 
 async def _get_stripe_customer_org_ids() -> Tuple[set, Dict[str, str]]:
-    """Get all org_ids from Stripe customers metadata and return mapping to customer_ids"""
+    """Get all org_ids from Stripe customers metadata for the current product and return mapping to customer_ids"""
     try:
         org_ids = set()
         customer_map = {}  # org_id -> stripe_customer_id
@@ -624,6 +624,11 @@ async def _get_stripe_customer_org_ids() -> Tuple[set, Dict[str, str]]:
             customers = await StripeAsync.customer_list(**params)
             
             for customer in customers.data:
+                # Only include customers that belong to this product
+                customer_product = customer.metadata.get("product")
+                if customer_product != STRIPE_PRODUCT_TAG:
+                    continue  # Skip customers from other products (e.g., SigAgent)
+                
                 org_id = customer.metadata.get("org_id")
                 if org_id:
                     org_ids.add(org_id)
@@ -893,18 +898,25 @@ async def get_stripe_customer(db, org_id: str) -> Dict[str, Any]:
         except Exception as e:
             logger.warning(f"Could not retrieve Stripe customer {stripe_customer_id}: {e}")
 
-    # Fallback to Stripe search
+    # Fallback to Stripe search - filter by product tag to avoid cross-product conflicts
     logger.info(f"Local lookup failed, searching Stripe for org_id: {org_id}")
-    stripe_customer_list = await StripeAsync.customer_search(query=f"metadata['org_id']:'{org_id}'")
+    stripe_customer_list = await StripeAsync.customer_search(query=f"metadata['org_id']:'{org_id}' AND metadata['product']:'{STRIPE_PRODUCT_TAG}'")
         
     if stripe_customer_list and stripe_customer_list.data:
-        if len(stripe_customer_list.data) > 1:
-            logger.warning(f"Multiple Stripe customers found for org_id: {org_id}")
+        # Filter results to ensure they belong to this product (search query might not be perfect)
+        filtered_customers = [
+            c for c in stripe_customer_list.data 
+            if c.metadata.get("product") == STRIPE_PRODUCT_TAG
+        ]
         
-        return stripe_customer_list.data[0]
-    else:
-        logger.info(f"No Stripe customers found for org_id: {org_id}")
-        return None
+        if len(filtered_customers) > 1:
+            logger.warning(f"Multiple Stripe customers found for org_id: {org_id} with product: {STRIPE_PRODUCT_TAG}")
+        
+        if filtered_customers:
+            return filtered_customers[0]
+    
+    logger.info(f"No Stripe customers found for org_id: {org_id} with product: {STRIPE_PRODUCT_TAG}")
+    return None
 
 # Helper functions
 async def sync_payments_customer(db, org_id: str) -> Dict[str, Any]:
@@ -1057,6 +1069,7 @@ async def sync_stripe_customer(db, org_id: str) -> Dict[str, Any]:
             "org_id": org_id,
             "org_name": org_name,
             "user_id": user_id,
+            "product": STRIPE_PRODUCT_TAG,  # Tag customers with product to avoid cross-product conflicts
             "updated_at": datetime.now(UTC).isoformat()
         }
 
@@ -1075,7 +1088,7 @@ async def sync_stripe_customer(db, org_id: str) -> Dict[str, Any]:
                 stripe_customer.description != user_description):
                 update_customer = True
 
-            for key in ["org_id", "org_name", "user_id"]:
+            for key in ["org_id", "org_name", "user_id", "product"]:
                 if stripe_customer_metadata.get(key) != customer_metadata.get(key):
                     update_customer = True
                     break
@@ -1746,6 +1759,51 @@ async def record_usage(
 
 
 # Helper functions for webhook handlers
+def extract_customer_id_from_event(event: Dict[str, Any]) -> Optional[str]:
+    """
+    Extract customer_id from different Stripe webhook event types.
+    Returns customer_id if found, None otherwise.
+    """
+    event_type = event.get("type", "")
+    event_object = event.get("data", {}).get("object", {})
+    
+    # Subscription events have customer directly
+    if "subscription" in event_type:
+        return event_object.get("customer")
+    
+    # Invoice events have customer directly
+    if "invoice" in event_type:
+        return event_object.get("customer")
+    
+    # Checkout session events have customer directly
+    if "checkout.session" in event_type:
+        return event_object.get("customer")
+    
+    # For other event types, try to get customer from the object
+    return event_object.get("customer")
+
+async def verify_customer_product_tag(customer_id: str) -> bool:
+    """
+    Verify that a Stripe customer belongs to our product.
+    Uses local payments_customers collection for fast lookup (no Stripe API call).
+    Returns True if customer belongs to our product, False otherwise.
+    """
+    try:
+        db = ad.common.get_async_db()
+        
+        # Fast check: if customer exists in our local payments_customers with this stripe_customer_id,
+        # it means we've synced them and they have our product tag
+        customer = await db.payments_customers.find_one({"stripe_customer_id": customer_id})
+        if customer:
+            return True
+        
+        # Customer not found in local DB - they're not our customer
+        # (No need to check Stripe API - if we haven't synced them, they're not ours)
+        return False
+    except Exception as e:
+        logger.error(f"Error verifying product tag for customer {customer_id}: {e}")
+        return False
+
 async def handle_subscription_updated(db, subscription: Dict[str, Any]):
     """Handle subscription created or updated event"""
     logger.info(f"Handling subscription updated event for subscription_id {subscription['id']}")
@@ -2561,11 +2619,19 @@ async def webhook_received(
     except stripe.error.SignatureVerificationError as e:
         raise HTTPException(status_code=400, detail="Invalid signature")
     
+    # Extract customer_id and verify product tag before processing
+    customer_id = extract_customer_id_from_event(event)
+    if customer_id:
+        # Verify customer belongs to our product - silently skip if not
+        if not await verify_customer_product_tag(customer_id):
+            # Webhook is for a different product - this is normal, return success without processing
+            return {"status": "success", "skipped": "different_product"}
+    
     logger.info(f"Stripe webhook event received: {event['type']}")
 
     db = ad.common.get_async_db()
 
-    # Store event in database for audit
+    # Store event in database for audit (only for our product)
     event_doc = {
         "stripe_event_id": event["id"],
         "type": event["type"],
@@ -3057,6 +3123,7 @@ async def credit_customer_account_from_session(db, session: Dict[str, Any]):
 async def handle_checkout_session_completed(db, session: Dict[str, Any]):
     """Handle checkout session completed event"""
     try:
+        
         metadata = session.get("metadata", {})
         org_id = metadata.get("org_id")
         plan_id = metadata.get("plan_id")
