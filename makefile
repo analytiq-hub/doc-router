@@ -1,9 +1,11 @@
+SHELL := /bin/bash
+
 setup:
 	# Create and activate virtual environment if it doesn't exist
 	if [ ! -d ".venv" ]; then \
 		echo "Creating virtual environment..." ; \
 		python3 -m venv .venv ; \
-	fi
+	fi ; \
 	source .venv/bin/activate ; \
 	# Install uv if not already installed
 	if ! command -v uv &> /dev/null; then \
@@ -21,6 +23,12 @@ setup:
 dev: setup
 	cp .env packages/typescript/frontend/.env.local
 	./start-all.sh
+
+install: setup
+	# Install and build all TypeScript packages
+	cd packages/typescript/docrouter-sdk && npm install && npm run build
+	cd packages/typescript/docrouter-mcp && npm install && npm run build
+	cd packages/typescript/frontend && npm install
 
 deploy:
 	# Use .env for runtime env vars without baking them into images
@@ -51,4 +59,4 @@ tests-ts:
 clean:
 	rm -rf .venv
 
-.PHONY: dev tests setup tests-ts
+.PHONY: dev tests setup tests-ts install
