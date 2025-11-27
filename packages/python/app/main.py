@@ -38,6 +38,7 @@ from app.routes.oauth import oauth_router
 from app.routes.orgs import orgs_router
 from app.routes.users import users_router
 from app.routes.emails import emails_router
+from app.routes.redirect import redirect_router
 import analytiq_data as ad
 
 # Set up the environment variables. This reads the .env file.
@@ -129,6 +130,7 @@ app.add_middleware(
     expose_headers=["Content-Disposition"] # Needed to expose the Content-Disposition header to the frontend
 )
 
+app.include_router(redirect_router)
 app.include_router(payments_router)
 app.include_router(documents_router)
 app.include_router(ocr_router)
