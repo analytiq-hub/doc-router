@@ -962,7 +962,7 @@ For developers working on the SDK:
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd packages/typescript/docrouter-sdk
+cd packages/typescript/sdk
 
 # Install dependencies
 npm install

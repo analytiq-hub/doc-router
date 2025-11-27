@@ -451,7 +451,7 @@ For developers working on the MCP server:
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd docrouter-mcp
+cd packages/typescript/mcp
 
 # Install dependencies
 npm install

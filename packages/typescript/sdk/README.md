@@ -24,7 +24,7 @@ A TypeScript SDK for the DocRouter API, providing type-safe access to document p
 
 1. **Build the package:**
    ```bash
-   cd packages/typescript/docrouter-sdk
+   cd packages/typescript/sdk
    npm run build
    ```
 

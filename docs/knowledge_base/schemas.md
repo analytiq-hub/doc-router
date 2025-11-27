@@ -762,7 +762,7 @@ Include clear descriptions that explain:
 
 DocRouter provides multiple ways to interact with schemas programmatically:
 
-- **TypeScript/JavaScript SDK** - Type-safe client library for Node.js and browsers (see `packages/typescript/docrouter-sdk/`)
+- **TypeScript/JavaScript SDK** - Type-safe client library for Node.js and browsers (see `packages/typescript/sdk/`)
 - **Python SDK** - Type-safe Python client library (see `packages/python/sdk/`)
 - **REST API** - Direct HTTP requests (see API documentation for endpoints)
 - **MCP (Model Context Protocol)** - Integration with AI assistants like Claude Code

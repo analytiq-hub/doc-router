@@ -39,7 +39,7 @@
   "author": "Analytiq",
   "license": "MIT",
   "dependencies": {
-    "@docrouter/sdk": "file:../docrouter-sdk",
+    "@docrouter/sdk": "file:../sdk",
     "@modelcontextprotocol/sdk": "^1.20.0",
     "zod": "^3.22.0"
   },

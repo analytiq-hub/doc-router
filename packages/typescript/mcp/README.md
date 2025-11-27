@@ -58,7 +58,7 @@ Clone and install dependencies:
 
 ```bash
 git clone <repository-url>
-cd docrouter-mcp
+cd packages/typescript/mcp
 npm install
 ```
 

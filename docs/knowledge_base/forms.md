@@ -434,7 +434,7 @@ Map form fields to schema fields to auto-populate from AI extraction:
 
 DocRouter provides multiple ways to interact with forms programmatically:
 
-- **TypeScript/JavaScript SDK** - Type-safe client library (see `packages/typescript/docrouter-sdk/`)
+- **TypeScript/JavaScript SDK** - Type-safe client library (see `packages/typescript/sdk/`)
 - **Python SDK** - Type-safe Python client library (see `packages/python/sdk/`)
 - **REST API** - Direct HTTP requests
 - **MCP (Model Context Protocol)** - Integration with AI assistants like Claude Code

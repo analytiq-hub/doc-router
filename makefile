@@ -26,8 +26,8 @@ dev: setup
 
 install: setup
 	# Install and build all TypeScript packages
-	cd packages/typescript/docrouter-sdk && npm install && npm run build
-	cd packages/typescript/docrouter-mcp && npm install && npm run build
+	cd packages/typescript/sdk && npm install && npm run build
+	cd packages/typescript/mcp && npm install && npm run build
 	cd packages/typescript/frontend && npm install
 
 deploy:
@@ -53,8 +53,8 @@ tests-ui-debug: setup-ui
 	cd tests-ui && npm run test:ui:debug
 
 tests-ts:
-	cd packages/typescript/docrouter-sdk && npm install && npm run test:all
-	cd packages/typescript/docrouter-mcp && npm install && npm run test
+	cd packages/typescript/sdk && npm install && npm run test:all
+	cd packages/typescript/mcp && npm install && npm run test
 
 clean:
 	rm -rf .venv
