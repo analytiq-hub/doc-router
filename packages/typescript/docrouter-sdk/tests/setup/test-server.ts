@@ -40,10 +40,10 @@ export class TestServer {
     await this.ensureVenv(sdkDir, packagesDir);
 
     // Start the FastAPI server using the virtual environment
-    // The server needs to run from the packages directory where docrouter_app is located
+    // The server needs to run from the packages directory where app is located
     const uvicornArgs = [
       '-m', 'uvicorn',
-      'docrouter_app.main:app',
+      'app.main:app',
       '--host', '0.0.0.0',
       '--port', this.config.port.toString(),
       '--reload'

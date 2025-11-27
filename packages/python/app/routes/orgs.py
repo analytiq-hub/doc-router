@@ -13,14 +13,14 @@ from pydantic import BaseModel
 
 # Local imports
 import analytiq_data as ad
-from docrouter_app import limits
-from docrouter_app.auth import (
+from app import limits
+from app.auth import (
     get_current_user,
     is_system_admin,
     is_organization_admin,
 )
-from docrouter_app.models import User
-from docrouter_app.routes.payments import sync_customer, delete_payments_customer
+from app.models import User
+from app.routes.payments import sync_customer, delete_payments_customer
 
 # Configure logger
 logger = logging.getLogger(__name__)

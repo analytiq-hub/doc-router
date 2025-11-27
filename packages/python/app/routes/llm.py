@@ -13,9 +13,9 @@ from bson import ObjectId
 
 # Local imports
 import analytiq_data as ad
-from docrouter_app.auth import get_org_user, get_current_user, get_admin_user
-from docrouter_app.models import User
-from docrouter_app.routes.payments import SPUCreditException
+from app.auth import get_org_user, get_current_user, get_admin_user
+from app.models import User
+from app.routes.payments import SPUCreditException
 
 # Configure logger
 logger = logging.getLogger(__name__)

@@ -11,8 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 # Local imports
 import analytiq_data as ad
-from docrouter_app.auth import get_admin_user
-from docrouter_app.models import User
+from app.auth import get_admin_user
+from app.models import User
 
 # Configure logger
 logger = logging.getLogger(__name__)

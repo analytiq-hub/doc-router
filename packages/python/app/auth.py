@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 # Local imports
 import analytiq_data as ad
 
-from docrouter_app.models import User
+from app.models import User
 
 # Set up the environment variables. This reads the .env file.
 ad.common.setup()

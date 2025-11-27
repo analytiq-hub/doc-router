@@ -11,7 +11,7 @@ import asyncio
 
 import analytiq_data as ad
 
-from docrouter_app.auth import (
+from app.auth import (
     get_current_user,
     get_org_admin_user,
     get_admin_or_org_user,
@@ -19,7 +19,7 @@ from docrouter_app.auth import (
     is_system_admin,
     is_organization_member
 )
-from docrouter_app.models import User
+from app.models import User
 
 import asyncio
 import stripe

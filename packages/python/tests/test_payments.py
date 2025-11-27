@@ -10,7 +10,7 @@ from datetime import datetime, UTC
 from bson import ObjectId
 
 # Import payment functions
-from docrouter_app.routes.payments import (
+from app.routes.payments import (
     sync_payments_customer,
     get_payment_customer,
     check_payment_limits,

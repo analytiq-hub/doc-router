@@ -14,15 +14,15 @@ from filelock import FileLock
 cwd = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(f"{cwd}/..")
 # Ensure SDK src is importable without editable install
-sdk_src_path = os.path.normpath(os.path.join(cwd, "../docrouter_sdk/src"))
+sdk_src_path = os.path.normpath(os.path.join(cwd, "../sdk/src"))
 if os.path.isdir(sdk_src_path) and sdk_src_path not in sys.path:
     sys.path.append(sdk_src_path)
 
 # Now import the FastAPI app and dependencies
-from docrouter_app.main import app, security
-from docrouter_app.auth import get_current_user, get_admin_user
-from docrouter_app.models import User
-from docrouter_app.routes.payments import init_payments, sync_payments_customer
+from app.main import app, security
+from app.auth import get_current_user, get_admin_user
+from app.models import User
+from app.routes.payments import init_payments, sync_payments_customer
 from worker.worker import main as worker_main
 import analytiq_data as ad
 
@@ -124,7 +124,7 @@ async def org_and_users(test_db):
     Create an organization, an admin, a member, and a non-member user, and generate tokens for each.
     Returns a dict with user/org info and tokens.
     """
-    from docrouter_app.main import app
+    from app.main import app
     import secrets
 
     # Create users

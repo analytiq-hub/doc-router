@@ -341,7 +341,7 @@ async def test_user_permission_boundaries(test_db, mock_auth):
         await test_db.access_tokens.insert_one(token_doc)
         
         # Temporarily clear auth mock to use real token authentication
-        from docrouter_app.main import app
+        from app.main import app
         app.dependency_overrides.clear()
         
         regular_user_headers = get_token_headers(token)
@@ -395,8 +395,8 @@ async def test_user_permission_boundaries(test_db, mock_auth):
         
         # Step 4: Verify the permission system correctly enforces role-based access
         # Restore auth mock to use TEST_USER (system admin)
-        from docrouter_app.main import security
-        from docrouter_app.auth import get_current_user, get_admin_user
+        from app.main import security
+        from app.auth import get_current_user, get_admin_user
         mock_credentials = HTTPAuthorizationCredentials(scheme="Bearer", credentials="test_token")
         app.dependency_overrides = {
             security: lambda: mock_credentials,

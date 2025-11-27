@@ -15,9 +15,9 @@ cwd = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(f"{cwd}/..")
 
 # Now import the FastAPI app and dependencies
-from docrouter_app.main import app, security
-from docrouter_app.auth import get_current_user, get_admin_user
-from docrouter_app.models import User
+from app.main import app, security
+from app.auth import get_current_user, get_admin_user
+from app.models import User
 import analytiq_data as ad
 
 # Use a valid ObjectId format for user_id (24-character hex string)

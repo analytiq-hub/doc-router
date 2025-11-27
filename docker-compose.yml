@@ -64,7 +64,7 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - STRIPE_PRODUCT_TAG=${STRIPE_PRODUCT_TAG}
-    command: sh -c "cd /app/packages/python && uvicorn docrouter_app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "cd /app/packages/python && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     restart: unless-stopped
     ports:
       - "8000:8000"

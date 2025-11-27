@@ -22,7 +22,7 @@ assert os.environ["ENV"] == "pytest"
 @pytest.fixture
 def mock_send_email():
     """Mock the send_email function to prevent actual emails during tests"""
-    with patch("docrouter_app.email_utils.send_email") as mock_send_email:
+    with patch("app.email_utils.send_email") as mock_send_email:
         mock_send_email.return_value = {
             "success": True, 
             "message": "Email mock: Message would be sent"

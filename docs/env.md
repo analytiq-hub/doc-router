@@ -14,7 +14,7 @@ The DocRouter project uses a single `.env` file at the project root that is shar
 - **Usage**: 
   - Used to determine the MongoDB database name
   - Controls logging and debugging behavior
-  - Used in FastAPI backend (`packages/python/docrouter_app/main.py`, `packages/python/docrouter_app/auth.py`)
+  - Used in FastAPI backend (`packages/python/app/main.py`, `packages/python/app/auth.py`)
   - Used in worker processes (`packages/python/worker/worker.py`)
   - Used in frontend MongoDB connection (`packages/typescript/frontend/src/utils/mongodb.ts`)
 - **Values**: `"dev"`, `"prod"`, `"test"` (for testing)
@@ -24,16 +24,16 @@ The DocRouter project uses a single `.env` file at the project root that is shar
 - **Default**: `"mongodb://localhost:27017"`
 - **Usage**:
   - Primary database connection for all components
-  - Used in FastAPI backend (`packages/python/docrouter_app/main.py`, `packages/python/docrouter_app/auth.py`)
+  - Used in FastAPI backend (`packages/python/app/main.py`, `packages/python/app/auth.py`)
   - Used in worker processes (`packages/python/worker/worker.py`)
   - Used in frontend MongoDB connection (`packages/typescript/frontend/src/utils/mongodb.ts`)
-  - Used in payments module (`packages/python/docrouter_app/payments.py`)
+  - Used in payments module (`packages/python/app/payments.py`)
 - **Format**: `mongodb://[username:password@]host:port[/database]?authSource=admin`
 
 ### `FASTAPI_ROOT_PATH`
 - **Purpose**: Root path for FastAPI application (useful for reverse proxies)
 - **Default**: `"/"`
-- **Usage**: Used in FastAPI app configuration (`packages/python/docrouter_app/main.py`)
+- **Usage**: Used in FastAPI app configuration (`packages/python/app/main.py`)
 
 ## Authentication & NextAuth Variables
 
@@ -50,7 +50,7 @@ The DocRouter project uses a single `.env` file at the project root that is shar
 - **Required**: Yes
 - **Usage**: 
   - Used in NextAuth configuration (`packages/typescript/frontend/src/auth.ts`)
-  - JWT token signing in authentication (`packages/python/docrouter_app/auth.py`)
+  - JWT token signing in authentication (`packages/python/app/auth.py`)
   - Token encryption/decryption (`packages/python/analytiq_data/crypto/encryption.py`)
 
 ### `AUTH_GITHUB_ID`
@@ -85,13 +85,13 @@ The DocRouter project uses a single `.env` file at the project root that is shar
 - **Purpose**: AWS access key for AWS services
 - **Usage**:
   - AWS client initialization (`packages/python/analytiq_data/aws/client.py`)
-  - Used in startup process (`packages/python/docrouter_app/startup.py`)
+  - Used in startup process (`packages/python/app/startup.py`)
 
 ### `AWS_SECRET_ACCESS_KEY`
 - **Purpose**: AWS secret access key for AWS services
 - **Usage**:
   - AWS client initialization (`packages/python/analytiq_data/aws/client.py`)
-  - Used in startup process (`packages/python/docrouter_app/startup.py`)
+  - Used in startup process (`packages/python/app/startup.py`)
 
 ### `AWS_S3_BUCKET_NAME`
 - **Purpose**: S3 bucket name for file storage
@@ -106,7 +106,7 @@ The DocRouter project uses a single `.env` file at the project root that is shar
 
 ### `SES_FROM_EMAIL`
 - **Purpose**: Email address used as sender for AWS SES emails
-- **Usage**: Email sending configuration (`packages/python/docrouter_app/main.py`)
+- **Usage**: Email sending configuration (`packages/python/app/main.py`)
 
 ## LLM Provider API Keys
 
@@ -148,21 +148,21 @@ The following environment variables are used for various LLM providers:
 
 ### `STRIPE_SECRET_KEY`
 - **Purpose**: Stripe secret key for payment processing
-- **Usage**: Stripe client initialization (`packages/python/docrouter_app/payments.py`)
+- **Usage**: Stripe client initialization (`packages/python/app/payments.py`)
 
 ### `STRIPE_WEBHOOK_SECRET`
 - **Purpose**: Stripe webhook secret for verifying webhook signatures
-- **Usage**: Stripe webhook verification (`packages/python/docrouter_app/payments.py`)
+- **Usage**: Stripe webhook verification (`packages/python/app/payments.py`)
 
 ## System Administration
 
 ### `ADMIN_EMAIL`
 - **Purpose**: Email address for the default system administrator
-- **Usage**: System initialization (`packages/python/docrouter_app/startup.py`)
+- **Usage**: System initialization (`packages/python/app/startup.py`)
 
 ### `ADMIN_PASSWORD`
 - **Purpose**: Password for the default system administrator
-- **Usage**: System initialization (`packages/python/docrouter_app/startup.py`)
+- **Usage**: System initialization (`packages/python/app/startup.py`)
 
 ## Worker Configuration
 
@@ -184,7 +184,7 @@ The following environment variables are used for various LLM providers:
 ### `CORS_ORIGINS`
 - **Purpose**: Comma-separated list of allowed CORS origins
 - **Default**: `"http://localhost:3000,http://127.0.0.1:3000,http://host.docker.internal:3000"`
-- **Usage**: CORS middleware configuration (`packages/python/docrouter_app/main.py`)
+- **Usage**: CORS middleware configuration (`packages/python/app/main.py`)
 
 ## Testing Variables
 
@@ -234,7 +234,7 @@ The following environment variables are used for various LLM providers:
 ### `MONGO_URI`
 - **Purpose**: Alternative MongoDB URI (used in payments module)
 - **Default**: `"mongodb://localhost:27017"`
-- **Usage**: Payments module database connection (`packages/python/docrouter_app/payments.py`)
+- **Usage**: Payments module database connection (`packages/python/app/payments.py`)
 
 ## Environment-Specific Behavior
 

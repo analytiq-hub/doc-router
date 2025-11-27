@@ -16,7 +16,7 @@ setup:
 	uv pip install hatchling ; \
 	# Install packages in order
 	uv pip install -r packages/python/requirements.txt ; \
-	uv pip install -e packages/python/docrouter_sdk ; \
+	uv pip install -e packages/python/sdk ; \
 	# Ensure test dependencies are installed
 	uv pip install pytest-asyncio pytest-cov pytest-xdist
 

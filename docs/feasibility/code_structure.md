@@ -11,7 +11,7 @@
 doc-router/
 ├── packages/ # Python packages that can be independently installed
 │ ├── pyproject.toml # Unified package with optional dependencies
-│ ├── docrouter_sdk/ # SDK implementation
+│ ├── sdk/ # SDK implementation
 │ │ ├── api/ # API client implementation
 │ │ ├── models/ # Data models
 │ │ └── example/ # Example code
@@ -59,7 +59,7 @@ doc-router/
 - Each Python package should have its own `pyproject.toml` file:
 
 ```toml
-# Example for docrouter-sdk/pyproject.toml
+# Example for sdk/pyproject.toml
 [project]
 name = "docrouter-sdk"
 version = "0.1.0"

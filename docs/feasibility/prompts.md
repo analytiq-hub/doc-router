@@ -114,10 +114,10 @@ export interface GetTemplateParams {
 
 ### 4. docrouter_sdk Changes
 
-Update client library in `packages/python/docrouter_sdk/`:
+Update client library in `packages/python/sdk/`:
 
 ```python
-# Update models in packages/python/docrouter_sdk/models/prompt.py
+# Update models in packages/python/sdk/src/docrouter_sdk/models/prompt.py
 class PromptConfig(BaseModel):
     name: str
     content: str
@@ -127,7 +127,7 @@ class PromptConfig(BaseModel):
     model: str = "gpt-4o-mini"
     is_template: bool = False
 
-# Add template methods to packages/python/docrouter_sdk/api/prompts.py
+# Add template methods to packages/python/sdk/src/docrouter_sdk/api/prompts.py
 class PromptTemplatesAPI:
     def list(self, organization_id: str, skip: int = 0, limit: int = 10, tag_ids: List[str] = None) -> ListTemplatesResponse:
         """List prompt templates"""

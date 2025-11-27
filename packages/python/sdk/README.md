@@ -15,7 +15,7 @@ A Python client library for the Document Router API.
   # export DOCROUTER_URL="http://localhost:8000" # for local development
   export DOCROUTER_ORG_ID=<docrouter_org_id>
   export DOCROUTER_ORG_API_TOKEN=<docrouter_org_api_token> 
-  python packages/docrouter_sdk/examples/basic_docrouter_client.py
+  python packages/python/sdk/examples/basic_docrouter_client.py
 ```
 
 ## Installation
@@ -32,7 +32,7 @@ pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://
 
 ### Local editable install (development)
 ```bash
-cd packages/docrouter_sdk
+cd packages/python/sdk
 pip install -e .
 ```
 

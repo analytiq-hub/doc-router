@@ -23,21 +23,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 
 # Local imports
-from docrouter_app import startup
-from docrouter_app.routes.payments import payments_router, init_payments
-from docrouter_app.routes.documents import documents_router
-from docrouter_app.routes.ocr import ocr_router
-from docrouter_app.routes.llm import llm_router
-from docrouter_app.routes.prompts import prompts_router
-from docrouter_app.routes.schemas import schemas_router
-from docrouter_app.routes.tags import tags_router
-from docrouter_app.routes.forms import forms_router
-from docrouter_app.routes.aws import aws_router
-from docrouter_app.routes.token import token_router
-from docrouter_app.routes.oauth import oauth_router
-from docrouter_app.routes.orgs import orgs_router
-from docrouter_app.routes.users import users_router
-from docrouter_app.routes.emails import emails_router
+from app import startup
+from app.routes.payments import payments_router, init_payments
+from app.routes.documents import documents_router
+from app.routes.ocr import ocr_router
+from app.routes.llm import llm_router
+from app.routes.prompts import prompts_router
+from app.routes.schemas import schemas_router
+from app.routes.tags import tags_router
+from app.routes.forms import forms_router
+from app.routes.aws import aws_router
+from app.routes.token import token_router
+from app.routes.oauth import oauth_router
+from app.routes.orgs import orgs_router
+from app.routes.users import users_router
+from app.routes.emails import emails_router
 import analytiq_data as ad
 
 # Set up the environment variables. This reads the .env file.

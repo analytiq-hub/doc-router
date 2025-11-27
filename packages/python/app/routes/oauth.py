@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field
 
 # Local imports
 import analytiq_data as ad
-from docrouter_app.routes.payments import sync_customer
+from app.routes.payments import sync_customer
 
 # Configure logger
 logger = logging.getLogger(__name__)

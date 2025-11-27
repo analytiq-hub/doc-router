@@ -18,14 +18,14 @@ from pydantic import BaseModel
 
 # Local imports
 import analytiq_data as ad
-from docrouter_app.auth import (
+from app.auth import (
     get_current_user,
     get_admin_user,
     is_system_admin,
     is_organization_member,
     get_org_id_from_token
 )
-from docrouter_app.models import User
+from app.models import User
 
 # Configure logger
 logger = logging.getLogger(__name__)

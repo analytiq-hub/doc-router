@@ -88,7 +88,7 @@ cleanup_next_server() {
     pkill -f "next-server" >/dev/null 2>&1
 }
 cleanup_uvicorn() {
-    pkill -f "uvicorn.*docrouter_app" >/dev/null 2>&1
+    pkill -f "uvicorn.*app" >/dev/null 2>&1
 }
 cleanup_stripe_listen() {
     pkill -f "stripe listen" >/dev/null 2>&1
@@ -103,7 +103,7 @@ cleanup_uvicorn
 cleanup_worker
 cleanup_stripe_listen
 # Run all processes
-run_with_color "uvicorn docrouter_app.main:app --reload --host 0.0.0.0 --port 8000" "$RED" "FASTAPI" "packages/python"
+run_with_color "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000" "$RED" "FASTAPI" "packages/python"
 run_with_color "python worker.py" "$GREEN" "WORKER" "packages/python/worker"
 run_with_color "npm run dev" "$MAGENTA" "NEXTJS" "packages/typescript/frontend"
 

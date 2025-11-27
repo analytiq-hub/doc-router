@@ -62,7 +62,7 @@ async def test_access_tokens(test_db, mock_auth):
         
         # Step 3: Test the token functionality by calling the list documents API
         # Temporarily clear the mock authentication to test real token authentication
-        from docrouter_app.main import app
+        from app.main import app
         original_overrides = app.dependency_overrides.copy()
         app.dependency_overrides.clear()
         
@@ -185,7 +185,7 @@ async def test_account_access_tokens(test_db, mock_auth):
         
         # Step 3: Test the token functionality by calling the list organizations API
         # Temporarily clear the mock authentication to test real token authentication
-        from docrouter_app.main import app
+        from app.main import app
         original_overrides = app.dependency_overrides.copy()
         app.dependency_overrides.clear()
         

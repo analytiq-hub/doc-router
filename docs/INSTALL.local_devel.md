@@ -32,7 +32,7 @@
 * Start the back end
   ```bash
   cd packages/python
-  uvicorn docrouter_app.main:app --host 0.0.0.0 --port 8000
+  uvicorn app.main:app --host 0.0.0.0 --port 8000
   ```
 * In a separate shell, start the workers
   ```bash

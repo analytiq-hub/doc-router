@@ -21,7 +21,7 @@ pip install docrouter-sdk
 ### Local Development Installation
 
 ```bash
-cd packages/docrouter_sdk
+cd packages/python/sdk
 pip install -e .
 ```
 
@@ -104,8 +104,8 @@ print(f"Uploaded document ID: {result['documents'][0]['document_id']}")
 For more comprehensive examples and usage patterns, see the unit tests and examples in the GitHub repository:
 
 - **GitHub Repository**: [https://github.com/analytiq/doc-router](https://github.com/analytiq/doc-router)
-- **Unit Tests**: `packages/docrouter_sdk/tests/`
-- **Examples**: `packages/docrouter_sdk/examples/`
+- **Unit Tests**: `packages/python/sdk/tests/`
+- **Examples**: `packages/python/sdk/examples/`
 
 ## Package Information
 

@@ -19,7 +19,7 @@ Navigate to `packages/typescript/frontend/` directory:
 
 ### Backend (FastAPI)
 From `packages/` directory with activated virtual environment:
-- `uvicorn docrouter_app.main:app --reload --host 0.0.0.0 --port 8000` - Start development server
+- `uvicorn app.main:app --reload --host 0.0.0.0 --port 8000` - Start development server
 - `python worker/worker.py` - Start background worker process
 
 ### Testing
@@ -42,7 +42,7 @@ The Smart Document Router is a full-stack document processing platform with huma
 - Multi-tenant organization structure
 
 **Backend (FastAPI + Python)**
-- Main API server in `packages/python/docrouter_app/`
+- Main API server in `packages/python/app/`
 - FastAPI with Pydantic models for data validation
 - MongoDB for data persistence
 - Background worker system in `packages/python/worker/`
@@ -55,10 +55,10 @@ The Smart Document Router is a full-stack document processing platform with huma
 - LLM integrations via LiteLLM (OpenAI, Anthropic, Gemini, Groq)
 - Document processing pipelines
 
-**SDK (`packages/python/docrouter_sdk/`)**
+**SDK (`packages/python/sdk/`)**
 - Python client library for API integration
 - Type-safe models and API clients
-- Examples in `packages/python/docrouter_sdk/examples/`
+- Examples in `packages/python/sdk/examples/`
 
 ### Key Architectural Patterns
 
@@ -105,7 +105,7 @@ The Smart Document Router is a full-stack document processing platform with huma
 - Frontend pages follow Next.js App Router structure in `src/app/`
 - API routes in `src/app/api/`
 - React components in `src/components/`
-- Backend models in `packages/python/docrouter_app/models.py`
+- Backend models in `packages/python/app/models.py`
 - Shared utilities in `packages/python/analytiq_data/common/`
 
 ### Testing Strategy

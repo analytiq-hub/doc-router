@@ -4,7 +4,7 @@ description: Add context files for payments
 
 Add these files to your context, then stop:
 
-@packages/docrouter_app/payments.py
+@packages/app/payments.py
 @frontend/src/components/SubscriptionPlans.tsx
 @frontend/src/components/SubscriptionManager.tsx
 @frontend/src/components/SubscriptionUsage.tsx

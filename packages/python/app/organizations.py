@@ -11,7 +11,7 @@ from fastapi import HTTPException
 cwd = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(f"{cwd}/..")
 
-from docrouter_app.routes.orgs import OrganizationUpdate
+from app.routes.orgs import OrganizationUpdate
 
 def validate_organization_type_upgrade(current_type: str, new_type: str) -> bool:
     """
