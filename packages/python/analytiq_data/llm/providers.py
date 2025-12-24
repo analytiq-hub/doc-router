@@ -160,16 +160,16 @@ def get_llm_providers() -> dict:
             "display_name": "Anthropic",
             "litellm_provider": "anthropic",
             "litellm_models_available": [
-                "claude-3-5-sonnet-latest", 
-                "claude-3-7-sonnet-latest",
                 "claude-sonnet-4-20250514",
                 "claude-opus-4-1-20250805",
+                "claude-sonnet-4-5-20250929",
+                "claude-opus-4-5-20251101"
                 ],
             "litellm_models_enabled": [
-                "claude-3-5-sonnet-latest", 
-                "claude-3-7-sonnet-latest",
                 "claude-sonnet-4-20250514",
                 "claude-opus-4-1-20250805",
+                "claude-sonnet-4-5-20250929",
+                "claude-opus-4-5-20251101"
                 ],
             "enabled": True,
             "token" : "",
