@@ -43,11 +43,34 @@ async def setup_llm_providers(analytiq_client):
             provider_config = await db.llm_providers.find_one({"name": provider})
             update = False
 
+            # Preserve the token if the provider already exists
+            existing_token = None
+            existing_token_created_at = None
+            if provider_config is not None:
+                existing_token = provider_config.get("token")
+                existing_token_created_at = provider_config.get("token_created_at")
+
             # If the provider is not in MongoDB, create it
             if provider_config is None:
                 logger.info(f"Creating provider config for {provider}")
                 provider_config = {**config}
                 update = True
+            else:
+                # Merge config fields into provider_config, but preserve the token
+                for key, value in config.items():
+                    if key not in ["token", "token_created_at"]:
+                        if provider_config.get(key) != value:
+                            provider_config[key] = value
+                            update = True
+                
+                # Restore the preserved token
+                if existing_token is not None:
+                    provider_config["token"] = existing_token
+                if existing_token_created_at is not None:
+                    provider_config["token_created_at"] = existing_token_created_at
+                
+                # Ensure name field is set
+                provider_config["name"] = provider
 
             # Should we update the token?
             if provider_config.get("token") in [None, ""]:
@@ -61,7 +84,7 @@ async def setup_llm_providers(analytiq_client):
                     update = True
 
             # Get the litellm_models for the provider
-            litellm_models = litellm.models_by_provider[provider]
+            litellm_models = litellm.models_by_provider[config["litellm_provider"]]
             
             # Get the available models for the provider
             models_available = provider_config.get("litellm_models_available", [])
@@ -98,9 +121,10 @@ async def setup_llm_providers(analytiq_client):
 
             # Order the litellm_models_available using same order from litellm.models_by_provider. If order changes, set the update flag
             # litellm may return a set for models; normalize to an ordered sequence for stable indexing
-            litellm_models_seq = list(litellm.models_by_provider.get(provider, []))
-            if isinstance(litellm.models_by_provider.get(provider, []), set):
-                litellm_models_seq = sorted(litellm.models_by_provider.get(provider, []))
+            litellm_provider_key = config["litellm_provider"]
+            litellm_models_seq = list(litellm.models_by_provider.get(litellm_provider_key, []))
+            if isinstance(litellm.models_by_provider.get(litellm_provider_key, []), set):
+                litellm_models_seq = sorted(litellm.models_by_provider.get(litellm_provider_key, []))
             model_position = {model_name: idx for idx, model_name in enumerate(litellm_models_seq)}
             models_available_ordered = sorted(
                 provider_config["litellm_models_available"],
