@@ -83,7 +83,9 @@ async def get_file_attachment(analytiq_client, doc: dict, llm_provider: str, llm
     ext = os.path.splitext(file_name)[1].lower()
 
     # Check if model supports vision
-    model_supports_vision = supports_pdf_input(llm_model, None) or llm_provider == "xai"
+    # Note: XAI doesn't support the complex file attachment format, so we exclude it here
+    # XAI will use OCR text-only approach instead
+    model_supports_vision = supports_pdf_input(llm_model, None)
 
     if model_supports_vision and doc.get("pdf_file_name"):
         # For vision-capable models, prefer PDF version
@@ -297,7 +299,8 @@ async def run_llm(analytiq_client,
     )
     
     # Determine how to handle the document content
-    if file_attachment_blob:
+    # XAI doesn't support complex file attachment formats, so use text-only for XAI
+    if file_attachment_blob and llm_provider != "xai":
         # For vision models, we can pass both the PDF and OCR text
         # The PDF provides visual context, OCR text provides structured text
         prompt = f"""{prompt1}
@@ -364,7 +367,8 @@ async def run_llm(analytiq_client,
             ]
             logger.info(f"{document_id}/{prompt_revid}: Attaching OCR and PDF to prompt using base64 for {llm_provider}")
     
-    if not file_attachment_blob:
+    # Use OCR-only approach if no file attachment or if provider is XAI (which doesn't support file attachments)
+    if not file_attachment_blob or llm_provider == "xai":
         # Original OCR-only approach
         prompt = f"""{prompt1}
 

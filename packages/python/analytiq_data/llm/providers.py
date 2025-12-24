@@ -321,8 +321,8 @@ def get_llm_providers() -> dict:
         "xai": {
             "display_name": "xAI",
             "litellm_provider": "xai",
-            "litellm_models_available": ["xai/grok-4-0709"],
-            "litellm_models_enabled": ["xai/grok-4-0709"],
+            "litellm_models_available": ["xai/grok-4-fast-reasoning"],
+            "litellm_models_enabled": ["xai/grok-4-fast-reasoning"],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
