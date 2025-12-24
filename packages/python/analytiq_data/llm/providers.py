@@ -290,6 +290,16 @@ def get_llm_providers() -> dict:
             "token_created_at": None,
             "token_env": "OPENAI_API_KEY",
         },
+        "openrouter": {
+            "display_name": "OpenRouter",
+            "litellm_provider": "openrouter",
+            "litellm_models_available": ["openrouter/openai/gpt-5.2-chat"],
+            "litellm_models_enabled": ["openrouter/openai/gpt-5.2-chat"],
+            "enabled": True,
+            "token" : "",
+            "token_created_at": None,
+            "token_env": "OPENROUTER_API_KEY",
+        },
         "vertex_ai": {
             "display_name": "Google Vertex AI",
             "litellm_provider": "vertex_ai",
