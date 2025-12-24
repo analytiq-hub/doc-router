@@ -219,8 +219,18 @@ def get_llm_providers() -> dict:
         "gemini": {
             "display_name": "Gemini",
             "litellm_provider": "gemini",
-            "litellm_models_available": ["gemini/gemini-2.0-flash", "gemini/gemini-2.5-flash-preview-05-20", "gemini/gemini-2.5-pro-preview-06-05"],
-            "litellm_models_enabled": ["gemini/gemini-2.0-flash", "gemini/gemini-2.5-flash-preview-05-20"],
+            "litellm_models_available": [
+                "gemini/gemini-2.5-flash", 
+                "gemini/gemini-2.5-pro",
+                "gemini/gemini-3-flash-preview",
+                "gemini/gemini-3-pro-preview"
+            ],
+            "litellm_models_enabled": [
+                "gemini/gemini-2.5-flash", 
+                "gemini/gemini-2.5-pro",
+                "gemini/gemini-3-flash-preview",
+                "gemini/gemini-3-pro-preview"
+            ],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
