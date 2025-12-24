@@ -37,7 +37,7 @@ jose==1.0.0
 jsonschema==4.25.1
 jsonschema-specifications==2025.9.1
 legacy-cgi==2.6.3
-litellm==1.77.1
+litellm==1.80.11
 markdown-it-py==4.0.0
 markupsafe==3.0.2
 mcp==1.14.0
