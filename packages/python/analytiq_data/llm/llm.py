@@ -109,6 +109,32 @@ def is_o_series_model(model_name: str) -> bool:
     # O-series models start with 'o' (not to be confused with gpt-4o which starts with 'gpt')
     return name.startswith("o") and not name.startswith("gpt")
 
+def get_temperature(model: str) -> float:
+    """
+    Get the temperature setting for a given model.
+    
+    Args:
+        model: The model name
+        
+    Returns:
+        float: Temperature value (1.0 for o-series models or gemini models, 0.1 otherwise)
+    """
+    if not model:
+        return 0.1
+    
+    model_lower = model.strip().lower()
+    
+    # O-series models require temperature=1
+    if is_o_series_model(model):
+        return 1.0
+    
+    # Gemini models use temperature=1
+    if model_lower.startswith("gemini/"):
+        return 1.0
+    
+    # Default temperature for other models
+    return 0.1
+
 def is_retryable_error(exception) -> bool:
     """
     Check if an exception is retryable based on error patterns.
@@ -149,7 +175,6 @@ async def _litellm_acompletion_with_retry(
     model: str,
     messages: list,
     api_key: str,
-    temperature: float = 0.1,
     response_format: Optional[Dict] = None,
     aws_access_key_id: Optional[str] = None,
     aws_secret_access_key: Optional[str] = None,
@@ -162,7 +187,6 @@ async def _litellm_acompletion_with_retry(
         model: The LLM model to use
         messages: The messages to send
         api_key: The API key
-        temperature: The temperature setting
         response_format: The response format
         aws_access_key_id: AWS access key (for Bedrock)
         aws_secret_access_key: AWS secret key (for Bedrock)
@@ -174,9 +198,7 @@ async def _litellm_acompletion_with_retry(
     Raises:
         Exception: If the call fails after all retries
     """
-    # O-series models only support temperature=1
-    if is_o_series_model(model):
-        temperature = 1
+    temperature = get_temperature(model)
     return await litellm.acompletion(
         model=model,
         messages=messages,
@@ -413,13 +435,10 @@ async def run_llm(analytiq_client,
         aws_region_name = None
 
     # 6. Call the LLM with retry mechanism
-    # Ensure temperature is valid for the chosen model
-    call_temperature = 1 if is_o_series_model(llm_model) else 0.1
     response = await _litellm_acompletion_with_retry(
         model=llm_model,
         messages=messages,  # Use the vision-aware messages
         api_key=api_key,
-        temperature=call_temperature,
         response_format=response_format,
         aws_access_key_id=aws_access_key_id,
         aws_secret_access_key=aws_secret_access_key,
@@ -786,9 +805,7 @@ async def run_llm_chat(
             # Streaming response
             async def generate_stream():
                 try:
-                    # O-series models only support temperature=1
-                    if is_o_series_model(params["model"]):
-                        params["temperature"] = 1
+                    params["temperature"] = get_temperature(params["model"])
                     response = await litellm.acompletion(**params, stream=True)
                     async for chunk in response:
                         if chunk.choices[0].delta.content:
@@ -807,9 +824,7 @@ async def run_llm_chat(
             )
         else:
             # Non-streaming response
-            # O-series models only support temperature=1
-            if is_o_series_model(params["model"]):
-                params["temperature"] = 1
+            params["temperature"] = get_temperature(params["model"])
             response = await litellm.acompletion(**params)
             
             return {
