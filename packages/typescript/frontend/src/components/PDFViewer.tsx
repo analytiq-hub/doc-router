@@ -21,7 +21,6 @@ import UnfoldMoreIcon from '@mui/icons-material/UnfoldMore';
 import { styled } from '@mui/material/styles';
 import { alpha } from '@mui/material/styles';
 import PrintIcon from '@mui/icons-material/Print';
-import SaveOutlinedIcon from '@mui/icons-material/SaveOutlined';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
 import { saveAs } from 'file-saver';
@@ -793,8 +792,8 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
             Print
           </StyledMenuItem>
           <StyledMenuItem onClick={handleSave}>
-            <SaveOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
-            Save
+            <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
+            Download
           </StyledMenuItem>
           <Divider />
           <StyledMenuItem onClick={handleGoToFirstPage}>
