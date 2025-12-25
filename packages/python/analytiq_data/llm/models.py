@@ -34,12 +34,14 @@ async def get_llm_model(analytiq_client, prompt_revid: str) -> dict:
 
     prompt = await collection.find_one({"_id": ObjectId(prompt_revid)})
     if prompt is None:
+        logger.info(f"Prompt {prompt_revid} not found, falling back to default model {default_model}")
         return default_model
     
     litellm_model = prompt.get("model", default_model)
     if is_chat_model(litellm_model):
         return litellm_model
     else:
+        logger.info(f"Model {litellm_model} is not a chat model, falling back to default model {default_model}")
         return default_model
 
 def is_chat_model(llm_model: str) -> bool:  
@@ -52,10 +54,6 @@ def is_chat_model(llm_model: str) -> bool:
     Returns:
         True if the LLM model is a chat model, False otherwise
     """
-    # Some litellmmodels have the mode set to chat, but are not chat models
-    if llm_model in ["gemini/gemini-2.5-flash-preview-tts"]:
-        return False
-    
     try:
         model_info = litellm.get_model_info(llm_model)
         if model_info.get('mode') == 'chat':

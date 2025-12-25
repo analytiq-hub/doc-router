@@ -246,7 +246,10 @@ async def run_llm(analytiq_client,
         # Delete the existing result
         await delete_llm_result(analytiq_client, document_id, prompt_revid)
 
-    logger.info(f"Running new LLM analysis for doc_id/prompt_revid {document_id}/{prompt_revid}")
+    if not llm_model:
+        logger.info(f"Running new LLM analysis for doc_id/prompt_revid {document_id}/{prompt_revid}")
+    else:
+        logger.info(f"Running new LLM analysis for doc_id/prompt_revid {document_id}/{prompt_revid} with passed-in model {llm_model}")
 
     # 1. Get the document and organization_id
     doc = await ad.common.doc.get_doc(analytiq_client, document_id)
@@ -619,7 +622,7 @@ async def delete_llm_result(analytiq_client,
     return result.deleted_count > 0
 
 
-async def run_llm_for_prompt_revids(analytiq_client, document_id: str, prompt_revids: list[str], model: str = "gpt-4o-mini") -> None:
+async def run_llm_for_prompt_revids(analytiq_client, document_id: str, prompt_revids: list[str], llm_model: str = None) -> None:
     """
     Run the LLM for the given prompt IDs.
 
@@ -632,7 +635,7 @@ async def run_llm_for_prompt_revids(analytiq_client, document_id: str, prompt_re
     n_prompts = len(prompt_revids)
 
     # Create n_prompts concurrent tasks
-    tasks = [run_llm(analytiq_client, document_id, prompt_revid, model) for prompt_revid in prompt_revids]
+    tasks = [run_llm(analytiq_client, document_id, prompt_revid, llm_model) for prompt_revid in prompt_revids]
 
     # Run the tasks
     results = await asyncio.gather(*tasks)
