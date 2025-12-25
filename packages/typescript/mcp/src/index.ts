@@ -230,9 +230,41 @@ async function initializeClient(config: Config) {
 // Helper function to handle errors
 function handleError(error: unknown): string {
   if (error instanceof Error) {
-    return JSON.stringify({ error: error.message }, null, 2);
+    // Check if it's an ApiError with additional details
+    const apiError = error as Error & { status?: number; code?: string; details?: unknown };
+
+    const errorObj: Record<string, unknown> = {
+      error: error.message,
+    };
+
+    // Include status code if available
+    if (apiError.status !== undefined) {
+      errorObj.status = apiError.status;
+    }
+
+    // Include error code if available
+    if (apiError.code !== undefined) {
+      errorObj.code = apiError.code;
+    }
+
+    // Include detailed error information if available
+    if (apiError.details !== undefined) {
+      errorObj.details = apiError.details;
+    }
+
+    return JSON.stringify(errorObj, null, 2);
   }
-  return JSON.stringify({ error: 'Unknown error occurred' }, null, 2);
+
+  // Handle non-Error objects
+  if (typeof error === 'object' && error !== null) {
+    try {
+      return JSON.stringify({ error: 'Request failed', details: error }, null, 2);
+    } catch {
+      return JSON.stringify({ error: 'Unknown error occurred (could not serialize)' }, null, 2);
+    }
+  }
+
+  return JSON.stringify({ error: String(error) || 'Unknown error occurred' }, null, 2);
 }
 
 // Helper function to serialize dates
@@ -1069,9 +1101,9 @@ const tools: Tool[] = [
       type: 'object',
       properties: {
         promptId: { type: 'string', description: 'ID of the prompt' },
-        prompt: { type: 'object', description: 'Prompt data' },
+        content: { type: 'string', description: 'Prompt content' },
       },
-      required: ['promptId', 'prompt'],
+      required: ['promptId', 'content'],
     },
   },
   {
@@ -1702,9 +1734,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'update_prompt': {
+        const promptId = getArg<string>(args, 'promptId');
+        const content = getArg<string>(args, 'content');
+
+        // Find the prompt with the matching prompt_id to preserve other fields
+        let currentPrompt = null;
+        const allPrompts = await docrouterClient.listPrompts({});
+        for (const p of allPrompts.prompts) {
+          if (p.prompt_id === promptId) {
+            currentPrompt = p;
+            break;
+          }
+        }
+
+        if (!currentPrompt) {
+          throw new Error(`Prompt with ID ${promptId} not found`);
+        }
+
+        // Update with new content while preserving other fields
         const result = await docrouterClient.updatePrompt({
-          promptId: getArg(args, 'promptId'),
-          prompt: getArg(args, 'prompt'),
+          promptId: promptId,
+          prompt: {
+            name: currentPrompt.name,
+            content: content,
+            schema_id: currentPrompt.schema_id,
+            schema_version: currentPrompt.schema_version,
+            tag_ids: currentPrompt.tag_ids,
+            model: currentPrompt.model
+          },
         });
         return {
           content: [
