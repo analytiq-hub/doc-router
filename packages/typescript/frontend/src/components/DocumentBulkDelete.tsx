@@ -75,14 +75,15 @@ export const DocumentBulkDelete = forwardRef<DocumentBulkDeleteRef, DocumentBulk
     try {
       let successCount = 0;
       let failureCount = 0;
-      let skip = 0;
       const limit = 100;
       const BATCH_SIZE = 10; // Maximum concurrent deletions
 
+      // Always fetch from skip=0 since documents shift as they're deleted
+      // This ensures we process all remaining documents that match the filter
       while (true) {
-        // Fetch next batch of documents
+        // Fetch next batch of documents (always from the beginning)
         const batchResponse = await docRouterOrgApi.listDocuments({
-          skip,
+          skip: 0,
           limit,
           nameSearch: searchParameters.searchTerm.trim() || undefined,
           tagIds: searchParameters.selectedTagFilters.length > 0
@@ -95,6 +96,7 @@ export const DocumentBulkDelete = forwardRef<DocumentBulkDeleteRef, DocumentBulk
 
         const documentsInBatch = batchResponse.documents;
 
+        // If no documents are returned, we're done
         if (documentsInBatch.length === 0) {
           break;
         }
@@ -138,11 +140,8 @@ export const DocumentBulkDelete = forwardRef<DocumentBulkDeleteRef, DocumentBulk
           }
         }
 
-        if (documentsInBatch.length < limit) {
-          break;
-        }
-
-        skip += limit;
+        // Continue fetching from skip=0 until no more documents are returned
+        // As documents are deleted, remaining documents shift to fill the gaps
       }
 
       if (successCount > 0) {
