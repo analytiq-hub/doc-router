@@ -1,6 +1,6 @@
 {
   "name": "@docrouter/mcp",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "TypeScript MCP server for DocRouter API",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
