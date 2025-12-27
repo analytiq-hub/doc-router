@@ -122,18 +122,26 @@ async def list_org_tokens(
         "organization_id": organization_id
     })
     tokens = await cursor.to_list(length=None)
-    ret = [
-        {
+    ret = []
+    for token in tokens:
+        # Decrypt token to get preview (first 10 chars) for display
+        token_preview = None
+        try:
+            decrypted_token = ad.crypto.decrypt_token(token["token"])
+            token_preview = decrypted_token[:10] if len(decrypted_token) >= 10 else ""
+        except Exception as e:
+            logger.warning(f"Failed to decrypt token for preview: {e}")
+            token_preview = None
+        
+        ret.append({
             "id": str(token["_id"]),
             "user_id": token["user_id"],
             "organization_id": token["organization_id"],
             "name": token["name"],
-            "token": token["token"],
+            "token": token_preview,  # Return preview in token field
             "created_at": token["created_at"],
             "lifetime": token["lifetime"]
-        }
-        for token in tokens
-    ]
+        })
     return ListAccessTokensResponse(access_tokens=ret)
 
 @token_router.delete("/v0/orgs/{organization_id}/access_tokens/{token_id}", tags=["access_tokens"])
@@ -279,18 +287,26 @@ async def list_account_tokens(
         "organization_id": None  # Only get account-level tokens
     })
     tokens = await cursor.to_list(length=None)
-    ret = [
-        {
+    ret = []
+    for token in tokens:
+        # Decrypt token to get preview (first 10 chars)
+        token_preview = ""
+        try:
+            decrypted_token = ad.crypto.decrypt_token(token["token"])
+            token_preview = decrypted_token[:10] if len(decrypted_token) >= 10 else ""
+        except Exception as e:
+            logger.warning(f"Failed to decrypt token for preview: {e}")
+            token_preview = ""
+        
+        ret.append({
             "id": str(token["_id"]),
             "user_id": token["user_id"],
             "organization_id": None,
             "name": token["name"],
-            "token": token["token"],
+            "token": token_preview,  # Return preview in token field
             "created_at": token["created_at"],
             "lifetime": token["lifetime"]
-        }
-        for token in tokens
-    ]
+        })
     return ListAccessTokensResponse(access_tokens=ret)
 
 @token_router.delete("/v0/account/access_tokens/{token_id}", tags=["account/access_tokens"])

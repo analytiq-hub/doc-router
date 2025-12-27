@@ -55,11 +55,17 @@ const AccountTokenManager: React.FC = () => {
     }
   };
 
-  const saveToken = () => {
+  const saveToken = async () => {
     if (newToken) {
-      setTokens([...tokens, newToken]);
       setNewToken(null);
       setShowTokenModal(false);
+      // Refetch tokens to get the preview instead of full token
+      try {
+        const tokensData = await docRouterAccountApi.getAccountTokens();
+        setTokens(tokensData);
+      } catch (error) {
+        console.error('Error fetching tokens:', error);
+      }
     }
   };
 
@@ -90,6 +96,7 @@ const AccountTokenManager: React.FC = () => {
           <TableHead>
             <TableRow>
               <TableCell>Comment</TableCell>
+              <TableCell>Token</TableCell>
               <TableCell>Creation</TableCell>
               <TableCell>Expiration</TableCell>
               <TableCell></TableCell>
@@ -106,6 +113,9 @@ const AccountTokenManager: React.FC = () => {
                 }}
               >
                 <TableCell sx={{ py: 0.5 }}>{token.name}</TableCell>
+                <TableCell sx={{ py: 0.5, fontFamily: 'monospace' }}>
+                  {token.token ? `${token.token}...` : '-'}
+                </TableCell>
                 <TableCell sx={{ py: 0.5 }}>{new Date(token.created_at).toLocaleString()}</TableCell>
                 <TableCell sx={{ py: 0.5 }}>
                   {token.lifetime

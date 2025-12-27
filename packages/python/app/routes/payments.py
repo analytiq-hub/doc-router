@@ -266,6 +266,14 @@ async def init_payments(db):
     await get_credit_config()
     await get_tier_limits()
 
+    # Create indexes for payments_usage_records collection
+    from analytiq_data.mongodb import ensure_index
+    await ensure_index(
+        collection=db.payments_usage_records,
+        index_spec=[("org_id", 1), ("timestamp", 1)],
+        index_name="org_timestamp_idx"
+    )
+
     await sync_all_customers(db)
     logger.info("Stripe customers synced")
 
