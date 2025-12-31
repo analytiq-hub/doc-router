@@ -125,13 +125,13 @@ async def list_org_tokens(
     ret = []
     for token in tokens:
         # Decrypt token to get preview (first 10 chars) for display
-        token_preview = None
+        token_preview = ""
         try:
             decrypted_token = ad.crypto.decrypt_token(token["token"])
             token_preview = decrypted_token[:10] if len(decrypted_token) >= 10 else ""
         except Exception as e:
             logger.warning(f"Failed to decrypt token for preview: {e}")
-            token_preview = None
+            token_preview = ""
         
         ret.append({
             "id": str(token["_id"]),
