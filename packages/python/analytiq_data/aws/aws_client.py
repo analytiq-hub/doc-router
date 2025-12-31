@@ -1,6 +1,7 @@
 import boto3
 import botocore
 import aioboto3
+from botocore.config import Config
 from botocore.credentials import AssumeRoleCredentialFetcher, DeferredRefreshableCredentials
 import logging
 import os
@@ -233,12 +234,19 @@ class AsyncAWSClient:
     @asynccontextmanager
     async def client(self, service_name: str):
         """Create an async client with automatic credential refresh"""
+        # Configure timeouts
+        config = Config(
+            connect_timeout=10,      # 10s to establish connection
+            read_timeout=120,        # 2 minutes to read response (enough for API calls, not infinite)
+            retries={'max_attempts': 2}
+        )
+
         try:
             # Refresh session to ensure we have current credentials
             if self.botocore_session:
                 self._refresh_session()
-            
-            async with self.session.client(service_name) as client:
+
+            async with self.session.client(service_name, config=config) as client:
                 yield client
         except Exception as e:
             # If we get a signature error, try refreshing credentials once
@@ -246,7 +254,7 @@ class AsyncAWSClient:
                 logger.warning(f"AWS signature expired, refreshing credentials and retrying")
                 if self.botocore_session:
                     self._refresh_session()
-                    async with self.session.client(service_name) as client:
+                    async with self.session.client(service_name, config=config) as client:
                         yield client
                 else:
                     raise e
