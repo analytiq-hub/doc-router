@@ -37,13 +37,13 @@ install: setup
 #	docker compose --env-file .env up -d --build
 
 deploy:
-	cp .env deploy/compose/.env; \
+	cat .env .env.compose > deploy/compose/.env; \
 	cd deploy/compose; \
 	docker compose down; \
 	docker compose -f docker-compose.yml --env-file .env up -d --build
 
 deploy-embedded:
-	cp .env deploy/compose/.env; \
+	cat .env .env.compose.embedded > deploy/compose/.env; \
 	cd deploy/compose; \
 	docker compose down; \
 	docker compose -f docker-compose.embedded.yml --env-file .env up -d --build	
