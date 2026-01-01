@@ -15,18 +15,18 @@ fi
 # Separate config (non-sensitive) and secrets (sensitive)
 CONFIG_VARS=(
     "ENV"
-    "MONGODB_URI"
     "FASTAPI_BACKEND_URL"
     "FASTAPI_ROOT_PATH"
     "NEXTAUTH_URL"
     "NEXT_PUBLIC_FASTAPI_FRONTEND_URL"
-    "ADMIN_EMAIL"
-    "ADMIN_PASSWORD"
     "N_WORKERS"
 )
 
 SECRET_VARS=(
     "NEXTAUTH_SECRET"
+    "MONGODB_URI"
+    "ADMIN_EMAIL"
+    "ADMIN_PASSWORD"
     "AWS_ACCESS_KEY_ID"
     "AWS_SECRET_ACCESS_KEY"
     "AWS_S3_BUCKET_NAME"
@@ -45,8 +45,8 @@ SECRET_VARS=(
     "AUTH_GOOGLE_SECRET"
 )
 
-# Generate ConfigMap
-CONFIGMAP_FILE="$OUTPUT_DIR/configmap-generated.yaml"
+# Generate ConfigMap (overwrite existing)
+CONFIGMAP_FILE="$OUTPUT_DIR/configmap.yaml"
 cat > "$CONFIGMAP_FILE" <<EOF
 apiVersion: v1
 kind: ConfigMap
@@ -57,7 +57,8 @@ data:
 EOF
 
 for var in "${CONFIG_VARS[@]}"; do
-    value=$(grep "^${var}=" "$ENV_FILE" 2>/dev/null | cut -d= -f2- | sed 's/^"//;s/"$//' | sed 's/#.*$//' | xargs)
+    # Get the LAST occurrence (override from .env.kind takes precedence)
+    value=$(grep "^${var}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- | sed 's/^"//;s/"$//' | sed 's/#.*$//' | xargs)
     if [ -n "$value" ]; then
         # Escape special YAML characters
         value=$(echo "$value" | sed 's/"/\\"/g')
@@ -65,8 +66,8 @@ for var in "${CONFIG_VARS[@]}"; do
     fi
 done
 
-# Generate Secrets
-SECRETS_FILE="$OUTPUT_DIR/secrets-generated.yaml"
+# Generate Secrets (overwrite existing)
+SECRETS_FILE="$OUTPUT_DIR/secrets.yaml"
 cat > "$SECRETS_FILE" <<EOF
 apiVersion: v1
 kind: Secret
@@ -78,7 +79,8 @@ stringData:
 EOF
 
 for var in "${SECRET_VARS[@]}"; do
-    value=$(grep "^${var}=" "$ENV_FILE" 2>/dev/null | cut -d= -f2- | sed 's/^"//;s/"$//' | sed 's/#.*$//' | xargs)
+    # Get the LAST occurrence (override from .env.kind takes precedence)
+    value=$(grep "^${var}=" "$ENV_FILE" 2>/dev/null | tail -1 | cut -d= -f2- | sed 's/^"//;s/"$//' | sed 's/#.*$//' | xargs)
     if [ -n "$value" ]; then
         # Escape special YAML characters
         value=$(echo "$value" | sed 's/"/\\"/g')
