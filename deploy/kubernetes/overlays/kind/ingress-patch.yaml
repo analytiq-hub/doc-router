@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend-ingress
+  namespace: doc-router
+  annotations:
+    # For kind, we can use NodePort or a simple ingress
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  ingressClassName: nginx
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 3000
+      - path: /fastapi
+        pathType: Prefix
+        backend:
+          service:
+            name: backend
+            port:
+              number: 8000

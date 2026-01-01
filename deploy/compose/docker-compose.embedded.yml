@@ -1,0 +1,123 @@
+services:
+  frontend:
+    image: analytiqhub/doc-router-frontend:latest
+    build:
+      context: ../..
+      dockerfile: deploy/shared/docker/Dockerfile
+      target: frontend
+      args:
+        # Build-time environment
+        - NEXT_PUBLIC_FASTAPI_FRONTEND_URL=${NEXT_PUBLIC_FASTAPI_FRONTEND_URL:-http://localhost:8000}
+        - NODE_ENV=production
+    environment:
+      # Runtime environment
+      - ENV=${ENV:-dev}
+      - MONGODB_URI=mongodb://admin:admin@mongodb:27017?authSource=admin
+      - FASTAPI_BACKEND_URL=${FASTAPI_BACKEND_URL:-http://localhost:8000}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
+      - AUTH_GITHUB_ID=${AUTH_GITHUB_ID}
+      - AUTH_GITHUB_SECRET=${AUTH_GITHUB_SECRET}
+      - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID}
+      - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
+      - NEXT_PUBLIC_FASTAPI_FRONTEND_URL=${NEXT_PUBLIC_FASTAPI_FRONTEND_URL:-http://localhost:8000}
+    command: sh -c "cd /app/packages/typescript/frontend && npm run start"
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    networks:
+      - doc-router-local-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  backend:
+    image: analytiqhub/doc-router-backend:latest
+    build:
+      context: ../..
+      dockerfile: deploy/shared/docker/Dockerfile
+      target: backend
+    environment:
+      # Runtime environment
+      - ENV=${ENV:-dev}
+      - MONGODB_URI=mongodb://admin:admin@mongodb:27017
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
+      - FASTAPI_SECRET=${FASTAPI_SECRET:-${NEXTAUTH_SECRET}} # Obsolete, will be removed
+      - FASTAPI_ROOT_PATH=${FASTAPI_ROOT_PATH:-/fastapi}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - SES_FROM_EMAIL=${SES_FROM_EMAIL}
+    command: sh -c "cd /app/packages/python && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    networks:
+      - doc-router-local-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  worker:
+    image: analytiqhub/doc-router-backend:latest
+    build:
+      context: ../..
+      dockerfile: deploy/shared/docker/Dockerfile
+      target: backend
+    environment:
+      # Runtime environment
+      - ENV=${ENV:-dev}
+      - N_WORKERS=${N_WORKERS:-1}
+      - MONGODB_URI=mongodb://admin:admin@mongodb:27017
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_nextauth_secret_for_development}
+    command: sh -c "cd /app/packages/python/worker && python3 worker.py"
+    restart: unless-stopped
+    networks:
+      - doc-router-local-network
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+  mongodb:
+    image: mongo:latest
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin
+    ports:
+      - "27018:27017" # external_port:internal_port
+    networks:
+      - doc-router-local-network
+    volumes:
+      - doc-router-local-mongodb:/data/db
+    command: mongod --quiet --logpath /dev/null
+    restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
+
+networks:
+  doc-router-local-network:
+    driver: bridge
+
+volumes:
+  doc-router-local-mongodb:

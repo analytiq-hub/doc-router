@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker
+  namespace: doc-router
+  labels:
+    app: worker
+    component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+        component: worker
+    spec:
+      containers:
+      - name: worker
+        image: analytiqhub/doc-router-backend:latest
+        imagePullPolicy: IfNotPresent
+        command: ["sh", "-c"]
+        args: ["cd /app/packages/python/worker && python3 worker.py"]
+        envFrom:
+        - configMapRef:
+            name: doc-router-config
+        - secretRef:
+            name: doc-router-secrets
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: worker
+  namespace: doc-router
+  labels:
+    app: worker
+spec:
+  type: ClusterIP
+  # Worker service for potential metrics/monitoring in the future
+  # No ports needed currently as worker doesn't expose HTTP
+  selector:
+    app: worker
