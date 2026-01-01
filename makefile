@@ -59,11 +59,11 @@ down-clean:
 	docker volume rm compose_doc-router-local-mongodb 2>/dev/null || true; \
 	echo "Removed containers and volumes (including MongoDB data volume: compose_doc-router-local-mongodb)"
 
-deploy-kind:
-	cd deploy/kubernetes/scripts && ./deploy-kind.sh
-
 setup-kind:
 	cd deploy/kubernetes/scripts && ./setup-kind.sh
+
+deploy-kind:
+	cd deploy/kubernetes/scripts && ./deploy-kind.sh
 
 clean-kind:
 	@CLUSTER_NAME=$${CLUSTER_NAME:-doc-router}; \
