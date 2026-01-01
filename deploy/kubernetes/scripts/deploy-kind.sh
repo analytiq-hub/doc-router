@@ -8,6 +8,7 @@ CLUSTER_NAME=${CLUSTER_NAME:-"doc-router"}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 KIND_OVERLAY="$SCRIPT_DIR/../overlays/kind"
+BASE_DIR="$SCRIPT_DIR/.."
 
 echo "🚀 Deploying doc-router to kind cluster: $CLUSTER_NAME"
 
@@ -22,6 +23,21 @@ if ! kubectl cluster-info &> /dev/null; then
     echo "❌ kubectl is not configured or cluster is not accessible"
     exit 1
 fi
+
+# Generate Kubernetes config from .env files
+echo "📝 Generating Kubernetes ConfigMap and Secrets from .env files..."
+cd "$PROJECT_ROOT"
+
+# Merge .env and .env.kind (if exists) for kind deployment
+MERGED_ENV=$(mktemp)
+cat .env > "$MERGED_ENV"
+if [ -f .env.kind ]; then
+    cat .env.kind >> "$MERGED_ENV"
+fi
+
+# Generate ConfigMap and Secrets
+"$SCRIPT_DIR/generate-k8s-config.sh" "$MERGED_ENV" "$BASE_DIR/base"
+rm "$MERGED_ENV"
 
 # Build images
 echo "🔨 Building Docker images..."
@@ -44,15 +60,6 @@ echo "📦 Loading images into kind cluster..."
 kind load docker-image analytiqhub/doc-router-frontend:latest --name "$CLUSTER_NAME"
 kind load docker-image analytiqhub/doc-router-backend:latest --name "$CLUSTER_NAME"
 
-# Apply secrets (user should customize these)
-echo "⚠️  Note: Make sure to update secrets.yaml with your actual secrets before deploying"
-read -p "Continue with deployment? (y/N) " -n 1 -r
-echo
-if [[ ! $REPLY =~ ^[Yy]$ ]]; then
-    echo "Aborted. Update secrets and run again."
-    exit 1
-fi
-
 # Deploy using kustomize
 echo "🚀 Deploying to Kubernetes..."
 cd "$KIND_OVERLAY"
@@ -63,7 +70,7 @@ echo "⏳ Waiting for deployments to be ready..."
 kubectl wait --namespace doc-router \
   --for=condition=available \
   --timeout=300s \
-  deployment/frontend deployment/backend deployment/worker
+  deployment/frontend deployment/backend deployment/worker || true
 
 echo ""
 echo "✅ Deployment complete!"

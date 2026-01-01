@@ -127,6 +127,7 @@ celerybeat.pid
 .env.docker
 .env.compose
 .env.compose.embedded
+.env.kind
 .venv
 env/
 venv/

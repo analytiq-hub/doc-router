@@ -59,6 +59,21 @@ down-clean:
 	docker volume rm compose_doc-router-local-mongodb 2>/dev/null || true; \
 	echo "Removed containers and volumes (including MongoDB data volume: compose_doc-router-local-mongodb)"
 
+deploy-kind:
+	cd deploy/kubernetes/scripts && ./deploy-kind.sh
+
+setup-kind:
+	cd deploy/kubernetes/scripts && ./setup-kind.sh
+
+clean-kind:
+	@CLUSTER_NAME=$${CLUSTER_NAME:-doc-router}; \
+	if kind get clusters | grep -q "^$$CLUSTER_NAME$$"; then \
+		echo "Deleting kind cluster: $$CLUSTER_NAME"; \
+		kind delete cluster --name $$CLUSTER_NAME; \
+	else \
+		echo "Kind cluster $$CLUSTER_NAME does not exist"; \
+	fi
+
 tests: setup
 	. .venv/bin/activate && pytest -n auto packages/python/tests/
 
@@ -83,4 +98,4 @@ tests-ts:
 clean:
 	rm -rf .venv
 
-.PHONY: dev tests setup tests-ts install deploy deploy-embedded down down-clean
+.PHONY: dev tests setup tests-ts install deploy deploy-embedded down down-clean deploy-kind setup-kind clean-kind
