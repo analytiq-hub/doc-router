@@ -17,6 +17,8 @@ spec:
         app: backend
         component: backend
     spec:
+      securityContext:
+        fsGroup: 1000
       containers:
       - name: backend
         image: analytiqhub/doc-router-backend:latest
@@ -26,12 +28,18 @@ spec:
           name: http
           protocol: TCP
         command: ["sh", "-c"]
-        args: ["cd /app/packages/python && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+        args: ["cd /app/packages/python && ulimit -n 65536 && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
         envFrom:
         - configMapRef:
             name: doc-router-config
         - secretRef:
             name: doc-router-secrets
+        securityContext:
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         resources:
           requests:
             memory: "512Mi"
@@ -43,13 +51,15 @@ spec:
           httpGet:
             path: /docs
             port: 8000
-          initialDelaySeconds: 30
-          periodSeconds: 10
-          timeoutSeconds: 5
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /docs
             port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
