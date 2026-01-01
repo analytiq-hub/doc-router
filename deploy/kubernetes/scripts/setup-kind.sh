@@ -67,12 +67,24 @@ kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main
 
 # Wait for ingress controller to be ready
 echo "⏳ Waiting for NGINX Ingress Controller to be ready..."
+# Wait for pods to be created first
+for i in {1..30}; do
+    if kubectl get pods -n ingress-nginx --selector=app.kubernetes.io/component=controller --no-headers 2>/dev/null | grep -q .; then
+        break
+    fi
+    sleep 2
+done
+
+# Now wait for them to be ready
 kubectl wait --namespace ingress-nginx \
   --for=condition=ready pod \
   --selector=app.kubernetes.io/component=controller \
-  --timeout=90s
+  --timeout=120s || {
+    echo "⚠️  Ingress controller may still be starting. Check with: kubectl get pods -n ingress-nginx"
+    echo "Continuing anyway..."
+  }
 
-echo "✅ NGINX Ingress Controller is ready"
+echo "✅ NGINX Ingress Controller setup complete"
 
 # Create local registry (optional, for testing)
 echo "📦 Setting up local image registry..."
