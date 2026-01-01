@@ -52,6 +52,13 @@ down:
 	cd deploy/compose; \
 	docker compose down
 
+down-clean:
+	cd deploy/compose; \
+	docker compose -f docker-compose.embedded.yml down -v 2>/dev/null || true; \
+	docker compose -f docker-compose.yml down -v 2>/dev/null || true; \
+	docker volume rm compose_doc-router-local-mongodb 2>/dev/null || true; \
+	echo "Removed containers and volumes (including MongoDB data volume: compose_doc-router-local-mongodb)"
+
 tests: setup
 	. .venv/bin/activate && pytest -n auto packages/python/tests/
 
@@ -76,4 +83,4 @@ tests-ts:
 clean:
 	rm -rf .venv
 
-.PHONY: dev tests setup tests-ts install
+.PHONY: dev tests setup tests-ts install deploy deploy-embedded down down-clean
