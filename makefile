@@ -30,10 +30,27 @@ install: setup
 	cd packages/typescript/mcp && npm install && npm run build
 	cd packages/typescript/frontend && npm install
 
+# Legacy deployment
+#deploy:
+#	# Use .env for runtime env vars without baking them into images
+#	docker compose down ; \
+#	docker compose --env-file .env up -d --build
+
 deploy:
-	# Use .env for runtime env vars without baking them into images
-	docker compose down ; \
-	docker compose --env-file .env up -d --build
+	cp .env deploy/compose/.env; \
+	cd deploy/compose; \
+	docker compose down; \
+	docker compose -f docker-compose.yml --env-file .env up -d --build
+
+deploy-embedded:
+	cp .env deploy/compose/.env; \
+	cd deploy/compose; \
+	docker compose down; \
+	docker compose -f docker-compose.embedded.yml --env-file .env up -d --build	
+
+down:
+	cd deploy/compose; \
+	docker compose down
 
 tests: setup
 	. .venv/bin/activate && pytest -n auto packages/python/tests/
