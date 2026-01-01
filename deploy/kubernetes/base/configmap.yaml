@@ -6,7 +6,7 @@ metadata:
 data:
   ENV: "test"
   FASTAPI_BACKEND_URL: "http://backend.doc-router.svc.cluster.local:8000"
-  FASTAPI_ROOT_PATH: "/"
+  FASTAPI_ROOT_PATH: "/fastapi"
   NEXTAUTH_URL: "http://localhost:3000"
-  NEXT_PUBLIC_FASTAPI_FRONTEND_URL: "http://localhost:8000"
+  NEXT_PUBLIC_FASTAPI_FRONTEND_URL: "http://localhost/fastapi"
   N_WORKERS: "4"

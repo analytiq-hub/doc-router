@@ -7,10 +7,6 @@ resources:
   - ../../base
 
 patches:
-  - path: configmap-patch.yaml
-    target:
-      kind: ConfigMap
-      name: doc-router-config
   - path: ingress-patch.yaml
     target:
       kind: Ingress

@@ -37,16 +37,23 @@ fi
 
 # Generate ConfigMap and Secrets
 "$SCRIPT_DIR/generate-k8s-config.sh" "$MERGED_ENV" "$BASE_DIR/base"
+
+# Read NEXT_PUBLIC_FASTAPI_FRONTEND_URL from merged env file for frontend build
+NEXT_PUBLIC_FASTAPI_FRONTEND_URL=$(grep "^NEXT_PUBLIC_FASTAPI_FRONTEND_URL=" "$MERGED_ENV" 2>/dev/null | tail -1 | cut -d= -f2- | sed 's/^"//;s/"$//' | sed 's/#.*$//' | xargs)
+if [ -z "$NEXT_PUBLIC_FASTAPI_FRONTEND_URL" ]; then
+    NEXT_PUBLIC_FASTAPI_FRONTEND_URL="http://localhost:8000"
+    echo "⚠️  Warning: NEXT_PUBLIC_FASTAPI_FRONTEND_URL not found in .env files, using default: $NEXT_PUBLIC_FASTAPI_FRONTEND_URL"
+fi
 rm "$MERGED_ENV"
 
 # Build images
 echo "🔨 Building Docker images..."
 cd "$PROJECT_ROOT"
 
-echo "Building frontend image..."
+echo "Building frontend image with NEXT_PUBLIC_FASTAPI_FRONTEND_URL=$NEXT_PUBLIC_FASTAPI_FRONTEND_URL..."
 docker build -t analytiqhub/doc-router-frontend:latest \
   --target frontend \
-  --build-arg NEXT_PUBLIC_FASTAPI_FRONTEND_URL=http://localhost:8000 \
+  --build-arg NEXT_PUBLIC_FASTAPI_FRONTEND_URL="$NEXT_PUBLIC_FASTAPI_FRONTEND_URL" \
   --build-arg NODE_ENV=production \
   -f deploy/shared/docker/Dockerfile .
 
@@ -65,6 +72,10 @@ echo "🚀 Deploying to Kubernetes..."
 cd "$KIND_OVERLAY"
 kubectl apply -k .
 
+# Restart deployments to pick up new images and ConfigMap changes
+echo "🔄 Restarting deployments to pick up new images and configuration..."
+kubectl rollout restart deployment/frontend deployment/backend deployment/worker -n doc-router
+
 echo ""
 echo "⏳ Waiting for deployments to be ready..."
 kubectl wait --namespace doc-router \
@@ -82,5 +93,5 @@ echo "  kubectl get ingress -n doc-router"
 echo ""
 echo "Access the application:"
 echo "  Frontend: http://localhost:3000"
-echo "  Backend API: http://localhost:8000"
+echo "  Backend API: $NEXT_PUBLIC_FASTAPI_FRONTEND_URL"
 echo ""

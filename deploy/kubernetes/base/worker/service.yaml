@@ -8,6 +8,11 @@ metadata:
 spec:
   type: ClusterIP
   # Worker service for potential metrics/monitoring in the future
-  # No ports needed currently as worker doesn't expose HTTP
+  # Placeholder port for future metrics endpoint (e.g., Prometheus)
+  ports:
+  - port: 9090
+    targetPort: 9090
+    protocol: TCP
+    name: metrics
   selector:
     app: worker

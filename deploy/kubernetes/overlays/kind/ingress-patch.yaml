@@ -5,7 +5,10 @@ metadata:
   namespace: doc-router
   annotations:
     # For kind, we can use NodePort or a simple ingress
-    nginx.ingress.kubernetes.io/rewrite-target: /
+    # Rewrite /fastapi to / (strip prefix for backend routing)
+    # FastAPI root_path=/fastapi is for URL generation in docs, not routing
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
 spec:
   ingressClassName: nginx
   rules:
@@ -18,8 +21,8 @@ spec:
             name: frontend
             port:
               number: 3000
-      - path: /fastapi
-        pathType: Prefix
+      - path: /fastapi(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
             name: backend
