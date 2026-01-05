@@ -1,0 +1,7 @@
+# Secrets should not be committed
+secrets.yaml
+secrets-*.yaml
+*.secret.yaml
+
+# Kustomize build output
+kustomization-build.yaml

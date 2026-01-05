@@ -2,8 +2,8 @@ services:
   frontend:
     image: analytiqhub/doc-router-frontend:latest
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: deploy/shared/docker/Dockerfile
       target: frontend
       args:
         # Build-time environment
@@ -39,8 +39,8 @@ services:
   backend:
     image: analytiqhub/doc-router-backend:latest
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: deploy/shared/docker/Dockerfile
       target: backend
     environment:
       # Runtime environment
@@ -82,8 +82,8 @@ services:
   worker:
     image: analytiqhub/doc-router-backend:latest
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ../..
+      dockerfile: deploy/shared/docker/Dockerfile
       target: backend
     environment:
       # Runtime environment

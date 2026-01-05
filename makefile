@@ -30,10 +30,49 @@ install: setup
 	cd packages/typescript/mcp && npm install && npm run build
 	cd packages/typescript/frontend && npm install
 
+# Legacy deployment
+#deploy:
+#	# Use .env for runtime env vars without baking them into images
+#	docker compose down ; \
+#	docker compose --env-file .env up -d --build
+
 deploy:
-	# Use .env for runtime env vars without baking them into images
-	docker compose down ; \
-	docker compose --env-file .env up -d --build
+	cat .env .env.compose > deploy/compose/.env; \
+	cd deploy/compose; \
+	docker compose down; \
+	docker compose -f docker-compose.yml --env-file .env up -d --build
+
+deploy-embedded:
+	cat .env .env.compose.embedded > deploy/compose/.env; \
+	cd deploy/compose; \
+	docker compose down; \
+	docker compose -f docker-compose.embedded.yml --env-file .env up -d --build	
+
+down:
+	cd deploy/compose; \
+	docker compose down
+
+down-clean:
+	cd deploy/compose; \
+	docker compose -f docker-compose.embedded.yml down -v 2>/dev/null || true; \
+	docker compose -f docker-compose.yml down -v 2>/dev/null || true; \
+	docker volume rm compose_doc-router-local-mongodb 2>/dev/null || true; \
+	echo "Removed containers and volumes (including MongoDB data volume: compose_doc-router-local-mongodb)"
+
+setup-kind:
+	cd deploy/kubernetes/scripts && ./setup-kind.sh
+
+deploy-kind:
+	cd deploy/kubernetes/scripts && ./deploy-kind.sh
+
+clean-kind:
+	@CLUSTER_NAME=$${CLUSTER_NAME:-doc-router}; \
+	if kind get clusters | grep -q "^$$CLUSTER_NAME$$"; then \
+		echo "Deleting kind cluster: $$CLUSTER_NAME"; \
+		kind delete cluster --name $$CLUSTER_NAME; \
+	else \
+		echo "Kind cluster $$CLUSTER_NAME does not exist"; \
+	fi
 
 tests: setup
 	. .venv/bin/activate && pytest -n auto packages/python/tests/
@@ -59,4 +98,4 @@ tests-ts:
 clean:
 	rm -rf .venv
 
-.PHONY: dev tests setup tests-ts install
+.PHONY: dev tests setup tests-ts install deploy deploy-embedded down down-clean deploy-kind setup-kind clean-kind

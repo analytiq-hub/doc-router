@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: doc-router
+  labels:
+    name: doc-router
+    app.kubernetes.io/name: doc-router
+    app.kubernetes.io/part-of: doc-router

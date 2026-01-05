@@ -1,0 +1,13 @@
+# MongoDB is enabled by default in kind overlay
+# This file documents the MongoDB configuration for kind
+# The StatefulSet is included in the kustomization.yaml resources
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  namespace: doc-router
+spec:
+  # MongoDB configuration for kind
+  # Uses local storage via PersistentVolumeClaim
+  # Suitable for development and testing

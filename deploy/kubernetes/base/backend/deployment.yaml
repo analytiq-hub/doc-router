@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: doc-router
+  labels:
+    app: backend
+    component: backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+        component: backend
+    spec:
+      securityContext:
+        fsGroup: 1000
+      containers:
+      - name: backend
+        image: analytiqhub/doc-router-backend:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+          name: http
+          protocol: TCP
+        command: ["sh", "-c"]
+        args: ["ulimit -n 65536; cd /app/packages/python && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+        envFrom:
+        - configMapRef:
+            name: doc-router-config
+        - secretRef:
+            name: doc-router-secrets
+        securityContext:
+          runAsNonRoot: false
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          # Note: ulimits are set via command, not securityContext
+          # Kubernetes doesn't support ulimit in securityContext without privileged mode
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /docs
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3

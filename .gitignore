@@ -125,6 +125,9 @@ celerybeat.pid
 .env
 .env.dev
 .env.docker
+.env.compose
+.env.compose.embedded
+.env.kind
 .venv
 env/
 venv/
@@ -167,3 +170,8 @@ cython_debug/
 node_modules
 .test-server-config.json
 .mcp*.json
+
+# Generated Kubernetes config files (contain secrets from .env)
+# Template files (*.template) are kept in git, generated files are ignored
+deploy/kubernetes/base/configmap.yaml
+deploy/kubernetes/base/secrets.yaml

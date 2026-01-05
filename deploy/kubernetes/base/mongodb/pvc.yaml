@@ -1,0 +1,15 @@
+# Note: This PVC is created automatically by the StatefulSet volumeClaimTemplates
+# This file is kept for reference/documentation purposes
+# The actual PVC will be named: mongodb-data-mongodb-0
+
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongodb-data-mongodb-0
+  namespace: doc-router
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
