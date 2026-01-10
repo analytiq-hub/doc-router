@@ -64,36 +64,11 @@ services:
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - STRIPE_PRODUCT_TAG=${STRIPE_PRODUCT_TAG}
-    command: sh -c "cd /app/packages/python && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      - N_WORKERS=${N_WORKERS:-1}
+    command: sh -c "cd /app/packages/python/worker && python3 worker.py & cd /app/packages/python && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     restart: unless-stopped
     ports:
       - "8000:8000"
-    networks:
-      - doc-router-network
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 512M
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-
-  worker:
-    image: analytiqhub/doc-router-backend:latest
-    build:
-      context: ../..
-      dockerfile: deploy/shared/docker/Dockerfile
-      target: backend
-    environment:
-      # Runtime environment
-      - ENV=${ENV:-dev}
-      - N_WORKERS=${N_WORKERS:-1}
-      - MONGODB_URI=${MONGODB_URI:-mongodb://YOUR_HOST_IP:27017}
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_nextauth_secret_for_development}
-      - STRIPE_PRODUCT_TAG=${STRIPE_PRODUCT_TAG}
-    command: sh -c "cd /app/packages/python/worker && python3 worker.py"
-    restart: unless-stopped
     networks:
       - doc-router-network
     deploy:

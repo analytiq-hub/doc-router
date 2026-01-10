@@ -36,23 +36,23 @@ install: setup
 #	docker compose down ; \
 #	docker compose --env-file .env up -d --build
 
-deploy:
+deploy-compose:
 	cat .env .env.compose > deploy/compose/.env; \
 	cd deploy/compose; \
 	docker compose down; \
 	docker compose -f docker-compose.yml --env-file .env up -d --build
 
-deploy-embedded:
+deploy-compose-embedded:
 	cat .env .env.compose.embedded > deploy/compose/.env; \
 	cd deploy/compose; \
 	docker compose down; \
 	docker compose -f docker-compose.embedded.yml --env-file .env up -d --build	
 
-down:
+down-compose:
 	cd deploy/compose; \
 	docker compose down
 
-down-clean:
+down-compose-clean:
 	cd deploy/compose; \
 	docker compose -f docker-compose.embedded.yml down -v 2>/dev/null || true; \
 	docker compose -f docker-compose.yml down -v 2>/dev/null || true; \

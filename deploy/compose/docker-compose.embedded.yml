@@ -59,33 +59,11 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - SES_FROM_EMAIL=${SES_FROM_EMAIL}
-    command: sh -c "cd /app/packages/python && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      - N_WORKERS=${N_WORKERS:-1}
+    command: sh -c "cd /app/packages/python/worker && python3 worker.py & cd /app/packages/python && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     restart: unless-stopped
     ports:
       - "8000:8000"
-    networks:
-      - doc-router-local-network
-    deploy:
-      resources:
-        limits:
-          memory: 1G
-        reservations:
-          memory: 512M
-
-  worker:
-    image: analytiqhub/doc-router-backend:latest
-    build:
-      context: ../..
-      dockerfile: deploy/shared/docker/Dockerfile
-      target: backend
-    environment:
-      # Runtime environment
-      - ENV=${ENV:-dev}
-      - N_WORKERS=${N_WORKERS:-1}
-      - MONGODB_URI=mongodb://admin:admin@mongodb:27017
-      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_nextauth_secret_for_development}
-    command: sh -c "cd /app/packages/python/worker && python3 worker.py"
-    restart: unless-stopped
     networks:
       - doc-router-local-network
     deploy:

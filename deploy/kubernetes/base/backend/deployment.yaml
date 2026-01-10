@@ -28,7 +28,7 @@ spec:
           name: http
           protocol: TCP
         command: ["sh", "-c"]
-        args: ["ulimit -n 65536; cd /app/packages/python && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+        args: ["ulimit -n 65536; cd /app/packages/python/worker && python3 worker.py & cd /app/packages/python && exec uvicorn app.main:app --host 0.0.0.0 --port 8000"]
         envFrom:
         - configMapRef:
             name: doc-router-config

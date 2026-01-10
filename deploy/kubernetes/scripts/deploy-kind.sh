@@ -74,14 +74,14 @@ kubectl apply -k .
 
 # Restart deployments to pick up new images and ConfigMap changes
 echo "🔄 Restarting deployments to pick up new images and configuration..."
-kubectl rollout restart deployment/frontend deployment/backend deployment/worker -n doc-router
+kubectl rollout restart deployment/frontend deployment/backend -n doc-router
 
 echo ""
 echo "⏳ Waiting for deployments to be ready..."
 kubectl wait --namespace doc-router \
   --for=condition=available \
   --timeout=300s \
-  deployment/frontend deployment/backend deployment/worker || true
+  deployment/frontend deployment/backend || true
 
 echo ""
 echo "✅ Deployment complete!"

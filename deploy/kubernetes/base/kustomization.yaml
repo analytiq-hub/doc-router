@@ -13,8 +13,6 @@ resources:
   - backend/deployment.yaml
   - backend/service.yaml
   - backend/hpa.yaml
-  - worker/deployment.yaml
-  - worker/service.yaml
   - mongodb/statefulset.yaml
   - mongodb/service.yaml
   - mongodb/pvc.yaml
