@@ -157,12 +157,15 @@ down:
 	fi; \
 	choice=$$(gum choose --header "Select shutdown target:" \
 		"Docker Compose (stop containers)" \
-		"Docker Compose (stop and remove volumes)"); \
+		"Docker Compose (stop and remove volumes)" \
+		"Kubernetes (kind)"); \
 	case "$$choice" in \
 		"Docker Compose (stop containers)") \
 			$(MAKE) down-compose;; \
 		"Docker Compose (stop and remove volumes)") \
 			$(MAKE) down-compose-clean;; \
+		"Kubernetes (kind)") \
+			$(MAKE) down-kind;; \
 		*) \
 			echo "No selection made or cancelled."; \
 			exit 1;; \
