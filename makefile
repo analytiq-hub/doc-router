@@ -1,5 +1,15 @@
 SHELL := /bin/bash
 
+# DockerHub configuration
+DOCKERHUB_ORG ?= analytiqhub
+FRONTEND_IMAGE = $(DOCKERHUB_ORG)/doc-router-frontend
+BACKEND_IMAGE = $(DOCKERHUB_ORG)/doc-router-backend
+IMAGE_TAG ?= latest
+DOCKERFILE = deploy/shared/docker/Dockerfile
+# Build args for frontend (NEXT_PUBLIC_ vars are baked into Next.js build at build time)
+NEXT_PUBLIC_FASTAPI_FRONTEND_URL ?= http://localhost:8000
+NODE_ENV ?= production
+
 help:
 	@echo "Available make targets:"
 	@echo ""
@@ -20,8 +30,10 @@ help:
 	@echo "  make deploy                  - Interactive menu: Local, Docker Compose, or Kubernetes"
 	@echo ""
 	@echo "Deployment (Direct):"
-	@echo "  make deploy-compose          - Deploy to Docker Compose"
-	@echo "  make deploy-compose-embedded - Deploy to Docker Compose with embedded MongoDB"
+	@echo "  make deploy-compose          - Deploy to Docker Compose (builds images)"
+	@echo "  make deploy-compose-embedded - Deploy to Docker Compose with embedded MongoDB (builds images)"
+	@echo "  make deploy-compose-dockerhub - Deploy using DockerHub images (no build)"
+	@echo "  make deploy-compose-dockerhub-embedded - Deploy with MongoDB using DockerHub images (no build)"
 	@echo "  make deploy-kind             - Deploy to Kubernetes kind cluster"
 	@echo ""
 	@echo "Shutdown (Interactive):"
@@ -39,6 +51,15 @@ help:
 	@echo "  make tests-ui                - Run UI tests"
 	@echo "  make tests-ui-debug          - Run UI tests in debug mode"
 	@echo "  make tests-ts                - Run TypeScript SDK and MCP tests"
+	@echo ""
+	@echo "DockerHub:"
+	@echo "  make dockerhub-build        - Build both frontend and backend images"
+	@echo "  make dockerhub-push          - Push both images to DockerHub"
+	@echo "  make dockerhub-build-push    - Build and push both images"
+	@echo "  make dockerhub-build-frontend - Build frontend image only"
+	@echo "  make dockerhub-build-backend  - Build backend image only"
+	@echo "  make dockerhub-push-frontend  - Push frontend image only"
+	@echo "  make dockerhub-push-backend   - Push backend image only"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean                   - Remove Python virtual environment"
@@ -119,16 +140,22 @@ deploy:
 	fi; \
 	choice=$$(gum choose --header "Select deployment target:" \
 		"Local Development" \
-		"Docker Compose" \
-		"Docker Compose (Embedded MongoDB)" \
+		"Docker Compose (build images)" \
+		"Docker Compose (Embedded MongoDB, build images)" \
+		"Docker Compose (DockerHub images, no build)" \
+		"Docker Compose (DockerHub + MongoDB, no build)" \
 		"Kubernetes (kind)"); \
 	case "$$choice" in \
 		"Local Development") \
 			$(MAKE) deploy-dev;; \
-		"Docker Compose") \
+		"Docker Compose (build images)") \
 			$(MAKE) deploy-compose;; \
-		"Docker Compose (Embedded MongoDB)") \
+		"Docker Compose (Embedded MongoDB, build images)") \
 			$(MAKE) deploy-compose-embedded;; \
+		"Docker Compose (DockerHub images, no build)") \
+			$(MAKE) deploy-compose-dockerhub;; \
+		"Docker Compose (DockerHub + MongoDB, no build)") \
+			$(MAKE) deploy-compose-dockerhub-embedded;; \
 		"Kubernetes (kind)") \
 			$(MAKE) deploy-kind;; \
 		*) \
@@ -146,7 +173,19 @@ deploy-compose-embedded:
 	cat .env .env.compose.embedded > deploy/compose/.env; \
 	cd deploy/compose; \
 	docker compose down; \
-	docker compose -f docker-compose.embedded.yml --env-file .env up -d --build	
+	docker compose -f docker-compose.embedded.yml --env-file .env up -d --build
+
+deploy-compose-dockerhub:
+	cat .env .env.compose > deploy/compose/.env; \
+	cd deploy/compose; \
+	docker compose -f docker-compose.dockerhub.yml --env-file .env pull; \
+	docker compose -f docker-compose.dockerhub.yml --env-file .env up -d
+
+deploy-compose-dockerhub-embedded:
+	cat .env .env.compose.embedded > deploy/compose/.env; \
+	cd deploy/compose; \
+	docker compose -f docker-compose.dockerhub.embedded.yml --env-file .env pull; \
+	docker compose -f docker-compose.dockerhub.embedded.yml --env-file .env up -d	
 
 down:
 	@if ! command -v gum &> /dev/null; then \
@@ -173,14 +212,19 @@ down:
 
 down-compose:
 	cd deploy/compose; \
-	docker compose down
+	docker compose -f docker-compose.yml down 2>/dev/null || true; \
+	docker compose -f docker-compose.embedded.yml down 2>/dev/null || true; \
+	docker compose -f docker-compose.dockerhub.yml down 2>/dev/null || true; \
+	docker compose -f docker-compose.dockerhub.embedded.yml down 2>/dev/null || true
 
 down-compose-clean:
 	cd deploy/compose; \
 	docker compose -f docker-compose.embedded.yml down -v 2>/dev/null || true; \
 	docker compose -f docker-compose.yml down -v 2>/dev/null || true; \
+	docker compose -f docker-compose.dockerhub.yml down -v 2>/dev/null || true; \
+	docker compose -f docker-compose.dockerhub.embedded.yml down -v 2>/dev/null || true; \
 	docker volume rm compose_doc-router-local-mongodb 2>/dev/null || true; \
-	echo "Removed containers and volumes (including MongoDB data volume: compose_doc-router-local-mongodb)"
+	echo "Removed containers and volumes"
 
 setup-kind:
 	cd deploy/kubernetes/scripts && ./setup-kind.sh
@@ -221,4 +265,38 @@ tests-ts:
 clean:
 	rm -rf .venv
 
-.PHONY: help deploy-dev tests setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-kind down down-compose down-compose-clean down-kind
+# DockerHub targets
+dockerhub-build-frontend:
+	@echo "Building frontend image: $(FRONTEND_IMAGE):$(IMAGE_TAG)"
+	@echo "Using NEXT_PUBLIC_FASTAPI_FRONTEND_URL=$(NEXT_PUBLIC_FASTAPI_FRONTEND_URL)"
+	@echo "Note: This value is baked into the Next.js build. Override with: make dockerhub-build-frontend NEXT_PUBLIC_FASTAPI_FRONTEND_URL=your-url"
+	docker build -t $(FRONTEND_IMAGE):$(IMAGE_TAG) \
+		--target frontend \
+		--build-arg NEXT_PUBLIC_FASTAPI_FRONTEND_URL=$(NEXT_PUBLIC_FASTAPI_FRONTEND_URL) \
+		--build-arg NODE_ENV=$(NODE_ENV) \
+		-f $(DOCKERFILE) .
+
+dockerhub-build-backend:
+	@echo "Building backend image: $(BACKEND_IMAGE):$(IMAGE_TAG)"
+	docker build -t $(BACKEND_IMAGE):$(IMAGE_TAG) \
+		--target backend \
+		-f $(DOCKERFILE) .
+
+dockerhub-build: dockerhub-build-frontend dockerhub-build-backend
+	@echo "✅ Both images built successfully"
+
+dockerhub-push-frontend: dockerhub-build-frontend
+	@echo "Pushing frontend image: $(FRONTEND_IMAGE):$(IMAGE_TAG)"
+	docker push $(FRONTEND_IMAGE):$(IMAGE_TAG)
+
+dockerhub-push-backend: dockerhub-build-backend
+	@echo "Pushing backend image: $(BACKEND_IMAGE):$(IMAGE_TAG)"
+	docker push $(BACKEND_IMAGE):$(IMAGE_TAG)
+
+dockerhub-push: dockerhub-push-frontend dockerhub-push-backend
+	@echo "✅ Both images pushed successfully to DockerHub"
+
+dockerhub-build-push: dockerhub-build dockerhub-push
+	@echo "✅ Build and push complete!"
+
+.PHONY: help deploy-dev tests setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-compose-dockerhub deploy-compose-dockerhub-embedded deploy-kind down down-compose down-compose-clean down-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean
