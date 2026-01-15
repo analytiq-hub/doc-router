@@ -1227,7 +1227,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
               />
               <button
                 onClick={() => setIsCompareModalOpen(true)}
-                className="h-8 flex items-center gap-2 px-3 text-sm font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+                className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
               >
                 <CompareArrowsIcon className="text-base" />
                 <span>Compare Versions</span>
@@ -1237,7 +1237,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
           {currentSchemaFull && (
             <button
               onClick={() => setIsInfoModalOpen(true)}
-              className="h-8 w-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
+              className="h-8 w-8 mb-2 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
               title="View schema details"
             >
               <DescriptionIcon className="text-lg" />
