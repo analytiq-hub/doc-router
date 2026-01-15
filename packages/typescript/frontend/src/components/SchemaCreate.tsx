@@ -1191,22 +1191,20 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
     <div className="p-4 mx-auto">
       <div className="bg-white p-6 rounded-lg shadow mb-6">
         <div className="hidden md:flex items-center gap-3 mb-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold">
-              {currentSchemaId ? 'Edit Schema' : 'Create Schema'}
-            </h2>
-            {currentSchemaFull && (
-              <button
-                onClick={() => setIsInfoModalOpen(true)}
-                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
-                title="View schema information"
-              >
-                <InfoIcon className="text-lg" />
-              </button>
-            )}
-          </div>
+          <h2 className="text-xl font-bold">
+            {currentSchemaId ? 'Edit Schema' : 'Create Schema'}
+          </h2>
+          {currentSchemaFull && (
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="h-8 w-8 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+              title="View schema information"
+            >
+              <InfoIcon className="text-lg" />
+            </button>
+          )}
           {currentSchemaFull && currentSchemaId && (
-            <div className="flex items-center gap-3">
+            <>
               <SchemaVersionSelector
                 organizationId={organizationId}
                 schemaId={currentSchemaId}
@@ -1238,12 +1236,12 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
               />
               <button
                 onClick={() => setIsCompareModalOpen(true)}
-                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+                className="h-8 flex items-center gap-2 px-3 text-sm font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
               >
                 <CompareArrowsIcon className="text-base" />
                 <span>Compare Versions</span>
               </button>
-            </div>
+            </>
           )}
           <InfoTooltip 
             title="About Schemas"
