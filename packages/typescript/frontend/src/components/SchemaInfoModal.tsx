@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Schema } from '@docrouter/sdk';
-import DescriptionIcon from '@mui/icons-material/Description';
+import BadgeIcon from '@mui/icons-material/Badge';
 import { DocRouterAccountApi } from '@/utils/api';
 
 interface SchemaInfoModalProps {
@@ -58,8 +58,8 @@ const SchemaInfoModal: React.FC<SchemaInfoModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white p-6 rounded-lg shadow-xl max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-4">
-          <DescriptionIcon className="text-blue-600" />
-          <h3 className="text-lg font-medium">Schema Details</h3>
+          <BadgeIcon className="text-blue-600" />
+          <h3 className="text-lg font-medium">Schema Properties</h3>
         </div>
         
         <div className="grid grid-cols-2 gap-4">

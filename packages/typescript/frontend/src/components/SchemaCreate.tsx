@@ -13,7 +13,7 @@ import InfoTooltip from '@/components/InfoTooltip';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import DescriptionIcon from '@mui/icons-material/Description';
+import BadgeIcon from '@mui/icons-material/Badge';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/navigation';
@@ -1237,9 +1237,9 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
             <button
               onClick={() => setIsInfoModalOpen(true)}
               className="h-8 w-8 mb-2 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
-              title="View schema details"
+              title="Schema Properties"
             >
-              <DescriptionIcon className="text-lg" />
+              <BadgeIcon className="text-lg" />
             </button>
           )}
           <InfoTooltip 
