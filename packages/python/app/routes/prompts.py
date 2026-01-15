@@ -503,3 +503,40 @@ async def delete_prompt(
         raise HTTPException(status_code=404, detail="No prompt revisions found")
         
     return {"message": "Prompt deleted successfully"}
+
+@prompts_router.get("/v0/orgs/{organization_id}/prompts/{prompt_id}/versions", response_model=ListPromptsResponse)
+async def list_prompt_versions(
+    organization_id: str,
+    prompt_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """List all versions of a prompt by prompt_id"""
+    logger.info(f"list_prompt_versions() start: organization_id: {organization_id}, prompt_id: {prompt_id}")
+    db = ad.common.get_async_db()
+    
+    # Verify the prompt belongs to the organization
+    prompt = await db.prompts.find_one({
+        "_id": ObjectId(prompt_id),
+        "organization_id": organization_id
+    })
+    if not prompt:
+        raise HTTPException(status_code=404, detail="Prompt not found or not in this organization")
+    
+    # Get all revisions for this prompt_id, sorted by version descending
+    revisions = await db.prompt_revisions.find(
+        {"prompt_id": prompt_id}
+    ).sort("prompt_version", -1).to_list(None)
+    
+    if not revisions:
+        return ListPromptsResponse(prompts=[], total_count=0, skip=0)
+    
+    # Convert _id to prompt_revid and add name
+    for revision in revisions:
+        revision['prompt_revid'] = str(revision.pop('_id'))
+        revision['name'] = prompt['name']
+    
+    return ListPromptsResponse(
+        prompts=revisions,
+        total_count=len(revisions),
+        skip=0
+    )

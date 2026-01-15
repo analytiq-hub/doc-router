@@ -13,6 +13,12 @@ import TagSelector from './TagSelector';
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/navigation';
 import Editor from "@monaco-editor/react";
+import BadgeIcon from '@mui/icons-material/Badge';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import PromptInfoModal from './PromptInfoModal';
+import PromptVersionSelector from './PromptVersionSelector';
+import PromptVersionCompareModal from './PromptVersionCompareModal';
+import PromptDiffView from './PromptDiffView';
 
 // Define default model constant
 const DEFAULT_LLM_MODEL = 'gemini-2.0-flash';
@@ -22,6 +28,9 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   const [currentPromptId, setCurrentPromptId] = useState<string | null>(null);
+  const [currentPromptFull, setCurrentPromptFull] = useState<Prompt | null>(null);
+  const [viewingVersion, setViewingVersion] = useState<number | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
   const [currentPrompt, setCurrentPrompt] = useState<PromptConfig>({
     name: '',
     content: '',
@@ -31,6 +40,10 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
     model: undefined
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [diffLeft, setDiffLeft] = useState<Prompt | null>(null);
+  const [diffRight, setDiffRight] = useState<Prompt | null>(null);
   const [schemas, setSchemas] = useState<Schema[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<string>('');
   const [selectedSchemaDetails, setSelectedSchemaDetails] = useState<Schema | null>(null);
@@ -86,6 +99,9 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
           setIsLoading(true);
           const prompt = await docRouterOrgApi.getPrompt({ promptRevId });
           setCurrentPromptId(prompt.prompt_id);
+          setCurrentPromptFull(prompt);
+          setViewingVersion(prompt.prompt_version);
+          setIsReadOnly(false);
           setCurrentPrompt({
             name: prompt.name,
             content: prompt.content,
@@ -266,10 +282,66 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
     <div className="p-4 w-full">
       {/* Prompt Creation Form */}
       <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <div className="hidden md:flex items-center gap-2 mb-4">
+        <div className="hidden md:flex items-center gap-3 mb-4 flex-wrap">
           <h2 className="text-xl font-bold">
             {currentPromptId ? 'Edit Prompt' : 'Create Prompt'}
           </h2>
+          {currentPromptFull && currentPromptId && (
+            <>
+              <PromptVersionSelector
+                organizationId={organizationId}
+                promptId={currentPromptId}
+                currentVersion={currentPromptFull.prompt_version}
+                onVersionSelect={async (promptRevId, version) => {
+                  try {
+                    setIsLoading(true);
+                    const prompt = await docRouterOrgApi.getPrompt({ promptRevId });
+                    setCurrentPromptFull(prompt);
+                    setViewingVersion(version);
+                    // Check if this is the latest version
+                    const versionsResponse = await docRouterOrgApi.listPromptVersions({ promptId: currentPromptId });
+                    const latestVersion = versionsResponse.prompts.sort((a, b) => b.prompt_version - a.prompt_version)[0];
+                    setIsReadOnly(version !== latestVersion.prompt_version);
+                    setCurrentPrompt({
+                      name: prompt.name,
+                      content: prompt.content,
+                      schema_id: prompt.schema_id,
+                      schema_version: prompt.schema_version,
+                      tag_ids: prompt.tag_ids || [],
+                      model: prompt.model
+                    });
+                    setSelectedTagIds(prompt.tag_ids || []);
+                    setSelectedSchema(prompt.schema_id || '');
+                    if (prompt.schema_id) {
+                      await handleSchemaSelect(prompt.schema_id);
+                    }
+                    // Update URL to reflect the selected version
+                    router.push(`/orgs/${organizationId}/prompts/${promptRevId}`);
+                  } catch (error) {
+                    toast.error(`Error loading prompt version: ${getApiErrorMsg(error)}`);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+              />
+              <button
+                onClick={() => setIsCompareModalOpen(true)}
+                className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+              >
+                <CompareArrowsIcon className="text-base" />
+                <span>Compare Versions</span>
+              </button>
+            </>
+          )}
+          {currentPromptFull && (
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="h-8 w-8 mb-2 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
+              title="Prompt Properties"
+            >
+              <BadgeIcon className="text-lg" />
+            </button>
+          )}
           <InfoTooltip 
             title="Configuring Prompts"
             content={
@@ -290,6 +362,52 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
             }
           />
         </div>
+        
+        {isReadOnly && currentPromptFull && (
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">
+                Viewing version {viewingVersion} (read-only). This is not the latest version.
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!currentPromptId) return;
+                  try {
+                    setIsLoading(true);
+                    const versionsResponse = await docRouterOrgApi.listPromptVersions({ promptId: currentPromptId });
+                    const latestVersion = versionsResponse.prompts.sort((a, b) => b.prompt_version - a.prompt_version)[0];
+                    const prompt = await docRouterOrgApi.getPrompt({ promptRevId: latestVersion.prompt_revid });
+                    setCurrentPromptFull(prompt);
+                    setViewingVersion(prompt.prompt_version);
+                    setIsReadOnly(false);
+                    setCurrentPrompt({
+                      name: prompt.name,
+                      content: prompt.content,
+                      schema_id: prompt.schema_id,
+                      schema_version: prompt.schema_version,
+                      tag_ids: prompt.tag_ids || [],
+                      model: prompt.model
+                    });
+                    setSelectedTagIds(prompt.tag_ids || []);
+                    setSelectedSchema(prompt.schema_id || '');
+                    if (prompt.schema_id) {
+                      await handleSchemaSelect(prompt.schema_id);
+                    }
+                    router.push(`/orgs/${organizationId}/prompts/${latestVersion.prompt_revid}`);
+                  } catch (error) {
+                    toast.error(`Error loading latest version: ${getApiErrorMsg(error)}`);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                className="px-3 py-1 text-sm bg-yellow-100 hover:bg-yellow-200 rounded border border-yellow-300"
+              >
+                View Latest Version
+              </button>
+            </div>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Prompt Name Input and Action Buttons in a flex container */}
           <div className="flex items-center gap-4 mb-4">
@@ -300,7 +418,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                 value={currentPrompt.name}
                 onChange={e => setCurrentPrompt({ ...currentPrompt, name: e.target.value })}
                 placeholder="Prompt Name"
-                disabled={isLoading}
+                disabled={isLoading || isReadOnly}
               />
             </div>
             <div className="flex gap-2">
@@ -322,14 +440,14 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                   setSelectedTagIds([]);
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
-                disabled={isLoading}
+                disabled={isLoading || isReadOnly}
               >
                 Clear
               </button>
               <button
                 type="submit"
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                disabled={isLoading}
+                disabled={isLoading || isReadOnly}
               >
                 {currentPromptId ? 'Update Prompt' : 'Save Prompt'}
               </button>
@@ -349,7 +467,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                 wrappingIndent: "indent",
                 lineNumbers: "on",
                 folding: true,
-                renderValidationDecorations: "on"
+                renderValidationDecorations: "on",
+                readOnly: isReadOnly
               }}
               theme="vs-light"
             />
@@ -364,7 +483,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                 <select
                   value={selectedSchema}
                   onChange={(e) => handleSchemaSelect(e.target.value)}
-                  disabled={isLoading}
+                  disabled={isLoading || isReadOnly}
                   className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
                 >
                   <option value="">None</option>
@@ -383,7 +502,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                 <select
                   value={currentPrompt.model || DEFAULT_LLM_MODEL}
                   onChange={(e) => setCurrentPrompt(prev => ({ ...prev, model: e.target.value }))}
-                  disabled={isLoading}
+                  disabled={isLoading || isReadOnly}
                   className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
                 >
                   {llmModels.map((model) => (
@@ -402,7 +521,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                   availableTags={availableTags}
                   selectedTagIds={selectedTagIds}
                   onChange={setSelectedTagIds}
-                  disabled={isLoading}
+                  disabled={isLoading || isReadOnly}
                 />
               </div>
             </div>
@@ -424,6 +543,42 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
           </div>
         </form>
       </div>
+      
+      {/* Version Compare Modal */}
+      {currentPromptFull && currentPromptId && (
+        <PromptVersionCompareModal
+          isOpen={isCompareModalOpen}
+          onClose={() => setIsCompareModalOpen(false)}
+          organizationId={organizationId}
+          promptId={currentPromptId}
+          currentPrompt={currentPromptFull}
+          onCompare={(leftPrompt, rightPrompt) => {
+            setDiffLeft(leftPrompt);
+            setDiffRight(rightPrompt);
+          }}
+        />
+      )}
+      
+      {/* Info Modal */}
+      {currentPromptFull && (
+        <PromptInfoModal
+          isOpen={isInfoModalOpen}
+          onClose={() => setIsInfoModalOpen(false)}
+          prompt={currentPromptFull}
+        />
+      )}
+      
+      {/* Diff View */}
+      {diffLeft && diffRight && (
+        <PromptDiffView
+          leftPrompt={diffLeft}
+          rightPrompt={diffRight}
+          onClose={() => {
+            setDiffLeft(null);
+            setDiffRight(null);
+          }}
+        />
+      )}
     </div>
   );
 };

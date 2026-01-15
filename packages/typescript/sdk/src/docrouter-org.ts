@@ -280,6 +280,11 @@ export class DocRouterOrg {
     return this.http.delete<{ message: string }>(`/v0/orgs/${this.organizationId}/prompts/${promptId}`);
   }
 
+  async listPromptVersions(params: { promptId: string }): Promise<ListPromptsResponse> {
+    const { promptId } = params;
+    return this.http.get<ListPromptsResponse>(`/v0/orgs/${this.organizationId}/prompts/${promptId}/versions`);
+  }
+
   // ---------------- Tags ----------------
 
   async createTag(params: { tag: Omit<Tag, 'id' | 'created_at' | 'updated_at'>; }): Promise<Tag> {

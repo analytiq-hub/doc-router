@@ -12,11 +12,13 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DownloadIcon from '@mui/icons-material/Download';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import BadgeIcon from '@mui/icons-material/Badge';
 import colors from 'tailwindcss/colors';
 import { isColorLight } from '@/utils/colors';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import PromptNameModal from './PromptNameModal';
+import PromptInfoModal from './PromptInfoModal';
 
 // Define default model constant
 const DEFAULT_LLM_MODEL = 'gemini-2.0-flash';
@@ -40,6 +42,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   const [isNameModalOpen, setIsNameModalOpen] = useState(false);
   const [isCloning, setIsCloning] = useState(false);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const loadPrompts = useCallback(async () => {
     try {
@@ -102,7 +105,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
 
   const handleMenuClose = () => {
     setAnchorEl(null);
-    if (!isNameModalOpen) {
+    if (!isNameModalOpen && !isInfoModalOpen) {
       setSelectedPrompt(null);
     }
   };
@@ -512,6 +515,28 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
         >
           <MenuItem 
             onClick={() => {
+              if (selectedPrompt) {
+                setAnchorEl(null); // Close menu manually
+                setIsInfoModalOpen(true);
+                // Don't clear selectedPrompt since we're opening the info modal
+              }
+            }}
+            className="flex items-center gap-2"
+          >
+            <BadgeIcon fontSize="small" className="text-blue-600" />
+            <span>Properties</span>
+          </MenuItem>
+          <MenuItem 
+            onClick={() => {
+              if (selectedPrompt) handleEdit(selectedPrompt);
+            }}
+            className="flex items-center gap-2"
+          >
+            <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+            <span>Edit</span>
+          </MenuItem>
+          <MenuItem 
+            onClick={() => {
               if (selectedPrompt) handleRenamePrompt(selectedPrompt);
             }}
             className="flex items-center gap-2"
@@ -527,15 +552,6 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
           >
             <ContentCopyIcon fontSize="small" className="text-purple-600" />
             <span>Clone</span>
-          </MenuItem>
-          <MenuItem 
-            onClick={() => {
-              if (selectedPrompt) handleEdit(selectedPrompt);
-            }}
-            className="flex items-center gap-2"
-          >
-            <EditOutlinedIcon fontSize="small" className="text-blue-600" />
-            <span>Edit</span>
           </MenuItem>
           <MenuItem 
             onClick={() => {
@@ -565,6 +581,18 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
             promptName={isCloning ? `${selectedPrompt.name} (Copy)` : selectedPrompt.name}
             onSubmit={handleRenameSubmit}
             isCloning={isCloning}
+          />
+        )}
+        
+        {/* Info Modal */}
+        {selectedPrompt && (
+          <PromptInfoModal
+            isOpen={isInfoModalOpen}
+            onClose={() => {
+              setIsInfoModalOpen(false);
+              setSelectedPrompt(null);
+            }}
+            prompt={selectedPrompt}
           />
         )}
       </div>
