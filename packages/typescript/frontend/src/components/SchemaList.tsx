@@ -4,7 +4,7 @@ import { Schema, SchemaResponseFormat, SchemaProperty } from '@docrouter/sdk';
 import { SchemaField } from '@/types/ui';
 import { getApiErrorMsg } from '@/utils/api';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { TextField, InputAdornment, Menu, MenuItem } from '@mui/material';
+import { TextField, InputAdornment, IconButton, Menu, MenuItem } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -288,14 +288,13 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       align: 'center',
       sortable: false,
       renderCell: (params) => (
-        <div>
-          <button
+        <div className="flex gap-2 items-center h-full">
+          <IconButton
             onClick={(e) => handleMenuOpen(e, params.row)}
-            disabled={isLoading}
-            className="p-1.5 text-gray-600 hover:bg-gray-50 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="text-gray-600 hover:bg-gray-50"
           >
-            <MoreVertIcon className="text-base" />
-          </button>
+            <MoreVertIcon />
+          </IconButton>
         </div>
       ),
     },
