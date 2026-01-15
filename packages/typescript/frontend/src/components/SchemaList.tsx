@@ -4,7 +4,7 @@ import { Schema, SchemaResponseFormat, SchemaProperty } from '@docrouter/sdk';
 import { SchemaField } from '@/types/ui';
 import { getApiErrorMsg } from '@/utils/api';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { TextField, InputAdornment, IconButton, Menu, MenuItem } from '@mui/material';
+import { TextField, InputAdornment, Menu, MenuItem } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -266,18 +266,17 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       renderCell: (params) => (
         <div className="flex items-center gap-2">
           <span className="text-gray-600">v{params.row.schema_version}</span>
-          <IconButton
-            size="small"
+          <button
             onClick={(e) => {
               e.stopPropagation();
               setSelectedSchema(params.row);
               setIsInfoModalOpen(true);
             }}
-            className="text-blue-600 hover:bg-blue-50"
+            className="p-1 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
             title="View schema information"
           >
-            <InfoIcon fontSize="small" />
-          </IconButton>
+            <InfoIcon className="text-base" />
+          </button>
         </div>
       ),
     },
@@ -290,13 +289,13 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       sortable: false,
       renderCell: (params) => (
         <div>
-          <IconButton
+          <button
             onClick={(e) => handleMenuOpen(e, params.row)}
             disabled={isLoading}
-            className="text-gray-600 hover:bg-gray-50"
+            className="p-1.5 text-gray-600 hover:bg-gray-50 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <MoreVertIcon />
-          </IconButton>
+            <MoreVertIcon className="text-base" />
+          </button>
         </div>
       ),
     },

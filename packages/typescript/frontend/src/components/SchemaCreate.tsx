@@ -15,7 +15,6 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
 import InfoIcon from '@mui/icons-material/Info';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
-import { IconButton, Button } from '@mui/material';
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/navigation';
 import SchemaInfoModal from './SchemaInfoModal';
@@ -1191,63 +1190,60 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
   return (
     <div className="p-4 mx-auto">
       <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <div className="hidden md:flex items-center gap-2 mb-4 flex-wrap">
-          <h2 className="text-xl font-bold">
-            {currentSchemaId ? 'Edit Schema' : 'Create Schema'}
-          </h2>
-          {currentSchemaFull && (
-            <>
-              <IconButton
-                size="small"
+        <div className="hidden md:flex items-center gap-3 mb-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold">
+              {currentSchemaId ? 'Edit Schema' : 'Create Schema'}
+            </h2>
+            {currentSchemaFull && (
+              <button
                 onClick={() => setIsInfoModalOpen(true)}
-                className="text-blue-600 hover:bg-blue-50"
+                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
                 title="View schema information"
               >
-                <InfoIcon fontSize="small" />
-              </IconButton>
-              {currentSchemaId && (
-                <>
-                  <SchemaVersionSelector
-                    organizationId={organizationId}
-                    schemaId={currentSchemaId}
-                    currentVersion={currentSchemaFull.schema_version}
-                    currentSchemaRevId={currentSchemaFull.schema_revid}
-                    onVersionSelect={async (schemaRevId, version) => {
-                    try {
-                      setIsLoading(true);
-                      const schema = await docRouterOrgApi.getSchema({ schemaRevId });
-                      setCurrentSchemaFull(schema);
-                      setViewingVersion(version);
-                      // Check if this is the latest version
-                      const versionsResponse = await docRouterOrgApi.listSchemaVersions({ schemaId: currentSchemaId });
-                      const latestVersion = versionsResponse.schemas.sort((a, b) => b.schema_version - a.schema_version)[0];
-                      setIsReadOnly(version !== latestVersion.schema_version);
-                      setCurrentSchema({
-                        name: schema.name,
-                        response_format: schema.response_format
-                      });
-                      setFields(jsonSchemaToFields(schema.response_format));
-                      // Update URL to reflect the selected version
-                      router.push(`/orgs/${organizationId}/schemas/${schemaRevId}`);
-                    } catch (error) {
-                      toast.error(`Error loading schema version: ${getApiErrorMsg(error)}`);
-                    } finally {
-                      setIsLoading(false);
-                    }
-                  }}
-                  />
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    startIcon={<CompareArrowsIcon />}
-                    onClick={() => setIsCompareModalOpen(true)}
-                    className="text-blue-600 border-blue-600 hover:bg-blue-50"
-                  >
-                    Compare Versions
-                  </Button>
-                </>
-              )}
-            </>
+                <InfoIcon className="text-lg" />
+              </button>
+            )}
+          </div>
+          {currentSchemaFull && currentSchemaId && (
+            <div className="flex items-center gap-3">
+              <SchemaVersionSelector
+                organizationId={organizationId}
+                schemaId={currentSchemaId}
+                currentVersion={currentSchemaFull.schema_version}
+                currentSchemaRevId={currentSchemaFull.schema_revid}
+                onVersionSelect={async (schemaRevId, version) => {
+                  try {
+                    setIsLoading(true);
+                    const schema = await docRouterOrgApi.getSchema({ schemaRevId });
+                    setCurrentSchemaFull(schema);
+                    setViewingVersion(version);
+                    // Check if this is the latest version
+                    const versionsResponse = await docRouterOrgApi.listSchemaVersions({ schemaId: currentSchemaId });
+                    const latestVersion = versionsResponse.schemas.sort((a, b) => b.schema_version - a.schema_version)[0];
+                    setIsReadOnly(version !== latestVersion.schema_version);
+                    setCurrentSchema({
+                      name: schema.name,
+                      response_format: schema.response_format
+                    });
+                    setFields(jsonSchemaToFields(schema.response_format));
+                    // Update URL to reflect the selected version
+                    router.push(`/orgs/${organizationId}/schemas/${schemaRevId}`);
+                  } catch (error) {
+                    toast.error(`Error loading schema version: ${getApiErrorMsg(error)}`);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+              />
+              <button
+                onClick={() => setIsCompareModalOpen(true)}
+                className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+              >
+                <CompareArrowsIcon className="text-base" />
+                <span>Compare Versions</span>
+              </button>
+            </div>
           )}
           <InfoTooltip 
             title="About Schemas"

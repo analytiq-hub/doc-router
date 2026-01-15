@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Schema } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
-import { Select, MenuItem, FormControl, InputLabel, Button, CircularProgress, Alert } from '@mui/material';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 
 interface SchemaVersionCompareModalProps {
@@ -28,6 +27,8 @@ const SchemaVersionCompareModal: React.FC<SchemaVersionCompareModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [leftVersion, setLeftVersion] = useState<number>(currentSchema.schema_version);
   const [rightVersion, setRightVersion] = useState<number>(currentSchema.schema_version);
+  const [leftDropdownOpen, setLeftDropdownOpen] = useState(false);
+  const [rightDropdownOpen, setRightDropdownOpen] = useState(false);
 
   useEffect(() => {
     const loadVersions = async () => {
@@ -73,72 +74,141 @@ const SchemaVersionCompareModal: React.FC<SchemaVersionCompareModalProps> = ({
 
   if (!isOpen) return null;
 
+  const leftSchema = versions.find(v => v.schema_version === leftVersion);
+  const rightSchema = versions.find(v => v.schema_version === rightVersion);
+
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white p-6 rounded-lg shadow-xl max-w-md w-full mx-4" onClick={(e) => e.stopPropagation()}>
-        <h3 className="text-lg font-medium mb-4">Compare Schema Versions</h3>
+        <h3 className="text-lg font-semibold mb-4">Compare Schema Versions</h3>
         
         {error && (
-          <Alert severity="error" className="mb-4">
+          <div className="mb-4 px-3 py-2 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
             {error}
-          </Alert>
+          </div>
         )}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-8">
-            <CircularProgress />
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           </div>
         ) : (
           <div className="space-y-4">
             <div className="flex items-center gap-4">
-              <FormControl size="small" className="flex-1">
-                <InputLabel id="left-version-label">From Version</InputLabel>
-                <Select
-                  labelId="left-version-label"
-                  value={leftVersion}
-                  onChange={(e) => setLeftVersion(e.target.value as number)}
-                  label="From Version"
+              {/* Left Version Dropdown */}
+              <div className="flex-1 relative">
+                <label className="block text-sm font-medium text-gray-700 mb-1">From Version</label>
+                <button
+                  onClick={() => {
+                    setLeftDropdownOpen(!leftDropdownOpen);
+                    setRightDropdownOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {versions.map((version) => (
-                    <MenuItem key={version.schema_revid} value={version.schema_version}>
-                      v{version.schema_version}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+                  <span>v{leftVersion}</span>
+                  <svg
+                    className={`w-4 h-4 text-gray-500 transition-transform ${leftDropdownOpen ? 'transform rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {leftDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setLeftDropdownOpen(false)}
+                    ></div>
+                    <div className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                      {versions.map((version) => (
+                        <button
+                          key={version.schema_revid}
+                          onClick={() => {
+                            setLeftVersion(version.schema_version);
+                            setLeftDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${
+                            version.schema_version === leftVersion ? 'bg-blue-50' : ''
+                          }`}
+                        >
+                          v{version.schema_version}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
 
-              <CompareArrowsIcon className="text-gray-400" />
+              <div className="pt-6">
+                <CompareArrowsIcon className="text-gray-400" />
+              </div>
 
-              <FormControl size="small" className="flex-1">
-                <InputLabel id="right-version-label">To Version</InputLabel>
-                <Select
-                  labelId="right-version-label"
-                  value={rightVersion}
-                  onChange={(e) => setRightVersion(e.target.value as number)}
-                  label="To Version"
+              {/* Right Version Dropdown */}
+              <div className="flex-1 relative">
+                <label className="block text-sm font-medium text-gray-700 mb-1">To Version</label>
+                <button
+                  onClick={() => {
+                    setRightDropdownOpen(!rightDropdownOpen);
+                    setLeftDropdownOpen(false);
+                  }}
+                  className="w-full flex items-center justify-between px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  {versions.map((version) => (
-                    <MenuItem key={version.schema_revid} value={version.schema_version}>
-                      v{version.schema_version}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+                  <span>v{rightVersion}</span>
+                  <svg
+                    className={`w-4 h-4 text-gray-500 transition-transform ${rightDropdownOpen ? 'transform rotate-180' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {rightDropdownOpen && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-10"
+                      onClick={() => setRightDropdownOpen(false)}
+                    ></div>
+                    <div className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                      {versions.map((version) => (
+                        <button
+                          key={version.schema_revid}
+                          onClick={() => {
+                            setRightVersion(version.schema_version);
+                            setRightDropdownOpen(false);
+                          }}
+                          className={`w-full px-3 py-2 text-left text-sm hover:bg-gray-50 transition-colors ${
+                            version.schema_version === rightVersion ? 'bg-blue-50' : ''
+                          }`}
+                        >
+                          v{version.schema_version}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-4">
+            <div className="flex justify-end gap-3 pt-4 border-t">
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50"
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-50 text-gray-700"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={handleCompare}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
                 disabled={leftVersion === rightVersion}
+                className={`px-4 py-2 rounded-md text-white ${
+                  leftVersion === rightVersion
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700'
+                }`}
               >
                 Compare
               </button>
