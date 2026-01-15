@@ -378,6 +378,15 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       >
         <MenuItem 
           onClick={() => {
+            if (selectedSchema) handleEdit(selectedSchema);
+          }}
+          className="flex items-center gap-2"
+        >
+          <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+          <span>Edit</span>
+        </MenuItem>
+        <MenuItem 
+          onClick={() => {
             if (selectedSchema) {
               setSelectedSchema(selectedSchema);
               setIsInfoModalOpen(true);
@@ -406,15 +415,6 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
         >
           <ContentCopyIcon fontSize="small" className="text-purple-600" />
           <span>Clone</span>
-        </MenuItem>
-        <MenuItem 
-          onClick={() => {
-            if (selectedSchema) handleEdit(selectedSchema);
-          }}
-          className="flex items-center gap-2"
-        >
-          <EditOutlinedIcon fontSize="small" className="text-blue-600" />
-          <span>Edit</span>
         </MenuItem>
         <MenuItem 
           onClick={() => {
