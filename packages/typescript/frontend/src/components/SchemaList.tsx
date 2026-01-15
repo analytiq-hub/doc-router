@@ -12,11 +12,13 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DownloadIcon from '@mui/icons-material/Download';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import InfoIcon from '@mui/icons-material/Info';
 import colors from 'tailwindcss/colors';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-toastify';
 import SchemaNameModal from './SchemaNameModal';
+import SchemaInfoModal from './SchemaInfoModal';
 
 const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
@@ -32,6 +34,7 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   const [selectedSchema, setSelectedSchema] = useState<Schema | null>(null);
   const [isNameModalOpen, setIsNameModalOpen] = useState(false);
   const [isCloning, setIsCloning] = useState(false);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const loadSchemas = useCallback(async () => {
     try {
@@ -257,12 +260,24 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
     {
       field: 'schema_version',
       headerName: 'Version',
-      width: 100,
+      width: 150,
       headerAlign: 'left',
       align: 'left',
       renderCell: (params) => (
-        <div className="text-gray-600">
-          v{params.row.schema_version}
+        <div className="flex items-center gap-2">
+          <span className="text-gray-600">v{params.row.schema_version}</span>
+          <IconButton
+            size="small"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSelectedSchema(params.row);
+              setIsInfoModalOpen(true);
+            }}
+            className="text-blue-600 hover:bg-blue-50"
+            title="View schema information"
+          >
+            <InfoIcon fontSize="small" />
+          </IconButton>
         </div>
       ),
     },
@@ -428,6 +443,18 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
           onSubmit={handleNameSubmit}
           isCloning={isCloning}
           organizationId={organizationId}
+        />
+      )}
+      
+      {/* Info Modal */}
+      {selectedSchema && (
+        <SchemaInfoModal
+          isOpen={isInfoModalOpen}
+          onClose={() => {
+            setIsInfoModalOpen(false);
+            setSelectedSchema(null);
+          }}
+          schema={selectedSchema}
         />
       )}
     </div>

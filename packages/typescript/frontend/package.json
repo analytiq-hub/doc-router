@@ -42,6 +42,7 @@
     "next-auth": "^4.24.11",
     "react": "^18",
     "react-data-grid": "^7.0.0-beta.47",
+    "react-diff-viewer-continued": "^3.4.0",
     "react-dom": "^18",
     "react-dropzone": "^14.2.9",
     "react-hot-toast": "^2.5.1",

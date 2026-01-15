@@ -13,16 +13,24 @@ import InfoTooltip from '@/components/InfoTooltip';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import InfoIcon from '@mui/icons-material/Info';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import { IconButton, Button } from '@mui/material';
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/navigation';
+import SchemaInfoModal from './SchemaInfoModal';
+import SchemaVersionSelector from './SchemaVersionSelector';
+import SchemaVersionCompareModal from './SchemaVersionCompareModal';
+import SchemaDiffView from './SchemaDiffView';
 
 interface NestedFieldsEditorProps {
   fields: SchemaField[];
   onChange: (fields: SchemaField[]) => void;
   isLoading: boolean;
+  isReadOnly?: boolean;
 }
 
-const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChange, isLoading }) => {
+const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChange, isLoading, isReadOnly = false }) => {
   const [expandedFields, setExpandedFields] = useState<Record<number, boolean>>({});
   
   const toggleExpansion = (index: number) => {
@@ -90,13 +98,13 @@ const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChang
               value={field.name}
               onChange={e => updateNestedField(index, { name: e.target.value })}
               placeholder="field_name"
-              disabled={isLoading}
+              disabled={isLoading || isReadOnly}
             />
             <select
               className="p-1.5 border rounded text-sm w-24"
               value={field.type}
               onChange={e => updateNestedField(index, { type: e.target.value as SchemaField['type'] })}
-              disabled={isLoading}
+              disabled={isLoading || isReadOnly}
             >
               <option value="str">String</option>
               <option value="int">Integer</option>
@@ -108,7 +116,7 @@ const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChang
               type="button"
               onClick={() => removeNestedField(index)}
               className="p-1 bg-red-50 text-red-600 rounded hover:bg-red-100 disabled:opacity-50 text-sm h-8 w-8 flex items-center justify-center"
-              disabled={isLoading}
+              disabled={isLoading || isReadOnly}
               aria-label="Remove field"
             >
               <span className="inline-block leading-none translate-y-[1px]">✕</span>
@@ -117,7 +125,7 @@ const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChang
               type="button"
               onClick={() => addNestedField(index)}
               className="p-1 bg-green-50 text-green-600 rounded hover:bg-green-100 disabled:opacity-50 text-xl h-8 w-8 flex items-center justify-center"
-              disabled={isLoading}
+              disabled={isLoading || isReadOnly}
               aria-label="Add field after this one"
             >
               <span className="inline-block leading-none">+</span>
@@ -129,7 +137,7 @@ const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChang
             value={field.description || ''}
             onChange={e => updateNestedField(index, { description: e.target.value })}
             placeholder="Description of this field"
-            disabled={isLoading}
+            disabled={isLoading || isReadOnly}
           />
           
           {/* Recursive rendering for nested objects */}
@@ -167,6 +175,12 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
   const router = useRouter();
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [currentSchemaId, setCurrentSchemaId] = useState<string | null>(null);
+  const [currentSchemaFull, setCurrentSchemaFull] = useState<Schema | null>(null);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [viewingVersion, setViewingVersion] = useState<number | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+  const [diffSchemas, setDiffSchemas] = useState<{ left: Schema | null; right: Schema | null }>({ left: null, right: null });
   const [currentSchema, setCurrentSchema] = useState<SchemaConfig>({
     name: '',
     response_format: {
@@ -282,6 +296,12 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
         try {
           const schema = await docRouterOrgApi.getSchema({ schemaRevId });
           setCurrentSchemaId(schema.schema_id);
+          setCurrentSchemaFull(schema);
+          setViewingVersion(schema.schema_version);
+          // Check if this is the latest version
+          const versionsResponse = await docRouterOrgApi.listSchemaVersions({ schemaId: schema.schema_id });
+          const latestVersion = versionsResponse.schemas.sort((a, b) => b.schema_version - a.schema_version)[0];
+          setIsReadOnly(schema.schema_version !== latestVersion.schema_version);
           setCurrentSchema({
             name: schema.name,
             response_format: schema.response_format
@@ -294,6 +314,9 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
         }
       } else {
         setCurrentSchemaId(null);
+        setCurrentSchemaFull(null);
+        setViewingVersion(null);
+        setIsReadOnly(false);
         setCurrentSchema({
           name: '',
           response_format: {
@@ -1168,10 +1191,64 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
   return (
     <div className="p-4 mx-auto">
       <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <div className="hidden md:flex items-center gap-2 mb-4">
+        <div className="hidden md:flex items-center gap-2 mb-4 flex-wrap">
           <h2 className="text-xl font-bold">
             {currentSchemaId ? 'Edit Schema' : 'Create Schema'}
           </h2>
+          {currentSchemaFull && (
+            <>
+              <IconButton
+                size="small"
+                onClick={() => setIsInfoModalOpen(true)}
+                className="text-blue-600 hover:bg-blue-50"
+                title="View schema information"
+              >
+                <InfoIcon fontSize="small" />
+              </IconButton>
+              {currentSchemaId && (
+                <>
+                  <SchemaVersionSelector
+                    organizationId={organizationId}
+                    schemaId={currentSchemaId}
+                    currentVersion={currentSchemaFull.schema_version}
+                    currentSchemaRevId={currentSchemaFull.schema_revid}
+                    onVersionSelect={async (schemaRevId, version) => {
+                    try {
+                      setIsLoading(true);
+                      const schema = await docRouterOrgApi.getSchema({ schemaRevId });
+                      setCurrentSchemaFull(schema);
+                      setViewingVersion(version);
+                      // Check if this is the latest version
+                      const versionsResponse = await docRouterOrgApi.listSchemaVersions({ schemaId: currentSchemaId });
+                      const latestVersion = versionsResponse.schemas.sort((a, b) => b.schema_version - a.schema_version)[0];
+                      setIsReadOnly(version !== latestVersion.schema_version);
+                      setCurrentSchema({
+                        name: schema.name,
+                        response_format: schema.response_format
+                      });
+                      setFields(jsonSchemaToFields(schema.response_format));
+                      // Update URL to reflect the selected version
+                      router.push(`/orgs/${organizationId}/schemas/${schemaRevId}`);
+                    } catch (error) {
+                      toast.error(`Error loading schema version: ${getApiErrorMsg(error)}`);
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }}
+                  />
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    startIcon={<CompareArrowsIcon />}
+                    onClick={() => setIsCompareModalOpen(true)}
+                    className="text-blue-600 border-blue-600 hover:bg-blue-50"
+                  >
+                    Compare Versions
+                  </Button>
+                </>
+              )}
+            </>
+          )}
           <InfoTooltip 
             title="About Schemas"
             content={
@@ -1188,6 +1265,44 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
             }
           />
         </div>
+        
+        {isReadOnly && currentSchemaFull && (
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">
+                Viewing version {viewingVersion} (read-only). This is not the latest version.
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!currentSchemaId) return;
+                  try {
+                    setIsLoading(true);
+                    const versionsResponse = await docRouterOrgApi.listSchemaVersions({ schemaId: currentSchemaId });
+                    const latestVersion = versionsResponse.schemas.sort((a, b) => b.schema_version - a.schema_version)[0];
+                    const schema = await docRouterOrgApi.getSchema({ schemaRevId: latestVersion.schema_revid });
+                    setCurrentSchemaFull(schema);
+                    setViewingVersion(schema.schema_version);
+                    setIsReadOnly(false);
+                    setCurrentSchema({
+                      name: schema.name,
+                      response_format: schema.response_format
+                    });
+                    setFields(jsonSchemaToFields(schema.response_format));
+                    router.push(`/orgs/${organizationId}/schemas/${latestVersion.schema_revid}`);
+                  } catch (error) {
+                    toast.error(`Error loading latest version: ${getApiErrorMsg(error)}`);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                className="text-sm text-blue-600 hover:text-blue-800 font-medium underline"
+              >
+                View Latest Version
+              </button>
+            </div>
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Schema Name Input and Action Buttons in a flex container */}
           <div className="flex items-center gap-4 mb-4">
@@ -1198,7 +1313,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                 value={currentSchema.name}
                 onChange={e => setCurrentSchema({ ...currentSchema, name: e.target.value })}
                 placeholder="Schema Name"
-                disabled={isLoading}
+                disabled={isLoading || isReadOnly}
               />
             </div>
             <div className="flex gap-2">
@@ -1226,14 +1341,14 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                   });
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
-                disabled={isLoading}
+                disabled={isLoading || isReadOnly}
               >
                 Clear
               </button>
               <button
                 type="submit"
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                disabled={isLoading}
+                disabled={isLoading || isReadOnly}
               >
                 {currentSchemaId ? 'Update Schema' : 'Save Schema'}
               </button>
@@ -1303,13 +1418,13 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                                       value={field.name}
                                       onChange={e => updateField(index, { name: e.target.value })}
                                       placeholder="field_name"
-                                      disabled={isLoading}
+                                      disabled={isLoading || isReadOnly}
                                     />
                                     <select
                                       className="p-1.5 border rounded text-sm w-24"
                                       value={field.type}
                                       onChange={e => updateField(index, { type: e.target.value as SchemaField['type'] })}
-                                      disabled={isLoading}
+                                      disabled={isLoading || isReadOnly}
                                     >
                                       <option value="str">String</option>
                                       <option value="int">Integer</option>
@@ -1322,7 +1437,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                                       type="button"
                                       onClick={() => removeField(index)}
                                       className="p-1 bg-red-50 text-red-600 rounded hover:bg-red-100 disabled:opacity-50 text-sm h-8 w-8 flex items-center justify-center"
-                                      disabled={isLoading}
+                                      disabled={isLoading || isReadOnly}
                                       aria-label="Remove field"
                                     >
                                       <span className="inline-block leading-none translate-y-[1px]">✕</span>
@@ -1339,7 +1454,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                                         }));
                                       }}
                                       className="p-1 bg-green-50 text-green-600 rounded hover:bg-green-100 disabled:opacity-50 text-xl h-8 w-8 flex items-center justify-center"
-                                      disabled={isLoading}
+                                      disabled={isLoading || isReadOnly}
                                       aria-label="Add field after this one"
                                     >
                                       <span className="inline-block leading-none">+</span>
@@ -1350,7 +1465,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                                     value={field.description || ''}
                                     onChange={e => updateField(index, { description: e.target.value })}
                                     placeholder="Description of this field"
-                                    disabled={isLoading}
+                                    disabled={isLoading || isReadOnly}
                                     onKeyDown={e => {
                                       // Allow Shift+Enter for new lines, but prevent form submission
                                       if (e.key === 'Enter' && !e.shiftKey) {
@@ -1380,6 +1495,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                                           fields={field.nestedFields || [{ name: '', type: 'str' }]}
                                           onChange={(nestedFields) => handleNestedFieldsChange(index, nestedFields)}
                                           isLoading={isLoading}
+                                          isReadOnly={isReadOnly}
                                         />
                                       )}
                                     </div>
@@ -1408,7 +1524,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                                               className="p-1.5 border rounded text-sm"
                                               value={field.arrayItemType || 'str'}
                                               onChange={e => handleArrayItemTypeChange(index, e.target.value as SchemaField['type'])}
-                                              disabled={isLoading}
+                                              disabled={isLoading || isReadOnly}
                                             >
                                               <option value="str">String</option>
                                               <option value="int">Integer</option>
@@ -1426,6 +1542,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                                                 fields={field.arrayObjectFields || [{ name: '', type: 'str' }]}
                                                 onChange={(objectFields) => handleArrayObjectFieldsChange(index, objectFields)}
                                                 isLoading={isLoading}
+                                                isReadOnly={isReadOnly}
                                               />
                                             </div>
                                           )}
@@ -1447,7 +1564,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                   type="button"
                   onClick={addField}
                   className="w-full p-1.5 bg-blue-50 text-blue-600 rounded hover:bg-blue-100 disabled:opacity-50 text-sm"
-                  disabled={isLoading}
+                  disabled={isLoading || isReadOnly}
                 >
                   Add Field
                 </button>
@@ -1467,7 +1584,8 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                     wrappingIndent: "indent",
                     lineNumbers: "on",
                     folding: true,
-                    renderValidationDecorations: "on"
+                    renderValidationDecorations: "on",
+                    readOnly: isReadOnly
                   }}
                   theme="vs-light"
                 />
@@ -1476,6 +1594,38 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
           </div>
         </form>
       </div>
+      
+      {/* Info Modal */}
+      {currentSchemaFull && (
+        <>
+          <SchemaInfoModal
+            isOpen={isInfoModalOpen}
+            onClose={() => setIsInfoModalOpen(false)}
+            schema={currentSchemaFull}
+          />
+          
+          {/* Compare Versions Modal */}
+          <SchemaVersionCompareModal
+            isOpen={isCompareModalOpen}
+            onClose={() => setIsCompareModalOpen(false)}
+            organizationId={organizationId}
+            schemaId={currentSchemaId!}
+            currentSchema={currentSchemaFull}
+            onCompare={(leftSchema, rightSchema) => {
+              setDiffSchemas({ left: leftSchema, right: rightSchema });
+            }}
+          />
+          
+          {/* Diff View */}
+          {diffSchemas.left && diffSchemas.right && (
+            <SchemaDiffView
+              leftSchema={diffSchemas.left}
+              rightSchema={diffSchemas.right}
+              onClose={() => setDiffSchemas({ left: null, right: null })}
+            />
+          )}
+        </>
+      )}
     </div>
   );
 };

@@ -489,3 +489,40 @@ async def validate_against_schema(
     
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Validation error: {str(e)}")
+
+@schemas_router.get("/v0/orgs/{organization_id}/schemas/{schema_id}/versions", response_model=ListSchemasResponse)
+async def list_schema_versions(
+    organization_id: str,
+    schema_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """List all versions of a schema by schema_id"""
+    logger.info(f"list_schema_versions() start: organization_id: {organization_id}, schema_id: {schema_id}")
+    db = ad.common.get_async_db()
+    
+    # Verify the schema belongs to the organization
+    schema = await db.schemas.find_one({
+        "_id": ObjectId(schema_id),
+        "organization_id": organization_id
+    })
+    if not schema:
+        raise HTTPException(status_code=404, detail="Schema not found or not in this organization")
+    
+    # Get all revisions for this schema_id, sorted by version descending
+    revisions = await db.schema_revisions.find(
+        {"schema_id": schema_id}
+    ).sort("schema_version", -1).to_list(None)
+    
+    if not revisions:
+        return ListSchemasResponse(schemas=[], total_count=0, skip=0)
+    
+    # Convert _id to schema_revid and add name
+    for revision in revisions:
+        revision['schema_revid'] = str(revision.pop('_id'))
+        revision['name'] = schema['name']
+    
+    return ListSchemasResponse(
+        schemas=revisions,
+        total_count=len(revisions),
+        skip=0
+    )

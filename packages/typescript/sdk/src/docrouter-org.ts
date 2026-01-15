@@ -390,6 +390,11 @@ export class DocRouterOrg {
     return this.http.post<{ valid: boolean; errors?: string[] }>(`/v0/orgs/${this.organizationId}/schemas/${schemaRevId}/validate`, { data });
   }
 
+  async listSchemaVersions(params: { schemaId: string }): Promise<ListSchemasResponse> {
+    const { schemaId } = params;
+    return this.http.get<ListSchemasResponse>(`/v0/orgs/${this.organizationId}/schemas/${schemaId}/versions`);
+  }
+
   // ---------------- Payments ----------------
 
   async getCustomerPortal(): Promise<PortalSessionResponse> {
