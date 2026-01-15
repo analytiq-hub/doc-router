@@ -264,7 +264,7 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       headerAlign: 'left',
       align: 'left',
       renderCell: (params) => (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 h-full">
           <span className="text-gray-600">v{params.row.schema_version}</span>
           <button
             onClick={(e) => {
@@ -272,10 +272,10 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
               setSelectedSchema(params.row);
               setIsInfoModalOpen(true);
             }}
-            className="p-1 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+            className="h-6 w-6 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-full transition-colors shadow-none border-0 outline-none focus:outline-none focus:ring-0"
             title="View schema information"
           >
-            <InfoIcon className="text-base" />
+            <InfoIcon className="text-sm" style={{ fontSize: '18px' }} />
           </button>
         </div>
       ),
@@ -369,6 +369,8 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
           sx={{
             '& .MuiDataGrid-cell': {
               padding: 'px',
+              display: 'flex',
+              alignItems: 'center',
             },
             '& .MuiDataGrid-row:nth-of-type(odd)': {
               backgroundColor: colors.gray[100],  // Using Tailwind colors
