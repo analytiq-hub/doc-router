@@ -1200,7 +1200,6 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                 organizationId={organizationId}
                 schemaId={currentSchemaId}
                 currentVersion={currentSchemaFull.schema_version}
-                currentSchemaRevId={currentSchemaFull.schema_revid}
                 onVersionSelect={async (schemaRevId, version) => {
                   try {
                     setIsLoading(true);

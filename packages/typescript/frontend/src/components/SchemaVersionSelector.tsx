@@ -7,7 +7,6 @@ interface SchemaVersionSelectorProps {
   organizationId: string;
   schemaId: string;
   currentVersion: number;
-  currentSchemaRevId: string;
   onVersionSelect: (schemaRevId: string, version: number) => void;
 }
 
@@ -15,7 +14,6 @@ const SchemaVersionSelector: React.FC<SchemaVersionSelectorProps> = ({
   organizationId,
   schemaId,
   currentVersion,
-  currentSchemaRevId,
   onVersionSelect
 }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
@@ -75,8 +73,6 @@ const SchemaVersionSelector: React.FC<SchemaVersionSelectorProps> = ({
       return dateString;
     }
   };
-
-  const selectedSchema = versions.find(v => v.schema_version === selectedVersion);
 
   if (isLoading) {
     return (
