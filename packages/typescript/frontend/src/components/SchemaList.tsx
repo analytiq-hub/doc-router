@@ -387,7 +387,7 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
           className="flex items-center gap-2"
         >
           <BadgeIcon fontSize="small" className="text-blue-600" />
-          <span>Schema Information</span>
+          <span>Properties</span>
         </MenuItem>
         <MenuItem 
           onClick={() => {
