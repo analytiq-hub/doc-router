@@ -1,6 +1,7 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Schema } from '@docrouter/sdk';
 import DescriptionIcon from '@mui/icons-material/Description';
+import { DocRouterAccountApi } from '@/utils/api';
 
 interface SchemaInfoModalProps {
   isOpen: boolean;
@@ -13,6 +14,29 @@ const SchemaInfoModal: React.FC<SchemaInfoModalProps> = ({
   onClose, 
   schema 
 }) => {
+  const [createdByName, setCreatedByName] = useState<string | null>(null);
+  const [isLoadingName, setIsLoadingName] = useState(false);
+  const docRouterAccountApi = React.useMemo(() => new DocRouterAccountApi(), []);
+
+  useEffect(() => {
+    if (isOpen && schema.created_by) {
+      setIsLoadingName(true);
+      docRouterAccountApi.getUser(schema.created_by)
+        .then(user => {
+          setCreatedByName(user.name || null);
+        })
+        .catch(error => {
+          console.error('Error fetching user name:', error);
+          setCreatedByName(null);
+        })
+        .finally(() => {
+          setIsLoadingName(false);
+        });
+    } else {
+      setCreatedByName(null);
+    }
+  }, [isOpen, schema.created_by, docRouterAccountApi]);
+
   if (!isOpen) return null;
 
   const formatDate = (dateString: string) => {
@@ -38,10 +62,17 @@ const SchemaInfoModal: React.FC<SchemaInfoModalProps> = ({
           <h3 className="text-lg font-medium">Schema Details</h3>
         </div>
         
-        <div className="space-y-4">
+        <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1">Schema Name</label>
             <div className="text-gray-900 bg-gray-50 p-2 rounded border">{schema.name}</div>
+          </div>
+          
+          <div>
+            <label className="text-sm font-semibold text-gray-700 block mb-1">Version</label>
+            <div className="text-gray-900 bg-gray-50 p-2 rounded border">
+              v{schema.schema_version}
+            </div>
           </div>
           
           <div>
@@ -61,13 +92,6 @@ const SchemaInfoModal: React.FC<SchemaInfoModalProps> = ({
           </div>
           
           <div>
-            <label className="text-sm font-semibold text-gray-700 block mb-1">Version</label>
-            <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-              v{schema.schema_version}
-            </div>
-          </div>
-          
-          <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1">Created At</label>
             <div className="text-gray-900 bg-gray-50 p-2 rounded border">
               {formatDate(schema.created_at)}
@@ -75,8 +99,21 @@ const SchemaInfoModal: React.FC<SchemaInfoModalProps> = ({
           </div>
           
           <div>
-            <label className="text-sm font-semibold text-gray-700 block mb-1">Created By</label>
+            <label className="text-sm font-semibold text-gray-700 block mb-1">Created By Name</label>
             <div className="text-gray-900 bg-gray-50 p-2 rounded border">
+              {isLoadingName ? (
+                <span className="text-gray-500 italic">Loading...</span>
+              ) : createdByName ? (
+                createdByName
+              ) : (
+                <span className="text-gray-500 italic">Not available</span>
+              )}
+            </div>
+          </div>
+          
+          <div className="col-span-2">
+            <label className="text-sm font-semibold text-gray-700 block mb-1">Created By ID</label>
+            <div className="text-gray-900 bg-gray-50 p-2 rounded border font-mono text-sm break-all">
               {schema.created_by}
             </div>
           </div>
