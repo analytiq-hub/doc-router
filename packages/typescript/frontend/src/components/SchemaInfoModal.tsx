@@ -1,6 +1,6 @@
 import React from 'react';
 import { Schema } from '@docrouter/sdk';
-import InfoIcon from '@mui/icons-material/Info';
+import DescriptionIcon from '@mui/icons-material/Description';
 
 interface SchemaInfoModalProps {
   isOpen: boolean;
@@ -34,8 +34,8 @@ const SchemaInfoModal: React.FC<SchemaInfoModalProps> = ({
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
       <div className="bg-white p-6 rounded-lg shadow-xl max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-4">
-          <InfoIcon className="text-blue-600" />
-          <h3 className="text-lg font-medium">Schema Information</h3>
+          <DescriptionIcon className="text-blue-600" />
+          <h3 className="text-lg font-medium">Schema Details</h3>
         </div>
         
         <div className="space-y-4">

@@ -12,7 +12,7 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DownloadIcon from '@mui/icons-material/Download';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
-import InfoIcon from '@mui/icons-material/Info';
+import BadgeIcon from '@mui/icons-material/Badge';
 import colors from 'tailwindcss/colors';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
@@ -266,17 +266,6 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       renderCell: (params) => (
         <div className="flex items-center gap-2 h-full">
           <span className="text-gray-600">v{params.row.schema_version}</span>
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedSchema(params.row);
-              setIsInfoModalOpen(true);
-            }}
-            className="h-6 w-6 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-full transition-colors shadow-none border-0 outline-none focus:outline-none focus:ring-0"
-            title="View schema information"
-          >
-            <InfoIcon className="text-sm" style={{ fontSize: '18px' }} />
-          </button>
         </div>
       ),
     },
@@ -387,6 +376,19 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
+        <MenuItem 
+          onClick={() => {
+            if (selectedSchema) {
+              setSelectedSchema(selectedSchema);
+              setIsInfoModalOpen(true);
+              handleMenuClose();
+            }
+          }}
+          className="flex items-center gap-2"
+        >
+          <BadgeIcon fontSize="small" className="text-blue-600" />
+          <span>View Details</span>
+        </MenuItem>
         <MenuItem 
           onClick={() => {
             if (selectedSchema) handleNameSchema(selectedSchema);

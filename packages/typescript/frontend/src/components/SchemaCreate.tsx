@@ -13,7 +13,7 @@ import InfoTooltip from '@/components/InfoTooltip';
 import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea/dnd';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
-import InfoIcon from '@mui/icons-material/Info';
+import DescriptionIcon from '@mui/icons-material/Description';
 import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
 import { toast } from 'react-toastify';
 import { useRouter } from 'next/navigation';
@@ -1194,15 +1194,6 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
           <h2 className="text-xl font-bold">
             {currentSchemaId ? 'Edit Schema' : 'Create Schema'}
           </h2>
-          {currentSchemaFull && (
-            <button
-              onClick={() => setIsInfoModalOpen(true)}
-              className="h-8 w-8 flex items-center justify-center text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
-              title="View schema information"
-            >
-              <InfoIcon className="text-lg" />
-            </button>
-          )}
           {currentSchemaFull && currentSchemaId && (
             <>
               <SchemaVersionSelector
@@ -1242,6 +1233,15 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
                 <span>Compare Versions</span>
               </button>
             </>
+          )}
+          {currentSchemaFull && (
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="h-8 w-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
+              title="View schema details"
+            >
+              <DescriptionIcon className="text-lg" />
+            </button>
           )}
           <InfoTooltip 
             title="About Schemas"
