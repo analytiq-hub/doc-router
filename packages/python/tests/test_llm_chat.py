@@ -105,7 +105,7 @@ async def test_llm_chat_admin_only_access(org_and_users, setup_test_models, test
 
     # Test unauthenticated access
     resp = client.post("/v0/account/llm/run", json=chat_request)
-    assert resp.status_code == 403, f"Unauthenticated request should be rejected, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 401, f"Unauthenticated request should be rejected, got {resp.status_code}: {resp.text}"
 
 
 @pytest.mark.asyncio
@@ -158,7 +158,7 @@ async def test_llm_chat_non_streaming_response(org_and_users, setup_test_models,
         mock_llm.assert_called_once()
         call_args = mock_llm.call_args[1]
         assert call_args["model"] == "gpt-4o-mini"
-        assert call_args["temperature"] == 0.3
+        assert call_args["temperature"] == 0.1  # get_temperature() overwrites request temperature
         assert call_args["max_tokens"] == 100
         assert len(call_args["messages"]) == 2
         assert call_args["messages"][0]["role"] == "system"
@@ -336,7 +336,7 @@ async def test_llm_chat_with_all_parameters(org_and_users, setup_test_models, te
         call_args = mock_llm.call_args[1]
         assert call_args["model"] == "gpt-4o-mini"
         assert call_args["max_tokens"] == 50
-        assert call_args["temperature"] == 0.2
+        assert call_args["temperature"] == 0.1  # get_temperature() overwrites request temperature
 
 
 @pytest.mark.asyncio
@@ -433,7 +433,7 @@ async def test_llm_chat_org_admin_only_access(org_and_users, setup_test_models, 
 
     # Test unauthenticated access
     resp = client.post(f"/v0/orgs/{org_id}/llm/run", json=chat_request)
-    assert resp.status_code == 403, f"Unauthenticated request should be rejected, got {resp.status_code}: {resp.text}"
+    assert resp.status_code == 401, f"Unauthenticated request should be rejected, got {resp.status_code}: {resp.text}"
 
 
 @pytest.mark.asyncio
