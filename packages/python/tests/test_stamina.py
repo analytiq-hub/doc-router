@@ -63,8 +63,7 @@ async def test_successful_completion_no_retry():
         result = await _litellm_acompletion_with_retry(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": "test"}],
-            api_key="test-key",
-            temperature=0.1
+            api_key="test-key"
         )
         
         # Verify the function was called once (no retry)
@@ -91,8 +90,7 @@ async def test_retryable_error_retries_and_succeeds():
         result = await _litellm_acompletion_with_retry(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": "test"}],
-            api_key="test-key",
-            temperature=0.1
+            api_key="test-key"
         )
         
         # Verify the function was called twice (retry happened)
@@ -110,8 +108,7 @@ async def test_non_retryable_error_no_retry():
             await _litellm_acompletion_with_retry(
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": "test"}],
-                api_key="test-key",
-                temperature=0.1
+                api_key="test-key"
             )
         
         # Verify the function was called only once (no retry)
@@ -137,8 +134,7 @@ async def test_multiple_retryable_errors_eventually_succeeds():
         result = await _litellm_acompletion_with_retry(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": "test"}],
-            api_key="test-key",
-            temperature=0.1
+            api_key="test-key"
         )
         
         # Verify the function was called four times (3 retries)
@@ -159,7 +155,6 @@ async def test_retry_with_aws_parameters():
             model="claude-3-sonnet-20240229-v1:0",
             messages=[{"role": "user", "content": "test"}],
             api_key="test-key",
-            temperature=0.1,
             aws_access_key_id="test-access-key",
             aws_secret_access_key="test-secret-key",
             aws_region_name="us-east-1"
