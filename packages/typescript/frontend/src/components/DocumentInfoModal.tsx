@@ -151,26 +151,26 @@ const DocumentInfoModal: React.FC<DocumentInfoModalProps> = ({
                       const bgColor = tag.color;
                       const textColor = isColorLight(bgColor) ? 'text-gray-800' : 'text-white';
                       return (
-                        <div key={tagId} className="border-b border-gray-200 pb-2 last:border-b-0 last:pb-0">
+                        <div key={tagId} className="flex items-center gap-2 border-b border-gray-200 pb-2 last:border-b-0 last:pb-0">
+                          <div className="text-gray-600 font-mono text-xs">
+                            {tagId}
+                          </div>
                           <div 
                             className={`px-2 py-1 leading-none rounded shadow-sm ${textColor} inline-flex items-center`}
                             style={{ backgroundColor: bgColor }}
                           >
                             {tag.name}
                           </div>
-                          <div className="text-gray-600 font-mono text-xs mt-1">
-                            {tagId}
-                          </div>
                         </div>
                       );
                     } else {
                       return (
-                        <div key={tagId} className="text-sm border-b border-gray-200 pb-2 last:border-b-0 last:pb-0">
+                        <div key={tagId} className="flex items-center gap-2 text-sm border-b border-gray-200 pb-2 last:border-b-0 last:pb-0">
+                          <div className="text-gray-600 font-mono text-xs">
+                            {tagId}
+                          </div>
                           <div className="font-medium text-gray-500 italic">
                             Unknown tag
-                          </div>
-                          <div className="text-gray-600 font-mono text-xs mt-1">
-                            {tagId}
                           </div>
                         </div>
                       );
