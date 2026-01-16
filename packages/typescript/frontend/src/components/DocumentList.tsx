@@ -12,6 +12,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import DownloadIcon from '@mui/icons-material/Download';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import BadgeIcon from '@mui/icons-material/Badge';
 import { isColorLight } from '@/utils/colors';
 import { DocumentUpdate } from './DocumentUpdate';
 import SearchIcon from '@mui/icons-material/Search';
@@ -21,6 +22,7 @@ import { formatLocalDateWithTZ } from '@/utils/date';
 import { BoltIcon } from '@heroicons/react/24/outline';
 import { DocumentBulkUpdate } from './DocumentBulkUpdate';
 import { DocRouterOrgApi } from '@/utils/api';
+import DocumentInfoModal from './DocumentInfoModal';
 
 // Helper function to parse and URL-encode metadata search
 const parseAndEncodeMetadataSearch = (searchStr: string): string | null => {
@@ -71,6 +73,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
   // Add state for menu
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const [isSmallScreen, setIsSmallScreen] = useState(false);
 
@@ -555,6 +558,19 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
         </MenuItem>
         <MenuItem 
           onClick={() => {
+            if (selectedDocument) {
+              setAnchorEl(null); // Close menu manually
+              setIsInfoModalOpen(true);
+              // Don't clear selectedDocument since we're opening the info modal
+            }
+          }}
+          className="flex items-center gap-2"
+        >
+          <BadgeIcon fontSize="small" className="text-blue-600" />
+          <span>Properties</span>
+        </MenuItem>
+        <MenuItem 
+          onClick={() => {
             if (selectedDocument) handleEditTags(selectedDocument);
           }}
           className="flex items-center gap-2"
@@ -591,6 +607,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
           currentTags={editingDocument.tag_ids || []}
           currentMetadata={editingDocument.metadata || {}}
           availableTags={tags}
+          document={editingDocument}
           onSave={handleUpdateDocument}
         />
       )}
@@ -619,6 +636,18 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
         }}
         onRefresh={fetchFiles}
       />
+      
+      {/* Info Modal */}
+      {selectedDocument && (
+        <DocumentInfoModal
+          isOpen={isInfoModalOpen}
+          onClose={() => {
+            setIsInfoModalOpen(false);
+            setSelectedDocument(null);
+          }}
+          document={selectedDocument}
+        />
+      )}
     </Box>
   );
 };
