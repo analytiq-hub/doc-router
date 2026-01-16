@@ -1244,6 +1244,14 @@ const tools: Tool[] = [
       required: ['messages', 'model'],
     },
   },
+  {
+    name: 'get_organization',
+    description: 'Get information about the current organization (name, type, ID)',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
 
   // ========== HELPER TOOLS ==========
   {
@@ -1273,14 +1281,6 @@ const tools: Tool[] = [
   {
     name: 'help_forms',
     description: 'Get help information about creating and configuring forms in DocRouter',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
-  },
-  {
-    name: 'get_organization',
-    description: 'Get information about the current organization (name, type, ID)',
     inputSchema: {
       type: 'object',
       properties: {},
@@ -1969,6 +1969,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case 'get_organization': {
+        const result = await docrouterAccountClient.getOrganizationFromToken(orgToken);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(serializeDates(result), null, 2),
+            },
+          ],
+        };
+      }
+
       // ========== HELPER TOOLS ==========
       case 'help': {
         const helpText = `
@@ -2032,6 +2044,9 @@ This server provides access to DocRouter resources and tools.
 
 ### LLM Chat
 - \`run_llm_chat(messages, model, temperature, max_tokens, stream)\` - Run chat
+
+### Organization
+- \`get_organization()\` - Get information about the current organization (name, type, ID)
 
 ### Help Tools
 - \`help()\` - Get general API help information
@@ -2151,18 +2166,6 @@ This server provides access to DocRouter resources and tools.
             isError: true,
           };
         }
-      }
-
-      case 'get_organization': {
-        const result = await docrouterAccountClient.getOrganizationFromToken(orgToken);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(serializeDates(result), null, 2),
-            },
-          ],
-        };
       }
 
       default:
