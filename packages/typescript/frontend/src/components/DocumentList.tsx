@@ -646,6 +646,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
             setSelectedDocument(null);
           }}
           document={selectedDocument}
+          availableTags={tags}
         />
       )}
     </Box>

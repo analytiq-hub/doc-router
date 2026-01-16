@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Document } from '@docrouter/sdk';
+import { Document, Tag } from '@docrouter/sdk';
 import BadgeIcon from '@mui/icons-material/Badge';
 import { DocRouterAccountApi } from '@/utils/api';
 
@@ -7,12 +7,14 @@ interface DocumentInfoModalProps {
   isOpen: boolean;
   onClose: () => void;
   document: Document;
+  availableTags?: Tag[];
 }
 
 const DocumentInfoModal: React.FC<DocumentInfoModalProps> = ({ 
   isOpen, 
   onClose, 
-  document 
+  document,
+  availableTags = []
 }) => {
   const [uploadedByUserId, setUploadedByUserId] = useState<string | null>(null);
   const [isLoadingUserId, setIsLoadingUserId] = useState(false);
@@ -65,7 +67,13 @@ const DocumentInfoModal: React.FC<DocumentInfoModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
+    <div 
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]" 
+      onClick={(e) => {
+        e.stopPropagation();
+        onClose();
+      }}
+    >
       <div className="bg-white p-6 rounded-lg shadow-xl max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center gap-2 mb-4">
           <BadgeIcon className="text-blue-600" />
@@ -132,15 +140,23 @@ const DocumentInfoModal: React.FC<DocumentInfoModalProps> = ({
           </div>
           
           <div className="col-span-2">
-            <label className="text-sm font-semibold text-gray-700 block mb-1">Tag IDs</label>
+            <label className="text-sm font-semibold text-gray-700 block mb-1">Tags</label>
             <div className="text-gray-900 bg-gray-50 p-2 rounded border">
               {document.tag_ids && document.tag_ids.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
-                  {document.tag_ids.map((tagId, index) => (
-                    <span key={tagId} className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-mono">
-                      {tagId}
-                    </span>
-                  ))}
+                <div className="space-y-2">
+                  {document.tag_ids.map((tagId) => {
+                    const tag = availableTags.find(t => t.id === tagId);
+                    return (
+                      <div key={tagId} className="text-sm border-b border-gray-200 pb-2 last:border-b-0 last:pb-0">
+                        <div className="font-medium text-gray-900">
+                          {tag ? tag.name : <span className="text-gray-500 italic">Unknown tag</span>}
+                        </div>
+                        <div className="text-gray-600 font-mono text-xs mt-1">
+                          {tagId}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <span className="text-gray-500 italic">No tags</span>
@@ -169,7 +185,10 @@ const DocumentInfoModal: React.FC<DocumentInfoModalProps> = ({
         <div className="flex justify-end mt-6 pt-4 border-t">
           <button
             type="button"
-            onClick={onClose}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClose();
+            }}
             className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
           >
             Close

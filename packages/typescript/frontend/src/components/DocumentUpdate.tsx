@@ -220,6 +220,7 @@ export function DocumentUpdate({
           isOpen={isInfoModalOpen}
           onClose={() => setIsInfoModalOpen(false)}
           document={document}
+          availableTags={availableTags}
         />
       )}
     </Transition>
