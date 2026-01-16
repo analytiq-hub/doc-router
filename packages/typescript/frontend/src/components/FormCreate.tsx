@@ -29,11 +29,20 @@ const Editor = dynamic(() => import("@monaco-editor/react"), {
 });
 import InfoTooltip from '@/components/InfoTooltip';
 import { FormComponent } from '@/types/ui';
+import BadgeIcon from '@mui/icons-material/Badge';
+import CompareArrowsIcon from '@mui/icons-material/CompareArrows';
+import FormInfoModal from './FormInfoModal';
+import FormVersionSelector from './FormVersionSelector';
+import FormVersionCompareModal from './FormVersionCompareModal';
+import FormDiffView from './FormDiffView';
 
 const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ organizationId, formId }) => {
   const router = useRouter();
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [currentFormId, setCurrentFormId] = useState<string | null>(null);
+  const [currentFormFull, setCurrentFormFull] = useState<Form | null>(null);
+  const [viewingVersion, setViewingVersion] = useState<number | null>(null);
+  const [isReadOnly, setIsReadOnly] = useState(false);
   const [currentForm, setCurrentForm] = useState<FormConfig>({
     name: '',
     response_format: {
@@ -47,6 +56,10 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'builder' | 'mapper' | 'json'>('builder');
   const [jsonForm, setJsonForm] = useState('');
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const [diffLeft, setDiffLeft] = useState<Form | null>(null);
+  const [diffRight, setDiffRight] = useState<Form | null>(null);
 
   // Load editing form if available
   useEffect(() => {
@@ -56,6 +69,12 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
           setIsLoading(true);
           const form = await docRouterOrgApi.getForm({ formRevId: formId });
           setCurrentFormId(form.form_id);
+          setCurrentFormFull(form);
+          setViewingVersion(form.form_version);
+          // Check if this is the latest version
+          const versionsResponse = await docRouterOrgApi.listFormVersions({ formId: form.form_id });
+          const latestVersion = versionsResponse.forms.sort((a, b) => b.form_version - a.form_version)[0];
+          setIsReadOnly(form.form_version !== latestVersion.form_version);
           setCurrentForm({
             name: form.name,
             response_format: {
@@ -166,10 +185,62 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
   return (
     <div className="p-4 w-full">
       <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <div className="hidden md:flex items-center gap-2 mb-4">
+        <div className="hidden md:flex items-center gap-3 mb-4 flex-wrap">
           <h2 className="text-xl font-bold">
             {currentFormId ? 'Edit Form' : 'Create Form'}
           </h2>
+          {currentFormFull && currentFormId && (
+            <>
+              <FormVersionSelector
+                organizationId={organizationId}
+                formId={currentFormId}
+                currentVersion={currentFormFull.form_version}
+                onVersionSelect={async (formRevId, version) => {
+                  try {
+                    setIsLoading(true);
+                    const form = await docRouterOrgApi.getForm({ formRevId });
+                    setCurrentFormFull(form);
+                    setViewingVersion(version);
+                    // Check if this is the latest version
+                    const versionsResponse = await docRouterOrgApi.listFormVersions({ formId: currentFormId });
+                    const latestVersion = versionsResponse.forms.sort((a, b) => b.form_version - a.form_version)[0];
+                    setIsReadOnly(version !== latestVersion.form_version);
+                    setCurrentForm({
+                      name: form.name,
+                      response_format: {
+                        ...form.response_format,
+                        json_formio_mapping: form.response_format.json_formio_mapping || {}
+                      },
+                      tag_ids: form.tag_ids || []
+                    });
+                    setSelectedTagIds(form.tag_ids || []);
+                    // Update URL to reflect the selected version
+                    router.push(`/orgs/${organizationId}/forms/${formRevId}`);
+                  } catch (error) {
+                    toast.error(`Error loading form version: ${getApiErrorMsg(error)}`);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+              />
+              <button
+                onClick={() => setIsCompareModalOpen(true)}
+                className="h-8 mb-2 flex items-center gap-2 px-3 text-sm font-medium text-blue-600 border border-blue-600 rounded-md hover:bg-blue-50 transition-colors"
+              >
+                <CompareArrowsIcon className="text-base" />
+                <span>Compare Versions</span>
+              </button>
+            </>
+          )}
+          {currentFormFull && (
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="h-8 w-8 mb-2 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
+              title="Form Properties"
+            >
+              <BadgeIcon className="text-lg" />
+            </button>
+          )}
           <InfoTooltip 
             title="About Forms"
             content={
@@ -187,6 +258,48 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
           />
         </div>
         
+        {isReadOnly && currentFormFull && (
+          <div className="mb-4 p-3 bg-yellow-50 border border-yellow-200 rounded-md text-yellow-800">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium">
+                Viewing version {viewingVersion} (read-only). This is not the latest version.
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!currentFormId) return;
+                  try {
+                    setIsLoading(true);
+                    const versionsResponse = await docRouterOrgApi.listFormVersions({ formId: currentFormId });
+                    const latestVersion = versionsResponse.forms.sort((a, b) => b.form_version - a.form_version)[0];
+                    const form = await docRouterOrgApi.getForm({ formRevId: latestVersion.form_revid });
+                    setCurrentFormFull(form);
+                    setViewingVersion(form.form_version);
+                    setIsReadOnly(false);
+                    setCurrentForm({
+                      name: form.name,
+                      response_format: {
+                        ...form.response_format,
+                        json_formio_mapping: form.response_format.json_formio_mapping || {}
+                      },
+                      tag_ids: form.tag_ids || []
+                    });
+                    setSelectedTagIds(form.tag_ids || []);
+                    router.push(`/orgs/${organizationId}/forms/${latestVersion.form_revid}`);
+                  } catch (error) {
+                    toast.error(`Error loading latest version: ${getApiErrorMsg(error)}`);
+                  } finally {
+                    setIsLoading(false);
+                  }
+                }}
+                className="px-3 py-1 text-sm bg-yellow-100 hover:bg-yellow-200 rounded border border-yellow-300"
+              >
+                View Latest Version
+              </button>
+            </div>
+          </div>
+        )}
+        
         <div className="space-y-4">
           {/* Form Name Input */}
           <div className="flex items-center gap-4 mb-4">
@@ -197,7 +310,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                 value={currentForm.name}
                 onChange={e => setCurrentForm({ ...currentForm, name: e.target.value })}
                 placeholder="Form Name"
-                disabled={isLoading}
+                disabled={isLoading || isReadOnly}
               />
             </div>
             <div className="flex gap-2">
@@ -216,7 +329,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                   setSelectedTagIds([]);
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
-                disabled={isLoading}
+                disabled={isLoading || isReadOnly}
               >
                 Clear
               </button>
@@ -230,7 +343,7 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                   saveForm();
                 }}
                 className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-                disabled={isLoading}
+                disabled={isLoading || isReadOnly}
               >
                 {currentFormId ? 'Update Form' : 'Save Form'}
               </button>
@@ -284,14 +397,17 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                 <FormioBuilder
                   jsonFormio={JSON.stringify(currentForm.response_format.json_formio || [])}
                   onChange={(components) => {
-                    setCurrentForm(prev => ({
-                      ...prev,
-                      response_format: {
-                        ...prev.response_format,
-                        json_formio: components
-                      }
-                    }));
+                    if (!isReadOnly) {
+                      setCurrentForm(prev => ({
+                        ...prev,
+                        response_format: {
+                          ...prev.response_format,
+                          json_formio: components
+                        }
+                      }));
+                    }
                   }}
+                  readOnly={isReadOnly}
                 />
               </div>
             ) : activeTab === 'mapper' ? (
@@ -302,14 +418,17 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                 formComponents={currentForm.response_format.json_formio as FormComponent[] || []}
                 fieldMappings={currentForm.response_format.json_formio_mapping || {}}
                 onMappingChange={(mappings) => {
-                  setCurrentForm(prev => ({
-                    ...prev,
-                    response_format: {
-                      ...prev.response_format,
-                      json_formio_mapping: mappings
-                    }
-                  }));
+                  if (!isReadOnly) {
+                    setCurrentForm(prev => ({
+                      ...prev,
+                      response_format: {
+                        ...prev.response_format,
+                        json_formio_mapping: mappings
+                      }
+                    }));
+                  }
                 }}
+                readOnly={isReadOnly}
               />
             ) : (
               // JSON Form Tab
@@ -326,7 +445,8 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                     wrappingIndent: "indent",
                     lineNumbers: "on",
                     folding: true,
-                    renderValidationDecorations: "on"
+                    renderValidationDecorations: "on",
+                    readOnly: isReadOnly
                   }}
                   theme="vs-light"
                 />
@@ -344,12 +464,48 @@ const FormCreate: React.FC<{ organizationId: string, formId?: string }> = ({ org
                 availableTags={availableTags}
                 selectedTagIds={selectedTagIds}
                 onChange={setSelectedTagIds}
-                disabled={isLoading}
+                disabled={isLoading || isReadOnly}
               />
             </div>
           </div>
         </div>
       </div>
+      
+      {/* Version Compare Modal */}
+      {currentFormFull && currentFormId && (
+        <FormVersionCompareModal
+          isOpen={isCompareModalOpen}
+          onClose={() => setIsCompareModalOpen(false)}
+          organizationId={organizationId}
+          formId={currentFormId}
+          currentForm={currentFormFull}
+          onCompare={(leftForm, rightForm) => {
+            setDiffLeft(leftForm);
+            setDiffRight(rightForm);
+          }}
+        />
+      )}
+      
+      {/* Info Modal */}
+      {currentFormFull && (
+        <FormInfoModal
+          isOpen={isInfoModalOpen}
+          onClose={() => setIsInfoModalOpen(false)}
+          form={currentFormFull}
+        />
+      )}
+      
+      {/* Diff View */}
+      {diffLeft && diffRight && (
+        <FormDiffView
+          leftForm={diffLeft}
+          rightForm={diffRight}
+          onClose={() => {
+            setDiffLeft(null);
+            setDiffRight(null);
+          }}
+        />
+      )}
     </div>
   );
 };

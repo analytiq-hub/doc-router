@@ -342,6 +342,11 @@ export class DocRouterOrg {
     return this.http.delete<{ message: string }>(`/v0/orgs/${this.organizationId}/forms/${formId}`);
   }
 
+  async listFormVersions(params: { formId: string }): Promise<ListFormsResponse> {
+    const { formId } = params;
+    return this.http.get<ListFormsResponse>(`/v0/orgs/${this.organizationId}/forms/${formId}/versions`);
+  }
+
   async submitForm(params: Omit<SubmitFormParams, 'organizationId'>): Promise<FormSubmission> {
     const { documentId, formRevId, submission_data, submitted_by } = params;
     return this.http.post<FormSubmission>(`/v0/orgs/${this.organizationId}/forms/submissions/${documentId}`, {

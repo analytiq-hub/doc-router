@@ -6,13 +6,14 @@ import type { Form } from 'formiojs';
 interface FormioBuilderProps {
   jsonFormio?: string;
   onChange?: (schema: Form | object) => void;
+  readOnly?: boolean;
 }
 
 interface FormWithComponents extends Form {
   components: unknown[];
 }
 
-const FormioBuilder: React.FC<FormioBuilderProps> = ({ jsonFormio, onChange }) => {
+const FormioBuilder: React.FC<FormioBuilderProps> = ({ jsonFormio, onChange, readOnly = false }) => {
   const builderRef = useRef<HTMLDivElement>(null);
   const builderInstance = useRef<FormBuilder | null>(null);
   const onChangeRef = useRef(onChange);
@@ -37,8 +38,14 @@ const FormioBuilder: React.FC<FormioBuilderProps> = ({ jsonFormio, onChange }) =
     // Normalize jsonFormio for comparison (handle undefined/null)
     const currentJsonFormio = jsonFormio || '';
     
-    // Only recreate if jsonFormio actually changed
-    if (currentJsonFormio === lastJsonFormio.current) return;
+    // Recreate if jsonFormio changed or readOnly changed
+    if (currentJsonFormio === lastJsonFormio.current && builderInstance.current) {
+      // If only readOnly changed, update the existing builder
+      if (builderInstance.current && typeof (builderInstance.current as any).readOnly !== 'undefined') {
+        (builderInstance.current as any).readOnly = readOnly;
+      }
+      return;
+    }
     
     lastJsonFormio.current = currentJsonFormio;
 
@@ -67,7 +74,9 @@ const FormioBuilder: React.FC<FormioBuilderProps> = ({ jsonFormio, onChange }) =
     }
 
     // Create the Formio builder using the captured element
-    const builder = new FormBuilder(builderElement, form, {});
+    const builder = new FormBuilder(builderElement, form, {
+      readOnly: readOnly
+    });
     builderInstance.current = builder;
     
     // Listen to the correct FormBuilder events
@@ -151,7 +160,7 @@ const FormioBuilder: React.FC<FormioBuilderProps> = ({ jsonFormio, onChange }) =
       builder.destroy();
       builderInstance.current = null;
     };
-  }, [jsonFormio]);
+  }, [jsonFormio, readOnly]);
 
   return <div ref={builderRef} />;
 };

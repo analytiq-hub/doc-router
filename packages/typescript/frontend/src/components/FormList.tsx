@@ -12,11 +12,13 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import DownloadIcon from '@mui/icons-material/Download';
 import DriveFileRenameOutlineIcon from '@mui/icons-material/DriveFileRenameOutline';
 import ContentCopyIcon from '@mui/icons-material/ContentCopy';
+import BadgeIcon from '@mui/icons-material/Badge';
 import colors from 'tailwindcss/colors';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-toastify';
 import FormNameModal from '@/components/FormNameModal';
+import FormInfoModal from '@/components/FormInfoModal';
 import { isColorLight } from '@/utils/colors';
 
 const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
@@ -34,6 +36,7 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const [isNameModalOpen, setIsNameModalOpen] = useState(false);
   const [isCloning, setIsCloning] = useState(false);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const loadForms = useCallback(async () => {
     try {
@@ -355,6 +358,28 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       >
         <MenuItem 
           onClick={() => {
+            if (selectedForm) handleEdit(selectedForm);
+          }}
+          className="flex items-center gap-2"
+        >
+          <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+          <span>Edit</span>
+        </MenuItem>
+        <MenuItem 
+          onClick={() => {
+            if (selectedForm) {
+              setAnchorEl(null); // Close menu manually
+              setIsInfoModalOpen(true);
+              // Don't clear selectedForm since we're opening the info modal
+            }
+          }}
+          className="flex items-center gap-2"
+        >
+          <BadgeIcon fontSize="small" className="text-blue-600" />
+          <span>Properties</span>
+        </MenuItem>
+        <MenuItem 
+          onClick={() => {
             if (selectedForm) handleNameForm(selectedForm);
           }}
           className="flex items-center gap-2"
@@ -370,15 +395,6 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
         >
           <ContentCopyIcon fontSize="small" className="text-purple-600" />
           <span>Clone</span>
-        </MenuItem>
-        <MenuItem 
-          onClick={() => {
-            if (selectedForm) handleEdit(selectedForm);
-          }}
-          className="flex items-center gap-2"
-        >
-          <EditOutlinedIcon fontSize="small" className="text-blue-600" />
-          <span>Edit</span>
         </MenuItem>
         <MenuItem 
           onClick={() => {
@@ -409,6 +425,18 @@ const FormList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
           onSubmit={handleNameSubmit}
           isCloning={isCloning}
           organizationId={organizationId}
+        />
+      )}
+      
+      {/* Info Modal */}
+      {selectedForm && (
+        <FormInfoModal
+          isOpen={isInfoModalOpen}
+          onClose={() => {
+            setIsInfoModalOpen(false);
+            setSelectedForm(null);
+          }}
+          form={selectedForm}
         />
       )}
     </div>

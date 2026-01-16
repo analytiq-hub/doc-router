@@ -23,6 +23,7 @@ interface FormioMapperProps {
   formComponents: FormComponent[];
   fieldMappings: Record<string, FieldMapping>;
   onMappingChange: (mappings: Record<string, FieldMapping>) => void;
+  readOnly?: boolean;
 }
 
 interface MappedSchemaField {
@@ -49,6 +50,7 @@ interface JsonSchemaFieldDefinition {
 }
 
 const FormioMapper: React.FC<FormioMapperProps> = ({
+  readOnly = false,
   organizationId,
   selectedTagIds,
   formComponents,
@@ -619,8 +621,9 @@ const FormioMapper: React.FC<FormioMapperProps> = ({
                               {field.isExpandable && (
                                 <button
                                   onClick={() => toggleFieldExpansion(field)}
-                                  className="text-gray-500 hover:text-gray-700 p-0.5"
+                                  className="text-gray-500 hover:text-gray-700 p-0.5 disabled:opacity-50 disabled:cursor-not-allowed"
                                   title={expandedFields.has(`${field.promptRevId}-${field.path}`) ? 'Collapse' : 'Expand'}
+                                  disabled={readOnly}
                                 >
                                   {expandedFields.has(`${field.promptRevId}-${field.path}`) ? (
                                     <ChevronDownIcon className="h-3 w-3" />
@@ -631,10 +634,10 @@ const FormioMapper: React.FC<FormioMapperProps> = ({
                               )}
                               
                               <span 
-                                className={`font-medium text-sm ${field.isExpandable ? 'cursor-pointer' : 'cursor-move'}`}
-                                onClick={field.isExpandable ? () => toggleFieldExpansion(field) : undefined}
-                                draggable={!field.isExpandable}
-                                onDragStart={!field.isExpandable ? (e) => handleDragStart(e, field) : undefined}
+                                className={`font-medium text-sm ${readOnly ? 'cursor-default' : (field.isExpandable ? 'cursor-pointer' : 'cursor-move')}`}
+                                onClick={!readOnly && field.isExpandable ? () => toggleFieldExpansion(field) : undefined}
+                                draggable={!readOnly && !field.isExpandable}
+                                onDragStart={!readOnly && !field.isExpandable ? (e) => handleDragStart(e, field) : undefined}
                               >
                                 {field.name}
                               </span>
@@ -696,8 +699,8 @@ const FormioMapper: React.FC<FormioMapperProps> = ({
                 return (
                   <div
                     key={formField.key}
-                    onDrop={(e) => handleDrop(e, formField)}
-                    onDragOver={(e) => handleDragOver(e, formField)}
+                    onDrop={!readOnly ? (e) => handleDrop(e, formField) : undefined}
+                    onDragOver={!readOnly ? (e) => handleDragOver(e, formField) : undefined}
                     className={`p-3 border-2 border-dashed rounded-lg transition-colors ${
                       mapping 
                         ? 'border-green-300 bg-green-50' 
@@ -723,8 +726,9 @@ const FormioMapper: React.FC<FormioMapperProps> = ({
                                 </span>
                                 <button
                                   onClick={() => removeMapping(formField.key)}
-                                  className="text-red-500 hover:text-red-700"
+                                  className="text-red-500 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                   title="Remove all mappings"
+                                  disabled={readOnly}
                                 >
                                   <XMarkIcon className="h-4 w-4" />
                                 </button>
@@ -747,8 +751,9 @@ const FormioMapper: React.FC<FormioMapperProps> = ({
                                       ? removeMapping(formField.key) 
                                       : removeSource(formField.key, index)
                                     }
-                                    className="text-red-500 hover:text-red-700"
+                                    className="text-red-500 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                                     title={mapping.sources.length === 1 ? "Remove mapping" : "Remove this source"}
+                                    disabled={readOnly}
                                   >
                                     <XMarkIcon className="h-3 w-3" />
                                   </button>

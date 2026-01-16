@@ -433,6 +433,43 @@ async def delete_form(
         
     return {"message": "Form deleted successfully"}
 
+@forms_router.get("/v0/orgs/{organization_id}/forms/{form_id}/versions", response_model=ListFormsResponse)
+async def list_form_versions(
+    organization_id: str,
+    form_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """List all versions of a form by form_id"""
+    logger.info(f"list_form_versions() start: organization_id: {organization_id}, form_id: {form_id}")
+    db = ad.common.get_async_db()
+    
+    # Verify the form belongs to the organization
+    form = await db.forms.find_one({
+        "_id": ObjectId(form_id),
+        "organization_id": organization_id
+    })
+    if not form:
+        raise HTTPException(status_code=404, detail="Form not found or not in this organization")
+    
+    # Get all revisions for this form_id, sorted by version descending
+    revisions = await db.form_revisions.find(
+        {"form_id": form_id}
+    ).sort("form_version", -1).to_list(None)
+    
+    if not revisions:
+        return ListFormsResponse(forms=[], total_count=0, skip=0)
+    
+    # Convert _id to form_revid and add name
+    for revision in revisions:
+        revision['form_revid'] = str(revision.pop('_id'))
+        revision['name'] = form['name']
+    
+    return ListFormsResponse(
+        forms=revisions,
+        total_count=len(revisions),
+        skip=0
+    )
+
 # Form submission endpoints
 @forms_router.post("/v0/orgs/{organization_id}/forms/submissions/{document_id}", response_model=FormSubmission)
 async def submit_form(
