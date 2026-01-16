@@ -13,6 +13,10 @@ interface FormWithComponents extends Form {
   components: unknown[];
 }
 
+interface FormBuilderWithReadOnly extends FormBuilder {
+  readOnly?: boolean;
+}
+
 const FormioBuilder: React.FC<FormioBuilderProps> = ({ jsonFormio, onChange, readOnly = false }) => {
   const builderRef = useRef<HTMLDivElement>(null);
   const builderInstance = useRef<FormBuilder | null>(null);
@@ -41,8 +45,9 @@ const FormioBuilder: React.FC<FormioBuilderProps> = ({ jsonFormio, onChange, rea
     // Recreate if jsonFormio changed or readOnly changed
     if (currentJsonFormio === lastJsonFormio.current && builderInstance.current) {
       // If only readOnly changed, update the existing builder
-      if (builderInstance.current && typeof (builderInstance.current as any).readOnly !== 'undefined') {
-        (builderInstance.current as any).readOnly = readOnly;
+      const builderWithReadOnly = builderInstance.current as FormBuilderWithReadOnly;
+      if (builderWithReadOnly && typeof builderWithReadOnly.readOnly !== 'undefined') {
+        builderWithReadOnly.readOnly = readOnly;
       }
       return;
     }
