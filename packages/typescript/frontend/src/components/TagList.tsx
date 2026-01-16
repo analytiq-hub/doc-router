@@ -9,10 +9,12 @@ import SearchIcon from '@mui/icons-material/Search';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import BadgeIcon from '@mui/icons-material/Badge';
 import colors from 'tailwindcss/colors';
 import { isColorLight } from '@/utils/colors';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import TagInfoModal from '@/components/TagInfoModal';
 
 const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
@@ -28,6 +30,7 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   // Add state for menu
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const loadTags = useCallback(async () => {
     try {
@@ -235,6 +238,19 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
           </MenuItem>
           <MenuItem 
             onClick={() => {
+              if (selectedTag) {
+                setAnchorEl(null); // Close menu manually
+                setIsInfoModalOpen(true);
+                // Don't clear selectedTag since we're opening the info modal
+              }
+            }}
+            className="flex items-center gap-2"
+          >
+            <BadgeIcon fontSize="small" className="text-blue-600" />
+            <span>Properties</span>
+          </MenuItem>
+          <MenuItem 
+            onClick={() => {
               if (selectedTag) handleDelete(selectedTag.id);
             }}
             className="flex items-center gap-2"
@@ -243,6 +259,18 @@ const TagList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
             <span>Delete</span>
           </MenuItem>
         </Menu>
+        
+        {/* Info Modal */}
+        {selectedTag && (
+          <TagInfoModal
+            isOpen={isInfoModalOpen}
+            onClose={() => {
+              setIsInfoModalOpen(false);
+              setSelectedTag(null);
+            }}
+            tag={selectedTag}
+          />
+        )}
       </div>
     </div>
   );

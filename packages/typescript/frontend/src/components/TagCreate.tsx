@@ -10,6 +10,8 @@ import colors from 'tailwindcss/colors';
 import InfoTooltip from '@/components/InfoTooltip';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
+import BadgeIcon from '@mui/icons-material/Badge';
+import TagInfoModal from '@/components/TagInfoModal';
 
 const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organizationId, tagId }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
@@ -20,6 +22,8 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
   });
 
   const [isLoading, setIsLoading] = useState(false);
+  const [currentTagFull, setCurrentTagFull] = useState<Tag | null>(null);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const router = useRouter();
 
   // Load editing tag if available
@@ -29,6 +33,7 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
         setIsLoading(true);
         try {
           const tag = await docRouterOrgApi.getTag({ tagId });
+          setCurrentTagFull(tag);
           setCurrentTag({
             id: tag.id,
             name: tag.name,
@@ -42,6 +47,7 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
           setIsLoading(false);
         }
       } else {
+        setCurrentTagFull(null);
         setCurrentTag({ name: '', color: colors.blue[500], description: '' });
       }
     }
@@ -95,6 +101,15 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
           <h2 className="text-xl font-bold">
             {currentTag.id ? 'Edit Tag' : 'Create Tag'}
           </h2>
+          {currentTagFull && (
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              className="h-8 w-8 mb-2 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
+              title="Tag Properties"
+            >
+              <BadgeIcon className="text-lg" />
+            </button>
+          )}
           <InfoTooltip 
             title="About Tags"
             content={
@@ -175,6 +190,15 @@ const TagCreate: React.FC<{ organizationId: string, tagId?: string }> = ({ organ
           </div>
         </form>
       </div>
+      
+      {/* Info Modal */}
+      {currentTagFull && (
+        <TagInfoModal
+          isOpen={isInfoModalOpen}
+          onClose={() => setIsInfoModalOpen(false)}
+          tag={currentTagFull}
+        />
+      )}
     </div>
   );
 };
