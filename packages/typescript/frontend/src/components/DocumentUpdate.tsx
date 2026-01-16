@@ -1,10 +1,8 @@
 import { Fragment, useState } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
 import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline'
-import { Tag, Document } from '@docrouter/sdk';
+import { Tag } from '@docrouter/sdk';
 import TagSelector from './TagSelector';
-import BadgeIcon from '@mui/icons-material/Badge';
-import DocumentInfoModal from './DocumentInfoModal';
 
 interface DocumentUpdateProps {
   isOpen: boolean
@@ -13,7 +11,6 @@ interface DocumentUpdateProps {
   currentTags: string[]
   currentMetadata?: Record<string, string>
   availableTags: Tag[]
-  document?: Document // Optional full document object for properties modal
   onSave: (tagIds: string[], metadata: Record<string, string>) => Promise<void>
 }
 
@@ -24,7 +21,6 @@ export function DocumentUpdate({
   currentTags, 
   currentMetadata = {},
   availableTags,
-  document,
   onSave 
 }: DocumentUpdateProps) {
   const [selectedTags, setSelectedTags] = useState(currentTags)
@@ -36,7 +32,6 @@ export function DocumentUpdate({
     }))
   )
   const [validationError, setValidationError] = useState<string | null>(null)
-  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false)
 
   const handleAddMetadata = () => {
     const newId = `field_${Date.now()}`
@@ -102,21 +97,9 @@ export function DocumentUpdate({
                 <div className="flex h-full flex-col bg-white shadow-xl">
                   <div className="px-4 py-6 sm:px-6">
                     <div className="flex items-start justify-between">
-                      <div className="flex items-center gap-2">
-                        <h2 className="text-base font-semibold leading-6 text-gray-900">
-                          Update Document: {documentName}
-                        </h2>
-                        {document && (
-                          <button
-                            type="button"
-                            onClick={() => setIsInfoModalOpen(true)}
-                            className="h-8 w-8 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
-                            title="Document Properties"
-                          >
-                            <BadgeIcon className="text-lg" />
-                          </button>
-                        )}
-                      </div>
+                      <h2 className="text-base font-semibold leading-6 text-gray-900">
+                        Update Document: {documentName}
+                      </h2>
                       <button
                         type="button"
                         className="rounded-md text-gray-400 hover:text-gray-500"
@@ -213,16 +196,6 @@ export function DocumentUpdate({
           </div>
         </div>
       </Dialog>
-      
-      {/* Info Modal */}
-      {document && (
-        <DocumentInfoModal
-          isOpen={isInfoModalOpen}
-          onClose={() => setIsInfoModalOpen(false)}
-          document={document}
-          availableTags={availableTags}
-        />
-      )}
     </Transition>
   )
 } 

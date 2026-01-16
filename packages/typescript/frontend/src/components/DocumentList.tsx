@@ -607,7 +607,6 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
           currentTags={editingDocument.tag_ids || []}
           currentMetadata={editingDocument.metadata || {}}
           availableTags={tags}
-          document={editingDocument}
           onSave={handleUpdateDocument}
         />
       )}
