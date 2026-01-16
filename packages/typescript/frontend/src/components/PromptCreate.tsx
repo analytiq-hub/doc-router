@@ -101,7 +101,10 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
           setCurrentPromptId(prompt.prompt_id);
           setCurrentPromptFull(prompt);
           setViewingVersion(prompt.prompt_version);
-          setIsReadOnly(false);
+          // Check if this is the latest version
+          const versionsResponse = await docRouterOrgApi.listPromptVersions({ promptId: prompt.prompt_id });
+          const latestVersion = versionsResponse.prompts.sort((a, b) => b.prompt_version - a.prompt_version)[0];
+          setIsReadOnly(prompt.prompt_version !== latestVersion.prompt_version);
           setCurrentPrompt({
             name: prompt.name,
             content: prompt.content,
