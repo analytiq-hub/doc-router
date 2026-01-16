@@ -47,3 +47,8 @@ warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
 disallow_incomplete_defs = true
+
+[tool.pytest.ini_options]
+filterwarnings = [
+    "ignore:enable_cleanup_closed ignored because:DeprecationWarning",
+]

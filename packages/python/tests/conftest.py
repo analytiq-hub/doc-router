@@ -36,15 +36,6 @@ from tests.conftest_utils import (
 # Define pytest configuration
 pytest_plugins = ["pytest_asyncio"]
 
-# Suppress aiohttp deprecation warning about enable_cleanup_closed in Python 3.13+
-# This warning is harmless - aiohttp is just informing us that the parameter is ignored in Python 3.13+
-# The warning message is: "enable_cleanup_closed ignored because https://github.com/python/cpython/pull/118960 is fixed in Python version..."
-warnings.filterwarnings(
-    "ignore",
-    message=".*enable_cleanup_closed ignored because.*",
-    category=DeprecationWarning
-)
-
 # Set default asyncio fixture scope
 def pytest_addoption(parser):
     parser.addini(
