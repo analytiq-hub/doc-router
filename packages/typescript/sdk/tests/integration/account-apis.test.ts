@@ -198,7 +198,7 @@ describe('DocRouterAccount Missing APIs Integration Tests', () => {
       }, testFixtures.org_id) as any;
 
       await client.deleteOrganizationToken(created.id, testFixtures.org_id);
-      
+
       // Verify it's deleted by checking the tokens list
       const tokens = await client.getOrganizationTokens(testFixtures.org_id);
       if (Array.isArray(tokens)) {
@@ -208,6 +208,48 @@ describe('DocRouterAccount Missing APIs Integration Tests', () => {
         // If response is not an array, just verify the API call succeeded
         expect(tokens).toBeDefined();
       }
+    });
+
+    test('getOrganizationFromToken with org token', async () => {
+      // Create an organization token
+      const created = await client.createOrganizationToken({
+        name: `Resolve Test Org Token ${Date.now()}`,
+        lifetime: 3600
+      }, testFixtures.org_id) as any;
+
+      // Resolve the token to organization info
+      const orgInfo = await client.getOrganizationFromToken(created.token);
+
+      expect(orgInfo).toBeDefined();
+      expect(orgInfo.organization_id).toBe(testFixtures.org_id);
+      // Verify new fields: organization_name and organization_type
+      expect(orgInfo.organization_name).toBeDefined();
+      expect(typeof orgInfo.organization_name).toBe('string');
+      expect(orgInfo.organization_type).toBeDefined();
+      expect(['individual', 'team', 'enterprise']).toContain(orgInfo.organization_type);
+
+      // Clean up
+      await client.deleteOrganizationToken(created.id, testFixtures.org_id);
+    });
+
+    test('getOrganizationFromToken with account token', async () => {
+      // Create an account token
+      const created = await client.createAccountToken({
+        name: `Resolve Test Account Token ${Date.now()}`,
+        lifetime: 3600
+      }) as any;
+
+      // Resolve the token - should return null for account tokens
+      const orgInfo = await client.getOrganizationFromToken(created.token);
+
+      expect(orgInfo).toBeDefined();
+      expect(orgInfo.organization_id).toBeNull();
+      // Verify new fields are also null for account tokens
+      expect(orgInfo.organization_name).toBeNull();
+      expect(orgInfo.organization_type).toBeNull();
+
+      // Clean up
+      await client.deleteAccountToken(created.id);
     });
   });
 

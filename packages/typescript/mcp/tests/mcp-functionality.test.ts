@@ -170,7 +170,8 @@ describe('MCP Server Functionality', () => {
         'help',
         'help_prompts',
         'help_schemas',
-        'help_forms'
+        'help_forms',
+        'get_organization'
       ];
 
       expectedHelpTools.forEach(toolName => {

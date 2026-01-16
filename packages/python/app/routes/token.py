@@ -331,13 +331,38 @@ async def get_organization_from_token(
     token: str = Query(..., description="The API token to resolve to organization ID")
 ):
     """
-    Get the organization ID associated with an API token.
-    
-    Returns the organization ID for org-specific tokens, 
-    or null for account-level tokens.
+    Get the organization information associated with an API token.
+
+    Returns the organization ID, name, and type for org-specific tokens,
+    or null values for account-level tokens.
     """
     try:
         org_id = await get_org_id_from_token(token)
-        return {"organization_id": org_id}
+
+        # If it's an account-level token (no org_id), return null values
+        if org_id is None:
+            return {
+                "organization_id": None,
+                "organization_name": None,
+                "organization_type": None
+            }
+
+        # Fetch organization details
+        db = ad.common.get_async_db()
+        org = await db.organizations.find_one({"_id": ObjectId(org_id)})
+
+        if not org:
+            # Token references an org that no longer exists
+            return {
+                "organization_id": org_id,
+                "organization_name": None,
+                "organization_type": None
+            }
+
+        return {
+            "organization_id": org_id,
+            "organization_name": org.get("name"),
+            "organization_type": org.get("type")
+        }
     except HTTPException as e:
         raise HTTPException(status_code=401, detail="Invalid token")

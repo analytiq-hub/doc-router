@@ -53,10 +53,6 @@ export interface ListAccessTokensResponse {
   access_tokens: AccessToken[];
 }
 
-export interface TokenOrganizationResponse {
-  organization_id: string | null;
-}
-
 // Organization types
 export interface OrganizationMember {
   user_id: string;
@@ -64,6 +60,12 @@ export interface OrganizationMember {
 }
 
 export type OrganizationType = 'individual' | 'team' | 'enterprise';
+
+export interface TokenOrganizationResponse {
+  organization_id: string | null;
+  organization_name: string | null;
+  organization_type: OrganizationType | null;
+}
 
 export interface Organization {
   id: string;

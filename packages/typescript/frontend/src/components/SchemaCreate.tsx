@@ -1236,7 +1236,7 @@ const SchemaCreate: React.FC<{ organizationId: string, schemaRevId?: string }> =
           {currentSchemaFull && (
             <button
               onClick={() => setIsInfoModalOpen(true)}
-              className="h-8 w-8 mb-2 flex items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
+              className="h-8 w-8 mb-2 items-center justify-center text-gray-600 hover:bg-gray-50 rounded-md transition-colors"
               title="Schema Properties"
             >
               <BadgeIcon className="text-lg" />

@@ -192,29 +192,32 @@ const server = new Server(
   }
 );
 
-// Global DocRouter client
+// Global DocRouter clients
 let docrouterClient: DocRouterOrg;
+let docrouterAccountClient: DocRouterAccount;
+let orgToken: string;
 
 // Initialize DocRouter client
 async function initializeClient(config: Config) {
   try {
     console.error('Resolving organization ID from token...');
-    const accountClient = new DocRouterAccount({
+    docrouterAccountClient = new DocRouterAccount({
       baseURL: config.baseURL,
       accountToken: config.orgToken,
       timeout: config.timeout,
       retries: config.retries,
     });
-    
-    const tokenResponse = await accountClient.getOrganizationFromToken(config.orgToken);
+    orgToken = config.orgToken;
+
+    const tokenResponse = await docrouterAccountClient.getOrganizationFromToken(config.orgToken);
     const organizationId = tokenResponse.organization_id;
-    
+
     if (!organizationId) {
       throw new Error('Token is an account-level token, not an organization-specific token. Please use an organization API token.');
     }
-    
+
     console.error(`Resolved organization ID: ${organizationId}`);
-    
+
     docrouterClient = new DocRouterOrg({
       baseURL: config.baseURL,
       orgToken: config.orgToken,
@@ -1275,6 +1278,14 @@ const tools: Tool[] = [
       properties: {},
     },
   },
+  {
+    name: 'get_organization',
+    description: 'Get information about the current organization (name, type, ID)',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
 ];
 
 // List tools handler
@@ -2140,6 +2151,18 @@ This server provides access to DocRouter resources and tools.
             isError: true,
           };
         }
+      }
+
+      case 'get_organization': {
+        const result = await docrouterAccountClient.getOrganizationFromToken(orgToken);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(serializeDates(result), null, 2),
+            },
+          ],
+        };
       }
 
       default:

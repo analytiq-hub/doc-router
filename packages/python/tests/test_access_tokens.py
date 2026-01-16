@@ -300,25 +300,37 @@ async def test_get_organization_from_token(test_db, mock_auth):
         account_token_result = create_account_token_response.json()
         account_api_token = account_token_result["token"]
         
-        # Step 3: Test resolving organization token to organization ID
+        # Step 3: Test resolving organization token to organization ID, name, and type
         resolve_org_response = client.get(
             f"/v0/account/token/organization?token={org_api_token}"
         )
-        
+
         assert resolve_org_response.status_code == 200
         org_resolve_data = resolve_org_response.json()
         assert "organization_id" in org_resolve_data
         assert org_resolve_data["organization_id"] == TEST_ORG_ID
-        
-        # Step 4: Test resolving account token to organization ID (should return null)
+        # Verify new organization_name field
+        assert "organization_name" in org_resolve_data
+        assert org_resolve_data["organization_name"] == "Test Organization"
+        # Verify new organization_type field
+        assert "organization_type" in org_resolve_data
+        assert org_resolve_data["organization_type"] == "team"
+
+        # Step 4: Test resolving account token to organization ID (should return null for all fields)
         resolve_account_response = client.get(
             f"/v0/account/token/organization?token={account_api_token}"
         )
-        
+
         assert resolve_account_response.status_code == 200
         account_resolve_data = resolve_account_response.json()
         assert "organization_id" in account_resolve_data
         assert account_resolve_data["organization_id"] is None
+        # Verify organization_name is null for account tokens
+        assert "organization_name" in account_resolve_data
+        assert account_resolve_data["organization_name"] is None
+        # Verify organization_type is null for account tokens
+        assert "organization_type" in account_resolve_data
+        assert account_resolve_data["organization_type"] is None
         
         # Step 5: Test with invalid token
         invalid_token_response = client.get(
