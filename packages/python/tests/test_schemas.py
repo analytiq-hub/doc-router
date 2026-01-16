@@ -694,3 +694,124 @@ async def test_schema_name_only_update(test_db, mock_auth):
         pass  # mock_auth fixture handles cleanup
     
     logger.info(f"test_schema_name_only_update() end")
+
+@pytest.mark.asyncio
+async def test_list_schema_versions(test_db, mock_auth):
+    """Test listing all versions of a schema"""
+    logger.info(f"test_list_schema_versions() start")
+    
+    try:
+        # Step 1: Create a schema
+        original_schema_data = {
+            "name": "Version List Test Schema",
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "version_list_test",
+                    "schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "field1": {
+                                "type": "string",
+                                "description": "First field"
+                            }
+                        },
+                        "required": ["field1"]
+                    },
+                    "strict": True
+                }
+            }
+        }
+        
+        create_response = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/schemas",
+            json=original_schema_data,
+            headers=get_auth_headers()
+        )
+        
+        assert create_response.status_code == 200
+        original_schema = create_response.json()
+        original_schema_id = original_schema["schema_id"]
+        original_schema_version = original_schema["schema_version"]
+        
+        # Step 2: Create a second version by updating the schema
+        updated_schema_data = {
+            "name": "Version List Test Schema",
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "version_list_test",
+                    "schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "field1": {
+                                "type": "string",
+                                "description": "First field"
+                            },
+                            "field2": {
+                                "type": "string",
+                                "description": "Second field"
+                            }
+                        },
+                        "required": ["field1", "field2"]
+                    },
+                    "strict": True
+                }
+            }
+        }
+        
+        update_response = client.put(
+            f"/v0/orgs/{TEST_ORG_ID}/schemas/{original_schema_id}",
+            json=updated_schema_data,
+            headers=get_auth_headers()
+        )
+        
+        assert update_response.status_code == 200
+        updated_schema = update_response.json()
+        updated_schema_version = updated_schema["schema_version"]
+        assert updated_schema_version > original_schema_version
+        
+        # Step 3: List all versions
+        versions_response = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/schemas/{original_schema_id}/versions",
+            headers=get_auth_headers()
+        )
+        
+        assert versions_response.status_code == 200
+        versions_data = versions_response.json()
+        assert "schemas" in versions_data
+        assert versions_data["total_count"] == 2
+        assert len(versions_data["schemas"]) == 2
+        
+        # Step 4: Verify versions are sorted descending by version
+        versions = versions_data["schemas"]
+        assert versions[0]["schema_version"] > versions[1]["schema_version"]
+        assert versions[0]["schema_version"] == updated_schema_version
+        assert versions[1]["schema_version"] == original_schema_version
+        
+        # Step 5: Verify all versions have the same schema_id and name
+        for version in versions:
+            assert version["schema_id"] == original_schema_id
+            assert version["name"] == "Version List Test Schema"
+            assert "schema_revid" in version
+        
+        # Step 6: Test with non-existent schema_id
+        fake_id = str(ObjectId())
+        not_found_response = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/schemas/{fake_id}/versions",
+            headers=get_auth_headers()
+        )
+        assert not_found_response.status_code == 404
+        
+        # Clean up
+        client.delete(
+            f"/v0/orgs/{TEST_ORG_ID}/schemas/{original_schema_id}",
+            headers=get_auth_headers()
+        )
+        
+    finally:
+        pass  # mock_auth fixture handles cleanup
+    
+    logger.info(f"test_list_schema_versions() end")

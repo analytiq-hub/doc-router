@@ -694,4 +694,87 @@ async def test_prompt_name_only_update(test_db, mock_auth, setup_test_models):
         headers=get_auth_headers()
     )
 
-    logger.info(f"test_prompt_name_only_update() end") 
+    logger.info(f"test_prompt_name_only_update() end")
+
+@pytest.mark.asyncio
+async def test_list_prompt_versions(test_db, mock_auth, setup_test_models):
+    """Test listing all versions of a prompt"""
+    logger.info(f"test_list_prompt_versions() start")
+    
+    # Step 1: Create a prompt
+    original_prompt_data = {
+        "name": "Version List Test Prompt",
+        "content": "This is the original content",
+        "model": "gpt-4o-mini",
+        "tag_ids": []
+    }
+    
+    create_response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/prompts",
+        json=original_prompt_data,
+        headers=get_auth_headers()
+    )
+    
+    assert create_response.status_code == 200
+    original_prompt = create_response.json()
+    original_prompt_id = original_prompt["prompt_id"]
+    original_prompt_version = original_prompt["prompt_version"]
+    
+    # Step 2: Create a second version by updating the prompt
+    updated_prompt_data = {
+        "name": "Version List Test Prompt",
+        "content": "This is the updated content",
+        "model": "gpt-4o-mini",
+        "tag_ids": []
+    }
+    
+    update_response = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/prompts/{original_prompt_id}",
+        json=updated_prompt_data,
+        headers=get_auth_headers()
+    )
+    
+    assert update_response.status_code == 200
+    updated_prompt = update_response.json()
+    updated_prompt_version = updated_prompt["prompt_version"]
+    assert updated_prompt_version > original_prompt_version
+    
+    # Step 3: List all versions
+    versions_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/prompts/{original_prompt_id}/versions",
+        headers=get_auth_headers()
+    )
+    
+    assert versions_response.status_code == 200
+    versions_data = versions_response.json()
+    assert "prompts" in versions_data
+    assert versions_data["total_count"] == 2
+    assert len(versions_data["prompts"]) == 2
+    
+    # Step 4: Verify versions are sorted descending by version
+    versions = versions_data["prompts"]
+    assert versions[0]["prompt_version"] > versions[1]["prompt_version"]
+    assert versions[0]["prompt_version"] == updated_prompt_version
+    assert versions[1]["prompt_version"] == original_prompt_version
+    
+    # Step 5: Verify all versions have the same prompt_id and name
+    for version in versions:
+        assert version["prompt_id"] == original_prompt_id
+        assert version["name"] == "Version List Test Prompt"
+        assert "prompt_revid" in version
+    
+    # Step 6: Test with non-existent prompt_id
+    fake_id = str(ObjectId())
+    not_found_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/prompts/{fake_id}/versions",
+        headers=get_auth_headers()
+    )
+    assert not_found_response.status_code == 404
+    
+    # Clean up
+    client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/prompts/{original_prompt_id}",
+        headers=get_auth_headers()
+    )
+    
+    logger.info(f"test_list_prompt_versions() end") 

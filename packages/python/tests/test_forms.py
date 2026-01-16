@@ -698,6 +698,124 @@ async def test_form_name_only_update(test_db, mock_auth):
     logger.info(f"test_form_name_only_update() end")
 
 @pytest.mark.asyncio
+async def test_list_form_versions(test_db, mock_auth):
+    """Test listing all versions of a form"""
+    logger.info(f"test_list_form_versions() start")
+    
+    try:
+        # Step 1: Create a form
+        original_form_data = {
+            "name": "Version List Test Form",
+            "response_format": {
+                "json_formio": [
+                    {
+                        "type": "textfield",
+                        "key": "field1",
+                        "label": "First Field",
+                        "input": True,
+                        "validate": {
+                            "required": True
+                        }
+                    }
+                ]
+            },
+            "tag_ids": []
+        }
+        
+        create_response = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/forms",
+            json=original_form_data,
+            headers=get_auth_headers()
+        )
+        
+        assert create_response.status_code == 200
+        original_form = create_response.json()
+        original_form_id = original_form["form_id"]
+        original_form_version = original_form["form_version"]
+        
+        # Step 2: Create a second version by updating the form
+        updated_form_data = {
+            "name": "Version List Test Form",
+            "response_format": {
+                "json_formio": [
+                    {
+                        "type": "textfield",
+                        "key": "field1",
+                        "label": "First Field",
+                        "input": True,
+                        "validate": {
+                            "required": True
+                        }
+                    },
+                    {
+                        "type": "textfield",
+                        "key": "field2",
+                        "label": "Second Field",
+                        "input": True,
+                        "validate": {
+                            "required": False
+                        }
+                    }
+                ]
+            },
+            "tag_ids": []
+        }
+        
+        update_response = client.put(
+            f"/v0/orgs/{TEST_ORG_ID}/forms/{original_form_id}",
+            json=updated_form_data,
+            headers=get_auth_headers()
+        )
+        
+        assert update_response.status_code == 200
+        updated_form = update_response.json()
+        updated_form_version = updated_form["form_version"]
+        assert updated_form_version > original_form_version
+        
+        # Step 3: List all versions
+        versions_response = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/forms/{original_form_id}/versions",
+            headers=get_auth_headers()
+        )
+        
+        assert versions_response.status_code == 200
+        versions_data = versions_response.json()
+        assert "forms" in versions_data
+        assert versions_data["total_count"] == 2
+        assert len(versions_data["forms"]) == 2
+        
+        # Step 4: Verify versions are sorted descending by version
+        versions = versions_data["forms"]
+        assert versions[0]["form_version"] > versions[1]["form_version"]
+        assert versions[0]["form_version"] == updated_form_version
+        assert versions[1]["form_version"] == original_form_version
+        
+        # Step 5: Verify all versions have the same form_id and name
+        for version in versions:
+            assert version["form_id"] == original_form_id
+            assert version["name"] == "Version List Test Form"
+            assert "form_revid" in version
+        
+        # Step 6: Test with non-existent form_id
+        fake_id = str(ObjectId())
+        not_found_response = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/forms/{fake_id}/versions",
+            headers=get_auth_headers()
+        )
+        assert not_found_response.status_code == 404
+        
+        # Clean up
+        client.delete(
+            f"/v0/orgs/{TEST_ORG_ID}/forms/{original_form_id}",
+            headers=get_auth_headers()
+        )
+        
+    finally:
+        pass  # mock_auth fixture handles cleanup
+    
+    logger.info(f"test_list_form_versions() end")
+
+@pytest.mark.asyncio
 async def test_form_with_mapping(test_db, mock_auth):
     """Test form creation and retrieval with json_formio_mapping field"""
     logger.info(f"test_form_with_mapping() start")
