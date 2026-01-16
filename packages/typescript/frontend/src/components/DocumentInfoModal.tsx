@@ -14,26 +14,36 @@ const DocumentInfoModal: React.FC<DocumentInfoModalProps> = ({
   onClose, 
   document 
 }) => {
-  const [uploadedByName, setUploadedByName] = useState<string | null>(null);
-  const [isLoadingName, setIsLoadingName] = useState(false);
+  const [uploadedByUserId, setUploadedByUserId] = useState<string | null>(null);
+  const [isLoadingUserId, setIsLoadingUserId] = useState(false);
   const docRouterAccountApi = React.useMemo(() => new DocRouterAccountApi(), []);
 
   useEffect(() => {
+    // document.uploaded_by contains the user's name, not ID
+    // We need to search for the user by name to get their ID
     if (isOpen && document.uploaded_by) {
-      setIsLoadingName(true);
-      docRouterAccountApi.getUser(document.uploaded_by)
-        .then(user => {
-          setUploadedByName(user.name || null);
+      setIsLoadingUserId(true);
+      docRouterAccountApi.listUsers({ search_name: document.uploaded_by, limit: 1 })
+        .then(response => {
+          // Find exact match by name (case-insensitive)
+          const user = response.users.find(u => 
+            u.name?.toLowerCase() === document.uploaded_by.toLowerCase()
+          );
+          if (user) {
+            setUploadedByUserId(user.id);
+          } else {
+            setUploadedByUserId(null);
+          }
         })
         .catch(error => {
-          console.error('Error fetching user name:', error);
-          setUploadedByName(null);
+          console.error('Error fetching user ID:', error);
+          setUploadedByUserId(null);
         })
         .finally(() => {
-          setIsLoadingName(false);
+          setIsLoadingUserId(false);
         });
     } else {
-      setUploadedByName(null);
+      setUploadedByUserId(null);
     }
   }, [isOpen, document.uploaded_by, docRouterAccountApi]);
 
@@ -104,20 +114,20 @@ const DocumentInfoModal: React.FC<DocumentInfoModalProps> = ({
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1">Uploaded By Name</label>
             <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-              {isLoadingName ? (
-                <span className="text-gray-500 italic">Loading...</span>
-              ) : uploadedByName ? (
-                uploadedByName
-              ) : (
-                <span className="text-gray-500 italic">Not available</span>
-              )}
+              {document.uploaded_by || <span className="text-gray-500 italic">Not available</span>}
             </div>
           </div>
           
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1">Uploaded By ID</label>
             <div className="text-gray-900 bg-gray-50 p-2 rounded border font-mono text-sm break-all">
-              {document.uploaded_by}
+              {isLoadingUserId ? (
+                <span className="text-gray-500 italic">Loading...</span>
+              ) : uploadedByUserId ? (
+                uploadedByUserId
+              ) : (
+                <span className="text-gray-500 italic">Not available</span>
+              )}
             </div>
           </div>
           
