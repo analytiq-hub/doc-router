@@ -515,6 +515,15 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
         >
           <MenuItem 
             onClick={() => {
+              if (selectedPrompt) handleEdit(selectedPrompt);
+            }}
+            className="flex items-center gap-2"
+          >
+            <EditOutlinedIcon fontSize="small" className="text-blue-600" />
+            <span>Edit</span>
+          </MenuItem>
+          <MenuItem 
+            onClick={() => {
               if (selectedPrompt) {
                 setAnchorEl(null); // Close menu manually
                 setIsInfoModalOpen(true);
@@ -525,15 +534,6 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
           >
             <BadgeIcon fontSize="small" className="text-blue-600" />
             <span>Properties</span>
-          </MenuItem>
-          <MenuItem 
-            onClick={() => {
-              if (selectedPrompt) handleEdit(selectedPrompt);
-            }}
-            className="flex items-center gap-2"
-          >
-            <EditOutlinedIcon fontSize="small" className="text-blue-600" />
-            <span>Edit</span>
           </MenuItem>
           <MenuItem 
             onClick={() => {
