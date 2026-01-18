@@ -34,7 +34,6 @@
     "file-saver": "^2.0.5",
     "formiojs": "^4.21.7",
     "jsonwebtoken": "^9.0.2",
-    "label-studio": "^1.0.1",
     "monaco-editor": "^0.52.2",
     "monaco-editor-webpack-plugin": "^7.1.0",
     "mongodb": "^6.9.0",
