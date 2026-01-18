@@ -1,6 +1,6 @@
 {
   "name": "@docrouter/sdk",
-  "version": "0.2.2",
+  "version": "1.0.0",
   "description": "TypeScript SDK for DocRouter API",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
