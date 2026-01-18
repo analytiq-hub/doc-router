@@ -825,9 +825,33 @@ get_schema(schemaRevId: "696c4a89fc1c7a2d00322b95")
 
 #### update_schema
 
-Updates an existing schema. Creates a new version while preserving history.
+Updates an existing schema. Creates a new version while preserving history. You can update just the name, just the response_format, or both. Fields not provided will be preserved from the current schema.
 
 ```
+# Update only the name
+update_schema(
+  schemaId: "696c4a89fc1c7a2d00322b95",
+  schema: {
+    "name": "Invoice Extraction v2"
+  }
+)
+
+# Update only the response_format
+update_schema(
+  schemaId: "696c4a89fc1c7a2d00322b95",
+  schema: {
+    "response_format": {
+      "type": "json_schema",
+      "json_schema": {
+        "name": "document_extraction",
+        "schema": { ... },  // See schema format above
+        "strict": true
+      }
+    }
+  }
+)
+
+# Update both name and response_format
 update_schema(
   schemaId: "696c4a89fc1c7a2d00322b95",
   schema: {
@@ -847,8 +871,8 @@ update_schema(
 **Parameters:**
 - `schemaId` (string, required): The schema ID (not revision ID) to update
 - `schema` (object, required): Object containing:
-  - `name` (string, optional): New name for the schema
-  - `response_format` (object, required): The updated schema definition
+  - `name` (string, optional): New name for the schema (if omitted, current name is preserved)
+  - `response_format` (object, optional): The updated schema definition (if omitted, current response_format is preserved)
 
 **Returns:** Updated schema object with new `schema_revid` and incremented `schema_version`
 

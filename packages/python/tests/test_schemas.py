@@ -815,3 +815,186 @@ async def test_list_schema_versions(test_db, mock_auth):
         pass  # mock_auth fixture handles cleanup
     
     logger.info(f"test_list_schema_versions() end")
+
+@pytest.mark.asyncio
+async def test_schema_partial_updates(test_db, mock_auth):
+    """Test partial schema updates: name only, response_format only, and both"""
+    logger.info(f"test_schema_partial_updates() start")
+    
+    try:
+        # Step 1: Create a schema
+        original_schema_data = {
+            "name": "Original Schema",
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "test_schema",
+                    "schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "field1": {
+                                "type": "string",
+                                "description": "First field"
+                            }
+                        },
+                        "required": ["field1"]
+                    },
+                    "strict": True
+                }
+            }
+        }
+        
+        create_response = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/schemas",
+            json=original_schema_data,
+            headers=get_auth_headers()
+        )
+        
+        assert create_response.status_code == 200
+        original_schema = create_response.json()
+        original_schema_id = original_schema["schema_id"]
+        original_schema_revid = original_schema["schema_revid"]
+        original_schema_version = original_schema["schema_version"]
+        original_response_format = original_schema["response_format"]
+        
+        # Step 2: Test updating ONLY the name (without providing response_format)
+        name_only_update = {
+            "name": "Updated Name Only"
+        }
+        
+        name_update_response = client.put(
+            f"/v0/orgs/{TEST_ORG_ID}/schemas/{original_schema_id}",
+            json=name_only_update,
+            headers=get_auth_headers()
+        )
+        
+        assert name_update_response.status_code == 200
+        name_updated_schema = name_update_response.json()
+        
+        # Verify name was updated
+        assert name_updated_schema["name"] == "Updated Name Only"
+        # Verify response_format was preserved
+        assert name_updated_schema["response_format"] == original_response_format
+        # Verify no new version was created (same revid and version)
+        assert name_updated_schema["schema_revid"] == original_schema_revid
+        assert name_updated_schema["schema_version"] == original_schema_version
+        
+        # Step 3: Test updating ONLY the response_format (without providing name)
+        response_format_only_update = {
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "test_schema",
+                    "schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "field1": {
+                                "type": "string",
+                                "description": "First field"
+                            },
+                            "field2": {
+                                "type": "number",
+                                "description": "Second field"
+                            }
+                        },
+                        "required": ["field1", "field2"]
+                    },
+                    "strict": True
+                }
+            }
+        }
+        
+        response_format_update_response = client.put(
+            f"/v0/orgs/{TEST_ORG_ID}/schemas/{original_schema_id}",
+            json=response_format_only_update,
+            headers=get_auth_headers()
+        )
+        
+        assert response_format_update_response.status_code == 200
+        response_format_updated_schema = response_format_update_response.json()
+        
+        # Verify name was preserved
+        assert response_format_updated_schema["name"] == "Updated Name Only"
+        # Verify response_format was updated (new field added)
+        assert "field2" in response_format_updated_schema["response_format"]["json_schema"]["schema"]["properties"]
+        # Verify a new version was created (different revid and incremented version)
+        assert response_format_updated_schema["schema_revid"] != original_schema_revid
+        assert response_format_updated_schema["schema_version"] > original_schema_version
+        
+        # Step 4: Test updating BOTH name and response_format
+        both_update = {
+            "name": "Updated Both Fields",
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "test_schema",
+                    "schema": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "field1": {
+                                "type": "string",
+                                "description": "First field"
+                            },
+                            "field2": {
+                                "type": "number",
+                                "description": "Second field"
+                            },
+                            "field3": {
+                                "type": "boolean",
+                                "description": "Third field"
+                            }
+                        },
+                        "required": ["field1", "field2", "field3"]
+                    },
+                    "strict": True
+                }
+            }
+        }
+        
+        both_update_response = client.put(
+            f"/v0/orgs/{TEST_ORG_ID}/schemas/{original_schema_id}",
+            json=both_update,
+            headers=get_auth_headers()
+        )
+        
+        assert both_update_response.status_code == 200
+        both_updated_schema = both_update_response.json()
+        
+        # Verify both were updated
+        assert both_updated_schema["name"] == "Updated Both Fields"
+        assert "field3" in both_updated_schema["response_format"]["json_schema"]["schema"]["properties"]
+        # Verify a new version was created
+        assert both_updated_schema["schema_revid"] != response_format_updated_schema["schema_revid"]
+        assert both_updated_schema["schema_version"] > response_format_updated_schema["schema_version"]
+        
+        # Step 5: Verify all versions exist in the database
+        db_schemas = await test_db.schema_revisions.find({
+            "schema_id": original_schema_id
+        }).to_list(None)
+        
+        # Should have 3 versions: original, response_format update, both update
+        # (name-only update doesn't create a new version)
+        assert len(db_schemas) == 3, f"Should have 3 versions, got {len(db_schemas)}"
+        
+        # Step 6: Test that updating with empty object fails
+        empty_update_response = client.put(
+            f"/v0/orgs/{TEST_ORG_ID}/schemas/{original_schema_id}",
+            json={},
+            headers=get_auth_headers()
+        )
+        
+        assert empty_update_response.status_code == 422, "Should fail validation when no fields provided"
+        
+        # Clean up
+        client.delete(
+            f"/v0/orgs/{TEST_ORG_ID}/schemas/{original_schema_id}",
+            headers=get_auth_headers()
+        )
+        
+    finally:
+        pass  # mock_auth fixture handles cleanup
+    
+    logger.info(f"test_schema_partial_updates() end")

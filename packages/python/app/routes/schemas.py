@@ -82,6 +82,16 @@ class SchemaConfig(BaseModel):
     name: str
     response_format: SchemaResponseFormat
 
+class SchemaUpdateConfig(BaseModel):
+    name: Optional[str] = None
+    response_format: Optional[SchemaResponseFormat] = None
+    
+    @model_validator(mode='after')
+    def validate_at_least_one_field(self):
+        if self.name is None and self.response_format is None:
+            raise ValueError("At least one field (name or response_format) must be provided")
+        return self
+
 class Schema(SchemaConfig):
     schema_revid: str # MongoDB's _id
     schema_id: str    # Stable identifier
@@ -299,7 +309,7 @@ async def get_schema(
 async def update_schema(
     organization_id: str,
     schema_id: str,
-    schema: SchemaConfig,
+    schema: SchemaUpdateConfig,
     current_user: User = Depends(get_org_user)
 ):
     """Update a schema"""
@@ -329,24 +339,28 @@ async def update_schema(
     if not latest_schema_revision:
         raise HTTPException(status_code=404, detail="Schema revision not found")
 
+    # Use provided values or fall back to existing values
+    new_name = schema.name if schema.name is not None else existing_schema["name"]
+    new_response_format = schema.response_format.model_dump() if schema.response_format is not None else latest_schema_revision["response_format"]
+
     # Check if only the name has changed
     only_name_changed = (
-        schema.name != existing_schema["name"] and
-        schema.response_format.model_dump() == latest_schema_revision["response_format"]
+        new_name != existing_schema["name"] and
+        new_response_format == latest_schema_revision["response_format"]
     )
     
     if only_name_changed:
         # Update the name in the schemas collection
         result = await db.schemas.update_one(
             {"_id": ObjectId(schema_id)},
-            {"$set": {"name": schema.name}}
+            {"$set": {"name": new_name}}
         )
         
         if result.modified_count > 0:
             # Return the updated schema
             updated_revision = latest_schema_revision.copy()
             updated_revision["schema_revid"] = str(updated_revision.pop("_id"))
-            updated_revision["name"] = schema.name
+            updated_revision["name"] = new_name
             return Schema(**updated_revision)
         else:
             raise HTTPException(status_code=500, detail="Failed to update schema name")
@@ -356,16 +370,16 @@ async def update_schema(
     _, new_schema_version = await get_schema_id_and_version(schema_id)
     
     # Update the schemas collection if name changed
-    if schema.name != existing_schema["name"]:
+    if new_name != existing_schema["name"]:
         await db.schemas.update_one(
             {"_id": ObjectId(schema_id)},
-            {"$set": {"name": schema.name}}
+            {"$set": {"name": new_name}}
         )
     
     # Create new version of the schema in schema_revisions
     new_schema = {
         "schema_id": schema_id,
-        "response_format": schema.response_format.model_dump(),
+        "response_format": new_response_format,
         "schema_version": new_schema_version,
         "created_at": datetime.now(UTC),
         "created_by": current_user.user_id
@@ -376,7 +390,7 @@ async def update_schema(
     
     # Return updated schema
     new_schema["schema_revid"] = str(result.inserted_id)
-    new_schema["name"] = schema.name
+    new_schema["name"] = new_name
     return Schema(**new_schema)
 
 @schemas_router.delete("/v0/orgs/{organization_id}/schemas/{schema_id}")
