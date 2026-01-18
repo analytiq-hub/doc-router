@@ -1252,6 +1252,14 @@ const tools: Tool[] = [
       properties: {},
     },
   },
+  {
+    name: 'list_llm_models',
+    description: 'List enabled LLM models available for use in prompts for this organization',
+    inputSchema: {
+      type: 'object',
+      properties: {},
+    },
+  },
 
   // ========== HELPER TOOLS ==========
   {
@@ -1981,6 +1989,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case 'list_llm_models': {
+        const result = await docrouterClient.listLLMModels();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(serializeDates(result), null, 2),
+            },
+          ],
+        };
+      }
+
       // ========== HELPER TOOLS ==========
       case 'help': {
         const helpText = `
@@ -2047,6 +2067,7 @@ This server provides access to DocRouter resources and tools.
 
 ### Organization
 - \`get_organization()\` - Get information about the current organization (name, type, ID)
+- \`list_llm_models()\` - List enabled LLM models available for use in prompts
 
 ### Help Tools
 - \`help()\` - Get general API help information
