@@ -39,7 +39,7 @@ Every prompt in DocRouter has the following components:
 | **Name** | Yes | Human-readable identifier for the prompt |
 | **Content** | Yes | The instruction text sent to the AI model |
 | **Schema** | No | Optional JSON schema for structured output |
-| **Model** | No | AI model to use (defaults to `gemini-2.0-flash`) |
+| **Model** | No | AI model to use (defaults to `gpt-4o-mini`) |
 | **Tags** | No | Document tags that trigger this prompt |
 
 ### Prompt Content
@@ -109,43 +109,26 @@ DocRouter maintains schema versions automatically:
 
 ## Selecting Language Models
 
-### Available Models
+### Listing Available Models
 
-DocRouter supports multiple AI providers through LiteLLM, including:
+To see which LLM models are available for your organization, use the `list_llm_models` MCP tool:
 
-- **OpenAI** - GPT-4, GPT-4o models
-- **Anthropic** - Claude 3.5, Claude 4 Sonnet and Opus models
-- **Google Gemini** - Gemini 2.0 and 2.5 Flash and Pro models
-- **Groq** - DeepSeek and Llama models with ultra-fast inference
-- **Mistral** - Mistral models
-- **xAI** - Grok models
-- **AWS Bedrock** - Claude models via AWS infrastructure
-- **Azure OpenAI / Azure AI Studio** - Available when configured
-- **Google Vertex AI** - Gemini models via Google Cloud
+```
+list_llm_models()
+```
 
-**For the complete and up-to-date list of supported models**, see `packages/analytiq_data/llm/providers.py` in the codebase. This file defines all available LLM providers and their specific model identifiers.
+This returns an array of enabled model names that can be used when creating or updating prompts. Only models that are enabled in your organization's LLM provider settings will be returned.
+
+### Recommended Models for Document Processing
+
+**For document extraction tasks:**
+- **`gemini/gemini-3-flash-preview`** or other Gemini models - Excellent for document processing with great speed and cost efficiency
+- **OpenAI models** (e.g., `gpt-4o-mini`, `gpt-4o`) - Reliable and well-suited for structured extraction
+- **Grok models** - Good choice for document analysis and extraction
 
 ### Default Model
 
 If no model is specified, DocRouter uses **`gpt-4o-mini`** as the default model.
-
-### How to Choose a Model
-
-When creating or editing a prompt, select a model from the dropdown. Consider:
-
-**For general document extraction:**
-- **`gpt-4o-mini`** (default) - Fast, cost-effective, and reliable for most use cases
-- **`gemini/gemini-2.0-flash`** - Excellent option for extraction tasks with great speed/cost ratio
-
-**For complex or challenging documents:**
-- Use higher-capability models like Claude Sonnet 4 or GPT-5 for documents requiring advanced reasoning
-
-**For chain-of-thought applications:**
-- **Grok models** are particularly well-suited for applications requiring step-by-step reasoning and chain-of-thought processing
-
-**For high-volume processing:**
-- Gemini Flash models offer excellent speed and cost efficiency
-- Groq models provide ultra-fast inference for time-sensitive applications
 
 ### Model Configuration
 
@@ -154,7 +137,7 @@ AI model providers must be configured in your organization settings:
 1. Navigate to Organization Settings → LLM Providers
 2. Add API keys for the providers you want to use
 3. Enable/disable specific models
-4. Only enabled models appear in the prompt editor
+4. Only enabled models are available for use in prompts
 
 ---
 
@@ -237,10 +220,10 @@ Return empty strings for fields not found in the document.
 
 ### 3. Choose the Right Model for the Task
 
-- **Complex documents**: Use Claude 3.5 Sonnet or GPT-4 Turbo
-- **High volume**: Use Gemini 2.0 Flash for speed
-- **Budget-conscious**: Use Claude 3 Haiku or Gemini Flash
-- **Consistency needed**: Test multiple models and pick the best performer
+Use `list_llm_models()` to see available models, then select based on your needs:
+- **Document processing**: Prefer Gemini models (e.g., `gemini/gemini-3-flash-preview`) or OpenAI/Grok models
+- **Complex reasoning**: Use higher-capability models when needed
+- **High volume**: Gemini Flash models offer excellent speed and cost efficiency
 
 ### 4. Use Tags Strategically
 
@@ -274,6 +257,158 @@ DocRouter provides multiple ways to interact with prompts programmatically:
 - **MCP (Model Context Protocol)** - Integration with AI assistants like Claude Code
 
 All methods support the same prompt operations: create, list, retrieve, update, and delete prompts.
+
+### MCP Tool Examples
+
+#### list_llm_models
+
+Before creating or updating a prompt, check which LLM models are available for your organization:
+
+```
+list_llm_models()
+```
+
+**Returns:** Object with `models` array containing enabled model names (e.g., `["gpt-4o-mini", "gemini/gemini-3-flash-preview", "gpt-4o", ...]`)
+
+#### create_prompt
+
+Creates a new prompt. Requires `name` and `content` parameters.
+
+```
+create_prompt(
+  prompt: {
+    "name": "Invoice Extraction",
+    "content": "Extract the following from this invoice: invoice number, date, vendor, total amount.",
+    "model": "gemini/gemini-3-flash-preview",  # Optional, defaults to gpt-4o-mini
+    "schema_id": "abc123",  # Optional, link to a schema
+    "tag_ids": ["tag1", "tag2"]  # Optional, tags that trigger this prompt
+  }
+)
+```
+
+**Parameters:**
+- `prompt` (object, required): Prompt configuration containing:
+  - `name` (string, required): Human-readable name for the prompt
+  - `content` (string, required): The prompt instruction text
+  - `model` (string, optional): LLM model to use (defaults to `gpt-4o-mini`)
+  - `schema_id` (string, optional): Schema ID to link for structured output
+  - `tag_ids` (array of strings, optional): Tag IDs that trigger this prompt
+
+**Returns:** Created prompt object with `prompt_id`, `prompt_revid`, and `prompt_version`
+
+#### list_prompts
+
+Lists all prompts with optional filtering.
+
+```
+list_prompts(skip: 0, limit: 10, nameSearch: "Invoice", tag_ids: "tag1,tag2")
+```
+
+**Parameters:**
+- `skip` (number, optional): Number of prompts to skip (default: 0)
+- `limit` (number, optional): Number of prompts to return (default: 10)
+- `document_id` (string, optional): Filter prompts by document ID
+- `tag_ids` (string, optional): Comma-separated tag IDs to filter by
+- `nameSearch` (string, optional): Search prompts by name
+
+**Returns:** Object with `prompts` array and `total_count`
+
+#### get_prompt
+
+Retrieves a specific prompt by its revision ID.
+
+```
+get_prompt(promptRevId: "696c4a89fc1c7a2d00322b95")
+```
+
+**Parameters:**
+- `promptRevId` (string, required): The prompt revision ID
+
+**Returns:** Full prompt object including `name`, `content`, `model`, `schema_id`, `tag_ids`, `prompt_id`, `prompt_revid`, `prompt_version`
+
+#### update_prompt
+
+Updates a prompt. You can update the content, model, schema_id, or tag_ids. Fields not provided will be preserved from the current prompt.
+
+```
+# Update only the content
+update_prompt(
+  promptId: "696c4a89fc1c7a2d00322b95",
+  content: "Extract the following from this invoice: invoice number, date, vendor name, customer name, line items, and total amount. Return data according to the schema."
+)
+
+# Update only the model
+update_prompt(
+  promptId: "696c4a89fc1c7a2d00322b95",
+  model: "gemini/gemini-3-flash-preview"
+)
+
+# Update multiple fields
+update_prompt(
+  promptId: "696c4a89fc1c7a2d00322b95",
+  content: "Updated extraction instructions...",
+  model: "gemini/gemini-3-flash-preview",
+  tag_ids: ["invoice", "urgent"]
+)
+```
+
+**Parameters:**
+- `promptId` (string, required): The prompt ID (not revision ID) to update
+- `content` (string, optional): The updated prompt content (if omitted, current content is preserved)
+- `model` (string, optional): LLM model to use (if omitted, current model is preserved)
+- `schema_id` (string, optional): Schema ID to link (if omitted, current schema_id is preserved)
+- `tag_ids` (array of strings, optional): Tag IDs that trigger this prompt (if omitted, current tag_ids are preserved)
+
+**Returns:** Updated prompt object with new `prompt_revid` and incremented `prompt_version`
+
+#### delete_prompt
+
+Deletes a prompt and all its versions.
+
+```
+delete_prompt(promptId: "696c4a89fc1c7a2d00322b95")
+```
+
+**Parameters:**
+- `promptId` (string, required): The prompt ID to delete
+
+**Returns:** Confirmation of deletion
+
+### Common Workflow
+
+```
+# 1. Check available LLM models
+list_llm_models()
+# Returns: { "models": ["gpt-4o-mini", "gemini/gemini-3-flash-preview", "gpt-4o"] }
+
+# 2. Create a new prompt
+create_prompt(
+  prompt: {
+    "name": "Invoice Extraction",
+    "content": "Extract invoice data...",
+    "model": "gemini/gemini-3-flash-preview",
+    "schema_id": "abc123",
+    "tag_ids": ["invoice"]
+  }
+)
+# Returns: { prompt_id: "xyz789", prompt_revid: "xyz789", prompt_version: 1, ... }
+
+# 3. List prompts to find the one you need
+list_prompts(nameSearch: "Invoice")
+# Returns: { prompts: [...], total_count: 1 }
+
+# 4. Get full prompt details
+get_prompt(promptRevId: "xyz789")
+# Returns: Full prompt object
+
+# 5. Update the prompt content
+update_prompt(promptId: "xyz789", content: "Updated extraction instructions...")
+# Returns: { prompt_id: "xyz789", prompt_revid: "def456", prompt_version: 2, ... }
+
+# 6. Delete the prompt when no longer needed
+delete_prompt(promptId: "xyz789")
+# Returns: Deletion confirmation
+```
 
 ---
 

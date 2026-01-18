@@ -1105,8 +1105,11 @@ const tools: Tool[] = [
       properties: {
         promptId: { type: 'string', description: 'ID of the prompt' },
         content: { type: 'string', description: 'Prompt content' },
+        model: { type: 'string', description: 'LLM model to use' },
+        schema_id: { type: 'string', description: 'Schema ID to link' },
+        tag_ids: { type: 'array', items: { type: 'string' }, description: 'Tag IDs that trigger this prompt' },
       },
-      required: ['promptId', 'content'],
+      required: ['promptId'],
     },
   },
   {
@@ -1754,7 +1757,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       case 'update_prompt': {
         const promptId = getArg<string>(args, 'promptId');
-        const content = getArg<string>(args, 'content');
+        const content = getOptionalArg<string>(args, 'content');
+        const model = getOptionalArg<string>(args, 'model');
+        const schema_id = getOptionalArg<string>(args, 'schema_id');
+        const tag_ids = getOptionalArg<string[]>(args, 'tag_ids');
 
         // Find the prompt with the matching prompt_id to preserve other fields
         let currentPrompt = null;
@@ -1770,16 +1776,16 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error(`Prompt with ID ${promptId} not found`);
         }
 
-        // Update with new content while preserving other fields
+        // Merge provided fields with existing prompt fields
         const result = await docrouterClient.updatePrompt({
           promptId: promptId,
           prompt: {
             name: currentPrompt.name,
-            content: content,
-            schema_id: currentPrompt.schema_id,
+            content: content ?? currentPrompt.content,
+            schema_id: schema_id ?? currentPrompt.schema_id,
             schema_version: currentPrompt.schema_version,
-            tag_ids: currentPrompt.tag_ids,
-            model: currentPrompt.model
+            tag_ids: tag_ids ?? currentPrompt.tag_ids,
+            model: model ?? currentPrompt.model
           },
         });
         return {
