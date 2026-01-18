@@ -9,8 +9,8 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { z } from 'zod';
 import { DocRouterOrg, DocRouterAccount } from '@docrouter/sdk';
-import { readFileSync, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { readFileSync, existsSync, writeFileSync, mkdirSync, statSync } from 'fs';
+import { join, dirname, resolve, isAbsolute, extname, basename } from 'path';
 import { fileURLToPath } from 'url';
 
 // Configuration schema
@@ -719,7 +719,7 @@ const tools: Tool[] = [
   // ========== DOCUMENTS ==========
   {
     name: 'upload_documents',
-    description: 'Upload documents to DocRouter',
+    description: 'Upload documents to DocRouter from file paths',
     inputSchema: {
       type: 'object',
       properties: {
@@ -729,12 +729,12 @@ const tools: Tool[] = [
           items: {
             type: 'object',
             properties: {
-              name: { type: 'string', description: 'Document name' },
-              content: { type: 'string', description: 'Base64 encoded document content (supports both plain base64 and data URLs)' },
+              file_path: { type: 'string', description: 'Path to the document file on disk' },
+              name: { type: 'string', description: 'Document name (optional, defaults to filename)' },
               tag_ids: { type: 'array', items: { type: 'string' }, description: 'Optional list of tag IDs' },
               metadata: { type: 'object', description: 'Optional metadata' },
             },
-            required: ['name', 'content'],
+            required: ['file_path'],
           },
         },
       },
@@ -757,12 +757,13 @@ const tools: Tool[] = [
   },
   {
     name: 'get_document',
-    description: 'Get document by ID from DocRouter',
+    description: 'Get document metadata (state, tags, metadata) and optionally download the file to disk',
     inputSchema: {
       type: 'object',
       properties: {
         documentId: { type: 'string', description: 'ID of the document to retrieve' },
-        fileType: { type: 'string', description: 'File type to retrieve (pdf, image, etc.)', default: 'pdf' },
+        fileType: { type: 'string', description: 'File type to retrieve (original or pdf)', default: 'original' },
+        save_path: { type: 'string', description: 'Optional file path or directory to save the document. If directory, uses original filename. If not provided, file is not downloaded.' },
       },
       required: ['documentId'],
     },
@@ -1332,24 +1333,77 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'get_document': {
-        const result = await docrouterClient.getDocument({
-          documentId: getArg(args, 'documentId'),
-          fileType: getArg(args, 'fileType', 'pdf'),
+        const documentId = getArg<string>(args, 'documentId');
+        const fileType = getArg<string>(args, 'fileType', 'original');
+        const savePath = getOptionalArg<string>(args, 'save_path');
+        
+        // Always call getDocument to get metadata and optionally the file
+        const fileResult = await docrouterClient.getDocument({
+          documentId: documentId,
+          fileType: fileType,
         });
         
-        // Convert ArrayBuffer to base64 for transmission
-        const base64Content = Buffer.from(result.content).toString('base64');
+        // Extract metadata from the response
+        const response: Record<string, unknown> = {
+          id: fileResult.id,
+          pdf_id: fileResult.pdf_id,
+          document_name: fileResult.document_name,
+          upload_date: fileResult.upload_date,
+          uploaded_by: fileResult.uploaded_by,
+          state: fileResult.state,
+          tag_ids: fileResult.tag_ids,
+          type: fileResult.type,
+          metadata: fileResult.metadata,
+        };
+        
+        // If save_path is provided, save the file to disk
+        if (savePath) {
+          
+          // Resolve the save path
+          let finalPath: string;
+          if (isAbsolute(savePath)) {
+            finalPath = savePath;
+          } else {
+            finalPath = resolve(process.cwd(), savePath);
+          }
+          
+          // Check if path is a directory or file
+          let isDirectory = false;
+          try {
+            const stats = statSync(finalPath);
+            isDirectory = stats.isDirectory();
+          } catch {
+            // Path doesn't exist - check if it looks like a directory (ends with /)
+            isDirectory = savePath.endsWith('/') || savePath.endsWith('\\');
+          }
+          
+          // Determine final file path
+          if (isDirectory) {
+            // Use original filename with appropriate extension
+            const extension = fileType === 'pdf' ? '.pdf' : extname(fileResult.document_name) || '.pdf';
+            const fileName = basename(fileResult.document_name, extname(fileResult.document_name)) + extension;
+            finalPath = join(finalPath, fileName);
+          }
+          
+          // Ensure directory exists
+          const targetDir = dirname(finalPath);
+          if (!existsSync(targetDir)) {
+            mkdirSync(targetDir, { recursive: true });
+          }
+          
+          // Write file to disk
+          const fileBuffer = Buffer.from(fileResult.content);
+          writeFileSync(finalPath, fileBuffer);
+          
+          response.saved_path = finalPath;
+          response.file_size = fileBuffer.length;
+        }
         
         return {
           content: [
             {
               type: 'text',
-              text: JSON.stringify({
-                ...(serializeDates(result) as Record<string, unknown>),
-                content: base64Content,
-                content_type: 'base64',
-                content_size: result.content.byteLength
-              }, null, 2),
+              text: JSON.stringify(response, null, 2),
             },
           ],
         };
@@ -1481,9 +1535,41 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
       // ========== DOCUMENTS ==========
       case 'upload_documents': {
-        const documentsInput = getArg(args, 'documents') as Array<{ name: string; content: string; tag_ids?: string[]; metadata?: Record<string, string>; }>;
-        // No need to convert content - SDK now accepts base64 strings directly
-        const result = await docrouterClient.uploadDocuments({ documents: documentsInput });
+        const documentsInput = getArg(args, 'documents') as Array<{ file_path: string; name?: string; tag_ids?: string[]; metadata?: Record<string, string>; }>;
+        
+        // Read files from disk and encode to base64
+        const documents = [];
+        for (const doc of documentsInput) {
+          // Resolve file path (handle both absolute and relative paths)
+          let filePath: string;
+          if (isAbsolute(doc.file_path)) {
+            filePath = doc.file_path;
+          } else {
+            // For relative paths, resolve relative to current working directory
+            filePath = resolve(process.cwd(), doc.file_path);
+          }
+          
+          // Check if file exists
+          if (!existsSync(filePath)) {
+            throw new Error(`File not found: ${filePath}`);
+          }
+          
+          // Read file and encode to base64
+          const fileBuffer = readFileSync(filePath);
+          const base64Content = fileBuffer.toString('base64');
+          
+          // Use provided name or derive from filename
+          const fileName = doc.name || filePath.split(/[/\\]/).pop() || 'document';
+          
+          documents.push({
+            name: fileName,
+            content: base64Content,
+            tag_ids: doc.tag_ids,
+            metadata: doc.metadata,
+          });
+        }
+        
+        const result = await docrouterClient.uploadDocuments({ documents });
         return {
           content: [
             {
@@ -2017,7 +2103,7 @@ This server provides access to DocRouter resources and tools.
 ## Available Tools
 
 ### Documents
-- \`upload_documents(documents)\` - Upload documents
+- \`upload_documents(documents)\` - Upload documents from file paths
 - \`list_documents(skip, limit, tagIds, nameSearch, metadataSearch)\` - List documents
 - \`get_document(documentId, fileType)\` - Get document by ID
 - \`update_document(documentId, documentName, tagIds, metadata)\` - Update document
