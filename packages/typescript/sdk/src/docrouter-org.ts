@@ -52,6 +52,8 @@ import {
   LLMChatResponse,
   LLMChatStreamChunk,
   LLMChatStreamError,
+  // LLM Models
+  ListOrgLLMModelsResponse,
 } from './types';
 
 /**
@@ -452,6 +454,12 @@ export class DocRouterOrg {
 
   async runLLMChat(request: LLMChatRequest): Promise<LLMChatResponse> {
     return this.http.post(`/v0/orgs/${this.organizationId}/llm/run`, request);
+  }
+
+  // ---------------- LLM Models (Org) ----------------
+
+  async listLLMModels(): Promise<ListOrgLLMModelsResponse> {
+    return this.http.get<ListOrgLLMModelsResponse>(`/v0/orgs/${this.organizationId}/llm/models`);
   }
 
   async runLLMChatStream(

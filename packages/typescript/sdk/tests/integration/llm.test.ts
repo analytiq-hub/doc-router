@@ -22,6 +22,22 @@ describe('LLM Integration Tests', () => {
     // Here we just verify endpoints are callable and handle errors gracefully.
     await expect(client.runLLM({ documentId: 'nonexistent', promptRevId: 'nonexistent' })).rejects.toThrow();
   });
+
+  test('listLLMModels - returns enabled model names', async () => {
+    const response = await client.listLLMModels();
+    
+    expect(response).toBeDefined();
+    expect(response.models).toBeDefined();
+    expect(Array.isArray(response.models)).toBe(true);
+    
+    // Verify all items are strings (model names)
+    if (response.models.length > 0) {
+      response.models.forEach((model: string) => {
+        expect(typeof model).toBe('string');
+        expect(model.length).toBeGreaterThan(0);
+      });
+    }
+  });
 });
 
 

@@ -286,6 +286,10 @@ export interface ListLLMModelsResponse {
   models: LLMModel[];
 }
 
+export interface ListOrgLLMModelsResponse {
+  models: string[];
+}
+
 export interface LLMProvider {
   name: string;
   display_name: string;
