@@ -769,6 +769,141 @@ DocRouter provides multiple ways to interact with schemas programmatically:
 
 All methods support the same schema operations: create, list, retrieve, update, delete, and validate against schemas.
 
+### MCP Tool Examples
+
+#### create_schema
+
+Creates a new schema. Requires `name` and `response_format` parameters.
+
+```
+create_schema(
+  name: "Invoice Extraction",
+  response_format: {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "document_extraction",
+      "schema": { ... },  // See schema format above
+      "strict": true
+    }
+  }
+)
+```
+
+**Parameters:**
+- `name` (string, required): Human-readable name for the schema
+- `response_format` (object, required): The schema definition following the format documented above
+
+**Returns:** Created schema object with `schema_id`, `schema_revid`, and `schema_version`
+
+#### list_schemas
+
+Lists all schemas with optional filtering.
+
+```
+list_schemas(skip: 0, limit: 10, nameSearch: "Invoice")
+```
+
+**Parameters:**
+- `skip` (number, optional): Number of schemas to skip (default: 0)
+- `limit` (number, optional): Number of schemas to return (default: 10)
+- `nameSearch` (string, optional): Filter schemas by name
+
+**Returns:** Object with `schemas` array and `total` count
+
+#### get_schema
+
+Retrieves a specific schema by its revision ID.
+
+```
+get_schema(schemaRevId: "696c4a89fc1c7a2d00322b95")
+```
+
+**Parameters:**
+- `schemaRevId` (string, required): The schema revision ID
+
+**Returns:** Full schema object including `name`, `response_format`, `schema_id`, `schema_revid`, `schema_version`
+
+#### update_schema
+
+Updates an existing schema. Creates a new version while preserving history.
+
+```
+update_schema(
+  schemaId: "696c4a89fc1c7a2d00322b95",
+  schema: {
+    "name": "Invoice Extraction",
+    "response_format": {
+      "type": "json_schema",
+      "json_schema": {
+        "name": "document_extraction",
+        "schema": { ... },  // See schema format above
+        "strict": true
+      }
+    }
+  }
+)
+```
+
+**Parameters:**
+- `schemaId` (string, required): The schema ID (not revision ID) to update
+- `schema` (object, required): Object containing:
+  - `name` (string, optional): New name for the schema
+  - `response_format` (object, required): The updated schema definition
+
+**Returns:** Updated schema object with new `schema_revid` and incremented `schema_version`
+
+#### delete_schema
+
+Deletes a schema and all its versions.
+
+```
+delete_schema(schemaId: "696c4a89fc1c7a2d00322b95")
+```
+
+**Parameters:**
+- `schemaId` (string, required): The schema ID to delete
+
+**Returns:** Confirmation of deletion
+
+#### validate_schema
+
+Validates a schema format without creating it. Useful for checking correctness before creating/updating.
+
+```
+validate_schema(
+  schema: '{"type": "json_schema", "json_schema": {...}}'  // JSON string
+)
+```
+
+**Parameters:**
+- `schema` (string, required): JSON string of the schema to validate
+
+**Returns:** Object with `valid` (boolean), `errors` (array), and `warnings` (array)
+
+### Common Workflow
+
+```
+# 1. Create a new schema
+create_schema(name: "Purchase Order", response_format: { ... })
+# Returns: { schema_id: "abc123", schema_revid: "abc123", schema_version: 1 }
+
+# 2. List schemas to find the one you need
+list_schemas(nameSearch: "Purchase")
+# Returns: { schemas: [...], total: 1 }
+
+# 3. Get full schema details
+get_schema(schemaRevId: "abc123")
+# Returns: Full schema object
+
+# 4. Update the schema to add a new field
+update_schema(schemaId: "abc123", schema: { "name": "Purchase Order", "response_format": { ... } })
+# Returns: { schema_id: "abc123", schema_revid: "def456", schema_version: 2 }
+
+# 5. Delete the schema when no longer needed
+delete_schema(schemaId: "abc123")
+# Returns: Deletion confirmation
+```
+
 ---
 
 ## Schema Workflow
