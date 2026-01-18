@@ -1,6 +1,6 @@
 {
   "name": "@docrouter/mcp",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "TypeScript MCP server for DocRouter API",
   "main": "./dist/index.js",
   "module": "./dist/index.mjs",
@@ -40,7 +40,7 @@
   "author": "Analytiq",
   "license": "MIT",
   "dependencies": {
-    "@docrouter/sdk": "file:../sdk",
+    "@docrouter/sdk": "^1.0.0",
     "@modelcontextprotocol/sdk": "^1.20.0",
     "zod": "^3.22.0"
   },
