@@ -35,6 +35,9 @@ class LLMModel(BaseModel):
 class ListLLMModelsResponse(BaseModel):
     models: List[LLMModel]
 
+class ListOrgLLMModelsResponse(BaseModel):
+    models: List[str]
+
 class LLMToken(BaseModel):
     id: str
     user_id: str
@@ -357,6 +360,29 @@ async def run_llm_chat_account(
     Supports both streaming and non-streaming responses.
     """
     return await ad.llm.run_llm_chat(request, current_user)
+
+@llm_router.get("/v0/orgs/{organization_id}/llm/models", response_model=ListOrgLLMModelsResponse)
+async def list_org_llm_models(
+    organization_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """List enabled LLM model names for the organization"""
+    db = ad.common.get_async_db()
+
+    # Retrieve only enabled providers from MongoDB
+    cursor = db.llm_providers.find({"enabled": True})
+
+    # Get all enabled providers
+    providers = await cursor.to_list(length=None)
+
+    # Collect all enabled model names
+    model_names = []
+    for provider in providers:
+        # Only return enabled models
+        models = provider.get("litellm_models_enabled", [])
+        model_names.extend(models)
+
+    return ListOrgLLMModelsResponse(models=model_names)
 
 @llm_router.get("/v0/account/llm/models", response_model=ListLLMModelsResponse)
 async def list_llm_models(

@@ -574,3 +574,91 @@ async def test_llm_chat_account_vs_org_endpoints(org_and_users, setup_test_model
         assert "choices" in org_data
         assert org_data["choices"][0]["message"]["content"] == "Org endpoint response"
         mock_llm.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_list_org_llm_models(org_and_users, setup_test_models, test_db):
+    """Test listing enabled LLM models for an organization"""
+    org_id = org_and_users["org_id"]
+    admin = org_and_users["admin"]
+    member = org_and_users["member"]
+    outsider = org_and_users["outsider"]
+    
+    # Add additional test providers with different enabled states
+    import analytiq_data as ad
+    from datetime import datetime, UTC
+    
+    # Add a disabled provider (should not appear in results)
+    disabled_provider = {
+        "name": "Anthropic",
+        "display_name": "Anthropic",
+        "litellm_provider": "anthropic",
+        "litellm_models_available": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229"],
+        "litellm_models_enabled": ["claude-3-5-sonnet-20241022"],
+        "enabled": False,
+        "token": ad.crypto.encrypt_token("test-token"),
+        "token_created_at": datetime.now(UTC)
+    }
+    await test_db.llm_providers.insert_one(disabled_provider)
+    
+    # Add another enabled provider
+    enabled_provider_2 = {
+        "name": "Google",
+        "display_name": "Google",
+        "litellm_provider": "gemini",
+        "litellm_models_available": ["gemini/gemini-2.0-flash", "gemini/gemini-pro"],
+        "litellm_models_enabled": ["gemini/gemini-2.0-flash"],  # Only one enabled
+        "enabled": True,
+        "token": ad.crypto.encrypt_token("test-token"),
+        "token_created_at": datetime.now(UTC)
+    }
+    await test_db.llm_providers.insert_one(enabled_provider_2)
+    
+    # Test admin access (should work)
+    resp = client.get(f"/v0/orgs/{org_id}/llm/models", headers=get_token_headers(admin["token"]))
+    assert resp.status_code == 200, f"Admin should be able to list org LLM models, got {resp.status_code}: {resp.text}"
+    
+    response_data = resp.json()
+    assert "models" in response_data
+    assert isinstance(response_data["models"], list)
+    
+    # Should only include enabled models from enabled providers
+    models = response_data["models"]
+    assert "gpt-4o-mini" in models, "Should include enabled OpenAI model"
+    assert "gpt-4o" in models, "Should include enabled OpenAI model"
+    assert "gemini/gemini-2.0-flash" in models, "Should include enabled Gemini model"
+    assert "gemini/gemini-pro" not in models, "Should NOT include disabled Gemini model"
+    assert "claude-3-5-sonnet-20241022" not in models, "Should NOT include models from disabled provider"
+    
+    # Test member access (should work - all org members can see available models)
+    resp = client.get(f"/v0/orgs/{org_id}/llm/models", headers=get_token_headers(member["token"]))
+    assert resp.status_code == 200, f"Member should be able to list org LLM models, got {resp.status_code}: {resp.text}"
+    
+    member_response = resp.json()
+    assert "models" in member_response
+    assert len(member_response["models"]) == len(models), "Member should see same models as admin"
+    
+    # Test outsider access (should be forbidden)
+    resp = client.get(f"/v0/orgs/{org_id}/llm/models", headers=get_token_headers(outsider["token"]))
+    assert resp.status_code == 403, f"Outsider should NOT be able to list org LLM models, got {resp.status_code}: {resp.text}"
+    
+    # Test unauthenticated access
+    resp = client.get(f"/v0/orgs/{org_id}/llm/models")
+    assert resp.status_code == 401, f"Unauthenticated request should be rejected, got {resp.status_code}: {resp.text}"
+
+
+@pytest.mark.asyncio
+async def test_list_org_llm_models_no_enabled_providers(org_and_users, test_db):
+    """Test listing LLM models when no providers are enabled"""
+    org_id = org_and_users["org_id"]
+    admin = org_and_users["admin"]
+    
+    # Ensure no enabled providers exist
+    await test_db.llm_providers.delete_many({"enabled": True})
+    
+    resp = client.get(f"/v0/orgs/{org_id}/llm/models", headers=get_token_headers(admin["token"]))
+    assert resp.status_code == 200, f"Should return empty list when no providers enabled, got {resp.status_code}: {resp.text}"
+    
+    response_data = resp.json()
+    assert "models" in response_data
+    assert response_data["models"] == [], "Should return empty list when no providers enabled"
