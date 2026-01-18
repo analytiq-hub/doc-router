@@ -828,7 +828,7 @@ get_schema(schemaRevId: "696c4a89fc1c7a2d00322b95")
 Updates an existing schema. Creates a new version while preserving history. You can update just the name, just the response_format, or both. Fields not provided will be preserved from the current schema.
 
 ```
-# Update only the name
+# Update only the name (does not create a new version)
 update_schema(
   schemaId: "696c4a89fc1c7a2d00322b95",
   schema: {
@@ -874,7 +874,7 @@ update_schema(
   - `name` (string, optional): New name for the schema (if omitted, current name is preserved)
   - `response_format` (object, optional): The updated schema definition (if omitted, current response_format is preserved)
 
-**Returns:** Updated schema object with new `schema_revid` and incremented `schema_version`
+**Returns:** Updated schema object. Note: Updating only the name does not create a new version (same `schema_revid` and `schema_version`). Updating `response_format` creates a new version with incremented `schema_version`.
 
 #### delete_schema
 
