@@ -420,7 +420,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-sm font-medium text-gray-700">Header value</label>
                     <div className="text-xs text-gray-500">
-                      {authHeaderPreview ? <span className="font-mono">{authHeaderPreview}</span> : 'Not set'}
+                      {authHeaderPreview ? <span className="font-mono">Header Value begins with: {authHeaderPreview}</span> : 'Not set'}
                     </div>
                   </div>
                   <input
@@ -440,7 +440,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                 <label className="block text-sm font-medium text-gray-700">Webhook secret</label>
                 <div className="text-xs text-gray-500">
                   {secretPreview ? (
-                    <span className="font-mono">{secretPreview}</span>
+                    <span className="font-mono">Secret begins with: {secretPreview}</span>
                   ) : secretSet ? (
                     'Secret is set'
                   ) : (
