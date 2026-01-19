@@ -316,6 +316,11 @@ async def get_webhook_delivery(
     # Return full payload for debugging; never return secret.
     row["id"] = str(row.pop("_id"))
     row.pop("secret_encrypted", None)
+    # Decrypt the auth header value
+    row["auth_header_value"] = ad.crypto.decrypt_token(row.get("auth_header_value"))
+    # Truncate the auth header value to 4 characters
+    row["auth_header_value"] = row["auth_header_value"][:4] + "..."
+   
     return row
 
 

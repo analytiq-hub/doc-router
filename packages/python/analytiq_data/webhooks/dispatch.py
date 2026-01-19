@@ -169,6 +169,7 @@ async def enqueue_event(
             auth_type = "hmac"
     auth_header_name = webhook_cfg.get("auth_header_name")
     auth_header_value = webhook_cfg.get("auth_header_value")
+    auth_header_preview = webhook_cfg.get("auth_header_preview")
 
     event_id = str(uuid.uuid4())
     ts = int(time.time())
