@@ -193,7 +193,7 @@ async def update_org_webhook_config(
         else:
             val = request.auth_header_value
             update["webhook.auth_header_value"] = ad.crypto.encrypt_token(val)
-            update["webhook.auth_header_preview"] = f"{val[:16]}..."
+            update["webhook.auth_header_preview"] = f"{val[:5]}..."
 
     if request.secret is not None:
         if request.secret == "":
