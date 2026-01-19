@@ -1888,6 +1888,39 @@ class AddAccessTokenUniquenessIndex(Migration):
             logger.error(f"Failed to remove unique index on access_tokens.token: {e}")
             return False
 
+
+class AddWebhookDeliveriesIndexes(Migration):
+    def __init__(self):
+        super().__init__(description="Add indexes for webhook_deliveries (org queries and retry scanning)")
+
+    async def up(self, db) -> bool:
+        try:
+            # For org-scoped delivery listing (UI)
+            await db.webhook_deliveries.create_index(
+                [("organization_id", 1), ("created_at", -1)],
+                name="webhook_deliveries_org_created_at",
+            )
+            # For retry scanning / claiming due deliveries
+            await db.webhook_deliveries.create_index(
+                [("status", 1), ("next_attempt_at", 1)],
+                name="webhook_deliveries_status_next_attempt_at",
+            )
+            logger.info("Successfully created webhook_deliveries indexes")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create webhook_deliveries indexes: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            await db.webhook_deliveries.drop_index("webhook_deliveries_org_created_at")
+            await db.webhook_deliveries.drop_index("webhook_deliveries_status_next_attempt_at")
+            logger.info("Successfully removed webhook_deliveries indexes")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to remove webhook_deliveries indexes: {e}")
+            return False
+
 # List of all migrations in order
 MIGRATIONS = [
     OcrKeyMigration(),
@@ -1914,6 +1947,7 @@ MIGRATIONS = [
     RenameUserFields(),
     UpgradeTokens(),
     AddAccessTokenUniquenessIndex(),
+    AddWebhookDeliveriesIndexes(),
     # Add more migrations here
 ]
 

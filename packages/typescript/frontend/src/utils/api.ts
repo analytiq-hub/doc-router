@@ -54,6 +54,9 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// Export for custom (non-SDK) backend endpoints.
+export const apiClient = api;
+
 // Add authorization header to all requests
 api.interceptors.request.use(async (config) => {
   // First try to use global session (pre-fetched from context)

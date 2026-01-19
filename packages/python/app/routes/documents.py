@@ -191,6 +191,17 @@ async def upload_document(
             "metadata": document.metadata
         })
 
+        # Optional per-org webhook: document uploaded
+        try:
+            await ad.webhooks.enqueue_event(
+                analytiq_client,
+                organization_id=organization_id,
+                event_type="document.uploaded",
+                document_id=document_id,
+            )
+        except Exception as e:
+            logger.warning(f"Webhook enqueue failed for uploaded doc {document_id}: {e}")
+
         # Post a message to the ocr job queue
         msg = {"document_id": document_id}
         await ad.queue.send_msg(analytiq_client, "ocr", msg=msg)

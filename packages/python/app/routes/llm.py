@@ -143,12 +143,44 @@ async def run_llm_analysis(
         
     except SPUCreditException as e:
         logger.warning(f"{document_id}/{prompt_revid}: SPU credit exhausted in LLM run: {str(e)}")
+        try:
+            prompt_id, prompt_version = await ad.llm.get_prompt_info_from_rev_id(analytiq_client, prompt_revid)
+            await ad.webhooks.enqueue_event(
+                analytiq_client,
+                organization_id=organization_id,
+                event_type="llm.error",
+                document_id=document_id,
+                prompt={
+                    "prompt_revid": prompt_revid,
+                    "prompt_id": prompt_id,
+                    "prompt_version": prompt_version,
+                },
+                error={"stage": "llm_api", "message": str(e)},
+            )
+        except Exception:
+            pass
         raise HTTPException(
             status_code=402,
             detail=f"Insufficient SPU credits: {str(e)}"
         )
     except Exception as e:
         logger.error(f"{document_id}/{prompt_revid}: Error in LLM run: {str(e)}")
+        try:
+            prompt_id, prompt_version = await ad.llm.get_prompt_info_from_rev_id(analytiq_client, prompt_revid)
+            await ad.webhooks.enqueue_event(
+                analytiq_client,
+                organization_id=organization_id,
+                event_type="llm.error",
+                document_id=document_id,
+                prompt={
+                    "prompt_revid": prompt_revid,
+                    "prompt_id": prompt_id,
+                    "prompt_version": prompt_version,
+                },
+                error={"stage": "llm_api", "message": str(e)},
+            )
+        except Exception:
+            pass
         raise HTTPException(
             status_code=500,
             detail=f"Error processing document: {str(e)}"

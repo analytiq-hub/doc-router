@@ -9,8 +9,13 @@ async def process_llm_msg(analytiq_client, msg):
     logger.info(f"Processing LLM msg: {msg}")
 
     document_id = msg["msg"]["document_id"]
+    org_id = None
     
     try:
+        doc = await ad.common.doc.get_doc(analytiq_client, document_id)
+        if doc:
+            org_id = doc.get("organization_id")
+
         # Update state to LLM processing
         await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_LLM_PROCESSING)
 
@@ -37,6 +42,19 @@ async def process_llm_msg(analytiq_client, msg):
         
         # Update state to LLM failed
         await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_LLM_FAILED)
+
+        # Optional per-org webhook: error
+        try:
+            if org_id:
+                await ad.webhooks.enqueue_event(
+                    analytiq_client,
+                    organization_id=org_id,
+                    event_type="llm.error",
+                    document_id=document_id,
+                    error={"stage": "llm", "message": str(e)},
+                )
+        except Exception:
+            pass
         
         # Could add LLM error queue handling here if needed
         

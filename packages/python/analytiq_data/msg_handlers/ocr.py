@@ -36,6 +36,8 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
     logger.info(f"Force: {force}")
 
     msg_id = msg["_id"]
+    document_id = None
+    org_id = None
 
     try:
         document_id = msg["msg"]["document_id"]
@@ -45,6 +47,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
         if not doc:
             logger.error(f"Document {document_id} not found. Skipping OCR.")
             return
+        org_id = doc.get("organization_id")
 
         # Check if OCR is supported for this file
         if not ad.common.doc.ocr_supported(doc.get("user_file_name", "")):
@@ -72,6 +75,14 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
             if not doc or "mongo_file_name" not in doc:
                 logger.error(f"Document metadata for {document_id} not found or missing mongo_file_name. Skipping OCR.")
                 await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_FAILED)
+                if org_id:
+                    await ad.webhooks.enqueue_event(
+                        analytiq_client,
+                        organization_id=org_id,
+                        event_type="document.error",
+                        document_id=document_id,
+                        error={"stage": "ocr", "message": "missing mongo_file_name"},
+                    )
                 return
 
             # Use the PDF file if available, otherwise fallback to original
@@ -79,12 +90,28 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
             if pdf_file_name is None:
                 logger.error(f"Document metadata for {document_id} not found or missing pdf_file_name. Skipping OCR.")
                 await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_FAILED)
+                if org_id:
+                    await ad.webhooks.enqueue_event(
+                        analytiq_client,
+                        organization_id=org_id,
+                        event_type="document.error",
+                        document_id=document_id,
+                        error={"stage": "ocr", "message": "missing pdf_file_name"},
+                    )
                 return
 
             file = await _ocr_get_file(analytiq_client, pdf_file_name)
             if file is None:
                 logger.error(f"File for {document_id} not found. Skipping OCR.")
                 await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_FAILED)
+                if org_id:
+                    await ad.webhooks.enqueue_event(
+                        analytiq_client,
+                        organization_id=org_id,
+                        event_type="document.error",
+                        document_id=document_id,
+                        error={"stage": "ocr", "message": "file not found"},
+                    )
                 return
 
             # Run OCR
@@ -109,7 +136,19 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
         logger.error(f"Error processing OCR msg: {e}")
         
         # Update state to OCR failed
-        await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_FAILED)
+        if document_id:
+            await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_FAILED)
+        try:
+            if org_id and document_id:
+                await ad.webhooks.enqueue_event(
+                    analytiq_client,
+                    organization_id=org_id,
+                    event_type="document.error",
+                    document_id=document_id,
+                    error={"stage": "ocr", "message": str(e)},
+                )
+        except Exception:
+            pass
 
         # Save the message to the ocr_err queue
         await ad.queue.send_msg(analytiq_client, "ocr_err", msg=msg)

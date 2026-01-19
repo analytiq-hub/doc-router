@@ -502,6 +502,25 @@ async def run_llm(analytiq_client,
 
     # 10. Save the new result
     await save_llm_result(analytiq_client, document_id, prompt_revid, resp_dict)
+
+    # Optional per-org webhook: per-prompt completion (non-default prompts only)
+    if prompt_revid != "default":
+        try:
+            prompt_id, prompt_version = await get_prompt_info_from_rev_id(analytiq_client, prompt_revid)
+            await ad.webhooks.enqueue_event(
+                analytiq_client,
+                organization_id=org_id,
+                event_type="llm.completed",
+                document_id=document_id,
+                prompt={
+                    "prompt_revid": prompt_revid,
+                    "prompt_id": prompt_id,
+                    "prompt_version": prompt_version,
+                },
+                llm_output=resp_dict,
+            )
+        except Exception as e:
+            logger.warning(f"{document_id}/{prompt_revid}: webhook enqueue failed: {e}")
     
     return resp_dict
 

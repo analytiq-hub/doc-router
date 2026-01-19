@@ -39,6 +39,20 @@ const DeveloperPage: React.FC = () => {
           </Link>
         </div>
 
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h2 className="text-xl font-semibold">Webhook</h2>
+            <p className="text-gray-600 mb-2">
+              Configure a per-organization webhook and view delivery history.
+            </p>
+          </div>
+          <Link href="/settings/user/developer/organization-webhooks" passHref>
+            <Button variant="contained" color="primary">
+              Manage
+            </Button>
+          </Link>
+        </div>
+
         <div className="bg-blue-50 rounded-lg shadow p-4">
           <div className="space-y-2 text-blue-900">
             <p>
