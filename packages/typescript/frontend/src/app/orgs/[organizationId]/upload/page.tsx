@@ -8,4 +8,5 @@ export const metadata: Metadata = {
 export default async function UploadPage({ params }: { params: Promise<{ organizationId: string }> }) {
   const { organizationId } = await params;
   return <DocumentUpload organizationId={organizationId} />
-} 
+}
+ 
