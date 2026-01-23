@@ -1,5 +1,6 @@
 "use client"
 
+import { use } from 'react';
 import dynamic from 'next/dynamic';
 import { Box } from '@mui/material';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
@@ -15,13 +16,14 @@ const PDFViewer = dynamic(() => import('@/components/PDFViewer'), {
 })
 
 interface PageProps {
-  params: {
+  params: Promise<{
     organizationId: string;
     id: string;
-  };
+  }>;
 }
 
 const PDFViewerPage = ({ params }: PageProps) => {
+  const { organizationId, id } = use(params);
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showPdfPanel, setShowPdfPanel] = useState(true);
   const [highlightInfo, setHighlightInfo] = useState<HighlightInfo | undefined>();
@@ -62,8 +64,8 @@ const PDFViewerPage = ({ params }: PageProps) => {
 
   const panelSizes = getPanelSizes();
 
-  if (!params.id) return <div>No PDF ID provided</div>;
-  const pdfId = Array.isArray(params.id) ? params.id[0] : params.id;
+  if (!id) return <div>No PDF ID provided</div>;
+  const pdfId = Array.isArray(id) ? id[0] : id;
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
@@ -74,7 +76,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
               <Panel defaultSize={panelSizes.left}>
                 <Box sx={{ height: '100%', overflow: 'auto' }}>
                   <PDFSidebar 
-                    organizationId={params.organizationId} 
+                    organizationId={organizationId} 
                     id={pdfId}
                     onHighlight={setHighlightInfo}
                     onClearHighlight={() => setHighlightInfo(undefined)}
@@ -89,7 +91,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
             <Panel defaultSize={panelSizes.main}>
               <Box sx={{ height: '100%', overflow: 'hidden' }}>
                 <PDFViewer 
-                  organizationId={params.organizationId} 
+                  organizationId={organizationId} 
                   id={pdfId}
                   highlightInfo={highlightInfo}
                 />

@@ -1,16 +1,18 @@
 'use client'
 
+import { use } from 'react';
 import FormList from '@/components/FormList';
 import FormCreate from '@/components/FormCreate';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-export default function FormsPage({ params }: { params: { organizationId: string } }) {
+export default function FormsPage({ params }: { params: Promise<{ organizationId: string }> }) {
+  const { organizationId } = use(params);
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get('tab') || 'forms';
 
   const handleTabChange = (newValue: string) => {
-    router.push(`/orgs/${params.organizationId}/forms?tab=${newValue}`);
+    router.push(`/orgs/${organizationId}/forms?tab=${newValue}`);
   };
 
   return (
@@ -43,10 +45,10 @@ export default function FormsPage({ params }: { params: { organizationId: string
 
         <div className="max-w-6xl mx-auto">
           <div role="tabpanel" hidden={tab !== 'forms'}>
-            {tab === 'forms' && <FormList organizationId={params.organizationId} />}
+            {tab === 'forms' && <FormList organizationId={organizationId} />}
           </div>
           <div role="tabpanel" hidden={tab !== 'form-create'}>
-            {tab === 'form-create' && <FormCreate organizationId={params.organizationId} />}
+            {tab === 'form-create' && <FormCreate organizationId={organizationId} />}
           </div>
         </div>
       </div>

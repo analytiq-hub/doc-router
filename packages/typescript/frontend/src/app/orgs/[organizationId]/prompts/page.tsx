@@ -1,16 +1,18 @@
 'use client'
 
+import { use } from 'react';
 import PromptList from '@/components/PromptList';
 import PromptCreate from '@/components/PromptCreate';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-export default function PromptsPage({ params }: { params: { organizationId: string } }) {
+export default function PromptsPage({ params }: { params: Promise<{ organizationId: string }> }) {
+  const { organizationId } = use(params);
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get('tab') || 'prompts';
 
   const handleTabChange = (newValue: string) => {
-    router.push(`/orgs/${params.organizationId}/prompts?tab=${newValue}`);
+    router.push(`/orgs/${organizationId}/prompts?tab=${newValue}`);
   };
 
   return (
@@ -43,10 +45,10 @@ export default function PromptsPage({ params }: { params: { organizationId: stri
 
       <div className="max-w-6xl mx-auto">
         <div role="tabpanel" hidden={tab !== 'prompts'}>
-          {tab === 'prompts' && <PromptList organizationId={params.organizationId} />}
+          {tab === 'prompts' && <PromptList organizationId={organizationId} />}
         </div>
         <div role="tabpanel" hidden={tab !== 'prompt-create'}>
-          {tab === 'prompt-create' && <PromptCreate organizationId={params.organizationId} />}
+          {tab === 'prompt-create' && <PromptCreate organizationId={organizationId} />}
         </div>
       </div>
     </div>
