@@ -1011,9 +1011,6 @@ async def run_llm_chat(
         )
 
     try:
-        # Import litellm here to avoid event loop warnings
-        import litellm
-        
         # Prepare messages for litellm
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
         
@@ -1100,3 +1097,39 @@ async def run_llm_chat(
             status_code=500,
             detail=f"Error processing LLM request: {str(e)}"
         )
+
+
+def get_embedding_models(provider: str = "openai") -> List[Dict[str, Any]]:
+    """
+    Get all embedding models for a given provider.
+    
+    Args:
+        provider: The litellm provider name (e.g., "openai", "cohere", "azure")
+    
+    Returns:
+        List of dictionaries, each containing:
+        - name: Model name
+        - dimensions: Embedding vector dimensions (output_vector_size)
+        - output_cost_per_token: Cost per token for output (typically 0 for embeddings)
+        - output_cost_per_token_batches: Cost per token for batched output (if available)
+    """
+    models = litellm.models_by_provider.get(provider, [])
+    embedding_models = []
+    
+    for model in models:
+        try:
+            model_info = litellm.get_model_info(model)
+            # Check if this is an embedding model
+            if model_info.get('mode') == 'embedding':
+                embedding_models.append({
+                    'name': model,
+                    'dimensions': model_info.get('output_vector_size'),
+                    'output_cost_per_token': model_info.get('output_cost_per_token'),
+                    'output_cost_per_token_batches': model_info.get('output_cost_per_token_batches')
+                })
+        except Exception as e:
+            # Skip models that can't be queried
+            logger.debug(f"Could not get model info for {model}: {e}")
+            pass
+    
+    return embedding_models
