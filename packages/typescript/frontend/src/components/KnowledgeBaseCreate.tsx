@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
-import { KnowledgeBaseConfig, Tag, ChunkerType } from '@docrouter/sdk';
+import { DocRouterOrgApi, DocRouterAccountApi, getApiErrorMsg } from '@/utils/api';
+import { KnowledgeBaseConfig, Tag, ChunkerType, LLMEmbeddingModel } from '@docrouter/sdk';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 import InfoTooltip from '@/components/InfoTooltip';
@@ -19,6 +19,7 @@ const MAX_COALESCE_NEIGHBORS = 5;
 
 const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> = ({ organizationId, kbId }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
+  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
   const [currentKB, setCurrentKB] = useState<KnowledgeBaseConfig>({
@@ -32,6 +33,7 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
     coalesce_neighbors: DEFAULT_COALESCE_NEIGHBORS
   });
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
+  const [availableEmbeddingModels, setAvailableEmbeddingModels] = useState<LLMEmbeddingModel[]>([]);
   const [isEditing, setIsEditing] = useState(false);
 
   // Load available tags
@@ -46,6 +48,20 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
     }
     loadTags();
   }, [docRouterOrgApi]);
+
+  // Load available embedding models
+  useEffect(() => {
+    async function loadEmbeddingModels() {
+      try {
+        const response = await docRouterAccountApi.listLLMModels({ llmEnabled: true });
+        setAvailableEmbeddingModels(response.embedding_models);
+      } catch (error) {
+        console.error('Error loading embedding models:', error);
+        // Don't show error toast - just log it, as this is not critical for KB creation
+      }
+    }
+    loadEmbeddingModels();
+  }, [docRouterAccountApi]);
 
   // Load KB if editing
   useEffect(() => {
@@ -272,15 +288,23 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
                   <label htmlFor="embedding-model" className="w-40 text-sm font-medium text-gray-700">
                     Embedding Model
                   </label>
-                  <input
+                  <select
                     id="embedding-model"
-                    type="text"
                     className="flex-1 p-2 border rounded disabled:bg-gray-100"
                     value={currentKB.embedding_model ?? DEFAULT_EMBEDDING_MODEL}
                     onChange={e => setCurrentKB({ ...currentKB, embedding_model: e.target.value })}
-                    placeholder="text-embedding-3-small"
                     disabled={isLoading}
-                  />
+                  >
+                    {availableEmbeddingModels.length > 0 ? (
+                      availableEmbeddingModels.map(model => (
+                        <option key={model.litellm_model} value={model.litellm_model}>
+                          {model.litellm_model} ({model.dimensions}D)
+                        </option>
+                      ))
+                    ) : (
+                      <option value={DEFAULT_EMBEDDING_MODEL}>{DEFAULT_EMBEDDING_MODEL}</option>
+                    )}
+                  </select>
                 </div>
               </div>
             </>

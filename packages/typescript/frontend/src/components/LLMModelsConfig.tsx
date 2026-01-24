@@ -217,6 +217,14 @@ const LLMModelsConfig: React.FC = () => {
           m.litellm_provider === provider.litellm_provider
         );
         
+        // Type-safe access to embedding model properties
+        const inputCostPerToken = embeddingModelInfo?.input_cost_per_token ?? 0;
+        const inputCostPerTokenBatches = embeddingModelInfo 
+          ? ('input_cost_per_token_batches' in embeddingModelInfo 
+              ? embeddingModelInfo.input_cost_per_token_batches 
+              : 0)
+          : 0;
+        
         return {
           id: `${provider.name}-${modelName}`,
           provider: provider.name,
@@ -224,8 +232,8 @@ const LLMModelsConfig: React.FC = () => {
           enabled: provider.litellm_models_enabled.includes(modelName),
           max_input_tokens: embeddingModelInfo?.max_input_tokens ?? 0,
           dimensions: embeddingModelInfo?.dimensions ?? 0,
-          input_cost_per_token: (embeddingModelInfo as any)?.input_cost_per_token ?? 0,
-          input_cost_per_token_batches: (embeddingModelInfo as any)?.input_cost_per_token_batches ?? 0,
+          input_cost_per_token: inputCostPerToken,
+          input_cost_per_token_batches: inputCostPerTokenBatches,
         };
       })
   );
