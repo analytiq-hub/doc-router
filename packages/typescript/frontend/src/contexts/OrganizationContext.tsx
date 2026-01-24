@@ -99,23 +99,33 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         // Find the organization from the path in our organizations list
         const orgFromPath = organizations.find(org => org.id === orgIdFromPath)
         if (orgFromPath) {
-          setCurrentOrganization(orgFromPath)
-          localStorage.setItem('currentOrganizationId', orgFromPath.id)
+          // Always update if the path organization is different from current
+          if (!currentOrganization || currentOrganization.id !== orgFromPath.id) {
+            setCurrentOrganization(orgFromPath)
+            localStorage.setItem('currentOrganizationId', orgFromPath.id)
+          }
           return
         }
+        // If orgIdFromPath exists but org not found in list yet, wait for organizations to load
+        // Don't fall through to default behavior
+        return
       }
 
-      // Fallback to stored organization or first available
+      // Fallback to stored organization or first available (only when not on org-specific page)
       const storedOrganizationId = localStorage.getItem('currentOrganizationId')
       
       if (storedOrganizationId) {
         const storedOrganization = organizations.find(w => w.id === storedOrganizationId)
-        if (storedOrganization && !currentOrganization) {
-          setCurrentOrganization(storedOrganization)
+        if (storedOrganization) {
+          // Update if current organization is different from stored
+          if (!currentOrganization || currentOrganization.id !== storedOrganization.id) {
+            setCurrentOrganization(storedOrganization)
+          }
           return
         }
       }
       
+      // Only set to first organization if we don't have a current one
       if (organizations.length > 0 && !currentOrganization) {
         setCurrentOrganization(organizations[0])
         localStorage.setItem('currentOrganizationId', organizations[0].id)
@@ -123,7 +133,7 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
 
     initializeCurrentOrganization()
-  }, [organizations, currentOrganization, getOrganizationIdFromPath, docRouterAccountApi])
+  }, [organizations, currentOrganization, getOrganizationIdFromPath, pathname])
 
   const switchOrganization = useCallback((organizationId: string) => {
     const organization = organizations.find(w => w.id === organizationId)
