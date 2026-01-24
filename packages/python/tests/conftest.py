@@ -64,7 +64,13 @@ def unique_db_name():
 @pytest_asyncio.fixture
 async def test_db(unique_db_name):
     """Set up and tear down a unique test database per worker/session"""
-    client = motor.motor_asyncio.AsyncIOMotorClient(os.environ["MONGODB_URI"])
+    # Explicitly set directConnection=True to bypass replica set discovery
+    # This prevents PyMongo from trying to connect to internal Docker hostnames
+    # that are not resolvable in GitHub Actions
+    client = motor.motor_asyncio.AsyncIOMotorClient(
+        os.environ["MONGODB_URI"],
+        directConnection=True
+    )
     db = client[unique_db_name]
     
     # Verify we're using the test database
