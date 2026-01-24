@@ -51,7 +51,7 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   useEffect(() => {
     const fetchOrganizations = async () => {
       if (status === 'loading') return;
-      
+
       try {
         const appSession = session as AppSession | null;
         if (!appSession?.user?.id) {
@@ -90,40 +90,55 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     fetchOrganizations();
   }, [pathname, session, status, docRouterAccountApi]);
 
+  // Sync currentOrganization with URL path - this is the source of truth when on org pages
   useEffect(() => {
-    const initializeCurrentOrganization = () => {
-      // Check if we're on an organization-specific page (/orgs/[organizationId] or /settings/organizations/[organizationId])
-      const orgIdFromPath = getOrganizationIdFromPath()
-      
-      if (orgIdFromPath) {
-        // Find the organization from the path in our organizations list
-        const orgFromPath = organizations.find(org => org.id === orgIdFromPath)
-        if (orgFromPath) {
-          setCurrentOrganization(orgFromPath)
-          localStorage.setItem('currentOrganizationId', orgFromPath.id)
-          return
-        }
-      }
+    if (organizations.length === 0) return
 
-      // Fallback to stored organization or first available
-      const storedOrganizationId = localStorage.getItem('currentOrganizationId')
-      
-      if (storedOrganizationId) {
-        const storedOrganization = organizations.find(w => w.id === storedOrganizationId)
-        if (storedOrganization && !currentOrganization) {
-          setCurrentOrganization(storedOrganization)
-          return
-        }
-      }
-      
-      if (organizations.length > 0 && !currentOrganization) {
-        setCurrentOrganization(organizations[0])
-        localStorage.setItem('currentOrganizationId', organizations[0].id)
+    // Extract org ID directly from pathname (not via callback to avoid stale closure)
+    let orgIdFromPath: string | null = null
+    const orgsMatch = pathname.match(/^\/orgs\/([^\/]+)/)
+    if (orgsMatch) {
+      orgIdFromPath = orgsMatch[1]
+    } else {
+      const settingsMatch = pathname.match(/^\/settings\/organizations\/([^\/]+)/)
+      if (settingsMatch) {
+        orgIdFromPath = settingsMatch[1]
       }
     }
 
-    initializeCurrentOrganization()
-  }, [organizations, currentOrganization, getOrganizationIdFromPath, docRouterAccountApi])
+    if (orgIdFromPath) {
+      // We're on an org-specific page - URL is the source of truth
+      const orgFromPath = organizations.find(org => org.id === orgIdFromPath)
+      if (orgFromPath) {
+        setCurrentOrganization(prev => {
+          if (prev?.id === orgFromPath.id) return prev
+          localStorage.setItem('currentOrganizationId', orgFromPath.id)
+          return orgFromPath
+        })
+        return
+      }
+    }
+
+    // Not on an org-specific page - preserve current selection if valid
+    setCurrentOrganization(prev => {
+      if (prev && organizations.some(org => org.id === prev.id)) {
+        return prev
+      }
+
+      // Fallback to stored organization
+      const storedOrganizationId = localStorage.getItem('currentOrganizationId')
+      if (storedOrganizationId) {
+        const storedOrganization = organizations.find(w => w.id === storedOrganizationId)
+        if (storedOrganization) {
+          return storedOrganization
+        }
+      }
+
+      // Last resort: use first organization
+      localStorage.setItem('currentOrganizationId', organizations[0].id)
+      return organizations[0]
+    })
+  }, [organizations, pathname])
 
   const switchOrganization = useCallback((organizationId: string) => {
     const organization = organizations.find(w => w.id === organizationId)
@@ -161,13 +176,13 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         return;
       }
 
-      const response = await docRouterAccountApi.listOrganizations({ userId: appSession.user.id });
-      
+      const response = await docRouterAccountApi.listOrganizations({ userId: appSession.user.id, limit: 50 });
+
       // Re-apply filtering logic
       let filtered: Organization[] = response.organizations;
       const isSysAdmin = appSession.user.role === 'admin';
       const isSettingsPage = pathname.startsWith('/settings/organizations');
-      
+
       if (isSettingsPage) {
         if (isSysAdmin) {
           filtered = response.organizations;
@@ -177,18 +192,12 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
           );
         }
       }
+
       setOrganizations(filtered);
-      
-      if (currentOrganization) {
-        const updatedOrganization = filtered.find(w => w.id === currentOrganization.id);
-        if (updatedOrganization) {
-          setCurrentOrganization(updatedOrganization);
-        }
-      }
     } catch (error) {
       console.error('Failed to refresh organizations:', error);
     }
-  }, [pathname, currentOrganization, session, docRouterAccountApi])
+  }, [pathname, session, docRouterAccountApi])
 
   return (
     <OrganizationContext.Provider value={{
