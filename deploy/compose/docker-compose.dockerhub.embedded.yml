@@ -5,7 +5,7 @@ services:
     environment:
       # Runtime environment
       - ENV=${ENV:-dev}
-      - MONGODB_URI=mongodb://admin:admin@mongodb:27017?authSource=admin
+      - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
       - FASTAPI_BACKEND_URL=${FASTAPI_BACKEND_URL:-http://localhost:8000}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
@@ -35,7 +35,7 @@ services:
     environment:
       # Runtime environment
       - ENV=${ENV:-dev}
-      - MONGODB_URI=mongodb://admin:admin@mongodb:27017
+      - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
       - FASTAPI_SECRET=${FASTAPI_SECRET:-${NEXTAUTH_SECRET}} # Obsolete, will be removed
@@ -68,18 +68,26 @@ services:
           memory: 512M
 
   mongodb:
-    image: mongo:latest
+    # MongoDB Atlas Local image with full vector search support
+    # Includes mongot (vector search) process - no additional configuration needed
+    image: mongodb/mongodb-atlas-local:latest
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin
+      # Optional: Set mongot log output (useful for debugging)
+      MONGOT_LOG_FILE: /dev/stdout
+      RUNNER_LOG_FILE: /dev/stdout
     ports:
       - "27018:27017" # external_port:internal_port
     networks:
       - doc-router-local-network
     volumes:
       - doc-router-local-mongodb:/data/db
-    command: mongod --quiet --logpath /dev/null
+    # No custom command - mongodb-atlas-local has its own startup process
     restart: always
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
     deploy:
       resources:
         limits:
