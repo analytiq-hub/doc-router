@@ -76,7 +76,8 @@ const LLMModelsConfig: React.FC = () => {
     setSelectedModel('');
   };
 
-  const columns: GridColDef[] = [
+  // Chat models columns (with test button)
+  const chatModelColumns: GridColDef[] = [
     { field: 'provider', headerName: 'Provider', flex: 1, minWidth: 120 },
     { field: 'name', headerName: 'Model Name', flex: 1, minWidth: 150 },
     {
@@ -110,76 +111,160 @@ const LLMModelsConfig: React.FC = () => {
       ),
     },
     { field: 'max_input_tokens', headerName: 'Max Input Tokens', width: 140, minWidth: 140 },
-    { field: 'max_output_tokens', headerName: 'Max Output Tokens / Dimensions', width: 180, minWidth: 180 },
+    { field: 'max_output_tokens', headerName: 'Max Output Tokens', width: 140, minWidth: 140 },
     { field: 'input_cost_per_token', headerName: 'Input Cost', width: 100, minWidth: 100 },
     { field: 'output_cost_per_token', headerName: 'Output Cost', width: 100, minWidth: 100 },
+  ];
+
+  // Embedding models columns (without test button)
+  const embeddingModelColumns: GridColDef[] = [
+    { field: 'provider', headerName: 'Provider', flex: 1, minWidth: 120 },
+    { field: 'name', headerName: 'Model Name', flex: 1, minWidth: 150 },
+    {
+      field: 'enabled',
+      headerName: 'Enabled',
+      width: 100,
+      minWidth: 100,
+      renderCell: (params: GridRenderCellParams) => (
+        <Switch
+          checked={params.row.enabled}
+          onChange={(e) => handleToggleModel(params.row.provider, params.row.name, e.target.checked)}
+          size="small"
+          color="primary"
+        />
+      ),
+    },
+    { field: 'max_input_tokens', headerName: 'Max Input Tokens', width: 140, minWidth: 140 },
+    { field: 'dimensions', headerName: 'Dimensions', width: 120, minWidth: 120 },
+    { field: 'input_cost_per_token', headerName: 'Input Cost', width: 100, minWidth: 100 },
+    { field: 'input_cost_per_token_batches', headerName: 'Input Cost (Batches)', width: 150, minWidth: 150 },
   ];
 
   if (loading) return <div>Loading...</div>;
   if (error) return <div className="text-red-500">{error}</div>;
 
-  const rows = providers.flatMap(provider =>
-    provider.litellm_models_available.map(modelName => {
-      // Find the model info by matching both provider and model name
-      // Check chat models first, then embedding models
-      const chatModelInfo = chatModels.find(m => 
-        m.litellm_model === modelName && 
-        m.litellm_provider === provider.litellm_provider
-      );
-      const embeddingModelInfo = embeddingModels.find(m => 
-        m.litellm_model === modelName && 
-        m.litellm_provider === provider.litellm_provider
-      );
-      
-      const modelInfo = chatModelInfo || embeddingModelInfo;
-      
-      if (!modelInfo) {
-        console.warn(`No model info found for ${provider.litellm_provider}/${modelName}`);
-      }
-      
-      return {
-        id: `${provider.name}-${modelName}`,
-        provider: provider.name,
-        name: modelName,
-        enabled: provider.litellm_models_enabled.includes(modelName),
-        max_input_tokens: modelInfo?.max_input_tokens ?? 0,
-        max_output_tokens: chatModelInfo ? (chatModelInfo.max_output_tokens ?? 0) : (embeddingModelInfo ? 'N/A' : 0),
-        dimensions: embeddingModelInfo ? (embeddingModelInfo.dimensions ?? 0) : undefined,
-        input_cost_per_token: chatModelInfo ? (chatModelInfo.input_cost_per_token ?? 0) : (embeddingModelInfo ? 'N/A' : 0),
-        output_cost_per_token: modelInfo?.output_cost_per_token ?? 0,
-        output_cost_per_token_batches: embeddingModelInfo ? (embeddingModelInfo.output_cost_per_token_batches ?? 0) : undefined,
-      };
-    })
+  // Build chat model rows
+  const chatModelRows = providers.flatMap(provider =>
+    provider.litellm_models_available
+      .filter(modelName => {
+        const chatModelInfo = chatModels.find(m => 
+          m.litellm_model === modelName && 
+          m.litellm_provider === provider.litellm_provider
+        );
+        return chatModelInfo !== undefined;
+      })
+      .map(modelName => {
+        const chatModelInfo = chatModels.find(m => 
+          m.litellm_model === modelName && 
+          m.litellm_provider === provider.litellm_provider
+        );
+        
+        return {
+          id: `${provider.name}-${modelName}`,
+          provider: provider.name,
+          name: modelName,
+          enabled: provider.litellm_models_enabled.includes(modelName),
+          max_input_tokens: chatModelInfo?.max_input_tokens ?? 0,
+          max_output_tokens: chatModelInfo?.max_output_tokens ?? 0,
+          input_cost_per_token: chatModelInfo?.input_cost_per_token ?? 0,
+          output_cost_per_token: chatModelInfo?.output_cost_per_token ?? 0,
+        };
+      })
+  );
+
+  // Build embedding model rows
+  const embeddingModelRows = providers.flatMap(provider =>
+    provider.litellm_models_available
+      .filter(modelName => {
+        const embeddingModelInfo = embeddingModels.find(m => 
+          m.litellm_model === modelName && 
+          m.litellm_provider === provider.litellm_provider
+        );
+        return embeddingModelInfo !== undefined;
+      })
+      .map(modelName => {
+        const embeddingModelInfo = embeddingModels.find(m => 
+          m.litellm_model === modelName && 
+          m.litellm_provider === provider.litellm_provider
+        );
+        
+        return {
+          id: `${provider.name}-${modelName}`,
+          provider: provider.name,
+          name: modelName,
+          enabled: provider.litellm_models_enabled.includes(modelName),
+          max_input_tokens: embeddingModelInfo?.max_input_tokens ?? 0,
+          dimensions: embeddingModelInfo?.dimensions ?? 0,
+          input_cost_per_token: embeddingModelInfo?.input_cost_per_token ?? 0,
+          input_cost_per_token_batches: embeddingModelInfo?.input_cost_per_token_batches ?? 0,
+        };
+      })
   );
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
-      <h2 className="text-2xl font-bold mb-4">All Language Models</h2>
-      <div className="w-full overflow-x-auto">
-        <DataGrid
-          rows={rows}
-          columns={columns}
-          disableRowSelectionOnClick
-          sx={{
-            minWidth: 800,
-            height: 400,
-            '& .MuiDataGrid-cell': {
-              padding: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              height: '100%',
-            },
-            '& .MuiDataGrid-row': {
-              height: '48px !important',
-            },
-            '& .MuiDataGrid-row:nth-of-type(odd)': {
-              backgroundColor: colors.gray[100],
-            },
-            '& .MuiDataGrid-row:hover': {
-              backgroundColor: `${colors.gray[200]} !important`,
-            },
-          }}
-        />
+      <h2 className="text-2xl font-bold mb-6">LLM Models Configuration</h2>
+      
+      {/* Chat Models Section */}
+      <div className="mb-8">
+        <h3 className="text-xl font-semibold mb-4">Chat Models</h3>
+        <div className="w-full overflow-x-auto">
+          <DataGrid
+            rows={chatModelRows}
+            columns={chatModelColumns}
+            disableRowSelectionOnClick
+            sx={{
+              minWidth: 800,
+              height: 400,
+              '& .MuiDataGrid-cell': {
+                padding: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                height: '100%',
+              },
+              '& .MuiDataGrid-row': {
+                height: '48px !important',
+              },
+              '& .MuiDataGrid-row:nth-of-type(odd)': {
+                backgroundColor: colors.gray[100],
+              },
+              '& .MuiDataGrid-row:hover': {
+                backgroundColor: `${colors.gray[200]} !important`,
+              },
+            }}
+          />
+        </div>
+      </div>
+
+      {/* Embedding Models Section */}
+      <div>
+        <h3 className="text-xl font-semibold mb-4">Embedding Models</h3>
+        <div className="w-full overflow-x-auto">
+          <DataGrid
+            rows={embeddingModelRows}
+            columns={embeddingModelColumns}
+            disableRowSelectionOnClick
+            sx={{
+              minWidth: 800,
+              height: 400,
+              '& .MuiDataGrid-cell': {
+                padding: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                height: '100%',
+              },
+              '& .MuiDataGrid-row': {
+                height: '48px !important',
+              },
+              '& .MuiDataGrid-row:nth-of-type(odd)': {
+                backgroundColor: colors.gray[100],
+              },
+              '& .MuiDataGrid-row:hover': {
+                backgroundColor: `${colors.gray[200]} !important`,
+              },
+            }}
+          />
+        </div>
       </div>
 
       {/* Test Modal */}

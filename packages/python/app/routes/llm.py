@@ -37,8 +37,8 @@ class LLMEmbeddingModel(BaseModel):
     litellm_provider: str
     max_input_tokens: int
     dimensions: int
-    output_cost_per_token: float
-    output_cost_per_token_batches: float
+    input_cost_per_token: float
+    input_cost_per_token_batches: float
 
 class ListLLMModelsResponse(BaseModel):
     chat_models: List[LLMChatModel]
@@ -490,16 +490,16 @@ async def list_llm_models(
                 try:
                     model_info = litellm.get_model_info(model)
                     dimensions = model_info.get("output_vector_size", 0)
-                    output_cost_per_token_batches = 0.0
+                    input_cost_per_token_batches = 0.0
                     if model in litellm.model_cost:
-                        output_cost_per_token_batches = litellm.model_cost[model].get("output_cost_per_token_batches", 0.0)
+                        input_cost_per_token_batches = litellm.model_cost[model].get("input_cost_per_token_batches", 0.0)
                     embedding_model = LLMEmbeddingModel(
                         litellm_model=model,
                         litellm_provider=provider["litellm_provider"],
                         max_input_tokens=max_input_tokens,
                         dimensions=dimensions,
-                        output_cost_per_token=output_cost_per_token,
-                        output_cost_per_token_batches=output_cost_per_token_batches,
+                        input_cost_per_token=input_cost_per_token,
+                        input_cost_per_token_batches=input_cost_per_token_batches,
                     )
                     embedding_models.append(embedding_model)
                     logger.info(f"embedding_model: {embedding_model}")

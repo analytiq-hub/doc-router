@@ -90,7 +90,8 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
     setSelectedModel('');
   };
 
-  const columns: GridColDef[] = [
+  // Chat models columns (with test button)
+  const chatModelColumns: GridColDef[] = [
     { field: 'litellm_model', headerName: 'Model Name', flex: 1, minWidth: 150 },
     {
       field: 'enabled',
@@ -123,25 +124,49 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
       ),
     },
     { field: 'max_input_tokens', headerName: 'Max Input Tokens', width: 140, minWidth: 140 },
-    { field: 'max_output_tokens', headerName: 'Max Output Tokens / Dimensions', width: 180, minWidth: 180 },
+    { field: 'max_output_tokens', headerName: 'Max Output Tokens', width: 140, minWidth: 140 },
     { field: 'input_cost_per_token', headerName: 'Input Cost', width: 100, minWidth: 100 },
     { field: 'output_cost_per_token', headerName: 'Output Cost', width: 100, minWidth: 100 },
+  ];
+
+  // Embedding models columns (without test button)
+  const embeddingModelColumns: GridColDef[] = [
+    { field: 'litellm_model', headerName: 'Model Name', flex: 1, minWidth: 150 },
+    {
+      field: 'enabled',
+      headerName: 'Enabled',
+      width: 100,
+      minWidth: 100,
+      renderCell: (params: GridRenderCellParams) => (
+        <Switch
+          checked={provider?.litellm_models_enabled.includes(params.row.litellm_model)}
+          onChange={(e) => handleToggleModel(params.row.litellm_model, e.target.checked)}
+          size="small"
+          color="primary"
+        />
+      ),
+    },
+    { field: 'max_input_tokens', headerName: 'Max Input Tokens', width: 140, minWidth: 140 },
+    { field: 'dimensions', headerName: 'Dimensions', width: 120, minWidth: 120 },
+    { field: 'input_cost_per_token', headerName: 'Input Cost', width: 100, minWidth: 100 },
+    { field: 'input_cost_per_token_batches', headerName: 'Input Cost (Batches)', width: 150, minWidth: 150 },
   ];
 
   if (loading) return <div>Loading...</div>;
   if (error) return <div className="text-red-500">{error}</div>;
   if (!provider) return <div>Provider not found</div>;
 
-  // Combine chat and embedding models
-  const allModels = [
-    ...chatModels.map(m => ({ ...m, model_type: 'chat' as const, input_cost_per_token: m.input_cost_per_token })),
-    ...embeddingModels.map(m => ({ 
-      ...m, 
-      model_type: 'embedding' as const, 
-      max_output_tokens: m.dimensions,
-      input_cost_per_token: 'N/A' // Embedding models don't have input_cost_per_token
-    }))
-  ];
+  // Prepare chat models for display
+  const chatModelRows = chatModels.map(m => ({
+    ...m,
+    input_cost_per_token: m.input_cost_per_token
+  }));
+
+  // Prepare embedding models for display
+  const embeddingModelRows = embeddingModels.map(m => ({
+    ...m,
+    input_cost_per_token_batches: m.input_cost_per_token_batches
+  }));
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
@@ -150,19 +175,44 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
       <p><b>Enabled:</b> {provider.enabled ? 'Yes' : 'No'}</p>
       <p><b>Token:</b> {provider.token ? `${provider.token.slice(0, 16)}••••••••` : 'Not set'}</p>
       </div>
-      <h3 className="text-lg font-semibold mb-2">Models</h3>
-      <div className="w-full overflow-x-auto">
-        <DataGrid
-          rows={allModels}
-          columns={columns}
-          disableRowSelectionOnClick
-          getRowId={(row) => row.litellm_model}
-          sx={{
-            minWidth: 800,
-            height: 300,
-          }}
-        />
-      </div>
+      
+      {/* Chat Models Section */}
+      {chatModelRows.length > 0 && (
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-2">Chat Models</h3>
+          <div className="w-full overflow-x-auto">
+            <DataGrid
+              rows={chatModelRows}
+              columns={chatModelColumns}
+              disableRowSelectionOnClick
+              getRowId={(row) => row.litellm_model}
+              sx={{
+                minWidth: 800,
+                height: 300,
+              }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Embedding Models Section */}
+      {embeddingModelRows.length > 0 && (
+        <div>
+          <h3 className="text-lg font-semibold mb-2">Embedding Models</h3>
+          <div className="w-full overflow-x-auto">
+            <DataGrid
+              rows={embeddingModelRows}
+              columns={embeddingModelColumns}
+              disableRowSelectionOnClick
+              getRowId={(row) => row.litellm_model}
+              sx={{
+                minWidth: 800,
+                height: 300,
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Test Modal */}
       <LLMTestModal

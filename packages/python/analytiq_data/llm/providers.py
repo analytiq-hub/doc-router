@@ -288,16 +288,14 @@ def get_llm_providers() -> dict:
                 "gpt-5.1",
                 "gpt-5.2",
                 "text-embedding-3-small",
-                "text-embedding-3-large",
-                "text-embedding-ada-002"
+                "text-embedding-3-large"
             ],
             "litellm_models_enabled": [
                 "gpt-4o-mini", 
                 "gpt-5.1",
                 "gpt-5.2",
                 "text-embedding-3-small",
-                "text-embedding-3-large",
-                "text-embedding-ada-002"
+                "text-embedding-3-large"
             ],
             "enabled": True,
             "token" : "",

@@ -1110,8 +1110,8 @@ def get_embedding_models(provider: str = "openai") -> List[Dict[str, Any]]:
         List of dictionaries, each containing:
         - name: Model name
         - dimensions: Embedding vector dimensions (output_vector_size)
-        - output_cost_per_token: Cost per token for output (typically 0 for embeddings)
-        - output_cost_per_token_batches: Cost per token for batched output (if available)
+        - input_cost_per_token: Cost per token for input
+        - input_cost_per_token_batches: Cost per token for batched input (if available)
     """
     models = litellm.models_by_provider.get(provider, [])
     embedding_models = []
@@ -1121,11 +1121,18 @@ def get_embedding_models(provider: str = "openai") -> List[Dict[str, Any]]:
             model_info = litellm.get_model_info(model)
             # Check if this is an embedding model
             if model_info.get('mode') == 'embedding':
+                # Get cost information from model_cost
+                input_cost_per_token = 0.0
+                input_cost_per_token_batches = 0.0
+                if model in litellm.model_cost:
+                    input_cost_per_token = litellm.model_cost[model].get("input_cost_per_token", 0.0)
+                    input_cost_per_token_batches = litellm.model_cost[model].get("input_cost_per_token_batches", 0.0)
+                
                 embedding_models.append({
                     'name': model,
                     'dimensions': model_info.get('output_vector_size'),
-                    'output_cost_per_token': model_info.get('output_cost_per_token'),
-                    'output_cost_per_token_batches': model_info.get('output_cost_per_token_batches')
+                    'input_cost_per_token': input_cost_per_token,
+                    'input_cost_per_token_batches': input_cost_per_token_batches
                 })
         except Exception as e:
             # Skip models that can't be queried

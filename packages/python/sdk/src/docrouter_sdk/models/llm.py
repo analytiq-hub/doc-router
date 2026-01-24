@@ -15,8 +15,8 @@ class LLMEmbeddingModel(BaseModel):
     litellm_provider: str
     max_input_tokens: int
     dimensions: int
-    output_cost_per_token: float
-    output_cost_per_token_batches: float
+    input_cost_per_token: float
+    input_cost_per_token_batches: float
 
 class ListLLMModelsResponse(BaseModel):
     chat_models: List[LLMChatModel]

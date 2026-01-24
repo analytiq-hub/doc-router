@@ -287,8 +287,8 @@ export interface LLMEmbeddingModel {
   litellm_provider: string;
   max_input_tokens: number;
   dimensions: number;
-  output_cost_per_token: number;
-  output_cost_per_token_batches: number;
+  input_cost_per_token: number;
+  input_cost_per_token_batches: number;
 }
 
 export interface ListLLMModelsResponse {
