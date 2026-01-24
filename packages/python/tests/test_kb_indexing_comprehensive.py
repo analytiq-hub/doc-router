@@ -726,6 +726,139 @@ async def test_user_2_document_indexed_with_extra_tag_delete(mock_embedding, moc
 
 
 # ============================================================================
+# CATEGORY 4: KB Created After Document
+# ============================================================================
+
+@pytest.mark.asyncio
+@patch('litellm.get_model_info', return_value={"provider": "openai"})
+@patch('litellm.aembedding')
+async def test_4_1_kb_created_after_document(mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models):
+    """Test 4.1: KB created with matching tag after document was created"""
+    mock_embedding.return_value = create_mock_embedding_response()
+    
+    try:
+        # Setup: Create document first with tagA
+        tagA_id = await create_tag("TagA")
+        document_id = await create_document(test_db, [tagA_id])
+        
+        # Verify document exists but is not indexed in any KB yet
+        index_entries = await test_db.document_index.find({"document_id": document_id}).to_list(length=None)
+        assert len(index_entries) == 0, "Document should not be indexed yet"
+        
+        # Create KB later with tagA (matching the document)
+        kb1_id = await create_kb("KB1", [tagA_id])
+        
+        # Verify document is still not indexed (KB creation doesn't auto-index)
+        await verify_document_in_kb(test_db, document_id, kb1_id, should_be_indexed=False)
+        
+        # Run reconciliation to find and index matching documents
+        results = await ad.kb.reconciliation.reconcile_knowledge_base(
+            ad.common.get_analytiq_client(), kb1_id, TEST_ORG_ID, dry_run=False
+        )
+        
+        # Process the queued indexing messages
+        await process_pending_kb_index_messages(test_db)
+        
+        # Verify document is now indexed in KB1
+        await verify_document_in_kb(test_db, document_id, kb1_id, should_be_indexed=True)
+        
+        # Verify KB1 stats
+        kb1 = await test_db.knowledge_bases.find_one({"_id": ObjectId(kb1_id)})
+        assert kb1["document_count"] == 1, "KB1 should have 1 document"
+        assert kb1["chunk_count"] > 0, "KB1 should have chunks"
+        
+    finally:
+        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
+        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
+        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+
+@pytest.mark.asyncio
+@patch('litellm.get_model_info', return_value={"provider": "openai"})
+@patch('litellm.aembedding')
+async def test_4_2_kb_created_after_document_multiple_kbs(mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models):
+    """Test 4.2: Multiple KBs created after document with matching tags"""
+    mock_embedding.return_value = create_mock_embedding_response()
+    
+    try:
+        # Setup: Create document first with [tagA, tagB]
+        tagA_id = await create_tag("TagA")
+        tagB_id = await create_tag("TagB")
+        tagC_id = await create_tag("TagC")
+        tagD_id = await create_tag("TagD")
+        
+        document_id = await create_document(test_db, [tagA_id, tagB_id])
+        
+        # Create KB1 later with [tagA, tagC]
+        kb1_id = await create_kb("KB1", [tagA_id, tagC_id])
+        
+        # Create KB2 later with [tagB, tagD]
+        kb2_id = await create_kb("KB2", [tagB_id, tagD_id])
+        
+        # Run reconciliation for both KBs
+        await ad.kb.reconciliation.reconcile_knowledge_base(
+            ad.common.get_analytiq_client(), kb1_id, TEST_ORG_ID, dry_run=False
+        )
+        await ad.kb.reconciliation.reconcile_knowledge_base(
+            ad.common.get_analytiq_client(), kb2_id, TEST_ORG_ID, dry_run=False
+        )
+        
+        # Process the queued indexing messages
+        await process_pending_kb_index_messages(test_db)
+        
+        # Verify document is indexed in both KBs
+        await verify_document_in_kb(test_db, document_id, kb1_id, should_be_indexed=True)
+        await verify_document_in_kb(test_db, document_id, kb2_id, should_be_indexed=True)
+        
+        # Verify KB stats
+        kb1 = await test_db.knowledge_bases.find_one({"_id": ObjectId(kb1_id)})
+        kb2 = await test_db.knowledge_bases.find_one({"_id": ObjectId(kb2_id)})
+        assert kb1["document_count"] == 1, "KB1 should have 1 document"
+        assert kb2["document_count"] == 1, "KB2 should have 1 document"
+        
+    finally:
+        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
+        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
+        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+
+@pytest.mark.asyncio
+@patch('litellm.get_model_info', return_value={"provider": "openai"})
+@patch('litellm.aembedding')
+async def test_4_3_kb_created_after_document_no_match(mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models):
+    """Test 4.3: KB created after document but tags don't match"""
+    mock_embedding.return_value = create_mock_embedding_response()
+    
+    try:
+        # Setup: Create document first with tagA
+        tagA_id = await create_tag("TagA")
+        tagB_id = await create_tag("TagB")
+        
+        document_id = await create_document(test_db, [tagA_id])
+        
+        # Create KB later with tagB (no match)
+        kb1_id = await create_kb("KB1", [tagB_id])
+        
+        # Run reconciliation
+        results = await ad.kb.reconciliation.reconcile_knowledge_base(
+            ad.common.get_analytiq_client(), kb1_id, TEST_ORG_ID, dry_run=False
+        )
+        
+        # Process any queued indexing messages
+        await process_pending_kb_index_messages(test_db)
+        
+        # Verify document is NOT indexed in KB1 (tags don't match)
+        await verify_document_in_kb(test_db, document_id, kb1_id, should_be_indexed=False)
+        
+        # Verify KB1 stats
+        kb1 = await test_db.knowledge_bases.find_one({"_id": ObjectId(kb1_id)})
+        assert kb1["document_count"] == 0, "KB1 should have 0 documents"
+        
+    finally:
+        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
+        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
+        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+
+
+# ============================================================================
 # EDGE CASES
 # ============================================================================
 
