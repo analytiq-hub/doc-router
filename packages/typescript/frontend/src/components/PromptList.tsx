@@ -4,7 +4,7 @@ import { Tag } from '@docrouter/sdk';
 import { Prompt, Schema } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { TextField, InputAdornment, IconButton, Menu, MenuItem, Autocomplete } from '@mui/material';
+import { TextField, InputAdornment, IconButton, Menu, MenuItem, Autocomplete, Tooltip, Box } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -343,21 +343,69 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
         const promptTags = availableTags.filter(tag => 
           params.row.tag_ids?.includes(tag.id)
         );
-        return (
-          <div className="flex gap-1 flex-wrap items-center h-full">
-            {promptTags.map(tag => (
-              <div
-                key={tag.id}
-                className={`px-2 py-1 rounded text-xs ${
-                  isColorLight(tag.color) ? 'text-gray-800' : 'text-white'
-                } flex items-center`}
-                style={{ backgroundColor: tag.color }}
-              >
-                {tag.name}
-              </div>
-            ))}
+        const firstTag = promptTags[0];
+        const hasMoreTags = promptTags.length > 1;
+
+        const tagChip = (tag: Tag) => (
+          <div
+            key={tag.id}
+            className={`px-2 py-1 rounded text-xs ${
+              isColorLight(tag.color) ? 'text-gray-800' : 'text-white'
+            } flex items-center`}
+            style={{ backgroundColor: tag.color }}
+          >
+            {tag.name}
           </div>
         );
+
+        if (!firstTag) {
+          return <div className="text-gray-400 flex items-center h-full">-</div>;
+        }
+
+        const content = (
+          <div className="flex gap-1 items-center h-full">
+            {tagChip(firstTag)}
+            {hasMoreTags && (
+              <span className="text-gray-500 text-sm">...</span>
+            )}
+          </div>
+        );
+
+        if (hasMoreTags) {
+          const tooltipContent = (
+            <Box className="flex flex-col gap-1.5 p-1">
+              {promptTags.map(tag => tagChip(tag))}
+            </Box>
+          );
+
+          return (
+            <Tooltip 
+              title={tooltipContent}
+              arrow
+              placement="top"
+              enterDelay={200}
+              componentsProps={{
+                tooltip: {
+                  sx: {
+                    bgcolor: 'white',
+                    color: 'text.primary',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    padding: '4px',
+                    maxWidth: '300px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                  },
+                },
+              }}
+            >
+              <div className="w-full flex items-center h-full">
+                {content}
+              </div>
+            </Tooltip>
+          );
+        }
+
+        return content;
       },
     },
     {

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
-import { Box, IconButton, TextField, InputAdornment, Autocomplete, Menu, MenuItem } from '@mui/material';
+import { Box, IconButton, TextField, InputAdornment, Autocomplete, Menu, MenuItem, Tooltip } from '@mui/material';
 import { isAxiosError } from 'axios';
 // All API calls now use docRouterOrgApi
 import { Tag, Document } from '@docrouter/sdk';
@@ -353,23 +353,71 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
       flex: 1,
       renderCell: (params) => {
         const documentTags = tags.filter(tag => params.row.tag_ids?.includes(tag.id));
-        return (
-          <div className="flex gap-1 flex-wrap items-center h-full">
-            {documentTags.map(tag => {
-              const bgColor = tag.color;
-              const textColor = isColorLight(bgColor) ? 'text-gray-800' : 'text-white';
-              return (
-                <div 
-                  key={tag.id}
-                  className={`px-2 py-1 leading-none rounded shadow-sm ${textColor} flex items-center`}
-                  style={{ backgroundColor: bgColor }}
-                >
-                  {tag.name}
-                </div>
-              );
-            })}
+        const firstTag = documentTags[0];
+        const hasMoreTags = documentTags.length > 1;
+
+        const tagChip = (tag: Tag) => {
+          const bgColor = tag.color;
+          const textColor = isColorLight(bgColor) ? 'text-gray-800' : 'text-white';
+          return (
+            <div 
+              key={tag.id}
+              className={`px-2 py-1 leading-none rounded shadow-sm ${textColor} flex items-center`}
+              style={{ backgroundColor: bgColor }}
+            >
+              {tag.name}
+            </div>
+          );
+        };
+
+        if (!firstTag) {
+          return <div className="text-gray-400 flex items-center h-full">-</div>;
+        }
+
+        const content = (
+          <div className="flex gap-1 items-center h-full">
+            {tagChip(firstTag)}
+            {hasMoreTags && (
+              <span className="text-gray-500 text-sm">...</span>
+            )}
           </div>
         );
+
+        if (hasMoreTags) {
+          const tooltipContent = (
+            <Box className="flex flex-col gap-1.5 p-1">
+              {documentTags.map(tag => tagChip(tag))}
+            </Box>
+          );
+
+          return (
+            <Tooltip 
+              title={tooltipContent}
+              arrow
+              placement="top"
+              enterDelay={200}
+              componentsProps={{
+                tooltip: {
+                  sx: {
+                    bgcolor: 'white',
+                    color: 'text.primary',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    padding: '4px',
+                    maxWidth: '300px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                  },
+                },
+              }}
+            >
+              <div className="w-full flex items-center h-full">
+                {content}
+              </div>
+            </Tooltip>
+          );
+        }
+
+        return content;
       },
     },
     {

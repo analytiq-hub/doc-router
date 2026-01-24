@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { KnowledgeBase, Tag } from '@docrouter/sdk';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { TextField, InputAdornment, IconButton, Menu, MenuItem, Chip } from '@mui/material';
+import { TextField, InputAdornment, IconButton, Menu, MenuItem, Chip, Tooltip, Box } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
@@ -157,33 +157,6 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       ),
     },
     {
-      field: 'tag_ids',
-      headerName: 'Tags',
-      width: 200,
-      headerAlign: 'left',
-      align: 'left',
-      renderCell: (params) => {
-        const kbTags = availableTags.filter(tag => 
-          params.row.tag_ids?.includes(tag.id)
-        );
-        return (
-          <div className="flex gap-1 flex-wrap items-center h-full">
-            {kbTags.map(tag => (
-              <div
-                key={tag.id}
-                className={`px-2 py-1 rounded text-xs ${
-                  isColorLight(tag.color) ? 'text-gray-800' : 'text-white'
-                } flex items-center`}
-                style={{ backgroundColor: tag.color }}
-              >
-                {tag.name}
-              </div>
-            ))}
-          </div>
-        );
-      },
-    },
-    {
       field: 'status',
       headerName: 'Status',
       width: 120,
@@ -226,6 +199,81 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
           {params.row.embedding_model}
         </div>
       ),
+    },
+    {
+      field: 'tag_ids',
+      headerName: 'Tags',
+      width: 200,
+      headerAlign: 'left',
+      align: 'left',
+      renderCell: (params) => {
+        const kbTags = availableTags.filter(tag => 
+          params.row.tag_ids?.includes(tag.id)
+        );
+        const firstTag = kbTags[0];
+        const hasMoreTags = kbTags.length > 1;
+
+        const tagChip = (tag: Tag) => (
+          <div
+            key={tag.id}
+            className={`px-2 py-1 rounded text-xs ${
+              isColorLight(tag.color) ? 'text-gray-800' : 'text-white'
+            } flex items-center whitespace-nowrap`}
+            style={{ backgroundColor: tag.color }}
+          >
+            {tag.name}
+          </div>
+        );
+
+        if (!firstTag) {
+          return <div className="text-gray-400 flex items-center h-full">-</div>;
+        }
+
+        const content = (
+          <div className="flex gap-1 items-center h-full">
+            {tagChip(firstTag)}
+            {hasMoreTags && (
+              <span className="text-gray-500 text-sm">...</span>
+            )}
+          </div>
+        );
+
+        if (hasMoreTags) {
+          const tooltipContent = (
+            <Box className="flex flex-col gap-1.5 p-1">
+              {kbTags.map(tag => tagChip(tag))}
+            </Box>
+          );
+
+          return (
+            <Tooltip 
+              title={tooltipContent}
+              arrow
+              placement="top"
+              enterDelay={200}
+              componentsProps={{
+                tooltip: {
+                  sx: {
+                    bgcolor: 'white',
+                    color: 'text.primary',
+                    border: '1px solid',
+                    borderColor: 'divider',
+                    padding: '4px',
+                    maxWidth: '300px',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                  },
+                },
+              }}
+            >
+              <div className="w-full flex items-center h-full">
+                {content}
+              </div>
+            </Tooltip>
+          );
+        }
+
+        return content;
+      },
     },
     {
       field: 'actions',
@@ -309,6 +357,12 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             sx={{
               '& .MuiDataGrid-cell': {
                 padding: '8px',
+              },
+              '& .MuiDataGrid-cell[data-field="tag_ids"]': {
+                paddingTop: '8px',
+                paddingBottom: '8px',
+                display: 'flex',
+                alignItems: 'center',
               },
               '& .MuiDataGrid-row:nth-of-type(odd)': {
                 backgroundColor: colors.gray[100],
