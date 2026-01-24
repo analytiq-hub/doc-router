@@ -156,17 +156,11 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
   if (error) return <div className="text-red-500">{error}</div>;
   if (!provider) return <div>Provider not found</div>;
 
-  // Prepare chat models for display
-  const chatModelRows = chatModels.map(m => ({
-    ...m,
-    input_cost_per_token: m.input_cost_per_token
-  }));
+  // Prepare chat models for display (already have all needed fields)
+  const chatModelRows = chatModels;
 
-  // Prepare embedding models for display
-  const embeddingModelRows = embeddingModels.map(m => ({
-    ...m,
-    input_cost_per_token_batches: m.input_cost_per_token_batches
-  }));
+  // Prepare embedding models for display (already have all needed fields)
+  const embeddingModelRows = embeddingModels;
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
