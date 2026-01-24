@@ -1,0 +1,537 @@
+# knowledge_bases.py
+
+# Standard library imports
+import logging
+import hashlib
+from datetime import datetime, UTC
+from typing import Optional, List, Dict, Literal, Any
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# Third-party imports
+from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from bson import ObjectId
+
+# Local imports
+import analytiq_data as ad
+from app.auth import get_org_user
+from app.models import User
+
+# Configure logger
+logger = logging.getLogger(__name__)
+
+# Initialize FastAPI router
+knowledge_bases_router = APIRouter(tags=["knowledge-bases"])
+
+# KB Configuration Constants
+VALID_CHUNKER_TYPES = ["token", "word", "sentence", "semantic", "sdpm", "late"]
+DEFAULT_CHUNKER_TYPE = "recursive"  # Note: "recursive" is a Chonkie alias, map to "semantic"
+DEFAULT_CHUNK_SIZE = 512
+DEFAULT_CHUNK_OVERLAP = 128
+DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
+DEFAULT_COALESCE_NEIGHBORS = 0
+MIN_CHUNK_SIZE = 50
+MAX_CHUNK_SIZE = 2000
+MAX_COALESCE_NEIGHBORS = 5
+
+# KB Models
+class KnowledgeBaseConfig(BaseModel):
+    name: str = Field(..., description="Human-readable name for the KB")
+    description: str = Field(default="", description="Optional description")
+    tag_ids: List[str] = Field(default_factory=list, description="Tag IDs for auto-indexing")
+    chunker_type: str = Field(default=DEFAULT_CHUNKER_TYPE, description="Chonkie chunker type")
+    chunk_size: int = Field(default=DEFAULT_CHUNK_SIZE, description="Target tokens per chunk")
+    chunk_overlap: int = Field(default=DEFAULT_CHUNK_OVERLAP, description="Overlap tokens between chunks")
+    embedding_model: str = Field(default=DEFAULT_EMBEDDING_MODEL, description="LiteLLM embedding model")
+    coalesce_neighbors: int = Field(default=DEFAULT_COALESCE_NEIGHBORS, description="Number of neighboring chunks to include (0-5)")
+    
+    @field_validator('chunker_type')
+    @classmethod
+    def validate_chunker_type(cls, v):
+        # Map "recursive" to "semantic" (Chonkie's semantic chunker is closest to recursive)
+        if v == "recursive":
+            return "semantic"
+        if v not in VALID_CHUNKER_TYPES:
+            raise ValueError(f"chunker_type must be one of {VALID_CHUNKER_TYPES} or 'recursive'")
+        return v
+    
+    @field_validator('chunk_size')
+    @classmethod
+    def validate_chunk_size(cls, v):
+        if v < MIN_CHUNK_SIZE or v > MAX_CHUNK_SIZE:
+            raise ValueError(f"chunk_size must be between {MIN_CHUNK_SIZE} and {MAX_CHUNK_SIZE}")
+        return v
+    
+    @field_validator('chunk_overlap')
+    @classmethod
+    def validate_chunk_overlap(cls, v):
+        if v < 0:
+            raise ValueError("chunk_overlap must be non-negative")
+        return v
+    
+    @model_validator(mode='after')
+    def validate_chunk_overlap_vs_size(self):
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError("chunk_overlap must be less than chunk_size")
+        return self
+    
+    @field_validator('coalesce_neighbors')
+    @classmethod
+    def validate_coalesce_neighbors(cls, v):
+        if v < 0 or v > MAX_COALESCE_NEIGHBORS:
+            raise ValueError(f"coalesce_neighbors must be between 0 and {MAX_COALESCE_NEIGHBORS}")
+        return v
+
+class KnowledgeBaseUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    tag_ids: Optional[List[str]] = None
+    coalesce_neighbors: Optional[int] = None
+    
+    @field_validator('coalesce_neighbors')
+    @classmethod
+    def validate_coalesce_neighbors(cls, v):
+        if v is not None and (v < 0 or v > MAX_COALESCE_NEIGHBORS):
+            raise ValueError(f"coalesce_neighbors must be between 0 and {MAX_COALESCE_NEIGHBORS}")
+        return v
+
+class KnowledgeBase(KnowledgeBaseConfig):
+    kb_id: str
+    embedding_dimensions: int
+    status: Literal["indexing", "active", "error"]
+    document_count: int
+    chunk_count: int
+    created_at: datetime
+    updated_at: datetime
+
+class ListKnowledgeBasesResponse(BaseModel):
+    knowledge_bases: List[KnowledgeBase]
+    total_count: int
+
+class KnowledgeBaseDocument(BaseModel):
+    document_id: str
+    document_name: str
+    chunk_count: int
+    indexed_at: datetime
+
+class ListKBDocumentsResponse(BaseModel):
+    documents: List[KnowledgeBaseDocument]
+    total_count: int
+
+class KBSearchRequest(BaseModel):
+    query: str = Field(..., description="Search query text")
+    top_k: int = Field(default=5, ge=1, le=20, description="Number of results to return")
+    skip: int = Field(default=0, ge=0, description="Pagination offset")
+    document_ids: Optional[List[str]] = Field(default=None, description="Filter by specific document IDs")
+    metadata_filter: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filters (sanitized server-side)")
+    upload_date_from: Optional[datetime] = Field(default=None, description="Filter by upload date from")
+    upload_date_to: Optional[datetime] = Field(default=None, description="Filter by upload date to")
+    coalesce_neighbors: Optional[int] = Field(default=None, ge=0, le=MAX_COALESCE_NEIGHBORS, description="Override KB default")
+
+class KBSearchResult(BaseModel):
+    content: str
+    source: str
+    document_id: str
+    relevance: Optional[float]
+    chunk_index: int
+    is_matched: bool
+
+class KBSearchResponse(BaseModel):
+    results: List[KBSearchResult]
+    query: str
+    total_count: int
+    skip: int
+    top_k: int
+
+# Helper Functions
+async def detect_embedding_dimensions(embedding_model: str, analytiq_client) -> int:
+    """
+    Auto-detect embedding dimensions by making a test call to LiteLLM.
+    
+    Args:
+        embedding_model: LiteLLM model string
+        analytiq_client: AnalytiqClient instance
+        
+    Returns:
+        Dimension count
+        
+    Raises:
+        HTTPException: If embedding model is invalid or API call fails
+    """
+    try:
+        import litellm
+        
+        # Get provider and API key
+        provider = litellm.get_model_info(embedding_model).get("provider", "openai")
+        api_key = await ad.llm.get_llm_key(analytiq_client, provider)
+        
+        # Make test embedding call
+        response = await litellm.aembedding(
+            model=embedding_model,
+            input=["test"],
+            api_key=api_key
+        )
+        
+        if not response.data or len(response.data) == 0:
+            raise HTTPException(status_code=400, detail="Invalid embedding model response")
+        
+        dimensions = len(response.data[0]["embedding"])
+        return dimensions
+        
+    except Exception as e:
+        logger.error(f"Failed to detect embedding dimensions for {embedding_model}: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to detect embedding dimensions: {str(e)}"
+        )
+
+async def validate_tag_ids(tag_ids: List[str], organization_id: str, analytiq_client) -> None:
+    """
+    Validate that all tag IDs exist and belong to the organization.
+    
+    Args:
+        tag_ids: List of tag IDs to validate
+        organization_id: Organization ID
+        analytiq_client: AnalytiqClient instance
+        
+    Raises:
+        HTTPException: If any tag ID is invalid
+    """
+    if not tag_ids:
+        return
+    
+    db = ad.common.get_async_db(analytiq_client)
+    
+    # Convert to ObjectIds for query
+    tag_object_ids = []
+    for tag_id in tag_ids:
+        try:
+            tag_object_ids.append(ObjectId(tag_id))
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"Invalid tag ID format: {tag_id}")
+    
+    # Check all tags exist and belong to org
+    tags = await db.tags.find({
+        "_id": {"$in": tag_object_ids},
+        "organization_id": organization_id
+    }).to_list(None)
+    
+    found_tag_ids = {str(tag["_id"]) for tag in tags}
+    missing_tags = set(tag_ids) - found_tag_ids
+    
+    if missing_tags:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tags not found or not accessible: {list(missing_tags)}"
+        )
+
+# API Endpoints
+@knowledge_bases_router.post("/v0/orgs/{organization_id}/knowledge-bases", response_model=KnowledgeBase)
+async def create_knowledge_base(
+    organization_id: str,
+    config: KnowledgeBaseConfig = Body(...),
+    current_user: User = Depends(get_org_user)
+):
+    """Create a new knowledge base"""
+    logger.info(f"Creating KB for org {organization_id}: {config.name}")
+    
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    
+    # Validate tag IDs
+    await validate_tag_ids(config.tag_ids, organization_id, analytiq_client)
+    
+    # Auto-detect embedding dimensions
+    embedding_dimensions = await detect_embedding_dimensions(config.embedding_model, analytiq_client)
+    
+    # Create KB document
+    now = datetime.now(UTC)
+    kb_doc = {
+        "organization_id": organization_id,
+        "name": config.name,
+        "description": config.description,
+        "tag_ids": config.tag_ids,
+        "chunker_type": config.chunker_type,
+        "chunk_size": config.chunk_size,
+        "chunk_overlap": config.chunk_overlap,
+        "embedding_model": config.embedding_model,
+        "embedding_dimensions": embedding_dimensions,
+        "coalesce_neighbors": config.coalesce_neighbors,
+        "status": "indexing",  # Will transition to "active" once index is ready
+        "document_count": 0,
+        "chunk_count": 0,
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    result = await db.knowledge_bases.insert_one(kb_doc)
+    kb_id = str(result.inserted_id)
+    
+    # TODO: Create vector search index (async, will transition status to "active" when ready)
+    # For now, set status to "active" immediately
+    await db.knowledge_bases.update_one(
+        {"_id": ObjectId(kb_id)},
+        {"$set": {"status": "active"}}
+    )
+    
+    # Fetch and return created KB
+    kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id)})
+    return KnowledgeBase(
+        kb_id=kb_id,
+        embedding_dimensions=kb["embedding_dimensions"],
+        status=kb["status"],
+        document_count=kb["document_count"],
+        chunk_count=kb["chunk_count"],
+        created_at=kb["created_at"],
+        updated_at=kb["updated_at"],
+        **config.model_dump()
+    )
+
+@knowledge_bases_router.get("/v0/orgs/{organization_id}/knowledge-bases", response_model=ListKnowledgeBasesResponse)
+async def list_knowledge_bases(
+    organization_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    name_search: Optional[str] = Query(None),
+    current_user: User = Depends(get_org_user)
+):
+    """List knowledge bases for an organization"""
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    
+    # Build query
+    query = {"organization_id": organization_id}
+    if name_search:
+        query["name"] = {"$regex": name_search, "$options": "i"}
+    
+    # Get total count
+    total_count = await db.knowledge_bases.count_documents(query)
+    
+    # Get KBs with pagination
+    cursor = db.knowledge_bases.find(query).skip(skip).limit(limit).sort("created_at", -1)
+    kbs = await cursor.to_list(length=limit)
+    
+    knowledge_bases = [
+        KnowledgeBase(
+            kb_id=str(kb["_id"]),
+            embedding_dimensions=kb["embedding_dimensions"],
+            status=kb["status"],
+            document_count=kb["document_count"],
+            chunk_count=kb["chunk_count"],
+            created_at=kb["created_at"],
+            updated_at=kb["updated_at"],
+            name=kb["name"],
+            description=kb.get("description", ""),
+            tag_ids=kb.get("tag_ids", []),
+            chunker_type=kb["chunker_type"],
+            chunk_size=kb["chunk_size"],
+            chunk_overlap=kb["chunk_overlap"],
+            embedding_model=kb["embedding_model"],
+            coalesce_neighbors=kb.get("coalesce_neighbors", 0)
+        )
+        for kb in kbs
+    ]
+    
+    return ListKnowledgeBasesResponse(
+        knowledge_bases=knowledge_bases,
+        total_count=total_count
+    )
+
+@knowledge_bases_router.get("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}", response_model=KnowledgeBase)
+async def get_knowledge_base(
+    organization_id: str,
+    kb_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Get a knowledge base by ID"""
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    
+    kb = await db.knowledge_bases.find_one({
+        "_id": ObjectId(kb_id),
+        "organization_id": organization_id
+    })
+    
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    
+    return KnowledgeBase(
+        kb_id=kb_id,
+        embedding_dimensions=kb["embedding_dimensions"],
+        status=kb["status"],
+        document_count=kb["document_count"],
+        chunk_count=kb["chunk_count"],
+        created_at=kb["created_at"],
+        updated_at=kb["updated_at"],
+        name=kb["name"],
+        description=kb.get("description", ""),
+        tag_ids=kb.get("tag_ids", []),
+        chunker_type=kb["chunker_type"],
+        chunk_size=kb["chunk_size"],
+        chunk_overlap=kb["chunk_overlap"],
+        embedding_model=kb["embedding_model"],
+        coalesce_neighbors=kb.get("coalesce_neighbors", 0)
+    )
+
+@knowledge_bases_router.put("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}", response_model=KnowledgeBase)
+async def update_knowledge_base(
+    organization_id: str,
+    kb_id: str,
+    update: KnowledgeBaseUpdate = Body(...),
+    current_user: User = Depends(get_org_user)
+):
+    """Update a knowledge base (only mutable fields)"""
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    
+    # Verify KB exists and belongs to org
+    kb = await db.knowledge_bases.find_one({
+        "_id": ObjectId(kb_id),
+        "organization_id": organization_id
+    })
+    
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    
+    # Validate tag IDs if provided
+    if update.tag_ids is not None:
+        await validate_tag_ids(update.tag_ids, organization_id, analytiq_client)
+    
+    # Build update dict (only include provided fields)
+    update_dict = {"updated_at": datetime.now(UTC)}
+    if update.name is not None:
+        update_dict["name"] = update.name
+    if update.description is not None:
+        update_dict["description"] = update.description
+    if update.tag_ids is not None:
+        update_dict["tag_ids"] = update.tag_ids
+    if update.coalesce_neighbors is not None:
+        update_dict["coalesce_neighbors"] = update.coalesce_neighbors
+    
+    # Update KB
+    await db.knowledge_bases.update_one(
+        {"_id": ObjectId(kb_id)},
+        {"$set": update_dict}
+    )
+    
+    # Fetch and return updated KB
+    updated_kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id)})
+    return KnowledgeBase(
+        kb_id=kb_id,
+        embedding_dimensions=updated_kb["embedding_dimensions"],
+        status=updated_kb["status"],
+        document_count=updated_kb["document_count"],
+        chunk_count=updated_kb["chunk_count"],
+        created_at=updated_kb["created_at"],
+        updated_at=updated_kb["updated_at"],
+        name=updated_kb["name"],
+        description=updated_kb.get("description", ""),
+        tag_ids=updated_kb.get("tag_ids", []),
+        chunker_type=updated_kb["chunker_type"],
+        chunk_size=updated_kb["chunk_size"],
+        chunk_overlap=updated_kb["chunk_overlap"],
+        embedding_model=updated_kb["embedding_model"],
+        coalesce_neighbors=updated_kb.get("coalesce_neighbors", 0)
+    )
+
+@knowledge_bases_router.delete("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}")
+async def delete_knowledge_base(
+    organization_id: str,
+    kb_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Delete a knowledge base and all associated data"""
+    logger.info(f"Deleting KB {kb_id} for org {organization_id}")
+    
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    
+    # Verify KB exists and belongs to org
+    kb = await db.knowledge_bases.find_one({
+        "_id": ObjectId(kb_id),
+        "organization_id": organization_id
+    })
+    
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    
+    # Drop vector collection
+    collection_name = f"kb_vectors_{kb_id}"
+    await db[collection_name].drop()
+    
+    # Delete document_index entries
+    await db.document_index.delete_many({"kb_id": kb_id})
+    
+    # Delete KB config
+    await db.knowledge_bases.delete_one({"_id": ObjectId(kb_id)})
+    
+    return {"message": "Knowledge base deleted successfully"}
+
+@knowledge_bases_router.get("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}/documents", response_model=ListKBDocumentsResponse)
+async def list_kb_documents(
+    organization_id: str,
+    kb_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    current_user: User = Depends(get_org_user)
+):
+    """List documents in a knowledge base"""
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    
+    # Verify KB exists and belongs to org
+    kb = await db.knowledge_bases.find_one({
+        "_id": ObjectId(kb_id),
+        "organization_id": organization_id
+    })
+    
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    
+    # Get total count
+    total_count = await db.document_index.count_documents({"kb_id": kb_id})
+    
+    # Get document_index entries with pagination
+    index_entries = await db.document_index.find({"kb_id": kb_id}).skip(skip).limit(limit).sort("indexed_at", -1).to_list(length=limit)
+    
+    # Fetch document details
+    document_ids = [entry["document_id"] for entry in index_entries]
+    docs = await db.docs.find({
+        "_id": {"$in": [ObjectId(doc_id) for doc_id in document_ids]},
+        "organization_id": organization_id
+    }).to_list(None)
+    
+    doc_map = {str(doc["_id"]): doc for doc in docs}
+    
+    documents = [
+        KnowledgeBaseDocument(
+            document_id=entry["document_id"],
+            document_name=doc_map.get(entry["document_id"], {}).get("user_file_name", "Unknown"),
+            chunk_count=entry["chunk_count"],
+            indexed_at=entry["indexed_at"]
+        )
+        for entry in index_entries
+        if entry["document_id"] in doc_map
+    ]
+    
+    return ListKBDocumentsResponse(
+        documents=documents,
+        total_count=total_count
+    )
+
+@knowledge_bases_router.post("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}/search", response_model=KBSearchResponse)
+async def search_knowledge_base(
+    organization_id: str,
+    kb_id: str,
+    search_request: KBSearchRequest = Body(...),
+    current_user: User = Depends(get_org_user)
+):
+    """Search a knowledge base (testing/debug endpoint)"""
+    # TODO: Implement vector search
+    # For now, return empty results
+    return KBSearchResponse(
+        results=[],
+        query=search_request.query,
+        total_count=0,
+        skip=search_request.skip,
+        top_k=search_request.top_k
+    )
