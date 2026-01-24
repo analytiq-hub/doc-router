@@ -445,8 +445,14 @@ async def test_embedding_model(
     try:
         analytiq_client = ad.common.get_analytiq_client()
         
-        # Get provider and API key
-        provider = litellm.get_model_info(request.model).get("provider")
+        # Get provider using the standard method (same as run_llm_chat)
+        provider = ad.llm.get_llm_model_provider(request.model)
+        if provider is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not determine provider for model {request.model}"
+            )
+        
         api_key = await ad.llm.get_llm_key(analytiq_client, provider)
         
         if not api_key:
