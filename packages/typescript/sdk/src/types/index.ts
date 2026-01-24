@@ -603,6 +603,7 @@ export interface Prompt {
   schema_version?: number;
   tag_ids?: string[];
   model?: string;
+  kb_id?: string;
   created_at: string;
   created_by: string;
 }

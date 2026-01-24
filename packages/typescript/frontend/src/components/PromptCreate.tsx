@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, DocRouterAccountApi } from '@/utils/api';
 import { LLMChatModel } from '@docrouter/sdk';
-import { Tag, Prompt, Schema, SchemaResponseFormat } from '@docrouter/sdk';
+import { Tag, Prompt, Schema, SchemaResponseFormat, KnowledgeBase } from '@docrouter/sdk';
 
 // Type alias for prompt creation/update (without id and timestamps)
 type PromptConfig = Omit<Prompt, 'prompt_revid' | 'prompt_id' | 'prompt_version' | 'created_at' | 'created_by'>;
@@ -50,6 +50,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [llmModels, setLLMModels] = useState<LLMChatModel[]>([]);
+  const [availableKnowledgeBases, setAvailableKnowledgeBases] = useState<KnowledgeBase[]>([]);
+  const [selectedKbId, setSelectedKbId] = useState<string>('');
 
   const handleSchemaSelect = useCallback(async (schemaId: string) => {
     setSelectedSchema(schemaId);
@@ -111,10 +113,12 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
             schema_id: prompt.schema_id,
             schema_version: prompt.schema_version,
             tag_ids: prompt.tag_ids || [],
-            model: prompt.model
+            model: prompt.model,
+            kb_id: prompt.kb_id
           });
           setSelectedTagIds(prompt.tag_ids || []);
           setSelectedSchema(prompt.schema_id || '');
+          setSelectedKbId(prompt.kb_id || '');
           // Optionally, load schema details if needed
           if (prompt.schema_id) {
             await handleSchemaSelect(prompt.schema_id);
@@ -168,10 +172,11 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
     try {
       setIsLoading(true);
       
-      // Create the prompt object with tag_ids
+      // Create the prompt object with tag_ids and kb_id
       const promptToSave = {
         ...currentPrompt,
-        tag_ids: selectedTagIds
+        tag_ids: selectedTagIds,
+        kb_id: selectedKbId || undefined
       };
 
       if (currentPromptId) {
@@ -189,12 +194,14 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
         schema_id: undefined,
         schema_version: undefined,
         tag_ids: [],
-        model: undefined
+        model: undefined,
+        kb_id: undefined
       });
       setCurrentPromptId(null);
       setSelectedSchema('');
       setSelectedSchemaDetails(null);
       setSelectedTagIds([]);
+      setSelectedKbId('');
 
       router.push(`/orgs/${organizationId}/prompts`);
       
@@ -239,11 +246,24 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
     }
   }, [docRouterAccountApi]);
 
+  const loadKnowledgeBases = useCallback(async () => {
+    try {
+      const response = await docRouterOrgApi.listKnowledgeBases({ limit: 100 });
+      // Only show active knowledge bases
+      const activeKBs = response.knowledge_bases.filter(kb => kb.status === 'active');
+      setAvailableKnowledgeBases(activeKBs);
+    } catch (error) {
+      const errorMsg = getApiErrorMsg(error) || 'Error loading knowledge bases';
+      toast.error(errorMsg);
+    }
+  }, [docRouterOrgApi]);
+
   useEffect(() => {
     loadSchemas();
     loadTags();
     loadLLMModels();
-  }, [loadSchemas, loadTags, loadLLMModels]);
+    loadKnowledgeBases();
+  }, [loadSchemas, loadTags, loadLLMModels, loadKnowledgeBases]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -311,10 +331,12 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                       schema_id: prompt.schema_id,
                       schema_version: prompt.schema_version,
                       tag_ids: prompt.tag_ids || [],
-                      model: prompt.model
+                      model: prompt.model,
+                      kb_id: prompt.kb_id
                     });
                     setSelectedTagIds(prompt.tag_ids || []);
                     setSelectedSchema(prompt.schema_id || '');
+                    setSelectedKbId(prompt.kb_id || '');
                     if (prompt.schema_id) {
                       await handleSchemaSelect(prompt.schema_id);
                     }
@@ -390,10 +412,12 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                       schema_id: prompt.schema_id,
                       schema_version: prompt.schema_version,
                       tag_ids: prompt.tag_ids || [],
-                      model: prompt.model
+                      model: prompt.model,
+                      kb_id: prompt.kb_id
                     });
                     setSelectedTagIds(prompt.tag_ids || []);
                     setSelectedSchema(prompt.schema_id || '');
+                    setSelectedKbId(prompt.kb_id || '');
                     if (prompt.schema_id) {
                       await handleSchemaSelect(prompt.schema_id);
                     }
@@ -436,11 +460,13 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     schema_id: undefined,
                     schema_version: undefined,
                     tag_ids: [],
-                    model: undefined
+                    model: undefined,
+                    kb_id: undefined
                   });
                   setSelectedSchema('');
                   setSelectedSchemaDetails(null);
                   setSelectedTagIds([]);
+                  setSelectedKbId('');
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
                 disabled={isLoading || isReadOnly}
@@ -480,6 +506,24 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
           <div className="flex gap-4">
             <div className="w-1/2 space-y-4">
               <div>
+                <label className="block text-sm font-medium text-gray-700" data-tour="prompt-model-select">
+                  Model
+                </label>
+                <select
+                  value={currentPrompt.model || DEFAULT_LLM_MODEL}
+                  onChange={(e) => setCurrentPrompt(prev => ({ ...prev, model: e.target.value }))}
+                  disabled={isLoading || isReadOnly}
+                  className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                >
+                  {llmModels.map((model) => (
+                    <option key={model.litellm_model} value={model.litellm_model}>
+                      {model.litellm_model} ({model.litellm_provider})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium text-gray-700" data-tour="prompt-schema-select">
                   Schema (Optional)
                 </label>
@@ -499,21 +543,28 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700" data-tour="prompt-model-select">
-                  Model
+                <label className="block text-sm font-medium text-gray-700">
+                  Knowledge Base (Optional)
                 </label>
                 <select
-                  value={currentPrompt.model || DEFAULT_LLM_MODEL}
-                  onChange={(e) => setCurrentPrompt(prev => ({ ...prev, model: e.target.value }))}
+                  value={selectedKbId}
+                  onChange={(e) => {
+                    setSelectedKbId(e.target.value);
+                    setCurrentPrompt(prev => ({ ...prev, kb_id: e.target.value || undefined }));
+                  }}
                   disabled={isLoading || isReadOnly}
-                  className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                  className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
                 >
-                  {llmModels.map((model) => (
-                    <option key={model.litellm_model} value={model.litellm_model}>
-                      {model.litellm_model} ({model.litellm_provider})
+                  <option value="">None</option>
+                  {availableKnowledgeBases.map((kb) => (
+                    <option key={kb.kb_id} value={kb.kb_id}>
+                      {kb.name}
                     </option>
                   ))}
                 </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Associate a knowledge base to enable RAG (Retrieval-Augmented Generation) for this prompt
+                </p>
               </div>
 
               <div className="space-y-2">

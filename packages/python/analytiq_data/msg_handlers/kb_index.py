@@ -85,23 +85,45 @@ async def process_kb_index_msg(analytiq_client, msg, force: bool = False):
                 # Find all KBs that match this document's tags
                 doc_tag_ids = await ad.common.doc.get_doc_tag_ids(analytiq_client, document_id)
                 
+                db = analytiq_client.mongodb_async[analytiq_client.env]
+                
+                # Get all KBs the document is currently indexed in
+                existing_index_entries = await db.document_index.find({"document_id": document_id}).to_list(length=None)
+                existing_kb_ids = {entry["kb_id"] for entry in existing_index_entries}
+                
                 if not doc_tag_ids:
-                    logger.info(f"Document {document_id} has no tags. Skipping KB indexing.")
+                    # Document has no tags - remove from all KBs
+                    logger.info(f"Document {document_id} has no tags. Removing from all KBs.")
+                    for kb_id in existing_kb_ids:
+                        try:
+                            await remove_document_from_kb(analytiq_client, kb_id, document_id, organization_id)
+                        except Exception as e:
+                            logger.error(f"Error removing document {document_id} from KB {kb_id}: {e}")
                     return
                 
                 # Find KBs that match any of the document's tags
-                db = analytiq_client.mongodb_async[analytiq_client.env]
                 matching_kbs = await db.knowledge_bases.find({
                     "organization_id": organization_id,
                     "status": {"$in": ["indexing", "active"]},  # Only index into active KBs
                     "tag_ids": {"$in": doc_tag_ids}  # KB must have at least one matching tag
                 }).to_list(length=None)
                 
+                matching_kb_ids = {str(kb["_id"]) for kb in matching_kbs}
+                
+                # Remove from KBs where tags no longer match
+                kb_ids_to_remove = existing_kb_ids - matching_kb_ids
+                for kb_id in kb_ids_to_remove:
+                    try:
+                        await remove_document_from_kb(analytiq_client, kb_id, document_id, organization_id)
+                        logger.info(f"Removed document {document_id} from KB {kb_id} due to tag mismatch")
+                    except Exception as e:
+                        logger.error(f"Error removing document {document_id} from KB {kb_id}: {e}")
+                
                 if not matching_kbs:
                     logger.info(f"No matching KBs found for document {document_id} with tags {doc_tag_ids}")
                     return
                 
-                # Index into all matching KBs
+                # Index into all matching KBs (will re-index if already indexed, which is fine)
                 for kb in matching_kbs:
                     try:
                         await index_document_in_kb(
