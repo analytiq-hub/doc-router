@@ -368,9 +368,6 @@ def get_llm_model_provider(llm_model: str) -> str | None:
     Returns:
         The provider for the given LLM model
     """
-    # Import litellm here to avoid event loop warnings
-    import litellm
-    
     if llm_model is None:
         return None
 
