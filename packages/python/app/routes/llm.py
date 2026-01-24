@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 llm_router = APIRouter(tags=["llm"])
 
 # LLM models
-class LLMModel(BaseModel):
+class LLMChatModel(BaseModel):
     litellm_model: str
     litellm_provider: str
     max_input_tokens: int
@@ -32,8 +32,17 @@ class LLMModel(BaseModel):
     input_cost_per_token: float
     output_cost_per_token: float
 
+class LLMEmbeddingModel(BaseModel):
+    litellm_model: str
+    litellm_provider: str
+    max_input_tokens: int
+    dimensions: int
+    output_cost_per_token: float
+    output_cost_per_token_batches: float
+
 class ListLLMModelsResponse(BaseModel):
-    models: List[LLMModel]
+    chat_models: List[LLMChatModel]
+    embedding_models: List[LLMEmbeddingModel]
 
 class ListOrgLLMModelsResponse(BaseModel):
     models: List[str]
@@ -436,7 +445,8 @@ async def list_llm_models(
     providers = await cursor.to_list(length=None)
 
     # Get all available models for each provider
-    llm_models = []
+    chat_models = []
+    embedding_models = []
     for provider in providers:
         # Skip disabled providers
         if provider_enabled and not provider["enabled"]:
@@ -451,31 +461,52 @@ async def list_llm_models(
         else:
             models = provider["litellm_models_available"]
 
-        # Get the max input and output tokens for each model
+        # Separate chat and embedding models
         for model in models:
             max_input_tokens = 0
-            max_output_tokens = 0
             input_cost_per_token = 0
             output_cost_per_token = 0
             
             if model in litellm.model_cost:
                 max_input_tokens = litellm.model_cost[model].get("max_input_tokens", 0)
-                max_output_tokens = litellm.model_cost[model].get("max_output_tokens", 0)
                 input_cost_per_token = litellm.model_cost[model].get("input_cost_per_token", 0)
                 output_cost_per_token = litellm.model_cost[model].get("output_cost_per_token", 0)
 
-            llm_model = LLMModel(
-                litellm_model=model,
-                litellm_provider=provider["litellm_provider"],
-                max_input_tokens=max_input_tokens,
-                max_output_tokens=max_output_tokens,
-                input_cost_per_token=input_cost_per_token,
-                output_cost_per_token=output_cost_per_token,
-            )
-            llm_models.append(llm_model)
-            logger.info(f"llm_model: {llm_model}")
+            # Check if it's a chat model or embedding model
+            if ad.llm.is_chat_model(model):
+                max_output_tokens = litellm.model_cost[model].get("max_output_tokens", 0)
+                chat_model = LLMChatModel(
+                    litellm_model=model,
+                    litellm_provider=provider["litellm_provider"],
+                    max_input_tokens=max_input_tokens,
+                    max_output_tokens=max_output_tokens,
+                    input_cost_per_token=input_cost_per_token,
+                    output_cost_per_token=output_cost_per_token,
+                )
+                chat_models.append(chat_model)
+                logger.info(f"chat_model: {chat_model}")
+            elif ad.llm.is_embedding_model(model):
+                # Get dimensions from model info
+                try:
+                    model_info = litellm.get_model_info(model)
+                    dimensions = model_info.get("output_vector_size", 0)
+                    output_cost_per_token_batches = 0.0
+                    if model in litellm.model_cost:
+                        output_cost_per_token_batches = litellm.model_cost[model].get("output_cost_per_token_batches", 0.0)
+                    embedding_model = LLMEmbeddingModel(
+                        litellm_model=model,
+                        litellm_provider=provider["litellm_provider"],
+                        max_input_tokens=max_input_tokens,
+                        dimensions=dimensions,
+                        output_cost_per_token=output_cost_per_token,
+                        output_cost_per_token_batches=output_cost_per_token_batches,
+                    )
+                    embedding_models.append(embedding_model)
+                    logger.info(f"embedding_model: {embedding_model}")
+                except Exception as e:
+                    logger.error(f"Error getting model info for {model}: {e}")
 
-    return ListLLMModelsResponse(models=llm_models)
+    return ListLLMModelsResponse(chat_models=chat_models, embedding_models=embedding_models)
 
 @llm_router.get("/v0/account/llm/providers", response_model=ListLLMProvidersResponse)
 async def list_llm_providers(

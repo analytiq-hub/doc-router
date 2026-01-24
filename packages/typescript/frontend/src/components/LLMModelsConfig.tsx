@@ -4,14 +4,15 @@ import Switch from '@mui/material/Switch';
 import Button from '@mui/material/Button';
 import { DocRouterAccountApi } from '@/utils/api';
 import { LLMProvider } from '@docrouter/sdk';
-import { LLMModel } from '@docrouter/sdk';
+import { LLMChatModel, LLMEmbeddingModel } from '@docrouter/sdk';
 import colors from 'tailwindcss/colors';
 import LLMTestModal from './LLMTestModal';
 
 const LLMModelsConfig: React.FC = () => {
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   const [providers, setProviders] = useState<LLMProvider[]>([]);
-  const [models, setModels] = useState<LLMModel[]>([]);
+  const [chatModels, setChatModels] = useState<LLMChatModel[]>([]);
+  const [embeddingModels, setEmbeddingModels] = useState<LLMEmbeddingModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -28,7 +29,8 @@ const LLMModelsConfig: React.FC = () => {
           docRouterAccountApi.listLLMModels({})
         ]);
         setProviders(providersResponse.providers);
-        setModels(modelsResponse.models);
+        setChatModels(modelsResponse.chat_models);
+        setEmbeddingModels(modelsResponse.embedding_models);
       } catch (error) {
         console.error('Error fetching data:', error);
         setError('An error occurred while fetching data.');
@@ -108,7 +110,7 @@ const LLMModelsConfig: React.FC = () => {
       ),
     },
     { field: 'max_input_tokens', headerName: 'Max Input Tokens', width: 140, minWidth: 140 },
-    { field: 'max_output_tokens', headerName: 'Max Output Tokens', width: 140, minWidth: 140 },
+    { field: 'max_output_tokens', headerName: 'Max Output Tokens / Dimensions', width: 180, minWidth: 180 },
     { field: 'input_cost_per_token', headerName: 'Input Cost', width: 100, minWidth: 100 },
     { field: 'output_cost_per_token', headerName: 'Output Cost', width: 100, minWidth: 100 },
   ];
@@ -119,10 +121,17 @@ const LLMModelsConfig: React.FC = () => {
   const rows = providers.flatMap(provider =>
     provider.litellm_models_available.map(modelName => {
       // Find the model info by matching both provider and model name
-      const modelInfo = models.find(m => 
+      // Check chat models first, then embedding models
+      const chatModelInfo = chatModels.find(m => 
         m.litellm_model === modelName && 
         m.litellm_provider === provider.litellm_provider
       );
+      const embeddingModelInfo = embeddingModels.find(m => 
+        m.litellm_model === modelName && 
+        m.litellm_provider === provider.litellm_provider
+      );
+      
+      const modelInfo = chatModelInfo || embeddingModelInfo;
       
       if (!modelInfo) {
         console.warn(`No model info found for ${provider.litellm_provider}/${modelName}`);
@@ -134,9 +143,11 @@ const LLMModelsConfig: React.FC = () => {
         name: modelName,
         enabled: provider.litellm_models_enabled.includes(modelName),
         max_input_tokens: modelInfo?.max_input_tokens ?? 0,
-        max_output_tokens: modelInfo?.max_output_tokens ?? 0,
-        input_cost_per_token: modelInfo?.input_cost_per_token ?? 0,
+        max_output_tokens: chatModelInfo ? (chatModelInfo.max_output_tokens ?? 0) : (embeddingModelInfo ? 'N/A' : 0),
+        dimensions: embeddingModelInfo ? (embeddingModelInfo.dimensions ?? 0) : undefined,
+        input_cost_per_token: chatModelInfo ? (chatModelInfo.input_cost_per_token ?? 0) : (embeddingModelInfo ? 'N/A' : 0),
         output_cost_per_token: modelInfo?.output_cost_per_token ?? 0,
+        output_cost_per_token_batches: embeddingModelInfo ? (embeddingModelInfo.output_cost_per_token_batches ?? 0) : undefined,
       };
     })
   );

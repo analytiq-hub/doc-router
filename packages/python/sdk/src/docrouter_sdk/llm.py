@@ -1,6 +1,7 @@
 from typing import Dict, Any
 from .models.llm import (
-    LLMModel,
+    LLMChatModel,
+    LLMEmbeddingModel,
     ListLLMModelsResponse,
     LLMRunResponse,
     LLMResult,

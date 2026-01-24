@@ -8,7 +8,8 @@ from .document import (
 )
 from .ocr import GetOCRMetadataResponse
 from .llm import (
-    LLMModel,
+    LLMChatModel,
+    LLMEmbeddingModel,
     ListLLMModelsResponse,
     LLMRunResponse,
     LLMResult,
@@ -45,7 +46,8 @@ __all__ = [
     "GetOCRMetadataResponse",
     
     # LLM models
-    "LLMModel",
+    "LLMChatModel",
+    "LLMEmbeddingModel",
     "ListLLMModelsResponse",
     "LLMRunResponse",
     "LLMResult",

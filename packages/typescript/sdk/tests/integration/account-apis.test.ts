@@ -262,8 +262,10 @@ describe('DocRouterAccount Missing APIs Integration Tests', () => {
       });
       
       expect(response).toBeDefined();
-      expect(response.models).toBeDefined();
-      expect(Array.isArray(response.models)).toBe(true);
+      expect(response.chat_models).toBeDefined();
+      expect(response.embedding_models).toBeDefined();
+      expect(Array.isArray(response.chat_models)).toBe(true);
+      expect(Array.isArray(response.embedding_models)).toBe(true);
     });
 
     test('listLLMProviders', async () => {

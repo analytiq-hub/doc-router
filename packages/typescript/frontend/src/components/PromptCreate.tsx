@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, DocRouterAccountApi } from '@/utils/api';
-import { LLMModel } from '@docrouter/sdk';
+import { LLMChatModel } from '@docrouter/sdk';
 import { Tag, Prompt, Schema, SchemaResponseFormat } from '@docrouter/sdk';
 
 // Type alias for prompt creation/update (without id and timestamps)
@@ -49,7 +49,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const [selectedSchemaDetails, setSelectedSchemaDetails] = useState<Schema | null>(null);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [llmModels, setLLMModels] = useState<LLMModel[]>([]);
+  const [llmModels, setLLMModels] = useState<LLMChatModel[]>([]);
 
   const handleSchemaSelect = useCallback(async (schemaId: string) => {
     setSelectedSchema(schemaId);
@@ -232,7 +232,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
         providerEnabled: true,
         llmEnabled: true
       });
-      setLLMModels(response.models);
+      setLLMModels(response.chat_models);
     } catch (error) {
       const errorMsg = getApiErrorMsg(error) || 'Error loading LLM models';
       toast.error(errorMsg);

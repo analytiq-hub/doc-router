@@ -273,7 +273,7 @@ export interface ListLLMModelsParams {
   llmEnabled?: boolean;
 }
 
-export interface LLMModel {
+export interface LLMChatModel {
   litellm_model: string;
   litellm_provider: string;
   max_input_tokens: number;
@@ -282,8 +282,18 @@ export interface LLMModel {
   output_cost_per_token: number;
 }
 
+export interface LLMEmbeddingModel {
+  litellm_model: string;
+  litellm_provider: string;
+  max_input_tokens: number;
+  dimensions: number;
+  output_cost_per_token: number;
+  output_cost_per_token_batches: number;
+}
+
 export interface ListLLMModelsResponse {
-  models: LLMModel[];
+  chat_models: LLMChatModel[];
+  embedding_models: LLMEmbeddingModel[];
 }
 
 export interface ListOrgLLMModelsResponse {

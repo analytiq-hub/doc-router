@@ -4,7 +4,7 @@ import Switch from '@mui/material/Switch';
 import Button from '@mui/material/Button';
 import { DocRouterAccountApi } from '@/utils/api';
 import { LLMProvider } from '@docrouter/sdk';
-import { LLMModel } from '@docrouter/sdk';
+import { LLMChatModel, LLMEmbeddingModel } from '@docrouter/sdk';
 import LLMTestModal from './LLMTestModal';
 
 interface LLMProviderConfigProps {
@@ -14,7 +14,8 @@ interface LLMProviderConfigProps {
 const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) => {
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   const [provider, setProvider] = useState<LLMProvider | null>(null);
-  const [models, setModels] = useState<LLMModel[]>([]);
+  const [chatModels, setChatModels] = useState<LLMChatModel[]>([]);
+  const [embeddingModels, setEmbeddingModels] = useState<LLMEmbeddingModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   
@@ -37,7 +38,8 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
             providerEnabled: false,
             llmEnabled: false
           });
-          setModels(modelsResponse.models);
+          setChatModels(modelsResponse.chat_models);
+          setEmbeddingModels(modelsResponse.embedding_models);
         } else {
           setError('Provider not found');
         }
@@ -121,7 +123,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
       ),
     },
     { field: 'max_input_tokens', headerName: 'Max Input Tokens', width: 140, minWidth: 140 },
-    { field: 'max_output_tokens', headerName: 'Max Output Tokens', width: 140, minWidth: 140 },
+    { field: 'max_output_tokens', headerName: 'Max Output Tokens / Dimensions', width: 180, minWidth: 180 },
     { field: 'input_cost_per_token', headerName: 'Input Cost', width: 100, minWidth: 100 },
     { field: 'output_cost_per_token', headerName: 'Output Cost', width: 100, minWidth: 100 },
   ];
@@ -129,6 +131,17 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
   if (loading) return <div>Loading...</div>;
   if (error) return <div className="text-red-500">{error}</div>;
   if (!provider) return <div>Provider not found</div>;
+
+  // Combine chat and embedding models
+  const allModels = [
+    ...chatModels.map(m => ({ ...m, model_type: 'chat' as const, input_cost_per_token: m.input_cost_per_token })),
+    ...embeddingModels.map(m => ({ 
+      ...m, 
+      model_type: 'embedding' as const, 
+      max_output_tokens: m.dimensions,
+      input_cost_per_token: 'N/A' // Embedding models don't have input_cost_per_token
+    }))
+  ];
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
@@ -140,7 +153,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
       <h3 className="text-lg font-semibold mb-2">Models</h3>
       <div className="w-full overflow-x-auto">
         <DataGrid
-          rows={models}
+          rows={allModels}
           columns={columns}
           disableRowSelectionOnClick
           getRowId={(row) => row.litellm_model}
