@@ -67,7 +67,7 @@ async def process_kb_index_msg(analytiq_client, msg, force: bool = False):
                 for entry in index_entries:
                     await remove_document_from_kb(
                         analytiq_client,
-                        entry["kb_id"],
+                        str(entry["kb_id"]),
                         document_id,
                         organization_id
                     )
@@ -89,7 +89,7 @@ async def process_kb_index_msg(analytiq_client, msg, force: bool = False):
                 
                 # Get all KBs the document is currently indexed in
                 existing_index_entries = await db.document_index.find({"document_id": document_id}).to_list(length=None)
-                existing_kb_ids = {entry["kb_id"] for entry in existing_index_entries}
+                existing_kb_ids = {str(entry["kb_id"]) for entry in existing_index_entries}
                 
                 if not doc_tag_ids:
                     # Document has no tags - remove from all KBs

@@ -520,6 +520,73 @@ async def test_2_5_remove_all_tags(mock_embedding, mock_get_model_info, test_db,
 
 
 # ============================================================================
+# CATEGORY 2.6: Explicit Fragment Removal Test
+# ============================================================================
+
+@pytest.mark.asyncio
+@patch('litellm.get_model_info', return_value={"provider": "openai"})
+@patch('litellm.aembedding')
+async def test_2_6_remove_kb_tag_fragments_removed(mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models):
+    """Test 2.6: Explicitly verify fragments are removed when KB tag is removed from document"""
+    mock_embedding.return_value = create_mock_embedding_response()
+    
+    try:
+        # Setup: Document has [tagKB], KB1 has [tagKB]
+        tagKB_id = await create_tag("TagKB")
+        
+        kb1_id = await create_kb("KB1", [tagKB_id])
+        document_id = await create_document(test_db, [tagKB_id], "This is a test document with multiple sentences. " * 20)
+        
+        # Index the document
+        await index_document(document_id, None, test_db)
+        await process_pending_kb_index_messages(test_db, document_id)
+        
+        # Verify document is indexed with fragments
+        index_entry = await test_db.document_index.find_one({
+            "kb_id": kb1_id,
+            "document_id": document_id
+        })
+        assert index_entry is not None, "Document should be indexed"
+        assert index_entry["chunk_count"] > 0, "Document should have chunks"
+        
+        vectors_collection = test_db[f"kb_vectors_{kb1_id}"]
+        vector_count_before = await vectors_collection.count_documents({"document_id": document_id})
+        assert vector_count_before > 0, f"Document should have {vector_count_before} fragments before tag removal"
+        
+        # Remove the KB tag from document
+        update_response = client.put(
+            f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
+            json={"tag_ids": []},
+            headers=get_auth_headers()
+        )
+        assert update_response.status_code == 200
+        
+        # Process the queued KB indexing message
+        await process_pending_kb_index_messages(test_db, document_id)
+        
+        # Explicitly verify fragments are removed
+        vector_count_after = await vectors_collection.count_documents({"document_id": document_id})
+        assert vector_count_after == 0, f"All {vector_count_before} fragments should be removed, but {vector_count_after} remain"
+        
+        # Verify document_index entry is removed
+        index_entry_after = await test_db.document_index.find_one({
+            "kb_id": kb1_id,
+            "document_id": document_id
+        })
+        assert index_entry_after is None, "Document index entry should be removed"
+        
+        # Verify KB stats
+        kb1 = await test_db.knowledge_bases.find_one({"_id": ObjectId(kb1_id)})
+        assert kb1["document_count"] == 0, "KB1 should have 0 documents"
+        assert kb1["chunk_count"] == 0, "KB1 should have 0 chunks"
+        
+    finally:
+        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
+        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
+        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+
+
+# ============================================================================
 # CATEGORY 3: KB Tag Update Scenarios
 # ============================================================================
 

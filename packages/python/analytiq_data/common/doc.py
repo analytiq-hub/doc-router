@@ -139,7 +139,7 @@ async def delete_doc(analytiq_client, document_id: str, organization_id: str):
     # Find all KBs this document is indexed in
     index_entries = await db.document_index.find({"document_id": document_id}).to_list(length=None)
     for entry in index_entries:
-        kb_id = entry["kb_id"]
+        kb_id = str(entry["kb_id"])  # Ensure string type for consistency
         try:
             # Remove document from KB (this handles vectors and document_index cleanup)
             await ad.kb.indexing.remove_document_from_kb(
