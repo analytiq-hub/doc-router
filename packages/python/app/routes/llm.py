@@ -514,6 +514,9 @@ async def list_llm_providers(
             token_created_at=provider["token_created_at"]
         ))
     
+    # Sort providers alphabetically by display_name
+    llm_providers.sort(key=lambda p: p.display_name.lower())
+    
     return ListLLMProvidersResponse(providers=llm_providers)
 
 @llm_router.put("/v0/account/llm/provider/{provider_name}")
