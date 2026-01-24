@@ -135,7 +135,24 @@ async def delete_doc(analytiq_client, document_id: str, organization_id: str):
     # Delete all OCR results for the document
     await ad.common.delete_ocr_all(analytiq_client, document_id=document_id)
 
-    logger.info(f"Document {document_id} has been deleted with all LLM and OCR results.")
+    # Delete KB vectors and document_index entries for this document
+    # Find all KBs this document is indexed in
+    index_entries = await db.document_index.find({"document_id": document_id}).to_list(length=None)
+    for entry in index_entries:
+        kb_id = entry["kb_id"]
+        try:
+            # Remove document from KB (this handles vectors and document_index cleanup)
+            await ad.kb.indexing.remove_document_from_kb(
+                analytiq_client,
+                kb_id,
+                document_id,
+                organization_id
+            )
+        except Exception as e:
+            logger.warning(f"Error removing document {document_id} from KB {kb_id} during deletion: {e}")
+            # Continue with other KBs even if one fails
+
+    logger.info(f"Document {document_id} has been deleted with all LLM, OCR, and KB results.")
 
 
 async def list_docs(

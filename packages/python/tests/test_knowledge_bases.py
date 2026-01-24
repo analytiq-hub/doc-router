@@ -24,10 +24,17 @@ assert os.environ["ENV"] == "pytest"
 # Mock embedding response for dimension detection
 MOCK_EMBEDDING_DIMENSIONS = 1536
 
-def create_mock_embedding_response():
-    """Create a mock embedding response"""
+def create_mock_embedding_response(num_embeddings=1):
+    """Create a mock embedding response with non-zero vectors (required for cosine similarity)"""
     mock_response = AsyncMock()
-    mock_response.data = [{"embedding": [0.0] * MOCK_EMBEDDING_DIMENSIONS}]
+    # Generate non-zero embeddings (simple pattern that's not all zeros)
+    # Use a small non-zero value to avoid zero vector issues with MongoDB cosine similarity
+    embeddings = []
+    for i in range(num_embeddings):
+        # Create a simple non-zero vector: [0.1, 0.2, 0.3, ...] pattern
+        embedding = [0.001 * (j % 100 + 1) for j in range(MOCK_EMBEDDING_DIMENSIONS)]
+        embeddings.append({"embedding": embedding})
+    mock_response.data = embeddings
     return mock_response
 
 @pytest.mark.asyncio
@@ -408,7 +415,7 @@ async def test_kb_immutable_fields(mock_embedding, mock_get_model_info, test_db,
         # Create a KB
         kb_data = {
             "name": "Test Immutable KB",
-            "chunker_type": "semantic",
+            "chunker_type": "recursive",  # Use recursive instead of semantic (semantic is disabled)
             "chunk_size": 512,
             "chunk_overlap": 128,
             "embedding_model": "text-embedding-3-small"
@@ -439,7 +446,7 @@ async def test_kb_immutable_fields(mock_embedding, mock_get_model_info, test_db,
         updated_kb = update_response.json()
         assert updated_kb["name"] == "Updated Name"  # Mutable field updated
         # Immutable fields should remain unchanged
-        assert updated_kb["chunker_type"] == "semantic"  # Not changed
+        assert updated_kb["chunker_type"] == "recursive"  # Not changed
         assert updated_kb["chunk_size"] == 512  # Not changed
         assert updated_kb["embedding_model"] == "text-embedding-3-small"  # Not changed
         

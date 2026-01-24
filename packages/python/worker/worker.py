@@ -91,6 +91,46 @@ async def worker_llm(worker_id: str) -> None:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)  # Sleep longer on errors to prevent tight loop
 
+async def worker_kb_index(worker_id: str) -> None:
+    """
+    Worker for KB indexing jobs
+
+    Args:
+        worker_id: The worker ID
+    """
+    # Re-read the environment variables, in case they were changed by unit tests
+    ENV = os.getenv("ENV", "dev")
+
+    # Create a separate client instance for each worker
+    analytiq_client = ad.common.get_analytiq_client(env=ENV, name=worker_id)
+    logger.info(f"Starting worker {worker_id}")
+
+    last_heartbeat = datetime.now(UTC)
+
+    while True:
+        try:
+            # Log heartbeat every 10 minutes
+            now = datetime.now(UTC)
+            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS: 
+                logger.info(f"Worker {worker_id} heartbeat")
+                last_heartbeat = now
+
+            msg = await ad.queue.recv_msg(analytiq_client, "kb_index")
+            if msg:
+                logger.info(f"Worker {worker_id} processing KB index msg: {msg}")
+                try:
+                    await ad.msg_handlers.process_kb_index_msg(analytiq_client, msg)
+                except Exception as e:
+                    logger.error(f"Error processing KB index message {msg.get('_id')}: {str(e)}")
+                    # Mark message as failed
+                    await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg["_id"]), status="failed")
+            else:
+                await asyncio.sleep(0.2)  # Avoid tight loop when no messages
+                
+        except Exception as e:
+            logger.error(f"Worker {worker_id} encountered error: {str(e)}")
+            await asyncio.sleep(1)  # Sleep longer on errors to prevent tight loop
+
 async def worker_webhook(worker_id: str) -> None:
     """
     Worker for outbound webhook deliveries.
@@ -131,13 +171,14 @@ async def main():
     # Re-read the environment variables, in case they were changed by unit tests
     N_WORKERS = int(os.getenv("N_WORKERS", "1"))
 
-    # Create N_WORKERS workers of worker_ocr and worker_llm
+    # Create N_WORKERS workers of worker_ocr, worker_llm, worker_kb_index, and worker_webhook
     ocr_workers = [worker_ocr(f"ocr_{i}") for i in range(N_WORKERS)]
     llm_workers = [worker_llm(f"llm_{i}") for i in range(N_WORKERS)]
+    kb_index_workers = [worker_kb_index(f"kb_index_{i}") for i in range(N_WORKERS)]
     webhook_workers = [worker_webhook(f"webhook_{i}") for i in range(N_WORKERS)]
 
     # Run all workers concurrently
-    await asyncio.gather(*ocr_workers, *llm_workers, *webhook_workers)
+    await asyncio.gather(*ocr_workers, *llm_workers, *kb_index_workers, *webhook_workers)
 
 if __name__ == "__main__":
     try:    

@@ -217,4 +217,6 @@ async def get_ocr_n_pages(analytiq_client, document_id:str) -> int:
     blob = await ad.mongodb.get_blob_async(analytiq_client, bucket=OCR_BUCKET, key=key)
     if blob is None:
         return 0
-    return blob["metadata"]["n_pages"]
+    if blob.get("metadata") is None:
+        return 0
+    return blob["metadata"].get("n_pages", 0)

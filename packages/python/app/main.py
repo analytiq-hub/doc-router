@@ -97,6 +97,9 @@ async def lifespan(app):
     db = ad.common.get_async_db(analytiq_client)
     await init_payments(db)
     
+    # Initialize KB embedding cache index
+    await ad.kb.embedding_cache.ensure_embedding_cache_index(analytiq_client)
+    
     yield  # This is where the app runs
     
     # Shutdown code (if any) would go here

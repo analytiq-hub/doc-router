@@ -262,6 +262,9 @@ async def update_document(
     if not update_dict:
         return {"message": "No updates provided"}
 
+    # Get old tag IDs before update (for KB membership check)
+    old_tag_ids = document.get("tag_ids", [])
+    
     # Update the document
     updated_doc = await db.docs.find_one_and_update(
         {
@@ -277,6 +280,18 @@ async def update_document(
             status_code=404,
             detail="Document not found"
         )
+    
+    # If tags changed, trigger KB membership re-evaluation
+    if update.tag_ids is not None:
+        new_tag_ids = set(update.tag_ids)
+        old_tag_ids_set = set(old_tag_ids)
+        
+        if new_tag_ids != old_tag_ids_set:
+            # Tags changed - queue KB indexing job to re-evaluate membership
+            # The worker will handle both adding to new KBs and removing from old KBs
+            kb_msg = {"document_id": document_id}
+            await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
+            logger.info(f"Queued KB indexing for document {document_id} due to tag changes")
 
     return {"message": "Document updated successfully"}
 

@@ -23,8 +23,9 @@ logger = logging.getLogger(__name__)
 knowledge_bases_router = APIRouter(tags=["knowledge-bases"])
 
 # KB Configuration Constants
-VALID_CHUNKER_TYPES = ["token", "word", "sentence", "semantic", "sdpm", "late"]
-DEFAULT_CHUNKER_TYPE = "recursive"  # Note: "recursive" is a Chonkie alias, map to "semantic"
+VALID_CHUNKER_TYPES = ["token", "word", "sentence", "recursive"]
+# Note: "semantic", "late", and "sdpm" are disabled as they require sentence_transformers (large dependency)
+DEFAULT_CHUNKER_TYPE = "recursive"  # Uses RecursiveChunker from chonkie
 DEFAULT_CHUNK_SIZE = 512
 DEFAULT_CHUNK_OVERLAP = 128
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
@@ -47,11 +48,9 @@ class KnowledgeBaseConfig(BaseModel):
     @field_validator('chunker_type')
     @classmethod
     def validate_chunker_type(cls, v):
-        # Map "recursive" to "semantic" (Chonkie's semantic chunker is closest to recursive)
-        if v == "recursive":
-            return "semantic"
+        # "recursive" is a valid chunker type (uses RecursiveChunker)
         if v not in VALID_CHUNKER_TYPES:
-            raise ValueError(f"chunker_type must be one of {VALID_CHUNKER_TYPES} or 'recursive'")
+            raise ValueError(f"chunker_type must be one of {VALID_CHUNKER_TYPES}")
         return v
     
     @field_validator('chunk_size')
@@ -183,6 +182,76 @@ async def detect_embedding_dimensions(embedding_model: str, analytiq_client) -> 
             status_code=400,
             detail=f"Failed to detect embedding dimensions: {str(e)}"
         )
+
+async def wait_for_vector_index_ready(
+    analytiq_client,
+    kb_id: str,
+    max_wait_seconds: int = 30,
+    poll_interval: float = 0.5
+) -> None:
+    """
+    Wait for the vector search index to be ready (not in INITIAL_SYNC or NOT_STARTED state).
+    
+    Args:
+        analytiq_client: AnalytiqClient instance
+        kb_id: Knowledge base ID
+        max_wait_seconds: Maximum time to wait in seconds
+        poll_interval: Time between polls in seconds
+    """
+    import asyncio
+    db = ad.common.get_async_db(analytiq_client)
+    collection_name = f"kb_vectors_{kb_id}"
+    
+    max_attempts = int(max_wait_seconds / poll_interval)
+    for i in range(max_attempts):
+        try:
+            # Try a minimal vector search query to check if index is ready
+            # Use a non-zero vector to avoid "zero vector" errors
+            test_vector = [0.001] * 1536  # Small non-zero values
+            test_result = await db[collection_name].aggregate([
+                {
+                    "$vectorSearch": {
+                        "index": "kb_vector_index",
+                        "path": "embedding",
+                        "queryVector": test_vector,
+                        "numCandidates": 1,
+                        "limit": 1
+                    }
+                }
+            ]).to_list(length=1)
+            # If we get here without an error, the index is ready
+            logger.debug(f"Vector index for KB {kb_id} is ready after {i * poll_interval:.1f}s")
+            return
+        except Exception as e:
+            error_msg = str(e)
+            # Check for index building states
+            if "INITIAL_SYNC" in error_msg or "NOT_STARTED" in error_msg:
+                # Index is still building, wait and retry
+                if i < max_attempts - 1:
+                    await asyncio.sleep(poll_interval)
+                    continue
+                else:
+                    logger.warning(f"Vector index for KB {kb_id} still building after {max_wait_seconds}s (state: {'INITIAL_SYNC' if 'INITIAL_SYNC' in error_msg else 'NOT_STARTED'})")
+                    # Don't raise - let the actual search handle the error
+                    return
+            elif "zero vector" in error_msg.lower():
+                # This is a different error - the index might be ready but we used a zero vector
+                # Try again with a non-zero vector (shouldn't happen with our test_vector, but just in case)
+                if i < max_attempts - 1:
+                    await asyncio.sleep(poll_interval)
+                    continue
+            else:
+                # Different error - might be that index doesn't exist or other issue
+                # For test purposes, if it's not a building state error, log and continue
+                if "no such command" not in error_msg.lower() and "not found" not in error_msg.lower():
+                    logger.debug(f"Vector index check for KB {kb_id} returned non-building error: {error_msg[:100]}")
+                    # Assume it might be ready and let the actual search handle it
+                    return
+                # If it's a "not found" type error, wait a bit more
+                if i < max_attempts - 1:
+                    await asyncio.sleep(poll_interval)
+                    continue
+                raise
 
 async def create_vector_search_index(
     analytiq_client,
@@ -637,13 +706,77 @@ async def search_knowledge_base(
     search_request: KBSearchRequest = Body(...),
     current_user: User = Depends(get_org_user)
 ):
-    """Search a knowledge base (testing/debug endpoint)"""
-    # TODO: Implement vector search
-    # For now, return empty results
-    return KBSearchResponse(
-        results=[],
-        query=search_request.query,
-        total_count=0,
-        skip=search_request.skip,
-        top_k=search_request.top_k
-    )
+    """Search a knowledge base using vector search"""
+    analytiq_client = ad.common.get_analytiq_client()
+    
+    try:
+        search_results = await ad.kb.search.search_knowledge_base(
+            analytiq_client=analytiq_client,
+            kb_id=kb_id,
+            query=search_request.query,
+            organization_id=organization_id,
+            top_k=search_request.top_k,
+            skip=search_request.skip,
+            document_ids=search_request.document_ids,
+            metadata_filter=search_request.metadata_filter,
+            upload_date_from=search_request.upload_date_from,
+            upload_date_to=search_request.upload_date_to,
+            coalesce_neighbors=search_request.coalesce_neighbors
+        )
+        
+        return KBSearchResponse(
+            results=[KBSearchResult(**result) for result in search_results["results"]],
+            query=search_request.query,
+            total_count=search_results["total_count"],
+            skip=search_request.skip,
+            top_k=search_request.top_k
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error searching KB {kb_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+@knowledge_bases_router.post("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}/reconcile")
+async def reconcile_knowledge_base_endpoint(
+    organization_id: str,
+    kb_id: str,
+    dry_run: bool = Query(False, description="If true, only report issues without fixing them"),
+    current_user: User = Depends(get_org_user)
+):
+    """Reconcile a knowledge base (fix drift between tags and indexes)"""
+    analytiq_client = ad.common.get_analytiq_client()
+    
+    try:
+        results = await ad.kb.reconciliation.reconcile_knowledge_base(
+            analytiq_client=analytiq_client,
+            kb_id=kb_id,
+            organization_id=organization_id,
+            dry_run=dry_run
+        )
+        return results
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Error reconciling KB {kb_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Reconciliation failed: {str(e)}")
+
+@knowledge_bases_router.post("/v0/orgs/{organization_id}/knowledge-bases/reconcile-all")
+async def reconcile_all_knowledge_bases_endpoint(
+    organization_id: str,
+    dry_run: bool = Query(False, description="If true, only report issues without fixing them"),
+    current_user: User = Depends(get_org_user)
+):
+    """Reconcile all knowledge bases for an organization"""
+    analytiq_client = ad.common.get_analytiq_client()
+    
+    try:
+        results = await ad.kb.reconciliation.reconcile_all_knowledge_bases(
+            analytiq_client=analytiq_client,
+            organization_id=organization_id,
+            dry_run=dry_run
+        )
+        return results
+    except Exception as e:
+        logger.error(f"Error reconciling all KBs for org {organization_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Reconciliation failed: {str(e)}")
