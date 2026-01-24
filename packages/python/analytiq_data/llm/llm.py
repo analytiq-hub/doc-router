@@ -599,7 +599,21 @@ async def run_llm(analytiq_client,
                         
                         logger.info(f"{document_id}/{prompt_revid}: Added {len(search_results.get('results', []))} KB search results to conversation")
                     except Exception as e:
-                        logger.error(f"{document_id}/{prompt_revid}: Error handling KB search tool call: {e}")
+                        error_msg = str(e)
+                        # Check if this is a vector index timing issue
+                        if "INITIAL_SYNC" in error_msg or "NOT_STARTED" in error_msg or "cannot query vector index" in error_msg.lower():
+                            logger.warning(
+                                f"{document_id}/{prompt_revid}: KB search index not ready yet (timing issue). "
+                                f"Error: {error_msg[:200]}"
+                            )
+                            error_content = (
+                                "The knowledge base search index is still building. "
+                                "This is a temporary issue - please try again in a few moments."
+                            )
+                        else:
+                            logger.error(f"{document_id}/{prompt_revid}: Error handling KB search tool call: {e}")
+                            error_content = f"Error searching knowledge base: {error_msg[:200]}"
+                        
                         # Add error message to conversation
                         messages.append({
                             "role": "assistant",
@@ -618,7 +632,7 @@ async def run_llm(analytiq_client,
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tool_call.id,
-                            "content": f"Error searching knowledge base: {str(e)}"
+                            "content": error_content
                         })
                 else:
                     logger.warning(f"{document_id}/{prompt_revid}: Unknown tool call: {tool_call.function.name}")

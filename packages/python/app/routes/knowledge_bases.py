@@ -743,6 +743,14 @@ async def search_knowledge_base(
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
+        error_msg = str(e)
+        # Check if this is a vector index timing issue
+        if "INITIAL_SYNC" in error_msg or "NOT_STARTED" in error_msg or "cannot query vector index" in error_msg.lower():
+            logger.warning(f"Vector index for KB {kb_id} not ready yet. Error: {error_msg[:200]}")
+            raise HTTPException(
+                status_code=503,  # Service Unavailable
+                detail=f"Knowledge base search index is still building. Please try again in a few moments. Error: {error_msg[:200]}"
+            )
         logger.error(f"Error searching KB {kb_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
 

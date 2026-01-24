@@ -12,7 +12,7 @@ import stamina
 
 import analytiq_data as ad
 from .embedding_cache import get_embedding_from_cache, store_embedding_in_cache, compute_chunk_hash
-from .errors import is_retryable_embedding_error
+from .errors import is_retryable_embedding_error, is_retryable_vector_index_error
 
 logger = logging.getLogger(__name__)
 
@@ -251,8 +251,13 @@ async def search_knowledge_base(
         pipeline.append({"$skip": skip})
     pipeline.append({"$limit": top_k})
     
-    # Execute search
-    search_results = await vectors_collection.aggregate(pipeline).to_list(length=top_k)
+    # Execute search with retry logic for vector index timing issues
+    search_results = await _execute_vector_search_with_retry(
+        vectors_collection,
+        pipeline,
+        top_k,
+        kb_id
+    )
     
     # Get total count (approximate, for pagination)
     # Note: MongoDB vector search doesn't provide exact counts efficiently
@@ -268,10 +273,12 @@ async def search_knowledge_base(
             chunk_index = result["chunk_index"]
             
             # Get all chunks for this document, sorted by chunk_index
-            doc_chunks = await vectors_collection.find({
-                "document_id": document_id,
-                "organization_id": organization_id
-            }).sort("chunk_index", 1).to_list(length=None)
+            # Use retry logic for this query too, in case index is still building
+            doc_chunks = await _execute_find_query_with_retry(
+                vectors_collection,
+                {"document_id": document_id, "organization_id": organization_id},
+                kb_id
+            )
             
             # Find the index of the matched chunk
             matched_idx = next((i for i, chunk in enumerate(doc_chunks) if chunk["chunk_index"] == chunk_index), None)
@@ -333,6 +340,86 @@ async def search_knowledge_base(
         "results": formatted_results,
         "total_count": total_count
     }
+
+
+@stamina.retry(on=is_retryable_vector_index_error)
+async def _execute_vector_search_with_retry(
+    vectors_collection,
+    pipeline: List[Dict[str, Any]],
+    top_k: int,
+    kb_id: str
+) -> List[Dict[str, Any]]:
+    """
+    Execute vector search with retry logic for MongoDB vector index timing issues.
+    
+    If the index is in INITIAL_SYNC or NOT_STARTED state, this will retry with exponential backoff.
+    
+    Args:
+        vectors_collection: MongoDB collection for vectors
+        pipeline: Aggregation pipeline for vector search
+        top_k: Number of results to return
+        kb_id: Knowledge base ID (for logging)
+        
+    Returns:
+        List of search results
+        
+    Raises:
+        Exception: If search fails after all retries
+    """
+    try:
+        return await vectors_collection.aggregate(pipeline).to_list(length=top_k)
+    except Exception as e:
+        error_msg = str(e)
+        if is_retryable_vector_index_error(e):
+            logger.warning(
+                f"Vector index for KB {kb_id} not ready yet (INITIAL_SYNC/NOT_STARTED). "
+                f"Will retry with exponential backoff. Error: {error_msg[:200]}"
+            )
+            # Re-raise to trigger stamina retry
+            raise
+        else:
+            # Non-retryable error, re-raise immediately
+            logger.error(f"Non-retryable error in vector search for KB {kb_id}: {error_msg[:200]}")
+            raise
+
+
+@stamina.retry(on=is_retryable_vector_index_error)
+async def _execute_find_query_with_retry(
+    vectors_collection,
+    filter_dict: Dict[str, Any],
+    kb_id: str
+) -> List[Dict[str, Any]]:
+    """
+    Execute a find query with retry logic for MongoDB vector index timing issues.
+    
+    Used for coalescing queries that also need to handle index timing.
+    
+    Args:
+        vectors_collection: MongoDB collection for vectors
+        filter_dict: Filter dictionary for the find query
+        kb_id: Knowledge base ID (for logging)
+        
+    Returns:
+        List of documents
+        
+    Raises:
+        Exception: If query fails after all retries
+    """
+    try:
+        return await vectors_collection.find(filter_dict).sort("chunk_index", 1).to_list(length=None)
+    except Exception as e:
+        error_msg = str(e)
+        if is_retryable_vector_index_error(e):
+            logger.warning(
+                f"Vector index for KB {kb_id} not ready yet during coalescing query. "
+                f"Will retry with exponential backoff. Error: {error_msg[:200]}"
+            )
+            # Re-raise to trigger stamina retry
+            raise
+        else:
+            # Non-retryable error, re-raise immediately
+            logger.error(f"Non-retryable error in coalescing query for KB {kb_id}: {error_msg[:200]}")
+            raise
 
 
 @stamina.retry(on=is_retryable_embedding_error)

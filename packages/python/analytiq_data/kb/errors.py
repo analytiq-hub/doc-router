@@ -87,6 +87,38 @@ def is_permanent_embedding_error(exception: Exception) -> bool:
     return False
 
 
+def is_retryable_vector_index_error(exception: Exception) -> bool:
+    """
+    Check if a MongoDB vector index error is retryable (index still building).
+    
+    Args:
+        exception: The exception to check
+        
+    Returns:
+        bool: True if the exception indicates the index is still building and should be retried
+    """
+    if not isinstance(exception, Exception):
+        return False
+    
+    error_message = str(exception).lower()
+    
+    # Check for MongoDB vector index building states
+    retryable_patterns = [
+        "initial_sync",
+        "not_started",
+        "cannot query vector index",
+        "while in state",
+        "index.*building",
+        "index.*not ready",
+    ]
+    
+    for pattern in retryable_patterns:
+        if pattern in error_message:
+            return True
+    
+    return False
+
+
 async def set_kb_status_to_error(
     analytiq_client,
     kb_id: str,
