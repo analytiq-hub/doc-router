@@ -202,7 +202,8 @@ async def generate_embeddings_batch(
 async def get_or_generate_embeddings(
     analytiq_client,
     chunks: List[Chunk],
-    embedding_model: str
+    embedding_model: str,
+    organization_id: str
 ) -> Tuple[List[List[float]], int]:
     """
     Get embeddings from cache or generate new ones.
@@ -211,6 +212,7 @@ async def get_or_generate_embeddings(
         analytiq_client: The analytiq client
         chunks: List of Chunk objects
         embedding_model: LiteLLM embedding model string
+        organization_id: Organization ID for SPU metering
         
     Returns:
         Tuple of (embeddings list, cache_miss_count)
@@ -239,8 +241,18 @@ async def get_or_generate_embeddings(
     
     # Generate embeddings for cache misses in batches
     if cache_misses:
-        logger.info(f"Generating {len(cache_misses)} embeddings (cache misses)")
+        cache_miss_count = len(cache_misses)
+        logger.info(f"Generating {cache_miss_count} embeddings (cache misses)")
+        
+        # Check SPU credits before generating embeddings (1 SPU per embedding)
+        # This will raise SPUCreditException if insufficient credits
+        await ad.payments.check_spu_limits(organization_id, cache_miss_count)
+        
         generated_embeddings = []
+        
+        # Get provider for SPU metering
+        model_info = litellm.get_model_info(embedding_model)
+        provider = model_info.get("provider") if model_info else None
         
         # Process in batches
         for i in range(0, len(cache_misses), EMBEDDING_BATCH_SIZE):
@@ -262,6 +274,20 @@ async def get_or_generate_embeddings(
                 embedding
             )
             embeddings[cache_miss_idx] = embedding
+        
+        # Record SPU usage: 1 SPU per embedding generated (cache miss)
+        if cache_miss_count > 0:
+            try:
+                await ad.payments.record_spu_usage(
+                    org_id=organization_id,
+                    spus=cache_miss_count,  # 1 SPU per embedding
+                    llm_provider=provider,
+                    llm_model=embedding_model
+                )
+                logger.info(f"Recorded {cache_miss_count} SPU usage for {cache_miss_count} embedding(s) generated")
+            except Exception as e:
+                logger.error(f"Error recording SPU usage for embeddings: {e}")
+                # Don't fail indexing if SPU recording fails
     
     cache_miss_count = len(cache_misses)
     logger.info(f"Embedding lookup complete: {len(chunks)} total, {cache_miss_count} cache misses, {len(chunks) - cache_miss_count} cache hits")
@@ -340,7 +366,8 @@ async def index_document_in_kb(
     embeddings, cache_miss_count = await get_or_generate_embeddings(
         analytiq_client,
         chunks,
-        kb["embedding_model"]
+        kb["embedding_model"],
+        organization_id
     )
     
     # Prepare vectors for insertion

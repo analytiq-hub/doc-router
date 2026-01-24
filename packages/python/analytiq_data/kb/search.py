@@ -170,6 +170,10 @@ async def search_knowledge_base(
     query_embedding = await get_embedding_from_cache(analytiq_client, query_hash, embedding_model)
     
     if not query_embedding:
+        # Check SPU credits before generating query embedding (1 SPU per query embedding)
+        # This will raise SPUCreditException if insufficient credits
+        await ad.payments.check_spu_limits(organization_id, 1)
+        
         # Generate embedding
         try:
             model_info = litellm.get_model_info(embedding_model)
@@ -186,6 +190,19 @@ async def search_knowledge_base(
             
             # Cache the query embedding
             await store_embedding_in_cache(analytiq_client, query_hash, embedding_model, query_embedding)
+            
+            # Record SPU usage: 1 SPU per query embedding generated (cache miss)
+            try:
+                await ad.payments.record_spu_usage(
+                    org_id=organization_id,
+                    spus=1,  # 1 SPU per query embedding
+                    llm_provider=provider,
+                    llm_model=embedding_model
+                )
+                logger.info(f"Recorded 1 SPU usage for query embedding generated")
+            except Exception as e:
+                logger.error(f"Error recording SPU usage for query embedding: {e}")
+                # Don't fail search if SPU recording fails
             
         except Exception as e:
             logger.error(f"Error generating query embedding: {e}")

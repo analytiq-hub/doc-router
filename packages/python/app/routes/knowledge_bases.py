@@ -15,6 +15,7 @@ from bson import ObjectId
 import analytiq_data as ad
 from app.auth import get_org_user
 from app.models import User
+from app.routes.payments import SPUCreditException
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -225,13 +226,15 @@ async def wait_for_vector_index_ready(
         except Exception as e:
             error_msg = str(e)
             # Check for index building states
-            if "INITIAL_SYNC" in error_msg or "NOT_STARTED" in error_msg:
+            if ("INITIAL_SYNC" in error_msg or "NOT_STARTED" in error_msg or 
+                "not initialized" in error_msg.lower()):
                 # Index is still building, wait and retry
                 if i < max_attempts - 1:
                     await asyncio.sleep(poll_interval)
                     continue
                 else:
-                    logger.warning(f"Vector index for KB {kb_id} still building after {max_wait_seconds}s (state: {'INITIAL_SYNC' if 'INITIAL_SYNC' in error_msg else 'NOT_STARTED'})")
+                    state = "INITIAL_SYNC" if "INITIAL_SYNC" in error_msg else ("NOT_STARTED" if "NOT_STARTED" in error_msg else "not initialized")
+                    logger.warning(f"Vector index for KB {kb_id} still building after {max_wait_seconds}s (state: {state})")
                     # Don't raise - let the actual search handle the error
                     return
             elif "zero vector" in error_msg.lower():
@@ -730,6 +733,12 @@ async def search_knowledge_base(
             total_count=search_results["total_count"],
             skip=search_request.skip,
             top_k=search_request.top_k
+        )
+    except SPUCreditException as e:
+        logger.warning(f"SPU credit exhausted for KB search {kb_id}: {str(e)}")
+        raise HTTPException(
+            status_code=402,
+            detail=f"Insufficient SPU credits: {str(e)}"
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
