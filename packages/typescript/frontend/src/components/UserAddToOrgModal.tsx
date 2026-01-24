@@ -33,7 +33,7 @@ const UserAddToOrgModal: React.FC<UserAddToOrgModalProps> = ({
     }
 
     const timeoutId = setTimeout(() => {
-      docRouterAccountApi.listUsers({ limit: 1000 })
+      docRouterAccountApi.listUsers({ limit: 100 })
         .then(response => {
           const filteredUsers = response.users.filter(user =>
             !currentMembers.includes(user.id) && (

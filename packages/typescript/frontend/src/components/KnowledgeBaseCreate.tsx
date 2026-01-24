@@ -38,7 +38,7 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
   useEffect(() => {
     async function loadTags() {
       try {
-        const response = await docRouterOrgApi.listTags({ limit: 1000 });
+        const response = await docRouterOrgApi.listTags({ limit: 100 });
         setAvailableTags(response.tags);
       } catch (error) {
         console.error('Error loading tags:', error);

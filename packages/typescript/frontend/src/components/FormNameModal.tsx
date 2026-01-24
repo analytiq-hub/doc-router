@@ -36,7 +36,7 @@ const FormNameModal: React.FC<FormNameModalProps> = ({
         try {
           const response = await docRouterOrgApi.listForms({
             skip: 0,
-            limit: 1000
+            limit: 100
           });
           
           setExistingNames(response.forms.map(form => form.name.toLowerCase()));

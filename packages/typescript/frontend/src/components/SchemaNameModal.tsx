@@ -35,7 +35,7 @@ const SchemaNameModal: React.FC<SchemaNameModalProps> = ({
       const fetchSchemaNames = async () => {
         try {
           const response = await docRouterOrgApi.listSchemas({
-            limit: 1000
+            limit: 100
           });
           
           setExistingNames(response.schemas.map(schema => schema.name.toLowerCase()));

@@ -15,6 +15,7 @@ import FolderIcon from '@mui/icons-material/Folder';
 import colors from 'tailwindcss/colors';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
+import KnowledgeBaseInfoModal from '@/components/KnowledgeBaseInfoModal';
 
 const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
@@ -30,6 +31,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
   // Add state for menu
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedKB, setSelectedKB] = useState<KnowledgeBase | null>(null);
+  const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const loadKnowledgeBases = useCallback(async () => {
     try {
@@ -310,7 +312,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             onClick={() => {
               if (selectedKB) {
                 setAnchorEl(null);
-                // TODO: Open info modal
+                setIsInfoModalOpen(true);
               }
             }}
             className="flex items-center gap-2"
@@ -328,6 +330,18 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             <span>Delete</span>
           </MenuItem>
         </Menu>
+        
+        {/* Info Modal */}
+        {selectedKB && (
+          <KnowledgeBaseInfoModal
+            isOpen={isInfoModalOpen}
+            onClose={() => {
+              setIsInfoModalOpen(false);
+              setSelectedKB(null);
+            }}
+            kb={selectedKB}
+          />
+        )}
       </div>
     </div>
   );
