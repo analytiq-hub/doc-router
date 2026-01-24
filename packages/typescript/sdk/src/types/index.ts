@@ -267,6 +267,36 @@ export interface LLMChatStreamError {
   error: string;
 }
 
+export interface LLMEmbeddingTestRequest {
+  model: string;
+  input: string;
+}
+
+export interface LLMEmbeddingTestResponse {
+  model: string;
+  dimensions: number;
+  embedding: number[];
+  usage?: {
+    prompt_tokens?: number;
+    total_tokens?: number;
+  } | null;
+}
+
+export interface LLMEmbeddingTestRequest {
+  model: string;
+  input: string;
+}
+
+export interface LLMEmbeddingTestResponse {
+  model: string;
+  dimensions: number;
+  embedding: number[];
+  usage?: {
+    prompt_tokens?: number;
+    total_tokens?: number;
+  } | null;
+}
+
 export interface ListLLMModelsParams {
   providerName?: string;
   providerEnabled?: boolean;

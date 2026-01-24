@@ -11,6 +11,8 @@ import {
   TokenOrganizationResponse,
   ListLLMModelsParams,
   ListLLMModelsResponse,
+  LLMEmbeddingTestRequest,
+  LLMEmbeddingTestResponse,
   ListLLMProvidersResponse,
   SetLLMProviderConfigRequest,
   LLMChatRequest,
@@ -308,6 +310,13 @@ export class DocRouterAccount {
   ): Promise<void> {
     const streamingRequest = { ...request, stream: true };
     return this.http.stream('/v0/account/llm/run', streamingRequest, onChunk, onError, abortSignal);
+  }
+
+  /**
+   * Test embedding model (account level, admin only)
+   */
+  async testEmbeddingModel(request: LLMEmbeddingTestRequest): Promise<LLMEmbeddingTestResponse> {
+    return this.http.post('/v0/account/llm/test/embedding', request);
   }
 
   /**

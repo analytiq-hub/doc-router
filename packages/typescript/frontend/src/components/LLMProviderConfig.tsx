@@ -6,6 +6,7 @@ import { DocRouterAccountApi } from '@/utils/api';
 import { LLMProvider } from '@docrouter/sdk';
 import { LLMChatModel, LLMEmbeddingModel } from '@docrouter/sdk';
 import LLMTestModal from './LLMTestModal';
+import LLMEmbeddingTestModal from './LLMEmbeddingTestModal';
 
 interface LLMProviderConfigProps {
   providerName: string;
@@ -22,6 +23,8 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
   // Test modal state
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>('');
+  const [embeddingTestModalOpen, setEmbeddingTestModalOpen] = useState(false);
+  const [selectedEmbeddingModel, setSelectedEmbeddingModel] = useState<string>('');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -90,6 +93,16 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
     setSelectedModel('');
   };
 
+  const handleTestEmbeddingModel = (modelName: string) => {
+    setSelectedEmbeddingModel(modelName);
+    setEmbeddingTestModalOpen(true);
+  };
+
+  const handleCloseEmbeddingTestModal = () => {
+    setEmbeddingTestModalOpen(false);
+    setSelectedEmbeddingModel('');
+  };
+
   // Chat models columns (with test button)
   const chatModelColumns: GridColDef[] = [
     { field: 'litellm_model', headerName: 'Model Name', flex: 1, minWidth: 150 },
@@ -129,7 +142,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
     { field: 'output_cost_per_token', headerName: 'Output Cost', width: 100, minWidth: 100 },
   ];
 
-  // Embedding models columns (without test button)
+  // Embedding models columns (with test button)
   const embeddingModelColumns: GridColDef[] = [
     { field: 'litellm_model', headerName: 'Model Name', flex: 1, minWidth: 150 },
     {
@@ -144,6 +157,22 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
           size="small"
           color="primary"
         />
+      ),
+    },
+    {
+      field: 'test',
+      headerName: 'Test',
+      width: 100,
+      minWidth: 100,
+      renderCell: (params: GridRenderCellParams) => (
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={() => handleTestEmbeddingModel(params.row.litellm_model)}
+          disabled={!provider?.litellm_models_enabled.includes(params.row.litellm_model)}
+        >
+          Test
+        </Button>
       ),
     },
     { field: 'max_input_tokens', headerName: 'Max Input Tokens', width: 140, minWidth: 140 },
@@ -208,11 +237,16 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
         </div>
       )}
 
-      {/* Test Modal */}
+      {/* Test Modals */}
       <LLMTestModal
         open={testModalOpen}
         onClose={handleCloseTestModal}
         modelName={selectedModel}
+      />
+      <LLMEmbeddingTestModal
+        open={embeddingTestModalOpen}
+        onClose={handleCloseEmbeddingTestModal}
+        modelName={selectedEmbeddingModel}
       />
     </div>
   );

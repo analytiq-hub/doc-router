@@ -107,6 +107,16 @@ class LLMStreamResponse(BaseModel):
     chunk: str
     done: bool = False
 
+class LLMEmbeddingTestRequest(BaseModel):
+    model: str = Field(..., description="The embedding model to use (e.g., 'text-embedding-3-small')")
+    input: str = Field(..., description="Text to embed")
+
+class LLMEmbeddingTestResponse(BaseModel):
+    model: str
+    dimensions: int
+    embedding: List[float]
+    usage: Optional[dict] = None
+
 # Organization-level LLM routes
 @llm_router.post("/v0/orgs/{organization_id}/llm/run/{document_id}", response_model=LLMRunResponse)
 async def run_llm_analysis(
@@ -401,6 +411,89 @@ async def run_llm_chat_account(
     Supports both streaming and non-streaming responses.
     """
     return await ad.llm.run_llm_chat(request, current_user)
+
+@llm_router.post("/v0/account/llm/test/embedding", response_model=LLMEmbeddingTestResponse)
+async def test_embedding_model(
+    request: LLMEmbeddingTestRequest,
+    current_user: User = Depends(get_admin_user)
+):
+    """
+    Test embedding model with sample text (admin only) - Account level.
+    """
+    import litellm
+    
+    # Verify the model is an embedding model
+    if not ad.llm.is_embedding_model(request.model):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model {request.model} is not an embedding model"
+        )
+    
+    # Verify the model exists and is enabled
+    db = ad.common.get_async_db()
+    found = False
+    for provider in await db.llm_providers.find({}).to_list(None):
+        if request.model in provider["litellm_models_enabled"]:
+            found = True
+            break
+    if not found:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model {request.model} is not enabled"
+        )
+    
+    try:
+        analytiq_client = ad.common.get_analytiq_client()
+        
+        # Get provider and API key
+        provider = litellm.get_model_info(request.model).get("provider")
+        api_key = await ad.llm.get_llm_key(analytiq_client, provider)
+        
+        if not api_key:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No API key found for provider {provider}"
+            )
+        
+        # Generate embedding
+        response = await litellm.aembedding(
+            model=request.model,
+            input=[request.input],
+            api_key=api_key
+        )
+        
+        if not response.data or len(response.data) == 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Invalid embedding response: no data returned"
+            )
+        
+        embedding = response.data[0]["embedding"]
+        dimensions = len(embedding)
+        
+        # Get usage if available
+        usage = None
+        if hasattr(response, 'usage'):
+            usage = {
+                "prompt_tokens": getattr(response.usage, 'prompt_tokens', 0),
+                "total_tokens": getattr(response.usage, 'total_tokens', 0)
+            }
+        
+        return LLMEmbeddingTestResponse(
+            model=request.model,
+            dimensions=dimensions,
+            embedding=embedding,
+            usage=usage
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error testing embedding model {request.model}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error testing embedding model: {str(e)}"
+        )
 
 @llm_router.get("/v0/orgs/{organization_id}/llm/models", response_model=ListOrgLLMModelsResponse)
 async def list_org_llm_models(
