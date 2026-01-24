@@ -5,7 +5,7 @@ from litellm.utils import supports_pdf_input  # Add this import
 import json
 from datetime import datetime, UTC
 from pydantic import BaseModel, create_model
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List
 from collections import OrderedDict
 import logging
 from bson import ObjectId
@@ -178,7 +178,9 @@ async def _litellm_acompletion_with_retry(
     response_format: Optional[Dict] = None,
     aws_access_key_id: Optional[str] = None,
     aws_secret_access_key: Optional[str] = None,
-    aws_region_name: Optional[str] = None
+    aws_region_name: Optional[str] = None,
+    tools: Optional[List[Dict]] = None,
+    tool_choice: Optional[Union[str, Dict]] = None
 ):
     """
     Make an LLM call with stamina retry mechanism.
@@ -191,6 +193,8 @@ async def _litellm_acompletion_with_retry(
         aws_access_key_id: AWS access key (for Bedrock)
         aws_secret_access_key: AWS secret key (for Bedrock)
         aws_region_name: AWS region (for Bedrock)
+        tools: Optional list of tools/functions for the model to call
+        tool_choice: Optional tool choice parameter ("auto", "none", or specific function)
         
     Returns:
         The LLM response
@@ -199,16 +203,23 @@ async def _litellm_acompletion_with_retry(
         Exception: If the call fails after all retries
     """
     temperature = get_temperature(model)
-    return await litellm.acompletion(
-        model=model,
-        messages=messages,
-        api_key=api_key,
-        temperature=temperature,
-        response_format=response_format,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region_name=aws_region_name
-    )
+    params = {
+        "model": model,
+        "messages": messages,
+        "api_key": api_key,
+        "temperature": temperature,
+        "response_format": response_format,
+        "aws_access_key_id": aws_access_key_id,
+        "aws_secret_access_key": aws_secret_access_key,
+        "aws_region_name": aws_region_name
+    }
+    
+    # Add tools if provided
+    if tools:
+        params["tools"] = tools
+        params["tool_choice"] = tool_choice if tool_choice is not None else "auto"
+    
+    return await litellm.acompletion(**params)
 
 @stamina.retry(on=is_retryable_error)
 async def _litellm_acreate_file_with_retry(
@@ -316,12 +327,24 @@ async def run_llm(analytiq_client,
 
     prompt1 = await ad.common.get_prompt_content(analytiq_client, prompt_revid)
     
+    # Check if prompt has KB ID for RAG (do this early to modify system prompt if needed)
+    kb_id = await ad.common.get_prompt_kb_id(analytiq_client, prompt_revid)
+    
     # Define system_prompt before using it
-    system_prompt = (
-        "You are a helpful assistant that extracts document information into JSON format. "
-        "Always respond with valid JSON only, no other text. "
-        "Format your entire response as a JSON object."
-    )
+    if kb_id:
+        system_prompt = (
+            "You are a helpful assistant that extracts document information into JSON format. "
+            "You have access to a knowledge base that contains additional context from related documents. "
+            "Use the search_knowledge_base tool when you need additional information beyond what's in the current document. "
+            "Always respond with valid JSON only, no other text. "
+            "Format your entire response as a JSON object."
+        )
+    else:
+        system_prompt = (
+            "You are a helpful assistant that extracts document information into JSON format. "
+            "Always respond with valid JSON only, no other text. "
+            "Format your entire response as a JSON object."
+        )
     
     # Determine how to handle the document content
     # XAI doesn't support complex file attachment formats, so use text-only for XAI
@@ -434,22 +457,200 @@ async def run_llm(analytiq_client,
         aws_secret_access_key = None
         aws_region_name = None
 
-    # 6. Call the LLM with retry mechanism
-    response = await _litellm_acompletion_with_retry(
-        model=llm_model,
-        messages=messages,  # Use the vision-aware messages
-        api_key=api_key,
-        response_format=response_format,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region_name=aws_region_name
-    )
+    # Set up tools if KB is enabled (kb_id already retrieved above)
+    tools = None
+    max_iterations = 5  # Maximum number of tool call iterations
+    
+    if kb_id:
+        # Check if model supports function calling
+        if litellm.supports_function_calling(model=llm_model):
+            logger.info(f"{document_id}/{prompt_revid}: KB {kb_id} specified, enabling RAG with function calling")
+            
+            # Define the search_knowledge_base tool
+            tools = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": "search_knowledge_base",
+                        "description": "Search the knowledge base for relevant information to answer questions about documents. Use this when you need additional context beyond what's in the current document.",
+                        "parameters": {
+                            "type": "object",
+                            "properties": {
+                                "query": {
+                                    "type": "string",
+                                    "description": "Search query to find relevant information in the knowledge base"
+                                },
+                                "top_k": {
+                                    "type": "integer",
+                                    "description": "Number of results to return (default: 5)",
+                                    "default": 5
+                                },
+                                "metadata_filter": {
+                                    "type": "object",
+                                    "description": "Optional metadata filters (document_name, tag_ids, etc.)"
+                                },
+                                "coalesce_neighbors": {
+                                    "type": "integer",
+                                    "description": "Number of neighboring chunks to include for context (default: 0)"
+                                }
+                            },
+                            "required": ["query"]
+                        }
+                    }
+                }
+            ]
+        else:
+            logger.warning(f"{document_id}/{prompt_revid}: KB {kb_id} specified but model {llm_model} doesn't support function calling. RAG disabled.")
+            kb_id = None  # Disable KB if model doesn't support it
+
+    # 6. Call the LLM with agentic loop if KB is enabled, otherwise single call
+    total_prompt_tokens = 0
+    total_completion_tokens = 0
+    total_cost = 0.0
+    
+    if kb_id and tools:
+        # Agentic loop: handle tool calls iteratively
+        iteration = 0
+        response = None
+        
+        while iteration < max_iterations:
+            iteration += 1
+            logger.info(f"{document_id}/{prompt_revid}: LLM call iteration {iteration}/{max_iterations}")
+            
+            response = await _litellm_acompletion_with_retry(
+                model=llm_model,
+                messages=messages,
+                api_key=api_key,
+                response_format=response_format,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_region_name=aws_region_name,
+                tools=tools,
+                tool_choice="auto"  # Always allow tool calls in agentic mode
+            )
+            
+            # Accumulate token usage
+            if hasattr(response, 'usage') and response.usage:
+                total_prompt_tokens += response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0
+                total_completion_tokens += response.usage.completion_tokens if hasattr(response.usage, 'completion_tokens') else 0
+                total_cost += litellm.completion_cost(completion_response=response) if hasattr(response, 'usage') else 0.0
+            
+            # Check if LLM wants to call a tool
+            message = response.choices[0].message
+            tool_calls = message.tool_calls if hasattr(message, 'tool_calls') and message.tool_calls else []
+            
+            if not tool_calls:
+                # No tool calls - LLM is done, break the loop
+                logger.info(f"{document_id}/{prompt_revid}: LLM completed after {iteration} iteration(s)")
+                break
+            
+            # Handle tool calls
+            for tool_call in tool_calls:
+                if tool_call.function.name == "search_knowledge_base":
+                    # Parse function arguments
+                    try:
+                        args = json.loads(tool_call.function.arguments)
+                        search_query = args.get("query", "")
+                        top_k = args.get("top_k", 5)
+                        metadata_filter = args.get("metadata_filter")
+                        coalesce_neighbors = args.get("coalesce_neighbors")
+                        
+                        logger.info(f"{document_id}/{prompt_revid}: LLM requested KB search: query='{search_query}', top_k={top_k}")
+                        
+                        # Perform KB search
+                        search_results = await ad.kb.search.search_knowledge_base(
+                            analytiq_client=analytiq_client,
+                            kb_id=kb_id,
+                            query=search_query,
+                            organization_id=org_id,
+                            top_k=top_k,
+                            metadata_filter=metadata_filter,
+                            coalesce_neighbors=coalesce_neighbors
+                        )
+                        
+                        # Format search results for LLM
+                        formatted_context = "Knowledge Base Search Results:\n"
+                        for i, result in enumerate(search_results.get("results", []), 1):
+                            formatted_context += f"\n[{i}] {result.get('content', '')}\n"
+                            formatted_context += f"Source: {result.get('source', 'Unknown')}\n"
+                            if result.get('relevance'):
+                                formatted_context += f"Relevance: {result.get('relevance'):.3f}\n"
+                        
+                        # Add tool response to messages
+                        messages.append({
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": tool_call.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool_call.function.name,
+                                        "arguments": tool_call.function.arguments
+                                    }
+                                }
+                            ]
+                        })
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": formatted_context
+                        })
+                        
+                        logger.info(f"{document_id}/{prompt_revid}: Added {len(search_results.get('results', []))} KB search results to conversation")
+                    except Exception as e:
+                        logger.error(f"{document_id}/{prompt_revid}: Error handling KB search tool call: {e}")
+                        # Add error message to conversation
+                        messages.append({
+                            "role": "assistant",
+                            "content": None,
+                            "tool_calls": [
+                                {
+                                    "id": tool_call.id,
+                                    "type": "function",
+                                    "function": {
+                                        "name": tool_call.function.name,
+                                        "arguments": tool_call.function.arguments
+                                    }
+                                }
+                            ]
+                        })
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "content": f"Error searching knowledge base: {str(e)}"
+                        })
+                else:
+                    logger.warning(f"{document_id}/{prompt_revid}: Unknown tool call: {tool_call.function.name}")
+            
+            # Continue loop to get LLM response with tool results
+            if iteration >= max_iterations:
+                logger.warning(f"{document_id}/{prompt_revid}: Reached max iterations ({max_iterations}), using last response")
+                break
+        
+        if response is None:
+            raise Exception(f"{document_id}/{prompt_revid}: No response received from LLM")
+    else:
+        # No KB or tools - single LLM call
+        response = await _litellm_acompletion_with_retry(
+            model=llm_model,
+            messages=messages,  # Use the vision-aware messages
+            api_key=api_key,
+            response_format=response_format,
+            aws_access_key_id=aws_access_key_id,
+            aws_secret_access_key=aws_secret_access_key,
+            aws_region_name=aws_region_name
+        )
+        
+        # Get token usage for single call
+        if hasattr(response, 'usage') and response.usage:
+            total_prompt_tokens = response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0
+            total_completion_tokens = response.usage.completion_tokens if hasattr(response.usage, 'completion_tokens') else 0
+            total_cost = litellm.completion_cost(completion_response=response) if hasattr(response, 'usage') else 0.0
 
     # 7. Get actual usage and cost from LLM response
-    prompt_tokens = response.usage.prompt_tokens
-    completion_tokens = response.usage.completion_tokens
-    total_tokens = response.usage.total_tokens
-    actual_cost = litellm.completion_cost(completion_response=response)
+    # For agentic loops, tokens are already accumulated above
+    total_tokens = total_prompt_tokens + total_completion_tokens
 
     # 8. Deduct credits with actual metrics
     await ad.payments.record_spu_usage(
@@ -457,14 +658,24 @@ async def run_llm(analytiq_client,
         total_spu_needed,
         llm_provider=llm_provider,
         llm_model=llm_model,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
+        prompt_tokens=total_prompt_tokens,
+        completion_tokens=total_completion_tokens,
         total_tokens=total_tokens,
-        actual_cost=actual_cost
+        actual_cost=total_cost
     )
 
     # Skip any <think> ... </think> blocks
     resp_content = response.choices[0].message.content
+    if resp_content is None:
+        # If content is None after agentic loop, the LLM made tool calls but didn't provide final content
+        # This shouldn't happen if we break the loop correctly, but handle it gracefully
+        if kb_id and tools:
+            logger.warning(f"{document_id}/{prompt_revid}: LLM response has no content after agentic loop, may have incomplete tool calls")
+            raise Exception(f"LLM response incomplete: model made tool calls but didn't provide final response after {max_iterations} iterations")
+        else:
+            # For non-agentic calls, content should always be present
+            logger.error(f"{document_id}/{prompt_revid}: LLM response has no content")
+            raise Exception(f"LLM response has no content")
 
     # Process response based on LLM provider
     resp_content1 = process_llm_resp_content(resp_content, llm_provider)

@@ -9,6 +9,7 @@ class PromptConfig(BaseModel):
     schema_version: Optional[int] = None
     tag_ids: List[str] = []
     model: str = "gpt-4o-mini"
+    kb_id: Optional[str] = None  # Optional knowledge base ID for RAG
 
 class Prompt(PromptConfig):
     prompt_revid: str

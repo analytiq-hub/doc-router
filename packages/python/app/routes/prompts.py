@@ -29,6 +29,7 @@ class PromptConfig(BaseModel):
     schema_version: Optional[int] = None
     tag_ids: List[str] = []
     model: str = "gpt-4o-mini"
+    kb_id: Optional[str] = None  # Optional knowledge base ID for RAG
 
 class Prompt(PromptConfig):
     prompt_revid: str           # MongoDB's _id
@@ -193,6 +194,24 @@ async def create_prompt(
         upsert=True
     )
     
+    # Validate kb_id if provided
+    if prompt.kb_id:
+        # Verify KB exists and belongs to org
+        kb = await db.knowledge_bases.find_one({
+            "_id": ObjectId(prompt.kb_id),
+            "organization_id": organization_id
+        })
+        if not kb:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Knowledge base {prompt.kb_id} not found or not accessible"
+            )
+        if kb.get("status") != "active":
+            raise HTTPException(
+                status_code=400,
+                detail=f"Knowledge base {prompt.kb_id} is not active (status: {kb.get('status')})"
+            )
+    
     # Create prompt document for prompt_revisions
     prompt_dict = {
         "prompt_id": prompt_id,  # Add stable identifier
@@ -204,7 +223,8 @@ async def create_prompt(
         "created_by": current_user.user_id,
         "tag_ids": prompt.tag_ids,
         "model": prompt.model,
-        "organization_id": organization_id
+        "organization_id": organization_id,
+        "kb_id": prompt.kb_id  # Store KB ID for RAG
     }
     
     # Insert into MongoDB
@@ -455,7 +475,9 @@ async def update_prompt(
         "created_at": datetime.now(UTC),
         "created_by": current_user.user_id,
         "tag_ids": prompt.tag_ids,
-        "model": prompt.model
+        "model": prompt.model,
+        "organization_id": organization_id,
+        "kb_id": prompt.kb_id  # Store KB ID for RAG
     }
     
     # Insert new version

@@ -1,6 +1,7 @@
 from datetime import datetime, UTC
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
+from typing import Optional
 
 import analytiq_data as ad
 
@@ -177,6 +178,32 @@ async def get_prompt_tag_ids(analytiq_client, prompt_id: str) -> list[str]:
     collection = db["prompt_revisions"]
     elem = await collection.find_one({"_id": ObjectId(prompt_id)})
     return elem["tag_ids"]
+
+async def get_prompt_kb_id(analytiq_client, prompt_id: str) -> Optional[str]:
+    """
+    Get the knowledge base ID associated with a prompt.
+    
+    Args:
+        analytiq_client: AnalytiqClient
+            The analytiq client
+        prompt_id: str
+            Prompt revision ID
+            
+    Returns:
+        Optional[str]: KB ID if prompt has one, None otherwise
+    """
+    # Special case for default prompt
+    if prompt_id == "default":
+        return None
+    
+    db_name = analytiq_client.env
+    db = analytiq_client.mongodb_async[db_name]
+    collection = db["prompt_revisions"]
+    elem = await collection.find_one({"_id": ObjectId(prompt_id)})
+    if elem is None:
+        raise ValueError(f"Prompt {prompt_id} not found")
+    return elem.get("kb_id")
+
 
 async def get_prompt_revision_ids_by_tag_ids(analytiq_client, tag_ids: list[str], latest_version: bool = True) -> list[str]:
     """
