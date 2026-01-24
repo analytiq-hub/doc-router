@@ -70,9 +70,11 @@ jobs:
         max_attempts = 60
         for i in range(max_attempts):
             try:
+                # Use directConnection=true to bypass replica set discovery
                 client = pymongo.MongoClient(
-                    'mongodb://localhost:27017/',
-                    serverSelectionTimeoutMS=2000
+                    'mongodb://localhost:27017/?directConnection=true',
+                    serverSelectionTimeoutMS=2000,
+                    directConnection=True
                 )
                 # Test basic connection
                 client.admin.command('ping')
@@ -150,7 +152,7 @@ jobs:
       working-directory: ./packages/python/
       env:
         ENV: pytest
-        MONGODB_URI: mongodb://localhost:27017
+        MONGODB_URI: mongodb://localhost:27017/?directConnection=true
         NEXTAUTH_SECRET: test_secret_key_for_ci
       run: |
         pytest tests/ -v 
