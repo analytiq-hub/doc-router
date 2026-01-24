@@ -180,11 +180,9 @@ async def generate_embeddings_batch(
     if not texts:
         return []
     
-    # Get provider and API key
-    model_info = litellm.get_model_info(embedding_model)
-    provider = model_info.get("provider")
-    
-    if not provider:
+    # Get provider and API key using the standard method
+    provider = ad.llm.get_llm_model_provider(embedding_model)
+    if provider is None:
         raise ValueError(f"Could not determine provider for model {embedding_model}")
     
     api_key = await ad.llm.get_llm_key(analytiq_client, provider)
@@ -258,9 +256,8 @@ async def get_or_generate_embeddings(
         
         generated_embeddings = []
         
-        # Get provider for SPU metering
-        model_info = litellm.get_model_info(embedding_model)
-        provider = model_info.get("provider") if model_info else None
+        # Get provider for SPU metering using the standard method
+        provider = ad.llm.get_llm_model_provider(embedding_model)
         
         # Process in batches
         for i in range(0, len(cache_misses), EMBEDDING_BATCH_SIZE):

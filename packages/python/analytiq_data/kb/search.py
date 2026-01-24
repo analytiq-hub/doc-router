@@ -189,15 +189,16 @@ async def search_knowledge_base(
             
             # Record SPU usage: 1 SPU per query embedding generated (cache miss)
             try:
-                model_info = litellm.get_model_info(embedding_model)
-                provider = model_info.get("provider")
-                await ad.payments.record_spu_usage(
-                    org_id=organization_id,
-                    spus=1,  # 1 SPU per query embedding
-                    llm_provider=provider,
-                    llm_model=embedding_model
-                )
-                logger.info(f"Recorded 1 SPU usage for query embedding generated")
+                # Get provider using the standard method
+                provider = ad.llm.get_llm_model_provider(embedding_model)
+                if provider:
+                    await ad.payments.record_spu_usage(
+                        org_id=organization_id,
+                        spus=1,  # 1 SPU per query embedding
+                        llm_provider=provider,
+                        llm_model=embedding_model
+                    )
+                    logger.info(f"Recorded 1 SPU usage for query embedding generated")
             except Exception as e:
                 logger.error(f"Error recording SPU usage for query embedding: {e}")
                 # Don't fail search if SPU recording fails
@@ -444,8 +445,11 @@ async def _generate_query_embedding_with_retry(
     Raises:
         Exception: If embedding generation fails after retries
     """
-    model_info = litellm.get_model_info(embedding_model)
-    provider = model_info.get("provider")
+    # Get provider using the standard method
+    provider = ad.llm.get_llm_model_provider(embedding_model)
+    if provider is None:
+        raise ValueError(f"Could not determine provider for model {embedding_model}")
+    
     api_key = await ad.llm.get_llm_key(analytiq_client, provider)
     
     # Generate embedding via LiteLLM
