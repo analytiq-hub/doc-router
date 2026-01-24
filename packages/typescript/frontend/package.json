@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "eslint src/"
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.5.3",
@@ -37,8 +37,8 @@
     "monaco-editor": "^0.52.2",
     "monaco-editor-webpack-plugin": "^7.1.0",
     "mongodb": "^6.9.0",
-    "next": "^14.1.0",
-    "next-auth": "^4.24.11",
+    "next": "^16.1.4",
+    "next-auth": "^4.24.13",
     "react": "^18",
     "react-data-grid": "^7.0.0-beta.47",
     "react-diff-viewer-continued": "^3.4.0",
@@ -59,14 +59,18 @@
     "@types/next": "^8.0.7",
     "@types/next-auth": "^3.15.0",
     "@types/node": "^20",
-    "@types/react": "^18.3.16",
-    "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.13",
+    "@types/react": "^18.3.17",
+    "@types/react-dom": "^18.3.1",
+    "eslint": "^9",
+    "eslint-config-next": "^16.1.4",
     "postcss": "^8.5.6",
-    "postcss-nested": "^4.2.3",
+    "postcss-nested": "^7.0.2",
     "tailwindcss": "^3.4.17",
     "terser-webpack-plugin": "^5.3.10",
     "typescript": "^5"
+  },
+  "overrides": {
+    "cookie": ">=0.7.0",
+    "quill": "^2.0.3"
   }
 }

@@ -1,16 +1,18 @@
 'use client'
 
+import { use } from 'react';
 import SchemaList from '@/components/SchemaList';
 import PromptList from '@/components/PromptList';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-export default function ModelsPage({ params }: { params: { organizationId: string } }) {
+export default function ModelsPage({ params }: { params: Promise<{ organizationId: string }> }) {
+  const { organizationId } = use(params);
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get('tab') || 'schemas';
 
   const handleTabChange = (newValue: string) => {
-    router.push(`/orgs/${params.organizationId}/models?tab=${newValue}`);
+    router.push(`/orgs/${organizationId}/models?tab=${newValue}`);
   };
 
   return (
@@ -42,10 +44,10 @@ export default function ModelsPage({ params }: { params: { organizationId: strin
 
       <div className="max-w-6xl mx-auto">
         <div role="tabpanel" hidden={tab !== 'schemas'}>
-          {tab === 'schemas' && <SchemaList organizationId={params.organizationId} />}
+          {tab === 'schemas' && <SchemaList organizationId={organizationId} />}
         </div>
         <div role="tabpanel" hidden={tab !== 'prompts'}>
-          {tab === 'prompts' && <PromptList organizationId={params.organizationId} />}
+          {tab === 'prompts' && <PromptList organizationId={organizationId} />}
         </div>
       </div>
     </div>

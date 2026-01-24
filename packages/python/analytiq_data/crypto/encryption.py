@@ -40,8 +40,10 @@ def encrypt_token(token: str, secret_name: str = "NEXTAUTH_SECRET") -> str:
     except Exception as e:
         raise ValueError(f"Encryption failed: {str(e)}")
 
-def decrypt_token(encrypted_token: str, secret_name: str = "NEXTAUTH_SECRET") -> str:
+def decrypt_token(encrypted_token: str | None, secret_name: str = "NEXTAUTH_SECRET") -> str | None:
     """Decrypt a token using AES with fixed IV"""
+    if encrypted_token is None:
+        return None
     try:
         cipher, iv = get_cipher(secret_name)
         decryptor = cipher.decryptor()

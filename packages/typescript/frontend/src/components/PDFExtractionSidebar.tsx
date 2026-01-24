@@ -41,10 +41,24 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   const [failedPrompts, setFailedPrompts] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [editMode, setEditMode] = useState<boolean>(false);
+  const [documentState, setDocumentState] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
+      let fetchedState: string | null = null;
       try {
+        // Fetch document state to check if processing
+        try {
+          const docResponse = await docRouterOrgApi.getDocument({
+            documentId: id,
+            fileType: "pdf"
+          });
+          fetchedState = docResponse.state;
+          setDocumentState(fetchedState);
+        } catch (error) {
+          console.error('Error fetching document state:', error);
+        }
+
         const promptsResponse = await docRouterOrgApi.listPrompts({document_id: id, limit: 100 });
         setMatchingPrompts(promptsResponse.prompts);
         
@@ -67,7 +81,25 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
           });
         } catch (error) {
           console.error('Error fetching default results:', error);
-          setFailedPrompts(prev => new Set(prev).add('default'));
+          // Check if document is still processing - if so, don't mark as failed
+          // Use the state we fetched at the beginning, or fetch fresh if not available
+          let currentState = fetchedState;
+          if (!currentState) {
+            try {
+              const docResponse = await docRouterOrgApi.getDocument({
+                documentId: id,
+                fileType: "pdf"
+              });
+              currentState = docResponse.state;
+              setDocumentState(currentState);
+            } catch (docError) {
+              console.error('Error fetching document state:', docError);
+            }
+          }
+          const isProcessing = currentState === 'ocr_processing' || currentState === 'llm_processing';
+          if (!isProcessing) {
+            setFailedPrompts(prev => new Set(prev).add('default'));
+          }
           setLoadingPrompts(prev => {
             const next = new Set(prev);
             next.delete('default');
@@ -81,6 +113,58 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     
     fetchData();
   }, [organizationId, id, docRouterOrgApi]);
+
+  // Poll document state when processing
+  useEffect(() => {
+    if (!documentState || (documentState !== 'ocr_processing' && documentState !== 'llm_processing')) {
+      return;
+    }
+
+    const pollInterval = setInterval(async () => {
+      try {
+        const docResponse = await docRouterOrgApi.getDocument({
+          documentId: id,
+          fileType: "pdf"
+        });
+        setDocumentState(docResponse.state);
+        
+        // If processing completed, try to fetch results again
+        if (docResponse.state === 'llm_completed' || docResponse.state === 'ocr_completed') {
+          // Try to fetch default results if not already loaded
+          if (!llmResults['default'] && !loadingPrompts.has('default') && !failedPrompts.has('default')) {
+            setLoadingPrompts(prev => new Set(prev).add('default'));
+            try {
+              const defaultResults = await docRouterOrgApi.getLLMResult({
+                documentId: id, 
+                promptRevId: 'default',
+                fallback: false
+              });
+              setLlmResults(prev => ({
+                ...prev,
+                'default': defaultResults
+              }));
+              setLoadingPrompts(prev => {
+                const next = new Set(prev);
+                next.delete('default');
+                return next;
+              });
+            } catch (error) {
+              console.error('Error fetching default results after processing:', error);
+              setLoadingPrompts(prev => {
+                const next = new Set(prev);
+                next.delete('default');
+                return next;
+              });
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error polling document state:', error);
+      }
+    }, 2000); // Poll every 2 seconds
+
+    return () => clearInterval(pollInterval);
+  }, [documentState, id, organizationId, docRouterOrgApi, llmResults, loadingPrompts, failedPrompts]);
 
   useEffect(() => {
     // Load OCR blocks in the background
@@ -98,6 +182,17 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     if (!llmResults[promptId]) {
       setLoadingPrompts(prev => new Set(prev).add(promptId));
       try {
+        // Refresh document state before fetching
+        try {
+          const docResponse = await docRouterOrgApi.getDocument({
+            documentId: id,
+            fileType: "pdf"
+          });
+          setDocumentState(docResponse.state);
+        } catch (error) {
+          console.error('Error fetching document state:', error);
+        }
+
         const results = await docRouterOrgApi.getLLMResult({
           documentId: id, 
           promptRevId: promptId,
@@ -114,7 +209,11 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
         });
       } catch (error) {
         console.error('Error fetching LLM results:', error);
-        setFailedPrompts(prev => new Set(prev).add(promptId));
+        // Check if document is still processing - if so, don't mark as failed
+        const isProcessing = documentState === 'ocr_processing' || documentState === 'llm_processing';
+        if (!isProcessing) {
+          setFailedPrompts(prev => new Set(prev).add(promptId));
+        }
       } finally {
         setLoadingPrompts(prev => {
           const newSet = new Set(prev);
@@ -564,8 +663,14 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   const renderPromptResults = (promptId: string) => {
     const result = llmResults[promptId];
     if (!result) {
-      if (loadingPrompts.has(promptId)) {
-        return <div className="p-4 text-sm text-gray-500">Loading...</div>;
+      // Check if document is still processing
+      const isProcessing = documentState === 'ocr_processing' || documentState === 'llm_processing';
+      
+      if (loadingPrompts.has(promptId) || isProcessing) {
+        const processingMessage = isProcessing 
+          ? (documentState === 'ocr_processing' ? 'Processing OCR...' : 'Processing LLM...')
+          : 'Loading...';
+        return <div className="p-4 text-sm text-gray-500">{processingMessage}</div>;
       }
       if (failedPrompts.has(promptId)) {
         return <div className="p-4 text-sm text-red-500">Failed to load results</div>;

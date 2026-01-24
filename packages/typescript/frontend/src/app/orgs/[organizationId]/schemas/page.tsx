@@ -1,16 +1,18 @@
 'use client'
 
+import { use } from 'react';
 import SchemaList from '@/components/SchemaList';
 import SchemaCreate from '@/components/SchemaCreate';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-export default function SchemasPage({ params }: { params: { organizationId: string } }) {
+export default function SchemasPage({ params }: { params: Promise<{ organizationId: string }> }) {
+  const { organizationId } = use(params);
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get('tab') || 'schemas';
 
   const handleTabChange = (newValue: string) => {
-    router.push(`/orgs/${params.organizationId}/schemas?tab=${newValue}`);
+    router.push(`/orgs/${organizationId}/schemas?tab=${newValue}`);
   };
 
   return (
@@ -43,10 +45,10 @@ export default function SchemasPage({ params }: { params: { organizationId: stri
 
         <div className="max-w-6xl mx-auto">
           <div role="tabpanel" hidden={tab !== 'schemas'}>
-            {tab === 'schemas' && <SchemaList organizationId={params.organizationId} />}
+            {tab === 'schemas' && <SchemaList organizationId={organizationId} />}
           </div>
           <div role="tabpanel" hidden={tab !== 'schema-create'}>
-            {tab === 'schema-create' && <SchemaCreate organizationId={params.organizationId} />}
+            {tab === 'schema-create' && <SchemaCreate organizationId={organizationId} />}
           </div>
         </div>
       </div>

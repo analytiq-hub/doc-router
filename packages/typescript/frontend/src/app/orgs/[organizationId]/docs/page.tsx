@@ -1,16 +1,18 @@
 'use client'
 
+import { use } from 'react';
 import DocumentList from '@/components/DocumentList';
 import DocumentUpload from '@/components/DocumentUpload';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-export default function DocumentsPage({ params }: { params: { organizationId: string } }) {
+export default function DocumentsPage({ params }: { params: Promise<{ organizationId: string }> }) {
+  const { organizationId } = use(params);
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get('tab') || 'documents';
 
   const handleTabChange = (newValue: string) => {
-    router.push(`/orgs/${params.organizationId}/docs?tab=${newValue}`);
+    router.push(`/orgs/${organizationId}/docs?tab=${newValue}`);
   };
 
   return (
@@ -44,10 +46,10 @@ export default function DocumentsPage({ params }: { params: { organizationId: st
 
       <div className="max-w-6xl mx-auto">
         <div role="tabpanel" hidden={tab !== 'documents'}>
-          {tab === 'documents' && <DocumentList organizationId={params.organizationId} />}
+          {tab === 'documents' && <DocumentList organizationId={organizationId} />}
         </div>
         <div role="tabpanel" hidden={tab !== 'upload'}>
-          {tab === 'upload' && <DocumentUpload organizationId={params.organizationId} />}
+          {tab === 'upload' && <DocumentUpload organizationId={organizationId} />}
         </div>
       </div>
     </div>

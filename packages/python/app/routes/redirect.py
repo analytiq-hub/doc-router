@@ -15,9 +15,7 @@ logger = logging.getLogger(__name__)
 redirect_router = APIRouter()
 
 # Environment variables
-NEXTAUTH_URL = os.getenv("NEXTAUTH_URL")
-if not NEXTAUTH_URL:
-    raise ValueError("NEXTAUTH_URL is not set")
+NEXTAUTH_URL = os.getenv("NEXTAUTH_URL", "http://localhost:3000")
 
 
 @redirect_router.get("/", include_in_schema=False)

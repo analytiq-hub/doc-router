@@ -61,7 +61,7 @@ async def test_webhook_config_update_all_options(test_db, mock_auth):
     assert data["auth_type"] == "header"
     assert data["auth_header_name"] == "X-Api-Key"
     assert data["auth_header_set"] is True
-    assert data["auth_header_preview"] == f"{payload['auth_header_value'][:16]}..."
+    assert data["auth_header_preview"] == f"{payload['auth_header_value'][:5]}..."
 
     secret_payload = {"secret": "whs_test_secret_value"}
     secret_response = client.put(
@@ -1240,6 +1240,10 @@ async def test_get_webhook_delivery_details(test_db, mock_auth):
 
     delivery_id = ObjectId()
     now = datetime.now(UTC)
+    
+    # Encrypt auth_header_value for the test
+    test_auth_value = "test_auth_header_value"
+    encrypted_auth_value = ad.crypto.encrypt_token(test_auth_value)
 
     await test_db[DELIVERIES_COLLECTION].insert_one({
         "_id": delivery_id,
@@ -1253,6 +1257,7 @@ async def test_get_webhook_delivery_details(test_db, mock_auth):
         "payload": {"event_id": "evt_detail", "test": True},
         "target_url": "https://example.com/webhook",
         "secret_encrypted": "should_not_be_returned",
+        "auth_header_value": encrypted_auth_value,
         "last_http_status": 200,
         "created_at": now,
         "updated_at": now,

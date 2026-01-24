@@ -1,16 +1,18 @@
 'use client'
 
+import { use } from 'react';
 import TagList from '@/components/TagList';
 import TagCreate from '@/components/TagCreate';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-export default function TagsPage({ params }: { params: { organizationId: string } }) {
+export default function TagsPage({ params }: { params: Promise<{ organizationId: string }> }) {
+  const { organizationId } = use(params);
   const searchParams = useSearchParams();
   const router = useRouter();
   const tab = searchParams.get('tab') || 'tags';
 
   const handleTabChange = (newValue: string) => {
-    router.push(`/orgs/${params.organizationId}/tags?tab=${newValue}`);
+    router.push(`/orgs/${organizationId}/tags?tab=${newValue}`);
   };
 
   return (
@@ -43,10 +45,10 @@ export default function TagsPage({ params }: { params: { organizationId: string 
 
       <div className="max-w-6xl mx-auto">
         <div role="tabpanel" hidden={tab !== 'tags'}>
-          {tab === 'tags' && <TagList organizationId={params.organizationId} />}
+          {tab === 'tags' && <TagList organizationId={organizationId} />}
         </div>
         <div role="tabpanel" hidden={tab !== 'tag-create'}>
-          {tab === 'tag-create' && <TagCreate organizationId={params.organizationId} />}
+          {tab === 'tag-create' && <TagCreate organizationId={organizationId} />}
         </div>
       </div>
     </div>
