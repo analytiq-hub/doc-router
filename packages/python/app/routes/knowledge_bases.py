@@ -205,6 +205,36 @@ async def create_vector_search_index(
     db = ad.common.get_async_db(analytiq_client)
     collection_name = f"kb_vectors_{kb_id}"
     
+    # Ensure the collection exists before creating the search index
+    # MongoDB requires the collection to exist before creating a search index
+    # We ensure it exists by inserting a temporary document (keep it until index is created)
+    collection = db[collection_name]
+    temp_doc_inserted = False
+    try:
+        # Insert a temporary document to ensure collection exists
+        # Keep it until after index creation - mongot may need the collection to have content
+        await collection.insert_one({"_id": "temp_init", "temp": True})
+        temp_doc_inserted = True
+        logger.info(f"Ensured collection {collection_name} exists for KB {kb_id}")
+    except Exception as e:
+        # If insert fails, collection might not exist - try creating it explicitly
+        logger.warning(f"Could not ensure collection exists via insert, trying create_collection: {e}")
+        try:
+            await db.create_collection(collection_name)
+            # After creating, insert temp doc to make it visible to mongot
+            await collection.insert_one({"_id": "temp_init", "temp": True})
+            temp_doc_inserted = True
+            logger.info(f"Created collection {collection_name} for KB {kb_id}")
+        except Exception as create_error:
+            # Collection might already exist, that's okay - try inserting temp doc
+            if "already exists" not in str(create_error).lower() and "NamespaceExists" not in str(create_error):
+                logger.warning(f"Collection creation issue (may already exist): {create_error}")
+            try:
+                await collection.insert_one({"_id": "temp_init", "temp": True})
+                temp_doc_inserted = True
+            except Exception:
+                pass  # Collection exists but we can't insert - proceed anyway
+    
     # For MongoDB Atlas: Use Atlas Search API
     # For self-hosted MongoDB 8.2+: Use createSearchIndexes command
     index_definition = {
@@ -234,6 +264,13 @@ async def create_vector_search_index(
             "indexes": [index_definition]
         })
         logger.info(f"Created vector search index for KB {kb_id}")
+        
+        # Clean up temporary document after successful index creation
+        if temp_doc_inserted:
+            try:
+                await collection.delete_one({"_id": "temp_init"})
+            except Exception:
+                pass  # Ignore cleanup errors
     except Exception as e:
         logger.error(f"Failed to create vector search index for KB {kb_id}: {e}")
         raise HTTPException(

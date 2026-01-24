@@ -17,6 +17,10 @@ logger = logging.getLogger(__name__)
 # Check that ENV is set to pytest
 assert os.environ["ENV"] == "pytest"
 
+# Note: Only LiteLLM API calls are mocked (to avoid external API costs and key requirements).
+# MongoDB operations, including vector search index creation, use the real MongoDB instance.
+# The test MongoDB (localhost:27017) must support vector search (mongodb-atlas-local or MongoDB 8.2+).
+
 # Mock embedding response for dimension detection
 MOCK_EMBEDDING_DIMENSIONS = 1536
 

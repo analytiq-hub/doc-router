@@ -18,12 +18,23 @@ jobs:
     runs-on: ubuntu-latest
     
     services:
-      # MongoDB service container
+      # MongoDB service container with full vector search support
+      # Using mongodb-atlas-local image which includes mongot (vector search) process
       mongodb:
-        image: mongo:6.0
+        image: mongodb/mongodb-atlas-local:latest
         ports:
           - 27017:27017
-        # No health check - we'll verify connection in a step
+        env:
+          # Optional: Set mongot log output (useful for debugging)
+          MONGOT_LOG_FILE: /dev/stdout
+          RUNNER_LOG_FILE: /dev/stdout
+        # This image includes Atlas Search and Vector Search capabilities
+        # mongot process runs automatically - no additional configuration needed
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
     - uses: actions/checkout@v3
@@ -47,13 +58,74 @@ jobs:
         uv pip install --system --no-cache-dir -r requirements.txt
         uv pip install --system --no-cache-dir pytest pytest-asyncio pymongo
     
-    - name: Verify MongoDB connection
+    - name: Verify MongoDB connection and vector search support
       run: |
-        # Use Python to verify MongoDB connection instead of shell tools
+        # Use Python to verify MongoDB connection and test vector search capability
         python -c "
         import pymongo
-        client = pymongo.MongoClient('mongodb://localhost:27017/')
-        print('MongoDB connection successful:', client.server_info())
+        import time
+        from pymongo.errors import ServerSelectionTimeoutError
+        
+        print('Waiting for MongoDB and mongot to be ready...')
+        max_attempts = 60
+        for i in range(max_attempts):
+            try:
+                client = pymongo.MongoClient(
+                    'mongodb://localhost:27017/',
+                    serverSelectionTimeoutMS=2000
+                )
+                # Test basic connection
+                client.admin.command('ping')
+                server_info = client.server_info()
+                print(f'MongoDB connection successful (attempt {i+1}/{max_attempts})')
+                print(f'MongoDB version: {server_info.get(\"version\", \"unknown\")}')
+                
+                # Test vector search capability by attempting to create a test index
+                # This verifies mongot is running and ready
+                test_db = client['test_vector_search']
+                try:
+                    test_db.command({
+                        'createSearchIndexes': 'test_vectors',
+                        'indexes': [{
+                            'name': 'test_vector_index',
+                            'type': 'vectorSearch',
+                            'definition': {
+                                'fields': [{
+                                    'type': 'vector',
+                                    'path': 'embedding',
+                                    'numDimensions': 128,
+                                    'similarity': 'cosine'
+                                }]
+                            }
+                        }]
+                    })
+                    print('✓ Vector search index creation successful - mongot is ready!')
+                    
+                    # Clean up test index
+                    try:
+                        test_db.command({
+                            'dropSearchIndexes': 'test_vectors',
+                            'index': 'test_vector_index'
+                        })
+                    except:
+                        pass
+                    
+                    break
+                except Exception as idx_error:
+                    if i < max_attempts - 1:
+                        print(f'Vector search not ready yet (attempt {i+1}/{max_attempts}): {str(idx_error)[:100]}')
+                        time.sleep(2)
+                    else:
+                        raise Exception(f'Vector search index creation failed after {max_attempts} attempts: {idx_error}')
+                        
+            except (ServerSelectionTimeoutError, Exception) as e:
+                if i < max_attempts - 1:
+                    print(f'MongoDB not ready yet (attempt {i+1}/{max_attempts}): {str(e)[:100]}')
+                    time.sleep(2)
+                else:
+                    raise Exception(f'MongoDB connection failed after {max_attempts} attempts: {e}')
+        
+        print('✓ MongoDB with full vector search support is ready!')
         "
     
     - name: Run python tests
