@@ -81,6 +81,15 @@ describe('SDK Client Unit Tests', () => {
       expect(typeof client.listTags).toBe('function');
       expect(typeof client.updateTag).toBe('function');
       expect(typeof client.deleteTag).toBe('function');
+      expect(typeof client.createKnowledgeBase).toBe('function');
+      expect(typeof client.listKnowledgeBases).toBe('function');
+      expect(typeof client.getKnowledgeBase).toBe('function');
+      expect(typeof client.updateKnowledgeBase).toBe('function');
+      expect(typeof client.deleteKnowledgeBase).toBe('function');
+      expect(typeof client.listKBDocuments).toBe('function');
+      expect(typeof client.searchKnowledgeBase).toBe('function');
+      expect(typeof client.reconcileKnowledgeBase).toBe('function');
+      expect(typeof client.reconcileAllKnowledgeBases).toBe('function');
     });
 
     test('should update org token', () => {

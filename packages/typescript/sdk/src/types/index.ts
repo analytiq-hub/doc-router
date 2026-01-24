@@ -785,3 +785,141 @@ export interface AWSConfig {
   s3_bucket_name: string;
   created_at: string;
 }
+
+// Knowledge Base types
+export type ChunkerType = "token" | "word" | "sentence" | "recursive";
+export type KBStatus = "indexing" | "active" | "error";
+
+export interface KnowledgeBaseConfig {
+  name: string;
+  description?: string;
+  tag_ids?: string[];
+  chunker_type?: ChunkerType;
+  chunk_size?: number;
+  chunk_overlap?: number;
+  embedding_model?: string;
+  coalesce_neighbors?: number;
+}
+
+export interface KnowledgeBaseUpdate {
+  name?: string;
+  description?: string;
+  tag_ids?: string[];
+  coalesce_neighbors?: number;
+}
+
+export interface KnowledgeBase extends KnowledgeBaseConfig {
+  kb_id: string;
+  embedding_dimensions: number;
+  status: KBStatus;
+  document_count: number;
+  chunk_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ListKnowledgeBasesParams {
+  skip?: number;
+  limit?: number;
+  name_search?: string;
+}
+
+export interface ListKnowledgeBasesResponse {
+  knowledge_bases: KnowledgeBase[];
+  total_count: number;
+}
+
+export interface GetKnowledgeBaseParams {
+  kbId: string;
+}
+
+export interface CreateKnowledgeBaseParams {
+  organizationId: string;
+  kb: KnowledgeBaseConfig;
+}
+
+export interface UpdateKnowledgeBaseParams {
+  kbId: string;
+  update: KnowledgeBaseUpdate;
+}
+
+export interface DeleteKnowledgeBaseParams {
+  kbId: string;
+}
+
+export interface KnowledgeBaseDocument {
+  document_id: string;
+  document_name: string;
+  chunk_count: number;
+  indexed_at: string;
+}
+
+export interface ListKBDocumentsParams {
+  kbId: string;
+  skip?: number;
+  limit?: number;
+}
+
+export interface ListKBDocumentsResponse {
+  documents: KnowledgeBaseDocument[];
+  total_count: number;
+}
+
+export interface KBSearchRequest {
+  query: string;
+  top_k?: number;
+  skip?: number;
+  document_ids?: string[];
+  metadata_filter?: Record<string, unknown>;
+  upload_date_from?: string;
+  upload_date_to?: string;
+  coalesce_neighbors?: number;
+}
+
+export interface KBSearchResult {
+  content: string;
+  source: string;
+  document_id: string;
+  relevance?: number;
+  chunk_index: number;
+  is_matched: boolean;
+}
+
+export interface KBSearchResponse {
+  results: KBSearchResult[];
+  query: string;
+  total_count: number;
+  skip: number;
+  top_k: number;
+}
+
+export interface SearchKnowledgeBaseParams {
+  kbId: string;
+  search: KBSearchRequest;
+}
+
+export interface ReconcileKnowledgeBaseParams {
+  kbId: string;
+  dry_run?: boolean;
+}
+
+export interface ReconcileKnowledgeBaseResponse {
+  kb_id: string;
+  missing_documents: string[];
+  stale_documents: string[];
+  orphaned_vectors: number;
+  missing_embeddings: number;
+  dry_run: boolean;
+}
+
+export interface ReconcileAllKnowledgeBasesParams {
+  dry_run?: boolean;
+}
+
+export interface ReconcileAllKnowledgeBasesResponse {
+  kb_results: ReconcileKnowledgeBaseResponse[];
+  total_missing: number;
+  total_stale: number;
+  total_orphaned: number;
+  dry_run: boolean;
+}

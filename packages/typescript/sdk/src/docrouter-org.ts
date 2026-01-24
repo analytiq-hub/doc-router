@@ -47,6 +47,25 @@ import {
   CreditUpdateResponse,
   UsageRangeRequest,
   UsageRangeResponse,
+  // Knowledge Bases
+  KnowledgeBase,
+  KnowledgeBaseConfig,
+  KnowledgeBaseUpdate,
+  ListKnowledgeBasesParams,
+  ListKnowledgeBasesResponse,
+  GetKnowledgeBaseParams,
+  CreateKnowledgeBaseParams,
+  UpdateKnowledgeBaseParams,
+  DeleteKnowledgeBaseParams,
+  ListKBDocumentsParams,
+  ListKBDocumentsResponse,
+  KBSearchRequest,
+  KBSearchResponse,
+  SearchKnowledgeBaseParams,
+  ReconcileKnowledgeBaseParams,
+  ReconcileKnowledgeBaseResponse,
+  ReconcileAllKnowledgeBasesParams,
+  ReconcileAllKnowledgeBasesResponse,
   // LLM Chat
   LLMChatRequest,
   LLMChatResponse,
@@ -405,6 +424,68 @@ export class DocRouterOrg {
   async listSchemaVersions(params: { schemaId: string }): Promise<ListSchemasResponse> {
     const { schemaId } = params;
     return this.http.get<ListSchemasResponse>(`/v0/orgs/${this.organizationId}/schemas/${schemaId}/versions`);
+  }
+
+  // ---------------- Knowledge Bases ----------------
+
+  async createKnowledgeBase(params: Omit<CreateKnowledgeBaseParams, 'organizationId'>): Promise<KnowledgeBase> {
+    const { kb } = params;
+    return this.http.post<KnowledgeBase>(`/v0/orgs/${this.organizationId}/knowledge-bases`, kb);
+  }
+
+  async listKnowledgeBases(params?: Omit<ListKnowledgeBasesParams, 'organizationId'>): Promise<ListKnowledgeBasesResponse> {
+    const { skip, limit, name_search } = params || {};
+    return this.http.get<ListKnowledgeBasesResponse>(`/v0/orgs/${this.organizationId}/knowledge-bases`, {
+      params: {
+        skip: skip || 0,
+        limit: limit || 10,
+        name_search: name_search
+      }
+    });
+  }
+
+  async getKnowledgeBase(params: Omit<GetKnowledgeBaseParams, 'organizationId'>): Promise<KnowledgeBase> {
+    const { kbId } = params;
+    return this.http.get<KnowledgeBase>(`/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}`);
+  }
+
+  async updateKnowledgeBase(params: Omit<UpdateKnowledgeBaseParams, 'organizationId'>): Promise<KnowledgeBase> {
+    const { kbId, update } = params;
+    return this.http.put<KnowledgeBase>(`/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}`, update);
+  }
+
+  async deleteKnowledgeBase(params: Omit<DeleteKnowledgeBaseParams, 'organizationId'>): Promise<{ message: string }> {
+    const { kbId } = params;
+    return this.http.delete<{ message: string }>(`/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}`);
+  }
+
+  async listKBDocuments(params: Omit<ListKBDocumentsParams, 'organizationId'>): Promise<ListKBDocumentsResponse> {
+    const { kbId, skip, limit } = params;
+    return this.http.get<ListKBDocumentsResponse>(`/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}/documents`, {
+      params: {
+        skip: skip || 0,
+        limit: limit || 10
+      }
+    });
+  }
+
+  async searchKnowledgeBase(params: Omit<SearchKnowledgeBaseParams, 'organizationId'>): Promise<KBSearchResponse> {
+    const { kbId, search } = params;
+    return this.http.post<KBSearchResponse>(`/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}/search`, search);
+  }
+
+  async reconcileKnowledgeBase(params: Omit<ReconcileKnowledgeBaseParams, 'organizationId'>): Promise<ReconcileKnowledgeBaseResponse> {
+    const { kbId, dry_run } = params;
+    return this.http.post<ReconcileKnowledgeBaseResponse>(`/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}/reconcile`, {}, {
+      params: { dry_run: dry_run || false }
+    });
+  }
+
+  async reconcileAllKnowledgeBases(params?: Omit<ReconcileAllKnowledgeBasesParams, 'organizationId'>): Promise<ReconcileAllKnowledgeBasesResponse> {
+    const { dry_run } = params || {};
+    return this.http.post<ReconcileAllKnowledgeBasesResponse>(`/v0/orgs/${this.organizationId}/knowledge-bases/reconcile-all`, {}, {
+      params: { dry_run: dry_run || false }
+    });
   }
 
   // ---------------- Payments ----------------
