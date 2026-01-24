@@ -54,6 +54,11 @@ async def setup_llm_providers(analytiq_client):
             if provider_config is None:
                 logger.info(f"Creating provider config for {provider}")
                 provider_config = {**config}
+                # Initialize new format fields as empty - they'll be populated below
+                provider_config["litellm_chat_models_enabled"] = []
+                provider_config["litellm_embedding_models_enabled"] = []
+                provider_config["litellm_chat_models_available"] = []
+                provider_config["litellm_embedding_models_available"] = []
                 update = True
             else:
                 # Merge config fields into provider_config, but preserve the token
@@ -86,73 +91,137 @@ async def setup_llm_providers(analytiq_client):
             # Get the litellm_models for the provider
             litellm_models = litellm.models_by_provider[config["litellm_provider"]]
             
-            # Get the available models for the provider
-            models_available = provider_config.get("litellm_models_available", [])
-            if models_available != config["litellm_models_available"]:
-                logger.info(f"Updating litellm_models_available for {provider} from {models_available} to {config['litellm_models_available']}")
-                provider_config["litellm_models_available"] = config["litellm_models_available"]
-                models_available = config["litellm_models_available"]
+            # Categorize models into chat and embedding
+            chat_models_available = []
+            embedding_models_available = []
+            
+            for model in litellm_models:
+                try:
+                    model_info = litellm.get_model_info(model)
+                    mode = model_info.get('mode', 'unknown')
+                    
+                    if mode == 'chat':
+                        chat_models_available.append(model)
+                    elif mode == 'embedding':
+                        embedding_models_available.append(model)
+                    else:
+                        # Unknown mode - default to chat for backward compatibility
+                        logger.debug(f"Model {model} has unknown mode '{mode}', categorizing as chat")
+                        chat_models_available.append(model)
+                except Exception as e:
+                    logger.warning(f"Could not determine mode for model {model}: {e}, categorizing as chat")
+                    chat_models_available.append(model)
+            
+            # Sort models to maintain consistent order
+            chat_models_available = sorted(chat_models_available)
+            embedding_models_available = sorted(embedding_models_available)
+            
+            # Get existing enabled models (preserve user selections)
+            existing_chat_enabled = provider_config.get("litellm_chat_models_enabled", [])
+            existing_embedding_enabled = provider_config.get("litellm_embedding_models_enabled", [])
+            
+            # If no existing enabled models in new format, check old format for migration
+            if not existing_chat_enabled and not existing_embedding_enabled:
+                old_enabled = provider_config.get("litellm_models_enabled", [])
+                if old_enabled:
+                    logger.info(f"Migrating enabled models from old format for provider {provider}: {old_enabled}")
+                    # Categorize old enabled models
+                    for model in old_enabled:
+                        try:
+                            model_info = litellm.get_model_info(model)
+                            mode = model_info.get('mode', 'unknown')
+                            if mode == 'embedding':
+                                existing_embedding_enabled.append(model)
+                            else:
+                                existing_chat_enabled.append(model)
+                        except Exception as e:
+                            logger.warning(f"Could not determine mode for {model}, defaulting to chat: {e}")
+                            existing_chat_enabled.append(model)
+            
+            # Filter enabled models to only include available models
+            # This ensures we don't keep models that are no longer available from LiteLLM
+            chat_models_enabled = [m for m in existing_chat_enabled if m in chat_models_available]
+            embedding_models_enabled = [m for m in existing_embedding_enabled if m in embedding_models_available]
+            
+            # Log if any enabled models were filtered out
+            filtered_chat = [m for m in existing_chat_enabled if m not in chat_models_available]
+            filtered_embedding = [m for m in existing_embedding_enabled if m not in embedding_models_available]
+            if filtered_chat:
+                logger.warning(f"Filtered out chat models that are no longer available for {provider}: {filtered_chat}")
+                logger.warning(f"These models were previously enabled but are not in LiteLLM's current model list. "
+                             f"Available chat models: {chat_models_available[:10]}...")  # Show first 10
+            if filtered_embedding:
+                logger.warning(f"Filtered out embedding models that are no longer available for {provider}: {filtered_embedding}")
+            
+            # If no models are enabled after filtering, but we had enabled models before, log a warning
+            if not chat_models_enabled and not embedding_models_enabled and (existing_chat_enabled or existing_embedding_enabled):
+                logger.error(f"WARNING: All enabled models were filtered out for provider {provider}! "
+                           f"Previously enabled: chat={existing_chat_enabled}, embedding={existing_embedding_enabled}. "
+                           f"Available: chat={len(chat_models_available)}, embedding={len(embedding_models_available)}")
+                logger.error(f"Available chat models for {provider}: {sorted(chat_models_available)}")
+                logger.error(f"Trying to find matches for enabled models...")
+                # Try to find close matches
+                for enabled_model in existing_chat_enabled:
+                    matches = [m for m in chat_models_available if enabled_model in m or m in enabled_model]
+                    if matches:
+                        logger.error(f"  Found potential matches for '{enabled_model}': {matches}")
+                    else:
+                        logger.error(f"  No matches found for '{enabled_model}'")
+            
+            # Update provider config if models changed
+            if provider_config.get("litellm_chat_models_available") != chat_models_available:
+                provider_config["litellm_chat_models_available"] = chat_models_available
                 update = True
             
-            # Get the models for the provider
-            models_enabled = provider_config.get("litellm_models_enabled", [])
-            if len(models_enabled) == 0:
-                provider_config["litellm_models_enabled"] = []
-                models_enabled = []
+            if provider_config.get("litellm_embedding_models_available") != embedding_models_available:
+                provider_config["litellm_embedding_models_available"] = embedding_models_available
+                update = True
+            
+            if provider_config.get("litellm_chat_models_enabled") != chat_models_enabled:
+                provider_config["litellm_chat_models_enabled"] = chat_models_enabled
+                update = True
+            
+            if provider_config.get("litellm_embedding_models_enabled") != embedding_models_enabled:
+                provider_config["litellm_embedding_models_enabled"] = embedding_models_enabled
+                update = True
+            
+            # Remove old format fields after migration to avoid confusion
+            if "litellm_models_available" in provider_config or "litellm_models_enabled" in provider_config:
+                provider_config.pop("litellm_models_available", None)
+                provider_config.pop("litellm_models_enabled", None)
                 update = True
 
             logger.debug(f"Litellm models: {litellm_models}")
-            logger.info(f"Models available: {models_available}")
-            logger.info(f"Models enabled: {models_enabled}")
-
-            # Avaliable models should be a subset of litellm_models
-            for model in models_available:
-                if model not in litellm_models:
-                    logger.info(f"Model {model} is not supported by {provider}, removing from provider config")
-                    provider_config["litellm_models_available"].remove(model)
-                    update = True
-            
-            # Enabled models should be a subset of litellm_models_available
-            for model in models_enabled:
-                if model not in provider_config["litellm_models_available"]:
-                    logger.info(f"Model {model} is not supported by {provider}, removing from provider config")
-                    provider_config["litellm_models_enabled"].remove(model)
-                    update = True
-
-            # Order the litellm_models_available using same order from litellm.models_by_provider. If order changes, set the update flag
-            # litellm may return a set for models; normalize to an ordered sequence for stable indexing
-            litellm_provider_key = config["litellm_provider"]
-            litellm_models_seq = list(litellm.models_by_provider.get(litellm_provider_key, []))
-            if isinstance(litellm.models_by_provider.get(litellm_provider_key, []), set):
-                litellm_models_seq = sorted(litellm.models_by_provider.get(litellm_provider_key, []))
-            model_position = {model_name: idx for idx, model_name in enumerate(litellm_models_seq)}
-            models_available_ordered = sorted(
-                provider_config["litellm_models_available"],
-                key=lambda x: model_position.get(x, float("inf"))
-            )
-            if models_available_ordered != provider_config["litellm_models_available"]:
-                logger.info(f"Litellm models available ordered: {models_available_ordered}")
-                logger.info(f"Provider config litellm_models_available: {provider_config['litellm_models_available']}")
-                provider_config["litellm_models_available"] = models_available_ordered
-                update = True
-            
-            # Order the litellm_models_enabled using same order from litellm.models_by_provider. If order changes, set the update flag
-            models_ordered = sorted(
-                provider_config["litellm_models_enabled"],
-                key=lambda x: model_position.get(x, float("inf"))
-            )
-            if models_ordered != provider_config["litellm_models_enabled"]:
-                logger.info(f"Litellm models ordered: {models_ordered}")
-                logger.info(f"Provider config litellm_models_enabled: {provider_config['litellm_models_enabled']}")
-                provider_config["litellm_models_enabled"] = models_ordered
-                update = True
+            logger.info(f"Chat models available: {len(chat_models_available)}, enabled: {len(chat_models_enabled)}")
+            logger.info(f"Embedding models available: {len(embedding_models_available)}, enabled: {len(embedding_models_enabled)}")
+            if chat_models_enabled:
+                logger.info(f"Enabled chat models for {provider}: {chat_models_enabled}")
+            if embedding_models_enabled:
+                logger.info(f"Enabled embedding models for {provider}: {embedding_models_enabled}")
 
             if update:
                 logger.info(f"Updating provider config for {provider}")
-                logger.info(f"Provider config: {provider_config}")
+                # Only set the fields we want to update, not the entire config
+                update_fields = {
+                    "litellm_chat_models_available": chat_models_available,
+                    "litellm_chat_models_enabled": chat_models_enabled,
+                    "litellm_embedding_models_available": embedding_models_available,
+                    "litellm_embedding_models_enabled": embedding_models_enabled,
+                }
+                # Remove old fields if they exist
+                unset_fields = {}
+                if "litellm_models_available" in provider_config:
+                    unset_fields["litellm_models_available"] = ""
+                if "litellm_models_enabled" in provider_config:
+                    unset_fields["litellm_models_enabled"] = ""
+                
+                update_op = {"$set": update_fields}
+                if unset_fields:
+                    update_op["$unset"] = unset_fields
+                
                 await db.llm_providers.update_one(
                     {"name": provider},
-                    {"$set": provider_config},
+                    update_op,
                     upsert=True
                 )
 

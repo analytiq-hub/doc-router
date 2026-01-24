@@ -101,3 +101,49 @@ def is_supported_model(llm_model: str) -> bool:
         return False    
     
     return True
+
+def is_embedding_model(model: str) -> bool:
+    """
+    Check if the model is an embedding model
+
+    Args:
+        model: The model name
+
+    Returns:
+        True if the model is an embedding model, False otherwise
+    """
+    try:
+        model_info = litellm.get_model_info(model)
+        if model_info.get('mode') == 'embedding':
+            return True
+    except Exception as e:
+        logger.error(f"Error checking if {model} is an embedding model: {e}")
+    
+    return False
+
+def get_embedding_dimensions(model: str) -> int | None:
+    """
+    Get embedding dimensions for a model by making a test call to LiteLLM.
+    This is a synchronous wrapper that should be used carefully.
+    
+    For async usage, use the detect_embedding_dimensions function in routes/knowledge_bases.py
+    
+    Args:
+        model: The embedding model name
+        
+    Returns:
+        Dimension count or None if detection fails
+    """
+    try:
+        # Try to get dimensions from model info if available
+        model_info = litellm.get_model_info(model)
+        # Some providers expose dimensions in model info
+        if 'dimensions' in model_info:
+            return model_info['dimensions']
+        
+        # For most models, we need to make an actual API call
+        # This is handled asynchronously in detect_embedding_dimensions
+        return None
+    except Exception as e:
+        logger.error(f"Error getting embedding dimensions for {model}: {e}")
+        return None

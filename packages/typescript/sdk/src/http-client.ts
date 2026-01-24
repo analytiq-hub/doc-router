@@ -119,7 +119,86 @@ export class HttpClient {
 
   private createApiError(error: unknown): ApiError {
     if (isAxiosError(error)) {
-      const message = error.response?.data?.detail || error.message || 'Request failed';
+      // Extract message from error response, handling both string and object details
+      let message = 'Request failed';
+      
+      // Try to get message from response data first
+      if (error.response?.data) {
+        const data = error.response.data;
+        
+        // Check for detail field
+        if (data.detail !== undefined) {
+          const detail = data.detail;
+          
+          // Handle array of validation errors (Pydantic format)
+          if (Array.isArray(detail)) {
+            const errorMessages = detail.map((err: unknown) => {
+              if (typeof err === 'object' && err !== null) {
+                const errObj = err as Record<string, unknown>;
+                if (errObj.msg && typeof errObj.msg === 'string') {
+                  const loc = errObj.loc;
+                  const location = Array.isArray(loc) ? loc.join('.') : 'field';
+                  return `${location}: ${errObj.msg}`;
+                }
+              }
+              return typeof err === 'string' ? err : JSON.stringify(err);
+            });
+            message = errorMessages.join('; ');
+          }
+          // Handle string detail
+          else if (typeof detail === 'string') {
+            message = detail;
+          }
+          // Handle object detail
+          else if (typeof detail === 'object' && detail !== null) {
+            // If detail is an object, try to extract a meaningful message
+            if ('message' in detail && typeof detail.message === 'string') {
+              message = detail.message;
+            } else {
+              message = JSON.stringify(detail);
+            }
+          } else {
+            message = String(detail);
+          }
+        } 
+        // Check if data itself is a string
+        else if (typeof data === 'string') {
+          message = data;
+        }
+        // Check if data has a message field
+        else if (typeof data === 'object' && data !== null && 'message' in data) {
+          const dataMessage = (data as { message?: unknown }).message;
+          if (typeof dataMessage === 'string') {
+            message = dataMessage;
+          } else if (dataMessage !== undefined) {
+            message = JSON.stringify(dataMessage);
+          }
+        }
+      }
+      
+      // Fallback to error.message if we still have default message
+      if (message === 'Request failed' && error.message) {
+        if (typeof error.message === 'string') {
+          message = error.message;
+        } else {
+          message = JSON.stringify(error.message);
+        }
+      }
+      
+      // Ensure message is always a string (final safety check)
+      if (typeof message !== 'string') {
+        try {
+          message = JSON.stringify(message);
+        } catch {
+          message = 'Request failed';
+        }
+      }
+      
+      // Double-check: if message is still not a string or is empty, use default
+      if (!message || typeof message !== 'string') {
+        message = 'Request failed';
+      }
+      
       const apiError: ApiError = new Error(message);
       apiError.status = error.response?.status;
       apiError.code = error.code;

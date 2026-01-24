@@ -57,13 +57,14 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
 
     try {
       const updatedModels = enabled
-        ? [...provider.litellm_models_enabled, model]
-        : provider.litellm_models_enabled.filter(m => m !== model);
+        ? [...provider.litellm_chat_models_enabled, model]
+        : provider.litellm_chat_models_enabled.filter(m => m !== model);
 
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled: provider.enabled,
         token: provider.token,
-        litellm_models_enabled: updatedModels
+        litellm_chat_models_enabled: updatedModels,
+        litellm_embedding_models_enabled: null
       });
 
       // Refresh provider data
@@ -97,7 +98,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
       minWidth: 100,
       renderCell: (params: GridRenderCellParams) => (
         <Switch
-          checked={provider?.litellm_models_enabled.includes(params.row.litellm_model)}
+          checked={provider?.litellm_chat_models_enabled?.includes(params.row.litellm_model) ?? false}
           onChange={(e) => handleToggleModel(params.row.litellm_model, e.target.checked)}
           size="small"
           color="primary"
@@ -114,7 +115,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
           variant="outlined"
           size="small"
           onClick={() => handleTestModel(params.row.litellm_model)}
-          disabled={!provider?.litellm_models_enabled.includes(params.row.litellm_model)}
+          disabled={!provider?.litellm_chat_models_enabled?.includes(params.row.litellm_model)}
         >
           Test
         </Button>

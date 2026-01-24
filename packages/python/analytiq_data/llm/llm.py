@@ -996,18 +996,18 @@ async def run_llm_chat(
     
     logger.info(f"run_llm_chat() start: model: {request.model}, stream: {request.stream}")
 
-    # Verify the model exists and is enabled
+    # Verify the chat model exists and is enabled
     db = ad.common.get_async_db()
     found = False
     for provider in await db.llm_providers.find({}).to_list(None):
-        if request.model in provider["litellm_models_enabled"]:
+        if request.model in provider.get("litellm_chat_models_enabled", []):
             found = True
             break
     if not found:
         from fastapi import HTTPException
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid model: {request.model}"
+            detail=f"Invalid chat model: {request.model}"
         )
 
     try:

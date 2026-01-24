@@ -294,8 +294,12 @@ export interface LLMProvider {
   name: string;
   display_name: string;
   litellm_provider: string;
-  litellm_models_enabled: string[];
-  litellm_models_available: string[];
+  // Chat models
+  litellm_chat_models_enabled: string[];
+  litellm_chat_models_available: string[];
+  // Embedding models
+  litellm_embedding_models_enabled: string[];
+  litellm_embedding_models_available: string[];
   enabled: boolean;
   token: string | null;
   token_created_at: string | null;
@@ -306,7 +310,8 @@ export interface ListLLMProvidersResponse {
 }
 
 export interface SetLLMProviderConfigRequest {
-  litellm_models_enabled: string[] | null;
+  litellm_chat_models_enabled: string[] | null;
+  litellm_embedding_models_enabled: string[] | null;
   enabled: boolean | null;
   token: string | null;
 }

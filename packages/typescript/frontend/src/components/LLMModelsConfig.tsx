@@ -46,13 +46,14 @@ const LLMModelsConfig: React.FC = () => {
 
     try {
       const updatedModels = enabled
-        ? [...provider.litellm_models_enabled, model]
-        : provider.litellm_models_enabled.filter(m => m !== model);
+        ? [...(provider.litellm_chat_models_enabled || []), model]
+        : (provider.litellm_chat_models_enabled || []).filter(m => m !== model);
 
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled: provider.enabled,
         token: provider.token,
-        litellm_models_enabled: updatedModels
+        litellm_chat_models_enabled: updatedModels,
+        litellm_embedding_models_enabled: null
       });
 
       // Refresh providers data
@@ -117,7 +118,7 @@ const LLMModelsConfig: React.FC = () => {
   if (error) return <div className="text-red-500">{error}</div>;
 
   const rows = providers.flatMap(provider =>
-    provider.litellm_models_available.map(modelName => {
+    (provider.litellm_chat_models_available || []).map(modelName => {
       // Find the model info by matching both provider and model name
       const modelInfo = models.find(m => 
         m.litellm_model === modelName && 
@@ -132,7 +133,7 @@ const LLMModelsConfig: React.FC = () => {
         id: `${provider.name}-${modelName}`,
         provider: provider.name,
         name: modelName,
-        enabled: provider.litellm_models_enabled.includes(modelName),
+        enabled: (provider.litellm_chat_models_enabled || []).includes(modelName),
         max_input_tokens: modelInfo?.max_input_tokens ?? 0,
         max_output_tokens: modelInfo?.max_output_tokens ?? 0,
         input_cost_per_token: modelInfo?.input_cost_per_token ?? 0,

@@ -23,8 +23,8 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI router
 llm_router = APIRouter(tags=["llm"])
 
-# LLM models
-class LLMModel(BaseModel):
+# Chat models (renamed from LLMModel for clarity)
+class ChatModel(BaseModel):
     litellm_model: str
     litellm_provider: str
     max_input_tokens: int
@@ -32,8 +32,23 @@ class LLMModel(BaseModel):
     input_cost_per_token: float
     output_cost_per_token: float
 
-class ListLLMModelsResponse(BaseModel):
-    models: List[LLMModel]
+class ListChatModelsResponse(BaseModel):
+    models: List[ChatModel]
+
+# Embedding models
+class EmbeddingModel(BaseModel):
+    litellm_model: str
+    litellm_provider: str
+    dimensions: int
+    cost_per_1k_tokens: float | None = None
+    max_input_tokens: int | None = None
+
+class ListEmbeddingModelsResponse(BaseModel):
+    models: List[EmbeddingModel]
+
+# Backward compatibility alias (deprecated, use ChatModel)
+LLMModel = ChatModel
+ListLLMModelsResponse = ListChatModelsResponse
 
 class ListOrgLLMModelsResponse(BaseModel):
     models: List[str]
@@ -49,8 +64,12 @@ class LLMProvider(BaseModel):
     name: str
     display_name: str
     litellm_provider: str
-    litellm_models_available: List[str]
-    litellm_models_enabled: List[str]
+    # Chat models
+    litellm_chat_models_available: List[str]
+    litellm_chat_models_enabled: List[str]
+    # Embedding models
+    litellm_embedding_models_available: List[str]
+    litellm_embedding_models_enabled: List[str]
     enabled: bool = False
     token: str | None = None
     token_created_at: datetime | None = None
@@ -59,7 +78,8 @@ class ListLLMProvidersResponse(BaseModel):
     providers: List[LLMProvider]
 
 class SetLLMProviderConfigRequest(BaseModel):
-    litellm_models_enabled: List[str] | None = None
+    litellm_chat_models_enabled: List[str] | None = None
+    litellm_embedding_models_enabled: List[str] | None = None
     enabled: bool | None = None
     token: str | None = None
 
@@ -398,7 +418,7 @@ async def list_org_llm_models(
     organization_id: str,
     current_user: User = Depends(get_org_user)
 ):
-    """List enabled LLM model names for the organization"""
+    """List enabled chat model names for the organization (backward compatibility)"""
     db = ad.common.get_async_db()
 
     # Retrieve only enabled providers from MongoDB
@@ -407,23 +427,23 @@ async def list_org_llm_models(
     # Get all enabled providers
     providers = await cursor.to_list(length=None)
 
-    # Collect all enabled model names
+    # Collect all enabled chat model names
     model_names = []
     for provider in providers:
-        # Only return enabled models
-        models = provider.get("litellm_models_enabled", [])
+        # Only return enabled chat models (backward compatibility)
+        models = provider.get("litellm_chat_models_enabled", [])
         model_names.extend(models)
 
     return ListOrgLLMModelsResponse(models=model_names)
 
-@llm_router.get("/v0/account/llm/models", response_model=ListLLMModelsResponse)
-async def list_llm_models(
+@llm_router.get("/v0/account/llm/chat-models", response_model=ListChatModelsResponse)
+async def list_chat_models(
     current_user: User = Depends(get_current_user),
     provider_name: str | None = Query(None, description="Filter models by provider name"),
     provider_enabled: bool | None = Query(None, description="Filter models by provider enabled status"),
-    llm_enabled: bool | None = Query(True, description="Filter models by enabled status"),
+    chat_enabled: bool | None = Query(True, description="Filter models by enabled status"),
 ):
-    """List all supported LLM models"""
+    """List all supported chat models"""
     # Import litellm here to avoid event loop warnings
     import litellm
     
@@ -432,24 +452,24 @@ async def list_llm_models(
     # Retrieve providers from MongoDB
     cursor = db.llm_providers.find({})
 
-    # Get all enabled providers
+    # Get all providers
     providers = await cursor.to_list(length=None)
 
-    # Get all available models for each provider
-    llm_models = []
+    # Get all available chat models for each provider
+    chat_models = []
     for provider in providers:
         # Skip disabled providers
-        if provider_enabled and not provider["enabled"]:
+        if provider_enabled and not provider.get("enabled", False):
             continue
 
-        if provider_name and provider_name != provider["litellm_provider"]:
+        if provider_name and provider_name != provider.get("litellm_provider"):
             continue
 
         # Which models to return?
-        if llm_enabled:
-            models = provider["litellm_models_enabled"]
+        if chat_enabled:
+            models = provider.get("litellm_chat_models_enabled", [])
         else:
-            models = provider["litellm_models_available"]
+            models = provider.get("litellm_chat_models_available", [])
 
         # Get the max input and output tokens for each model
         for model in models:
@@ -464,7 +484,7 @@ async def list_llm_models(
                 input_cost_per_token = litellm.model_cost[model].get("input_cost_per_token", 0)
                 output_cost_per_token = litellm.model_cost[model].get("output_cost_per_token", 0)
 
-            llm_model = LLMModel(
+            chat_model = ChatModel(
                 litellm_model=model,
                 litellm_provider=provider["litellm_provider"],
                 max_input_tokens=max_input_tokens,
@@ -472,10 +492,97 @@ async def list_llm_models(
                 input_cost_per_token=input_cost_per_token,
                 output_cost_per_token=output_cost_per_token,
             )
-            llm_models.append(llm_model)
-            logger.info(f"llm_model: {llm_model}")
+            chat_models.append(chat_model)
+            logger.info(f"chat_model: {chat_model}")
 
-    return ListLLMModelsResponse(models=llm_models)
+    return ListChatModelsResponse(models=chat_models)
+
+# Backward compatibility endpoint (deprecated, use /chat-models)
+@llm_router.get("/v0/account/llm/models", response_model=ListLLMModelsResponse)
+async def list_llm_models(
+    current_user: User = Depends(get_current_user),
+    provider_name: str | None = Query(None, description="Filter models by provider name"),
+    provider_enabled: bool | None = Query(None, description="Filter models by provider enabled status"),
+    llm_enabled: bool | None = Query(True, description="Filter models by enabled status"),
+):
+    """List all supported chat models (deprecated: use /chat-models)"""
+    return await list_chat_models(current_user, provider_name, provider_enabled, llm_enabled)
+
+@llm_router.get("/v0/account/llm/embedding-models", response_model=ListEmbeddingModelsResponse)
+async def list_embedding_models(
+    current_user: User = Depends(get_current_user),
+    provider_name: str | None = Query(None, description="Filter models by provider name"),
+    provider_enabled: bool | None = Query(None, description="Filter models by provider enabled status"),
+    embedding_enabled: bool | None = Query(True, description="Filter models by enabled status"),
+):
+    """List all supported embedding models"""
+    import litellm
+    import analytiq_data as ad
+    
+    db = ad.common.get_async_db()
+
+    # Retrieve providers from MongoDB
+    cursor = db.llm_providers.find({})
+
+    # Get all providers
+    providers = await cursor.to_list(length=None)
+
+    # Get all available embedding models for each provider
+    embedding_models = []
+    for provider in providers:
+        # Skip disabled providers
+        if provider_enabled and not provider.get("enabled", False):
+            continue
+
+        if provider_name and provider_name != provider.get("litellm_provider"):
+            continue
+
+        # Which models to return?
+        if embedding_enabled:
+            models = provider.get("litellm_embedding_models_enabled", [])
+        else:
+            models = provider.get("litellm_embedding_models_available", [])
+
+        # Get embedding model information
+        for model in models:
+            dimensions = 0
+            cost_per_1k_tokens = None
+            max_input_tokens = None
+            
+            try:
+                model_info = litellm.get_model_info(model)
+                # Try to get dimensions from model info
+                dimensions = model_info.get("dimensions", 0)
+                
+                # Get cost information if available
+                if model in litellm.model_cost:
+                    cost_info = litellm.model_cost[model]
+                    # Embedding models may have different cost structure
+                    cost_per_1k_tokens = cost_info.get("input_cost_per_token", 0) * 1000
+                    max_input_tokens = cost_info.get("max_input_tokens")
+                
+                # If dimensions not in model_info, we'd need to make an API call
+                # For now, we'll leave it as 0 and let the frontend handle detection
+                if dimensions == 0:
+                    # Could call detect_embedding_dimensions here, but that requires analytiq_client
+                    # For now, leave as 0 and document that dimensions should be detected on first use
+                    pass
+                    
+            except Exception as e:
+                logger.warning(f"Could not get model info for {model}: {e}")
+                # Continue with defaults
+
+            embedding_model = EmbeddingModel(
+                litellm_model=model,
+                litellm_provider=provider["litellm_provider"],
+                dimensions=dimensions,
+                cost_per_1k_tokens=cost_per_1k_tokens,
+                max_input_tokens=max_input_tokens,
+            )
+            embedding_models.append(embedding_model)
+            logger.info(f"embedding_model: {embedding_model}")
+
+    return ListEmbeddingModelsResponse(models=embedding_models)
 
 @llm_router.get("/v0/account/llm/providers", response_model=ListLLMProvidersResponse)
 async def list_llm_providers(
@@ -507,11 +614,13 @@ async def list_llm_providers(
             name=provider["name"],
             display_name=provider["display_name"],
             litellm_provider=provider["litellm_provider"],
-            litellm_models_enabled=provider["litellm_models_enabled"],
-            litellm_models_available=provider["litellm_models_available"],
-            enabled=provider["enabled"],
+            litellm_chat_models_enabled=provider.get("litellm_chat_models_enabled", []),
+            litellm_chat_models_available=provider.get("litellm_chat_models_available", []),
+            litellm_embedding_models_enabled=provider.get("litellm_embedding_models_enabled", []),
+            litellm_embedding_models_available=provider.get("litellm_embedding_models_available", []),
+            enabled=provider.get("enabled", False),
             token=token,
-            token_created_at=provider["token_created_at"]
+            token_created_at=provider.get("token_created_at")
         ))
     
     return ListLLMProvidersResponse(providers=llm_providers)
@@ -535,18 +644,39 @@ async def set_llm_provider_config(
         raise HTTPException(status_code=400, detail=f"Provider '{provider_name}' not found")
     litellm_provider = elem["litellm_provider"]
     
-    if request.litellm_models_enabled is not None:
-        if len(request.litellm_models_enabled) > 0:
-            for model in request.litellm_models_enabled:
-                if model not in elem["litellm_models_available"]:
-                    raise HTTPException(status_code=400, detail=f"Model '{model}' is not available for provider '{provider_name}'")
+    if request.litellm_chat_models_enabled is not None:
+        chat_models_available = elem.get("litellm_chat_models_available", [])
+        if len(request.litellm_chat_models_enabled) > 0:
+            for model in request.litellm_chat_models_enabled:
+                if model not in chat_models_available:
+                    raise HTTPException(status_code=400, detail=f"Chat model '{model}' is not available for provider '{provider_name}'")
         
         # Reorder the list
-        litellm_models_enabled_ordered = sorted(request.litellm_models_enabled,
-                                                key=lambda x: elem["litellm_models_available"].index(x))
+        model_position = {model_name: idx for idx, model_name in enumerate(chat_models_available)}
+        litellm_chat_models_enabled_ordered = sorted(
+            request.litellm_chat_models_enabled,
+            key=lambda x: model_position.get(x, float("inf"))
+        )
     
         # Save the reordered list
-        elem["litellm_models_enabled"] = litellm_models_enabled_ordered
+        elem["litellm_chat_models_enabled"] = litellm_chat_models_enabled_ordered
+    
+    if request.litellm_embedding_models_enabled is not None:
+        embedding_models_available = elem.get("litellm_embedding_models_available", [])
+        if len(request.litellm_embedding_models_enabled) > 0:
+            for model in request.litellm_embedding_models_enabled:
+                if model not in embedding_models_available:
+                    raise HTTPException(status_code=400, detail=f"Embedding model '{model}' is not available for provider '{provider_name}'")
+        
+        # Reorder the list
+        model_position = {model_name: idx for idx, model_name in enumerate(embedding_models_available)}
+        litellm_embedding_models_enabled_ordered = sorted(
+            request.litellm_embedding_models_enabled,
+            key=lambda x: model_position.get(x, float("inf"))
+        )
+    
+        # Save the reordered list
+        elem["litellm_embedding_models_enabled"] = litellm_embedding_models_enabled_ordered
 
     if request.enabled is not None:
         elem["enabled"] = request.enabled

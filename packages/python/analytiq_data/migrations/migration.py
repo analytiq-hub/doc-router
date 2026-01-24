@@ -1921,6 +1921,137 @@ class AddWebhookDeliveriesIndexes(Migration):
             logger.error(f"Failed to remove webhook_deliveries indexes: {e}")
             return False
 
+class SplitChatAndEmbeddingModels(Migration):
+    """
+    Migration to split llm_providers models into separate chat and embedding model lists.
+    This migration categorizes existing models using LiteLLM's get_model_info() to determine
+    if a model is a chat model (mode='chat') or embedding model (mode='embedding').
+    """
+    def __init__(self):
+        super().__init__(description="Split llm_providers models into chat and embedding model lists")
+        
+    async def up(self, db) -> bool:
+        try:
+            import litellm
+            import analytiq_data as ad
+            
+            # Process all providers
+            cursor = db.llm_providers.find({})
+            providers_updated = 0
+            
+            async for provider in cursor:
+                # Initialize new fields
+                chat_models_available = []
+                chat_models_enabled = []
+                embedding_models_available = []
+                embedding_models_enabled = []
+                
+                # Get existing models (if they exist)
+                models_available = provider.get("litellm_models_available", [])
+                models_enabled = provider.get("litellm_models_enabled", [])
+                
+                # Categorize available models
+                for model in models_available:
+                    try:
+                        model_info = litellm.get_model_info(model)
+                        mode = model_info.get('mode', 'unknown')
+                        
+                        if mode == 'chat':
+                            chat_models_available.append(model)
+                        elif mode == 'embedding':
+                            embedding_models_available.append(model)
+                        else:
+                            # Unknown mode - default to chat for backward compatibility
+                            logger.warning(f"Model {model} has unknown mode '{mode}', categorizing as chat")
+                            chat_models_available.append(model)
+                    except Exception as e:
+                        logger.warning(f"Could not determine mode for model {model}: {e}, categorizing as chat")
+                        chat_models_available.append(model)
+                
+                # Categorize enabled models
+                for model in models_enabled:
+                    try:
+                        model_info = litellm.get_model_info(model)
+                        mode = model_info.get('mode', 'unknown')
+                        
+                        if mode == 'chat':
+                            chat_models_enabled.append(model)
+                        elif mode == 'embedding':
+                            embedding_models_enabled.append(model)
+                        else:
+                            # Unknown mode - default to chat for backward compatibility
+                            logger.warning(f"Model {model} has unknown mode '{mode}', categorizing as chat")
+                            chat_models_enabled.append(model)
+                    except Exception as e:
+                        logger.warning(f"Could not determine mode for model {model}: {e}, categorizing as chat")
+                        chat_models_enabled.append(model)
+                
+                # Update provider with new fields
+                update_doc = {
+                    "litellm_chat_models_available": chat_models_available,
+                    "litellm_chat_models_enabled": chat_models_enabled,
+                    "litellm_embedding_models_available": embedding_models_available,
+                    "litellm_embedding_models_enabled": embedding_models_enabled,
+                }
+                
+                await db.llm_providers.update_one(
+                    {"_id": provider["_id"]},
+                    {"$set": update_doc}
+                )
+                
+                providers_updated += 1
+                logger.info(f"Updated provider {provider.get('name', 'unknown')}: "
+                          f"{len(chat_models_available)} chat, {len(embedding_models_available)} embedding models")
+            
+            logger.info(f"Migration completed: updated {providers_updated} providers")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Migration failed: {e}")
+            return False
+    
+    async def down(self, db) -> bool:
+        try:
+            # Merge chat and embedding models back into unified lists
+            cursor = db.llm_providers.find({})
+            providers_updated = 0
+            
+            async for provider in cursor:
+                chat_available = provider.get("litellm_chat_models_available", [])
+                embedding_available = provider.get("litellm_embedding_models_available", [])
+                chat_enabled = provider.get("litellm_chat_models_enabled", [])
+                embedding_enabled = provider.get("litellm_embedding_models_enabled", [])
+                
+                # Merge lists
+                models_available = chat_available + embedding_available
+                models_enabled = chat_enabled + embedding_enabled
+                
+                # Remove the new fields
+                await db.llm_providers.update_one(
+                    {"_id": provider["_id"]},
+                    {
+                        "$set": {
+                            "litellm_models_available": models_available,
+                            "litellm_models_enabled": models_enabled,
+                        },
+                        "$unset": {
+                            "litellm_chat_models_available": "",
+                            "litellm_chat_models_enabled": "",
+                            "litellm_embedding_models_available": "",
+                            "litellm_embedding_models_enabled": "",
+                        }
+                    }
+                )
+                
+                providers_updated += 1
+            
+            logger.info(f"Migration revert completed: updated {providers_updated} providers")
+            return True
+            
+        except Exception as e:
+            logger.error(f"Migration revert failed: {e}")
+            return False
+
 # List of all migrations in order
 MIGRATIONS = [
     OcrKeyMigration(),
@@ -1948,6 +2079,7 @@ MIGRATIONS = [
     UpgradeTokens(),
     AddAccessTokenUniquenessIndex(),
     AddWebhookDeliveriesIndexes(),
+    SplitChatAndEmbeddingModels(),
     # Add more migrations here
 ]
 

@@ -140,16 +140,16 @@ async def create_prompt(
     # Verify schema if specified
     schema = await validate_and_resolve_schema(prompt)
 
-    # Validate model exists
+    # Validate chat model exists and is enabled
     found = False
     for provider in await db.llm_providers.find({}).to_list(None):
-        if prompt.model in provider["litellm_models_enabled"]:
+        if prompt.model in provider.get("litellm_chat_models_enabled", []):
             found = True
             break
     if not found:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid model: {prompt.model}"
+            detail=f"Invalid chat model: {prompt.model}"
         )
 
     # Validate tag IDs if provided
@@ -398,16 +398,16 @@ async def update_prompt(
     # Only verify schema if one is specified
     schema = await validate_and_resolve_schema(prompt)
 
-    # Validate model exists
+    # Validate chat model exists and is enabled
     found = False
     for provider in await db.llm_providers.find({}).to_list(None):
-        if prompt.model in provider["litellm_models_enabled"]:
+        if prompt.model in provider.get("litellm_chat_models_enabled", []):
             found = True
             break
     if not found:
         raise HTTPException(
             status_code=400,
-            detail=f"Invalid model: {prompt.model}"
+            detail=f"Invalid chat model: {prompt.model}"
         )
     
     # Validate tag IDs if provided

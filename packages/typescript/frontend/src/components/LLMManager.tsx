@@ -52,7 +52,8 @@ const LLMManager: React.FC = () => {
       await docRouterAccountApi.setLLMProviderConfig(editingProvider, {
         token: editTokenValue,
         enabled: true,
-        litellm_models_enabled: null
+        litellm_chat_models_enabled: null,
+        litellm_embedding_models_enabled: null
       });
       setEditModalOpen(false);
       // Refresh the LLM providers list
@@ -69,7 +70,8 @@ const LLMManager: React.FC = () => {
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         token: null,
         enabled: false,
-        litellm_models_enabled: null
+        litellm_chat_models_enabled: null,
+        litellm_embedding_models_enabled: null
       });
       // Refresh the LLM providers list
       const response = await docRouterAccountApi.listLLMProviders();
@@ -99,7 +101,8 @@ const LLMManager: React.FC = () => {
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled,
         token: null,
-        litellm_models_enabled: null
+        litellm_chat_models_enabled: null,
+        litellm_embedding_models_enabled: null
       });
       // Refresh the LLM providers list
       const response = await docRouterAccountApi.listLLMProviders();
@@ -116,13 +119,14 @@ const LLMManager: React.FC = () => {
       if (!provider) return;
 
       const updatedModels = enabled
-        ? [...provider.litellm_models_enabled, model]
-        : provider.litellm_models_enabled.filter(m => m !== model);
+        ? [...(provider.litellm_chat_models_enabled || []), model]
+        : (provider.litellm_chat_models_enabled || []).filter(m => m !== model);
 
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled: provider.enabled,
         token: provider.token,
-        litellm_models_enabled: updatedModels
+        litellm_chat_models_enabled: updatedModels,
+        litellm_embedding_models_enabled: null
       });
       // Refresh the LLM providers list
       const response = await docRouterAccountApi.listLLMProviders();
@@ -170,15 +174,19 @@ const LLMManager: React.FC = () => {
       ),
     },
     {
-      field: 'litellm_models_enabled',
-      headerName: 'Enabled Models',
+      field: 'litellm_chat_models_enabled',
+      headerName: 'Enabled Chat Models',
       flex: 1,
       minWidth: 200,
-      renderCell: (params: GridRenderCellParams) => (
-        <span className="text-sm text-gray-600">
-          {params.value?.length || 0} {params.value?.length === 1 ? 'model' : 'models'} enabled
-        </span>
-      ),
+      renderCell: (params: GridRenderCellParams) => {
+        const chatCount = params.row.litellm_chat_models_enabled?.length || 0;
+        const embeddingCount = params.row.litellm_embedding_models_enabled?.length || 0;
+        return (
+          <span className="text-sm text-gray-600">
+            {chatCount} chat, {embeddingCount} embedding {chatCount + embeddingCount === 1 ? 'model' : 'models'} enabled
+          </span>
+        );
+      },
     },
     {
       field: 'token',
@@ -353,15 +361,33 @@ const LLMManager: React.FC = () => {
               </button>
             </div>
             <div className="max-h-96 overflow-y-auto">
-              {llmProviders.find(p => p.name === selectedProvider)?.litellm_models_available.map(model => (
-                <div key={model} className="flex items-center gap-2 py-2 border-b">
-                  <Checkbox
-                    checked={llmProviders.find(p => p.name === selectedProvider)?.litellm_models_enabled.includes(model)}
-                    onChange={(e) => handleToggleModel(selectedProvider, model, e.target.checked)}
-                  />
-                  <span>{model}</span>
-                </div>
-              ))}
+              <div className="mb-4">
+                <h3 className="font-semibold mb-2">Chat Models</h3>
+                {llmProviders.find(p => p.name === selectedProvider)?.litellm_chat_models_available.map(model => (
+                  <div key={model} className="flex items-center gap-2 py-2 border-b">
+                    <Checkbox
+                      checked={llmProviders.find(p => p.name === selectedProvider)?.litellm_chat_models_enabled?.includes(model) ?? false}
+                      onChange={(e) => handleToggleModel(selectedProvider, model, e.target.checked)}
+                    />
+                    <span>{model}</span>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <h3 className="font-semibold mb-2">Embedding Models</h3>
+                {llmProviders.find(p => p.name === selectedProvider)?.litellm_embedding_models_available.map(model => (
+                  <div key={model} className="flex items-center gap-2 py-2 border-b">
+                    <Checkbox
+                      checked={llmProviders.find(p => p.name === selectedProvider)?.litellm_embedding_models_enabled?.includes(model) ?? false}
+                      onChange={(e) => {
+                        // TODO: Implement embedding model toggle when we add embedding model management
+                        console.log('Embedding model toggle not yet implemented:', model, e.target.checked);
+                      }}
+                    />
+                    <span>{model}</span>
+                  </div>
+                ))}
+              </div>
             </div>
             <div className="flex justify-end mt-4">
               <button
