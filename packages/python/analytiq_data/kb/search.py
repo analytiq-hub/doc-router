@@ -8,9 +8,11 @@ from typing import List, Dict, Any, Optional
 from bson import ObjectId
 
 import litellm
+import stamina
 
 import analytiq_data as ad
 from .embedding_cache import get_embedding_from_cache, store_embedding_in_cache, compute_chunk_hash
+from .errors import is_retryable_embedding_error
 
 logger = logging.getLogger(__name__)
 
@@ -174,25 +176,21 @@ async def search_knowledge_base(
         # This will raise SPUCreditException if insufficient credits
         await ad.payments.check_spu_limits(organization_id, 1)
         
-        # Generate embedding
+        # Generate embedding with retry logic
         try:
-            model_info = litellm.get_model_info(embedding_model)
-            provider = model_info.get("provider")
-            api_key = await ad.llm.get_llm_key(analytiq_client, provider)
-            
-            response = await litellm.aembedding(
-                model=embedding_model,
-                input=[query],
-                api_key=api_key
+            query_embedding = await _generate_query_embedding_with_retry(
+                analytiq_client,
+                query,
+                embedding_model
             )
-            
-            query_embedding = response.data[0]["embedding"]
             
             # Cache the query embedding
             await store_embedding_in_cache(analytiq_client, query_hash, embedding_model, query_embedding)
             
             # Record SPU usage: 1 SPU per query embedding generated (cache miss)
             try:
+                model_info = litellm.get_model_info(embedding_model)
+                provider = model_info.get("provider")
                 await ad.payments.record_spu_usage(
                     org_id=organization_id,
                     spus=1,  # 1 SPU per query embedding
@@ -320,9 +318,11 @@ async def search_knowledge_base(
     # Format results
     formatted_results = []
     for result in search_results:
+        # Safely get metadata_snapshot (handle None case)
+        metadata_snapshot = result.get("metadata_snapshot") or {}
         formatted_results.append({
             "content": result.get("chunk_text", ""),
-            "source": result.get("metadata_snapshot", {}).get("document_name", "Unknown"),
+            "source": metadata_snapshot.get("document_name", "Unknown"),
             "document_id": result.get("document_id", ""),
             "relevance": result.get("relevance"),
             "chunk_index": result.get("chunk_index", 0),
@@ -333,3 +333,44 @@ async def search_knowledge_base(
         "results": formatted_results,
         "total_count": total_count
     }
+
+
+@stamina.retry(on=is_retryable_embedding_error)
+async def _generate_query_embedding_with_retry(
+    analytiq_client,
+    query: str,
+    embedding_model: str
+) -> List[float]:
+    """
+    Generate a query embedding with retry logic for transient errors.
+    
+    Uses stamina retry mechanism for transient errors (rate limits, timeouts, 503 errors).
+    
+    Args:
+        analytiq_client: The analytiq client
+        query: Query text to embed
+        embedding_model: LiteLLM embedding model string
+        
+    Returns:
+        Embedding vector as a list of floats
+        
+    Raises:
+        Exception: If embedding generation fails after retries
+    """
+    model_info = litellm.get_model_info(embedding_model)
+    provider = model_info.get("provider")
+    api_key = await ad.llm.get_llm_key(analytiq_client, provider)
+    
+    # Generate embedding via LiteLLM
+    # This will be retried automatically by stamina if it raises a retryable error
+    response = await litellm.aembedding(
+        model=embedding_model,
+        input=[query],
+        api_key=api_key
+    )
+    
+    # Validate response
+    if not response or not response.data or len(response.data) == 0:
+        raise ValueError(f"Invalid embedding response: no data returned for query")
+    
+    return response.data[0]["embedding"]

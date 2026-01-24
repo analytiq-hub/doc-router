@@ -7,6 +7,7 @@ from bson import ObjectId
 
 import analytiq_data as ad
 from analytiq_data.kb.indexing import index_document_in_kb, remove_document_from_kb
+from analytiq_data.kb.errors import is_permanent_embedding_error, set_kb_status_to_error
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +75,12 @@ async def process_kb_index_msg(analytiq_client, msg, force: bool = False):
             # Index document
             if kb_id:
                 # Index into specific KB
-                await index_document_in_kb(analytiq_client, kb_id, document_id, organization_id)
+                try:
+                    await index_document_in_kb(analytiq_client, kb_id, document_id, organization_id)
+                except Exception as e:
+                    # Error handling (including setting KB status to error) is done in index_document_in_kb
+                    # Re-raise to mark message as failed
+                    raise
             else:
                 # Find all KBs that match this document's tags
                 doc_tag_ids = await ad.common.doc.get_doc_tag_ids(analytiq_client, document_id)
@@ -106,6 +112,18 @@ async def process_kb_index_msg(analytiq_client, msg, force: bool = False):
                         )
                     except Exception as e:
                         logger.error(f"Error indexing document {document_id} into KB {kb['_id']}: {e}")
+                        # Check if this is a permanent error that should set KB status to error
+                        if is_permanent_embedding_error(e):
+                            error_msg = f"Permanent error indexing document {document_id}: {str(e)}"
+                            try:
+                                await set_kb_status_to_error(
+                                    analytiq_client,
+                                    str(kb["_id"]),
+                                    organization_id,
+                                    error_msg
+                                )
+                            except Exception as status_error:
+                                logger.error(f"Failed to set KB {kb['_id']} status to error: {status_error}")
                         # Continue with other KBs even if one fails
         
         logger.info(f"KB indexing completed for document {document_id}")

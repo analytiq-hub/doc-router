@@ -11,12 +11,18 @@ from typing import List, Dict, Any, Optional, Tuple
 from bson import ObjectId
 import tiktoken
 import litellm
+import stamina
 
 import analytiq_data as ad
 from .embedding_cache import (
     compute_chunk_hash,
     get_embedding_from_cache,
     store_embedding_in_cache
+)
+from .errors import (
+    is_retryable_embedding_error,
+    is_permanent_embedding_error,
+    set_kb_status_to_error
 )
 
 logger = logging.getLogger(__name__)
@@ -149,6 +155,7 @@ async def chunk_text(
         raise
 
 
+@stamina.retry(on=is_retryable_embedding_error)
 async def generate_embeddings_batch(
     analytiq_client,
     texts: List[str],
@@ -157,6 +164,8 @@ async def generate_embeddings_batch(
     """
     Generate embeddings for a batch of texts using LiteLLM.
     
+    Uses stamina retry mechanism for transient errors (rate limits, timeouts, 503 errors).
+    
     Args:
         analytiq_client: The analytiq client
         texts: List of text strings to embed
@@ -164,39 +173,38 @@ async def generate_embeddings_batch(
         
     Returns:
         List of embedding vectors
+        
+    Raises:
+        Exception: If embedding generation fails after retries
     """
     if not texts:
         return []
     
-    try:
-        # Get provider and API key
-        model_info = litellm.get_model_info(embedding_model)
-        provider = model_info.get("provider")
-        
-        if not provider:
-            raise ValueError(f"Could not determine provider for model {embedding_model}")
-        
-        api_key = await ad.llm.get_llm_key(analytiq_client, provider)
-        
-        if not api_key:
-            raise ValueError(f"No API key found for provider {provider}")
-        
-        # Generate embeddings via LiteLLM
-        response = await litellm.aembedding(
-            model=embedding_model,
-            input=texts,
-            api_key=api_key
-        )
-        
-        # Extract embeddings from response
-        embeddings = [item["embedding"] for item in response.data]
-        
-        logger.info(f"Generated {len(embeddings)} embeddings using {embedding_model}")
-        return embeddings
-        
-    except Exception as e:
-        logger.error(f"Error generating embeddings: {e}")
-        raise
+    # Get provider and API key
+    model_info = litellm.get_model_info(embedding_model)
+    provider = model_info.get("provider")
+    
+    if not provider:
+        raise ValueError(f"Could not determine provider for model {embedding_model}")
+    
+    api_key = await ad.llm.get_llm_key(analytiq_client, provider)
+    
+    if not api_key:
+        raise ValueError(f"No API key found for provider {provider}")
+    
+    # Generate embeddings via LiteLLM
+    # This will be retried automatically by stamina if it raises a retryable error
+    response = await litellm.aembedding(
+        model=embedding_model,
+        input=texts,
+        api_key=api_key
+    )
+    
+    # Extract embeddings from response
+    embeddings = [item["embedding"] for item in response.data]
+    
+    logger.info(f"Generated {len(embeddings)} embeddings using {embedding_model}")
+    return embeddings
 
 
 async def get_or_generate_embeddings(
@@ -464,6 +472,15 @@ async def index_document_in_kb(
         
     except Exception as e:
         logger.error(f"Error indexing document {document_id} into KB {kb_id}: {e}")
+        
+        # Check if this is a permanent error that should set KB status to error
+        if is_permanent_embedding_error(e):
+            error_msg = f"Permanent error indexing document {document_id}: {str(e)}"
+            try:
+                await set_kb_status_to_error(analytiq_client, kb_id, organization_id, error_msg)
+            except Exception as status_error:
+                logger.error(f"Failed to set KB status to error: {status_error}")
+        
         # Transaction will rollback automatically
         raise
 
