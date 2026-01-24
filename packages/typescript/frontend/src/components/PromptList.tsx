@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
-import { Tag } from '@docrouter/sdk';
-import { Prompt, Schema } from '@docrouter/sdk';
+import { Tag, Prompt, Schema } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { TextField, InputAdornment, IconButton, Menu, MenuItem, Autocomplete, Tooltip, Box } from '@mui/material';
@@ -213,7 +212,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       const promptExport = {
         name: prompt.name,
         model: prompt.model || DEFAULT_LLM_MODEL,
-        tags: prompt.tag_ids?.map(id => {
+        tags: prompt.tag_ids?.map((id: string) => {
           const tag = availableTags.find(t => t.id === id);
           return tag ? tag.name : null;
         }) || [],
