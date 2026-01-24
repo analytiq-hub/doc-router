@@ -184,6 +184,63 @@ async def detect_embedding_dimensions(embedding_model: str, analytiq_client) -> 
             detail=f"Failed to detect embedding dimensions: {str(e)}"
         )
 
+async def create_vector_search_index(
+    analytiq_client,
+    kb_id: str,
+    embedding_dimensions: int,
+    organization_id: str
+) -> None:
+    """
+    Create a vector search index on the KB's vector collection.
+    
+    Args:
+        analytiq_client: AnalytiqClient instance
+        kb_id: Knowledge base ID
+        embedding_dimensions: Number of dimensions in the embedding vectors
+        organization_id: Organization ID for filtering
+        
+    Raises:
+        HTTPException: If index creation fails
+    """
+    db = ad.common.get_async_db(analytiq_client)
+    collection_name = f"kb_vectors_{kb_id}"
+    
+    # For MongoDB Atlas: Use Atlas Search API
+    # For self-hosted MongoDB 8.2+: Use createSearchIndexes command
+    index_definition = {
+        "name": "kb_vector_index",
+        "type": "vectorSearch",
+        "definition": {
+            "fields": [
+                {
+                    "type": "vector",
+                    "path": "embedding",
+                    "numDimensions": embedding_dimensions,
+                    "similarity": "cosine"
+                },
+                {
+                    "type": "filter",
+                    "path": "organization_id"
+                }
+            ]
+        }
+    }
+    
+    # Create the search index - fail if this doesn't work
+    try:
+        # Use createSearchIndexes command (works for both Atlas and self-hosted 8.2+)
+        await db.command({
+            "createSearchIndexes": collection_name,
+            "indexes": [index_definition]
+        })
+        logger.info(f"Created vector search index for KB {kb_id}")
+    except Exception as e:
+        logger.error(f"Failed to create vector search index for KB {kb_id}: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to create vector search index: {str(e)}. Ensure MongoDB supports vector search (Atlas or 8.2+)."
+        )
+
 async def validate_tag_ids(tag_ids: List[str], organization_id: str, analytiq_client) -> None:
     """
     Validate that all tag IDs exist and belong to the organization.
@@ -256,7 +313,7 @@ async def create_knowledge_base(
         "embedding_model": config.embedding_model,
         "embedding_dimensions": embedding_dimensions,
         "coalesce_neighbors": config.coalesce_neighbors,
-        "status": "indexing",  # Will transition to "active" once index is ready
+        "status": "indexing",  # Will be set to "active" after index creation
         "document_count": 0,
         "chunk_count": 0,
         "created_at": now,
@@ -266,12 +323,30 @@ async def create_knowledge_base(
     result = await db.knowledge_bases.insert_one(kb_doc)
     kb_id = str(result.inserted_id)
     
-    # TODO: Create vector search index (async, will transition status to "active" when ready)
-    # For now, set status to "active" immediately
-    await db.knowledge_bases.update_one(
-        {"_id": ObjectId(kb_id)},
-        {"$set": {"status": "active"}}
-    )
+    # Create vector search index (await completion)
+    # For a new empty KB, this should be fast
+    # If this fails, we'll delete the KB and return an error
+    try:
+        await create_vector_search_index(
+            analytiq_client,
+            kb_id,
+            embedding_dimensions,
+            organization_id
+        )
+        # Update status to active after successful index creation
+        await db.knowledge_bases.update_one(
+            {"_id": ObjectId(kb_id)},
+            {"$set": {"status": "active", "updated_at": datetime.now(UTC)}}
+        )
+    except HTTPException:
+        # If index creation fails, clean up the KB and re-raise the exception
+        await db.knowledge_bases.delete_one({"_id": ObjectId(kb_id)})
+        # Also clean up the vector collection if it was created
+        try:
+            await db[f"kb_vectors_{kb_id}"].drop()
+        except Exception:
+            pass  # Collection may not exist
+        raise  # Re-raise the HTTPException
     
     # Fetch and return created KB
     kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id)})
