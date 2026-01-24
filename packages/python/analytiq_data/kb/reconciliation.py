@@ -9,7 +9,7 @@ This service detects and fixes drift between document tags and KB indexes:
 """
 
 import logging
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
 from typing import List, Dict, Any, Optional
 from bson import ObjectId
 
@@ -18,6 +18,119 @@ from .indexing import remove_document_from_kb
 from .embedding_cache import get_embedding_from_cache
 
 logger = logging.getLogger(__name__)
+
+# Lock collection for distributed reconciliation coordination
+RECONCILIATION_LOCKS_COLLECTION = "kb_reconciliation_locks"
+# Lock TTL: 10 minutes (reconciliation should complete well before this)
+RECONCILIATION_LOCK_TTL_SECS = 600
+
+
+async def ensure_reconciliation_lock_indexes(analytiq_client) -> None:
+    """
+    Ensure indexes exist on the reconciliation locks collection.
+    Called lazily on first use.
+    """
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    collection = db[RECONCILIATION_LOCKS_COLLECTION]
+    
+    try:
+        # Create unique index on kb_id to ensure only one lock per KB
+        await collection.create_index(
+            [("kb_id", 1)],
+            unique=True,
+            name="kb_id_unique_idx",
+            background=True
+        )
+        logger.info(f"Created unique index on {RECONCILIATION_LOCKS_COLLECTION}.kb_id")
+    except Exception as e:
+        # Index might already exist, that's fine
+        if "already exists" not in str(e).lower() and "duplicate key" not in str(e).lower():
+            logger.warning(f"Could not create index on {RECONCILIATION_LOCKS_COLLECTION}: {e}")
+    
+    try:
+        # Create TTL index on expires_at for automatic cleanup of expired locks
+        await collection.create_index(
+            [("expires_at", 1)],
+            expireAfterSeconds=0,  # Delete documents when expires_at is reached
+            name="expires_at_ttl_idx",
+            background=True
+        )
+        logger.info(f"Created TTL index on {RECONCILIATION_LOCKS_COLLECTION}.expires_at")
+    except Exception as e:
+        # Index might already exist, that's fine
+        if "already exists" not in str(e).lower() and "duplicate key" not in str(e).lower():
+            logger.warning(f"Could not create TTL index on {RECONCILIATION_LOCKS_COLLECTION}: {e}")
+
+
+async def acquire_reconciliation_lock(
+    analytiq_client,
+    kb_id: str,
+    worker_id: str
+) -> bool:
+    """
+    Try to acquire a distributed lock for KB reconciliation.
+    
+    Uses atomic find_one_and_update to ensure only one pod reconciles a KB at a time.
+    Lock expires after RECONCILIATION_LOCK_TTL_SECS to handle crashed workers.
+    
+    Returns:
+        True if lock was acquired, False if another pod already has the lock
+    """
+    # Ensure indexes exist (idempotent, safe to call multiple times)
+    await ensure_reconciliation_lock_indexes(analytiq_client)
+    
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    now = datetime.now(UTC)
+    lock_expires_at = now + timedelta(seconds=RECONCILIATION_LOCK_TTL_SECS)
+    
+    # Try to acquire lock atomically
+    # Only succeeds if lock doesn't exist or has expired
+    # This is atomic - no race condition possible
+    result = await db[RECONCILIATION_LOCKS_COLLECTION].find_one_and_update(
+        {
+            "kb_id": kb_id,
+            "$or": [
+                {"expires_at": {"$lt": now}},  # Expired lock
+                {"expires_at": {"$exists": False}},  # No expires_at field (old lock format)
+                {"expires_at": None}  # Null expires_at
+            ]
+        },
+        {
+            "$set": {
+                "kb_id": kb_id,
+                "worker_id": worker_id,
+                "acquired_at": now,
+                "expires_at": lock_expires_at
+            }
+        },
+        upsert=True,
+        return_document=True
+    )
+    
+    # If result is None, another pod has a valid lock
+    # If result exists, we successfully acquired it (either created new or took expired one)
+    if result is None:
+        return False
+    
+    # Verify we got the lock (check worker_id matches - should always be true after successful update)
+    return result.get("worker_id") == worker_id
+
+
+async def release_reconciliation_lock(
+    analytiq_client,
+    kb_id: str,
+    worker_id: str
+) -> None:
+    """
+    Release a reconciliation lock.
+    
+    Only releases if this worker_id owns the lock (safety check).
+    """
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    await db[RECONCILIATION_LOCKS_COLLECTION].delete_one({
+        "kb_id": kb_id,
+        "worker_id": worker_id
+    })
 
 
 async def reconcile_knowledge_base(
@@ -146,6 +259,13 @@ async def reconcile_knowledge_base(
     
     logger.info(f"Reconciliation for KB {kb_id}: {len(results['missing_documents'])} missing, "
                 f"{len(results['stale_documents'])} stale, {results['orphaned_vectors']} orphaned vectors")
+    
+    # Update last_reconciled_at timestamp (only if not dry_run)
+    if not dry_run:
+        await db.knowledge_bases.update_one(
+            {"_id": ObjectId(kb_id)},
+            {"$set": {"last_reconciled_at": datetime.now(UTC)}}
+        )
     
     return results
 

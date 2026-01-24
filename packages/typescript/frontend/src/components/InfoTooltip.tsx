@@ -17,6 +17,7 @@ const InfoTooltip: React.FC<InfoTooltipProps> = ({ title, content, width = "md:w
   return (
     <div className="relative inline-block align-middle -mt-0.5">
       <button
+        type="button"
         onClick={() => setIsOpen(!isOpen)}
         className="text-gray-500 hover:text-gray-700 focus:outline-none align-middle"
         style={{ verticalAlign: 'middle', transform: 'translateY(-1px)' }}

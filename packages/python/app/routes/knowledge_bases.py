@@ -45,6 +45,8 @@ class KnowledgeBaseConfig(BaseModel):
     chunk_overlap: int = Field(default=DEFAULT_CHUNK_OVERLAP, description="Overlap tokens between chunks")
     embedding_model: str = Field(default=DEFAULT_EMBEDDING_MODEL, description="LiteLLM embedding model")
     coalesce_neighbors: int = Field(default=DEFAULT_COALESCE_NEIGHBORS, description="Number of neighboring chunks to include (0-5)")
+    reconcile_enabled: bool = Field(default=False, description="Enable periodic automatic reconciliation")
+    reconcile_interval_seconds: Optional[int] = Field(default=None, ge=60, description="Reconciliation interval in seconds (minimum 60), required if reconcile_enabled=True")
     
     @field_validator('chunker_type')
     @classmethod
@@ -80,12 +82,22 @@ class KnowledgeBaseConfig(BaseModel):
         if v < 0 or v > MAX_COALESCE_NEIGHBORS:
             raise ValueError(f"coalesce_neighbors must be between 0 and {MAX_COALESCE_NEIGHBORS}")
         return v
+    
+    @model_validator(mode='after')
+    def validate_reconcile_config(self):
+        if self.reconcile_enabled and self.reconcile_interval_seconds is None:
+            raise ValueError("reconcile_interval_seconds is required when reconcile_enabled=True")
+        if not self.reconcile_enabled and self.reconcile_interval_seconds is not None:
+            raise ValueError("reconcile_interval_seconds should not be set when reconcile_enabled=False")
+        return self
 
 class KnowledgeBaseUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     tag_ids: Optional[List[str]] = None
     coalesce_neighbors: Optional[int] = None
+    reconcile_enabled: Optional[bool] = None
+    reconcile_interval_seconds: Optional[int] = Field(default=None, ge=60, description="Reconciliation interval in seconds (minimum 60)")
     
     @field_validator('coalesce_neighbors')
     @classmethod
@@ -93,6 +105,14 @@ class KnowledgeBaseUpdate(BaseModel):
         if v is not None and (v < 0 or v > MAX_COALESCE_NEIGHBORS):
             raise ValueError(f"coalesce_neighbors must be between 0 and {MAX_COALESCE_NEIGHBORS}")
         return v
+    
+    @model_validator(mode='after')
+    def validate_reconcile_config(self):
+        if self.reconcile_enabled is True and self.reconcile_interval_seconds is None:
+            raise ValueError("reconcile_interval_seconds is required when reconcile_enabled=True")
+        if self.reconcile_enabled is False and self.reconcile_interval_seconds is not None:
+            raise ValueError("reconcile_interval_seconds should not be set when reconcile_enabled=False")
+        return self
 
 class KnowledgeBase(KnowledgeBaseConfig):
     kb_id: str
@@ -422,6 +442,9 @@ async def create_knowledge_base(
         "embedding_model": config.embedding_model,
         "embedding_dimensions": embedding_dimensions,
         "coalesce_neighbors": config.coalesce_neighbors,
+        "reconcile_enabled": config.reconcile_enabled,
+        "reconcile_interval_seconds": config.reconcile_interval_seconds,
+        "last_reconciled_at": None,
         "status": "indexing",  # Will be set to "active" after index creation
         "document_count": 0,
         "chunk_count": 0,
@@ -459,16 +482,15 @@ async def create_knowledge_base(
     
     # Fetch and return created KB
     kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id)})
-    return KnowledgeBase(
-        kb_id=kb_id,
-        embedding_dimensions=kb["embedding_dimensions"],
-        status=kb["status"],
-        document_count=kb["document_count"],
-        chunk_count=kb["chunk_count"],
-        created_at=kb["created_at"],
-        updated_at=kb["updated_at"],
-        **config.model_dump()
-    )
+    kb_dict = config.model_dump()
+    kb_dict["kb_id"] = kb_id
+    kb_dict["embedding_dimensions"] = kb["embedding_dimensions"]
+    kb_dict["status"] = kb["status"]
+    kb_dict["document_count"] = kb["document_count"]
+    kb_dict["chunk_count"] = kb["chunk_count"]
+    kb_dict["created_at"] = kb["created_at"]
+    kb_dict["updated_at"] = kb["updated_at"]
+    return KnowledgeBase(**kb_dict)
 
 @knowledge_bases_router.get("/v0/orgs/{organization_id}/knowledge-bases", response_model=ListKnowledgeBasesResponse)
 async def list_knowledge_bases(
@@ -508,10 +530,12 @@ async def list_knowledge_bases(
             tag_ids=kb.get("tag_ids", []),
             chunker_type=kb["chunker_type"],
             chunk_size=kb["chunk_size"],
-            chunk_overlap=kb["chunk_overlap"],
-            embedding_model=kb["embedding_model"],
-            coalesce_neighbors=kb.get("coalesce_neighbors", 0)
-        )
+        chunk_overlap=kb["chunk_overlap"],
+        embedding_model=kb["embedding_model"],
+        coalesce_neighbors=kb.get("coalesce_neighbors", 0),
+        reconcile_enabled=kb.get("reconcile_enabled", False),
+        reconcile_interval_seconds=kb.get("reconcile_interval_seconds")
+    )
         for kb in kbs
     ]
     
@@ -553,7 +577,9 @@ async def get_knowledge_base(
         chunk_size=kb["chunk_size"],
         chunk_overlap=kb["chunk_overlap"],
         embedding_model=kb["embedding_model"],
-        coalesce_neighbors=kb.get("coalesce_neighbors", 0)
+        coalesce_neighbors=kb.get("coalesce_neighbors", 0),
+        reconcile_enabled=kb.get("reconcile_enabled", False),
+        reconcile_interval_seconds=kb.get("reconcile_interval_seconds")
     )
 
 @knowledge_bases_router.put("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}", response_model=KnowledgeBase)
@@ -590,6 +616,10 @@ async def update_knowledge_base(
         update_dict["tag_ids"] = update.tag_ids
     if update.coalesce_neighbors is not None:
         update_dict["coalesce_neighbors"] = update.coalesce_neighbors
+    if update.reconcile_enabled is not None:
+        update_dict["reconcile_enabled"] = update.reconcile_enabled
+    if update.reconcile_interval_seconds is not None:
+        update_dict["reconcile_interval_seconds"] = update.reconcile_interval_seconds
     
     # Update KB
     await db.knowledge_bases.update_one(
@@ -614,7 +644,9 @@ async def update_knowledge_base(
         chunk_size=updated_kb["chunk_size"],
         chunk_overlap=updated_kb["chunk_overlap"],
         embedding_model=updated_kb["embedding_model"],
-        coalesce_neighbors=updated_kb.get("coalesce_neighbors", 0)
+        coalesce_neighbors=updated_kb.get("coalesce_neighbors", 0),
+        reconcile_enabled=updated_kb.get("reconcile_enabled", False),
+        reconcile_interval_seconds=updated_kb.get("reconcile_interval_seconds")
     )
 
 @knowledge_bases_router.delete("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}")
@@ -764,6 +796,20 @@ async def reconcile_knowledge_base_endpoint(
     """Reconcile a knowledge base (fix drift between tags and indexes)"""
     analytiq_client = ad.common.get_analytiq_client()
     
+    # Acquire lock to ensure only one reconciliation runs at a time (even for manual triggers)
+    worker_id = f"api_{current_user.user_id}"
+    lock_acquired = await ad.kb.reconciliation.acquire_reconciliation_lock(
+        analytiq_client,
+        kb_id,
+        worker_id
+    )
+    
+    if not lock_acquired:
+        raise HTTPException(
+            status_code=409,
+            detail=f"KB {kb_id} is currently being reconciled by another process. Please try again later."
+        )
+    
     try:
         results = await ad.kb.reconciliation.reconcile_knowledge_base(
             analytiq_client=analytiq_client,
@@ -777,6 +823,13 @@ async def reconcile_knowledge_base_endpoint(
     except Exception as e:
         logger.error(f"Error reconciling KB {kb_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Reconciliation failed: {str(e)}")
+    finally:
+        # Always release lock, even on error
+        await ad.kb.reconciliation.release_reconciliation_lock(
+            analytiq_client,
+            kb_id,
+            worker_id
+        )
 
 @knowledge_bases_router.post("/v0/orgs/{organization_id}/knowledge-bases/reconcile-all")
 async def reconcile_all_knowledge_bases_endpoint(

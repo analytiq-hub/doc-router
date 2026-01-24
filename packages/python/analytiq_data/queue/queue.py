@@ -19,6 +19,19 @@ def get_queue_collection_name(queue_name: str) -> str:
     """
     return f"queues.{queue_name}"
 
+def get_kb_queue_name(kb_id: str) -> str:
+    """
+    Get the queue name for a specific KB.
+    Each KB has its own queue to ensure sequential processing per KB.
+    
+    Args:
+        kb_id: Knowledge base ID
+        
+    Returns:
+        str: Queue name for the KB (e.g., "kb_index_507f1f77bcf86cd799439011")
+    """
+    return f"kb_index_{kb_id}"
+
 async def send_msg(
     analytiq_client,
     queue_name: str,

@@ -131,6 +131,99 @@ async def worker_kb_index(worker_id: str) -> None:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)  # Sleep longer on errors to prevent tight loop
 
+async def worker_kb_reconcile(worker_id: str) -> None:
+    """
+    Worker for periodic KB reconciliation.
+    
+    Checks KBs with reconcile_enabled=True and runs reconciliation
+    if reconcile_interval_seconds has passed since last_reconciled_at.
+    """
+    ENV = os.getenv("ENV", "dev")
+    analytiq_client = ad.common.get_analytiq_client(env=ENV, name=worker_id)
+    logger.info(f"Starting KB reconciliation worker {worker_id}")
+    
+    last_heartbeat = datetime.now(UTC)
+    CHECK_INTERVAL_SECS = 10  # Check every 10 seconds for KBs that need reconciliation
+    
+    while True:
+        try:
+            now = datetime.now(UTC)
+            
+            # Log heartbeat every 10 minutes
+            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
+                logger.info(f"KB reconciliation worker {worker_id} heartbeat")
+                last_heartbeat = now
+            
+            # Find KBs with periodic reconciliation enabled
+            db = analytiq_client.mongodb_async[ENV]
+            kbs = await db.knowledge_bases.find({
+                "reconcile_enabled": True,
+                "status": {"$in": ["indexing", "active"]}
+            }).to_list(length=None)
+            
+            for kb in kbs:
+                kb_id = str(kb["_id"])
+                organization_id = kb["organization_id"]
+                reconcile_interval = kb.get("reconcile_interval_seconds")
+                last_reconciled = kb.get("last_reconciled_at")
+                
+                if not reconcile_interval:
+                    continue
+                
+                # Check if reconciliation is due
+                should_reconcile = False
+                if last_reconciled is None:
+                    # Never reconciled, do it now
+                    should_reconcile = True
+                else:
+                    # Check if interval has passed
+                    # last_reconciled might be a datetime or None
+                    if isinstance(last_reconciled, datetime):
+                        time_since_reconcile = (now - last_reconciled).total_seconds()
+                        if time_since_reconcile >= reconcile_interval:
+                            should_reconcile = True
+                    else:
+                        # Invalid timestamp, reconcile now
+                        should_reconcile = True
+                
+                if should_reconcile:
+                    # Try to acquire distributed lock to ensure only one pod reconciles
+                    lock_acquired = await ad.kb.reconciliation.acquire_reconciliation_lock(
+                        analytiq_client,
+                        kb_id,
+                        worker_id
+                    )
+                    
+                    if not lock_acquired:
+                        # Another pod is already reconciling this KB, skip
+                        logger.debug(f"KB {kb_id} is already being reconciled by another pod, skipping")
+                        continue
+                    
+                    try:
+                        logger.info(f"Running periodic reconciliation for KB {kb_id} (interval: {reconcile_interval}s)")
+                        await ad.kb.reconciliation.reconcile_knowledge_base(
+                            analytiq_client,
+                            kb_id,
+                            organization_id,
+                            dry_run=False
+                        )
+                    except Exception as e:
+                        logger.error(f"Error reconciling KB {kb_id}: {e}")
+                    finally:
+                        # Always release lock, even on error
+                        await ad.kb.reconciliation.release_reconciliation_lock(
+                            analytiq_client,
+                            kb_id,
+                            worker_id
+                        )
+            
+            # Sleep before next check
+            await asyncio.sleep(CHECK_INTERVAL_SECS)
+            
+        except Exception as e:
+            logger.error(f"KB reconciliation worker {worker_id} encountered error: {str(e)}")
+            await asyncio.sleep(30)  # Sleep longer on errors
+
 async def worker_webhook(worker_id: str) -> None:
     """
     Worker for outbound webhook deliveries.
@@ -172,13 +265,15 @@ async def main():
     N_WORKERS = int(os.getenv("N_WORKERS", "1"))
 
     # Create N_WORKERS workers of worker_ocr, worker_llm, worker_kb_index, and worker_webhook
+    # Only one KB reconciliation worker needed (checks all KBs periodically)
     ocr_workers = [worker_ocr(f"ocr_{i}") for i in range(N_WORKERS)]
     llm_workers = [worker_llm(f"llm_{i}") for i in range(N_WORKERS)]
     kb_index_workers = [worker_kb_index(f"kb_index_{i}") for i in range(N_WORKERS)]
     webhook_workers = [worker_webhook(f"webhook_{i}") for i in range(N_WORKERS)]
+    kb_reconcile_worker = [worker_kb_reconcile("kb_reconcile_0")]
 
     # Run all workers concurrently
-    await asyncio.gather(*ocr_workers, *llm_workers, *kb_index_workers, *webhook_workers)
+    await asyncio.gather(*ocr_workers, *llm_workers, *kb_index_workers, *webhook_workers, *kb_reconcile_worker)
 
 if __name__ == "__main__":
     try:    

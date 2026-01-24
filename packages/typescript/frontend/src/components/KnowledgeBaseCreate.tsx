@@ -30,7 +30,9 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
     chunk_size: DEFAULT_CHUNK_SIZE,
     chunk_overlap: DEFAULT_CHUNK_OVERLAP,
     embedding_model: DEFAULT_EMBEDDING_MODEL,
-    coalesce_neighbors: DEFAULT_COALESCE_NEIGHBORS
+    coalesce_neighbors: DEFAULT_COALESCE_NEIGHBORS,
+    reconcile_enabled: false,
+    reconcile_interval_seconds: undefined
   });
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [availableEmbeddingModels, setAvailableEmbeddingModels] = useState<LLMEmbeddingModel[]>([]);
@@ -78,7 +80,9 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
             chunk_size: kb.chunk_size,
             chunk_overlap: kb.chunk_overlap,
             embedding_model: kb.embedding_model,
-            coalesce_neighbors: kb.coalesce_neighbors || 0
+            coalesce_neighbors: kb.coalesce_neighbors || 0,
+            reconcile_enabled: kb.reconcile_enabled || false,
+            reconcile_interval_seconds: kb.reconcile_interval_seconds
           });
           setIsEditing(true);
         } catch (error) {
@@ -120,7 +124,9 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
             name: currentKB.name,
             description: currentKB.description,
             tag_ids: currentKB.tag_ids,
-            coalesce_neighbors: currentKB.coalesce_neighbors
+            coalesce_neighbors: currentKB.coalesce_neighbors,
+            reconcile_enabled: currentKB.reconcile_enabled,
+            reconcile_interval_seconds: currentKB.reconcile_interval_seconds
           }
         });
         toast.success('Knowledge base updated successfully');
@@ -330,6 +336,60 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
               title="Coalesce Neighbors"
               content="Number of neighboring chunks to include in search results for context. 0 means only return matched chunks."
             />
+          </div>
+
+          {/* Reconciliation Configuration - Editable */}
+          <div className="border-t pt-4 space-y-4">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-700">Periodic Reconciliation</h3>
+              <InfoTooltip 
+                title="Periodic Reconciliation"
+                content="Automatically reconcile the knowledge base to fix drift between document tags and indexes. Reconciliation detects missing documents, stale documents, and orphaned vectors."
+              />
+            </div>
+            
+            <div className="flex items-center gap-4">
+              <label htmlFor="reconcile-enabled" className="w-40 text-sm font-medium text-gray-700">
+                Enable Reconciliation
+              </label>
+              <input
+                id="reconcile-enabled"
+                type="checkbox"
+                className="w-4 h-4"
+                checked={currentKB.reconcile_enabled || false}
+                onChange={e => {
+                  const enabled = e.target.checked;
+                  setCurrentKB({ 
+                    ...currentKB, 
+                    reconcile_enabled: enabled,
+                    reconcile_interval_seconds: enabled && !currentKB.reconcile_interval_seconds ? 60 : currentKB.reconcile_interval_seconds
+                  });
+                }}
+                disabled={isLoading}
+              />
+            </div>
+
+            {currentKB.reconcile_enabled && (
+              <div className="flex items-center gap-4">
+                <label htmlFor="reconcile-interval" className="w-40 text-sm font-medium text-gray-700">
+                  Interval (seconds)
+                </label>
+                <input
+                  id="reconcile-interval"
+                  type="number"
+                  min={60}
+                  className="flex-1 p-2 border rounded disabled:bg-gray-100"
+                  value={currentKB.reconcile_interval_seconds || 60}
+                  onChange={e => setCurrentKB({ 
+                    ...currentKB, 
+                    reconcile_interval_seconds: parseInt(e.target.value) || undefined 
+                  })}
+                  disabled={isLoading}
+                  required={currentKB.reconcile_enabled}
+                />
+                <span className="text-sm text-gray-500 w-32">Minimum 60 seconds</span>
+              </div>
+            )}
           </div>
 
           {/* Action Buttons */}

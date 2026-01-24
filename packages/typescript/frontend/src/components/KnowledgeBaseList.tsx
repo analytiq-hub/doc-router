@@ -12,6 +12,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import BadgeIcon from '@mui/icons-material/Badge';
 import SearchOutlinedIcon from '@mui/icons-material/SearchOutlined';
 import FolderIcon from '@mui/icons-material/Folder';
+import SyncIcon from '@mui/icons-material/Sync';
 import colors from 'tailwindcss/colors';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
@@ -116,6 +117,24 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
   const handleViewDocuments = (kb: KnowledgeBase) => {
     router.push(`/orgs/${organizationId}/knowledge-bases?tab=documents&kbId=${kb.kb_id}`);
     handleMenuClose();
+  };
+
+  const handleReconcile = async (kb: KnowledgeBase) => {
+    handleMenuClose();
+    try {
+      const result = await docRouterOrgApi.reconcileKnowledgeBase({ 
+        kbId: kb.kb_id,
+        dry_run: false 
+      });
+      toast.success(
+        `Reconciliation complete: ${result.missing_documents.length} missing, ` +
+        `${result.stale_documents.length} stale, ${result.orphaned_vectors} orphaned vectors`
+      );
+      // Reload KBs to get updated last_reconciled_at
+      loadKnowledgeBases();
+    } catch (error) {
+      toast.error(`Reconciliation failed: ${getApiErrorMsg(error)}`);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -421,6 +440,15 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
           </MenuItem>
           <MenuItem 
             onClick={() => {
+              if (selectedKB) handleReconcile(selectedKB);
+            }}
+            className="flex items-center gap-2"
+          >
+            <SyncIcon fontSize="small" className="text-blue-600" />
+            <span>Reconcile</span>
+          </MenuItem>
+          <MenuItem 
+            onClick={() => {
               if (selectedKB) handleDelete(selectedKB.kb_id);
             }}
             className="flex items-center gap-2"
@@ -439,6 +467,8 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
               setSelectedKB(null);
             }}
             kb={selectedKB}
+            organizationId={organizationId}
+            onReconcile={loadKnowledgeBases}
           />
         )}
       </div>

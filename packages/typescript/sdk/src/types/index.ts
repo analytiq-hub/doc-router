@@ -840,6 +840,8 @@ export interface KnowledgeBaseConfig {
   chunk_overlap?: number;
   embedding_model?: string;
   coalesce_neighbors?: number;
+  reconcile_enabled?: boolean;
+  reconcile_interval_seconds?: number;
 }
 
 export interface KnowledgeBaseUpdate {
@@ -847,6 +849,8 @@ export interface KnowledgeBaseUpdate {
   description?: string;
   tag_ids?: string[];
   coalesce_neighbors?: number;
+  reconcile_enabled?: boolean;
+  reconcile_interval_seconds?: number;
 }
 
 export interface KnowledgeBase extends KnowledgeBaseConfig {
@@ -857,6 +861,7 @@ export interface KnowledgeBase extends KnowledgeBaseConfig {
   chunk_count: number;
   created_at: string;
   updated_at: string;
+  last_reconciled_at?: string;
 }
 
 export interface ListKnowledgeBasesParams {

@@ -1,20 +1,57 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import { KnowledgeBase } from '@docrouter/sdk';
 import BadgeIcon from '@mui/icons-material/Badge';
-import { Chip } from '@mui/material';
+import SyncIcon from '@mui/icons-material/Sync';
+import { Chip, Button } from '@mui/material';
+import { toast } from 'react-toastify';
+import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 
 interface KnowledgeBaseInfoModalProps {
   isOpen: boolean;
   onClose: () => void;
   kb: KnowledgeBase;
+  organizationId: string;
+  onReconcile?: () => void;
 }
 
 const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({ 
   isOpen, 
   onClose, 
-  kb 
+  kb,
+  organizationId,
+  onReconcile
 }) => {
+  const [isReconciling, setIsReconciling] = useState(false);
+  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
+  
   if (!isOpen) return null;
+  
+  const handleReconcile = async () => {
+    setIsReconciling(true);
+    try {
+      const result = await docRouterOrgApi.reconcileKnowledgeBase({ 
+        kbId: kb.kb_id,
+        dry_run: false 
+      });
+      toast.success(
+        `Reconciliation complete: ${result.missing_documents.length} missing, ` +
+        `${result.stale_documents.length} stale, ${result.orphaned_vectors} orphaned vectors`
+      );
+      if (onReconcile) {
+        onReconcile();
+      }
+    } catch (error) {
+      toast.error(`Reconciliation failed: ${getApiErrorMsg(error)}`);
+    } finally {
+      setIsReconciling(false);
+    }
+  };
+  
+  const formatInterval = (seconds?: number) => {
+    if (!seconds) return 'N/A';
+    if (seconds < 60) return `${seconds}s`;
+    return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+  };
 
   const formatDate = (dateString: string) => {
     try {
@@ -169,9 +206,47 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
               {formatDate(kb.updated_at)}
             </div>
           </div>
+          
+          <div className="col-span-2 border-t pt-4 mt-2">
+            <label className="text-sm font-semibold text-gray-700 block mb-2">Reconciliation</label>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <label className="text-sm text-gray-600">Periodic Reconciliation:</label>
+                <Chip 
+                  label={kb.reconcile_enabled ? 'Enabled' : 'Disabled'} 
+                  color={kb.reconcile_enabled ? 'success' : 'default'}
+                  size="small"
+                />
+              </div>
+              {kb.reconcile_enabled && kb.reconcile_interval_seconds && (
+                <div className="text-sm text-gray-600">
+                  Interval: {formatInterval(kb.reconcile_interval_seconds)}
+                </div>
+              )}
+              {kb.last_reconciled_at && (
+                <div className="text-sm text-gray-600">
+                  Last reconciled: {formatDate(kb.last_reconciled_at)}
+                </div>
+              )}
+              {!kb.last_reconciled_at && (
+                <div className="text-sm text-gray-500 italic">
+                  Never reconciled
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
-        <div className="flex justify-end mt-6 pt-4 border-t">
+        <div className="flex justify-between items-center mt-6 pt-4 border-t">
+          <Button
+            variant="outlined"
+            startIcon={<SyncIcon />}
+            onClick={handleReconcile}
+            disabled={isReconciling}
+            className="text-blue-600 border-blue-600 hover:bg-blue-50"
+          >
+            {isReconciling ? 'Reconciling...' : 'Reconcile Now'}
+          </Button>
           <button
             type="button"
             onClick={onClose}
