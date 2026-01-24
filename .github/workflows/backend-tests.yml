@@ -83,6 +83,16 @@ jobs:
                 # Test vector search capability by attempting to create a test index
                 # This verifies mongot is running and ready
                 test_db = client['test_vector_search']
+                test_collection = test_db['test_vectors']
+                
+                # Ensure collection exists by inserting a temporary document
+                # This matches the fix in the application code
+                try:
+                    test_collection.insert_one({'_id': 'temp_init', 'temp': True})
+                    print('✓ Collection test_vector_search.test_vectors exists')
+                except Exception as e:
+                    print(f'Warning: Could not ensure collection exists: {e}')
+                
                 try:
                     test_db.command({
                         'createSearchIndexes': 'test_vectors',
@@ -101,14 +111,22 @@ jobs:
                     })
                     print('✓ Vector search index creation successful - mongot is ready!')
                     
+                    # Clean up temporary document
+                    try:
+                        test_collection.delete_one({'_id': 'temp_init'})
+                    except:
+                        pass
+                    
                     # Clean up test index
                     try:
                         test_db.command({
                             'dropSearchIndexes': 'test_vectors',
                             'index': 'test_vector_index'
                         })
-                    except:
-                        pass
+                        print('✓ Test index cleaned up')
+                    except Exception as cleanup_error:
+                        if 'no such command' not in str(cleanup_error).lower():
+                            print(f'Warning: Could not clean up test index: {cleanup_error}')
                     
                     break
                 except Exception as idx_error:
