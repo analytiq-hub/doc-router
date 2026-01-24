@@ -179,78 +179,109 @@ async def reconcile_knowledge_base(
         "dry_run": dry_run
     }
     
-    # 1. Find missing documents: documents with matching tags but no document_index entry
-    # Get all documents with at least one matching tag
-    matching_docs = await db.docs.find({
-        "organization_id": organization_id,
-        "tag_ids": {"$in": list(kb_tag_ids)}
-    }).to_list(length=None)
+    # Batch size for processing documents (to handle large workspaces)
+    BATCH_SIZE = 100
     
-    # Get existing document_index entries for this KB
+    # 1. Find missing documents: documents with matching tags but no document_index entry
+    # Process documents in batches to avoid loading all into memory
+    logger.info(f"Reconciling KB {kb_id}: Checking for missing documents (processing in batches of {BATCH_SIZE})")
+    
+    # First, get all existing document_index entries for this KB (we need this set for comparison)
+    # This is typically much smaller than all documents, so loading it is acceptable
     existing_index_entries = await db.document_index.find({"kb_id": kb_id}).to_list(length=None)
     existing_doc_ids = {entry["document_id"] for entry in existing_index_entries}
     
-    # Find missing documents (have matching tags but not indexed)
-    for doc in matching_docs:
-        doc_id = str(doc["_id"])
-        doc_tag_ids = set(doc.get("tag_ids", []))
+    # Process matching documents in batches
+    skip = 0
+    while True:
+        matching_docs = await db.docs.find({
+            "organization_id": organization_id,
+            "tag_ids": {"$in": list(kb_tag_ids)}
+        }).skip(skip).limit(BATCH_SIZE).to_list(length=BATCH_SIZE)
         
-        # Check if document has at least one tag matching KB
-        if doc_tag_ids & kb_tag_ids and doc_id not in existing_doc_ids:
-            # Check if document has OCR text (required for indexing)
-            ocr_text = await ad.common.ocr.get_ocr_text(analytiq_client, doc_id)
-            if ocr_text and ocr_text.strip():
-                results["missing_documents"].append(doc_id)
-                if not dry_run:
-                    # Queue for indexing
-                    kb_msg = {"document_id": doc_id, "kb_id": kb_id}
-                    await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
+        if not matching_docs:
+            break
+        
+        # Find missing documents in this batch
+        for doc in matching_docs:
+            doc_id = str(doc["_id"])
+            doc_tag_ids = set(doc.get("tag_ids", []))
+            
+            # Check if document has at least one tag matching KB
+            if doc_tag_ids & kb_tag_ids and doc_id not in existing_doc_ids:
+                # Check if document has OCR text (required for indexing)
+                ocr_text = await ad.common.ocr.get_ocr_text(analytiq_client, doc_id)
+                if ocr_text and ocr_text.strip():
+                    results["missing_documents"].append(doc_id)
+                    if not dry_run:
+                        # Queue for indexing
+                        kb_msg = {"document_id": doc_id, "kb_id": kb_id}
+                        await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
+        
+        # If we got fewer documents than the batch size, we've reached the end
+        if len(matching_docs) < BATCH_SIZE:
+            break
+        
+        skip += BATCH_SIZE
     
     # 2. Find stale documents: indexed but tags no longer match
-    for entry in existing_index_entries:
-        doc_id = entry["document_id"]
-        doc = await db.docs.find_one({"_id": ObjectId(doc_id), "organization_id": organization_id})
+    # Process existing_index_entries in batches
+    logger.info(f"Reconciling KB {kb_id}: Checking for stale documents (processing {len(existing_index_entries)} entries in batches)")
+    
+    for i in range(0, len(existing_index_entries), BATCH_SIZE):
+        batch = existing_index_entries[i:i + BATCH_SIZE]
         
-        if not doc:
-            # Document was deleted - will be handled by deletion hook, but we can still mark it
-            continue
-        
-        doc_tag_ids = set(doc.get("tag_ids", []))
-        
-        # Check if document still has at least one matching tag
-        if not (doc_tag_ids & kb_tag_ids):
-            results["stale_documents"].append(doc_id)
-            if not dry_run:
-                # Remove from KB
-                try:
-                    await remove_document_from_kb(analytiq_client, kb_id, doc_id, organization_id)
-                except Exception as e:
-                    logger.error(f"Error removing stale document {doc_id} from KB {kb_id}: {e}")
+        for entry in batch:
+            doc_id = entry["document_id"]
+            doc = await db.docs.find_one({"_id": ObjectId(doc_id), "organization_id": organization_id})
+            
+            if not doc:
+                # Document was deleted - will be handled by deletion hook, but we can still mark it
+                continue
+            
+            doc_tag_ids = set(doc.get("tag_ids", []))
+            
+            # Check if document still has at least one matching tag
+            if not (doc_tag_ids & kb_tag_ids):
+                results["stale_documents"].append(doc_id)
+                if not dry_run:
+                    # Remove from KB
+                    try:
+                        await remove_document_from_kb(analytiq_client, kb_id, doc_id, organization_id)
+                    except Exception as e:
+                        logger.error(f"Error removing stale document {doc_id} from KB {kb_id}: {e}")
     
     # 3. Find orphaned vectors: vectors without document_index entries
+    # Process in batches to avoid loading all vector document IDs into memory
+    logger.info(f"Reconciling KB {kb_id}: Checking for orphaned vectors (processing in batches)")
     collection_name = f"kb_vectors_{kb_id}"
     vectors_collection = db[collection_name]
     
-    # Get all unique document_ids from vectors
+    # Get all unique document_ids from vectors using distinct (this is efficient)
+    # But process them in batches to avoid memory issues
     vector_doc_ids = await vectors_collection.distinct("document_id")
     
-    for vector_doc_id in vector_doc_ids:
-        # Check if document_index entry exists
-        index_entry = await db.document_index.find_one({
-            "kb_id": kb_id,
-            "document_id": vector_doc_id
-        })
+    # Process vector document IDs in batches
+    for i in range(0, len(vector_doc_ids), BATCH_SIZE):
+        batch = vector_doc_ids[i:i + BATCH_SIZE]
         
-        if not index_entry:
-            # Orphaned vectors found
-            if not dry_run:
-                # Delete orphaned vectors
-                delete_result = await vectors_collection.delete_many({"document_id": vector_doc_id})
-                results["orphaned_vectors"] += delete_result.deleted_count
-            else:
-                # Count orphaned vectors
-                count = await vectors_collection.count_documents({"document_id": vector_doc_id})
-                results["orphaned_vectors"] += count
+        for vector_doc_id in batch:
+            # Check if document_index entry exists
+            index_entry = await db.document_index.find_one({
+                "kb_id": kb_id,
+                "document_id": vector_doc_id
+            })
+            
+            if not index_entry:
+                # Orphaned vectors found
+                if not dry_run:
+                    # Delete orphaned vectors
+                    delete_result = await vectors_collection.delete_many({"document_id": vector_doc_id})
+                    results["orphaned_vectors"] += delete_result.deleted_count
+                else:
+                    # Count orphaned vectors
+                    count = await vectors_collection.count_documents({"document_id": vector_doc_id})
+                    results["orphaned_vectors"] += count
     
     # 4. Find missing embeddings: vectors with embeddings that don't exist in cache
     # This is less critical and can be expensive, so we'll do a sample check
