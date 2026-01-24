@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
-import { KnowledgeBase } from '@docrouter/sdk';
+import { KnowledgeBase, Tag } from '@docrouter/sdk';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import { TextField, InputAdornment, IconButton, Menu, MenuItem, Chip } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
@@ -16,6 +16,7 @@ import colors from 'tailwindcss/colors';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 import KnowledgeBaseInfoModal from '@/components/KnowledgeBaseInfoModal';
+import { isColorLight } from '@/utils/colors';
 
 const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
@@ -27,6 +28,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
   const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
+  const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   
   // Add state for menu
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -52,9 +54,23 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
     }
   }, [docRouterOrgApi, page, pageSize, searchTerm]);
 
+  const loadTags = useCallback(async () => {
+    try {
+      const response = await docRouterOrgApi.listTags({ limit: 100 });
+      setAvailableTags(response.tags);
+    } catch (error) {
+      const errorMsg = getApiErrorMsg(error) || 'Error loading tags';
+      console.error('Error loading tags:', errorMsg);
+    }
+  }, [docRouterOrgApi]);
+
   useEffect(() => {
     loadKnowledgeBases();
   }, [loadKnowledgeBases]);
+
+  useEffect(() => {
+    loadTags();
+  }, [loadTags]);
 
   // Menu handlers
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, kb: KnowledgeBase) => {
@@ -139,6 +155,33 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
           {params.row.description || '-'}
         </div>
       ),
+    },
+    {
+      field: 'tag_ids',
+      headerName: 'Tags',
+      width: 200,
+      headerAlign: 'left',
+      align: 'left',
+      renderCell: (params) => {
+        const kbTags = availableTags.filter(tag => 
+          params.row.tag_ids?.includes(tag.id)
+        );
+        return (
+          <div className="flex gap-1 flex-wrap items-center h-full">
+            {kbTags.map(tag => (
+              <div
+                key={tag.id}
+                className={`px-2 py-1 rounded text-xs ${
+                  isColorLight(tag.color) ? 'text-gray-800' : 'text-white'
+                } flex items-center`}
+                style={{ backgroundColor: tag.color }}
+              >
+                {tag.name}
+              </div>
+            ))}
+          </div>
+        );
+      },
     },
     {
       field: 'status',
