@@ -145,11 +145,13 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       headerName: 'Status',
       width: 120,
       renderCell: (params) => (
-        <Chip 
-          label={params.row.status} 
-          color={getStatusColor(params.row.status) as any}
-          size="small"
-        />
+        <div className="flex items-center h-full w-full">
+          <Chip 
+            label={params.row.status} 
+            color={getStatusColor(params.row.status) as any}
+            size="small"
+          />
+        </div>
       ),
     },
     {
