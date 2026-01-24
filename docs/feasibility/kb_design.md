@@ -6,16 +6,18 @@ This document outlines the design for implementing Knowledge Base (KB) support i
 
 ## Requirements Summary
 
-1.  **Multi-KB Support**: Each organization can create one or more knowledge bases.
+1.  **Multi-KB Support**: Each organization can create one or more knowledge bases. A document can belong to multiple KBs.
 2.  **Per-KB Embeddings**: Each KB uses its own embedding model and vector collection.
 3.  **Tag-Based Association**: Documents are associated with KBs automatically via tags.
 4.  **OCR-Gated Indexing**: KB indexing runs only after OCR completes successfully.
-5.  **Auto-Reindexing**: Tag changes or document updates trigger reindexing.
+5.  **Immutable Configuration**: KB chunking/embedding settings are immutable after creation. To change settings, create a new KB with the same tags.
 6.  **Vector Storage**: MongoDB vector search (Atlas or self-hosted 8.2+).
 7.  **Embedding Provider**: LiteLLM for unified embedding generation.
-8.  **Agentic LLM**: Prompts can reference KBs; LLM uses a search tool for context.
+8.  **Agentic LLM**: Prompts can reference a single KB; LLM uses a search tool for context.
 9.  **Atomic Operations**: Indexing uses a "Blue-Green" swap pattern for zero-downtime.
 10. **Self-Healing**: A reconciliation service fixes drift between tags and indexes.
+11. **Embedding Caching**: Embeddings are cached by chunk hash to avoid redundant API calls across KBs with the same embedding model.
+12. **SPU Metering**: 1 SPU charged per embedding generated or looked up; cached embeddings are free.
 
 ---
 
@@ -86,7 +88,7 @@ Stores the configuration for each KB.
     "tag_ids": List[str],               # Bridge to documents
     
     # Configuration
-    "chunker_type": str,                # "recursive" | "sentence" | "token"
+    "chunker_type": str,                # Any Chonkie chunker: "token", "word", "sentence", "semantic", "sdpm", "late"
     "chunk_size": int,                  # tokens
     "chunk_overlap": int,               # tokens
     "embedding_model": str,             # LiteLLM model string
@@ -94,7 +96,7 @@ Stores the configuration for each KB.
     "coalesce_neighbors": int,          # Context window size (0-5)
     
     # Stats & Metadata
-    "status": str,                      # "active" | "reconfiguring" | "error"
+    "status": str,                      # "indexing" | "active" | "error"
     "document_count": int,
     "chunk_count": int,
     "created_at": datetime,
@@ -125,6 +127,7 @@ Dynamically created per KB to allow different embedding dimensions.
     "organization_id": str,
     "document_id": str,
     "chunk_index": int,
+    "chunk_hash": str,                  # SHA-256 hash of chunk_text for caching
     "chunk_text": str,
     "embedding": List[float],
     "token_count": int,
@@ -133,30 +136,57 @@ Dynamically created per KB to allow different embedding dimensions.
 }
 ```
 
+### Collection: `embedding_cache`
+Global cache for embeddings, keyed by chunk hash and embedding model. Enables embedding reuse across KBs.
+
+```python
+{
+    "_id": ObjectId,
+    "chunk_hash": str,                  # SHA-256 hash of chunk text
+    "embedding_model": str,             # LiteLLM model string
+    "embedding": List[float],
+    "created_at": datetime
+}
+# Compound unique index on (chunk_hash, embedding_model)
+```
+
 ---
 
 ## Indexing Workflow (Robust & Atomic)
 
 ### 1. The "Blue-Green" Atomic Swap
 To ensure zero-downtime and prevent partial indexing states, the worker uses a transactional swap:
-1.  **Generate**: Chunks and embeddings are prepared in memory.
-2.  **Transaction**:
+1.  **Chunk**: Text is split into chunks using the configured Chonkie chunker.
+2.  **Hash**: Each chunk gets a SHA-256 hash of its text content.
+3.  **Cache Lookup**: Check `embedding_cache` for existing embeddings matching `(chunk_hash, embedding_model)`.
+4.  **Generate**: Only generate embeddings for cache misses via LiteLLM API.
+5.  **Cache Store**: Store newly generated embeddings in `embedding_cache`.
+6.  **Transaction**:
     *   Delete all existing vectors for `(kb_id, document_id)`.
     *   Insert the new batch of vectors.
     *   Update/Upsert the `document_index` entry.
     *   Adjust KB-level statistics.
-3.  **Rollback**: If any step fails (API timeout, DB error), the transaction rolls back, and the old vectors remain searchable.
+7.  **Rollback**: If any step fails (API timeout, DB error), the transaction rolls back, and the old vectors remain searchable.
 
-### 2. Triggers
+### 2. SPU Metering
+*   **Embedding Generation**: 1 SPU charged per embedding generated (cache miss).
+*   **Embedding Lookup (Search)**: 1 SPU charged per query embedding generated.
+*   **Cache Hits**: No SPU charge when embedding is retrieved from cache.
+
+### 3. Rate Limiting
+*   **Per-KB Rate Limits**: Each KB has its own rate limit bucket to prevent one KB from starving others.
+*   **Provider Coordination**: Rate limits are tracked per (organization, embedding_model) to respect provider quotas.
+
+### 4. Triggers
 *   **OCR Completion**: Successful OCR automatically evaluates document tags and queues indexing for matching KBs.
 *   **Tag Updates**: Adding/removing tags on a document triggers an immediate membership check.
-*   **Manual Reindex**: A KB-level "Reindex All" operation queues jobs for every document in the `document_index`.
 
-### 3. Self-Healing (Reconciliation)
+### 5. Self-Healing (Reconciliation)
 A background service runs periodically to fix "drift":
 *   **Missing**: Documents with matching tags but no `document_index` entry are queued for indexing.
 *   **Stale**: Documents in `document_index` whose tags no longer match the KB are queued for removal.
 *   **Orphans**: Vectors in `kb_vectors_*` without a corresponding `document_index` entry are purged.
+*   **Missing Embeddings**: After backup restore, recomputes any embeddings that are missing from the cache.
 
 ---
 
@@ -234,8 +264,9 @@ On KB creation, the system automatically detects embedding dimensions:
 **Chunk Coalescing**: If `coalesce_neighbors > 0`, the search:
 1. Finds the top K matching chunks via vector search
 2. For each matched chunk, fetches N preceding and N succeeding chunks from the same document
-3. Returns the expanded context set
-4. The matched chunk retains its similarity score; neighboring chunks are marked with `is_matched: false`
+3. Respects document boundaries (does not cross into neighboring documents)
+4. Returns the expanded context set
+5. The matched chunk retains its similarity score; neighboring chunks are marked with `is_matched: false`
 
 ### Agentic LLM Integration
 
@@ -280,8 +311,26 @@ On KB creation, the system automatically detects embedding dimensions:
 
 ### Error Handling
 *   **Retries**: Embedding API calls use exponential backoff (via `stamina`).
-*   **Rate Limiting**: Workers respect provider-specific rate limits to prevent 429 errors.
+*   **Rate Limiting**: Workers respect per-KB and provider-specific rate limits to prevent 429 errors.
 *   **Empty Docs**: Documents with no extractable text are logged as warnings and skipped.
+
+### Backup & Restore
+*   **Backup**: Vector collections and embedding cache are included in backups.
+*   **Restore**: After restore, the reconciliation service detects and recomputes any missing embeddings.
+*   **No Full Rebuild**: Vectors are not recreated from source documents; only missing entries are repaired.
+
+---
+
+## Monitoring & Metrics
+
+*   `kb_embedding_cache_hits_total` - Cache hits (counter, by model)
+*   `kb_embedding_cache_misses_total` - Cache misses (counter, by model)
+*   `kb_embedding_api_calls_total` - Total embedding API calls (counter, by model)
+*   `kb_indexing_queue_depth` - Number of documents waiting in the indexing queue (gauge)
+*   `kb_chunks_indexed_total` - Total chunks indexed (counter, by kb_id)
+*   `kb_indexing_errors_total` - Indexing failures (counter, by kb_id, error_type)
+*   `kb_search_results_count` - Number of results returned (histogram)
+*   `kb_spu_charged_total` - Total SPUs charged (counter, by operation_type: "index", "search")
 
 ---
 
@@ -323,12 +372,13 @@ All endpoints are scoped under `/v0/orgs/{organization_id}/knowledge-bases` and 
 }
 ```
 
-**Behavior**: 
+**Behavior**:
 - Validates that all `tag_ids` exist and belong to the organization
 - Automatically detects `embedding_dimensions` by calling LiteLLM with a test string
 - Creates the `kb_vectors_{kb_id}` collection
-- Creates the vector search index on the collection
-- Sets initial status to `"active"`
+- Sets initial status to `"indexing"` while vector search index is being built
+- Creates the vector search index on the collection (async)
+- Transitions to `"active"` once index is ready and initial document indexing completes
 
 ### List Knowledge Bases
 
@@ -369,12 +419,20 @@ All endpoints are scoped under `/v0/orgs/{organization_id}/knowledge-bases` and 
 
 **Endpoint**: `PUT /v0/orgs/{organization_id}/knowledge-bases/{kb_id}`
 
-**Request Body**: Same as Create, but all fields are optional (only provided fields are updated).
+**Request Body**:
+```json
+{
+  "name": "Updated KB Name",             // optional
+  "description": "Updated description",  // optional
+  "tag_ids": ["tag_id_1", "tag_id_3"],   // optional
+  "coalesce_neighbors": 3                // optional
+}
+```
 
-**Important**: 
-- Changing `chunker_type`, `chunk_size`, `chunk_overlap`, or `embedding_model` requires reindexing
-- If these fields change, the KB status is set to `"reconfiguring"` and a reindex job is automatically queued
-- Other fields (name, description, tag_ids, coalesce_neighbors) can be updated without reindexing
+**Important**:
+- **Immutable fields**: `chunker_type`, `chunk_size`, `chunk_overlap`, and `embedding_model` cannot be changed after creation.
+- To use different chunking/embedding settings, create a new KB with the same tags. Documents will be auto-indexed into the new KB using cached embeddings where possible.
+- Mutable fields (name, description, tag_ids, coalesce_neighbors) can be updated freely.
 
 ### Delete Knowledge Base
 
@@ -408,24 +466,6 @@ All endpoints are scoped under `/v0/orgs/{organization_id}/knowledge-bases` and 
 
 **Implementation**: Queries `document_index` collection where `kb_id = {kb_id}`, joins with `docs` collection for document details.
 
-### Reindex All Documents
-
-**Endpoint**: `POST /v0/orgs/{organization_id}/knowledge-bases/{kb_id}/reindex`
-
-**Response**:
-```json
-{
-  "status": "queued",
-  "document_count": 42,
-  "message": "Reindexing queued for 42 documents"
-}
-```
-
-**Behavior**: 
-- Finds all documents in `document_index` for this KB
-- Queues indexing jobs for each document
-- Useful when chunking/embedding configuration changes
-
 ### Search Knowledge Base (Testing/Debug)
 
 **Endpoint**: `POST /v0/orgs/{organization_id}/knowledge-bases/{kb_id}/search`
@@ -435,10 +475,11 @@ All endpoints are scoped under `/v0/orgs/{organization_id}/knowledge-bases` and 
 {
   "query": "What are the payment terms?",
   "top_k": 5,                            // optional, default: 5
+  "skip": 0,                             // optional, pagination offset
   "document_ids": ["doc_id_1"],          // optional, filter by specific documents
-  "metadata_filter": {                   // optional
-    "document_name": {"$regex": "invoice", "$options": "i"},
-    "tag_ids": {"$in": ["invoice", "2024"]}
+  "metadata_filter": {                   // optional, sanitized server-side
+    "document_name": "invoice",          // exact match or allowed operators only
+    "tag_ids": ["invoice", "2024"]       // array = $in match
   },
   "upload_date_from": "2024-01-01T00:00:00Z",  // optional
   "upload_date_to": "2024-12-31T23:59:59Z",    // optional
@@ -453,27 +494,32 @@ All endpoints are scoped under `/v0/orgs/{organization_id}/knowledge-bases` and 
     {
       "content": "Payment is due within 30 days of invoice date...",
       "source": "invoice-2024-001.pdf",
+      "document_id": "507f191e810c19729de860ea",
       "relevance": 0.92,
       "chunk_index": 5,
       "is_matched": true                 // false if this is a neighboring chunk
     }
   ],
-  "query": "What are the payment terms?"
+  "query": "What are the payment terms?",
+  "total_count": 42,
+  "skip": 0,
+  "top_k": 5
 }
 ```
 
-**Behavior**: 
-- Generates embedding for the query using the KB's embedding model
+**Behavior**:
+- Generates embedding for the query using the KB's embedding model (1 SPU charged)
 - Performs vector search within the specified KB
-- Returns formatted results for LLM consumption
+- **Input Sanitization**: `metadata_filter` is validated and sanitized to prevent MongoDB injection. Only allowed operators are permitted.
+- Returns paginated results for LLM consumption
 
 ---
 
 ## Implementation Phases
 
-1.  **Phase 1: Infrastructure**: Data models, dynamic collection management, and dimension auto-detection.
-2.  **Phase 2: Pipeline**: Integration with Chonkie (chunking) and LiteLLM (embeddings).
-3.  **Phase 3: Workers**: `kb_index` queue, Blue-Green worker logic, and OCR hooks.
-4.  **Phase 4: Search & RAG**: Vector search implementation and Agentic LLM tool integration.
-5.  **Phase 5: Maintenance**: Reconciliation service and cleanup hooks.
+1.  **Phase 1: Infrastructure**: Data models, dynamic collection management, embedding cache, and dimension auto-detection.
+2.  **Phase 2: Pipeline**: Integration with Chonkie (chunking), LiteLLM (embeddings), and SPU metering.
+3.  **Phase 3: Workers**: `kb_index` queue, Blue-Green worker logic, rate limiting, and OCR hooks.
+4.  **Phase 4: Search & RAG**: Vector search implementation, input sanitization, and Agentic LLM tool integration.
+5.  **Phase 5: Maintenance**: Reconciliation service, cleanup hooks, and backup/restore support.
 6.  **Phase 6: UI**: KB management dashboard and search testing interface.
