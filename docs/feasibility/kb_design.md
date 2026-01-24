@@ -515,6 +515,323 @@ All endpoints are scoped under `/v0/orgs/{organization_id}/knowledge-bases` and 
 
 ---
 
+## Testing Strategy
+
+A comprehensive test suite ensures reliability and correctness of the KB implementation. Tests are organized into Python backend tests (pytest) and TypeScript SDK tests (Jest).
+
+### Python Backend Tests (pytest)
+
+**Test File**: `packages/python/tests/test_knowledge_bases.py`
+
+#### API Endpoint Tests
+
+**Test: `test_kb_lifecycle`**
+- Create KB with all configuration options
+- Verify auto-detection of embedding dimensions
+- List KBs with pagination and name search
+- Get KB by ID
+- Update mutable fields (name, description, tag_ids, coalesce_neighbors)
+- Attempt to update immutable fields (should fail with 400)
+- Delete KB and verify cleanup (collection drop, document_index cleanup)
+
+**Test: `test_kb_create_validation`**
+- Invalid tag_ids (non-existent, wrong org)
+- Invalid chunker_type
+- Invalid chunk_size/chunk_overlap (overlap > size, negative values)
+- Invalid embedding_model (unsupported model)
+- Invalid coalesce_neighbors (negative, > max)
+
+**Test: `test_kb_list_pagination`**
+- Test skip/limit parameters
+- Test name_search filtering
+- Test total_count accuracy
+- Test empty results
+
+**Test: `test_kb_documents_list`**
+- Create KB and index documents
+- List documents in KB with pagination
+- Verify chunk_count accuracy
+- Test empty KB (no documents)
+
+**Test: `test_kb_search`**
+- Create KB and index test documents
+- Perform vector search with various queries
+- Test metadata filtering (document_name, tag_ids, custom metadata)
+- Test date range filtering
+- Test coalesce_neighbors override
+- Test pagination (skip/top_k)
+- Test input sanitization (reject MongoDB injection attempts)
+- Verify SPU metering (1 SPU per query embedding)
+
+**Test: `test_kb_search_empty_results`**
+- Search in empty KB
+- Search with filters that match no documents
+- Search with invalid KB ID
+
+#### Indexing Workflow Tests
+
+**Test: `test_kb_indexing_workflow`**
+- Upload document with matching tags
+- Trigger OCR completion
+- Verify KB indexing job is queued
+- Process indexing job
+- Verify vectors are created in `kb_vectors_{kb_id}`
+- Verify `document_index` entry is created
+- Verify KB stats are updated
+
+**Test: `test_kb_indexing_blue_green_swap`**
+- Index document with existing vectors
+- Simulate partial failure during swap
+- Verify old vectors remain searchable (transaction rollback)
+- Verify successful swap replaces old vectors atomically
+
+**Test: `test_kb_indexing_embedding_cache`**
+- Index same chunk text in two KBs with same embedding model
+- Verify first indexing generates embedding (cache miss)
+- Verify second indexing uses cached embedding (cache hit)
+- Verify SPU charged only once (cache miss)
+- Verify cache lookup is by (chunk_hash, embedding_model)
+
+**Test: `test_kb_indexing_tag_changes`**
+- Create document with tag matching KB
+- Verify indexing occurs
+- Remove tag from document
+- Verify document is removed from KB (vectors deleted, document_index entry removed)
+- Re-add tag
+- Verify document is re-indexed
+
+**Test: `test_kb_indexing_empty_document`**
+- Upload document with no extractable text
+- Verify indexing is skipped (no error, no vectors created)
+- Verify warning is logged
+
+**Test: `test_kb_indexing_rate_limiting`**
+- Create multiple KBs with same embedding model
+- Index documents simultaneously
+- Verify rate limiting prevents 429 errors
+- Verify per-KB rate limit buckets work independently
+
+#### Embedding Cache Tests
+
+**Test: `test_embedding_cache_lifecycle`**
+- Generate embedding for test chunk
+- Verify cache entry is created with correct (chunk_hash, embedding_model)
+- Retrieve same embedding (cache hit)
+- Generate embedding for different chunk (cache miss)
+- Verify cache lookup performance
+
+**Test: `test_embedding_cache_model_isolation`**
+- Same chunk text with different embedding models
+- Verify separate cache entries (different embeddings)
+- Verify both are retrievable
+
+#### Reconciliation Service Tests
+
+**Test: `test_reconciliation_missing_documents`**
+- Create document with matching tags but skip indexing
+- Run reconciliation service
+- Verify indexing job is queued
+- Verify document is eventually indexed
+
+**Test: `test_reconciliation_stale_documents`**
+- Index document in KB
+- Remove matching tag from document
+- Run reconciliation service
+- Verify document is removed from KB
+
+**Test: `test_reconciliation_orphaned_vectors`**
+- Manually create vectors without document_index entry
+- Run reconciliation service
+- Verify orphaned vectors are deleted
+
+**Test: `test_reconciliation_missing_embeddings`**
+- Simulate backup restore scenario (vectors exist but embeddings missing)
+- Run reconciliation service
+- Verify missing embeddings are recomputed
+
+#### Cleanup Tests
+
+**Test: `test_document_deletion_cleanup`**
+- Create document indexed in multiple KBs
+- Delete document
+- Verify vectors are removed from all KB collections
+- Verify document_index entries are removed
+- Verify KB stats are decremented
+
+**Test: `test_kb_deletion_cleanup`**
+- Create KB with indexed documents
+- Delete KB
+- Verify `kb_vectors_{kb_id}` collection is dropped
+- Verify all document_index entries are removed
+- Verify KB config is deleted
+
+#### SPU Metering Tests
+
+**Test: `test_spu_metering_indexing`**
+- Index document with cache misses
+- Verify 1 SPU charged per embedding generated
+- Verify no SPU charged for cache hits
+- Verify SPU tracking in metrics
+
+**Test: `test_spu_metering_search`**
+- Perform KB search
+- Verify 1 SPU charged for query embedding
+- Verify SPU tracking in metrics
+
+#### Error Handling Tests
+
+**Test: `test_embedding_api_retry`**
+- Simulate transient embedding API errors (503, rate limit)
+- Verify retry logic with exponential backoff
+- Verify eventual success or proper failure handling
+
+**Test: `test_embedding_api_permanent_failure`**
+- Simulate permanent embedding API errors (invalid API key)
+- Verify error is logged and indexing job fails
+- Verify KB status is set to "error"
+
+### TypeScript SDK Tests (Jest)
+
+**Test File**: `packages/typescript/sdk/tests/integration/knowledge-bases.test.ts`
+
+#### SDK API Tests
+
+**Test: `test_kb_lifecycle`**
+```typescript
+describe('Knowledge Base Lifecycle', () => {
+  test('create, list, get, update, delete KB', async () => {
+    // Create KB
+    const kb = await orgClient.knowledgeBases.create({...});
+    expect(kb.kb_id).toBeDefined();
+    expect(kb.embedding_dimensions).toBeGreaterThan(0);
+    
+    // List KBs
+    const list = await orgClient.knowledgeBases.list();
+    expect(list.knowledge_bases).toContainEqual(expect.objectContaining({kb_id: kb.kb_id}));
+    
+    // Get KB
+    const retrieved = await orgClient.knowledgeBases.get(kb.kb_id);
+    expect(retrieved).toEqual(kb);
+    
+    // Update KB
+    const updated = await orgClient.knowledgeBases.update(kb.kb_id, {name: 'Updated Name'});
+    expect(updated.name).toBe('Updated Name');
+    
+    // Delete KB
+    await orgClient.knowledgeBases.delete(kb.kb_id);
+    await expect(orgClient.knowledgeBases.get(kb.kb_id)).rejects.toThrow();
+  });
+});
+```
+
+**Test: `test_kb_documents_list`**
+- Create KB and index documents
+- List documents in KB
+- Verify pagination works
+- Verify chunk_count is accurate
+
+**Test: `test_kb_search`**
+- Create KB and index test documents
+- Perform search with various parameters
+- Verify results structure
+- Test metadata filtering
+- Test pagination
+
+**Test: `test_kb_validation_errors`**
+- Attempt to create KB with invalid data
+- Verify appropriate error messages
+- Test immutable field update attempts
+
+**Test: `test_kb_not_found_errors`**
+- Attempt to get/update/delete non-existent KB
+- Verify 404 errors
+
+### Test Fixtures & Utilities
+
+#### Python Test Fixtures
+
+**File**: `packages/python/tests/conftest_utils.py` (additions)
+
+```python
+@pytest.fixture
+async def test_kb(test_db, mock_auth):
+    """Create a test KB for use in tests"""
+    kb_data = {
+        "name": "Test KB",
+        "description": "Test knowledge base",
+        "tag_ids": [TEST_TAG_ID],
+        "chunker_type": "recursive",
+        "chunk_size": 512,
+        "chunk_overlap": 128,
+        "embedding_model": "text-embedding-3-small"
+    }
+    # Create KB via API
+    # Return KB ID and config
+    yield kb_id, kb_config
+    # Cleanup: delete KB
+
+@pytest.fixture
+async def test_document_with_text(test_db, mock_auth):
+    """Create a test document with OCR text"""
+    # Upload document
+    # Trigger OCR
+    # Wait for OCR completion
+    # Return document_id and text
+    yield document_id, ocr_text
+    # Cleanup: delete document
+```
+
+#### TypeScript Test Fixtures
+
+**File**: `packages/typescript/sdk/tests/setup/test-fixtures.ts` (additions)
+
+```typescript
+export async function createTestKB(orgClient: DocRouterOrg): Promise<string> {
+  const kb = await orgClient.knowledgeBases.create({
+    name: 'Test KB',
+    tag_ids: [testTagId],
+    embedding_model: 'text-embedding-3-small'
+  });
+  return kb.kb_id;
+}
+
+export async function createTestDocumentWithKB(
+  orgClient: DocRouterOrg,
+  kbId: string
+): Promise<string> {
+  // Upload document with matching tag
+  // Wait for indexing
+  // Return document_id
+}
+```
+
+### Test Coverage Goals
+
+- **API Endpoints**: 100% coverage of all CRUD operations
+- **Indexing Workflow**: 100% coverage of indexing, caching, and error paths
+- **Vector Search**: 100% coverage of search logic, filtering, and coalescing
+- **Reconciliation**: 100% coverage of all reconciliation scenarios
+- **Cleanup**: 100% coverage of document and KB deletion paths
+- **SPU Metering**: 100% coverage of SPU charging logic
+- **Error Handling**: 100% coverage of retry and failure scenarios
+
+### Running Tests
+
+**Python Backend**:
+```bash
+cd packages/python
+source .venv/bin/activate
+pytest tests/test_knowledge_bases.py -v
+```
+
+**TypeScript SDK**:
+```bash
+cd packages/typescript/sdk
+npm run test:integration -- knowledge-bases.test.ts
+```
+
+---
+
 ## Implementation Phases
 
 1.  **Phase 1: Infrastructure**: Data models, dynamic collection management, embedding cache, and dimension auto-detection.
@@ -523,3 +840,4 @@ All endpoints are scoped under `/v0/orgs/{organization_id}/knowledge-bases` and 
 4.  **Phase 4: Search & RAG**: Vector search implementation, input sanitization, and Agentic LLM tool integration.
 5.  **Phase 5: Maintenance**: Reconciliation service, cleanup hooks, and backup/restore support.
 6.  **Phase 6: UI**: KB management dashboard and search testing interface.
+7.  **Phase 7: Testing**: Complete pytest suite and TypeScript SDK tests for all KB APIs.
