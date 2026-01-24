@@ -742,9 +742,9 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
                 },
                 '& input': {
                   appearance: 'textfield',
-                  '-moz-appearance': 'textfield',
+                  MozAppearance: 'textfield',
                   '&::-webkit-outer-spin-button, &::-webkit-inner-spin-button': {
-                    '-webkit-appearance': 'none',
+                    WebkitAppearance: 'none',
                     margin: 0,
                   },
                 }
