@@ -62,49 +62,41 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
         const promptsResponse = await docRouterOrgApi.listPrompts({document_id: id, limit: 100 });
         setMatchingPrompts(promptsResponse.prompts);
         
-        // Fetch default prompt results
-        setLoadingPrompts(prev => new Set(prev).add('default'));
-        try {
-          const defaultResults = await docRouterOrgApi.getLLMResult({
-            documentId: id, 
-            promptRevId: 'default',
-            fallback: false
-          });
-          setLlmResults(prev => ({
-            ...prev,
-            'default': defaultResults
-          }));
-          setLoadingPrompts(prev => {
-            const next = new Set(prev);
-            next.delete('default');
-            return next;
-          });
-        } catch (error) {
-          console.error('Error fetching default results:', error);
-          // Check if document is still processing - if so, don't mark as failed
-          // Use the state we fetched at the beginning, or fetch fresh if not available
-          let currentState = fetchedState;
-          if (!currentState) {
-            try {
-              const docResponse = await docRouterOrgApi.getDocument({
-                documentId: id,
-                fileType: "pdf"
-              });
-              currentState = docResponse.state;
-              setDocumentState(currentState);
-            } catch (docError) {
-              console.error('Error fetching document state:', docError);
+        // Fetch default prompt results (only if document is not still processing)
+        // Check state first to avoid unnecessary API calls
+        const isProcessing = fetchedState === 'ocr_processing' || fetchedState === 'llm_processing';
+        if (!isProcessing) {
+          setLoadingPrompts(prev => new Set(prev).add('default'));
+          try {
+            const defaultResults = await docRouterOrgApi.getLLMResult({
+              documentId: id, 
+              promptRevId: 'default',
+              fallback: false
+            });
+            setLlmResults(prev => ({
+              ...prev,
+              'default': defaultResults
+            }));
+            setLoadingPrompts(prev => {
+              const next = new Set(prev);
+              next.delete('default');
+              return next;
+            });
+          } catch (error) {
+            // Only log as error if it's not a 404 (not found is expected if LLM hasn't run yet)
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404');
+            if (!isNotFound) {
+              console.error('Error fetching default results:', error);
             }
-          }
-          const isProcessing = currentState === 'ocr_processing' || currentState === 'llm_processing';
-          if (!isProcessing) {
+            // Mark as failed only if document is not processing
             setFailedPrompts(prev => new Set(prev).add('default'));
+            setLoadingPrompts(prev => {
+              const next = new Set(prev);
+              next.delete('default');
+              return next;
+            });
           }
-          setLoadingPrompts(prev => {
-            const next = new Set(prev);
-            next.delete('default');
-            return next;
-          });
         }
       } catch (error) {
         console.error('Error fetching prompts:', error);
@@ -143,13 +135,23 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                 ...prev,
                 'default': defaultResults
               }));
+              setFailedPrompts(prev => {
+                const next = new Set(prev);
+                next.delete('default');
+                return next;
+              });
               setLoadingPrompts(prev => {
                 const next = new Set(prev);
                 next.delete('default');
                 return next;
               });
             } catch (error) {
-              console.error('Error fetching default results after processing:', error);
+              // Only log as error if it's not a 404 (not found is expected if LLM hasn't run yet)
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404');
+              if (!isNotFound) {
+                console.error('Error fetching default results after processing:', error);
+              }
               setLoadingPrompts(prev => {
                 const next = new Set(prev);
                 next.delete('default');
