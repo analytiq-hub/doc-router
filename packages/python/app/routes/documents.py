@@ -281,7 +281,7 @@ async def update_document(
             detail="Document not found"
         )
     
-    # If tags changed, trigger KB membership re-evaluation and auto-reconciliation
+    # If tags changed, trigger KB membership re-evaluation
     if update.tag_ids is not None:
         new_tag_ids = set(update.tag_ids)
         old_tag_ids_set = set(old_tag_ids)
@@ -293,35 +293,23 @@ async def update_document(
             await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
             logger.info(f"Queued KB indexing for document {document_id} due to tag changes")
             
-            # Find all KBs affected by the tag changes (both old and new tags)
-            # This includes KBs that match old tags (for removal) and new tags (for addition)
-            all_affected_tag_ids = old_tag_ids_set | new_tag_ids
+            # If tags were removed, reconcile only this document across KBs
+            removed_tag_ids = old_tag_ids_set - new_tag_ids
             
-            if all_affected_tag_ids:
-                # Find all KBs that match any of the affected tags
-                affected_kbs = await db.knowledge_bases.find({
-                    "organization_id": organization_id,
-                    "status": {"$in": ["indexing", "active"]},
-                    "tag_ids": {"$in": list(all_affected_tag_ids)},
-                    "reconcile_enabled": True  # Only auto-reconcile if reconciliation is enabled
-                }).to_list(length=None)
-                
-                # Trigger reconciliation for each affected KB
-                for kb in affected_kbs:
-                    kb_id = str(kb["_id"])
-                    try:
-                        # Queue reconciliation (non-blocking, async)
-                        # Use a small delay to ensure KB indexing completes first
-                        await ad.kb.reconciliation.reconcile_knowledge_base(
-                            analytiq_client=analytiq_client,
-                            kb_id=kb_id,
-                            organization_id=organization_id,
-                            dry_run=False
-                        )
-                        logger.info(f"Auto-reconciled KB {kb_id} due to tag changes on document {document_id}")
-                    except Exception as e:
-                        # Log error but don't fail the document update
-                        logger.error(f"Error auto-reconciling KB {kb_id} for document {document_id}: {e}")
+            if removed_tag_ids:
+                # Reconcile only this document (not full KB reconciliation)
+                # This will check if the document needs to be removed from any KBs
+                try:
+                    await ad.kb.reconciliation.reconcile_knowledge_base(
+                        analytiq_client=analytiq_client,
+                        organization_id=organization_id,
+                        doc_id=document_id,
+                        dry_run=False
+                    )
+                    logger.info(f"Auto-reconciled document {document_id} after tag removal")
+                except Exception as e:
+                    # Log error but don't fail the document update
+                    logger.error(f"Error auto-reconciling document {document_id} after tag removal: {e}")
 
     return {"message": "Document updated successfully"}
 

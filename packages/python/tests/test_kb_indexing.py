@@ -451,7 +451,7 @@ async def test_kb_reconciliation(mock_embedding, mock_get_model_info, test_db, m
 
         # Run reconciliation (dry run first)
         results = await ad.kb.reconciliation.reconcile_knowledge_base(
-            analytiq_client, kb_id, TEST_ORG_ID, dry_run=True
+            analytiq_client, TEST_ORG_ID, kb_id=kb_id, dry_run=True
         )
         
         assert len(results["missing_documents"]) > 0, "Should detect missing document"
@@ -459,7 +459,7 @@ async def test_kb_reconciliation(mock_embedding, mock_get_model_info, test_db, m
         
         # Run reconciliation for real
         results = await ad.kb.reconciliation.reconcile_knowledge_base(
-            analytiq_client, kb_id, TEST_ORG_ID, dry_run=False
+            analytiq_client, TEST_ORG_ID, kb_id=kb_id, dry_run=False
         )
         
         # Process the queued indexing message
@@ -493,7 +493,7 @@ async def test_kb_reconciliation(mock_embedding, mock_get_model_info, test_db, m
         
         # Run reconciliation again
         results = await ad.kb.reconciliation.reconcile_knowledge_base(
-            analytiq_client, kb_id, TEST_ORG_ID, dry_run=False
+            analytiq_client, TEST_ORG_ID, kb_id=kb_id, dry_run=False
         )
         
         # Verify document is removed

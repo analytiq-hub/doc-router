@@ -203,8 +203,8 @@ async def worker_kb_reconcile(worker_id: str) -> None:
                         logger.info(f"Running periodic reconciliation for KB {kb_id} (interval: {reconcile_interval}s)")
                         await ad.kb.reconciliation.reconcile_knowledge_base(
                             analytiq_client,
-                            kb_id,
                             organization_id,
+                            kb_id=kb_id,
                             dry_run=False
                         )
                     except Exception as e:

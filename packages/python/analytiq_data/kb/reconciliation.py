@@ -135,21 +135,187 @@ async def release_reconciliation_lock(
 
 async def reconcile_knowledge_base(
     analytiq_client,
-    kb_id: str,
     organization_id: str,
+    kb_id: Optional[str] = None,
+    doc_id: Optional[str] = None,
     dry_run: bool = False
 ) -> Dict[str, Any]:
     """
-    Reconcile a single knowledge base.
+    Reconcile knowledge base(s) and/or document(s).
     
     Args:
         analytiq_client: The analytiq client
-        kb_id: Knowledge base ID
         organization_id: Organization ID
+        kb_id: Optional knowledge base ID. If provided, only reconcile this KB.
+        doc_id: Optional document ID. If provided, only check this document across KBs.
         dry_run: If True, only report issues without fixing them
         
     Returns:
-        Dict with reconciliation results
+        Dict with reconciliation results. If doc_id is provided, returns results for all affected KBs.
+        If kb_id is provided, returns results for that KB.
+        
+    Note:
+        - If both kb_id and doc_id are provided, checks that document in that KB only
+        - If only doc_id is provided, checks that document across all KBs in the organization
+        - If only kb_id is provided, performs full KB reconciliation (default behavior)
+        - If neither is provided, raises ValueError
+    """
+    if not kb_id and not doc_id:
+        raise ValueError("Either kb_id or doc_id (or both) must be provided")
+    
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    
+    # If doc_id is provided, reconcile that document
+    if doc_id:
+        return await _reconcile_document(analytiq_client, organization_id, doc_id, kb_id, dry_run)
+    
+    # Otherwise, reconcile the KB (full reconciliation)
+    if not kb_id:
+        raise ValueError("kb_id must be provided when doc_id is not provided")
+    
+    return await _reconcile_kb_full(analytiq_client, organization_id, kb_id, dry_run)
+
+
+async def _reconcile_document(
+    analytiq_client,
+    organization_id: str,
+    doc_id: str,
+    kb_id: Optional[str] = None,
+    dry_run: bool = False
+) -> Dict[str, Any]:
+    """
+    Reconcile a specific document across KBs (or in a specific KB if kb_id is provided).
+    """
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    
+    # Get the document
+    doc = await db.docs.find_one({"_id": ObjectId(doc_id), "organization_id": organization_id})
+    if not doc:
+        raise ValueError(f"Document {doc_id} not found")
+    
+    doc_tag_ids = set(doc.get("tag_ids", []))
+    
+    # Find KBs to check
+    if kb_id:
+        # Check only in the specified KB
+        kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id), "organization_id": organization_id})
+        if not kb:
+            raise ValueError(f"Knowledge base {kb_id} not found")
+        kbs_to_check = [kb]
+    else:
+        # Check in all KBs that match the document's tags (or all KBs if doc has no tags)
+        if doc_tag_ids:
+            kbs_to_check = await db.knowledge_bases.find({
+                "organization_id": organization_id,
+                "status": {"$in": ["indexing", "active"]},
+                "tag_ids": {"$in": list(doc_tag_ids)}
+            }).to_list(length=None)
+        else:
+            # Document has no tags - check all KBs where it might be indexed
+            existing_index_entries = await db.document_index.find({"document_id": doc_id}).to_list(length=None)
+            existing_kb_ids = {entry["kb_id"] for entry in existing_index_entries}
+            if existing_kb_ids:
+                kbs_to_check = await db.knowledge_bases.find({
+                    "_id": {"$in": [ObjectId(kb_id) for kb_id in existing_kb_ids]},
+                    "organization_id": organization_id,
+                    "status": {"$in": ["indexing", "active"]}
+                }).to_list(length=None)
+            else:
+                kbs_to_check = []
+    
+    all_results = {
+        "doc_id": doc_id,
+        "kb_results": [],
+        "total_missing": 0,
+        "total_stale": 0,
+        "total_orphaned": 0,
+        "dry_run": dry_run
+    }
+    
+    for kb in kbs_to_check:
+        kb_id_str = str(kb["_id"])
+        kb_tag_ids = set(kb.get("tag_ids", []))
+        
+        kb_result = {
+            "kb_id": kb_id_str,
+            "missing_documents": [],
+            "stale_documents": [],
+            "orphaned_vectors": 0,
+            "missing_embeddings": 0,
+            "dry_run": dry_run
+        }
+        
+        # Check if document should be in this KB
+        should_be_indexed = bool(doc_tag_ids & kb_tag_ids) if kb_tag_ids else False
+        
+        # Check if document is indexed in this KB
+        index_entry = await db.document_index.find_one({
+            "kb_id": kb_id_str,
+            "document_id": doc_id
+        })
+        is_indexed = index_entry is not None
+        
+        if should_be_indexed and not is_indexed:
+            # Document should be indexed but isn't
+            kb_result["missing_documents"].append(doc_id)
+            if not dry_run:
+                # Check if document has OCR text (required for indexing)
+                ocr_text = await ad.common.ocr.get_ocr_text(analytiq_client, doc_id)
+                if ocr_text and ocr_text.strip():
+                    kb_msg = {"document_id": doc_id, "kb_id": kb_id_str}
+                    await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
+        elif not should_be_indexed and is_indexed:
+            # Document is indexed but shouldn't be (stale)
+            kb_result["stale_documents"].append(doc_id)
+            if not dry_run:
+                try:
+                    await remove_document_from_kb(analytiq_client, kb_id_str, doc_id, organization_id)
+                except Exception as e:
+                    logger.error(f"Error removing stale document {doc_id} from KB {kb_id_str}: {e}")
+        
+        # Check for orphaned vectors for this document
+        collection_name = f"kb_vectors_{kb_id_str}"
+        vectors_collection = db[collection_name]
+        if is_indexed:
+            # Check if vectors exist but index entry doesn't (shouldn't happen, but check anyway)
+            vector_count = await vectors_collection.count_documents({"document_id": doc_id})
+            if vector_count > 0 and not index_entry:
+                kb_result["orphaned_vectors"] = vector_count
+                if not dry_run:
+                    await vectors_collection.delete_many({"document_id": doc_id})
+        else:
+            # Document not indexed - check if there are orphaned vectors
+            vector_count = await vectors_collection.count_documents({"document_id": doc_id})
+            if vector_count > 0:
+                kb_result["orphaned_vectors"] = vector_count
+                if not dry_run:
+                    await vectors_collection.delete_many({"document_id": doc_id})
+        
+        all_results["kb_results"].append(kb_result)
+        all_results["total_missing"] += len(kb_result["missing_documents"])
+        all_results["total_stale"] += len(kb_result["stale_documents"])
+        all_results["total_orphaned"] += kb_result["orphaned_vectors"]
+    
+    # Update last_reconciled_at for affected KBs (only if not dry_run)
+    if not dry_run:
+        for kb in kbs_to_check:
+            kb_id_str = str(kb["_id"])
+            await db.knowledge_bases.update_one(
+                {"_id": ObjectId(kb_id_str)},
+                {"$set": {"last_reconciled_at": datetime.now(UTC)}}
+            )
+    
+    return all_results
+
+
+async def _reconcile_kb_full(
+    analytiq_client,
+    organization_id: str,
+    kb_id: str,
+    dry_run: bool = False
+) -> Dict[str, Any]:
+    """
+    Perform full reconciliation of a knowledge base (original behavior).
     """
     db = analytiq_client.mongodb_async[analytiq_client.env]
     
@@ -343,8 +509,8 @@ async def reconcile_all_knowledge_bases(
         try:
             kb_results = await reconcile_knowledge_base(
                 analytiq_client,
-                kb_id,
-                org_id,
+                organization_id=org_id,
+                kb_id=kb_id,
                 dry_run=dry_run
             )
             all_results["kb_results"].append(kb_results)

@@ -623,7 +623,7 @@ async def test_3_1_remove_kb_tag_matching_document(mock_embedding, mock_get_mode
         
         # Run reconciliation to remove stale documents
         await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), kb1_id, TEST_ORG_ID, dry_run=False
+            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb1_id, dry_run=False
         )
         await process_pending_kb_index_messages(test_db)
         
@@ -675,7 +675,7 @@ async def test_3_2_remove_kb_tag_multiple_documents(mock_embedding, mock_get_mod
         
         # Run reconciliation to remove stale documents
         await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), kb1_id, TEST_ORG_ID, dry_run=False
+            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb1_id, dry_run=False
         )
         await process_pending_kb_index_messages(test_db)
         
@@ -727,7 +727,7 @@ async def test_3_3_remove_kb_tag_document_has_other_matching_tags(mock_embedding
         
         # Run reconciliation
         await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), kb1_id, TEST_ORG_ID, dry_run=False
+            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb1_id, dry_run=False
         )
         await process_pending_kb_index_messages(test_db)
         
@@ -820,7 +820,7 @@ async def test_4_1_kb_created_after_document(mock_embedding, mock_get_model_info
         
         # Run reconciliation to find and index matching documents
         results = await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), kb1_id, TEST_ORG_ID, dry_run=False
+            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb1_id, dry_run=False
         )
         
         # Process the queued indexing messages
@@ -863,10 +863,10 @@ async def test_4_2_kb_created_after_document_multiple_kbs(mock_embedding, mock_g
         
         # Run reconciliation for both KBs
         await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), kb1_id, TEST_ORG_ID, dry_run=False
+            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb1_id, dry_run=False
         )
         await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), kb2_id, TEST_ORG_ID, dry_run=False
+            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb2_id, dry_run=False
         )
         
         # Process the queued indexing messages
@@ -906,7 +906,7 @@ async def test_4_3_kb_created_after_document_no_match(mock_embedding, mock_get_m
         
         # Run reconciliation
         results = await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), kb1_id, TEST_ORG_ID, dry_run=False
+            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb1_id, dry_run=False
         )
         
         # Process any queued indexing messages

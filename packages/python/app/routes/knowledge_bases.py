@@ -818,8 +818,8 @@ async def reconcile_knowledge_base_endpoint(
     try:
         results = await ad.kb.reconciliation.reconcile_knowledge_base(
             analytiq_client=analytiq_client,
-            kb_id=kb_id,
             organization_id=organization_id,
+            kb_id=kb_id,
             dry_run=dry_run
         )
         return results
