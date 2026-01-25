@@ -468,7 +468,20 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             }}
             kb={selectedKB}
             organizationId={organizationId}
-            onReconcile={loadKnowledgeBases}
+            onReconcile={async () => {
+              await loadKnowledgeBases();
+              // Fetch the updated KB to get the latest last_reconciled_at
+              if (selectedKB) {
+                try {
+                  const updatedKB = await docRouterOrgApi.getKnowledgeBase({ kbId: selectedKB.kb_id });
+                  setSelectedKB(updatedKB);
+                } catch (error) {
+                  console.error('Error fetching updated KB:', error);
+                  // Fallback to reloading the list
+                  await loadKnowledgeBases();
+                }
+              }
+            }}
           />
         )}
       </div>

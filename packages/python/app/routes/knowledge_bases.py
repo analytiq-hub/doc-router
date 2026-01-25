@@ -122,6 +122,7 @@ class KnowledgeBase(KnowledgeBaseConfig):
     chunk_count: int
     created_at: datetime
     updated_at: datetime
+    last_reconciled_at: Optional[datetime] = None
 
 class ListKnowledgeBasesResponse(BaseModel):
     knowledge_bases: List[KnowledgeBase]
@@ -490,6 +491,7 @@ async def create_knowledge_base(
     kb_dict["chunk_count"] = kb["chunk_count"]
     kb_dict["created_at"] = kb["created_at"]
     kb_dict["updated_at"] = kb["updated_at"]
+    kb_dict["last_reconciled_at"] = kb.get("last_reconciled_at")
     return KnowledgeBase(**kb_dict)
 
 @knowledge_bases_router.get("/v0/orgs/{organization_id}/knowledge-bases", response_model=ListKnowledgeBasesResponse)
@@ -534,7 +536,8 @@ async def list_knowledge_bases(
         embedding_model=kb["embedding_model"],
         coalesce_neighbors=kb.get("coalesce_neighbors", 0),
         reconcile_enabled=kb.get("reconcile_enabled", False),
-        reconcile_interval_seconds=kb.get("reconcile_interval_seconds")
+        reconcile_interval_seconds=kb.get("reconcile_interval_seconds"),
+        last_reconciled_at=kb.get("last_reconciled_at")
     )
         for kb in kbs
     ]
@@ -579,7 +582,8 @@ async def get_knowledge_base(
         embedding_model=kb["embedding_model"],
         coalesce_neighbors=kb.get("coalesce_neighbors", 0),
         reconcile_enabled=kb.get("reconcile_enabled", False),
-        reconcile_interval_seconds=kb.get("reconcile_interval_seconds")
+        reconcile_interval_seconds=kb.get("reconcile_interval_seconds"),
+        last_reconciled_at=kb.get("last_reconciled_at")
     )
 
 @knowledge_bases_router.put("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}", response_model=KnowledgeBase)
@@ -646,7 +650,8 @@ async def update_knowledge_base(
         embedding_model=updated_kb["embedding_model"],
         coalesce_neighbors=updated_kb.get("coalesce_neighbors", 0),
         reconcile_enabled=updated_kb.get("reconcile_enabled", False),
-        reconcile_interval_seconds=updated_kb.get("reconcile_interval_seconds")
+        reconcile_interval_seconds=updated_kb.get("reconcile_interval_seconds"),
+        last_reconciled_at=updated_kb.get("last_reconciled_at")
     )
 
 @knowledge_bases_router.delete("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}")

@@ -56,12 +56,14 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
-      return date.toLocaleString('en-US', {
+      // Format in local timezone with explicit timezone display
+      return date.toLocaleString(undefined, {
         year: 'numeric',
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
+        timeZoneName: 'short' // Shows timezone abbreviation (e.g., PST, EST)
       });
     } catch {
       return dateString;
