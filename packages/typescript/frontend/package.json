@@ -45,11 +45,13 @@
     "react-dom": "^18",
     "react-dropzone": "^14.2.9",
     "react-hot-toast": "^2.5.1",
+    "react-markdown": "^9.0.1",
     "react-pdf": "^9.1.1",
     "react-resizable-panels": "^2.1.4",
     "react-table": "^7.8.0",
     "react-toastify": "^11.0.5",
-    "reactflow": "^11.11.4"
+    "reactflow": "^11.11.4",
+    "remark-gfm": "^4.0.0"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
