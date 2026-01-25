@@ -339,10 +339,10 @@ async def index_document_in_kb(
     if not doc:
         raise ValueError(f"Document {document_id} not found")
     
-    # Get OCR text
-    ocr_text = await ad.common.ocr.get_ocr_text(analytiq_client, document_id)
-    if not ocr_text or not ocr_text.strip():
-        logger.warning(f"Document {document_id} has no OCR text. Skipping indexing.")
+    # Get text to chunk (OCR text for OCR-supported files, original content for .txt/.md files)
+    text_to_chunk = await ad.llm.get_extracted_text(analytiq_client, document_id)
+    if not text_to_chunk or not text_to_chunk.strip():
+        logger.warning(f"Document {document_id} has no extractable text. Skipping indexing.")
         return {
             "chunk_count": 0,
             "cache_misses": 0,
@@ -352,7 +352,7 @@ async def index_document_in_kb(
     
     # Chunk the text
     chunks = await chunk_text(
-        ocr_text,
+        text_to_chunk,
         kb["chunker_type"],
         kb["chunk_size"],
         kb["chunk_overlap"]

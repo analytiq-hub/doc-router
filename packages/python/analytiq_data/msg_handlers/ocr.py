@@ -57,6 +57,9 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
             # Post a message to the llm job queue
             msg = {"document_id": document_id}
             await ad.queue.send_msg(analytiq_client, "llm", msg=msg)
+            # Post a message to the KB indexing queue (for .txt/.md files that can be indexed)
+            kb_msg = {"document_id": document_id}
+            await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
             return
 
         # Update state to OCR processing
