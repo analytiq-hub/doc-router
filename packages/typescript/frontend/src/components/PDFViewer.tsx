@@ -906,6 +906,13 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
                         height={pdfDimensions.height}
                         scale={scale}
                         rotate={originalRotation}
+                        onRenderTextLayerError={(error) => {
+                          if (error.name === 'AbortException') {
+                            // Silently ignore TextLayer task cancelled errors as they are expected during re-renders
+                            return;
+                          }
+                          console.error('TextLayer render error:', error);
+                        }}
                       >
                         {renderHighlights(index + 1)}
                       </Page>
