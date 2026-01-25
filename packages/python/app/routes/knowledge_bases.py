@@ -483,6 +483,20 @@ async def create_knowledge_base(
             pass  # Collection may not exist
         raise  # Re-raise the HTTPException
     
+    # Trigger reconciliation to index existing documents with matching tags
+    # This runs in the background - errors are logged but don't fail KB creation
+    try:
+        await ad.kb.reconciliation.reconcile_knowledge_base(
+            analytiq_client=analytiq_client,
+            organization_id=organization_id,
+            kb_id=kb_id,
+            dry_run=False
+        )
+        logger.info(f"Reconciliation triggered for newly created KB {kb_id}")
+    except Exception as e:
+        # Log error but don't fail KB creation - reconciliation can be retried later
+        logger.error(f"Error triggering reconciliation for KB {kb_id} after creation: {e}")
+    
     # Fetch and return created KB
     kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id)})
     
@@ -651,6 +665,13 @@ async def update_knowledge_base(
     if update.tag_ids is not None:
         await validate_tag_ids(update.tag_ids, organization_id, analytiq_client)
     
+    # Check if tags are being updated (for reconciliation trigger)
+    tags_changed = False
+    if update.tag_ids is not None:
+        old_tag_ids = set(kb.get("tag_ids", []))
+        new_tag_ids = set(update.tag_ids)
+        tags_changed = old_tag_ids != new_tag_ids
+    
     # Build update dict (only include provided fields)
     update_dict = {"updated_at": datetime.now(UTC)}
     if update.name is not None:
@@ -673,6 +694,21 @@ async def update_knowledge_base(
         {"_id": ObjectId(kb_id)},
         {"$set": update_dict}
     )
+    
+    # Trigger reconciliation if tags changed to re-evaluate document membership
+    # This runs in the background - errors are logged but don't fail KB update
+    if tags_changed:
+        try:
+            await ad.kb.reconciliation.reconcile_knowledge_base(
+                analytiq_client=analytiq_client,
+                organization_id=organization_id,
+                kb_id=kb_id,
+                dry_run=False
+            )
+            logger.info(f"Reconciliation triggered for KB {kb_id} after tag update")
+        except Exception as e:
+            # Log error but don't fail KB update - reconciliation can be retried later
+            logger.error(f"Error triggering reconciliation for KB {kb_id} after tag update: {e}")
     
     # Fetch and return updated KB
     updated_kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id)})

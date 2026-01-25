@@ -78,7 +78,7 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string): 'success' | 'warning' | 'error' | 'default' => {
     switch (status) {
       case 'active':
         return 'success';
@@ -110,7 +110,7 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
             <div className="pt-2">
               <Chip 
                 label={kb.status} 
-                color={getStatusColor(kb.status) as any}
+                color={getStatusColor(kb.status)}
                 size="small"
               />
             </div>
