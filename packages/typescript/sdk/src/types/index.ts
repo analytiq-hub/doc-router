@@ -911,6 +911,27 @@ export interface ListKBDocumentsResponse {
   total_count: number;
 }
 
+export interface KBChunk {
+  chunk_index: number;
+  chunk_text: string;
+  token_count: number;
+  indexed_at: string;
+  char_offset_start?: number;
+  char_offset_end?: number;
+}
+
+export interface ListKBDocumentChunksParams {
+  kbId: string;
+  documentId: string;
+  skip?: number;
+  limit?: number;
+}
+
+export interface ListKBChunksResponse {
+  chunks: KBChunk[];
+  total_count: number;
+}
+
 export interface KBSearchRequest {
   query: string;
   top_k?: number;

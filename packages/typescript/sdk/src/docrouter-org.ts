@@ -59,6 +59,8 @@ import {
   DeleteKnowledgeBaseParams,
   ListKBDocumentsParams,
   ListKBDocumentsResponse,
+  ListKBDocumentChunksParams,
+  ListKBChunksResponse,
   KBSearchRequest,
   KBSearchResponse,
   SearchKnowledgeBaseParams,
@@ -465,6 +467,16 @@ export class DocRouterOrg {
       params: {
         skip: skip || 0,
         limit: limit || 10
+      }
+    });
+  }
+
+  async getKBDocumentChunks(params: Omit<ListKBDocumentChunksParams, 'organizationId'>): Promise<ListKBChunksResponse> {
+    const { kbId, documentId, skip, limit } = params;
+    return this.http.get<ListKBChunksResponse>(`/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}/documents/${documentId}/chunks`, {
+      params: {
+        skip: skip || 0,
+        limit: limit || 100
       }
     });
   }

@@ -165,6 +165,18 @@ class KBSearchResponse(BaseModel):
     skip: int
     top_k: int
 
+class KBChunk(BaseModel):
+    chunk_index: int
+    chunk_text: str
+    token_count: int
+    indexed_at: datetime
+    char_offset_start: Optional[int] = None
+    char_offset_end: Optional[int] = None
+
+class ListKBChunksResponse(BaseModel):
+    chunks: List[KBChunk]
+    total_count: int
+
 # Helper Functions
 async def detect_embedding_dimensions(embedding_model: str, analytiq_client) -> int:
     """
@@ -829,6 +841,162 @@ async def list_kb_documents(
     
     return ListKBDocumentsResponse(
         documents=documents,
+        total_count=total_count
+    )
+
+@knowledge_bases_router.get("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}/documents/{document_id}/chunks", response_model=ListKBChunksResponse)
+async def list_kb_document_chunks(
+    organization_id: str,
+    kb_id: str,
+    document_id: str,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=1000),
+    current_user: User = Depends(get_org_user)
+):
+    """List chunks for a specific document in a knowledge base"""
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    
+    # Verify KB exists and belongs to org
+    kb = await db.knowledge_bases.find_one({
+        "_id": ObjectId(kb_id),
+        "organization_id": organization_id
+    })
+    
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    
+    # Verify document exists and belongs to org
+    doc = await db.docs.find_one({
+        "_id": ObjectId(document_id),
+        "organization_id": organization_id
+    })
+    
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Verify document is indexed in this KB
+    index_entry = await db.document_index.find_one({
+        "kb_id": kb_id,
+        "document_id": document_id
+    })
+    
+    if not index_entry:
+        raise HTTPException(status_code=404, detail="Document is not indexed in this knowledge base")
+    
+    # Get chunks from the vector collection
+    collection_name = f"kb_vectors_{kb_id}"
+    vectors_collection = db[collection_name]
+    
+    # Get total count
+    total_count = await vectors_collection.count_documents({
+        "document_id": document_id,
+        "organization_id": organization_id
+    })
+    
+    # Get chunks with pagination, sorted by chunk_index
+    chunks_cursor = vectors_collection.find({
+        "document_id": document_id,
+        "organization_id": organization_id
+    }).sort("chunk_index", 1).skip(skip).limit(limit)
+    
+    chunks_list = await chunks_cursor.to_list(length=limit)
+    
+    # Get full OCR text to calculate character offsets
+    ocr_text = await ad.common.ocr.get_ocr_text(analytiq_client, document_id)
+    
+    chunks = []
+    search_start = 0  # Track position in OCR text for sequential chunk finding
+    cumulative_offset = 0  # Fallback: cumulative character count
+    
+    for chunk_data in chunks_list:
+        char_offset_start = None
+        char_offset_end = None
+        
+        if ocr_text:
+            chunk_text = chunk_data["chunk_text"]
+            
+            # Strategy 1: Try exact match starting from last position
+            chunk_pos = ocr_text.find(chunk_text, search_start)
+            if chunk_pos != -1:
+                char_offset_start = chunk_pos
+                char_offset_end = chunk_pos + len(chunk_text)
+                search_start = char_offset_end
+                cumulative_offset = char_offset_end  # Update cumulative for next chunk
+            else:
+                # Strategy 2: Try normalized whitespace matching
+                # Normalize both texts by collapsing whitespace
+                import re
+                chunk_normalized = re.sub(r'\s+', ' ', chunk_text.strip())
+                ocr_normalized = re.sub(r'\s+', ' ', ocr_text[search_start:].strip())
+                
+                chunk_pos_normalized = ocr_normalized.find(chunk_normalized)
+                if chunk_pos_normalized != -1:
+                    # Map back to original text position
+                    # Count characters in original text up to the match
+                    original_pos = search_start
+                    normalized_pos = 0
+                    for i in range(search_start, len(ocr_text)):
+                        if normalized_pos == chunk_pos_normalized:
+                            char_offset_start = i
+                            break
+                        # Count non-whitespace or single whitespace
+                        if not ocr_text[i].isspace() or (i > 0 and not ocr_text[i-1].isspace()):
+                            normalized_pos += 1
+                    
+                    if char_offset_start is not None:
+                        # Estimate end position (approximate)
+                        char_offset_end = char_offset_start + len(chunk_text)
+                        search_start = char_offset_end
+                        cumulative_offset = char_offset_end  # Update cumulative for next chunk
+                else:
+                    # Strategy 3: Use first significant substring (first 100 chars or first sentence)
+                    search_key = chunk_text[:100].strip() if len(chunk_text) > 100 else chunk_text.strip()
+                    if search_key and len(search_key) > 10:  # Only if we have enough to match
+                        # Try finding the key in OCR text
+                        key_pos = ocr_text.find(search_key, search_start)
+                        if key_pos != -1:
+                            char_offset_start = key_pos
+                            # Estimate end based on chunk length
+                            char_offset_end = key_pos + len(chunk_text)
+                            search_start = char_offset_end
+                            cumulative_offset = char_offset_end  # Update cumulative for next chunk
+                        else:
+                            # Last resort: use cumulative estimate based on chunk order
+                            # This is approximate but better than nothing
+                            if len(chunks) > 0:
+                                last_chunk = chunks[-1]
+                                if last_chunk.char_offset_end is not None:
+                                    # Start from end of previous chunk
+                                    char_offset_start = last_chunk.char_offset_end
+                                    char_offset_end = char_offset_start + len(chunk_text)
+                                    search_start = char_offset_end
+                                else:
+                                    # Use cumulative offset as fallback
+                                    char_offset_start = cumulative_offset
+                                    char_offset_end = cumulative_offset + len(chunk_text)
+                                    cumulative_offset = char_offset_end
+                                    search_start = char_offset_end
+                            else:
+                                # First chunk, use cumulative offset
+                                char_offset_start = cumulative_offset
+                                char_offset_end = cumulative_offset + len(chunk_text)
+                                cumulative_offset = char_offset_end
+                                search_start = char_offset_end
+        
+        chunks.append(
+            KBChunk(
+                chunk_index=chunk_data["chunk_index"],
+                chunk_text=chunk_data["chunk_text"],
+                token_count=chunk_data.get("token_count", 0),
+                indexed_at=chunk_data.get("indexed_at", datetime.now(UTC)),
+                char_offset_start=char_offset_start,
+                char_offset_end=char_offset_end
+            )
+        )
+    
+    return ListKBChunksResponse(
+        chunks=chunks,
         total_count=total_count
     )
 
