@@ -151,10 +151,10 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
   };
 
   return (
-    <div className="p-4 max-w-4xl mx-auto">
-      <div className="bg-white p-6 rounded-lg shadow mb-6">
-        <div className="hidden md:flex items-center gap-2 mb-4">
-          <h2 className="text-xl font-bold">
+    <div className="p-2 sm:p-4 max-w-4xl mx-auto">
+      <div className="bg-white p-4 sm:p-6 rounded-lg shadow mb-6">
+        <div className="flex items-center gap-2 mb-4">
+          <h2 className="text-lg sm:text-xl font-bold">
             {isEditing ? 'Edit Knowledge Base' : 'Create Knowledge Base'}
           </h2>
           <InfoTooltip 
@@ -174,10 +174,10 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
             }
           />
         </div>
-        <form onSubmit={handleSubmit} className="space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-6">
           {/* Name */}
-          <div className="flex items-center gap-4">
-            <label htmlFor="kb-name" className="w-40 text-sm font-medium text-gray-700">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <label htmlFor="kb-name" className="w-full sm:w-40 text-sm font-medium text-gray-700">
               Name <span className="text-red-500">*</span>
             </label>
             <input
@@ -193,8 +193,8 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
           </div>
 
           {/* Description */}
-          <div className="flex items-center gap-4">
-            <label htmlFor="kb-description" className="w-40 text-sm font-medium text-gray-700">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <label htmlFor="kb-description" className="w-full sm:w-40 text-sm font-medium text-gray-700">
               Description
             </label>
             <textarea
@@ -209,8 +209,8 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
           </div>
 
           {/* Tags */}
-          <div className="flex items-start gap-4">
-            <label className="w-40 text-sm font-medium text-gray-700 pt-2">
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+            <label className="w-full sm:w-40 text-sm font-medium text-gray-700 pt-2">
               Tags
             </label>
             <div className="flex-1">
@@ -229,15 +229,15 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
           {/* Configuration Section - Only editable when creating */}
           {!isEditing && (
             <>
-              <div className="border-t pt-6 mt-6">
-                <h3 className="text-lg font-semibold mb-4">Indexing Configuration</h3>
-                <p className="text-sm text-gray-600 mb-4">
+              <div className="border-t pt-4 sm:pt-6 mt-4 sm:mt-6">
+                <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Indexing Configuration</h3>
+                <p className="text-sm text-gray-600 mb-3 sm:mb-4">
                   These settings cannot be changed after creation. To use different settings, create a new KB.
                 </p>
 
                 {/* Chunker Type */}
-                <div className="flex items-center gap-4 mb-4">
-                  <label htmlFor="chunker-type" className="w-40 text-sm font-medium text-gray-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4">
+                  <label htmlFor="chunker-type" className="w-full sm:w-40 text-sm font-medium text-gray-700">
                     Chunker Type
                   </label>
                   <select
@@ -254,44 +254,48 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
                 </div>
 
                 {/* Chunk Size */}
-                <div className="flex items-center gap-4 mb-4">
-                  <label htmlFor="chunk-size" className="w-40 text-sm font-medium text-gray-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4">
+                  <label htmlFor="chunk-size" className="w-full sm:w-40 text-sm font-medium text-gray-700">
                     Chunk Size (tokens)
                   </label>
-                  <input
-                    id="chunk-size"
-                    type="number"
-                    min={MIN_CHUNK_SIZE}
-                    max={MAX_CHUNK_SIZE}
-                    className="flex-1 p-2 border rounded disabled:bg-gray-100"
-                    value={currentKB.chunk_size ?? DEFAULT_CHUNK_SIZE}
-                    onChange={e => setCurrentKB({ ...currentKB, chunk_size: parseInt(e.target.value) || DEFAULT_CHUNK_SIZE })}
-                    disabled={isLoading}
-                  />
-                  <span className="text-sm text-gray-500 w-20">{MIN_CHUNK_SIZE}-{MAX_CHUNK_SIZE}</span>
+                  <div className="flex-1 flex items-center gap-2">
+                    <input
+                      id="chunk-size"
+                      type="number"
+                      min={MIN_CHUNK_SIZE}
+                      max={MAX_CHUNK_SIZE}
+                      className="flex-1 p-2 border rounded disabled:bg-gray-100"
+                      value={currentKB.chunk_size ?? DEFAULT_CHUNK_SIZE}
+                      onChange={e => setCurrentKB({ ...currentKB, chunk_size: parseInt(e.target.value) || DEFAULT_CHUNK_SIZE })}
+                      disabled={isLoading}
+                    />
+                    <span className="text-sm text-gray-500 whitespace-nowrap">{MIN_CHUNK_SIZE}-{MAX_CHUNK_SIZE}</span>
+                  </div>
                 </div>
 
                 {/* Chunk Overlap */}
-                <div className="flex items-center gap-4 mb-4">
-                  <label htmlFor="chunk-overlap" className="w-40 text-sm font-medium text-gray-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4">
+                  <label htmlFor="chunk-overlap" className="w-full sm:w-40 text-sm font-medium text-gray-700">
                     Chunk Overlap (tokens)
                   </label>
-                  <input
-                    id="chunk-overlap"
-                    type="number"
-                    min={0}
-                    max={(currentKB.chunk_size ?? DEFAULT_CHUNK_SIZE) - 1}
-                    className="flex-1 p-2 border rounded disabled:bg-gray-100"
-                    value={currentKB.chunk_overlap ?? DEFAULT_CHUNK_OVERLAP}
-                    onChange={e => setCurrentKB({ ...currentKB, chunk_overlap: parseInt(e.target.value) || 0 })}
-                    disabled={isLoading}
-                  />
-                  <span className="text-sm text-gray-500 w-20">0-{(currentKB.chunk_size ?? DEFAULT_CHUNK_SIZE) - 1}</span>
+                  <div className="flex-1 flex items-center gap-2">
+                    <input
+                      id="chunk-overlap"
+                      type="number"
+                      min={0}
+                      max={(currentKB.chunk_size ?? DEFAULT_CHUNK_SIZE) - 1}
+                      className="flex-1 p-2 border rounded disabled:bg-gray-100"
+                      value={currentKB.chunk_overlap ?? DEFAULT_CHUNK_OVERLAP}
+                      onChange={e => setCurrentKB({ ...currentKB, chunk_overlap: parseInt(e.target.value) || 0 })}
+                      disabled={isLoading}
+                    />
+                    <span className="text-sm text-gray-500 whitespace-nowrap">0-{(currentKB.chunk_size ?? DEFAULT_CHUNK_SIZE) - 1}</span>
+                  </div>
                 </div>
 
                 {/* Embedding Model */}
-                <div className="flex items-center gap-4 mb-4">
-                  <label htmlFor="embedding-model" className="w-40 text-sm font-medium text-gray-700">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4">
+                  <label htmlFor="embedding-model" className="w-full sm:w-40 text-sm font-medium text-gray-700">
                     Embedding Model
                   </label>
                   <select
@@ -317,29 +321,31 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
           )}
 
           {/* Coalesce Neighbors - Editable */}
-          <div className="flex items-center gap-4">
-            <label htmlFor="coalesce-neighbors" className="w-40 text-sm font-medium text-gray-700">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+            <label htmlFor="coalesce-neighbors" className="w-full sm:w-40 text-sm font-medium text-gray-700">
               Coalesce Neighbors
             </label>
-            <input
-              id="coalesce-neighbors"
-              type="number"
-              min={0}
-              max={MAX_COALESCE_NEIGHBORS}
-              className="flex-1 p-2 border rounded disabled:bg-gray-100"
-              value={currentKB.coalesce_neighbors ?? DEFAULT_COALESCE_NEIGHBORS}
-              onChange={e => setCurrentKB({ ...currentKB, coalesce_neighbors: parseInt(e.target.value) || 0 })}
-              disabled={isLoading}
-            />
-            <span className="text-sm text-gray-500 w-20">0-{MAX_COALESCE_NEIGHBORS}</span>
-            <InfoTooltip 
-              title="Coalesce Neighbors"
-              content="Number of neighboring chunks to include in search results for context. 0 means only return matched chunks."
-            />
+            <div className="flex-1 flex items-center gap-2">
+              <input
+                id="coalesce-neighbors"
+                type="number"
+                min={0}
+                max={MAX_COALESCE_NEIGHBORS}
+                className="flex-1 p-2 border rounded disabled:bg-gray-100"
+                value={currentKB.coalesce_neighbors ?? DEFAULT_COALESCE_NEIGHBORS}
+                onChange={e => setCurrentKB({ ...currentKB, coalesce_neighbors: parseInt(e.target.value) || 0 })}
+                disabled={isLoading}
+              />
+              <span className="text-sm text-gray-500 whitespace-nowrap">0-{MAX_COALESCE_NEIGHBORS}</span>
+              <InfoTooltip 
+                title="Coalesce Neighbors"
+                content="Number of neighboring chunks to include in search results for context. 0 means only return matched chunks."
+              />
+            </div>
           </div>
 
           {/* Reconciliation Configuration - Editable */}
-          <div className="border-t pt-4 space-y-4">
+          <div className="border-t pt-4 space-y-3 sm:space-y-4">
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-semibold text-gray-700">Periodic Reconciliation</h3>
               <InfoTooltip 
@@ -348,8 +354,8 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
               />
             </div>
             
-            <div className="flex items-center gap-4">
-              <label htmlFor="reconcile-enabled" className="w-40 text-sm font-medium text-gray-700">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <label htmlFor="reconcile-enabled" className="w-full sm:w-40 text-sm font-medium text-gray-700">
                 Enable Reconciliation
               </label>
               <input
@@ -370,41 +376,43 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
             </div>
 
             {currentKB.reconcile_enabled && (
-              <div className="flex items-center gap-4">
-                <label htmlFor="reconcile-interval" className="w-40 text-sm font-medium text-gray-700">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                <label htmlFor="reconcile-interval" className="w-full sm:w-40 text-sm font-medium text-gray-700">
                   Interval (seconds)
                 </label>
-                <input
-                  id="reconcile-interval"
-                  type="number"
-                  min={60}
-                  className="flex-1 p-2 border rounded disabled:bg-gray-100"
-                  value={currentKB.reconcile_interval_seconds || 60}
-                  onChange={e => setCurrentKB({ 
-                    ...currentKB, 
-                    reconcile_interval_seconds: parseInt(e.target.value) || undefined 
-                  })}
-                  disabled={isLoading}
-                  required={currentKB.reconcile_enabled}
-                />
-                <span className="text-sm text-gray-500 w-32">Minimum 60 seconds</span>
+                <div className="flex-1 flex items-center gap-2">
+                  <input
+                    id="reconcile-interval"
+                    type="number"
+                    min={60}
+                    className="flex-1 p-2 border rounded disabled:bg-gray-100"
+                    value={currentKB.reconcile_interval_seconds || 60}
+                    onChange={e => setCurrentKB({ 
+                      ...currentKB, 
+                      reconcile_interval_seconds: parseInt(e.target.value) || undefined 
+                    })}
+                    disabled={isLoading}
+                    required={currentKB.reconcile_enabled}
+                  />
+                  <span className="text-sm text-gray-500 whitespace-nowrap">Minimum 60 seconds</span>
+                </div>
               </div>
             )}
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-2 justify-end pt-4 border-t">
+          <div className="flex flex-col sm:flex-row gap-2 justify-end pt-4 border-t">
             <button
               type="button"
               onClick={() => router.push(`/orgs/${organizationId}/knowledge-bases`)}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
+              className="w-full sm:w-auto px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
               disabled={isLoading}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
               disabled={isLoading}
             >
               {isEditing ? 'Update Knowledge Base' : 'Create Knowledge Base'}
