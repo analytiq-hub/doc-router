@@ -9,6 +9,8 @@ import { ArrowBack, ArrowForward } from '@mui/icons-material';
 import colors from 'tailwindcss/colors';
 import { toast } from 'react-toastify';
 import Link from 'next/link';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface KnowledgeBaseDocumentsProps {
   organizationId: string;
@@ -256,15 +258,8 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                   </Typography>
                 </Box>
               </Box>
-              <Typography
-                variant="body2"
-                component="pre"
+              <Box
                 sx={{
-                  whiteSpace: 'pre-wrap',
-                  wordBreak: 'break-word',
-                  fontFamily: 'monospace',
-                  fontSize: '0.875rem',
-                  lineHeight: 1.6,
                   p: 2,
                   border: '1px solid',
                   borderColor: 'divider',
@@ -274,8 +269,12 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                   overflowY: 'auto'
                 }}
               >
-                {chunks[currentChunkIndex].chunk_text}
-              </Typography>
+                <div className="markdown-prose">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {chunks[currentChunkIndex].chunk_text}
+                  </ReactMarkdown>
+                </div>
+              </Box>
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
                 Indexed: {new Date(chunks[currentChunkIndex].indexed_at).toLocaleString()}
               </Typography>
