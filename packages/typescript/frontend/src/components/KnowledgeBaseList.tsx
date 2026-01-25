@@ -16,6 +16,7 @@ import SyncIcon from '@mui/icons-material/Sync';
 import colors from 'tailwindcss/colors';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
+import Link from 'next/link';
 import KnowledgeBaseInfoModal from '@/components/KnowledgeBaseInfoModal';
 import { isColorLight } from '@/utils/colors';
 
@@ -313,15 +314,16 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
   ];
 
   return (
-    <div className="p-4 max-w-7xl mx-auto">
+    <div className="p-4 w-full">
       <div className="bg-white p-6 rounded-lg shadow">
         <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200 text-blue-800 hidden md:block">
           <p className="text-sm">
             Knowledge Bases enable semantic search across your documents using vector embeddings.
             Documents are automatically indexed into knowledge bases based on their tags.
+            If none are available, <Link href={`/orgs/${organizationId}/knowledge-bases?tab=kb-create`} className="text-blue-600 font-medium hover:underline">click here</Link> or use the tab above to create a new knowledge base.
           </p>
         </div>
-        <h2 className="text-xl font-bold mb-4 hidden md:block">Knowledge Bases</h2>
+        <h2 className="text-xl font-bold mb-4">Knowledge Bases</h2>
         
         {/* Search Box */}
         <div className="mb-4">

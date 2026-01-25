@@ -12,7 +12,7 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
   const { organizationId } = use(params);
   const searchParams = useSearchParams();
   const router = useRouter();
-  const tab = searchParams.get('tab') || 'list';
+  const tab = searchParams.get('tab') || 'knowledge-bases';
   const kbId = searchParams.get('kbId');
 
   const handleTabChange = (newValue: string, kbIdParam?: string) => {
@@ -25,36 +25,34 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
   };
 
   return (
-    <div className="p-2 sm:p-4">
-      <div className="border-b border-gray-200 mb-4 sm:mb-6">
-        <div className="flex gap-2 sm:gap-8 overflow-x-auto">
+    <div className="p-4">
+      <div className="border-b border-gray-200 mb-6">
+        <div className="flex gap-8">
           <button
-            onClick={() => handleTabChange('list')}
-            className={`pb-4 px-1 relative font-semibold text-sm sm:text-base whitespace-nowrap ${
-              tab === 'list'
+            onClick={() => handleTabChange('knowledge-bases')}
+            className={`pb-4 px-1 relative font-semibold text-base ${
+              tab === 'knowledge-bases'
                 ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span className="hidden sm:inline">Knowledge Bases</span>
-            <span className="sm:hidden">KB</span>
+            Knowledge Bases
           </button>
           <button
-            onClick={() => handleTabChange('create')}
-            className={`pb-4 px-1 relative font-semibold text-sm sm:text-base whitespace-nowrap ${
-              tab === 'create'
+            onClick={() => handleTabChange('kb-create')}
+            className={`pb-4 px-1 relative font-semibold text-base ${
+              tab === 'kb-create'
                 ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
                 : 'text-gray-500 hover:text-gray-700'
             }`}
           >
-            <span className="hidden sm:inline">Create Knowledge Base</span>
-            <span className="sm:hidden">Create</span>
+            Create Knowledge Base
           </button>
           {kbId && (
             <>
               <button
                 onClick={() => handleTabChange('edit', kbId)}
-                className={`pb-4 px-1 relative font-semibold text-sm sm:text-base whitespace-nowrap ${
+                className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'edit'
                     ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
                     : 'text-gray-500 hover:text-gray-700'
@@ -64,7 +62,7 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
               </button>
               <button
                 onClick={() => handleTabChange('search', kbId)}
-                className={`pb-4 px-1 relative font-semibold text-sm sm:text-base whitespace-nowrap ${
+                className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'search'
                     ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
                     : 'text-gray-500 hover:text-gray-700'
@@ -74,7 +72,7 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
               </button>
               <button
                 onClick={() => handleTabChange('documents', kbId)}
-                className={`pb-4 px-1 relative font-semibold text-sm sm:text-base whitespace-nowrap ${
+                className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'documents'
                     ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
                     : 'text-gray-500 hover:text-gray-700'
@@ -84,7 +82,7 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
               </button>
               <button
                 onClick={() => handleTabChange('chat', kbId)}
-                className={`pb-4 px-1 relative font-semibold text-sm sm:text-base whitespace-nowrap ${
+                className={`pb-4 px-1 relative font-semibold text-base ${
                   tab === 'chat'
                     ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
                     : 'text-gray-500 hover:text-gray-700'
@@ -97,12 +95,12 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
         </div>
       </div>
 
-      <div className="w-full sm:max-w-7xl sm:mx-auto">
-        <div role="tabpanel" hidden={tab !== 'list'}>
-          {tab === 'list' && <KnowledgeBaseList organizationId={organizationId} />}
+      <div className="max-w-6xl mx-auto">
+        <div role="tabpanel" hidden={tab !== 'knowledge-bases'}>
+          {tab === 'knowledge-bases' && <KnowledgeBaseList organizationId={organizationId} />}
         </div>
-        <div role="tabpanel" hidden={tab !== 'create'}>
-          {tab === 'create' && <KnowledgeBaseCreate organizationId={organizationId} />}
+        <div role="tabpanel" hidden={tab !== 'kb-create'}>
+          {tab === 'kb-create' && <KnowledgeBaseCreate organizationId={organizationId} />}
         </div>
         <div role="tabpanel" hidden={tab !== 'edit'}>
           {tab === 'edit' && kbId && <KnowledgeBaseCreate organizationId={organizationId} kbId={kbId} />}
