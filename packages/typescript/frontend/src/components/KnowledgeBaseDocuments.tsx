@@ -246,12 +246,12 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                     const start = (chunk as any).char_offset_start;
                     const end = (chunk as any).char_offset_end;
                     return start != null && end != null && typeof start === 'number' && typeof end === 'number' ? (
-                      <Typography variant="caption" color="text.secondary">
+                      <Typography variant="caption" sx={{ color: 'text.primary', fontWeight: 500 }}>
                         Characters: {start.toLocaleString()} - {end.toLocaleString()}
                       </Typography>
                     ) : null;
                   })()}
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" sx={{ color: 'text.primary', fontWeight: 500 }}>
                     {chunks[currentChunkIndex].token_count} tokens
                   </Typography>
                 </Box>

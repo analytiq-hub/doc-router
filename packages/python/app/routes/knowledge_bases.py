@@ -913,7 +913,13 @@ async def list_kb_document_chunks(
         char_offset_start = None
         char_offset_end = None
         
-        if ocr_text:
+        # Always calculate offsets, even if OCR text is not available (use cumulative)
+        if not ocr_text:
+            # No OCR text available, use cumulative offset estimate
+            char_offset_start = cumulative_offset
+            char_offset_end = cumulative_offset + len(chunk_data["chunk_text"])
+            cumulative_offset = char_offset_end
+        else:
             chunk_text = chunk_data["chunk_text"]
             
             # Strategy 1: Try exact match starting from last position
@@ -962,27 +968,37 @@ async def list_kb_document_chunks(
                             search_start = char_offset_end
                             cumulative_offset = char_offset_end  # Update cumulative for next chunk
                         else:
-                            # Last resort: use cumulative estimate based on chunk order
-                            # This is approximate but better than nothing
-                            if len(chunks) > 0:
-                                last_chunk = chunks[-1]
-                                if last_chunk.char_offset_end is not None:
-                                    # Start from end of previous chunk
-                                    char_offset_start = last_chunk.char_offset_end
-                                    char_offset_end = char_offset_start + len(chunk_text)
-                                    search_start = char_offset_end
-                                else:
-                                    # Use cumulative offset as fallback
-                                    char_offset_start = cumulative_offset
-                                    char_offset_end = cumulative_offset + len(chunk_text)
-                                    cumulative_offset = char_offset_end
-                                    search_start = char_offset_end
+                            # Fall through to cumulative offset
+                            pass
+                    
+                    # If we still don't have offsets, use cumulative estimate
+                    if char_offset_start is None or char_offset_end is None:
+                        if len(chunks) > 0:
+                            last_chunk = chunks[-1]
+                            if last_chunk.char_offset_end is not None:
+                                # Start from end of previous chunk
+                                char_offset_start = last_chunk.char_offset_end
+                                char_offset_end = char_offset_start + len(chunk_text)
+                                search_start = char_offset_end
+                                cumulative_offset = char_offset_end
                             else:
-                                # First chunk, use cumulative offset
+                                # Use cumulative offset as fallback
                                 char_offset_start = cumulative_offset
                                 char_offset_end = cumulative_offset + len(chunk_text)
                                 cumulative_offset = char_offset_end
                                 search_start = char_offset_end
+                        else:
+                            # First chunk, use cumulative offset
+                            char_offset_start = cumulative_offset
+                            char_offset_end = cumulative_offset + len(chunk_text)
+                            cumulative_offset = char_offset_end
+                            search_start = char_offset_end
+        
+        # Ensure we always have offsets (fallback to cumulative if not set)
+        if char_offset_start is None or char_offset_end is None:
+            char_offset_start = cumulative_offset
+            char_offset_end = cumulative_offset + len(chunk_data["chunk_text"])
+            cumulative_offset = char_offset_end
         
         chunks.append(
             KBChunk(
