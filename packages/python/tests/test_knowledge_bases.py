@@ -4,6 +4,7 @@ import os
 from datetime import datetime, UTC
 import logging
 from unittest.mock import patch, AsyncMock
+import asyncio
 
 # Import shared test utilities
 from .conftest_utils import (

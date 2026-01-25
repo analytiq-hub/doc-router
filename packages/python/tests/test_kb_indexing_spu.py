@@ -409,9 +409,37 @@ async def test_kb_search_spu_recording(
         }
         await ad.msg_handlers.process_kb_index_msg(analytiq_client, kb_msg)
         
-        # Wait for vector index to be ready
+        # Wait for vector index to be ready (increase wait time for test environment)
         from app.routes.knowledge_bases import wait_for_vector_index_ready
-        await wait_for_vector_index_ready(analytiq_client, kb_id)
+        await wait_for_vector_index_ready(analytiq_client, kb_id, max_wait_seconds=60)
+        
+        # Additional wait and retry loop to ensure index is fully ready
+        import asyncio
+        max_retries = 10
+        for retry in range(max_retries):
+            try:
+                # Try a test search to verify index is ready
+                test_results = await ad.kb.search.search_knowledge_base(
+                    analytiq_client=analytiq_client,
+                    kb_id=kb_id,
+                    query="test",
+                    organization_id=TEST_ORG_ID,
+                    top_k=1
+                )
+                # If we get here, index is ready
+                break
+            except Exception as e:
+                if "not initialized" in str(e).lower() and retry < max_retries - 1:
+                    await asyncio.sleep(2)
+                    continue
+                elif retry < max_retries - 1:
+                    # Other error, wait a bit and retry
+                    await asyncio.sleep(1)
+                    continue
+                else:
+                    # Last retry failed, but continue anyway - the actual search will handle it
+                    logger.warning(f"Index may not be fully ready after {max_retries} retries, but continuing test")
+                    break
         
         # Reset mocks for search
         mock_check_spu_limits.reset_mock()

@@ -110,6 +110,8 @@ def is_retryable_vector_index_error(exception: Exception) -> bool:
         "while in state",
         "index.*building",
         "index.*not ready",
+        "not initialized",
+        "index.*not initialized",
     ]
     
     for pattern in retryable_patterns:
