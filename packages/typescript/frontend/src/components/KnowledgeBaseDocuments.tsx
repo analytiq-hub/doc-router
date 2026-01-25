@@ -243,8 +243,8 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                 <Box display="flex" gap={2}>
                   {(() => {
                     const chunk = chunks[currentChunkIndex];
-                    const start = (chunk as any).char_offset_start;
-                    const end = (chunk as any).char_offset_end;
+                    const start = chunk.char_offset_start;
+                    const end = chunk.char_offset_end;
                     return start != null && end != null && typeof start === 'number' && typeof end === 'number' ? (
                       <Typography variant="caption" sx={{ color: 'text.primary', fontWeight: 500 }}>
                         Characters: {start.toLocaleString()} - {end.toLocaleString()}
