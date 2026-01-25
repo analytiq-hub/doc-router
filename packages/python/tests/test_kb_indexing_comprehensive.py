@@ -613,7 +613,7 @@ async def test_3_1_remove_kb_tag_matching_document(mock_embedding, mock_get_mode
         # Verify document is indexed
         await verify_document_in_kb(test_db, document_id, kb1_id, should_be_indexed=True)
         
-        # Remove tagA from KB1
+        # Remove tagA from KB1 (reconciliation is triggered automatically)
         update_response = client.put(
             f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb1_id}",
             json={"tag_ids": [tagC_id]},
@@ -621,10 +621,7 @@ async def test_3_1_remove_kb_tag_matching_document(mock_embedding, mock_get_mode
         )
         assert update_response.status_code == 200
         
-        # Run reconciliation to remove stale documents
-        await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb1_id, dry_run=False
-        )
+        # Process queued indexing messages from automatic reconciliation
         await process_pending_kb_index_messages(test_db)
         
         # Verify document is removed from KB1
@@ -665,7 +662,7 @@ async def test_3_2_remove_kb_tag_multiple_documents(mock_embedding, mock_get_mod
         await verify_document_in_kb(test_db, document_id, kb1_id, should_be_indexed=True)
         await verify_document_in_kb(test_db, document_id, kb2_id, should_be_indexed=True)
         
-        # Remove tagA from KB1
+        # Remove tagA from KB1 (reconciliation is triggered automatically)
         update_response = client.put(
             f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb1_id}",
             json={"tag_ids": [tagC_id]},
@@ -673,10 +670,7 @@ async def test_3_2_remove_kb_tag_multiple_documents(mock_embedding, mock_get_mod
         )
         assert update_response.status_code == 200
         
-        # Run reconciliation to remove stale documents
-        await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb1_id, dry_run=False
-        )
+        # Process queued indexing messages from automatic reconciliation
         await process_pending_kb_index_messages(test_db)
         
         # Verify document is removed from KB1, remains in KB2
@@ -717,7 +711,7 @@ async def test_3_3_remove_kb_tag_document_has_other_matching_tags(mock_embedding
         # Verify document is indexed
         await verify_document_in_kb(test_db, document_id, kb1_id, should_be_indexed=True)
         
-        # Remove tagA from KB1 (KB1 now has [tagB, tagC])
+        # Remove tagA from KB1 (KB1 now has [tagB, tagC]) - reconciliation is triggered automatically
         update_response = client.put(
             f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb1_id}",
             json={"tag_ids": [tagB_id, tagC_id]},
@@ -725,10 +719,7 @@ async def test_3_3_remove_kb_tag_document_has_other_matching_tags(mock_embedding
         )
         assert update_response.status_code == 200
         
-        # Run reconciliation
-        await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb1_id, dry_run=False
-        )
+        # Process queued indexing messages from automatic reconciliation
         await process_pending_kb_index_messages(test_db)
         
         # Verify document remains in KB1 (still matches via tagB)
@@ -813,20 +804,13 @@ async def test_4_1_kb_created_after_document(mock_embedding, mock_get_model_info
         assert len(index_entries) == 0, "Document should not be indexed yet"
         
         # Create KB later with tagA (matching the document)
+        # Reconciliation is triggered automatically on KB creation
         kb1_id = await create_kb("KB1", [tagA_id])
         
-        # Verify document is still not indexed (KB creation doesn't auto-index)
-        await verify_document_in_kb(test_db, document_id, kb1_id, should_be_indexed=False)
-        
-        # Run reconciliation to find and index matching documents
-        results = await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb1_id, dry_run=False
-        )
-        
-        # Process the queued indexing messages
+        # Process the queued indexing messages from automatic reconciliation
         await process_pending_kb_index_messages(test_db)
         
-        # Verify document is now indexed in KB1
+        # Verify document is now indexed in KB1 (via automatic reconciliation)
         await verify_document_in_kb(test_db, document_id, kb1_id, should_be_indexed=True)
         
         # Verify KB1 stats
@@ -855,24 +839,16 @@ async def test_4_2_kb_created_after_document_multiple_kbs(mock_embedding, mock_g
         
         document_id = await create_document(test_db, [tagA_id, tagB_id])
         
-        # Create KB1 later with [tagA, tagC]
+        # Create KB1 later with [tagA, tagC] (reconciliation triggered automatically)
         kb1_id = await create_kb("KB1", [tagA_id, tagC_id])
         
-        # Create KB2 later with [tagB, tagD]
+        # Create KB2 later with [tagB, tagD] (reconciliation triggered automatically)
         kb2_id = await create_kb("KB2", [tagB_id, tagD_id])
         
-        # Run reconciliation for both KBs
-        await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb1_id, dry_run=False
-        )
-        await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb2_id, dry_run=False
-        )
-        
-        # Process the queued indexing messages
+        # Process the queued indexing messages from automatic reconciliation
         await process_pending_kb_index_messages(test_db)
         
-        # Verify document is indexed in both KBs
+        # Verify document is indexed in both KBs (via automatic reconciliation)
         await verify_document_in_kb(test_db, document_id, kb1_id, should_be_indexed=True)
         await verify_document_in_kb(test_db, document_id, kb2_id, should_be_indexed=True)
         
@@ -901,15 +877,10 @@ async def test_4_3_kb_created_after_document_no_match(mock_embedding, mock_get_m
         
         document_id = await create_document(test_db, [tagA_id])
         
-        # Create KB later with tagB (no match)
+        # Create KB later with tagB (no match) - reconciliation triggered automatically
         kb1_id = await create_kb("KB1", [tagB_id])
         
-        # Run reconciliation
-        results = await ad.kb.reconciliation.reconcile_knowledge_base(
-            ad.common.get_analytiq_client(), TEST_ORG_ID, kb_id=kb1_id, dry_run=False
-        )
-        
-        # Process any queued indexing messages
+        # Process any queued indexing messages from automatic reconciliation
         await process_pending_kb_index_messages(test_db)
         
         # Verify document is NOT indexed in KB1 (tags don't match)
