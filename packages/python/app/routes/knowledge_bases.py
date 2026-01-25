@@ -85,10 +85,11 @@ class KnowledgeBaseConfig(BaseModel):
     
     @model_validator(mode='after')
     def validate_reconcile_config(self):
+        # Only require interval if reconciliation is enabled
         if self.reconcile_enabled and self.reconcile_interval_seconds is None:
             raise ValueError("reconcile_interval_seconds is required when reconcile_enabled=True")
-        if not self.reconcile_enabled and self.reconcile_interval_seconds is not None:
-            raise ValueError("reconcile_interval_seconds should not be set when reconcile_enabled=False")
+        # If reconciliation is disabled, allow interval to be saved (user can change it in UI)
+        # The interval will be ignored by the worker, but saved for when they re-enable
         return self
 
 class KnowledgeBaseUpdate(BaseModel):
@@ -108,10 +109,11 @@ class KnowledgeBaseUpdate(BaseModel):
     
     @model_validator(mode='after')
     def validate_reconcile_config(self):
+        # Only require interval if reconciliation is enabled
         if self.reconcile_enabled is True and self.reconcile_interval_seconds is None:
             raise ValueError("reconcile_interval_seconds is required when reconcile_enabled=True")
-        if self.reconcile_enabled is False and self.reconcile_interval_seconds is not None:
-            raise ValueError("reconcile_interval_seconds should not be set when reconcile_enabled=False")
+        # If reconciliation is disabled, allow interval to be saved (user can change it in UI)
+        # The interval will be ignored by the worker, but saved for when they re-enable
         return self
 
 class KnowledgeBase(KnowledgeBaseConfig):
@@ -483,15 +485,29 @@ async def create_knowledge_base(
     
     # Fetch and return created KB
     kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id)})
+    
+    # Normalize timestamps to UTC-aware if they're naive
+    created_at = kb["created_at"]
+    if isinstance(created_at, datetime) and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    
+    updated_at = kb["updated_at"]
+    if isinstance(updated_at, datetime) and updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=UTC)
+    
+    last_reconciled_at = kb.get("last_reconciled_at")
+    if last_reconciled_at and isinstance(last_reconciled_at, datetime) and last_reconciled_at.tzinfo is None:
+        last_reconciled_at = last_reconciled_at.replace(tzinfo=UTC)
+    
     kb_dict = config.model_dump()
     kb_dict["kb_id"] = kb_id
     kb_dict["embedding_dimensions"] = kb["embedding_dimensions"]
     kb_dict["status"] = kb["status"]
     kb_dict["document_count"] = kb["document_count"]
     kb_dict["chunk_count"] = kb["chunk_count"]
-    kb_dict["created_at"] = kb["created_at"]
-    kb_dict["updated_at"] = kb["updated_at"]
-    kb_dict["last_reconciled_at"] = kb.get("last_reconciled_at")
+    kb_dict["created_at"] = created_at
+    kb_dict["updated_at"] = updated_at
+    kb_dict["last_reconciled_at"] = last_reconciled_at
     return KnowledgeBase(**kb_dict)
 
 @knowledge_bases_router.get("/v0/orgs/{organization_id}/knowledge-bases", response_model=ListKnowledgeBasesResponse)
@@ -518,29 +534,41 @@ async def list_knowledge_bases(
     cursor = db.knowledge_bases.find(query).skip(skip).limit(limit).sort("created_at", -1)
     kbs = await cursor.to_list(length=limit)
     
-    knowledge_bases = [
-        KnowledgeBase(
+    knowledge_bases = []
+    for kb in kbs:
+        # Normalize timestamps to UTC-aware if they're naive
+        created_at = kb["created_at"]
+        if isinstance(created_at, datetime) and created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=UTC)
+        
+        updated_at = kb["updated_at"]
+        if isinstance(updated_at, datetime) and updated_at.tzinfo is None:
+            updated_at = updated_at.replace(tzinfo=UTC)
+        
+        last_reconciled_at = kb.get("last_reconciled_at")
+        if last_reconciled_at and isinstance(last_reconciled_at, datetime) and last_reconciled_at.tzinfo is None:
+            last_reconciled_at = last_reconciled_at.replace(tzinfo=UTC)
+        
+        knowledge_bases.append(KnowledgeBase(
             kb_id=str(kb["_id"]),
             embedding_dimensions=kb["embedding_dimensions"],
             status=kb["status"],
             document_count=kb["document_count"],
             chunk_count=kb["chunk_count"],
-            created_at=kb["created_at"],
-            updated_at=kb["updated_at"],
+            created_at=created_at,
+            updated_at=updated_at,
             name=kb["name"],
             description=kb.get("description", ""),
             tag_ids=kb.get("tag_ids", []),
             chunker_type=kb["chunker_type"],
             chunk_size=kb["chunk_size"],
-        chunk_overlap=kb["chunk_overlap"],
-        embedding_model=kb["embedding_model"],
-        coalesce_neighbors=kb.get("coalesce_neighbors", 0),
-        reconcile_enabled=kb.get("reconcile_enabled", False),
-        reconcile_interval_seconds=kb.get("reconcile_interval_seconds"),
-        last_reconciled_at=kb.get("last_reconciled_at")
-    )
-        for kb in kbs
-    ]
+            chunk_overlap=kb["chunk_overlap"],
+            embedding_model=kb["embedding_model"],
+            coalesce_neighbors=kb.get("coalesce_neighbors", 0),
+            reconcile_enabled=kb.get("reconcile_enabled", False),
+            reconcile_interval_seconds=kb.get("reconcile_interval_seconds"),
+            last_reconciled_at=last_reconciled_at
+        ))
     
     return ListKnowledgeBasesResponse(
         knowledge_bases=knowledge_bases,
@@ -565,14 +593,27 @@ async def get_knowledge_base(
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
     
+    # Normalize timestamps to UTC-aware if they're naive
+    created_at = kb["created_at"]
+    if isinstance(created_at, datetime) and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    
+    updated_at = kb["updated_at"]
+    if isinstance(updated_at, datetime) and updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=UTC)
+    
+    last_reconciled_at = kb.get("last_reconciled_at")
+    if last_reconciled_at and isinstance(last_reconciled_at, datetime) and last_reconciled_at.tzinfo is None:
+        last_reconciled_at = last_reconciled_at.replace(tzinfo=UTC)
+    
     return KnowledgeBase(
         kb_id=kb_id,
         embedding_dimensions=kb["embedding_dimensions"],
         status=kb["status"],
         document_count=kb["document_count"],
         chunk_count=kb["chunk_count"],
-        created_at=kb["created_at"],
-        updated_at=kb["updated_at"],
+        created_at=created_at,
+        updated_at=updated_at,
         name=kb["name"],
         description=kb.get("description", ""),
         tag_ids=kb.get("tag_ids", []),
@@ -583,7 +624,7 @@ async def get_knowledge_base(
         coalesce_neighbors=kb.get("coalesce_neighbors", 0),
         reconcile_enabled=kb.get("reconcile_enabled", False),
         reconcile_interval_seconds=kb.get("reconcile_interval_seconds"),
-        last_reconciled_at=kb.get("last_reconciled_at")
+        last_reconciled_at=last_reconciled_at
     )
 
 @knowledge_bases_router.put("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}", response_model=KnowledgeBase)
@@ -623,6 +664,8 @@ async def update_knowledge_base(
     if update.reconcile_enabled is not None:
         update_dict["reconcile_enabled"] = update.reconcile_enabled
     if update.reconcile_interval_seconds is not None:
+        # Always save the interval, even if reconciliation is disabled
+        # This allows users to change it in the UI for when they re-enable
         update_dict["reconcile_interval_seconds"] = update.reconcile_interval_seconds
     
     # Update KB
@@ -633,14 +676,28 @@ async def update_knowledge_base(
     
     # Fetch and return updated KB
     updated_kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id)})
+    
+    # Normalize timestamps to UTC-aware if they're naive
+    created_at = updated_kb["created_at"]
+    if isinstance(created_at, datetime) and created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    
+    updated_at = updated_kb["updated_at"]
+    if isinstance(updated_at, datetime) and updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=UTC)
+    
+    last_reconciled_at = updated_kb.get("last_reconciled_at")
+    if last_reconciled_at and isinstance(last_reconciled_at, datetime) and last_reconciled_at.tzinfo is None:
+        last_reconciled_at = last_reconciled_at.replace(tzinfo=UTC)
+    
     return KnowledgeBase(
         kb_id=kb_id,
         embedding_dimensions=updated_kb["embedding_dimensions"],
         status=updated_kb["status"],
         document_count=updated_kb["document_count"],
         chunk_count=updated_kb["chunk_count"],
-        created_at=updated_kb["created_at"],
-        updated_at=updated_kb["updated_at"],
+        created_at=created_at,
+        updated_at=updated_at,
         name=updated_kb["name"],
         description=updated_kb.get("description", ""),
         tag_ids=updated_kb.get("tag_ids", []),
@@ -651,7 +708,7 @@ async def update_knowledge_base(
         coalesce_neighbors=updated_kb.get("coalesce_neighbors", 0),
         reconcile_enabled=updated_kb.get("reconcile_enabled", False),
         reconcile_interval_seconds=updated_kb.get("reconcile_interval_seconds"),
-        last_reconciled_at=updated_kb.get("last_reconciled_at")
+        last_reconciled_at=last_reconciled_at
     )
 
 @knowledge_bases_router.delete("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}")

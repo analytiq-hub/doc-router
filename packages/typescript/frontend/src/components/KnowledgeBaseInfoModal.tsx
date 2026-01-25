@@ -55,8 +55,16 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
 
   const formatDate = (dateString: string) => {
     try {
+      // Parse UTC timestamp from API (ISO 8601 format, e.g., "2026-01-24T21:12:34.738Z")
+      // JavaScript Date automatically converts UTC to local timezone
       const date = new Date(dateString);
-      // Format in local timezone with explicit timezone display
+      
+      // Verify it's a valid date
+      if (isNaN(date.getTime())) {
+        return dateString;
+      }
+      
+      // Format in local timezone (converted from UTC)
       return date.toLocaleString(undefined, {
         year: 'numeric',
         month: 'short',

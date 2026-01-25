@@ -146,6 +146,7 @@ async def worker_kb_reconcile(worker_id: str) -> None:
     CHECK_INTERVAL_SECS = 10  # Check every 10 seconds for KBs that need reconciliation
     
     while True:
+        logger.info(f"KB reconciliation worker {worker_id} running")
         try:
             now = datetime.now(UTC)
             
@@ -154,12 +155,19 @@ async def worker_kb_reconcile(worker_id: str) -> None:
                 logger.info(f"KB reconciliation worker {worker_id} heartbeat")
                 last_heartbeat = now
             
+            logger.debug(f"KB reconciliation worker {worker_id} checking for KBs that need reconciliation")
+            
             # Find KBs with periodic reconciliation enabled
             db = analytiq_client.mongodb_async[ENV]
             kbs = await db.knowledge_bases.find({
                 "reconcile_enabled": True,
                 "status": {"$in": ["indexing", "active"]}
             }).to_list(length=None)
+            
+            logger.debug(f"Found {len(kbs)} KB(s) with reconcile_enabled=True and active status")
+            
+            if not kbs:
+                logger.debug(f"No KBs found with reconcile_enabled=True and active status")
             
             for kb in kbs:
                 kb_id = str(kb["_id"])
@@ -168,6 +176,7 @@ async def worker_kb_reconcile(worker_id: str) -> None:
                 last_reconciled = kb.get("last_reconciled_at")
                 
                 if not reconcile_interval:
+                    logger.warning(f"KB {kb_id} has reconcile_enabled=True but reconcile_interval_seconds is None or missing. Skipping.")
                     continue
                 
                 # Check if reconciliation is due
@@ -179,6 +188,9 @@ async def worker_kb_reconcile(worker_id: str) -> None:
                     # Check if interval has passed
                     # last_reconciled might be a datetime or None
                     if isinstance(last_reconciled, datetime):
+                        # Ensure last_reconciled is timezone-aware (assume UTC if naive)
+                        if last_reconciled.tzinfo is None:
+                            last_reconciled = last_reconciled.replace(tzinfo=UTC)
                         time_since_reconcile = (now - last_reconciled).total_seconds()
                         if time_since_reconcile >= reconcile_interval:
                             should_reconcile = True
@@ -187,6 +199,7 @@ async def worker_kb_reconcile(worker_id: str) -> None:
                         should_reconcile = True
                 
                 if should_reconcile:
+                    logger.info(f"KB {kb_id} needs reconciliation (last_reconciled: {last_reconciled}, interval: {reconcile_interval}s)")
                     # Try to acquire distributed lock to ensure only one pod reconciles
                     lock_acquired = await ad.kb.reconciliation.acquire_reconciliation_lock(
                         analytiq_client,
@@ -276,7 +289,18 @@ async def main():
     await asyncio.gather(*ocr_workers, *llm_workers, *kb_index_workers, *webhook_workers, *kb_reconcile_worker)
 
 if __name__ == "__main__":
+    # Configure logging to ensure it's visible
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger.info("=" * 60)
+    logger.info("Starting worker process")
+    logger.info("=" * 60)
     try:    
         asyncio.run(main())
     except KeyboardInterrupt:
         logger.info("Keyboard interrupt received, exiting")
+    except Exception as e:
+        logger.error(f"Worker process crashed: {e}", exc_info=True)
+        raise
