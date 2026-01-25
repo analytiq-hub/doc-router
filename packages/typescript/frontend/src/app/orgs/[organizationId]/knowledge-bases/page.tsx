@@ -66,7 +66,7 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
                 onClick={() => handleTabChange('search', kbId)}
                 className={`pb-4 px-1 relative font-semibold text-sm sm:text-base whitespace-nowrap ${
                   tab === 'search'
-                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:h-0.5 after:bg-blue-600'
+                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
@@ -80,8 +80,7 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
                     : 'text-gray-500 hover:text-gray-700'
                 }`}
               >
-                <span className="hidden sm:inline">Documents</span>
-                <span className="sm:hidden">Docs</span>
+                Documents
               </button>
               <button
                 onClick={() => handleTabChange('chat', kbId)}
