@@ -36,3 +36,239 @@ body {
     text-wrap: balance;
   }
 }
+
+/* Markdown Prose Styling for KB Chat */
+.markdown-prose {
+  font-family: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  line-height: 1.7;
+  color: #1f2937;
+}
+
+/* Paragraphs */
+.markdown-prose p {
+  margin: 0.75em 0;
+  line-height: 1.7;
+}
+
+.markdown-prose p:first-child {
+  margin-top: 0;
+}
+
+.markdown-prose p:last-child {
+  margin-bottom: 0;
+}
+
+/* Headings */
+.markdown-prose h1 {
+  font-size: 1.75em;
+  font-weight: 700;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+  color: #111827;
+  letter-spacing: -0.02em;
+}
+
+.markdown-prose h2 {
+  font-size: 1.5em;
+  font-weight: 700;
+  margin-top: 1.1em;
+  margin-bottom: 0.5em;
+  line-height: 1.3;
+  color: #111827;
+  letter-spacing: -0.01em;
+}
+
+.markdown-prose h3 {
+  font-size: 1.25em;
+  font-weight: 600;
+  margin-top: 1em;
+  margin-bottom: 0.4em;
+  line-height: 1.4;
+  color: #1f2937;
+}
+
+.markdown-prose h4 {
+  font-size: 1.1em;
+  font-weight: 600;
+  margin-top: 0.9em;
+  margin-bottom: 0.3em;
+  line-height: 1.4;
+  color: #374151;
+}
+
+.markdown-prose h5,
+.markdown-prose h6 {
+  font-size: 1em;
+  font-weight: 600;
+  margin-top: 0.8em;
+  margin-bottom: 0.3em;
+  line-height: 1.4;
+  color: #4b5563;
+}
+
+/* Lists */
+.markdown-prose ul,
+.markdown-prose ol {
+  margin: 0.75em 0;
+  padding-left: 1.75em;
+}
+
+.markdown-prose ul {
+  list-style-type: disc;
+}
+
+.markdown-prose ol {
+  list-style-type: decimal;
+}
+
+.markdown-prose li {
+  margin: 0.4em 0;
+  line-height: 1.6;
+  padding-left: 0.25em;
+}
+
+.markdown-prose li > p {
+  margin-top: 0.5em;
+  margin-bottom: 0.5em;
+}
+
+.markdown-prose ul ul,
+.markdown-prose ol ol,
+.markdown-prose ul ol,
+.markdown-prose ol ul {
+  margin: 0.5em 0;
+}
+
+/* Code */
+.markdown-prose code {
+  font-family: 'Inconsolata', 'source-code-pro', 'Monaco', 'Consolas', 'Courier New', monospace;
+  font-size: 0.9em;
+  background-color: #f3f4f6;
+  color: #dc2626;
+  padding: 0.15em 0.4em;
+  border-radius: 0.25em;
+  font-weight: 500;
+  border: 1px solid #e5e7eb;
+}
+
+.markdown-prose pre {
+  font-family: 'Inconsolata', 'source-code-pro', 'Monaco', 'Consolas', 'Courier New', monospace;
+  font-size: 0.875em;
+  line-height: 1.6;
+  background-color: #1f2937;
+  color: #f9fafb;
+  padding: 1.25em 1.5em;
+  border-radius: 0.5em;
+  overflow-x: auto;
+  margin: 1em 0;
+  border: 1px solid #374151;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+.markdown-prose pre code {
+  background-color: transparent;
+  color: inherit;
+  padding: 0;
+  border: none;
+  font-size: inherit;
+  font-weight: 400;
+}
+
+/* Blockquotes */
+.markdown-prose blockquote {
+  border-left: 4px solid #3b82f6;
+  padding-left: 1.25em;
+  margin: 1em 0;
+  color: #4b5563;
+  font-style: italic;
+  background-color: #f9fafb;
+  padding: 0.75em 1.25em;
+  border-radius: 0 0.375em 0.375em 0;
+}
+
+.markdown-prose blockquote p {
+  margin: 0.5em 0;
+}
+
+.markdown-prose blockquote p:first-child {
+  margin-top: 0;
+}
+
+.markdown-prose blockquote p:last-child {
+  margin-bottom: 0;
+}
+
+/* Links */
+.markdown-prose a {
+  color: #2563eb;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  transition: color 0.2s;
+}
+
+.markdown-prose a:hover {
+  color: #1d4ed8;
+  text-decoration-thickness: 2px;
+}
+
+/* Tables */
+.markdown-prose table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.95em;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: 0.375em;
+  overflow: hidden;
+}
+
+.markdown-prose th {
+  background-color: #f3f4f6;
+  font-weight: 600;
+  text-align: left;
+  padding: 0.75em 1em;
+  border-bottom: 2px solid #e5e7eb;
+  color: #111827;
+}
+
+.markdown-prose td {
+  padding: 0.75em 1em;
+  border-bottom: 1px solid #e5e7eb;
+  color: #374151;
+}
+
+.markdown-prose tr:last-child td {
+  border-bottom: none;
+}
+
+.markdown-prose tr:hover {
+  background-color: #f9fafb;
+}
+
+/* Horizontal Rules */
+.markdown-prose hr {
+  border: none;
+  border-top: 2px solid #e5e7eb;
+  margin: 2em 0;
+}
+
+/* Strong and Emphasis */
+.markdown-prose strong {
+  font-weight: 700;
+  color: #111827;
+}
+
+.markdown-prose em {
+  font-style: italic;
+  color: #4b5563;
+}
+
+/* Images */
+.markdown-prose img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 0.375em;
+  margin: 1em 0;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
