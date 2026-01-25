@@ -267,6 +267,30 @@ export interface LLMChatStreamError {
   error: string;
 }
 
+export interface KBChatRequest {
+  model: string;
+  messages: LLMMessage[];
+  max_tokens?: number;
+  temperature?: number;
+  stream: true; // Always true for KB chat
+}
+
+export interface KBChatStreamChunk {
+  chunk?: string;
+  type?: 'tool_call' | 'tool_result';
+  tool_name?: string;
+  arguments?: any;
+  results_count?: number;
+  iteration?: number;
+  error?: string;
+  done: boolean;
+}
+
+export interface KBChatStreamError {
+  error: string;
+  done: boolean;
+}
+
 export interface LLMEmbeddingTestRequest {
   model: string;
   input: string;

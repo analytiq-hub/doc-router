@@ -5,6 +5,7 @@ import KnowledgeBaseList from '@/components/KnowledgeBaseList';
 import KnowledgeBaseCreate from '@/components/KnowledgeBaseCreate';
 import KnowledgeBaseSearch from '@/components/KnowledgeBaseSearch';
 import KnowledgeBaseDocuments from '@/components/KnowledgeBaseDocuments';
+import KnowledgeBaseChat from '@/components/KnowledgeBaseChat';
 import { useSearchParams, useRouter } from 'next/navigation';
 
 export default function KnowledgeBasesPage({ params }: { params: Promise<{ organizationId: string }> }) {
@@ -79,6 +80,16 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
               >
                 Documents
               </button>
+              <button
+                onClick={() => handleTabChange('chat', kbId)}
+                className={`pb-4 px-1 relative font-semibold text-base ${
+                  tab === 'chat'
+                    ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Chat
+              </button>
             </>
           )}
         </div>
@@ -99,6 +110,9 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
         </div>
         <div role="tabpanel" hidden={tab !== 'documents'}>
           {tab === 'documents' && kbId && <KnowledgeBaseDocuments organizationId={organizationId} kbId={kbId} />}
+        </div>
+        <div role="tabpanel" hidden={tab !== 'chat'}>
+          {tab === 'chat' && kbId && <KnowledgeBaseChat organizationId={organizationId} kbId={kbId} />}
         </div>
       </div>
     </div>

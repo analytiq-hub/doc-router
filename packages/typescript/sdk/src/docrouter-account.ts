@@ -309,7 +309,13 @@ export class DocRouterAccount {
     abortSignal?: AbortSignal
   ): Promise<void> {
     const streamingRequest = { ...request, stream: true };
-    return this.http.stream('/v0/account/llm/run', streamingRequest, onChunk, onError, abortSignal);
+    return this.http.stream<LLMChatStreamChunk | LLMChatStreamError>(
+      '/v0/account/llm/run',
+      streamingRequest,
+      onChunk,
+      onError,
+      abortSignal
+    );
   }
 
   /**

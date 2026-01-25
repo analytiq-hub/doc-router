@@ -73,6 +73,10 @@ import {
   LLMChatResponse,
   LLMChatStreamChunk,
   LLMChatStreamError,
+  // KB Chat
+  KBChatRequest,
+  KBChatStreamChunk,
+  KBChatStreamError,
   // LLM Models
   ListOrgLLMModelsResponse,
 } from './types';
@@ -562,7 +566,33 @@ export class DocRouterOrg {
     abortSignal?: AbortSignal
   ): Promise<void> {
     const streamingRequest = { ...request, stream: true };
-    return this.http.stream(`/v0/orgs/${this.organizationId}/llm/run`, streamingRequest, onChunk, onError, abortSignal);
+    return this.http.stream<LLMChatStreamChunk | LLMChatStreamError>(
+      `/v0/orgs/${this.organizationId}/llm/run`,
+      streamingRequest,
+      onChunk,
+      onError,
+      abortSignal
+    );
+  }
+
+  /**
+   * Run KB chat with streaming (organization level)
+   */
+  async runKBChatStream(
+    kbId: string,
+    request: KBChatRequest,
+    onChunk: (chunk: KBChatStreamChunk | KBChatStreamError) => void,
+    onError?: (error: Error) => void,
+    abortSignal?: AbortSignal
+  ): Promise<void> {
+    const streamingRequest = { ...request, stream: true };
+    return this.http.stream<KBChatStreamChunk | KBChatStreamError>(
+      `/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}/chat`,
+      streamingRequest,
+      onChunk,
+      onError,
+      abortSignal
+    );
   }
 
   /**

@@ -162,10 +162,10 @@ export class HttpClient {
   }
 
   // For streaming requests
-  async stream(
+  async stream<TChunk = LLMChatStreamChunk | LLMChatStreamError>(
     url: string,
     data: unknown,
-    onChunk: (chunk: LLMChatStreamChunk | LLMChatStreamError) => void,
+    onChunk: (chunk: TChunk) => void,
     onError?: (error: Error) => void,
     abortSignal?: AbortSignal
   ): Promise<void> {

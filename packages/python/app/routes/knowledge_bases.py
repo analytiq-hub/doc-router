@@ -16,6 +16,7 @@ import analytiq_data as ad
 from app.auth import get_org_user
 from app.models import User
 from app.routes.payments import SPUCreditException
+from app.routes.llm import LLMMessage
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -164,6 +165,13 @@ class KBSearchResponse(BaseModel):
     total_count: int
     skip: int
     top_k: int
+
+class KBChatRequest(BaseModel):
+    model: str = Field(..., description="The LLM model to use (e.g., 'gpt-4o-mini')")
+    messages: List[LLMMessage] = Field(..., description="Array of messages for the conversation")
+    temperature: Optional[float] = Field(default=0.7, description="Sampling temperature (0.0 to 2.0)")
+    max_tokens: Optional[int] = Field(default=None, description="Maximum tokens to generate")
+    stream: bool = Field(default=True, description="Whether to stream the response (always true for KB chat)")
 
 class KBChunk(BaseModel):
     chunk_index: int
@@ -1067,6 +1075,34 @@ async def search_knowledge_base(
             )
         logger.error(f"Error searching KB {kb_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Search failed: {str(e)}")
+
+@knowledge_bases_router.post("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}/chat")
+async def chat_knowledge_base(
+    organization_id: str,
+    kb_id: str,
+    request: KBChatRequest = Body(...),
+    current_user: User = Depends(get_org_user)
+):
+    """Chat with a knowledge base using LLM with tool calling support"""
+    analytiq_client = ad.common.get_analytiq_client()
+    
+    try:
+        return await ad.llm.run_kb_chat(
+            analytiq_client=analytiq_client,
+            kb_id=kb_id,
+            organization_id=organization_id,
+            request=request,
+            current_user=current_user
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Error in KB chat {kb_id}: {error_msg}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error processing KB chat request: {error_msg}"
+        )
 
 @knowledge_bases_router.post("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}/reconcile")
 async def reconcile_knowledge_base_endpoint(
