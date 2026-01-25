@@ -244,18 +244,18 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
   };
 
   return (
-    <div className="flex flex-col h-full max-w-6xl mx-auto bg-white rounded-lg shadow-lg">
+    <div className="flex flex-col h-full w-full sm:max-w-6xl sm:mx-auto bg-white sm:rounded-lg sm:shadow-lg">
       {/* Header */}
-      <div className="bg-gradient-to-r bg-blue-600 px-6 py-4 rounded-t-lg">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-white">Chat with Knowledge Base</h2>
-          <div className="flex items-center gap-4">
+      <div className="bg-gradient-to-r bg-blue-600 px-3 sm:px-6 py-2 sm:py-4 sm:rounded-t-lg">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+          <h2 className="text-base sm:text-xl font-semibold text-white truncate">Chat with Knowledge Base</h2>
+          <div className="flex items-center gap-2 sm:gap-4">
             {availableModels.length > 0 && (
               <select
                 value={selectedModel}
                 onChange={(e) => setSelectedModel(e.target.value)}
                 disabled={isStreaming}
-                className="px-3 py-1 bg-white text-gray-800 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-300"
+                className="flex-1 sm:flex-none px-2 sm:px-3 py-1 text-xs sm:text-sm bg-white text-gray-800 rounded border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-300"
               >
                 {availableModels.map(model => (
                   <option key={model} value={model}>{model}</option>
@@ -265,10 +265,11 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
             <button
               onClick={handleClear}
               disabled={isStreaming}
-              className="text-white hover:text-gray-200 transition-colors p-1 rounded-full hover:bg-white hover:bg-opacity-20 disabled:opacity-50"
+              className="text-white hover:text-gray-200 transition-colors p-1 rounded-full hover:bg-white hover:bg-opacity-20 disabled:opacity-50 flex-shrink-0"
               title="Clear conversation"
             >
-              <ClearIcon />
+              <ClearIcon fontSize="small" className="sm:hidden" />
+              <ClearIcon className="hidden sm:block" />
             </button>
           </div>
         </div>
@@ -277,27 +278,27 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
       {/* Messages Area */}
       <div
         ref={messagesContainerRef}
-        className="flex-1 overflow-y-auto p-6 space-y-4 bg-gray-50"
-        style={{ minHeight: '400px', maxHeight: '600px' }}
+        className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-3 sm:space-y-4 bg-gray-50"
+        style={{ minHeight: '300px', maxHeight: 'calc(100vh - 250px)' }}
       >
         {messages.length === 0 && !currentStreamingMessage && (
-          <div className="text-center py-12 text-gray-500">
-            <p className="text-lg mb-2">Start a conversation with your knowledge base</p>
-            <p className="text-sm">Ask questions and the AI will search the knowledge base to provide answers.</p>
+          <div className="text-center py-8 sm:py-12 text-gray-500 px-4">
+            <p className="text-base sm:text-lg mb-2">Start a conversation with your knowledge base</p>
+            <p className="text-xs sm:text-sm">Ask questions and the AI will search the knowledge base to provide answers.</p>
           </div>
         )}
 
         {messages.map((message, index) => (
           <div key={index} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div
-              className={`max-w-[80%] rounded-lg px-4 py-3 ${
+              className={`max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 ${
                 message.role === 'user'
                   ? 'bg-blue-600 text-white'
                   : 'bg-white text-gray-800 border border-gray-200'
               }`}
             >
               {message.role === 'user' ? (
-                <div className="whitespace-pre-wrap leading-relaxed">{message.content}</div>
+                <div className="whitespace-pre-wrap text-sm sm:text-base">{message.content}</div>
               ) : (
                 <div className="markdown-prose">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
@@ -308,18 +309,18 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
               
               {/* Tool Calls */}
               {message.toolCalls && message.toolCalls.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-gray-300">
-                  <div className="text-xs font-semibold text-gray-600 mb-2">Tool Usage:</div>
+                <div className="mt-2 sm:mt-3 pt-2 sm:pt-3 border-t border-gray-300">
+                  <div className="text-xs font-semibold text-gray-600 mb-1 sm:mb-2">Tool Usage:</div>
                   {message.toolCalls.map((toolCall) => (
-                    <div key={toolCall.id} className="mb-2 text-xs">
+                    <div key={toolCall.id} className="mb-1 sm:mb-2 text-xs">
                       <button
                         onClick={() => toggleToolCallExpansion(toolCall.id)}
-                        className="flex items-center gap-1 text-blue-600 hover:text-blue-800"
+                        className="flex items-center gap-1 text-blue-600 hover:text-blue-800 w-full text-left"
                       >
                         {expandedToolCalls.has(toolCall.id) ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
                         <SearchIcon fontSize="small" />
-                        <span className="font-medium">
-                          {toolCall.toolName} (Iteration {toolCall.iteration})
+                        <span className="font-medium truncate">
+                          {toolCall.toolName} <span className="hidden sm:inline">(Iteration {toolCall.iteration})</span>
                         </span>
                         {toolCall.status === 'pending' && (
                           <CircularProgress size={12} className="ml-2" />
@@ -332,16 +333,16 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
                         )}
                       </button>
                       {expandedToolCalls.has(toolCall.id) && (
-                        <div className="mt-1 ml-6 p-2 bg-gray-100 rounded text-xs">
+                        <div className="mt-1 ml-4 sm:ml-6 p-2 bg-gray-100 rounded text-xs">
                           <div className="font-medium mb-1">Query:</div>
-                          <div className="text-gray-700 mb-2">
+                          <div className="text-gray-700 mb-2 break-words">
                             {(toolCall.arguments?.query as string) || 'N/A'}
                           </div>
                           {toolCall.arguments?.top_k !== undefined && (
                             <div className="text-gray-600">Top K: {String(toolCall.arguments.top_k)}</div>
                           )}
                           {toolCall.error && (
-                            <div className="text-red-600 mt-1">Error: {toolCall.error}</div>
+                            <div className="text-red-600 mt-1 break-words">Error: {toolCall.error}</div>
                           )}
                         </div>
                       )}
@@ -356,7 +357,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
         {/* Streaming Message */}
         {currentStreamingMessage && (
           <div className="flex justify-start">
-            <div className="max-w-[80%] rounded-lg px-4 py-3 bg-white text-gray-800 border border-gray-200">
+            <div className="max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 bg-white text-gray-800 border border-gray-200">
               <div className="markdown-prose">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {currentStreamingMessage}
@@ -372,24 +373,24 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
         {/* Current Tool Calls (during streaming) */}
         {currentToolCalls.length > 0 && (
           <div className="flex justify-start">
-            <div className="max-w-[80%] rounded-lg px-4 py-3 bg-yellow-50 border border-yellow-200">
+            <div className="max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 bg-yellow-50 border border-yellow-200">
               <div className="text-xs font-semibold text-gray-700 mb-2">Active Tool Calls:</div>
               {currentToolCalls.map((toolCall) => (
                 <div key={toolCall.id} className="mb-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <SearchIcon fontSize="small" className="text-blue-600" />
-                    <span className="font-medium">{toolCall.toolName}</span>
+                  <div className="flex items-center gap-1 sm:gap-2 flex-wrap">
+                    <SearchIcon fontSize="small" className="text-blue-600 flex-shrink-0" />
+                    <span className="font-medium truncate">{toolCall.toolName}</span>
                     {toolCall.status === 'pending' && (
                       <>
-                        <CircularProgress size={12} />
-                        <span className="text-gray-600">Searching...</span>
+                        <CircularProgress size={12} className="flex-shrink-0" />
+                        <span className="text-gray-600 text-xs">Searching...</span>
                       </>
                     )}
                     {toolCall.status === 'completed' && toolCall.resultsCount !== undefined && (
-                      <span className="text-green-600">✓ {toolCall.resultsCount} results</span>
+                      <span className="text-green-600 text-xs">✓ {toolCall.resultsCount} results</span>
                     )}
                     {toolCall.status === 'error' && (
-                      <span className="text-red-600">✗ Error</span>
+                      <span className="text-red-600 text-xs">✗ Error</span>
                     )}
                   </div>
                 </div>
@@ -401,7 +402,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
         {/* Error Message */}
         {error && (
           <div className="flex justify-center">
-            <div className="max-w-[80%] rounded-lg px-4 py-3 bg-red-50 border border-red-200 text-red-800">
+            <div className="max-w-[85%] sm:max-w-[80%] rounded-lg px-3 py-2 sm:px-4 sm:py-3 bg-red-50 border border-red-200 text-red-800">
               <div className="flex items-start gap-2">
                 <span className="font-medium">Error:</span>
                 <span>{error}</span>
@@ -414,7 +415,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
       </div>
 
       {/* Input Area */}
-      <div className="border-t border-gray-200 p-4 bg-white rounded-b-lg">
+      <div className="border-t border-gray-200 p-3 sm:p-4 bg-white sm:rounded-b-lg">
         <div className="flex gap-2">
           <textarea
             value={currentInput}
@@ -422,25 +423,27 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
             onKeyPress={handleKeyPress}
             placeholder="Type your message..."
             disabled={isStreaming || !selectedModel}
-            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
+            className="flex-1 px-3 sm:px-4 py-2 sm:py-3 text-sm sm:text-base border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:bg-gray-100 disabled:cursor-not-allowed"
             rows={2}
           />
           <div className="flex flex-col gap-2">
             {isStreaming ? (
               <button
                 onClick={handleCancel}
-                className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center gap-2"
+                className="px-4 sm:px-6 py-2 sm:py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium flex items-center justify-center gap-1 sm:gap-2 text-sm sm:text-base"
               >
-                <span>Cancel</span>
+                <span className="hidden sm:inline">Cancel</span>
+                <span className="sm:hidden">✕</span>
               </button>
             ) : (
               <button
                 onClick={handleSend}
                 disabled={!currentInput.trim() || !selectedModel || isStreaming}
-                className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
+                className="px-4 sm:px-6 py-2 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-1 sm:gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
-                <SendIcon />
-                <span>Send</span>
+                <SendIcon fontSize="small" className="sm:hidden" />
+                <SendIcon className="hidden sm:block" />
+                <span className="hidden sm:inline">Send</span>
               </button>
             )}
           </div>

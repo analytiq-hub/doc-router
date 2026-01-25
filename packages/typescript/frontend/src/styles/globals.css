@@ -40,8 +40,16 @@ body {
 /* Markdown Prose Styling for KB Chat */
 .markdown-prose {
   font-family: 'Source Sans Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  line-height: 1.7;
+  line-height: 1.6;
   color: #1f2937;
+  font-size: 0.9rem;
+}
+
+@media (min-width: 640px) {
+  .markdown-prose {
+    line-height: 1.7;
+    font-size: 1rem;
+  }
 }
 
 /* Paragraphs */
@@ -60,58 +68,101 @@ body {
 
 /* Headings */
 .markdown-prose h1 {
-  font-size: 1.75em;
+  font-size: 1.5em;
   font-weight: 700;
-  margin-top: 1.25em;
+  margin-top: 1em;
   margin-bottom: 0.5em;
   line-height: 1.3;
   color: #111827;
   letter-spacing: -0.02em;
 }
 
+@media (min-width: 640px) {
+  .markdown-prose h1 {
+    font-size: 1.75em;
+    margin-top: 1.25em;
+  }
+}
+
 .markdown-prose h2 {
-  font-size: 1.5em;
+  font-size: 1.3em;
   font-weight: 700;
-  margin-top: 1.1em;
+  margin-top: 0.9em;
   margin-bottom: 0.5em;
   line-height: 1.3;
   color: #111827;
   letter-spacing: -0.01em;
 }
 
+@media (min-width: 640px) {
+  .markdown-prose h2 {
+    font-size: 1.5em;
+    margin-top: 1.1em;
+  }
+}
+
 .markdown-prose h3 {
-  font-size: 1.25em;
+  font-size: 1.15em;
   font-weight: 600;
-  margin-top: 1em;
+  margin-top: 0.8em;
   margin-bottom: 0.4em;
   line-height: 1.4;
   color: #1f2937;
 }
 
+@media (min-width: 640px) {
+  .markdown-prose h3 {
+    font-size: 1.25em;
+    margin-top: 1em;
+  }
+}
+
 .markdown-prose h4 {
-  font-size: 1.1em;
+  font-size: 1.05em;
   font-weight: 600;
-  margin-top: 0.9em;
+  margin-top: 0.7em;
   margin-bottom: 0.3em;
   line-height: 1.4;
   color: #374151;
 }
 
+@media (min-width: 640px) {
+  .markdown-prose h4 {
+    font-size: 1.1em;
+    margin-top: 0.9em;
+  }
+}
+
 .markdown-prose h5,
 .markdown-prose h6 {
-  font-size: 1em;
+  font-size: 0.95em;
   font-weight: 600;
-  margin-top: 0.8em;
+  margin-top: 0.7em;
   margin-bottom: 0.3em;
   line-height: 1.4;
   color: #4b5563;
+}
+
+@media (min-width: 640px) {
+  .markdown-prose h5,
+  .markdown-prose h6 {
+    font-size: 1em;
+    margin-top: 0.8em;
+  }
 }
 
 /* Lists */
 .markdown-prose ul,
 .markdown-prose ol {
   margin: 0.75em 0;
-  padding-left: 1.75em;
+  padding-left: 1.5em;
+}
+
+@media (min-width: 640px) {
+  .markdown-prose ul,
+  .markdown-prose ol {
+    padding-left: 1.75em;
+  }
 }
 
 .markdown-prose ul {
@@ -143,27 +194,44 @@ body {
 /* Code */
 .markdown-prose code {
   font-family: 'Inconsolata', 'source-code-pro', 'Monaco', 'Consolas', 'Courier New', monospace;
-  font-size: 0.9em;
+  font-size: 0.85em;
   background-color: #f3f4f6;
   color: #dc2626;
-  padding: 0.15em 0.4em;
+  padding: 0.15em 0.3em;
   border-radius: 0.25em;
   font-weight: 500;
   border: 1px solid #e5e7eb;
+  word-break: break-word;
+}
+
+@media (min-width: 640px) {
+  .markdown-prose code {
+    font-size: 0.9em;
+    padding: 0.15em 0.4em;
+  }
 }
 
 .markdown-prose pre {
   font-family: 'Inconsolata', 'source-code-pro', 'Monaco', 'Consolas', 'Courier New', monospace;
-  font-size: 0.875em;
-  line-height: 1.6;
+  font-size: 0.8em;
+  line-height: 1.5;
   background-color: #1f2937;
   color: #f9fafb;
-  padding: 1.25em 1.5em;
+  padding: 1em;
   border-radius: 0.5em;
   overflow-x: auto;
-  margin: 1em 0;
+  margin: 0.75em 0;
   border: 1px solid #374151;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+@media (min-width: 640px) {
+  .markdown-prose pre {
+    font-size: 0.875em;
+    line-height: 1.6;
+    padding: 1.25em 1.5em;
+    margin: 1em 0;
+  }
 }
 
 .markdown-prose pre code {
