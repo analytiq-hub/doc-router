@@ -195,6 +195,14 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
         onClose={() => setChunksDialogOpen(false)}
         maxWidth="lg"
         fullWidth
+        PaperProps={{
+          sx: {
+            height: '75vh',
+            maxHeight: '75vh',
+            display: 'flex',
+            flexDirection: 'column'
+          }
+        }}
       >
         <DialogTitle>
           <Box display="flex" alignItems="center" justifyContent="space-between">
@@ -224,7 +232,15 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
             )}
           </Box>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent
+          sx={{
+            flex: '1 1 auto',
+            overflowY: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            paddingTop: 2
+          }}
+        >
           {isLoadingChunks ? (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
               <CircularProgress />
@@ -265,8 +281,9 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                   borderColor: 'divider',
                   borderRadius: 1,
                   backgroundColor: 'grey.50',
-                  maxHeight: '50vh',
-                  overflowY: 'auto'
+                  flex: '1 1 auto',
+                  overflowY: 'auto',
+                  minHeight: 0
                 }}
               >
                 <div className="markdown-prose">
