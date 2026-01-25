@@ -6,6 +6,8 @@ import { KBSearchResult } from '@docrouter/sdk';
 import { toast } from 'react-toastify';
 import SearchIcon from '@mui/icons-material/Search';
 import { TextField, Button, Card, CardContent, Typography, Chip, CircularProgress } from '@mui/material';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface KnowledgeBaseSearchProps {
   organizationId: string;
@@ -140,9 +142,11 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
                         />
                       )}
                     </div>
-                    <Typography variant="body2" className="text-gray-700 whitespace-pre-wrap">
-                      {result.content}
-                    </Typography>
+                    <div className="markdown-prose">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {result.content}
+                      </ReactMarkdown>
+                    </div>
                     <div className="mt-2 text-xs text-gray-500">
                       Chunk {result.chunk_index} • Document ID: {result.document_id}
                     </div>
