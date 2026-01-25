@@ -36,7 +36,10 @@ TEST_ORG_ID = "6579a94b1f1d8f5a8e9c0123"
 def setup_env():
     """Set up the environment variables for the tests"""
     os.environ["ENV"] = "pytest"
-    os.environ["MONGODB_URI"] = "mongodb://localhost:27017"
+    # Only set MONGODB_URI if it's not already set (e.g., by GitHub Actions)
+    # This allows CI to set directConnection=true in the URI
+    if "MONGODB_URI" not in os.environ:
+        os.environ["MONGODB_URI"] = "mongodb://localhost:27017"
     os.environ["NEXTAUTH_SECRET"] = "test_secret_key_for_tests"
 
 # Set test environment variables
