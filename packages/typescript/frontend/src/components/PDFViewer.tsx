@@ -6,6 +6,8 @@ import { pdfjs, Document, Page } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { DocRouterOrgApi } from '@/utils/api';
+import { isOCRSupported } from '@/utils/ocr-utils';
+import { toast } from 'react-toastify';
 import { Toolbar, Typography, IconButton, TextField, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, List, Tooltip, Box, CircularProgress } from '@mui/material';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
@@ -480,6 +482,11 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   }, [handleMenuClose]);
 
   const handleDownloadOcrText = async () => {
+    if (!isOCRSupported(fileName)) {
+      toast.error('OCR is not supported for this file type');
+      handleMenuClose();
+      return;
+    }
     try {
       const text = await docRouterOrgApi.getOCRText({
         documentId: id
@@ -494,6 +501,11 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   };
 
   const handleDownloadOcrJson = async () => {
+    if (!isOCRSupported(fileName)) {
+      toast.error('OCR is not supported for this file type');
+      handleMenuClose();
+      return;
+    }
     try {
       const blocks = await docRouterOrgApi.getOCRBlocks({
         documentId: id
@@ -510,6 +522,13 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   useEffect(() => {
     const fetchOcrText = async () => {
       if (!showOcr) return;
+      
+      // Check if OCR is supported before making the API call
+      if (!isOCRSupported(fileName)) {
+        setOcrError('OCR is not supported for this file type');
+        setOcrLoading(false);
+        return;
+      }
       
       try {
         setOcrLoading(true);
@@ -528,7 +547,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
     };
 
     fetchOcrText();
-  }, [id, pageNumber, showOcr, organizationId, docRouterOrgApi]);
+  }, [id, pageNumber, showOcr, organizationId, docRouterOrgApi, fileName]);
 
   // This is called once for each page
   const renderHighlights = useCallback((page: number) => {

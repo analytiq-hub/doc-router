@@ -168,10 +168,30 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     return () => clearInterval(pollInterval);
   }, [documentState, id, organizationId, docRouterOrgApi, llmResults, loadingPrompts, failedPrompts]);
 
+  const [documentName, setDocumentName] = useState<string | null>(null);
+
   useEffect(() => {
-    // Load OCR blocks in the background
-    loadOCRBlocks(organizationId, id);
-  }, [id, organizationId, loadOCRBlocks]);
+    // Fetch document name for OCR support check
+    const fetchDocumentName = async () => {
+      try {
+        const docResponse = await docRouterOrgApi.getDocument({
+          documentId: id,
+          fileType: "pdf"
+        });
+        setDocumentName(docResponse.document_name);
+      } catch (error) {
+        console.error('Error fetching document name:', error);
+      }
+    };
+    fetchDocumentName();
+  }, [id, docRouterOrgApi]);
+
+  useEffect(() => {
+    // Load OCR blocks in the background (only if OCR is supported)
+    if (documentName) {
+      loadOCRBlocks(organizationId, id, documentName);
+    }
+  }, [id, organizationId, documentName, loadOCRBlocks]);
 
   const handlePromptChange = async (promptId: string) => {
     if (expandedPrompt === promptId) {

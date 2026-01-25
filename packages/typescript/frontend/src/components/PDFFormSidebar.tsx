@@ -81,10 +81,30 @@ const PDFFormSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
     fetchData();
   }, [fetchData]);
 
+  const [documentName, setDocumentName] = useState<string | null>(null);
+
   useEffect(() => {
-    // Load OCR blocks in the background
-    loadOCRBlocks(organizationId, id);
-  }, [id, organizationId, loadOCRBlocks]);
+    // Fetch document name for OCR support check
+    const fetchDocumentName = async () => {
+      try {
+        const docResponse = await docRouterOrgApi.getDocument({
+          documentId: id,
+          fileType: "original"
+        });
+        setDocumentName(docResponse.document_name);
+      } catch (error) {
+        console.error('Error fetching document name:', error);
+      }
+    };
+    fetchDocumentName();
+  }, [id, docRouterOrgApi]);
+
+  useEffect(() => {
+    // Load OCR blocks in the background (only if OCR is supported)
+    if (documentName) {
+      loadOCRBlocks(organizationId, id, documentName);
+    }
+  }, [id, organizationId, documentName, loadOCRBlocks]);
 
   // Add function to load existing submission for a form
   const loadExistingSubmission = useCallback(async (formRevId: string) => {

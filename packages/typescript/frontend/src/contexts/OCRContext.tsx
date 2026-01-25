@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import type { OCRBlock } from '@docrouter/sdk';
+import { isOCRSupported } from '@/utils/ocr-utils';
 
 export interface HighlightInfo {
   blocks: OCRBlock[];
@@ -11,7 +12,7 @@ export interface HighlightInfo {
 
 interface OCRContextType {
   ocrBlocks: OCRBlock[] | null;
-  loadOCRBlocks: (organizationId: string, documentId: string) => Promise<void>;
+  loadOCRBlocks: (organizationId: string, documentId: string, fileName?: string) => Promise<void>;
   findBlocksWithContext: (text: string, promptId: string, key?: string) => HighlightInfo;
   isLoading: boolean;
   error: string | null;
@@ -27,12 +28,19 @@ export function OCRProvider({ children }: { children: React.ReactNode }) {
   // Move blockCache to useMemo
   const blockCache = useMemo(() => new Map<string, OCRBlock[]>(), []);
 
-  const loadOCRBlocks = useCallback(async (organizationId: string, documentId: string) => {
+  const loadOCRBlocks = useCallback(async (organizationId: string, documentId: string, fileName?: string) => {
     const cacheKey = `${organizationId}-${documentId}`;
     
     // Check cache first
     if (blockCache.has(cacheKey)) {
       setOCRBlocks(blockCache.get(cacheKey)!);
+      return;
+    }
+
+    // Check if OCR is supported before making the API call
+    if (fileName && !isOCRSupported(fileName)) {
+      // OCR not supported for this file type, set empty blocks and return
+      setOCRBlocks([]);
       return;
     }
 
