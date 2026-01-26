@@ -27,6 +27,58 @@ from .errors import (
 
 logger = logging.getLogger(__name__)
 
+
+def get_embedding_cost(response, embedding_model: str) -> float:
+    """
+    Extract actual cost from a litellm embedding response.
+    
+    Args:
+        response: The litellm embedding response object
+        embedding_model: The embedding model name
+        
+    Returns:
+        Actual cost in USD (float)
+    """
+    try:
+        # Try to get cost from hidden params (litellm's automatic cost tracking)
+        if hasattr(response, '_hidden_params') and response._hidden_params:
+            response_cost = response._hidden_params.get("response_cost")
+            if response_cost is not None:
+                return float(response_cost)
+        
+        # Fallback: calculate cost from usage if available
+        if hasattr(response, 'usage') and response.usage:
+            # Get token count from usage
+            total_tokens = 0
+            if hasattr(response.usage, 'total_tokens'):
+                total_tokens = response.usage.total_tokens
+            elif hasattr(response.usage, 'prompt_tokens'):
+                total_tokens = response.usage.prompt_tokens
+            
+            # Get cost per token from litellm model_cost
+            if embedding_model in litellm.model_cost:
+                cost_info = litellm.model_cost[embedding_model]
+                # For embeddings, check if we're using batched pricing
+                input_cost_per_token = cost_info.get("input_cost_per_token", 0.0)
+                input_cost_per_token_batches = cost_info.get("input_cost_per_token_batches", 0.0)
+                
+                # Use batched pricing if available and we have multiple inputs
+                if input_cost_per_token_batches > 0 and hasattr(response, 'data') and len(response.data) > 1:
+                    cost = total_tokens * input_cost_per_token_batches
+                else:
+                    cost = total_tokens * input_cost_per_token
+                
+                return float(cost)
+        
+        # If we can't determine cost, return 0.0
+        logger.debug(f"Could not determine cost for embedding model {embedding_model}, returning 0.0")
+        return 0.0
+        
+    except Exception as e:
+        logger.warning(f"Error extracting embedding cost: {e}, returning 0.0")
+        return 0.0
+
+
 try:
     from chonkie import (
         TokenChunker,
@@ -160,7 +212,7 @@ async def generate_embeddings_batch(
     analytiq_client,
     texts: List[str],
     embedding_model: str
-) -> List[List[float]]:
+) -> Tuple[List[List[float]], float]:
     """
     Generate embeddings for a batch of texts using LiteLLM.
     
@@ -172,13 +224,13 @@ async def generate_embeddings_batch(
         embedding_model: LiteLLM embedding model string
         
     Returns:
-        List of embedding vectors
+        Tuple of (list of embedding vectors, actual cost in USD)
         
     Raises:
         Exception: If embedding generation fails after retries
     """
     if not texts:
-        return []
+        return [], 0.0
     
     # Get provider and API key using the standard method
     provider = ad.llm.get_llm_model_provider(embedding_model)
@@ -201,8 +253,11 @@ async def generate_embeddings_batch(
     # Extract embeddings from response
     embeddings = [item["embedding"] for item in response.data]
     
-    logger.info(f"Generated {len(embeddings)} embeddings using {embedding_model}")
-    return embeddings
+    # Extract actual cost from response
+    actual_cost = get_embedding_cost(response, embedding_model)
+    
+    logger.info(f"Generated {len(embeddings)} embeddings using {embedding_model}, cost: ${actual_cost:.6f}")
+    return embeddings, actual_cost
 
 
 async def get_or_generate_embeddings(
@@ -260,14 +315,16 @@ async def get_or_generate_embeddings(
         provider = ad.llm.get_llm_model_provider(embedding_model)
         
         # Process in batches
+        total_cost = 0.0
         for i in range(0, len(cache_misses), EMBEDDING_BATCH_SIZE):
             batch = cache_misses[i:i + EMBEDDING_BATCH_SIZE]
-            batch_embeddings = await generate_embeddings_batch(
+            batch_embeddings, batch_cost = await generate_embeddings_batch(
                 analytiq_client,
                 batch,
                 embedding_model
             )
             generated_embeddings.extend(batch_embeddings)
+            total_cost += batch_cost
         
         # Store in cache and fill in embeddings list
         for idx, (cache_miss_idx, embedding) in enumerate(zip(cache_miss_indices, generated_embeddings)):
@@ -287,9 +344,10 @@ async def get_or_generate_embeddings(
                     org_id=organization_id,
                     spus=cache_miss_count,  # 1 SPU per embedding
                     llm_provider=provider,
-                    llm_model=embedding_model
+                    llm_model=embedding_model,
+                    actual_cost=total_cost
                 )
-                logger.info(f"Recorded {cache_miss_count} SPU usage for {cache_miss_count} embedding(s) generated")
+                logger.info(f"Recorded {cache_miss_count} SPU usage for {cache_miss_count} embedding(s) generated, actual cost: ${total_cost:.6f}")
             except Exception as e:
                 logger.error(f"Error recording SPU usage for embeddings: {e}")
                 # Don't fail indexing if SPU recording fails

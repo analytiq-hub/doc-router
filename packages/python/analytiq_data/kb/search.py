@@ -4,7 +4,7 @@ Knowledge Base vector search functionality.
 
 import logging
 from datetime import datetime, UTC
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from bson import ObjectId
 
 import litellm
@@ -15,6 +15,57 @@ from .embedding_cache import get_embedding_from_cache, store_embedding_in_cache,
 from .errors import is_retryable_embedding_error, is_retryable_vector_index_error
 
 logger = logging.getLogger(__name__)
+
+
+def get_embedding_cost(response, embedding_model: str) -> float:
+    """
+    Extract actual cost from a litellm embedding response.
+    
+    Args:
+        response: The litellm embedding response object
+        embedding_model: The embedding model name
+        
+    Returns:
+        Actual cost in USD (float)
+    """
+    try:
+        # Try to get cost from hidden params (litellm's automatic cost tracking)
+        if hasattr(response, '_hidden_params') and response._hidden_params:
+            response_cost = response._hidden_params.get("response_cost")
+            if response_cost is not None:
+                return float(response_cost)
+        
+        # Fallback: calculate cost from usage if available
+        if hasattr(response, 'usage') and response.usage:
+            # Get token count from usage
+            total_tokens = 0
+            if hasattr(response.usage, 'total_tokens'):
+                total_tokens = response.usage.total_tokens
+            elif hasattr(response.usage, 'prompt_tokens'):
+                total_tokens = response.usage.prompt_tokens
+            
+            # Get cost per token from litellm model_cost
+            if embedding_model in litellm.model_cost:
+                cost_info = litellm.model_cost[embedding_model]
+                # For embeddings, check if we're using batched pricing
+                input_cost_per_token = cost_info.get("input_cost_per_token", 0.0)
+                input_cost_per_token_batches = cost_info.get("input_cost_per_token_batches", 0.0)
+                
+                # Use batched pricing if available and we have multiple inputs
+                if input_cost_per_token_batches > 0 and hasattr(response, 'data') and len(response.data) > 1:
+                    cost = total_tokens * input_cost_per_token_batches
+                else:
+                    cost = total_tokens * input_cost_per_token
+                
+                return float(cost)
+        
+        # If we can't determine cost, return 0.0
+        logger.debug(f"Could not determine cost for embedding model {embedding_model}, returning 0.0")
+        return 0.0
+        
+    except Exception as e:
+        logger.warning(f"Error extracting embedding cost: {e}, returning 0.0")
+        return 0.0
 
 
 def sanitize_metadata_filter(metadata_filter: Dict[str, Any]) -> Dict[str, Any]:
@@ -161,7 +212,7 @@ async def search_knowledge_base(
         
         # Generate embedding with retry logic
         try:
-            query_embedding = await _generate_query_embedding_with_retry(
+            query_embedding, embedding_cost = await _generate_query_embedding_with_retry(
                 analytiq_client,
                 query,
                 embedding_model
@@ -179,9 +230,10 @@ async def search_knowledge_base(
                         org_id=organization_id,
                         spus=1,  # 1 SPU per query embedding
                         llm_provider=provider,
-                        llm_model=embedding_model
+                        llm_model=embedding_model,
+                        actual_cost=embedding_cost
                     )
-                    logger.info(f"Recorded 1 SPU usage for query embedding generated")
+                    logger.info(f"Recorded 1 SPU usage for query embedding generated, actual cost: ${embedding_cost:.6f}")
             except Exception as e:
                 logger.error(f"Error recording SPU usage for query embedding: {e}")
                 # Don't fail search if SPU recording fails
@@ -416,7 +468,7 @@ async def _generate_query_embedding_with_retry(
     analytiq_client,
     query: str,
     embedding_model: str
-) -> List[float]:
+) -> Tuple[List[float], float]:
     """
     Generate a query embedding with retry logic for transient errors.
     
@@ -428,7 +480,7 @@ async def _generate_query_embedding_with_retry(
         embedding_model: LiteLLM embedding model string
         
     Returns:
-        Embedding vector as a list of floats
+        Tuple of (embedding vector as a list of floats, actual cost in USD)
         
     Raises:
         Exception: If embedding generation fails after retries
@@ -452,4 +504,7 @@ async def _generate_query_embedding_with_retry(
     if not response or not response.data or len(response.data) == 0:
         raise ValueError(f"Invalid embedding response: no data returned for query")
     
-    return response.data[0]["embedding"]
+    # Extract actual cost from response
+    actual_cost = get_embedding_cost(response, embedding_model)
+    
+    return response.data[0]["embedding"], actual_cost

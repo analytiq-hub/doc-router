@@ -1161,6 +1161,13 @@ async def run_kb_chat(
             detail=f"Model {request.model} does not support function calling. Please select a different model."
         )
     
+    # Determine SPU cost for this LLM (1 SPU per chat conversation)
+    spu_cost = await ad.payments.get_spu_cost(request.model)
+    total_spu_needed = spu_cost  # 1 SPU per chat conversation
+    
+    # Check if org has enough credits (throws SPUCreditException if insufficient)
+    await ad.payments.check_spu_limits(organization_id, total_spu_needed)
+    
     try:
         # Prepare messages for litellm
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
@@ -1226,6 +1233,11 @@ async def run_kb_chat(
         # Use non-streaming for agentic loop to properly handle tool calls,
         # then stream the final response
         async def generate_stream():
+            # Initialize cost tracking (outside try block so accessible in exception handler)
+            total_prompt_tokens = 0
+            total_completion_tokens = 0
+            total_cost = 0.0
+            
             try:
                 iteration = 0
                 
@@ -1263,6 +1275,12 @@ async def run_kb_chat(
                         tools=tools,
                         tool_choice="auto"
                     )
+                    
+                    # Accumulate token usage and cost
+                    if hasattr(response, 'usage') and response.usage:
+                        total_prompt_tokens += response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0
+                        total_completion_tokens += response.usage.completion_tokens if hasattr(response.usage, 'completion_tokens') else 0
+                        total_cost += litellm.completion_cost(completion_response=response) if hasattr(response, 'usage') else 0.0
                     
                     # Check if LLM wants to call a tool
                     message = response.choices[0].message
@@ -1383,12 +1401,47 @@ async def run_kb_chat(
                 # Send final done signal
                 yield f"data: {json.dumps({'chunk': '', 'done': True})}\n\n"
                 
+                # Record SPU usage after stream completes
+                total_tokens = total_prompt_tokens + total_completion_tokens
+                try:
+                    await ad.payments.record_spu_usage(
+                        org_id=organization_id,
+                        spus=total_spu_needed,
+                        llm_provider=llm_provider,
+                        llm_model=request.model,
+                        prompt_tokens=total_prompt_tokens,
+                        completion_tokens=total_completion_tokens,
+                        total_tokens=total_tokens,
+                        actual_cost=total_cost
+                    )
+                    logger.info(f"Recorded {total_spu_needed} SPU usage for KB chat, actual cost: ${total_cost:.6f}, tokens: {total_tokens}")
+                except Exception as e:
+                    logger.error(f"Error recording SPU usage for KB chat: {e}")
+                    # Don't fail the chat if SPU recording fails
+                
             except SPUCreditException as e:
                 logger.warning(f"SPU credit exhausted in KB chat: {str(e)}")
                 yield f"data: {json.dumps({'error': f'Insufficient SPU credits: {str(e)}', 'done': True})}\n\n"
             except Exception as e:
                 logger.error(f"Error in KB chat streaming: {str(e)}")
                 yield f"data: {json.dumps({'error': str(e), 'done': True})}\n\n"
+                # Try to record usage even on error (if we have any cost data)
+                if total_cost > 0 or total_prompt_tokens > 0:
+                    try:
+                        total_tokens = total_prompt_tokens + total_completion_tokens
+                        await ad.payments.record_spu_usage(
+                            org_id=organization_id,
+                            spus=total_spu_needed,
+                            llm_provider=llm_provider,
+                            llm_model=request.model,
+                            prompt_tokens=total_prompt_tokens,
+                            completion_tokens=total_completion_tokens,
+                            total_tokens=total_tokens,
+                            actual_cost=total_cost
+                        )
+                        logger.info(f"Recorded {total_spu_needed} SPU usage for KB chat (error case), actual cost: ${total_cost:.6f}")
+                    except Exception as record_error:
+                        logger.error(f"Error recording SPU usage for KB chat after error: {record_error}")
         
         return StreamingResponse(
             generate_stream(),
