@@ -795,8 +795,19 @@ async def delete_knowledge_base(
     if not kb:
         raise HTTPException(status_code=404, detail="Knowledge base not found")
     
-    # Drop vector collection
+    # Drop vector collection and its search index
     collection_name = f"kb_vectors_{kb_id}"
+    # Drop search index first (if it exists)
+    try:
+        await db.command({
+            "dropSearchIndexes": collection_name,
+            "index": "kb_vector_index"
+        })
+        logger.info(f"Dropped search index for KB {kb_id}")
+    except Exception as e:
+        # Index might not exist - that's okay
+        logger.warning(f"Could not drop search index (may not exist): {e}")
+    # Then drop the collection (this will also clean up any remaining indexes)
     await db[collection_name].drop()
     
     # Delete document_index entries
