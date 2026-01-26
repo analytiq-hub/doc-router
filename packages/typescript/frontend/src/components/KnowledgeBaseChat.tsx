@@ -157,9 +157,9 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
         messages: conversationMessages,
         temperature: 0.7,
         stream: true,
-        metadata_filter: metadataFilter,
-        upload_date_from: uploadDateFrom || undefined,
-        upload_date_to: uploadDateTo || undefined
+        ...(metadataFilter && { metadata_filter: metadataFilter }),
+        ...(uploadDateFrom && { upload_date_from: uploadDateFrom }),
+        ...(uploadDateTo && { upload_date_to: uploadDateTo })
       };
 
       let assistantContent = '';
