@@ -146,7 +146,6 @@ async def worker_kb_reconcile(worker_id: str) -> None:
     CHECK_INTERVAL_SECS = 10  # Check every 10 seconds for KBs that need reconciliation
     
     while True:
-        logger.info(f"KB reconciliation worker {worker_id} running")
         try:
             now = datetime.now(UTC)
             
