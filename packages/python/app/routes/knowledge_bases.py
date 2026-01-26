@@ -145,7 +145,6 @@ class KBSearchRequest(BaseModel):
     query: str = Field(..., description="Search query text")
     top_k: int = Field(default=5, ge=1, le=20, description="Number of results to return")
     skip: int = Field(default=0, ge=0, description="Pagination offset")
-    document_ids: Optional[List[str]] = Field(default=None, description="Filter by specific document IDs")
     metadata_filter: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filters (sanitized server-side)")
     upload_date_from: Optional[datetime] = Field(default=None, description="Filter by upload date from")
     upload_date_to: Optional[datetime] = Field(default=None, description="Filter by upload date to")
@@ -366,6 +365,10 @@ async def create_vector_search_index(
                 {
                     "type": "filter",
                     "path": "organization_id"
+                },
+                {
+                    "type": "filter",
+                    "path": "metadata_snapshot"
                 }
             ]
         }
@@ -1042,7 +1045,6 @@ async def search_knowledge_base(
             organization_id=organization_id,
             top_k=search_request.top_k,
             skip=search_request.skip,
-            document_ids=search_request.document_ids,
             metadata_filter=search_request.metadata_filter,
             upload_date_from=search_request.upload_date_from,
             upload_date_to=search_request.upload_date_to,

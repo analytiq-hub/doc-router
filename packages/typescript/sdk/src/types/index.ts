@@ -960,7 +960,6 @@ export interface KBSearchRequest {
   query: string;
   top_k?: number;
   skip?: number;
-  document_ids?: string[];
   metadata_filter?: Record<string, unknown>;
   upload_date_from?: string;
   upload_date_to?: string;

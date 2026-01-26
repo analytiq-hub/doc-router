@@ -59,28 +59,26 @@ def sanitize_metadata_filter(metadata_filter: Dict[str, Any]) -> Dict[str, Any]:
 
 def build_vector_search_filter(
     organization_id: str,
-    document_ids: Optional[List[str]] = None,
     metadata_filter: Optional[Dict[str, Any]] = None,
     upload_date_from: Optional[datetime] = None,
     upload_date_to: Optional[datetime] = None
-) -> Dict[str, Any]:
+) -> tuple[Dict[str, Any], Dict[str, Any]]:
     """
-    Build MongoDB filter for vector search.
+    Build filter for MongoDB $vectorSearch.
     
     Args:
         organization_id: Organization ID (required)
-        document_ids: Optional list of document IDs to filter by
         metadata_filter: Optional metadata filters (sanitized)
         upload_date_from: Optional upload date start
         upload_date_to: Optional upload date end
         
     Returns:
-        MongoDB filter dict
+        tuple: (vector_search_filter, post_filter)
+        - vector_search_filter: Filter to use in $vectorSearch stage (no regex)
+        - post_filter: Filter to apply after vector search (supports regex)
     """
     filter_dict = {"organization_id": organization_id}
-    
-    if document_ids:
-        filter_dict["document_id"] = {"$in": document_ids}
+    post_filter = {}
     
     # Apply metadata filters from metadata_snapshot
     if metadata_filter:
@@ -94,10 +92,22 @@ def build_vector_search_filter(
                     filter_dict["metadata_snapshot.tag_ids"] = value
             elif key == "document_name":
                 # Filter by document_name in metadata_snapshot
-                if isinstance(value, str):
-                    filter_dict["metadata_snapshot.document_name"] = {"$regex": value, "$options": "i"}
+                # Note: $vectorSearch filter doesn't support $regex, so we handle regex in post-filtering
+                if isinstance(value, dict):
+                    # If it's already a dict with operators, check if it's a supported operator
+                    # $vectorSearch supports: $eq, $ne, $in, $nin, $gt, $gte, $lt, $lte, $exists, $not
+                    supported_ops = {"$eq", "$ne", "$in", "$nin", "$gt", "$gte", "$lt", "$lte", "$exists", "$not"}
+                    if "$regex" in value:
+                        # Move regex to post-filter
+                        post_filter["metadata_snapshot.document_name"] = value
+                    elif any(op in value for op in supported_ops):
+                        filter_dict["metadata_snapshot.document_name"] = value
+                elif isinstance(value, str):
+                    # For string values, use regex in post-filtering for partial matching
+                    post_filter["metadata_snapshot.document_name"] = {"$regex": value, "$options": "i"}
                 else:
-                    filter_dict["metadata_snapshot.document_name"] = value
+                    # For other types, try exact match in vector search
+                    filter_dict["metadata_snapshot.document_name"] = {"$eq": value}
             elif key == "metadata":
                 # Filter by custom metadata in metadata_snapshot.metadata
                 if isinstance(value, dict):
@@ -116,7 +126,7 @@ def build_vector_search_filter(
         if date_filter:
             filter_dict["metadata_snapshot.upload_date"] = date_filter
     
-    return filter_dict
+    return filter_dict, post_filter
 
 
 async def search_knowledge_base(
@@ -126,7 +136,6 @@ async def search_knowledge_base(
     organization_id: str,
     top_k: int = 5,
     skip: int = 0,
-    document_ids: Optional[List[str]] = None,
     metadata_filter: Optional[Dict[str, Any]] = None,
     upload_date_from: Optional[datetime] = None,
     upload_date_to: Optional[datetime] = None,
@@ -142,7 +151,6 @@ async def search_knowledge_base(
         organization_id: Organization ID
         top_k: Number of results to return
         skip: Pagination offset
-        document_ids: Optional list of document IDs to filter by
         metadata_filter: Optional metadata filters
         upload_date_from: Optional upload date start
         upload_date_to: Optional upload date end
@@ -207,10 +215,9 @@ async def search_knowledge_base(
             logger.error(f"Error generating query embedding: {e}")
             raise ValueError(f"Failed to generate query embedding: {str(e)}")
     
-    # Build filter
-    search_filter = build_vector_search_filter(
+    # Build filters (vector search filter and post-filter for regex)
+    search_filter, post_filter = build_vector_search_filter(
         organization_id=organization_id,
-        document_ids=document_ids,
         metadata_filter=metadata_filter,
         upload_date_from=upload_date_from,
         upload_date_to=upload_date_to
@@ -227,7 +234,7 @@ async def search_knowledge_base(
         "path": "embedding",
         "queryVector": query_embedding,
         "numCandidates": max(top_k * 10, 100),  # Search more candidates for better results
-        "limit": top_k + skip  # Get enough for pagination
+        "limit": top_k * 3 if post_filter else top_k + skip  # Get more candidates if we need to post-filter
     }
     
     # Add filter only if it's not empty
@@ -240,12 +247,18 @@ async def search_knowledge_base(
         }
     ]
     
-    # Add score field if filter was used (score is always available from $vectorSearch)
+    # Add score field (score is always available from $vectorSearch)
     pipeline.append({
         "$addFields": {
             "score": {"$meta": "vectorSearchScore"}
         }
     })
+    
+    # Apply post-filtering for regex and other unsupported operators
+    if post_filter:
+        pipeline.append({
+            "$match": post_filter
+        })
     
     # Apply pagination
     if skip > 0:
