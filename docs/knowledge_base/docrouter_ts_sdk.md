@@ -2,7 +2,7 @@
 
 ## Overview
 
-The DocRouter TypeScript SDK provides type-safe access to the DocRouter API, enabling developers to integrate document processing, OCR, LLM operations, and organization management into their applications. The SDK supports both Node.js and browser environments with comprehensive TypeScript support.
+The DocRouter TypeScript SDK provides type-safe access to the DocRouter API, enabling developers to integrate document processing, OCR, LLM operations, knowledge bases, forms, schemas, and organization management into their applications. The SDK supports both Node.js and browser environments with comprehensive TypeScript support.
 
 ## Installation
 
@@ -38,7 +38,7 @@ For optimal TypeScript support, ensure your `tsconfig.json` includes:
 
 ## Authentication Methods
 
-The SDK supports three authentication strategies:
+The SDK supports two main authentication strategies:
 
 ### 1. Account Token (Server-to-Server)
 
@@ -48,7 +48,7 @@ Use `DocRouterAccount` for account-level operations with account tokens:
 import { DocRouterAccount } from '@docrouter/sdk';
 
 const client = new DocRouterAccount({
-  baseURL: 'https://api.docrouter.com',
+  baseURL: 'https://app.docrouter.ai/fastapi',
   accountToken: 'your-account-token-here'
 });
 ```
@@ -58,6 +58,7 @@ const client = new DocRouterAccount({
 - Organization management
 - Token creation and management
 - User management
+- Account-level LLM operations
 
 ### 2. Organization Token
 
@@ -67,7 +68,7 @@ Use `DocRouterOrg` for organization-scoped operations:
 import { DocRouterOrg } from '@docrouter/sdk';
 
 const client = new DocRouterOrg({
-  baseURL: 'https://api.docrouter.com',
+  baseURL: 'https://app.docrouter.ai/fastapi',
   orgToken: 'your-org-token-here',
   organizationId: 'org-123'
 });
@@ -77,26 +78,11 @@ const client = new DocRouterOrg({
 - Document processing within an organization
 - OCR operations
 - LLM operations
-- Tag management
+- Tag, prompt, schema, and form management
+- Knowledge base operations
+- Payment and subscription management
 
-### 3. JWT Token (Browser)
-
-Use `DocRouterOrg` with JWT tokens for browser applications:
-
-```typescript
-import { DocRouterOrg } from '@docrouter/sdk';
-
-const client = new DocRouterOrg({
-  baseURL: 'https://api.docrouter.com',
-  orgToken: 'your-jwt-token-here',
-  organizationId: 'your-org-id'
-});
-```
-
-**Use cases:**
-- Browser-based applications
-- Client-side document processing
-- Real-time chat interfaces
+**Note**: The organization ID can be resolved from the token using `DocRouterAccount.getOrganizationFromToken()`.
 
 ## Quick Start Examples
 
@@ -106,12 +92,15 @@ const client = new DocRouterOrg({
 import { DocRouterAccount } from '@docrouter/sdk';
 
 const client = new DocRouterAccount({
-  baseURL: 'https://api.docrouter.com',
+  baseURL: 'https://app.docrouter.ai/fastapi',
   accountToken: 'your-account-token'
 });
 
 // List organizations
 const orgs = await client.listOrganizations();
+
+// Get organization from token
+const orgInfo = await client.getOrganizationFromToken('org-token');
 
 // Create organization token
 const token = await client.createOrganizationToken({
@@ -126,29 +115,49 @@ const token = await client.createOrganizationToken({
 import { DocRouterOrg } from '@docrouter/sdk';
 
 const client = new DocRouterOrg({
-  baseURL: 'https://api.docrouter.com',
+  baseURL: 'https://app.docrouter.ai/fastapi',
   orgToken: 'your-org-token',
   organizationId: 'org-123'
 });
 
-// Upload documents
+// Upload documents (content should be base64 encoded)
 const result = await client.uploadDocuments({
   documents: [
     {
       name: 'document.pdf',
-      content: fileBuffer,
-      type: 'application/pdf'
+      content: base64Content, // Base64 string or data URL
+      tag_ids: ['tag-1', 'tag-2'],
+      metadata: { category: 'invoice' }
     }
   ]
 });
 
-// List documents
-const documents = await client.listDocuments();
+// List documents with filtering
+const documents = await client.listDocuments({
+  skip: 0,
+  limit: 10,
+  tagIds: 'tag-1,tag-2',
+  nameSearch: 'invoice',
+  metadataSearch: 'category=invoice'
+});
 
-// Get document details
+// Get document details and content
 const document = await client.getDocument({
   documentId: 'doc-123',
-  fileType: 'pdf'
+  fileType: 'pdf' // or 'original'
+});
+
+// Update document metadata
+await client.updateDocument({
+  documentId: 'doc-123',
+  documentName: 'Updated Document Name',
+  tagIds: ['tag-1', 'tag-2'],
+  metadata: { category: 'updated' }
+});
+
+// Delete document
+await client.deleteDocument({
+  documentId: 'doc-123'
 });
 ```
 
@@ -160,35 +169,23 @@ The `DocRouterAccount` client provides account-level operations:
 
 ```typescript
 const client = new DocRouterAccount({
-  baseURL: 'https://api.docrouter.com',
+  baseURL: 'https://app.docrouter.ai/fastapi',
   accountToken: 'your-account-token'
 });
-
-// Available methods:
-client.listOrganizations()     // List organizations
-client.getOrganization()       // Get organization details
-client.createOrganization()    // Create organization
-client.updateOrganization()    // Update organization
-client.deleteOrganization()    // Delete organization
-client.createAccountToken()    // Create account token
-client.getAccountTokens()      // List account tokens
-client.deleteAccountToken()    // Delete account token
-client.createOrganizationToken() // Create organization token
-client.listLLMModels()         // List LLM models
-client.listLLMProviders()      // List LLM providers
-client.setLLMProviderConfig()  // Configure LLM provider
-client.listUsers()             // List users
-client.getUser()               // Get user details
-client.createUser()            // Create user
-client.updateUser()            // Update user
-client.deleteUser()            // Delete user
 ```
 
 #### Organization Management
 
 ```typescript
-// List all organizations
-const orgs = await client.listOrganizations();
+// List organizations with optional filters
+const orgs = await client.listOrganizations({
+  userId: 'user-123',
+  organizationId: 'org-123',
+  nameSearch: 'My Org',
+  memberSearch: 'user@example.com',
+  skip: 0,
+  limit: 10
+});
 
 // Get organization details
 const org = await client.getOrganization('org-123');
@@ -196,7 +193,7 @@ const org = await client.getOrganization('org-123');
 // Create new organization
 const newOrg = await client.createOrganization({
   name: 'My Organization',
-  description: 'Organization description'
+  type: 'team' // or 'personal'
 });
 
 // Update organization
@@ -214,11 +211,14 @@ await client.deleteOrganization('org-123');
 // Create account token
 const accountToken = await client.createAccountToken({
   name: 'My Account Token',
-  lifetime: 86400
+  lifetime: 86400 // seconds
 });
 
 // List account tokens
 const tokens = await client.getAccountTokens();
+
+// Delete account token
+await client.deleteAccountToken('token-id');
 
 // Create organization token
 const orgToken = await client.createOrganizationToken({
@@ -226,15 +226,27 @@ const orgToken = await client.createOrganizationToken({
   lifetime: 86400
 }, 'org-123');
 
-// Delete token
-await client.deleteAccountToken('token-id');
+// List organization tokens
+const orgTokens = await client.getOrganizationTokens('org-123');
+
+// Delete organization token
+await client.deleteOrganizationToken('token-id', 'org-123');
+
+// Get organization from token
+const orgInfo = await client.getOrganizationFromToken('org-token');
 ```
 
 #### User Management
 
 ```typescript
-// List users
-const users = await client.listUsers();
+// List users with optional filters
+const users = await client.listUsers({
+  skip: 0,
+  limit: 10,
+  organization_id: 'org-123',
+  user_id: 'user-123',
+  search_name: 'John'
+});
 
 // Get user details
 const user = await client.getUser('user-123');
@@ -249,6 +261,153 @@ const newUser = await client.createUser({
 await client.updateUser('user-123', {
   name: 'John Smith'
 });
+
+// Delete user
+await client.deleteUser('user-123');
+```
+
+#### Email Verification
+
+```typescript
+// Send verification email
+await client.sendVerificationEmail('user-123');
+
+// Send registration verification email
+await client.sendRegistrationVerificationEmail('user-123');
+
+// Verify email with token
+await client.verifyEmail('verification-token');
+```
+
+#### AWS Configuration
+
+```typescript
+// Create AWS config
+const awsConfig = await client.createAWSConfig({
+  access_key_id: 'key',
+  secret_access_key: 'secret',
+  region: 'us-east-1'
+});
+
+// Get AWS config
+const config = await client.getAWSConfig();
+
+// Delete AWS config
+await client.deleteAWSConfig();
+```
+
+#### Invitations
+
+```typescript
+// Create invitation
+const invitation = await client.createInvitation({
+  email: 'user@example.com',
+  organization_id: 'org-123',
+  role: 'member'
+});
+
+// List invitations
+const invitations = await client.getInvitations({
+  skip: 0,
+  limit: 10
+});
+
+// Get invitation by token
+const inv = await client.getInvitation('invitation-token');
+
+// Accept invitation
+await client.acceptInvitation('invitation-token', {
+  name: 'John Doe'
+});
+```
+
+#### LLM Operations (Account Level)
+
+```typescript
+// List LLM models
+const models = await client.listLLMModels({
+  providerName: 'openai',
+  providerEnabled: true,
+  llmEnabled: true
+});
+
+// List LLM providers
+const providers = await client.listLLMProviders();
+
+// Set LLM provider config
+await client.setLLMProviderConfig('openai', {
+  api_key: 'key',
+  enabled: true
+});
+
+// Run LLM chat
+const response = await client.runLLMChat({
+  messages: [
+    { role: 'user', content: 'Hello' }
+  ],
+  model: 'gpt-4'
+});
+
+// Run LLM chat with streaming
+await client.runLLMChatStream(
+  {
+    messages: [{ role: 'user', content: 'Hello' }],
+    model: 'gpt-4'
+  },
+  (chunk) => {
+    console.log('Chunk:', chunk);
+  },
+  (error) => {
+    console.error('Error:', error);
+  }
+);
+
+// Test embedding model
+const testResult = await client.testEmbeddingModel({
+  model: 'text-embedding-ada-002',
+  text: 'Test text'
+});
+```
+
+#### Payment and Subscription Management (Account Level)
+
+```typescript
+// Get customer portal
+const portal = await client.getCustomerPortal('org-123');
+
+// Get subscription
+const subscription = await client.getSubscription('org-123');
+
+// Activate subscription
+await client.activateSubscription('org-123');
+
+// Cancel subscription
+await client.cancelSubscription('org-123');
+
+// Get current usage
+const usage = await client.getCurrentUsage('org-123');
+
+// Add credits
+await client.addCredits('org-123', 1000);
+
+// Get credit config
+const creditConfig = await client.getCreditConfig('org-123');
+
+// Purchase credits
+const purchase = await client.purchaseCredits('org-123', {
+  credits: 1000,
+  success_url: 'https://example.com/success',
+  cancel_url: 'https://example.com/cancel'
+});
+
+// Get usage range
+const usageRange = await client.getUsageRange('org-123', {
+  start_date: '2024-01-01',
+  end_date: '2024-01-31'
+});
+
+// Create checkout session
+const checkout = await client.createCheckoutSession('org-123', 'plan-id');
 ```
 
 ### DocRouterOrg Client
@@ -257,58 +416,10 @@ The `DocRouterOrg` client provides organization-scoped operations:
 
 ```typescript
 const client = new DocRouterOrg({
-  baseURL: 'https://api.docrouter.com',
+  baseURL: 'https://app.docrouter.ai/fastapi',
   orgToken: 'your-org-token',
   organizationId: 'org-123'
 });
-
-// Available methods:
-client.uploadDocuments()       // Upload documents
-client.listDocuments()         // List documents
-client.getDocument()           // Get document details
-client.updateDocument()        // Update document
-client.deleteDocument()        // Delete document
-client.getOCRBlocks()          // Get OCR blocks
-client.getOCRText()            // Get OCR text
-client.getOCRMetadata()        // Get OCR metadata
-client.runLLM()                // Run LLM on document
-client.getLLMResult()          // Get LLM result
-client.updateLLMResult()       // Update LLM result
-client.deleteLLMResult()       // Delete LLM result
-client.runLLMChat()            // Run LLM chat
-client.runLLMChatStream()      // Stream LLM chat
-client.createTag()             // Create tag
-client.getTag()                // Get tag details
-client.listTags()              // List tags
-client.updateTag()             // Update tag
-client.deleteTag()             // Delete tag
-client.createForm()            // Create form
-client.listForms()             // List forms
-client.getForm()               // Get form details
-client.updateForm()            // Update form
-client.deleteForm()            // Delete form
-client.submitForm()            // Submit form
-client.createPrompt()          // Create prompt
-client.listPrompts()           // List prompts
-client.getPrompt()             // Get prompt details
-client.updatePrompt()          // Update prompt
-client.deletePrompt()          // Delete prompt
-client.createSchema()          // Create schema
-client.listSchemas()           // List schemas
-client.getSchema()             // Get schema details
-client.updateSchema()          // Update schema
-client.deleteSchema()          // Delete schema
-client.validateAgainstSchema() // Validate data against schema
-client.getCustomerPortal()     // Get customer portal
-client.getSubscription()       // Get subscription
-client.activateSubscription()  // Activate subscription
-client.cancelSubscription()    // Cancel subscription
-client.getCurrentUsage()       // Get current usage
-client.addCredits()            // Add credits
-client.getCreditConfig()       // Get credit configuration
-client.purchaseCredits()       // Purchase credits
-client.getUsageRange()         // Get usage range
-client.createCheckoutSession() // Create checkout session
 ```
 
 #### Document Management
@@ -319,30 +430,34 @@ const uploadResult = await client.uploadDocuments({
   documents: [
     {
       name: 'invoice.pdf',
-      content: fileBuffer,
-      type: 'application/pdf'
+      content: base64Content, // Base64 string or data URL
+      tag_ids: ['tag-1'],
+      metadata: { category: 'invoice' }
     }
   ]
 });
 
 // List documents with filtering
 const documents = await client.listDocuments({
-  limit: 10,
   skip: 0,
-  tagIds: 'tag1,tag2'
+  limit: 10,
+  tagIds: 'tag-1,tag-2',
+  nameSearch: 'invoice',
+  metadataSearch: 'category=invoice'
 });
 
 // Get document details and content
 const document = await client.getDocument({
   documentId: 'doc-123',
-  fileType: 'pdf'
+  fileType: 'pdf' // or 'original'
 });
 
 // Update document metadata
 await client.updateDocument({
   documentId: 'doc-123',
-  documentName: 'Updated Document Name',
-  tagIds: ['tag1', 'tag2']
+  documentName: 'Updated Name',
+  tagIds: ['tag-1'],
+  metadata: { category: 'updated' }
 });
 
 // Delete document
@@ -361,7 +476,8 @@ const ocrBlocks = await client.getOCRBlocks({
 
 // Get OCR text (plain text)
 const ocrText = await client.getOCRText({
-  documentId: 'doc-123'
+  documentId: 'doc-123',
+  pageNum: 1 // Optional: specific page number
 });
 
 // Get OCR metadata
@@ -373,31 +489,26 @@ const ocrMetadata = await client.getOCRMetadata({
 #### LLM Operations
 
 ```typescript
-// Run LLM chat
-const chatResponse = await client.runLLMChat({
-  messages: [
-    { role: 'user', content: 'Extract key information from this document' }
-  ],
-  model: 'gpt-4'
-});
-
 // Run LLM on document
 const llmResult = await client.runLLM({
   documentId: 'doc-123',
-  promptRevId: 'prompt-123'
+  promptRevId: 'prompt-123',
+  force: false // Force re-extraction
 });
 
 // Get LLM result
 const result = await client.getLLMResult({
   documentId: 'doc-123',
-  promptRevId: 'prompt-123'
+  promptRevId: 'prompt-123',
+  fallback: false // Use fallback results
 });
 
 // Update LLM result
 await client.updateLLMResult({
   documentId: 'doc-123',
-  promptRevId: 'prompt-123',
-  content: 'Updated result content'
+  promptId: 'prompt-123',
+  result: { key: 'value' },
+  isVerified: false
 });
 
 // Delete LLM result
@@ -405,6 +516,39 @@ await client.deleteLLMResult({
   documentId: 'doc-123',
   promptId: 'prompt-123'
 });
+
+// Download all LLM results
+const results = await client.downloadAllLLMResults({
+  documentId: 'doc-123'
+});
+
+// Run LLM chat
+const chatResponse = await client.runLLMChat({
+  messages: [
+    { role: 'user', content: 'Extract key information' }
+  ],
+  model: 'gpt-4',
+  temperature: 0.7,
+  max_tokens: 1000
+});
+
+// Run LLM chat with streaming
+await client.runLLMChatStream(
+  {
+    messages: [{ role: 'user', content: 'Hello' }],
+    model: 'gpt-4'
+  },
+  (chunk) => {
+    console.log('Chunk:', chunk);
+  },
+  (error) => {
+    console.error('Error:', error);
+  },
+  abortSignal // Optional AbortSignal
+);
+
+// List LLM models
+const models = await client.listLLMModels();
 ```
 
 #### Tag Management
@@ -424,10 +568,11 @@ const tagDetails = await client.getTag({
   tagId: 'tag-123'
 });
 
-// List tags
+// List tags with optional search
 const tags = await client.listTags({
+  skip: 0,
   limit: 20,
-  skip: 0
+  nameSearch: 'invoice'
 });
 
 // Update tag
@@ -445,76 +590,56 @@ await client.deleteTag({
 });
 ```
 
-#### Form Management
-
-```typescript
-// Create form
-const form = await client.createForm({
-  name: 'Invoice Form',
-  description: 'Form for invoice data extraction',
-  jsonFormio: formioDefinition,
-  jsonFormioMapping: mappingDefinition
-});
-
-// List forms
-const forms = await client.listForms({
-  limit: 10,
-  skip: 0
-});
-
-// Get form details
-const formDetails = await client.getForm({
-  formId: 'form-123'
-});
-
-// Update form
-await client.updateForm({
-  formId: 'form-123',
-  name: 'Updated Form Name'
-});
-
-// Submit form
-const submission = await client.submitForm({
-  formId: 'form-123',
-  documentId: 'doc-123',
-  data: formData
-});
-
-// Delete form
-await client.deleteForm({
-  formId: 'form-123'
-});
-```
-
 #### Prompt Management
 
 ```typescript
 // Create prompt
-const prompt = await client.prompts.create({
-  name: 'Invoice Extraction',
-  content: 'Extract invoice number, date, and total amount',
-  description: 'Prompt for extracting invoice data'
+const prompt = await client.createPrompt({
+  prompt: {
+    name: 'Invoice Extraction',
+    content: 'Extract invoice number, date, and total amount',
+    schema_id: 'schema-123',
+    schema_version: 1,
+    tag_ids: ['tag-1'],
+    model: 'gpt-4o-mini',
+    kb_id: 'kb-123' // Optional: knowledge base ID for RAG
+  }
 });
 
-// List prompts
-const prompts = await client.prompts.list({
+// List prompts with optional filters
+const prompts = await client.listPrompts({
+  skip: 0,
   limit: 10,
-  skip: 0
+  document_id: 'doc-123',
+  tag_ids: 'tag-1,tag-2',
+  nameSearch: 'invoice'
 });
 
 // Get prompt details
-const promptDetails = await client.prompts.get({
-  promptId: 'prompt-123'
+const promptDetails = await client.getPrompt({
+  promptRevId: 'prompt-rev-123'
 });
 
 // Update prompt
-await client.prompts.update({
+await client.updatePrompt({
   promptId: 'prompt-123',
-  content: 'Updated prompt content'
+  prompt: {
+    name: 'Updated Prompt',
+    content: 'Updated content',
+    schema_id: 'schema-123',
+    schema_version: 1,
+    tag_ids: ['tag-1'],
+    model: 'gpt-4o-mini'
+  }
 });
 
 // Delete prompt
-await client.prompts.delete({
+await client.deletePrompt({
+  promptId: 'prompt-123'
+});
+
+// List prompt versions
+const versions = await client.listPromptVersions({
   promptId: 'prompt-123'
 });
 ```
@@ -523,60 +648,277 @@ await client.prompts.delete({
 
 ```typescript
 // Create schema
-const schema = await client.schemas.create({
+const schema = await client.createSchema({
   name: 'Invoice Schema',
-  description: 'Schema for invoice data validation',
-  jsonSchema: schemaDefinition
+  response_format: {
+    type: 'json_schema',
+    json_schema: {
+      name: 'invoice_extraction',
+      schema: {
+        type: 'object',
+        properties: {
+          invoice_date: { type: 'string', description: 'invoice date' }
+        },
+        required: ['invoice_date'],
+        additionalProperties: false
+      },
+      strict: true
+    }
+  }
 });
 
-// List schemas
-const schemas = await client.schemas.list({
+// List schemas with optional search
+const schemas = await client.listSchemas({
+  skip: 0,
   limit: 10,
-  skip: 0
+  nameSearch: 'invoice'
 });
 
 // Get schema details
-const schemaDetails = await client.schemas.get({
-  schemaId: 'schema-123'
+const schemaDetails = await client.getSchema({
+  schemaRevId: 'schema-rev-123'
 });
 
 // Update schema
-await client.schemas.update({
+await client.updateSchema({
   schemaId: 'schema-123',
-  name: 'Updated Schema Name'
+  schema: {
+    name: 'Updated Schema',
+    response_format: { /* ... */ }
+  }
 });
 
 // Delete schema
-await client.schemas.delete({
+await client.deleteSchema({
+  schemaId: 'schema-123'
+});
+
+// Validate data against schema
+const validation = await client.validateAgainstSchema({
+  schemaRevId: 'schema-rev-123',
+  data: { invoice_date: '2024-01-01' }
+});
+
+// List schema versions
+const versions = await client.listSchemaVersions({
   schemaId: 'schema-123'
 });
 ```
 
-#### Payment and Subscription Management
+#### Form Management
 
 ```typescript
-// Create portal session
-const portalSession = await client.payments.createPortalSession({
-  returnUrl: 'https://yourapp.com/return'
+// Create form
+const form = await client.createForm({
+  name: 'Invoice Form',
+  response_format: {
+    type: 'formio',
+    formio: {
+      json_formio: [
+        {
+          type: 'textfield',
+          key: 'invoice_number',
+          label: 'Invoice Number',
+          input: true
+        }
+      ],
+      json_formio_mapping: {
+        invoice_number: {
+          sources: [
+            {
+              promptId: 'prompt-123',
+              schemaFieldPath: 'invoice_number'
+            }
+          ],
+          mappingType: 'direct'
+        }
+      }
+    }
+  }
 });
 
-// Get subscription details
-const subscription = await client.payments.getSubscription();
-
-// Get usage information
-const usage = await client.payments.getUsage();
-
-// Get usage for date range
-const usageRange = await client.payments.getUsageRange({
-  startDate: '2024-01-01',
-  endDate: '2024-01-31'
+// List forms with optional tag filter
+const forms = await client.listForms({
+  skip: 0,
+  limit: 10,
+  tag_ids: 'tag-1,tag-2'
 });
 
-// Update credit configuration
-const creditUpdate = await client.payments.updateCreditConfig({
+// Get form details
+const formDetails = await client.getForm({
+  formRevId: 'form-rev-123'
+});
+
+// Update form
+await client.updateForm({
+  formId: 'form-123',
+  form: {
+    name: 'Updated Form',
+    response_format: { /* ... */ }
+  }
+});
+
+// Delete form
+await client.deleteForm({
+  formId: 'form-123'
+});
+
+// List form versions
+const versions = await client.listFormVersions({
+  formId: 'form-123'
+});
+
+// Submit form
+const submission = await client.submitForm({
+  documentId: 'doc-123',
+  formRevId: 'form-rev-123',
+  submission_data: {
+    invoice_number: 'INV-123'
+  },
+  submitted_by: 'user@example.com'
+});
+
+// Get form submission
+const formSubmission = await client.getFormSubmission({
+  documentId: 'doc-123',
+  formRevId: 'form-rev-123'
+});
+
+// Delete form submission
+await client.deleteFormSubmission({
+  documentId: 'doc-123',
+  formRevId: 'form-rev-123'
+});
+```
+
+#### Knowledge Base Management
+
+```typescript
+// Create knowledge base
+const kb = await client.createKnowledgeBase({
+  kb: {
+    name: 'Invoice Knowledge Base',
+    description: 'KB for invoice processing'
+  }
+});
+
+// List knowledge bases
+const kbs = await client.listKnowledgeBases({
+  skip: 0,
+  limit: 10,
+  name_search: 'invoice'
+});
+
+// Get knowledge base details
+const kbDetails = await client.getKnowledgeBase({
+  kbId: 'kb-123'
+});
+
+// Update knowledge base
+await client.updateKnowledgeBase({
+  kbId: 'kb-123',
+  update: {
+    name: 'Updated KB',
+    description: 'Updated description'
+  }
+});
+
+// Delete knowledge base
+await client.deleteKnowledgeBase({
+  kbId: 'kb-123'
+});
+
+// List KB documents
+const kbDocuments = await client.listKBDocuments({
+  kbId: 'kb-123',
+  skip: 0,
+  limit: 10
+});
+
+// Get KB document chunks
+const chunks = await client.getKBDocumentChunks({
+  kbId: 'kb-123',
+  documentId: 'doc-123',
+  skip: 0,
+  limit: 100
+});
+
+// Search knowledge base
+const searchResults = await client.searchKnowledgeBase({
+  kbId: 'kb-123',
+  search: {
+    query: 'invoice date',
+    top_k: 5
+  }
+});
+
+// Reconcile knowledge base
+const reconcileResult = await client.reconcileKnowledgeBase({
+  kbId: 'kb-123',
+  dry_run: false
+});
+
+// Reconcile all knowledge bases
+const reconcileAllResult = await client.reconcileAllKnowledgeBases({
+  dry_run: false
+});
+
+// Run KB chat with streaming
+await client.runKBChatStream(
+  'kb-123',
+  {
+    messages: [{ role: 'user', content: 'What is the invoice date?' }],
+    model: 'gpt-4'
+  },
+  (chunk) => {
+    console.log('Chunk:', chunk);
+  },
+  (error) => {
+    console.error('Error:', error);
+  },
+  abortSignal
+);
+```
+
+#### Payment and Subscription Management (Org Level)
+
+```typescript
+// Get customer portal
+const portal = await client.getCustomerPortal();
+
+// Get subscription
+const subscription = await client.getSubscription();
+
+// Activate subscription
+await client.activateSubscription();
+
+// Cancel subscription
+await client.cancelSubscription();
+
+// Get current usage
+const usage = await client.getCurrentUsage();
+
+// Add credits
+await client.addCredits(1000);
+
+// Get credit config
+const creditConfig = await client.getCreditConfig();
+
+// Purchase credits
+const purchase = await client.purchaseCredits({
   credits: 1000,
-  resetPeriod: 'monthly'
+  success_url: 'https://example.com/success',
+  cancel_url: 'https://example.com/cancel'
 });
+
+// Get usage range
+const usageRange = await client.getUsageRange({
+  start_date: '2024-01-01',
+  end_date: '2024-01-31'
+});
+
+// Create checkout session
+const checkout = await client.createCheckoutSession('plan-id');
 ```
 
 ## Error Handling
@@ -587,9 +929,11 @@ The SDK provides comprehensive error handling with retry logic and authenticatio
 import { DocRouterOrg } from '@docrouter/sdk';
 
 const client = new DocRouterOrg({
-  baseURL: 'https://api.docrouter.com',
+  baseURL: 'https://app.docrouter.ai/fastapi',
   orgToken: 'your-org-token',
   organizationId: 'org-123',
+  timeout: 30000, // 30 seconds
+  retries: 3,
   onAuthError: (error) => {
     console.error('Authentication error:', error);
     // Handle token refresh or re-authentication
@@ -597,7 +941,7 @@ const client = new DocRouterOrg({
 });
 
 try {
-  const documents = await client.documents.list();
+  const documents = await client.listDocuments();
 } catch (error) {
   if (error.status === 401) {
     // Handle authentication error
@@ -620,31 +964,36 @@ The SDK supports real-time streaming for LLM operations:
 import { DocRouterOrg } from '@docrouter/sdk';
 
 const client = new DocRouterOrg({
-  baseURL: 'https://api.docrouter.com',
-  orgToken: 'your-jwt-token',
-  organizationId: 'your-org-id'
+  baseURL: 'https://app.docrouter.ai/fastapi',
+  orgToken: 'your-org-token',
+  organizationId: 'org-123'
 });
 
 // Stream LLM responses
 const abortController = new AbortController();
 
-await client.runLLMChatStream({
-  messages: [
-    { role: 'user', content: 'Analyze this document step by step' }
-  ],
-  model: 'gpt-4'
-}, (chunk) => {
-  // Handle each chunk of the response
-  console.log('Chunk received:', chunk);
-  
-  // You can abort the stream if needed
-  if (shouldAbort) {
-    abortController.abort();
-  }
-}, (error) => {
-  // Handle stream errors
-  console.error('Stream error:', error);
-}, abortController.signal);
+await client.runLLMChatStream(
+  {
+    messages: [
+      { role: 'user', content: 'Analyze this document step by step' }
+    ],
+    model: 'gpt-4'
+  },
+  (chunk) => {
+    // Handle each chunk of the response
+    console.log('Chunk received:', chunk);
+    
+    // You can abort the stream if needed
+    if (shouldAbort) {
+      abortController.abort();
+    }
+  },
+  (error) => {
+    // Handle stream errors
+    console.error('Stream error:', error);
+  },
+  abortController.signal
+);
 ```
 
 ## Browser Usage
@@ -656,7 +1005,7 @@ The SDK works in browser environments with proper polyfills:
 import { DocRouterOrg } from '@docrouter/sdk';
 
 const client = new DocRouterOrg({
-  baseURL: 'https://api.docrouter.com',
+  baseURL: 'https://app.docrouter.ai/fastapi',
   orgToken: 'your-jwt-token',
   organizationId: 'your-org-id'
 });
@@ -666,23 +1015,28 @@ const fileInput = document.getElementById('fileInput') as HTMLInputElement;
 const file = fileInput.files[0];
 
 if (file) {
-  const fileBuffer = await file.arrayBuffer();
-  
-  const result = await client.uploadDocuments({
-    documents: [
-      {
-        name: file.name,
-        content: fileBuffer,
-        type: file.type
-      }
-    ]
-  });
+  // Convert file to base64
+  const reader = new FileReader();
+  reader.onload = async () => {
+    const base64Content = reader.result as string;
+    
+    const result = await client.uploadDocuments({
+      documents: [
+        {
+          name: file.name,
+          content: base64Content,
+          metadata: { source: 'browser' }
+        }
+      ]
+    });
+  };
+  reader.readAsDataURL(file);
 }
 ```
 
 ## Advanced Configuration
 
-### Custom HTTP Client
+### Custom HTTP Client Configuration
 
 You can provide custom configuration for the underlying HTTP client:
 
@@ -690,12 +1044,14 @@ You can provide custom configuration for the underlying HTTP client:
 import { DocRouterOrg } from '@docrouter/sdk';
 
 const client = new DocRouterOrg({
-  baseURL: 'https://api.docrouter.com',
+  baseURL: 'https://app.docrouter.ai/fastapi',
   orgToken: 'your-org-token',
   organizationId: 'org-123',
   timeout: 30000, // 30 seconds
   retries: 3,
-  retryDelay: 1000 // 1 second
+  onAuthError: (error) => {
+    // Handle authentication errors
+  }
 });
 ```
 
@@ -707,13 +1063,13 @@ import { DocRouterOrg } from '@docrouter/sdk';
 const config = {
   development: {
     baseURL: 'http://localhost:8000',
-    orgToken: process.env.DOCROUTER_DEV_TOKEN,
-    organizationId: process.env.DOCROUTER_DEV_ORG_ID
+    orgToken: process.env.DOCROUTER_DEV_TOKEN!,
+    organizationId: process.env.DOCROUTER_DEV_ORG_ID!
   },
   production: {
-    baseURL: 'https://api.docrouter.com',
-    orgToken: process.env.DOCROUTER_PROD_TOKEN,
-    organizationId: process.env.DOCROUTER_PROD_ORG_ID
+    baseURL: 'https://app.docrouter.ai/fastapi',
+    orgToken: process.env.DOCROUTER_PROD_TOKEN!,
+    organizationId: process.env.DOCROUTER_PROD_ORG_ID!
   }
 };
 
@@ -721,41 +1077,16 @@ const environment = process.env.NODE_ENV || 'development';
 const client = new DocRouterOrg(config[environment]);
 ```
 
-## Testing
+### Token Updates
 
-The SDK includes comprehensive testing utilities:
-
-```typescript
-// Unit tests
-npm run test:unit
-
-// Integration tests
-npm run test:integration
-
-// All tests
-npm run test:all
-```
-
-### Mocking for Tests
+You can update the token for an existing client:
 
 ```typescript
-import { DocRouterOrg } from '@docrouter/sdk';
+// Update organization token
+client.updateToken('new-org-token');
 
-// Mock the client for testing
-jest.mock('@docrouter/sdk');
-
-const mockClient = {
-  documents: {
-    list: jest.fn().mockResolvedValue({
-      documents: [],
-      total: 0,
-      skip: 0,
-      limit: 10
-    })
-  }
-};
-
-(DocRouterOrg as jest.Mock).mockImplementation(() => mockClient);
+// For account client
+accountClient.updateToken('new-account-token');
 ```
 
 ## Best Practices
@@ -788,25 +1119,19 @@ try {
 Leverage TypeScript for type safety:
 
 ```typescript
-import { DocRouterOrg, Document, UploadDocumentsParams } from '@docrouter/sdk';
+import { DocRouterOrg, UploadDocumentsResponse } from '@docrouter/sdk';
 
 const client = new DocRouterOrg(config);
 
-// Type-safe parameters
-const uploadParams: UploadDocumentsParams = {
-  organizationId: 'org-123',
+// Type-safe response
+const result: UploadDocumentsResponse = await client.uploadDocuments({
   documents: [
     {
       name: 'document.pdf',
-      content: fileBuffer,
-      type: 'application/pdf'
+      content: base64Content
     }
   ]
-};
-
-// Type-safe response
-const result = await client.uploadDocuments(uploadParams);
-const documents: Document[] = result.documents;
+});
 ```
 
 ### 3. Resource Management
@@ -822,22 +1147,25 @@ class DocumentService {
   }
   
   async uploadDocument(file: File): Promise<Document> {
-    const fileBuffer = await file.arrayBuffer();
+    const base64Content = await this.fileToBase64(file);
     
     const result = await this.client.uploadDocuments({
       documents: [{
         name: file.name,
-        content: fileBuffer,
-        type: file.type
+        content: base64Content
       }]
     });
     
     return result.documents[0];
   }
   
-  // Cleanup method
-  destroy() {
-    // Clean up any resources if needed
+  private async fileToBase64(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   }
 }
 ```
@@ -850,7 +1178,7 @@ Use environment variables for configuration:
 import { DocRouterOrg } from '@docrouter/sdk';
 
 const client = new DocRouterOrg({
-  baseURL: process.env.DOCROUTER_API_URL || 'https://api.docrouter.com',
+  baseURL: process.env.DOCROUTER_API_URL || 'https://app.docrouter.ai/fastapi',
   orgToken: process.env.DOCROUTER_ORG_TOKEN!,
   organizationId: process.env.DOCROUTER_ORG_ID!
 });
@@ -864,16 +1192,17 @@ const client = new DocRouterOrg({
 
 **Problem**: 401 Unauthorized errors
 
-**Solutions**:
+**Solutions:**
 - Verify your token is valid and not expired
 - Check that you're using the correct token type for your client
 - Ensure the organization ID is correct for `DocRouterOrg`
+- Use `getOrganizationFromToken()` to resolve organization ID from token
 
 #### 2. TypeScript Errors
 
 **Problem**: Type errors or missing types
 
-**Solutions**:
+**Solutions:**
 - Ensure you're using TypeScript 4.9+
 - Check that all imports are correct
 - Verify your `tsconfig.json` configuration
@@ -882,9 +1211,9 @@ const client = new DocRouterOrg({
 
 **Problem**: Connection timeouts or network errors
 
-**Solutions**:
+**Solutions:**
 - Check your network connection
-- Verify the API URL is correct
+- Verify the API URL is correct (`https://app.docrouter.ai/fastapi`)
 - Increase timeout values if needed
 - Check for firewall or proxy issues
 
@@ -892,45 +1221,34 @@ const client = new DocRouterOrg({
 
 **Problem**: 429 Too Many Requests errors
 
-**Solutions**:
+**Solutions:**
 - Implement exponential backoff
 - Reduce request frequency
 - Use streaming for large operations
 - Contact support for rate limit increases
 
-### Debug Mode
-
-Enable debug logging:
-
-```typescript
-const client = new DocRouterOrg({
-  baseURL: 'https://api.docrouter.com',
-  orgToken: 'your-org-token',
-  organizationId: 'org-123',
-  debug: true // Enable debug logging
-});
-```
-
 ## Package Information
 
 - **Package Name**: `@docrouter/sdk`
-- **Current Version**: 0.1.0
+- **Current Version**: 1.0.0
 - **Node.js Requirement**: >=16.0.0
 - **TypeScript Requirement**: >=4.9.0
 - **License**: MIT
-- **Repository**: Available on npm registry
+- **Repository**: https://github.com/analytiq/doc-router
 
 ### Dependencies
 
 - **axios**: HTTP client for API requests
-- **TypeScript**: Type definitions and compilation
+- **bson**: BSON serialization
+- **jsonwebtoken**: JWT handling
+- **mongodb**: MongoDB client
 
 ### Development Dependencies
 
 - **Jest**: Testing framework
 - **ESLint**: Code linting
 - **tsup**: Build tool
-- **Various type definitions**: For enhanced TypeScript support
+- **TypeScript**: Type definitions and compilation
 
 ## Support and Resources
 
@@ -939,8 +1257,7 @@ const client = new DocRouterOrg({
 1. **Check the API documentation** for detailed endpoint information
 2. **Review the examples** in the package repository
 3. **Check the troubleshooting section** above
-4. **Enable debug mode** for detailed logging
-5. **Contact support** for API-specific issues
+4. **Contact support** for API-specific issues
 
 ### Package Management
 
@@ -952,7 +1269,7 @@ npm update @docrouter/sdk
 npm list @docrouter/sdk
 
 # Install specific version
-npm install @docrouter/sdk@0.1.0
+npm install @docrouter/sdk@1.0.0
 ```
 
 ### Development
@@ -961,7 +1278,7 @@ For developers working on the SDK:
 
 ```bash
 # Clone the repository
-git clone <repository-url>
+git clone https://github.com/analytiq/doc-router
 cd packages/typescript/sdk
 
 # Install dependencies
@@ -977,4 +1294,4 @@ npm run test:all
 npm run dev
 ```
 
-The DocRouter TypeScript SDK provides a powerful, type-safe way to integrate DocRouter's document processing capabilities into your applications. With comprehensive API coverage, streaming support, and excellent TypeScript integration, it's the ideal choice for building document processing applications.
+The DocRouter TypeScript SDK provides a powerful, type-safe way to integrate DocRouter's document processing capabilities into your applications. With comprehensive API coverage, streaming support, knowledge base integration, and excellent TypeScript integration, it's the ideal choice for building document processing applications.
