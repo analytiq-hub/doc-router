@@ -30,6 +30,16 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
 
   return (
     <div className="p-4">
+      {kbId && (
+        <div className="max-w-6xl mx-auto mb-4">
+          <button
+            onClick={handleBack}
+            className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+          >
+            ← Back to Knowledge Bases
+          </button>
+        </div>
+      )}
       <div className="border-b border-gray-200 mb-6">
         <div className="flex gap-8">
           {!kbId && (
@@ -104,14 +114,6 @@ export default function KnowledgeBasesPage({ params }: { params: Promise<{ organ
       </div>
 
       <div className="max-w-6xl mx-auto">
-        {kbId && (
-          <button
-            onClick={handleBack}
-            className="mb-4 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
-          >
-            ← Back to Knowledge Bases
-          </button>
-        )}
         <div role="tabpanel" hidden={tab !== 'knowledge-bases'}>
           {tab === 'knowledge-bases' && <KnowledgeBaseList organizationId={organizationId} />}
         </div>
