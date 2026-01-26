@@ -259,9 +259,9 @@ async def _reconcile_document(
             # Document should be indexed but isn't
             kb_result["missing_documents"].append(doc_id)
             if not dry_run:
-                # Check if document has OCR text (required for indexing)
-                ocr_text = await ad.common.ocr.get_ocr_text(analytiq_client, doc_id)
-                if ocr_text and ocr_text.strip():
+                # Check if document has extractable text (OCR text for OCR files, original content for .txt/.md files)
+                extracted_text = await ad.llm.get_extracted_text(analytiq_client, doc_id)
+                if extracted_text and extracted_text.strip():
                     kb_msg = {"document_id": doc_id, "kb_id": kb_id_str}
                     await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
         elif not should_be_indexed and is_indexed:
@@ -375,9 +375,9 @@ async def _reconcile_kb_full(
             
             # Check if document has at least one tag matching KB
             if doc_tag_ids & kb_tag_ids and doc_id not in existing_doc_ids:
-                # Check if document has OCR text (required for indexing)
-                ocr_text = await ad.common.ocr.get_ocr_text(analytiq_client, doc_id)
-                if ocr_text and ocr_text.strip():
+                # Check if document has extractable text (OCR text for OCR files, original content for .txt/.md files)
+                extracted_text = await ad.llm.get_extracted_text(analytiq_client, doc_id)
+                if extracted_text and extracted_text.strip():
                     results["missing_documents"].append(doc_id)
                     if not dry_run:
                         # Queue for indexing
