@@ -289,177 +289,133 @@ Once configured, the following tools become available in your AI application:
 
 ## Example Workflows
 
-### 1. Document Analysis Workflow
+These workflows demonstrate common use cases with Claude Code. Each workflow shows:
+- **User Prompt**: What you type in Claude Code
+- **Expected Tools**: MCP tools that execute automatically
+- **Flow**: Step-by-step sequence of operations
 
-```typescript
-// List documents with filters
-const documents = await list_documents({
-  skip: 0,
-  limit: 10,
-  nameSearch: "invoice",
-  tagIds: "tag1,tag2"
-});
+### 1. Invoice Processing Workflow
 
-// Get OCR text for the first document
-const ocrText = await get_ocr_text({
-  documentId: documents.documents[0].id
-});
-
-// List available prompts
-const prompts = await list_prompts({
-  nameSearch: "invoice"
-});
-
-// Run extraction with a specific prompt
-const extraction = await run_llm({
-  documentId: documents.documents[0].id,
-  promptRevId: prompts.prompts[0].prompt_revid,
-  force: false
-});
-
-// Get extraction results
-const result = await get_llm_result({
-  documentId: documents.documents[0].id,
-  promptRevId: prompts.prompts[0].prompt_revid
-});
+**User Prompt:**
+```
+I have an invoice PDF at /path/to/invoice.pdf. Analyze it and set up 
+extraction for invoices. Create a schema, tag, and prompt for invoice 
+processing, then upload the document and run extraction.
 ```
 
-### 2. Document Upload and Processing Workflow
+**Expected Tools:**
+1. `validate_schema` - Validate the generated schema format
+2. `create_schema` - Create invoice extraction schema
+3. `create_tag` - Create "Invoices" tag for organization
+4. `create_prompt` - Create prompt for invoice extraction
+5. `update_prompt` - Link prompt to schema
+6. `upload_documents` - Upload the invoice PDF
+7. `run_llm` - Run extraction on the uploaded document
+8. `get_llm_result` - Retrieve and display extraction results
 
-```typescript
-// Upload documents from file paths
-const uploadResult = await upload_documents({
-  documents: [
-    {
-      file_path: "/path/to/invoice.pdf",
-      name: "invoice.pdf",
-      tag_ids: ["tag1", "tag2"],
-      metadata: { category: "invoice" }
-    }
-  ]
-});
+**Flow:**
+1. Claude Code reads the PDF file directly from disk (`/path/to/invoice.pdf`) and parses its content locally
+2. Claude analyzes the invoice structure, identifying key fields like invoice number, date, amount, vendor, line items, etc.
+3. Based on the analysis, Claude generates an appropriate JSON schema definition
+4. Schema is validated using `validate_schema` to ensure DocRouter compliance
+5. Schema is created with fields like: invoice_number, invoice_date, total_amount, vendor_name, line_items, etc.
+6. A tag named "Invoices" is created for categorizing invoice documents
+7. A prompt is created with instructions for extracting invoice data based on the document structure
+8. The prompt is updated to link it to the created schema
+9. The invoice PDF is uploaded with the "Invoices" tag
+10. LLM extraction is run using the created prompt
+11. Extraction results are retrieved and presented to the user
 
-const documentId = uploadResult.documents[0].document_id;
+---
 
-// Get document and save to disk
-const document = await get_document({
-  documentId: documentId,
-  fileType: "pdf",
-  save_path: "/path/to/downloads/"
-});
+### 2. Schema Discovery and Refinement Workflow
 
-// Get OCR text
-const ocrText = await get_ocr_text({
-  documentId: documentId
-});
+**User Prompt:**
+```
+Show me all invoice schemas. I want to add a 'due_date' field to the 
+most recent invoice schema. Validate the updated schema and test it 
+with sample data.
 ```
 
-### 3. Schema and Prompt Creation Workflow
+**Expected Tools:**
+1. `list_schemas` - List all schemas, optionally filtered by name
+2. `get_schema` - Get details of the selected schema
+3. `validate_schema` - Validate the updated schema format
+4. `update_schema` - Update the schema with the new field
+5. `validate_against_schema` - Test the schema with sample data
 
-```typescript
-// Validate schema format
-const schemaValidation = await validate_schema({
-  schema: JSON.stringify({
-    type: "json_schema",
-    json_schema: {
-      name: "invoice_extraction",
-      schema: {
-        type: "object",
-        properties: {
-          invoice_date: { type: "string", description: "invoice date" }
-        },
-        required: ["invoice_date"],
-        additionalProperties: false
-      },
-      strict: true
-    }
-  })
-});
+**Flow:**
+1. All schemas are listed, filtered by "invoice" name search
+2. The most recent invoice schema is retrieved to see its current structure
+3. Claude analyzes the schema and adds the 'due_date' field to the properties
+4. The updated schema is validated to ensure it meets DocRouter requirements
+5. If validation passes, the schema is updated
+6. Sample data including the new 'due_date' field is validated against the updated schema
+7. Validation results are shown to confirm the schema works correctly
 
-// Create schema if valid
-if (schemaValidation.valid) {
-  const schema = await create_schema({
-    name: "Invoice Schema",
-    response_format: {
-      type: "json_schema",
-      json_schema: {
-        name: "invoice_extraction",
-        schema: {
-          type: "object",
-          properties: {
-            invoice_date: { type: "string", description: "invoice date" }
-          },
-          required: ["invoice_date"],
-          additionalProperties: false
-        },
-        strict: true
-      }
-    }
-  });
+---
 
-  // Create prompt linked to schema
-  const prompt = await create_prompt({
-    prompt: {
-      name: "Invoice Extractor",
-      content: "Extract invoice information from the document."
-    }
-  });
+### 3. Form Creation and Submission Workflow
 
-  // Update prompt to link schema
-  await update_prompt({
-    promptId: prompt.prompt_id,
-    schema_id: schema.schema_id
-  });
-}
+**User Prompt:**
+```
+Create a form for manual invoice data entry that matches the invoice 
+schema. The form should have fields for invoice number, date, amount, 
+and vendor. Then submit form data for document doc-123.
 ```
 
-### 4. Form Management Workflow
+**Expected Tools:**
+1. `get_schema` - Retrieve the invoice schema to understand field structure
+2. `validate_form` - Validate the generated Form.io form format
+3. `create_form` - Create the form with appropriate fields
+4. `get_form` - Retrieve form details to get form revision ID
+5. `submit_form` - Submit form data for the specified document
+6. `get_form_submission` - Retrieve the submitted form data for verification
 
-```typescript
-// Validate form format
-const formValidation = await validate_form({
-  form: JSON.stringify({
-    json_formio: [
-      {
-        type: "textfield",
-        key: "invoice_number",
-        label: "Invoice Number",
-        input: true
-      }
-    ]
-  })
-});
+**Flow:**
+1. The invoice schema is retrieved to understand the required fields
+2. Claude generates a Form.io form definition with fields matching the schema:
+   - Invoice Number (textfield)
+   - Invoice Date (datetime)
+   - Amount (currency)
+   - Vendor Name (textfield)
+3. The form definition is validated using `validate_form`
+4. If valid, the form is created
+5. Form submission data is prepared matching the form structure
+6. The form is submitted for document doc-123
+7. The submission is retrieved to confirm it was saved correctly
 
-// Create form if valid
-if (formValidation.valid) {
-  const form = await create_form({
-    name: "Invoice Form",
-    response_format: {
-      type: "formio",
-      formio: {
-        json_formio: [
-          {
-            type: "textfield",
-            key: "invoice_number",
-            label: "Invoice Number",
-            input: true
-          }
-        ]
-      }
-    }
-  });
+---
 
-  // Submit form for a document
-  await submit_form({
-    documentId: "document_id",
-    formRevId: form.form_revid,
-    submission_data: {
-      invoice_number: "INV-123"
-    },
-    submitted_by: "user@example.com"
-  });
-}
+### 4. Batch Processing with Tags Workflow
+
+**User Prompt:**
 ```
+Upload all PDF files in /path/to/invoices/ directory. Tag them all 
+as 'invoices', then run extraction on each using the invoice prompt. 
+Show me the results for all documents.
+```
+
+**Expected Tools:**
+1. `list_tags` - Check if "invoices" tag exists
+2. `create_tag` - Create "invoices" tag if it doesn't exist
+3. `upload_documents` - Upload all PDF files from the directory
+4. `list_prompts` - Find the invoice extraction prompt
+5. `get_prompt` - Get prompt details to retrieve prompt revision ID
+6. `run_llm` - Run extraction on each uploaded document
+7. `get_llm_result` - Retrieve extraction results for each document
+
+**Flow:**
+1. Existing tags are listed to check if "invoices" tag exists
+2. If the tag doesn't exist, it's created with an appropriate color
+3. All PDF files in the specified directory are discovered
+4. All PDFs are uploaded in a batch with the "invoices" tag applied
+5. Prompts are listed to find the invoice extraction prompt
+6. The invoice prompt is retrieved to get its revision ID
+7. For each uploaded document:
+   - LLM extraction is run using the invoice prompt
+   - Extraction results are retrieved
+8. A summary of all extraction results is presented to the user
 
 ## Troubleshooting
 
