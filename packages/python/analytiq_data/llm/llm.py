@@ -1298,6 +1298,13 @@ async def run_kb_chat(
                                 yield f"data: {json.dumps({'type': 'tool_call', 'tool_name': 'search_knowledge_base', 'arguments': args, 'iteration': iteration, 'done': False})}\n\n"
                                 
                                 # Perform KB search
+                                # Merge request-level filters (from UI) with LLM tool call filters
+                                # Request filters take precedence as they come from user's explicit filter settings
+                                final_metadata_filter = request.metadata_filter if request.metadata_filter else metadata_filter
+                                # If both exist, merge them (request filters override LLM filters)
+                                if request.metadata_filter and metadata_filter:
+                                    final_metadata_filter = {**metadata_filter, **request.metadata_filter}
+                                
                                 try:
                                     search_results = await ad.kb.search.search_knowledge_base(
                                         analytiq_client=analytiq_client,
@@ -1305,7 +1312,9 @@ async def run_kb_chat(
                                         query=search_query,
                                         organization_id=organization_id,
                                         top_k=top_k,
-                                        metadata_filter=metadata_filter,
+                                        metadata_filter=final_metadata_filter,
+                                        upload_date_from=request.upload_date_from,
+                                        upload_date_to=request.upload_date_to,
                                         coalesce_neighbors=coalesce_neighbors
                                     )
                                     

@@ -150,22 +150,16 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
         content: userMessage.content
       });
 
-      // Build system message with filter context if filters are active
-      const systemMessages: LLMMessage[] = [];
+      // Build metadata filter and date filters for the request
       const metadataFilter = buildMetadataFilter();
-      if (hasActiveFilters && metadataFilter) {
-        // Add a system message to inform the LLM about active filters
-        systemMessages.push({
-          role: 'system',
-          content: `When searching the knowledge base, please use these filters in your search_knowledge_base tool calls: ${JSON.stringify(metadataFilter)}. You can include these filters in the metadata_filter parameter of the tool.`
-        });
-      }
-
       const request: KBChatRequest = {
         model: selectedModel,
-        messages: [...systemMessages, ...conversationMessages],
+        messages: conversationMessages,
         temperature: 0.7,
-        stream: true
+        stream: true,
+        metadata_filter: metadataFilter,
+        upload_date_from: uploadDateFrom || undefined,
+        upload_date_to: uploadDateTo || undefined
       };
 
       let assistantContent = '';

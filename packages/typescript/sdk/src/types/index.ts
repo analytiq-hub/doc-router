@@ -273,6 +273,9 @@ export interface KBChatRequest {
   max_tokens?: number;
   temperature?: number;
   stream: true; // Always true for KB chat
+  metadata_filter?: Record<string, unknown>;
+  upload_date_from?: string;
+  upload_date_to?: string;
 }
 
 export interface KBChatStreamChunk {

@@ -171,6 +171,9 @@ class KBChatRequest(BaseModel):
     temperature: Optional[float] = Field(default=0.7, description="Sampling temperature (0.0 to 2.0)")
     max_tokens: Optional[int] = Field(default=None, description="Maximum tokens to generate")
     stream: bool = Field(default=True, description="Whether to stream the response (always true for KB chat)")
+    metadata_filter: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filters (sanitized server-side)")
+    upload_date_from: Optional[datetime] = Field(default=None, description="Filter by upload date from")
+    upload_date_to: Optional[datetime] = Field(default=None, description="Filter by upload date to")
 
 class KBChunk(BaseModel):
     chunk_index: int
