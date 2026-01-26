@@ -368,7 +368,11 @@ async def create_vector_search_index(
                 },
                 {
                     "type": "filter",
-                    "path": "metadata_snapshot"
+                    "path": "metadata_snapshot.tag_ids"
+                },
+                {
+                    "type": "filter",
+                    "path": "metadata_snapshot.upload_date"
                 }
             ]
         }

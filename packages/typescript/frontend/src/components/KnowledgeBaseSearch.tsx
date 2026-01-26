@@ -17,10 +17,6 @@ interface KnowledgeBaseSearchProps {
   kbId: string;
 }
 
-interface MetadataFilter {
-  key: string;
-  value: string;
-}
 
 const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationId, kbId }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
@@ -34,8 +30,6 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
   const [showFilters, setShowFilters] = useState(false);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
-  const [documentNameFilter, setDocumentNameFilter] = useState('');
-  const [metadataFilters, setMetadataFilters] = useState<MetadataFilter[]>([]);
   const [uploadDateFrom, setUploadDateFrom] = useState('');
   const [uploadDateTo, setUploadDateTo] = useState('');
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
@@ -57,28 +51,13 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
   }, [docRouterOrgApi, kbId]);
 
   const buildMetadataFilter = useCallback((): Record<string, unknown> | undefined => {
-    const filter: Record<string, unknown> = {};
-    
     if (selectedTags.length > 0) {
-      filter.tag_ids = selectedTags.map(tag => tag.id);
+      return {
+        tag_ids: selectedTags.map(tag => tag.id)
+      };
     }
-    
-    if (documentNameFilter.trim()) {
-      filter.document_name = documentNameFilter.trim();
-    }
-    
-    const customMetadata: Record<string, string> = {};
-    metadataFilters.forEach(mf => {
-      if (mf.key.trim() && mf.value.trim()) {
-        customMetadata[mf.key.trim()] = mf.value.trim();
-      }
-    });
-    if (Object.keys(customMetadata).length > 0) {
-      filter.metadata = customMetadata;
-    }
-    
-    return Object.keys(filter).length > 0 ? filter : undefined;
-  }, [selectedTags, documentNameFilter, metadataFilters]);
+    return undefined;
+  }, [selectedTags]);
 
   const handleSearch = async () => {
     if (!query.trim()) {
@@ -133,24 +112,8 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
 
   const handleClearFilters = () => {
     setSelectedTags([]);
-    setDocumentNameFilter('');
-    setMetadataFilters([]);
     setUploadDateFrom('');
     setUploadDateTo('');
-  };
-
-  const addMetadataFilter = () => {
-    setMetadataFilters([...metadataFilters, { key: '', value: '' }]);
-  };
-
-  const removeMetadataFilter = (index: number) => {
-    setMetadataFilters(metadataFilters.filter((_, i) => i !== index));
-  };
-
-  const updateMetadataFilter = (index: number, field: 'key' | 'value', value: string) => {
-    const updated = [...metadataFilters];
-    updated[index] = { ...updated[index], [field]: value };
-    setMetadataFilters(updated);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -161,8 +124,6 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
   };
 
   const hasActiveFilters = selectedTags.length > 0 || 
-    documentNameFilter.trim() !== '' || 
-    metadataFilters.some(mf => mf.key.trim() && mf.value.trim()) ||
     uploadDateFrom !== '' ||
     uploadDateTo !== '';
 
@@ -180,7 +141,7 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
             }`}
           >
             <FilterListIcon fontSize="small" />
-            Filters {hasActiveFilters && `(${selectedTags.length + (documentNameFilter ? 1 : 0) + metadataFilters.filter(mf => mf.key && mf.value).length + (uploadDateFrom ? 1 : 0) + (uploadDateTo ? 1 : 0)})`}
+            Filters {hasActiveFilters && `(${selectedTags.length + (uploadDateFrom ? 1 : 0) + (uploadDateTo ? 1 : 0)})`}
           </button>
         </div>
         
@@ -316,20 +277,6 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
                 )}
               </div>
 
-              {/* Document Name Filter */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Document Name (partial match)
-                </label>
-                <input
-                  type="text"
-                  value={documentNameFilter}
-                  onChange={(e) => setDocumentNameFilter(e.target.value)}
-                  placeholder="Filter by document name..."
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-              </div>
-
               {/* Date Range Filters */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -352,42 +299,6 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
                 </div>
               </div>
 
-              {/* Custom Metadata Filters */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-semibold text-gray-900">Custom Metadata</h4>
-                  <button
-                    onClick={addMetadataFilter}
-                    className="px-2 py-1 text-sm text-blue-600 hover:text-blue-800"
-                  >
-                    Add Metadata Filter
-                  </button>
-                </div>
-                {metadataFilters.map((mf, index) => (
-                  <div key={index} className="flex gap-2 items-center">
-                    <input
-                      type="text"
-                      placeholder="Metadata key"
-                      value={mf.key}
-                      onChange={(e) => updateMetadataFilter(index, 'key', e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Metadata value"
-                      value={mf.value}
-                      onChange={(e) => updateMetadataFilter(index, 'value', e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                    />
-                    <button
-                      onClick={() => removeMetadataFilter(index)}
-                      className="p-2 text-red-600 hover:text-red-800 hover:bg-red-50 rounded"
-                    >
-                      <CloseIcon fontSize="small" />
-                    </button>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
 

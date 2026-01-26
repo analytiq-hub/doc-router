@@ -162,7 +162,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
           className="flex items-center h-full w-full cursor-pointer"
           onClick={() => handleEdit(params.row)}
         >
-          <span className="font-medium">{params.row.name}</span>
+          <span className="font-medium text-blue-600 hover:text-blue-800 hover:underline">{params.row.name}</span>
         </div>
       ),
     },

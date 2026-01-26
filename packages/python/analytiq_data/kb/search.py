@@ -35,8 +35,8 @@ def sanitize_metadata_filter(metadata_filter: Dict[str, Any]) -> Dict[str, Any]:
     allowed_operators = {"$in", "$eq", "$ne", "$gt", "$gte", "$lt", "$lte"}
     
     for key, value in metadata_filter.items():
-        # Only allow specific metadata fields
-        if key not in ["document_name", "tag_ids", "metadata"]:
+        # Only allow tag_ids filtering
+        if key != "tag_ids":
             logger.warning(f"Ignoring disallowed metadata filter key: {key}")
             continue
         
@@ -90,31 +90,6 @@ def build_vector_search_filter(
                     filter_dict["metadata_snapshot.tag_ids"] = {"$in": value}
                 else:
                     filter_dict["metadata_snapshot.tag_ids"] = value
-            elif key == "document_name":
-                # Filter by document_name in metadata_snapshot
-                # Note: $vectorSearch filter doesn't support $regex, so we handle regex in post-filtering
-                if isinstance(value, dict):
-                    # If it's already a dict with operators, check if it's a supported operator
-                    # $vectorSearch supports: $eq, $ne, $in, $nin, $gt, $gte, $lt, $lte, $exists, $not
-                    supported_ops = {"$eq", "$ne", "$in", "$nin", "$gt", "$gte", "$lt", "$lte", "$exists", "$not"}
-                    if "$regex" in value:
-                        # Move regex to post-filter
-                        post_filter["metadata_snapshot.document_name"] = value
-                    elif any(op in value for op in supported_ops):
-                        filter_dict["metadata_snapshot.document_name"] = value
-                elif isinstance(value, str):
-                    # For string values, use regex in post-filtering for partial matching
-                    post_filter["metadata_snapshot.document_name"] = {"$regex": value, "$options": "i"}
-                else:
-                    # For other types, try exact match in vector search
-                    filter_dict["metadata_snapshot.document_name"] = {"$eq": value}
-            elif key == "metadata":
-                # Filter by custom metadata in metadata_snapshot.metadata
-                if isinstance(value, dict):
-                    for meta_key, meta_value in value.items():
-                        filter_dict[f"metadata_snapshot.metadata.{meta_key}"] = meta_value
-                else:
-                    filter_dict["metadata_snapshot.metadata"] = value
     
     # Apply date range filters
     if upload_date_from or upload_date_to:
