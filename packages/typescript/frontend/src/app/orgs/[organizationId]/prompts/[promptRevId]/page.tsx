@@ -1,10 +1,23 @@
+'use client';
+
+import { useParams, useRouter } from 'next/navigation';
 import PromptCreate from '@/components/PromptCreate';
 
-export default async function PromptEditPage({ params }: { params: Promise<{ organizationId: string, promptRevId: string }> }) {
-  // Fetch the prompt data server-side (or you can do it client-side in PromptCreate)
-  // For now, just pass promptId and organizationId to PromptCreate
-  const { organizationId, promptRevId } = await params;
+export default function PromptEditPage() {
+  const { organizationId, promptRevId } = useParams();
+  const router = useRouter();
+
   return (
-    <PromptCreate organizationId={organizationId} promptRevId={promptRevId} />
+    <div className="p-4 max-w-4xl mx-auto">
+      {/* Back to Prompts Button */}
+      <button
+        onClick={() => router.push(`/orgs/${organizationId}/prompts`)}
+        className="mb-4 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+      >
+        ← Back to Prompts
+      </button>
+
+      <PromptCreate organizationId={organizationId as string} promptRevId={promptRevId as string} />
+    </div>
   );
 }
