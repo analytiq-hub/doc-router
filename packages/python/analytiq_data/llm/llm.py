@@ -1105,10 +1105,13 @@ async def run_kb_chat(
     organization_id: str,
     request: "KBChatRequest",
     current_user: "User"
-) -> "StreamingResponse":
+):
     """
     Chat with a knowledge base using LLM with tool calling support.
-    Supports streaming responses with tool use reporting.
+    Supports both streaming and non-streaming responses with tool use reporting.
+
+    When request.stream is True, returns a StreamingResponse (SSE).
+    When request.stream is False, returns a dict with keys: text, tool_calls (optional), tool_results (optional).
     
     Args:
         analytiq_client: The analytiq client
@@ -1118,7 +1121,7 @@ async def run_kb_chat(
         current_user: The current user making the request
     
     Returns:
-        StreamingResponse: A streaming response with text chunks and tool events
+        StreamingResponse if request.stream else dict with text, tool_calls, tool_results
     """
     import json
     from fastapi.responses import StreamingResponse
@@ -1443,11 +1446,171 @@ async def run_kb_chat(
                     except Exception as record_error:
                         logger.error(f"Error recording SPU usage for KB chat after error: {record_error}")
         
-        return StreamingResponse(
-            generate_stream(),
-            media_type="text/plain",
-            headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
-        )
+        async def run_non_streaming():
+            """Run the same agentic loop but collect into a single dict (text, tool_calls, tool_results)."""
+            total_prompt_tokens = 0
+            total_completion_tokens = 0
+            total_cost = 0.0
+            result = {"text": "", "tool_calls": [], "tool_results": []}
+            try:
+                iteration = 0
+                while iteration < max_iterations:
+                    iteration += 1
+                    logger.info(f"KB chat iteration {iteration}/{max_iterations}")
+                    response = await _litellm_acompletion_with_retry(
+                        model=request.model,
+                        messages=messages,
+                        api_key=api_key,
+                        aws_access_key_id=aws_access_key_id,
+                        aws_secret_access_key=aws_secret_access_key,
+                        aws_region_name=aws_region_name,
+                        tools=tools,
+                        tool_choice="auto"
+                    )
+                    if hasattr(response, 'usage') and response.usage:
+                        total_prompt_tokens += response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0
+                        total_completion_tokens += response.usage.completion_tokens if hasattr(response.usage, 'completion_tokens') else 0
+                        total_cost += litellm.completion_cost(completion_response=response) if hasattr(response, 'usage') else 0.0
+                    message = response.choices[0].message
+                    tool_calls = message.tool_calls if hasattr(message, 'tool_calls') and message.tool_calls else []
+                    if not tool_calls:
+                        final_content = message.content or ""
+                        result["text"] = final_content
+                        messages.append({"role": "assistant", "content": final_content})
+                        break
+                    for tool_call in tool_calls:
+                        if tool_call.function.name == "search_knowledge_base":
+                            try:
+                                args = json.loads(tool_call.function.arguments)
+                                search_query = args.get("query", "")
+                                top_k = args.get("top_k", 5)
+                                metadata_filter = args.get("metadata_filter")
+                                coalesce_neighbors = args.get("coalesce_neighbors")
+                                result["tool_calls"].append({
+                                    "type": "tool_call",
+                                    "tool_name": "search_knowledge_base",
+                                    "arguments": args,
+                                    "iteration": iteration,
+                                    "done": False
+                                })
+                                final_metadata_filter = request.metadata_filter if request.metadata_filter else metadata_filter
+                                if request.metadata_filter and metadata_filter:
+                                    final_metadata_filter = {**metadata_filter, **request.metadata_filter}
+                                try:
+                                    search_results = await ad.kb.search.search_knowledge_base(
+                                        analytiq_client=analytiq_client,
+                                        kb_id=kb_id,
+                                        query=search_query,
+                                        organization_id=organization_id,
+                                        top_k=top_k,
+                                        metadata_filter=final_metadata_filter,
+                                        upload_date_from=request.upload_date_from,
+                                        upload_date_to=request.upload_date_to,
+                                        coalesce_neighbors=coalesce_neighbors
+                                    )
+                                    results_count = len(search_results.get("results", []))
+                                    result["tool_results"].append({
+                                        "type": "tool_result",
+                                        "tool_name": "search_knowledge_base",
+                                        "results_count": results_count,
+                                        "iteration": iteration,
+                                        "done": False
+                                    })
+                                    formatted_context = "Knowledge Base Search Results:\n"
+                                    for i, result_item in enumerate(search_results.get("results", []), 1):
+                                        formatted_context += f"\n[{i}] {result_item.get('content', '')}\n"
+                                        formatted_context += f"Source: {result_item.get('source', 'Unknown')}\n"
+                                        if result_item.get('relevance'):
+                                            formatted_context += f"Relevance: {result_item.get('relevance'):.3f}\n"
+                                except SPUCreditException as e:
+                                    error_content = f"Insufficient SPU credits: {str(e)}"
+                                    result["tool_results"].append({
+                                        "type": "tool_result",
+                                        "tool_name": "search_knowledge_base",
+                                        "error": error_content,
+                                        "iteration": iteration,
+                                        "done": False
+                                    })
+                                    formatted_context = error_content
+                                except Exception as e:
+                                    error_msg = str(e)
+                                    if "INITIAL_SYNC" in error_msg or "NOT_STARTED" in error_msg or "cannot query vector index" in error_msg.lower():
+                                        error_content = "The knowledge base search index is still building. Please try again in a few moments."
+                                    else:
+                                        error_content = f"Error searching knowledge base: {error_msg[:200]}"
+                                    result["tool_results"].append({
+                                        "type": "tool_result",
+                                        "tool_name": "search_knowledge_base",
+                                        "error": error_content,
+                                        "iteration": iteration,
+                                        "done": False
+                                    })
+                                    formatted_context = error_content
+                                messages.append({
+                                    "role": "assistant",
+                                    "content": message.content if message.content else None,
+                                    "tool_calls": [{
+                                        "id": tool_call.id,
+                                        "type": "function",
+                                        "function": {"name": tool_call.function.name, "arguments": tool_call.function.arguments}
+                                    }]
+                                })
+                                messages.append({"role": "tool", "tool_call_id": tool_call.id, "content": formatted_context})
+                            except json.JSONDecodeError as e:
+                                logger.error(f"Error parsing tool call arguments: {e}")
+                        else:
+                            logger.warning(f"Unknown tool call: {tool_call.function.name}")
+                    if iteration >= max_iterations:
+                        if message.content:
+                            result["text"] = message.content
+                        break
+                total_tokens = total_prompt_tokens + total_completion_tokens
+                try:
+                    await ad.payments.record_spu_usage(
+                        org_id=organization_id,
+                        spus=total_spu_needed,
+                        llm_provider=llm_provider,
+                        llm_model=request.model,
+                        prompt_tokens=total_prompt_tokens,
+                        completion_tokens=total_completion_tokens,
+                        total_tokens=total_tokens,
+                        actual_cost=total_cost
+                    )
+                    logger.info(f"Recorded {total_spu_needed} SPU usage for KB chat (non-streaming), actual cost: ${total_cost:.6f}, tokens: {total_tokens}")
+                except Exception as e:
+                    logger.error(f"Error recording SPU usage for KB chat: {e}")
+                return result
+            except SPUCreditException as e:
+                logger.warning(f"SPU credit exhausted in KB chat: {str(e)}")
+                result["error"] = f"Insufficient SPU credits: {str(e)}"
+                return result
+            except Exception as e:
+                logger.error(f"Error in KB chat non-streaming: {str(e)}")
+                result["error"] = str(e)
+                if total_cost > 0 or total_prompt_tokens > 0:
+                    try:
+                        total_tokens = total_prompt_tokens + total_completion_tokens
+                        await ad.payments.record_spu_usage(
+                            org_id=organization_id,
+                            spus=total_spu_needed,
+                            llm_provider=llm_provider,
+                            llm_model=request.model,
+                            prompt_tokens=total_prompt_tokens,
+                            completion_tokens=total_completion_tokens,
+                            total_tokens=total_tokens,
+                            actual_cost=total_cost
+                        )
+                    except Exception as record_error:
+                        logger.error(f"Error recording SPU usage for KB chat after error: {record_error}")
+                return result
+        
+        if request.stream:
+            return StreamingResponse(
+                generate_stream(),
+                media_type="text/plain",
+                headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+            )
+        return await run_non_streaming()
         
     except HTTPException:
         raise
