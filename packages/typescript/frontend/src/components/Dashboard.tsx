@@ -358,10 +358,11 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
               <Typography variant="h6" className="font-semibold">
                 Recent Documents
               </Typography>
-              <Link href={`/orgs/${organizationId}/docs${searchQuery.trim() ? `?search=${encodeURIComponent(searchQuery)}` : ''}`}>
-                <Button size="small" variant="outlined">
-                  View All
-                </Button>
+              <Link
+                href={`/orgs/${organizationId}/docs${searchQuery.trim() ? `?search=${encodeURIComponent(searchQuery)}` : ''}`}
+                className="inline-flex items-center py-1.5 px-3 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                View All
               </Link>
             </div>
             <div className="space-y-3">
@@ -370,24 +371,29 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
               ) : filteredDocuments.length > 0 ? (
                 filteredDocuments.map((doc) => (
                   <div key={doc.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div className="flex items-center gap-3">
+                    <Link
+                      href={`/orgs/${organizationId}/docs/${doc.id}`}
+                      className="flex items-center gap-3 min-w-0 flex-1 hover:bg-gray-100 rounded -m-1 p-1 transition-colors"
+                    >
                       {getDocumentStatusIcon(doc.state)}
-                      <div>
-                        <div className="font-medium text-sm">{doc.document_name}</div>
+                      <div className="min-w-0">
+                        <div className="font-medium text-sm text-gray-900 truncate">{doc.document_name}</div>
                         <div className="text-xs text-gray-500">{formatDate(doc.upload_date)}</div>
                       </div>
-                    </div>
-                    <div className="flex gap-1 items-center">
+                    </Link>
+                    <div className="flex gap-1 items-center flex-shrink-0 ml-2">
                       {doc.tag_ids.slice(0, 2).map((tagId) => {
                         const tag = availableTags.find(t => t.id === tagId);
                         return tag ? (
-                          <div
+                          <Link
                             key={tagId}
-                            className={`px-2 py-1 leading-none rounded shadow-sm flex items-center text-xs ${isColorLight(tag.color) ? 'text-gray-800' : 'text-white'}`}
+                            href={`/orgs/${organizationId}/tags/${tag.id}`}
+                            className={`px-2 py-1 leading-none rounded shadow-sm flex items-center text-xs hover:opacity-90 ${isColorLight(tag.color) ? 'text-gray-800' : 'text-white'}`}
                             style={{ backgroundColor: tag.color }}
+                            onClick={(e) => e.stopPropagation()}
                           >
                             {tag.name}
-                          </div>
+                          </Link>
                         ) : null;
                       })}
                       {doc.tag_ids.length > 2 && (
@@ -413,49 +419,49 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
           {/* Quick Actions */}
           <Card>
             <CardContent>
-              <Typography variant="h6" className="font-semibold mb-4">
-                Quick Actions
-              </Typography>
-              <div className="grid grid-cols-2 gap-3">
-                <Link href={`/orgs/${organizationId}/docs?tab=upload`}>
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    startIcon={<UploadIcon />}
-                    className="h-12"
-                  >
-                    Upload Document
-                  </Button>
+              <h3 className="text-lg font-semibold text-gray-900 mb-3">Quick Actions</h3>
+              <div className="grid grid-cols-2 gap-2">
+                <Link
+                  href={`/orgs/${organizationId}/docs?tab=upload`}
+                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
+                >
+                  <UploadIcon className="h-4 w-4" />
+                  Upload Document
                 </Link>
-                <Link href={`/orgs/${organizationId}/schemas?tab=schema-create`}>
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    startIcon={<AddIcon />}
-                    className="h-12"
-                  >
-                    Create Schema
-                  </Button>
+                <Link
+                  href={`/orgs/${organizationId}/schemas?tab=schema-create`}
+                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
+                >
+                  <AddIcon className="h-4 w-4" />
+                  Create Schema
                 </Link>
-                <Link href={`/orgs/${organizationId}/prompts?tab=prompt-create`}>
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    startIcon={<AddIcon />}
-                    className="h-12"
-                  >
-                    Create Prompt
-                  </Button>
+                <Link
+                  href={`/orgs/${organizationId}/prompts?tab=prompt-create`}
+                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
+                >
+                  <AddIcon className="h-4 w-4" />
+                  Create Prompt
                 </Link>
-                <Link href={`/orgs/${organizationId}/tags?tab=tag-create`}>
-                  <Button
-                    variant="outlined"
-                    fullWidth
-                    startIcon={<AddIcon />}
-                    className="h-12"
-                  >
-                    Create Tag
-                  </Button>
+                <Link
+                  href={`/orgs/${organizationId}/tags?tab=tag-create`}
+                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
+                >
+                  <AddIcon className="h-4 w-4" />
+                  Create Tag
+                </Link>
+                <Link
+                  href={`/orgs/${organizationId}/forms?tab=form-create`}
+                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
+                >
+                  <AddIcon className="h-4 w-4" />
+                  Create Form
+                </Link>
+                <Link
+                  href={`/orgs/${organizationId}/knowledge-bases?tab=kb-create`}
+                  className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 text-sm font-medium text-gray-700 transition-colors"
+                >
+                  <AddIcon className="h-4 w-4" />
+                  Create Knowledge Base
                 </Link>
               </div>
             </CardContent>
@@ -469,21 +475,23 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
                   <Typography variant="h6" className="font-semibold">
                     Tag Usage
                   </Typography>
-                  <Link href={`/orgs/${organizationId}/tags`}>
-                    <Button size="small" variant="outlined">
-                      Manage Tags
-                    </Button>
+                  <Link
+                    href={`/orgs/${organizationId}/tags`}
+                    className="inline-flex items-center py-1.5 px-3 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+                  >
+                    Manage Tags
                   </Link>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {availableTags.map((tag) => (
-                    <div
+                    <Link
                       key={tag.id}
-                      className={`px-2 py-1 leading-none rounded shadow-sm flex items-center text-xs hover:opacity-80 cursor-pointer ${isColorLight(tag.color) ? 'text-gray-800' : 'text-white'}`}
+                      href={`/orgs/${organizationId}/tags/${tag.id}`}
+                      className={`px-2 py-1 leading-none rounded shadow-sm flex items-center text-xs hover:opacity-90 ${isColorLight(tag.color) ? 'text-gray-800' : 'text-white'}`}
                       style={{ backgroundColor: tag.color }}
                     >
                       {tag.name}
-                    </div>
+                    </Link>
                   ))}
                 </div>
               </CardContent>
