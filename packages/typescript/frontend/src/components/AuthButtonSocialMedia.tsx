@@ -35,7 +35,7 @@ function AuthButtonSocialMediaOnly() {
     <Box sx={{ display: 'flex', alignItems: 'center' }}>
       <Typography variant="body1" sx={{ mr: 2 }}>
       </Typography>
-      <Button sx={buttonStyle} startIcon={<LoginIcon />} onClick={handleLogin}>Sign in</Button>
+      <Button sx={buttonStyle} startIcon={<LoginIcon />} onClick={handleLogin}>Sign in or Register</Button>
     </Box>
   );
 }
