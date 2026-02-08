@@ -7,10 +7,10 @@ import { DocRouterOrgApi } from '@/utils/api';
 import Link from 'next/link';
 import { 
   Description as DocumentIcon,
-  Schema as SchemaIcon,
-  Psychology as PromptIcon,
-  Label as TagIcon,
-  Assignment as FormIcon,
+  DataObject as SchemaIcon,
+  Chat as PromptIcon,
+  LocalOffer as TagIcon,
+  ViewQuilt as FormIcon,
   MenuBook as KnowledgeBaseIcon,
   CloudUpload as UploadIcon,
   Add as AddIcon,
