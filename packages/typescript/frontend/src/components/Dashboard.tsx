@@ -11,6 +11,7 @@ import {
   Psychology as PromptIcon,
   Label as TagIcon,
   Assignment as FormIcon,
+  MenuBook as KnowledgeBaseIcon,
   CloudUpload as UploadIcon,
   Add as AddIcon,
   Search as SearchIcon,
@@ -30,6 +31,7 @@ interface DashboardStats {
   prompts: number;
   tags: number;
   forms: number;
+  knowledgeBases: number;
 }
 
 interface RecentDocument {
@@ -66,7 +68,8 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
     schemas: 0,
     prompts: 0,
     tags: 0,
-    forms: 0
+    forms: 0,
+    knowledgeBases: 0
   });
   const [recentDocuments, setRecentDocuments] = useState<RecentDocument[]>([]);
   const [availableTags, setAvailableTags] = useState<Array<{id: string; name: string; color: string}>>([]);
@@ -122,12 +125,13 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
     const fetchDashboardData = async () => {
       try {
         setLoading(true);
-        const [documentsRes, schemasRes, promptsRes, tagsRes, formsRes] = await Promise.all([
+        const [documentsRes, schemasRes, promptsRes, tagsRes, formsRes, knowledgeBasesRes] = await Promise.all([
           docRouterOrgApi.listDocuments({ limit: 5 }),
           docRouterOrgApi.listSchemas({ limit: 1 }),
           docRouterOrgApi.listPrompts({ limit: 1 }),
           docRouterOrgApi.listTags({ limit: 10 }),
-          docRouterOrgApi.listForms({ limit: 1 })
+          docRouterOrgApi.listForms({ limit: 1 }),
+          docRouterOrgApi.listKnowledgeBases({ limit: 1 })
         ]);
 
         setStats({
@@ -135,7 +139,8 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
           schemas: schemasRes.total_count,
           prompts: promptsRes.total_count,
           tags: tagsRes.total_count,
-          forms: formsRes.total_count
+          forms: formsRes.total_count,
+          knowledgeBases: knowledgeBasesRes.total_count
         });
 
         setRecentDocuments(documentsRes.documents);
@@ -190,6 +195,14 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
       href: `/orgs/${organizationId}/forms`,
       color: 'bg-red-500',
       description: 'Data forms'
+    },
+    {
+      title: 'Knowledge Bases',
+      count: stats.knowledgeBases,
+      icon: KnowledgeBaseIcon,
+      href: `/orgs/${organizationId}/knowledge-bases`,
+      color: 'bg-teal-500',
+      description: 'Knowledge bases'
     }
   ];
 
@@ -303,7 +316,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
       </Card>
 
       {/* Stats Widgets */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
         {widgets.map((widget) => {
           const Icon = widget.icon;
           return (
@@ -318,7 +331,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
                 </div>
                 <div className="text-right">
                   <div className="text-2xl font-bold text-gray-900">
-                    {loading ? '...' : stats[widget.title.toLowerCase() as keyof DashboardStats]}
+                    {loading ? '...' : widget.count}
                   </div>
                 </div>
               </div>
