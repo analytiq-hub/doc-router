@@ -316,34 +316,25 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
         </CardContent>
       </Card>
 
-      {/* Stats Widgets */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
+      {/* Stats: grid with 1, 2, 3, or 6 columns; equal-width cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
         {widgets.map((widget) => {
           const Icon = widget.icon;
           return (
             <Link
               key={widget.title}
               href={widget.href}
-              className="block bg-white rounded-lg shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow duration-200"
+              className="flex items-center gap-2 min-w-0 px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-800 shadow-sm hover:border-gray-300 hover:shadow transition-colors"
             >
-              <div className="flex items-center justify-between mb-4">
-                <div className={`p-3 rounded-lg ${widget.color}`}>
-                  <Icon className="h-6 w-6 text-white" />
-                </div>
-                <div className="text-right">
-                  <div className="text-2xl font-bold text-gray-900">
-                    {loading ? '...' : widget.count}
-                  </div>
-                </div>
+              <div className={`flex-shrink-0 p-1 rounded-md ${widget.color}`}>
+                <Icon className="h-4 w-4 text-white" />
               </div>
-              <div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-1">
-                  {widget.title}
-                </h3>
-                <p className="text-sm text-gray-600">
-                  {widget.description}
-                </p>
-              </div>
+              <span className="flex-shrink-0 text-sm font-bold text-gray-900 tabular-nums">
+                {loading ? '...' : widget.count}
+              </span>
+              <span className="text-sm font-medium text-gray-700 truncate min-w-0">
+                {widget.title}
+              </span>
             </Link>
           );
         })}
