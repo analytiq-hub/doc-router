@@ -13,7 +13,7 @@ import {
   Menu as Bars3Icon,
   //PieChart as ChartPieIcon,
   //FileUpload as ArrowUpTrayIcon,
-  FormatListBulleted as ListBulletIcon,
+  Description as DocumentIcon,
   // Apps as CubeIcon,
   // ViewQuilt as Square3Stack3DIcon,
   //Science as BeakerIcon,
@@ -21,7 +21,7 @@ import {
   DataObject as SchemaIcon,
   Chat as PromptIcon,
   ViewQuilt as FormsIcon,
-  Psychology as PsychologyIcon,
+  MenuBook as KnowledgeBaseIcon,
   InfoOutlined as AboutIcon
 } from '@mui/icons-material';
 import { SvgIconProps } from '@mui/material';
@@ -85,12 +85,12 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, [open, isClient]);
 
   const fileMenuItems = [
-    { text: 'Documents', icon: ListBulletIcon, tooltip: 'Documents', href: `/orgs/${currentOrganization?.id}/docs`},
+    { text: 'Documents', icon: DocumentIcon, tooltip: 'Documents', href: `/orgs/${currentOrganization?.id}/docs`},
     { text: 'Tags', icon: LocalOfferIcon, tooltip: 'Tags', href: `/orgs/${currentOrganization?.id}/tags`},  
     { text: 'Schemas', icon: SchemaIcon, tooltip: 'Schemas', href: `/orgs/${currentOrganization?.id}/schemas`},
     { text: 'Prompts', icon: PromptIcon, tooltip: 'Prompts', href: `/orgs/${currentOrganization?.id}/prompts`},
     { text: 'Forms', icon: FormsIcon, tooltip: 'Forms', href: `/orgs/${currentOrganization?.id}/forms`},
-    { text: 'Knowledge Bases', icon: PsychologyIcon, tooltip: 'Knowledge Bases', href: `/orgs/${currentOrganization?.id}/knowledge-bases`},
+    { text: 'Knowledge Bases', icon: KnowledgeBaseIcon, tooltip: 'Knowledge Bases', href: `/orgs/${currentOrganization?.id}/knowledge-bases`},
   ];
 
   const systemMenuItems = [
