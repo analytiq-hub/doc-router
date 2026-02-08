@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDropzone } from 'react-dropzone';
 import { DocRouterOrgApi } from '@/utils/api';
+import { isColorLight } from '@/utils/colors';
 import Link from 'next/link';
 import { 
   Description as DocumentIcon,
@@ -19,7 +20,7 @@ import {
   CheckCircle as CheckIcon,
   Error as ErrorIcon
 } from '@mui/icons-material';
-import { Button, TextField, InputAdornment, Chip, Card, CardContent, Typography, CircularProgress } from '@mui/material';
+import { Button, TextField, InputAdornment, Card, CardContent, Typography, CircularProgress } from '@mui/material';
 
 interface DashboardProps {
   organizationId: string;
@@ -376,25 +377,21 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
                         <div className="text-xs text-gray-500">{formatDate(doc.upload_date)}</div>
                       </div>
                     </div>
-                    <div className="flex gap-1">
+                    <div className="flex gap-1 items-center">
                       {doc.tag_ids.slice(0, 2).map((tagId) => {
                         const tag = availableTags.find(t => t.id === tagId);
                         return tag ? (
-                          <Chip
+                          <div
                             key={tagId}
-                            label={tag.name}
-                            size="small"
-                            style={{ backgroundColor: tag.color, color: 'white', fontSize: '0.7rem' }}
-                          />
+                            className={`px-2 py-1 leading-none rounded shadow-sm flex items-center text-xs ${isColorLight(tag.color) ? 'text-gray-800' : 'text-white'}`}
+                            style={{ backgroundColor: tag.color }}
+                          >
+                            {tag.name}
+                          </div>
                         ) : null;
                       })}
                       {doc.tag_ids.length > 2 && (
-                        <Chip
-                          label={`+${doc.tag_ids.length - 2}`}
-                          size="small"
-                          variant="outlined"
-                          className="text-xs"
-                        />
+                        <span className="text-gray-500 text-sm">+{doc.tag_ids.length - 2}</span>
                       )}
                     </div>
                   </div>
@@ -480,12 +477,13 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {availableTags.map((tag) => (
-                    <Chip
+                    <div
                       key={tag.id}
-                      label={tag.name}
-                      style={{ backgroundColor: tag.color, color: 'white' }}
-                      className="hover:opacity-80 cursor-pointer"
-                    />
+                      className={`px-2 py-1 leading-none rounded shadow-sm flex items-center text-xs hover:opacity-80 cursor-pointer ${isColorLight(tag.color) ? 'text-gray-800' : 'text-white'}`}
+                      style={{ backgroundColor: tag.color }}
+                    >
+                      {tag.name}
+                    </div>
                   ))}
                 </div>
               </CardContent>
