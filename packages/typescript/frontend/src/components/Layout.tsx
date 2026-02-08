@@ -186,7 +186,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             >
               <Bars3Icon className="h-6 w-6 text-white" />
             </button>
-            <Link href="/" className={`${open ? 'ml-3' : 'ml-6'} text-xl font-semibold text-white`}>
+            <Link href={session && currentOrganization?.id ? `/orgs/${currentOrganization.id}/dashboard` : session ? '/dashboard' : '/'} className={`${open ? 'ml-3' : 'ml-6'} text-xl font-semibold text-white`}>
               <span className="block sm:hidden">DocRouter.AI</span>
               <span className="hidden sm:block">Smart Document Router</span>
             </Link>

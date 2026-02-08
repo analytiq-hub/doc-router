@@ -17,3 +17,16 @@ export function isOCRSupported(fileName: string | null | undefined): boolean {
   const skipExtensions = ['.csv', '.xls', '.xlsx', '.txt', '.md'];
   return !skipExtensions.includes(ext);
 }
+
+/**
+ * Check if an error is a 404 "OCR ... not found" from the API (OCR not run yet or still processing).
+ * Use this to avoid logging these as console errors and to show a user-friendly message.
+ */
+export function isOcrNotReadyError(err: unknown): boolean {
+  const apiErr = err as Error & { status?: number };
+  return (
+    apiErr?.status === 404 &&
+    typeof apiErr?.message === 'string' &&
+    /OCR .* not found/i.test(apiErr.message)
+  );
+}

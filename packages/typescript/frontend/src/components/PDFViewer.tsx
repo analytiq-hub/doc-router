@@ -6,7 +6,7 @@ import { pdfjs, Document, Page } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { DocRouterOrgApi } from '@/utils/api';
-import { isOCRSupported } from '@/utils/ocr-utils';
+import { isOCRSupported, isOcrNotReadyError } from '@/utils/ocr-utils';
 import { toast } from 'react-toastify';
 import { Toolbar, Typography, IconButton, TextField, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, List, Tooltip, Box, CircularProgress } from '@mui/material';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
@@ -495,7 +495,12 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
       const defaultFileName = (fileName || `Document_${id}`) + `_ocr.txt`;
       saveAs(blob, defaultFileName);
     } catch (err) {
-      console.error('Error downloading OCR text:', err);
+      if (isOcrNotReadyError(err)) {
+        toast.info('OCR data not yet available');
+      } else {
+        console.error('Error downloading OCR text:', err);
+        toast.error('Failed to download OCR text');
+      }
     }
     handleMenuClose();
   };
@@ -514,7 +519,12 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
       const defaultFileName = (fileName || `Document_${id}`) + `_ocr.json`;
       saveAs(blob, defaultFileName);
     } catch (err) {
-      console.error('Error downloading OCR JSON:', err);
+      if (isOcrNotReadyError(err)) {
+        toast.info('OCR data not yet available');
+      } else {
+        console.error('Error downloading OCR JSON:', err);
+        toast.error('Failed to download OCR JSON');
+      }
     }
     handleMenuClose();
   };
@@ -539,8 +549,12 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
         });
         setOcrText(text);
       } catch (err) {
-        console.error('Error fetching OCR text:', err);
-        setOcrError('Failed to load OCR text');
+        if (isOcrNotReadyError(err)) {
+          setOcrError('OCR data not yet available');
+        } else {
+          console.error('Error fetching OCR text:', err);
+          setOcrError('Failed to load OCR text');
+        }
       } finally {
         setOcrLoading(false);
       }

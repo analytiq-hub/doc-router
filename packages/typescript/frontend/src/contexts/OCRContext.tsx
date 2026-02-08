@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import type { OCRBlock } from '@docrouter/sdk';
-import { isOCRSupported } from '@/utils/ocr-utils';
+import { isOCRSupported, isOcrNotReadyError } from '@/utils/ocr-utils';
 
 export interface HighlightInfo {
   blocks: OCRBlock[];
@@ -54,8 +54,15 @@ export function OCRProvider({ children }: { children: React.ReactNode }) {
       blockCache.set(cacheKey, blocks);
       setOCRBlocks(blocks);
     } catch (err) {
-      console.error('Error loading OCR blocks:', err);
-      setError('Failed to load OCR data');
+      if (isOcrNotReadyError(err)) {
+        // OCR not run yet or still processing — treat as empty blocks, no console error
+        blockCache.set(cacheKey, []);
+        setOCRBlocks([]);
+        setError('OCR data not yet available');
+      } else {
+        console.error('Error loading OCR blocks:', err);
+        setError('Failed to load OCR data');
+      }
     } finally {
       setIsLoading(false);
     }

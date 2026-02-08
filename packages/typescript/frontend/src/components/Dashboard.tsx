@@ -1,6 +1,8 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
+import { useDropzone } from 'react-dropzone';
 import { DocRouterOrgApi } from '@/utils/api';
 import Link from 'next/link';
 import { 
@@ -16,7 +18,7 @@ import {
   CheckCircle as CheckIcon,
   Error as ErrorIcon
 } from '@mui/icons-material';
-import { Button, TextField, InputAdornment, Chip, Card, CardContent, Typography } from '@mui/material';
+import { Button, TextField, InputAdornment, Chip, Card, CardContent, Typography, CircularProgress } from '@mui/material';
 
 interface DashboardProps {
   organizationId: string;
@@ -39,7 +41,25 @@ interface RecentDocument {
 }
 
 
+const DASHBOARD_ACCEPT = {
+  'application/pdf': ['.pdf'],
+  'application/msword': ['.doc'],
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+  'text/csv': ['.csv'],
+  'application/vnd.ms-excel': ['.xls'],
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+  'text/plain': ['.txt'],
+  'text/markdown': ['.md'],
+  'image/jpeg': ['.jpg', '.jpeg'],
+  'image/png': ['.png'],
+  'image/gif': ['.gif'],
+  'image/webp': ['.webp'],
+  'image/bmp': ['.bmp'],
+  'image/tiff': ['.tiff', '.tif']
+};
+
 const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
+  const router = useRouter();
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [stats, setStats] = useState<DashboardStats>({
     documents: 0,
@@ -52,6 +72,51 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
   const [availableTags, setAvailableTags] = useState<Array<{id: string; name: string; color: string}>>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [dashboardUploading, setDashboardUploading] = useState(false);
+  const [dashboardUploadError, setDashboardUploadError] = useState<string | null>(null);
+
+  const onDashboardDrop = useCallback(async (acceptedFiles: File[]) => {
+    if (acceptedFiles.length === 0) return;
+    setDashboardUploadError(null);
+    setDashboardUploading(true);
+    try {
+      const documents = await Promise.all(
+        acceptedFiles.map(
+          (file) =>
+            new Promise<{ name: string; content: string; tag_ids: string[]; metadata: Record<string, string> }>((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = () => resolve({
+                name: file.name,
+                content: reader.result as string,
+                tag_ids: [],
+                metadata: {}
+              });
+              reader.onerror = () => reject(reader.error);
+              reader.readAsDataURL(file);
+            })
+        )
+      );
+      const response = await docRouterOrgApi.uploadDocuments({ documents });
+      const firstId = response.documents[0]?.document_id;
+      if (firstId) {
+        router.push(`/orgs/${organizationId}/docs/${firstId}`);
+      } else {
+        setDashboardUploadError('Upload succeeded but no document ID returned.');
+      }
+    } catch (err) {
+      console.error('Dashboard upload error:', err);
+      setDashboardUploadError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
+    } finally {
+      setDashboardUploading(false);
+    }
+  }, [organizationId, docRouterOrgApi, router]);
+
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    onDrop: onDashboardDrop,
+    accept: DASHBOARD_ACCEPT,
+    multiple: true,
+    disabled: dashboardUploading
+  });
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -197,6 +262,45 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
           </Link>
         </div>
       </div>
+
+      {/* Dashboard dropzone: upload (no tags) → OCR + default extraction → document page */}
+      <Card className="border-2 border-dashed border-gray-300 hover:border-blue-400 transition-colors">
+        <CardContent className="py-8">
+          <div
+            {...getRootProps()}
+            className={`
+              flex flex-col items-center justify-center cursor-pointer rounded-lg py-10 px-6
+              transition-colors min-h-[140px]
+              ${isDragActive ? 'bg-blue-50 border-2 border-blue-400' : 'bg-gray-50/80 hover:bg-gray-100'}
+            `}
+          >
+            <input {...getInputProps()} />
+            {dashboardUploading ? (
+              <>
+                <CircularProgress size={40} className="mb-3" />
+                <Typography className="text-gray-500">Uploading and starting extraction…</Typography>
+              </>
+            ) : (
+              <>
+                <UploadIcon className="h-12 w-12 text-gray-500 mb-3" />
+                <Typography variant="subtitle1" className="font-medium text-gray-700">
+                  {isDragActive
+                    ? 'Drop document(s) here'
+                    : 'Drop a document here or click to upload'}
+                </Typography>
+                <Typography variant="body2" className="mt-1 text-gray-500">
+                  OCR and default extraction will run; you’ll be taken to the document page.
+                </Typography>
+              </>
+            )}
+          </div>
+          {dashboardUploadError && (
+            <Typography color="error" variant="body2" className="mt-3 text-center text-red-600">
+              {dashboardUploadError}
+            </Typography>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Stats Widgets */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6">
