@@ -11,16 +11,12 @@ import OrganizationSwitcher from './OrganizationSwitcher';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { 
   Menu as Bars3Icon,
-  //PieChart as ChartPieIcon,
-  //FileUpload as ArrowUpTrayIcon,
+  Dashboard as DashboardIcon,
   Description as DocumentIcon,
-  // Apps as CubeIcon,
-  // ViewQuilt as Square3Stack3DIcon,
-  //Science as BeakerIcon,
   LocalOffer as LocalOfferIcon,
   DataObject as SchemaIcon,
   Chat as PromptIcon,
-  ViewQuilt as FormsIcon,
+  Assignment as FormsIcon,
   MenuBook as KnowledgeBaseIcon,
   InfoOutlined as AboutIcon
 } from '@mui/icons-material';
@@ -85,6 +81,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, [open, isClient]);
 
   const fileMenuItems = [
+    { text: 'Dashboard', icon: DashboardIcon, tooltip: 'Dashboard', href: `/orgs/${currentOrganization?.id}/dashboard`},
     { text: 'Documents', icon: DocumentIcon, tooltip: 'Documents', href: `/orgs/${currentOrganization?.id}/docs`},
     { text: 'Tags', icon: LocalOfferIcon, tooltip: 'Tags', href: `/orgs/${currentOrganization?.id}/tags`},  
     { text: 'Schemas', icon: SchemaIcon, tooltip: 'Schemas', href: `/orgs/${currentOrganization?.id}/schemas`},
@@ -224,7 +221,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
             {status === 'authenticated' && (
               <>
                 <div className="py-1">
-                  {fileMenuItems.map(renderMenuItem)}
+                  {fileMenuItems.slice(0, 1).map(renderMenuItem)}
+                </div>
+                <hr className="border-gray-200 my-1" />
+                <div className="py-1">
+                  {fileMenuItems.slice(1).map(renderMenuItem)}
                 </div>
                 {/* <hr className="border-gray-200" />
                 <div className="py-1">

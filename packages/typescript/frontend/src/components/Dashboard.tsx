@@ -11,7 +11,7 @@ import {
   DataObject as SchemaIcon,
   Chat as PromptIcon,
   LocalOffer as TagIcon,
-  ViewQuilt as FormIcon,
+  Assignment as FormIcon,
   MenuBook as KnowledgeBaseIcon,
   CloudUpload as UploadIcon,
   Add as AddIcon,
