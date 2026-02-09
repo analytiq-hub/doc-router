@@ -180,10 +180,8 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
   const handleDeleteFile = async (fileId: string) => {
     try {
       await docRouterOrgApi.deleteDocument({ documentId: fileId });
-      // Refresh the file list after deletion
       fetchFiles();
       handleMenuClose();
-      toast.success('Document deleted successfully');
     } catch (error) {
       console.error('Error deleting file:', error);
       toast.error('Failed to delete document');
