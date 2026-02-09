@@ -103,7 +103,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
       const response = await docRouterOrgApi.uploadDocuments({ documents });
       const firstId = response.documents[0]?.document_id;
       if (firstId) {
-        router.push(`/orgs/${organizationId}/docs/${firstId}`);
+        router.push(`/orgs/${organizationId}/docs/${firstId}?bbox`);
       } else {
         setDashboardUploadError('Upload succeeded but no document ID returned.');
       }

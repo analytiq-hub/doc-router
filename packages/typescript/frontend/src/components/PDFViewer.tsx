@@ -7,6 +7,12 @@ import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { DocRouterOrgApi } from '@/utils/api';
 import { isOCRSupported, isOcrNotReadyError } from '@/utils/ocr-utils';
+
+/** Document states that indicate an error; stop polling for OCR/bounding boxes when these are set. */
+const DOCUMENT_ERROR_STATES = ['ocr_failed', 'llm_failed'] as const;
+function isDocumentErrorState(state: string | null): boolean {
+  return state != null && (DOCUMENT_ERROR_STATES as readonly string[]).includes(state);
+}
 import { toast } from 'react-toastify';
 import { Toolbar, Typography, IconButton, TextField, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, List, Tooltip, Box, CircularProgress } from '@mui/material';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
@@ -513,25 +519,67 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     }
   }, [initialShowBoundingBoxes]);
 
-  // When bounding boxes are on (e.g. from ?bbox) and we have a file name, load OCR blocks if not yet loaded
+  // When bounding boxes are on and we have a file name: load OCR blocks once, then poll every 1s until blocks
+  // are available or document state is an error (ocr_failed, llm_failed).
   useEffect(() => {
     if (!showBoundingBoxes || ocrBlocksForBoxes !== null || !isOCRSupported(fileName)) return;
+
     let cancelled = false;
-    docRouterOrgApi.getOCRBlocks({ documentId: id }).then(
-      (blocks) => {
+
+    const tryLoadBlocks = async (): Promise<boolean> => {
+      try {
+        const blocks = await docRouterOrgApi.getOCRBlocks({ documentId: id });
         if (!cancelled) setOcrBlocksForBoxes(blocks);
-      },
-      (err) => {
-        if (cancelled) return;
+        return true;
+      } catch (err) {
+        if (cancelled) return true;
         if (isOcrNotReadyError(err)) {
-          toast.info('OCR data not yet available');
-        } else {
-          console.error('Error loading OCR blocks:', err);
-          toast.error('Failed to load OCR bounding boxes');
+          return false; // keep polling
         }
+        console.error('Error loading OCR blocks:', err);
+        toast.error('Failed to load OCR bounding boxes');
+        return true; // stop polling on other errors
       }
-    );
-    return () => { cancelled = true; };
+    };
+
+    const fetchDocumentState = async (): Promise<string | null> => {
+      try {
+        const list = await docRouterOrgApi.listDocuments({ limit: 100, skip: 0 });
+        const doc = list.documents.find((d) => d.id === id);
+        return doc?.state ?? null;
+      } catch {
+        return null;
+      }
+    };
+
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+
+    const poll = async () => {
+      if (cancelled) return;
+      const gotBlocks = await tryLoadBlocks();
+      if (cancelled || gotBlocks) {
+        if (intervalId) clearInterval(intervalId);
+        return;
+      }
+      const state = await fetchDocumentState();
+      if (cancelled) return;
+      if (state && isDocumentErrorState(state)) {
+        if (intervalId) clearInterval(intervalId);
+        toast.info('OCR could not be completed for this document');
+        return;
+      }
+    };
+
+    // First attempt immediately (and show toast only once for "not yet available")
+    tryLoadBlocks().then((gotBlocks) => {
+      if (cancelled || gotBlocks) return;
+    });
+
+    intervalId = setInterval(poll, 1000);
+    return () => {
+      cancelled = true;
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [showBoundingBoxes, ocrBlocksForBoxes, fileName, id, docRouterOrgApi]);
 
   const handleDownloadOcrText = async () => {
