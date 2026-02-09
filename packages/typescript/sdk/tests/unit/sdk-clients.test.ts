@@ -1,4 +1,5 @@
 import { DocRouterAccount, DocRouterOrg } from '../../src';
+import type { GetLLMResultResponse } from '../../src';
 
 describe('SDK Client Unit Tests', () => {
   describe('DocRouterAccount', () => {
@@ -101,6 +102,41 @@ describe('SDK Client Unit Tests', () => {
 
       client.updateToken('new-token');
       expect(client).toBeDefined();
+    });
+  });
+
+  describe('GetLLMResultResponse type', () => {
+    test('accepts prompt_display_name for default prompt', () => {
+      const response: GetLLMResultResponse = {
+        prompt_revid: 'default',
+        prompt_id: 'default',
+        prompt_version: 1,
+        document_id: 'doc-123',
+        llm_result: { summary: 'test' },
+        updated_llm_result: { summary: 'test' },
+        is_edited: false,
+        is_verified: false,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+        prompt_display_name: 'Document Summary'
+      };
+      expect(response.prompt_display_name).toBe('Document Summary');
+    });
+
+    test('accepts response without prompt_display_name (non-default prompt)', () => {
+      const response: GetLLMResultResponse = {
+        prompt_revid: 'rev-456',
+        prompt_id: 'prompt-id',
+        prompt_version: 2,
+        document_id: 'doc-123',
+        llm_result: {},
+        updated_llm_result: {},
+        is_edited: false,
+        is_verified: false,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z'
+      };
+      expect(response.prompt_display_name).toBeUndefined();
     });
   });
 });

@@ -93,6 +93,7 @@ async def test_textract_and_llm_default_pipeline_inline(test_db, mock_auth, setu
         assert llm_result_resp.status_code == 200, f"Failed to get LLM result: {llm_result_resp.text}"
         llm_result_data = llm_result_resp.json()
         assert "llm_result" in llm_result_data
+        assert llm_result_data.get("prompt_display_name") == "Document Summary"
 
 
 @pytest.mark.asyncio
@@ -188,7 +189,17 @@ async def test_full_document_llm_processing_pipeline_inline(org_and_users, setup
         # Process LLM inline (default + tag prompt)
         await ad.msg_handlers.process_llm_msg(analytiq_client, {"_id": str(ObjectId()), "msg": {"document_id": document_id}})
 
-        # Verify result for the tagged prompt
+        # Verify default prompt result includes prompt_display_name
+        default_result_resp = client.get(
+            f"/v0/orgs/{org_id}/llm/result/{document_id}",
+            params={"prompt_revid": "default"},
+            headers=get_token_headers(admin["token"]),
+        )
+        assert default_result_resp.status_code == 200, f"Default LLM result not found: {default_result_resp.text}"
+        default_llm_result = default_result_resp.json()
+        assert default_llm_result.get("prompt_display_name") == "Document Summary"
+
+        # Verify result for the tagged prompt (no display name for non-default)
         result_resp = client.get(
             f"/v0/orgs/{org_id}/llm/result/{document_id}",
             params={"prompt_revid": prompt_revid},
@@ -197,6 +208,7 @@ async def test_full_document_llm_processing_pipeline_inline(org_and_users, setup
         assert result_resp.status_code == 200, f"LLM result not found: {result_resp.text}"
         llm_result = result_resp.json()
         assert "llm_result" in llm_result
+        assert llm_result.get("prompt_display_name") is None
         extracted = llm_result["llm_result"]
         if isinstance(extracted, str):
             extracted = json.loads(extracted)
@@ -261,5 +273,30 @@ async def test_full_document_llm_processing_pipeline_inline(org_and_users, setup
             headers=get_token_headers(admin["token"]) 
         )
         assert verify_delete_resp.status_code == 404
+
+
+def test_llm_result_prompt_display_name():
+    """Unit test: GET llm/result sets prompt_display_name for default prompt only."""
+    from app.routes.llm import _llm_result_response, LLMResult
+    from datetime import datetime, UTC
+
+    raw_default = {
+        "prompt_revid": "default",
+        "prompt_id": "default",
+        "prompt_version": 1,
+        "document_id": "doc123",
+        "llm_result": {"summary": "test"},
+        "updated_llm_result": {"summary": "test"},
+        "is_edited": False,
+        "is_verified": False,
+        "created_at": datetime.now(UTC),
+        "updated_at": datetime.now(UTC),
+    }
+    resp_default = _llm_result_response(raw_default, "default")
+    assert resp_default.prompt_display_name == "Document Summary"
+
+    raw_other = {**raw_default, "prompt_revid": "abc123", "prompt_id": "pid"}
+    resp_other = _llm_result_response(raw_other, "abc123")
+    assert resp_other.prompt_display_name is None
 
 

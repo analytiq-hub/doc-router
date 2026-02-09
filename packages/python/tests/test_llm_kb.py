@@ -35,8 +35,9 @@ assert os.environ["ENV"] == "pytest"
 MOCK_EMBEDDING_DIMENSIONS = 1536
 
 def create_mock_embedding_response(num_embeddings=1):
-    """Create a mock embedding response with non-zero vectors (required for cosine similarity)"""
-    mock_response = AsyncMock()
+    """Create a mock embedding response with non-zero vectors (required for cosine similarity).
+    Uses Mock() not AsyncMock() so get_embedding_cost() does not trigger unawaited coroutines."""
+    mock_response = Mock()
     # Generate non-zero embeddings (simple pattern that's not all zeros)
     # Use a small non-zero value to avoid zero vector issues with MongoDB cosine similarity
     embeddings = []
