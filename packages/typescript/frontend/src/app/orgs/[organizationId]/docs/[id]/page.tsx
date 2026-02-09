@@ -10,6 +10,10 @@ const PDFSidebar = dynamic(() => import('@/components/PDFSidebar'), {
   ssr: false,
   loading: () => <div className="h-64 flex items-center justify-center">Loading sidebar...</div>
 });
+const AgentTab = dynamic(() => import('@/components/agent/AgentTab'), {
+  ssr: false,
+  loading: () => <div className="h-32 flex items-center justify-center">Loading agent...</div>
+});
 import type { HighlightInfo } from '@/types/index';
 
 const PDFViewer = dynamic(() => import('@/components/PDFViewer'), {
@@ -29,6 +33,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
   const showBoundingBoxesFromUrl = searchParams.has('bbox');
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showPdfPanel, setShowPdfPanel] = useState(true);
+  const [showChatPanel, setShowChatPanel] = useState(true);
   const [highlightInfo, setHighlightInfo] = useState<HighlightInfo | undefined>();
   
   useEffect(() => {
@@ -36,7 +41,9 @@ const PDFViewerPage = ({ params }: PageProps) => {
       showLeftPanel,
       setShowLeftPanel,
       showPdfPanel,
-      setShowPdfPanel
+      setShowPdfPanel,
+      showChatPanel,
+      setShowChatPanel
     };
 
     const event = new Event('pdfviewercontrols');
@@ -45,27 +52,21 @@ const PDFViewerPage = ({ params }: PageProps) => {
     return () => {
       delete window.pdfViewerControls;
     };
-  }, [showLeftPanel, showPdfPanel]);
+  }, [showLeftPanel, showPdfPanel, showChatPanel]);
 
   useEffect(() => {
     console.log('Page - highlightedBlocks changed:', highlightInfo);
   }, [highlightInfo]);
 
-  const getPanelSizes = () => {
-    if (!showLeftPanel) {
-      return {
-        left: 0,
-        main: 100
-      };
-    }
-
-    return {
-      left: 40,
-      main: 60
-    };
+  // Three panels: extraction (left) | PDF (center) | agent (right, optional)
+  const getDefaultSizes = () => {
+    if (!showLeftPanel && !showChatPanel) return { left: 0, main: 100, right: 0 };
+    if (!showLeftPanel) return { left: 0, main: 65, right: 35 };
+    if (!showChatPanel) return { left: 30, main: 70, right: 0 };
+    return { left: 25, main: 50, right: 25 };
   };
 
-  const panelSizes = getPanelSizes();
+  const defaultSizes = getDefaultSizes();
 
   if (!id) return <div>No PDF ID provided</div>;
   const pdfId = Array.isArray(id) ? id[0] : id;
@@ -76,7 +77,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
         <PanelGroup direction="horizontal" style={{ width: '100%', height: '100%' }}>
           {showLeftPanel && (
             <>
-              <Panel defaultSize={panelSizes.left}>
+              <Panel defaultSize={defaultSizes.left} minSize={15} order={1}>
                 <Box sx={{ height: '100%', overflow: 'auto' }}>
                   <PDFSidebar 
                     organizationId={organizationId} 
@@ -89,9 +90,9 @@ const PDFViewerPage = ({ params }: PageProps) => {
               <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
             </>
           )}
-          
+
           {showPdfPanel && (
-            <Panel defaultSize={panelSizes.main}>
+            <Panel defaultSize={defaultSizes.main} minSize={20} order={2}>
               <Box sx={{ height: '100%', overflow: 'hidden' }}>
                 <PDFViewer 
                   organizationId={organizationId} 
@@ -101,6 +102,17 @@ const PDFViewerPage = ({ params }: PageProps) => {
                 />
               </Box>
             </Panel>
+          )}
+
+          {showChatPanel && (
+            <>
+              <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
+              <Panel defaultSize={defaultSizes.right} minSize={20} order={3}>
+                <Box sx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                  <AgentTab organizationId={organizationId} documentId={pdfId} />
+                </Box>
+              </Panel>
+            </>
           )}
         </PanelGroup>
       </Box>

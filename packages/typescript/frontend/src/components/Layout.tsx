@@ -29,6 +29,8 @@ interface PDFViewerControlsType {
   setShowLeftPanel: React.Dispatch<React.SetStateAction<boolean>>;
   showPdfPanel: boolean;
   setShowPdfPanel: React.Dispatch<React.SetStateAction<boolean>>;
+  showChatPanel: boolean;
+  setShowChatPanel: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 declare global {

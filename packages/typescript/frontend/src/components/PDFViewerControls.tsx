@@ -2,7 +2,9 @@ import {
   ViewSidebar, 
   PictureAsPdf,
   ViewSidebarOutlined,
-  PictureAsPdfOutlined 
+  PictureAsPdfOutlined,
+  Chat as ChatIcon,
+  ChatOutlined as ChatOutlinedIcon
 } from '@mui/icons-material';
 
 interface PDFViewerControlsProps {
@@ -10,6 +12,8 @@ interface PDFViewerControlsProps {
   setShowLeftPanel: React.Dispatch<React.SetStateAction<boolean>>;
   showPdfPanel: boolean;
   setShowPdfPanel: React.Dispatch<React.SetStateAction<boolean>>;
+  showChatPanel?: boolean;
+  setShowChatPanel?: React.Dispatch<React.SetStateAction<boolean>>;
   sidebarMode?: 'extraction' | 'forms';
 }
 
@@ -18,6 +22,8 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
   setShowLeftPanel,
   showPdfPanel,
   setShowPdfPanel,
+  showChatPanel = true,
+  setShowChatPanel = () => {},
   sidebarMode = 'extraction',
 }) => {
   return (
@@ -61,6 +67,27 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
           <PictureAsPdf className="w-4 h-4" />
         ) : (
           <PictureAsPdfOutlined className="w-4 h-4" />
+        )}
+      </button>
+
+      <button
+        onClick={() => setShowChatPanel(prev => !prev)}
+        className={`
+          flex items-center justify-center
+          w-8 h-[31px]
+          rounded
+          transition-colors duration-150
+          ${showChatPanel 
+            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' 
+            : 'text-blue-200 hover:bg-blue-500 hover:text-white'
+          }
+        `}
+        title={showChatPanel ? "Hide Chat Panel" : "Show Chat Panel"}
+      >
+        {showChatPanel ? (
+          <ChatIcon className="w-4 h-4" />
+        ) : (
+          <ChatOutlinedIcon className="w-4 h-4" />
         )}
       </button>
     </div>
