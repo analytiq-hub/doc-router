@@ -42,7 +42,7 @@ export interface AgentChatState {
   threadsLoading: boolean;
 }
 
-const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
+const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
 
 function getChatUrl(organizationId: string, documentId: string, path: string) {
   const base = `/v0/orgs/${organizationId}/documents/${documentId}`;

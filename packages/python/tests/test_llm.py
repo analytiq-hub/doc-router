@@ -300,3 +300,37 @@ def test_llm_result_prompt_display_name():
     assert resp_other.prompt_display_name is None
 
 
+def test_apply_prompt_caching_converts_system_string_when_supported():
+    """Prompt caching: system message string is converted to block with cache_control when model supports it."""
+    from analytiq_data.llm.llm import _apply_prompt_caching
+
+    with patch("analytiq_data.llm.llm.supports_prompt_caching", return_value=True):
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello"},
+        ]
+        out = _apply_prompt_caching("anthropic/claude-3-5-sonnet-20240620", messages)
+    assert len(out) == 2
+    assert out[0]["role"] == "system"
+    assert isinstance(out[0]["content"], list)
+    assert len(out[0]["content"]) == 1
+    assert out[0]["content"][0]["type"] == "text"
+    assert out[0]["content"][0]["text"] == "You are a helpful assistant."
+    assert out[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert out[1] == {"role": "user", "content": "Hello"}
+
+
+def test_apply_prompt_caching_no_change_when_not_supported():
+    """Prompt caching: messages are unchanged when model does not support caching."""
+    from analytiq_data.llm.llm import _apply_prompt_caching
+
+    with patch("analytiq_data.llm.llm.supports_prompt_caching", return_value=False):
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello"},
+        ]
+        out = _apply_prompt_caching("some-other-model", messages)
+    assert out is messages
+    assert out[0]["content"] == "You are a helpful assistant."
+
+

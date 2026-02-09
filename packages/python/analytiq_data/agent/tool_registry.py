@@ -6,11 +6,27 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import date, datetime
 from typing import Any, Callable
 
 from . import tools as agent_tools
 
 logger = logging.getLogger(__name__)
+
+
+def _json_serial_default(obj: Any) -> Any:
+    """Convert non-JSON-serializable values for tool result payloads."""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    if isinstance(obj, date) and not isinstance(obj, datetime):
+        return obj.isoformat()
+    try:
+        from bson import ObjectId
+        if isinstance(obj, ObjectId):
+            return str(obj)
+    except ImportError:
+        pass
+    raise TypeError(f"Object of type {type(obj).__name__!r} is not JSON serializable")
 
 # OpenAI function-calling format: list of {"type": "function", "function": {"name", "description", "parameters"}}
 TOOL_DEFINITIONS: list[dict[str, Any]] = [
@@ -401,7 +417,7 @@ async def execute_tool(name: str, context: dict, arguments: str | dict) -> str:
         params = arguments or {}
     try:
         result = await handler(context, params)
-        return json.dumps(result)
+        return json.dumps(result, default=_json_serial_default)
     except Exception as e:
         logger.exception("Tool %s failed", name)
         return json.dumps({"error": str(e)})

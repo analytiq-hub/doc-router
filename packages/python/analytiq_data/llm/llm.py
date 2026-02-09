@@ -1,7 +1,7 @@
 import asyncio
 import analytiq_data as ad
 import litellm
-from litellm.utils import supports_pdf_input  # Add this import
+from litellm.utils import supports_pdf_input, supports_prompt_caching
 import json
 from datetime import datetime, UTC
 from pydantic import BaseModel, create_model
@@ -19,6 +19,43 @@ logger = logging.getLogger(__name__)
 
 # Drop unsupported provider/model params automatically (e.g., O-series temperature)
 litellm.drop_params = True
+
+# Cache control directive for Anthropic/Bedrock prompt caching (ephemeral cache)
+_PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
+
+
+def _apply_prompt_caching(model: str, messages: list) -> list:
+    """
+    When the model supports prompt caching, convert the first (system) message
+    to content-block form with cache_control so the provider caches it.
+    Anthropic requires ~1024+ tokens for caching; we always add the directive
+    and let the API decide. Other providers ignore cache_control.
+    """
+    if not messages or not supports_prompt_caching(model=model):
+        return messages
+    first = messages[0]
+    if first.get("role") != "system":
+        return messages
+    content = first.get("content")
+    if isinstance(content, str):
+        # Single block with cache_control so the system prompt is cached
+        cached_system = {
+            "role": "system",
+            "content": [
+                {"type": "text", "text": content, "cache_control": _PROMPT_CACHE_CONTROL}
+            ],
+        }
+        return [cached_system] + list(messages[1:])
+    if isinstance(content, list):
+        # Already blocks; add cache_control to the last text block (per Anthropic spec)
+        blocks = list(content)
+        for i in range(len(blocks) - 1, -1, -1):
+            if isinstance(blocks[i], dict) and blocks[i].get("type") == "text":
+                blocks[i] = {**blocks[i], "cache_control": _PROMPT_CACHE_CONTROL}
+                break
+        return [{"role": "system", "content": blocks}] + list(messages[1:])
+    return messages
+
 
 async def get_extracted_text(analytiq_client, document_id: str) -> str | None:
     """
@@ -203,9 +240,10 @@ async def _litellm_acompletion_with_retry(
         Exception: If the call fails after all retries
     """
     temperature = get_temperature(model)
+    messages_to_send = _apply_prompt_caching(model, messages)
     params = {
         "model": model,
-        "messages": messages,
+        "messages": messages_to_send,
         "api_key": api_key,
         "temperature": temperature,
         "response_format": response_format,
@@ -298,6 +336,11 @@ async def run_llm(analytiq_client,
     Returns:
         dict: The LLM result
     """
+    # Normalize invalid prompt_revid (e.g. non-ObjectId from agent) to avoid ObjectId errors downstream
+    if prompt_revid != "default" and not ad.llm.models._is_valid_object_id(prompt_revid):
+        logger.info("prompt_revid %r is not a valid ObjectId, using default prompt", prompt_revid)
+        prompt_revid = "default"
+
     # Check for existing result unless force is True
     if not force:
         existing_result = await get_llm_result(analytiq_client, document_id, prompt_revid)
