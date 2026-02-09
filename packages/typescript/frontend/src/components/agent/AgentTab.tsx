@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import SendIcon from '@mui/icons-material/Send';
-import SettingsIcon from '@mui/icons-material/Settings';
+import React, { useEffect, useState, useRef } from 'react';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { useAgentChat } from './useAgentChat';
 import AgentChat from './AgentChat';
 import ThreadDropdown from './ThreadDropdown';
@@ -28,11 +28,22 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
   } = useAgentChat(organizationId, documentId);
 
   const [input, setInput] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
+  const [showModelDropUp, setShowModelDropUp] = useState(false);
+  const modelDropRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     loadModels();
   }, [loadModels]);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (modelDropRef.current && !modelDropRef.current.contains(e.target as Node)) {
+        setShowModelDropUp(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleSend = () => {
     const text = input.trim();
@@ -82,67 +93,81 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             />
           </div>
 
-          <div className="shrink-0 border-t border-gray-200 px-3 py-2 bg-white min-w-0">
-              {showSettings && (
-                <div className="flex flex-wrap items-center gap-3 mb-2 pb-2 border-b border-gray-100">
-                  <label className="flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={state.autoApprove}
-                      onChange={(e) => setAutoApprove(e.target.checked)}
-                      className="rounded"
-                    />
-                    Auto-approve tool calls
-                  </label>
-                  {state.availableModels.length > 0 && (
-                    <label className="flex items-center gap-2 text-sm">
-                      Model:
-                      <select
-                        value={state.model}
-                        onChange={(e) => setModel(e.target.value)}
-                        className="rounded border border-gray-300 text-sm py-1 px-2"
-                      >
-                        {state.availableModels.map((m) => (
-                          <option key={m} value={m}>
-                            {m}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
-                </div>
-              )}
-              <div className="flex gap-2 min-w-0">
-                <button
-                  type="button"
-                  onClick={() => setShowSettings((s) => !s)}
-                  className="shrink-0 p-1.5 rounded text-gray-500 hover:bg-gray-100"
-                  title="Settings"
-                >
-                  <SettingsIcon fontSize="small" />
-                </button>
-                <input
-                  type="text"
+          {/* Cursor-style: expandable textarea with scrollbar, submit ^ underneath */}
+          <div className="shrink-0 border-t border-gray-200 bg-white min-w-0">
+            <div className="px-3 pt-2 pb-1">
+              <div className="rounded-lg border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 min-w-0">
+                <textarea
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      handleSend();
+                    }
+                  }}
                   placeholder="Message the agent…"
-                  className="flex-1 min-w-0 rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  rows={3}
+                  className="w-full min-h-[4rem] max-h-[12rem] py-2.5 px-3 text-sm resize-y border-0 focus:outline-none focus:ring-0 overflow-y-auto bg-transparent"
+                  style={{ scrollbarGutter: 'stable' }}
                   disabled={state.loading}
                 />
-                <button
-                  type="button"
-                  onClick={handleSend}
-                  disabled={!input.trim() || state.loading}
-                  className="shrink-0 p-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Send"
-                >
-                  <SendIcon fontSize="small" />
-                </button>
               </div>
             </div>
-          </>
-        )}
+            <div className="flex items-center justify-between px-3 pb-2 pt-0 gap-2">
+              <div className="relative flex items-center gap-2 min-w-0" ref={modelDropRef}>
+                <button
+                  type="button"
+                  onClick={() => setShowModelDropUp((v) => !v)}
+                  className="flex items-center gap-0.5 text-[11px] text-gray-500 hover:text-gray-700 py-0.5"
+                  title="Model"
+                >
+                  <KeyboardArrowUpIcon sx={{ fontSize: 14 }} className={showModelDropUp ? '' : 'rotate-180'} />
+                  <span className="max-w-[120px] truncate">{state.model}</span>
+                </button>
+                {showModelDropUp && (
+                  <div className="absolute bottom-full left-0 mb-1 z-50 rounded-md border border-gray-200 bg-white shadow-lg py-1 min-w-[160px] max-h-48 overflow-y-auto">
+                    {state.availableModels.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-gray-500">Loading models…</div>
+                    ) : (
+                      state.availableModels.map((m) => (
+                        <button
+                          key={m}
+                          type="button"
+                          onClick={() => { setModel(m); setShowModelDropUp(false); }}
+                          className={`block w-full text-left px-3 py-1.5 text-xs ${m === state.model ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
+                        >
+                          {m}
+                        </button>
+                      ))
+                    )}
+                    <div className="border-t border-gray-100 mt-1 pt-1 px-2">
+                      <label className="flex items-center gap-2 text-[11px] text-gray-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={state.autoApprove}
+                          onChange={(e) => setAutoApprove(e.target.checked)}
+                          className="rounded"
+                        />
+                        Auto-approve tools
+                      </label>
+                    </div>
+                  </div>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!input.trim() || state.loading}
+                className="flex items-center justify-center w-8 h-8 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+                title="Send"
+              >
+                <ArrowUpwardIcon sx={{ fontSize: 18 }} />
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

@@ -32,64 +32,57 @@ export default function ToolCallCard({
   } catch {
     argsObj = {};
   }
+  const hasArgs = Object.keys(argsObj).length > 0;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50/80 p-3 text-sm">
-      <div className="flex items-center justify-between gap-2">
-        <span className="font-medium text-gray-800">{toolCall.name}</span>
+    <div className="rounded border border-gray-200 bg-gray-50/80 px-2 py-1 text-xs">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <span className="font-medium text-gray-700">{toolCall.name}</span>
+        {hasArgs && (
+          <button
+            type="button"
+            onClick={() => setShowRaw((v) => !v)}
+            className="flex items-center gap-0.5 text-gray-500 hover:text-gray-700"
+          >
+            {showRaw ? <ExpandLessIcon sx={{ fontSize: 12 }} /> : <ExpandMoreIcon sx={{ fontSize: 12 }} />}
+            {showRaw ? 'Hide' : 'Show'} params
+          </button>
+        )}
         {!resolved && (
-          <div className="flex items-center gap-1">
+          <span className="flex items-center gap-0.5 ml-auto">
             <button
               type="button"
               onClick={onApprove}
               disabled={disabled}
-              className="p-1.5 rounded text-green-600 hover:bg-green-100 disabled:opacity-50"
+              className="p-0.5 rounded text-green-600 hover:bg-green-100 disabled:opacity-50"
               title="Approve"
             >
-              <CheckCircleOutlineIcon fontSize="small" />
+              <CheckCircleOutlineIcon sx={{ fontSize: 14 }} />
             </button>
             <button
               type="button"
               onClick={onReject}
               disabled={disabled}
-              className="p-1.5 rounded text-red-600 hover:bg-red-100 disabled:opacity-50"
+              className="p-0.5 rounded text-red-600 hover:bg-red-100 disabled:opacity-50"
               title="Reject"
             >
-              <CancelOutlinedIcon fontSize="small" />
+              <CancelOutlinedIcon sx={{ fontSize: 14 }} />
             </button>
-          </div>
+          </span>
         )}
         {resolved && (
           <span
-            className={
-              approved
-                ? 'text-green-600 text-xs font-medium'
-                : 'text-red-600 text-xs font-medium'
-            }
+            className={`ml-auto text-[10px] font-medium ${approved ? 'text-green-600' : 'text-red-600'}`}
           >
-            {approved ? 'Approved' : 'Rejected'}
+            {approved ? '✓' : '✗'}
           </span>
         )}
       </div>
-      <div className="mt-2 text-gray-600">
-        {Object.keys(argsObj).length > 0 && (
-          <>
-            <button
-              type="button"
-              onClick={() => setShowRaw((v) => !v)}
-              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700"
-            >
-              {showRaw ? <ExpandLessIcon fontSize="small" /> : <ExpandMoreIcon fontSize="small" />}
-              {showRaw ? 'Hide' : 'Show'} parameters
-            </button>
-            {showRaw && (
-              <pre className="mt-1 p-2 bg-white rounded border border-gray-200 text-xs overflow-x-auto max-h-40 overflow-y-auto">
-                {JSON.stringify(argsObj, null, 2)}
-              </pre>
-            )}
-          </>
-        )}
-      </div>
+      {showRaw && hasArgs && (
+        <pre className="mt-1 p-1.5 bg-white rounded border border-gray-200 text-[10px] overflow-x-auto max-h-24 overflow-y-auto">
+          {JSON.stringify(argsObj, null, 2)}
+        </pre>
+      )}
     </div>
   );
 }

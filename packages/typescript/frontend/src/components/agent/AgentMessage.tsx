@@ -44,7 +44,7 @@ export default function AgentMessage({
           </div>
         )}
         {message.toolCalls && message.toolCalls.length > 0 && (
-          <div className="mt-2 space-y-2">
+          <div className="mt-1.5 space-y-1">
             {message.toolCalls.map((tc) => {
               const isPending = pendingCallIds?.has(tc.id);
               const resolved = resolvedToolCalls?.has(tc.id);
