@@ -1,0 +1,164 @@
+"""
+Persistence for document agent chat threads.
+Stored in MongoDB collection agent_threads; scoped by organization_id and document_id.
+"""
+from __future__ import annotations
+
+import logging
+from datetime import datetime, UTC
+from typing import Any
+
+from bson import ObjectId
+
+import analytiq_data as ad
+
+logger = logging.getLogger(__name__)
+
+COLLECTION = "agent_threads"
+
+
+def _thread_doc(
+    organization_id: str,
+    document_id: str,
+    created_by: str,
+    *,
+    title: str | None = None,
+    messages: list[dict] | None = None,
+    extraction: dict | None = None,
+) -> dict:
+    now = datetime.now(UTC)
+    return {
+        "organization_id": organization_id,
+        "document_id": document_id,
+        "created_by": created_by,
+        "title": title or "New chat",
+        "messages": messages or [],
+        "extraction": extraction or {},
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+async def list_threads(
+    analytiq_client: Any,
+    organization_id: str,
+    document_id: str,
+    limit: int = 50,
+) -> list[dict]:
+    """
+    List threads for a document (metadata only: id, title, created_at, updated_at).
+    Most recent first.
+    """
+    db = ad.common.get_async_db(analytiq_client)
+    coll = db[COLLECTION]
+    cursor = coll.find(
+        {"organization_id": organization_id, "document_id": document_id},
+        projection={"title": 1, "created_at": 1, "updated_at": 1},
+    ).sort("updated_at", -1).limit(limit)
+    docs = await cursor.to_list(length=limit)
+    return [
+        {
+            "id": str(d["_id"]),
+            "title": d.get("title", "New chat"),
+            "created_at": d.get("created_at"),
+            "updated_at": d.get("updated_at"),
+        }
+        for d in docs
+    ]
+
+
+async def get_thread(
+    analytiq_client: Any,
+    thread_id: str,
+    organization_id: str,
+) -> dict | None:
+    """Get a single thread by id (full doc including messages and extraction)."""
+    db = ad.common.get_async_db(analytiq_client)
+    coll = db[COLLECTION]
+    doc = await coll.find_one(
+        {"_id": ObjectId(thread_id), "organization_id": organization_id}
+    )
+    if not doc:
+        return None
+    return {
+        "id": str(doc["_id"]),
+        "title": doc.get("title", "New chat"),
+        "messages": doc.get("messages", []),
+        "extraction": doc.get("extraction") or {},
+        "created_at": doc.get("created_at"),
+        "updated_at": doc.get("updated_at"),
+    }
+
+
+async def create_thread(
+    analytiq_client: Any,
+    organization_id: str,
+    document_id: str,
+    created_by: str,
+    title: str | None = None,
+) -> str:
+    """Create a new thread; returns thread id."""
+    db = ad.common.get_async_db(analytiq_client)
+    coll = db[COLLECTION]
+    doc = _thread_doc(organization_id, document_id, created_by, title=title)
+    result = await coll.insert_one(doc)
+    return str(result.inserted_id)
+
+
+async def append_messages(
+    analytiq_client: Any,
+    thread_id: str,
+    organization_id: str,
+    new_messages: list[dict],
+    extraction: dict | None = None,
+) -> bool:
+    """
+    Append messages to a thread and optionally set extraction.
+    new_messages: list of { role, content?, tool_calls? } in API format.
+    """
+    if not new_messages:
+        return True
+    db = ad.common.get_async_db(analytiq_client)
+    coll = db[COLLECTION]
+    now = datetime.now(UTC)
+    update: dict = {
+        "$set": {"updated_at": now},
+        "$push": {"messages": {"$each": new_messages}},
+    }
+    if extraction is not None:
+        update["$set"]["extraction"] = extraction
+    result = await coll.update_one(
+        {"_id": ObjectId(thread_id), "organization_id": organization_id},
+        update,
+    )
+    return result.modified_count > 0
+
+
+async def update_thread_title(
+    analytiq_client: Any,
+    thread_id: str,
+    organization_id: str,
+    title: str,
+) -> bool:
+    """Update thread title (e.g. first user message snippet)."""
+    db = ad.common.get_async_db(analytiq_client)
+    coll = db[COLLECTION]
+    result = await coll.update_one(
+        {"_id": ObjectId(thread_id), "organization_id": organization_id},
+        {"$set": {"title": title, "updated_at": datetime.now(UTC)}},
+    )
+    return result.modified_count > 0
+
+
+async def delete_thread(
+    analytiq_client: Any,
+    thread_id: str,
+    organization_id: str,
+) -> bool:
+    """Delete a thread. Returns True if a document was deleted."""
+    db = ad.common.get_async_db(analytiq_client)
+    coll = db[COLLECTION]
+    result = await coll.delete_one(
+        {"_id": ObjectId(thread_id), "organization_id": organization_id}
+    )
+    return result.deleted_count > 0
