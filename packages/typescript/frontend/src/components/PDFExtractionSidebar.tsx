@@ -1029,13 +1029,15 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
       </div>
       
       <div className="overflow-auto flex-grow">
-        {/* Document Summary */}
+        {/* Default prompt (title from API: e.g. Document Summary) */}
         <div className="border-b border-black/10">
           <div
             onClick={() => handlePromptChange('default')}
             className="w-full min-h-[48px] flex items-center justify-between px-4 bg-gray-100/[0.6] hover:bg-gray-100/[0.8] transition-colors cursor-pointer"
           >
-            <span className="text-sm text-gray-900">Document Summary</span>
+            <span className="text-sm text-gray-900">
+              {llmResults['default']?.prompt_display_name ?? 'Document Summary'}
+            </span>
             <div className="flex items-center gap-2">
               <div
                 onClick={(e) => {

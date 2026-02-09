@@ -406,6 +406,8 @@ export interface GetLLMResultResponse {
   is_verified: boolean;
   created_at: string;
   updated_at: string;
+  /** Display name for the prompt (e.g. "Document Summary" for default prompt). From API. */
+  prompt_display_name?: string;
 }
 
 export interface DeleteLLMResultParams {

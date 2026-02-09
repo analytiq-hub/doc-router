@@ -23,6 +23,17 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI router
 llm_router = APIRouter(tags=["llm"])
 
+# Display name for the virtual default prompt (prompt_revid="default")
+DEFAULT_PROMPT_DISPLAY_NAME = "Document Summary"
+
+
+def _llm_result_response(raw: dict, prompt_revid: str) -> "LLMResult":
+    """Build LLMResult from DB document, excluding _id and setting prompt_display_name for default."""
+    response_data = {k: raw[k] for k in LLMResult.model_fields if k in raw}
+    if prompt_revid == "default":
+        response_data["prompt_display_name"] = DEFAULT_PROMPT_DISPLAY_NAME
+    return LLMResult(**response_data)
+
 # LLM models
 class LLMChatModel(BaseModel):
     litellm_model: str
@@ -87,6 +98,7 @@ class LLMResult(BaseModel):
     is_verified: bool
     created_at: datetime
     updated_at: datetime
+    prompt_display_name: Optional[str] = None
 
 class UpdateLLMResultRequest(BaseModel):
     updated_llm_result: dict
@@ -242,8 +254,8 @@ async def get_llm_result(
             status_code=404,
             detail=f"LLM result not found for document_id: {document_id} prompt_revid: {prompt_revid} fallback: {fallback}"
         )
-    
-    return llm_result
+
+    return _llm_result_response(llm_result, prompt_revid)
 
 @llm_router.put("/v0/orgs/{organization_id}/llm/result/{document_id}", response_model=LLMResult)
 async def update_llm_result(
@@ -272,7 +284,8 @@ async def update_llm_result(
             is_verified=update.is_verified
         )
         
-        return await ad.llm.get_llm_result(analytiq_client, document_id, prompt_revid)
+        updated = await ad.llm.get_llm_result(analytiq_client, document_id, prompt_revid)
+        return _llm_result_response(updated, prompt_revid)
         
     except ValueError as e:
         raise HTTPException(

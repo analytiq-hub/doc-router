@@ -35,6 +35,7 @@ class LLMResult(BaseModel):
     is_verified: bool
     created_at: datetime
     updated_at: datetime
+    prompt_display_name: Optional[str] = None
 
 class UpdateLLMResultRequest(BaseModel):
     updated_llm_result: dict
