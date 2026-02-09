@@ -10,6 +10,12 @@ const PDFFormSidebar = dynamic(() => import('./PDFFormSidebar'), {
   ssr: false,
   loading: () => <div className="h-32 flex items-center justify-center">Loading forms...</div>
 });
+
+const AgentTab = dynamic(() => import('./agent/AgentTab'), {
+  ssr: false,
+  loading: () => <div className="h-32 flex items-center justify-center">Loading agent...</div>
+});
+
 import type { HighlightInfo } from '@/types/index';
 import { DocRouterOrgApi } from '@/utils/api';
 
@@ -20,7 +26,7 @@ interface Props {
   onClearHighlight?: () => void;
 }
 
-type SidebarMode = 'extraction' | 'forms';
+type SidebarMode = 'extraction' | 'forms' | 'agent';
 
 const PDFSidebar = ({ organizationId, id, onHighlight, onClearHighlight }: Props) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
@@ -75,6 +81,16 @@ const PDFSidebar = ({ organizationId, id, onHighlight, onClearHighlight }: Props
             >
               Forms
             </button>
+            <button
+              onClick={() => setActiveMode('agent')}
+              className={`px-3 py-1 text-sm rounded transition-colors ${
+                activeMode === 'agent'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-600 hover:text-gray-900'
+              }`}
+            >
+              Agent
+            </button>
           </div>
         </div>
       </div>
@@ -88,13 +104,15 @@ const PDFSidebar = ({ organizationId, id, onHighlight, onClearHighlight }: Props
             onHighlight={onHighlight}
             onClearHighlight={onClearHighlight}
           />
-        ) : (
+        ) : activeMode === 'forms' ? (
           <PDFFormSidebar
             organizationId={organizationId}
             id={id}
             onHighlight={onHighlight}
             onClearHighlight={onClearHighlight}
           />
+        ) : (
+          <AgentTab organizationId={organizationId} documentId={id} />
         )}
       </div>
     </div>
