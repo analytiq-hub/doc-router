@@ -221,6 +221,35 @@ async def _litellm_acompletion_with_retry(
     
     return await litellm.acompletion(**params)
 
+
+async def agent_completion(
+    model: str,
+    messages: list,
+    api_key: str,
+    response_format: Optional[Dict] = None,
+    aws_access_key_id: Optional[str] = None,
+    aws_secret_access_key: Optional[str] = None,
+    aws_region_name: Optional[str] = None,
+    tools: Optional[List[Dict]] = None,
+    tool_choice: Optional[Union[str, Dict]] = None
+):
+    """
+    Public wrapper for agent/chat use. Makes one LLM completion call with optional tools.
+    Each call checks SPU at the caller; this only performs the litellm call with retry.
+    """
+    return await _litellm_acompletion_with_retry(
+        model=model,
+        messages=messages,
+        api_key=api_key,
+        response_format=response_format,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        aws_region_name=aws_region_name,
+        tools=tools,
+        tool_choice=tool_choice,
+    )
+
+
 @stamina.retry(on=is_retryable_error)
 async def _litellm_acreate_file_with_retry(
     file: tuple,
