@@ -82,7 +82,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             />
           </div>
 
-          <div className="shrink-0 border-t border-gray-200 p-2 bg-white">
+          <div className="shrink-0 border-t border-gray-200 px-3 py-2 bg-white min-w-0">
               {showSettings && (
                 <div className="flex flex-wrap items-center gap-3 mb-2 pb-2 border-b border-gray-100">
                   <label className="flex items-center gap-2 text-sm">
@@ -112,11 +112,11 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
                   )}
                 </div>
               )}
-              <div className="flex gap-2">
+              <div className="flex gap-2 min-w-0">
                 <button
                   type="button"
                   onClick={() => setShowSettings((s) => !s)}
-                  className="p-1.5 rounded text-gray-500 hover:bg-gray-100"
+                  className="shrink-0 p-1.5 rounded text-gray-500 hover:bg-gray-100"
                   title="Settings"
                 >
                   <SettingsIcon fontSize="small" />
@@ -127,14 +127,14 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
                   placeholder="Message the agent…"
-                  className="flex-1 rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 min-w-0 rounded border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   disabled={state.loading}
                 />
                 <button
                   type="button"
                   onClick={handleSend}
                   disabled={!input.trim() || state.loading}
-                  className="p-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="shrink-0 p-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   title="Send"
                 >
                   <SendIcon fontSize="small" />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
 
 const PDFExtractionSidebar = dynamic(() => import('./PDFExtractionSidebar'), {
@@ -12,7 +12,6 @@ const PDFFormSidebar = dynamic(() => import('./PDFFormSidebar'), {
 });
 
 import type { HighlightInfo } from '@/types/index';
-import { DocRouterOrgApi } from '@/utils/api';
 
 interface Props {
   organizationId: string;
@@ -24,38 +23,13 @@ interface Props {
 type SidebarMode = 'extraction' | 'forms';
 
 const PDFSidebar = ({ organizationId, id, onHighlight, onClearHighlight }: Props) => {
-  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [activeMode, setActiveMode] = useState<SidebarMode>('extraction');
-  const [documentName, setDocumentName] = useState<string>('');
-
-  useEffect(() => {
-    const fetchDocumentName = async () => {
-      try {
-        const response = await docRouterOrgApi.getDocument({
-          documentId: id,
-          fileType: "pdf"
-        });
-        setDocumentName(response.document_name);
-      } catch (error) {
-        console.error('Error fetching document name:', error);
-        setDocumentName('Untitled Document');
-      }
-    };
-
-    fetchDocumentName();
-  }, [organizationId, id, docRouterOrgApi]);
 
   return (
     <div className="w-full h-full flex flex-col border-r border-black/10">
-      {/* Header with document name and tabs */}
-      <div className="h-12 min-h-[48px] flex items-center justify-between px-4 bg-gray-100 text-black font-bold border-b border-black/10">
-        <div className="flex items-center gap-4">
-          <div className="w-[200px] flex justify-end">
-            <span className="text-sm font-bold text-gray-900 truncate max-w-[180px] block">
-              {documentName || 'Loading...'}
-            </span>
-          </div>
-          <div className="flex bg-gray-200 rounded-md p-1">
+      {/* Header with Extraction / Forms tabs only */}
+      <div className="h-12 min-h-[48px] flex items-center px-4 bg-gray-100 text-black font-bold border-b border-black/10">
+        <div className="flex bg-gray-200 rounded-md p-1">
             <button
               onClick={() => setActiveMode('extraction')}
               className={`px-3 py-1 text-sm rounded transition-colors ${
@@ -77,7 +51,6 @@ const PDFSidebar = ({ organizationId, id, onHighlight, onClearHighlight }: Props
               Forms
             </button>
           </div>
-        </div>
       </div>
       
       {/* Content area */}
