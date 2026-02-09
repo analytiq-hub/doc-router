@@ -2,6 +2,7 @@
 
 import { use } from 'react';
 import dynamic from 'next/dynamic';
+import { useSearchParams } from 'next/navigation';
 import { Box } from '@mui/material';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useState, useEffect } from 'react';
@@ -24,6 +25,8 @@ interface PageProps {
 
 const PDFViewerPage = ({ params }: PageProps) => {
   const { organizationId, id } = use(params);
+  const searchParams = useSearchParams();
+  const showBoundingBoxesFromUrl = searchParams.has('bbox');
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showPdfPanel, setShowPdfPanel] = useState(true);
   const [highlightInfo, setHighlightInfo] = useState<HighlightInfo | undefined>();
@@ -94,6 +97,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
                   organizationId={organizationId} 
                   id={pdfId}
                   highlightInfo={highlightInfo}
+                  initialShowBoundingBoxes={showBoundingBoxesFromUrl}
                 />
               </Box>
             </Panel>

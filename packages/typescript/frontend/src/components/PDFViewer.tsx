@@ -88,9 +88,11 @@ interface PDFViewerProps {
   organizationId: string;
   id: string;
   highlightInfo?: HighlightInfo;
+  /** When true (e.g. from ?bbox), bounding boxes are shown and OCR blocks are loaded on mount. */
+  initialShowBoundingBoxes?: boolean;
 }
 
-const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
+const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes }: PDFViewerProps) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -183,7 +185,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   const [ocrText, setOcrText] = useState<string>('');
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
-  const [showBoundingBoxes, setShowBoundingBoxes] = useState(false);
+  const [showBoundingBoxes, setShowBoundingBoxes] = useState(!!initialShowBoundingBoxes);
   const [ocrBlocksForBoxes, setOcrBlocksForBoxes] = useState<OCRBlock[] | null>(null);
   const [fitMode, setFitMode] = useState<'width' | 'page' | 'manual'>('width');
 
@@ -503,6 +505,34 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
     }
     handleMenuClose();
   }, [showBoundingBoxes, ocrBlocksForBoxes, fileName, id, docRouterOrgApi, handleMenuClose]);
+
+  // Sync URL ?bbox into menu state when user navigates with bbox param
+  useEffect(() => {
+    if (initialShowBoundingBoxes) {
+      setShowBoundingBoxes(true);
+    }
+  }, [initialShowBoundingBoxes]);
+
+  // When bounding boxes are on (e.g. from ?bbox) and we have a file name, load OCR blocks if not yet loaded
+  useEffect(() => {
+    if (!showBoundingBoxes || ocrBlocksForBoxes !== null || !isOCRSupported(fileName)) return;
+    let cancelled = false;
+    docRouterOrgApi.getOCRBlocks({ documentId: id }).then(
+      (blocks) => {
+        if (!cancelled) setOcrBlocksForBoxes(blocks);
+      },
+      (err) => {
+        if (cancelled) return;
+        if (isOcrNotReadyError(err)) {
+          toast.info('OCR data not yet available');
+        } else {
+          console.error('Error loading OCR blocks:', err);
+          toast.error('Failed to load OCR bounding boxes');
+        }
+      }
+    );
+    return () => { cancelled = true; };
+  }, [showBoundingBoxes, ocrBlocksForBoxes, fileName, id, docRouterOrgApi]);
 
   const handleDownloadOcrText = async () => {
     if (!isOCRSupported(fileName)) {
