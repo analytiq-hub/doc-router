@@ -526,13 +526,13 @@ async def test_kb_search_with_data(mock_embedding, mock_get_model_info, test_db,
     
     async def mock_embedding_side_effect(*args, **kwargs):
         inputs = kwargs.get("input", [])
-        mock_response = AsyncMock()
+        mock_response = Mock()
         mock_response.data = [
             {"embedding": create_mock_embedding_for_text(text)}
             for text in inputs
         ]
         return mock_response
-    
+
     mock_embedding.side_effect = mock_embedding_side_effect
     
     try:
