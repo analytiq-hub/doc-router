@@ -6,7 +6,11 @@ import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from analytiq_data.agent.agent_loop import run_agent_turn, run_agent_approve
+from analytiq_data.agent.agent_loop import (
+    run_agent_turn,
+    run_agent_approve,
+    _sanitize_messages_for_llm,
+)
 from analytiq_data.agent.session import set_turn_state, get_turn_state, clear_turn_state, generate_turn_id
 
 
@@ -115,6 +119,38 @@ async def test_run_agent_turn_returns_turn_id_when_tool_calls_and_not_auto_appro
     assert result.get("text") == "I will create a schema."
     assert len(result.get("tool_calls", [])) == 1
     assert result["tool_calls"][0]["name"] == "help_schemas"
+
+
+def test_sanitize_messages_strips_tool_calls_without_results():
+    """After navigating away and back, thread can have assistant+tool_calls with no tool results."""
+    messages = [
+        {"role": "user", "content": "Create a tag"},
+        {"role": "assistant", "content": "I'll create it.", "tool_calls": [{"id": "toolu_abc", "function": {"name": "create_tag", "arguments": "{}"}}]},
+        {"role": "user", "content": "ok"},
+    ]
+    out = _sanitize_messages_for_llm(messages)
+    assert len(out) == 3
+    assert out[0] == {"role": "user", "content": "Create a tag"}
+    assert out[1]["role"] == "assistant"
+    assert "tool_calls" not in out[1]
+    assert out[1]["content"] == "I'll create it."
+    assert out[2] == {"role": "user", "content": "ok"}
+
+
+def test_sanitize_messages_keeps_tool_calls_when_results_present():
+    """When tool results exist immediately after assistant+tool_calls, keep the block."""
+    messages = [
+        {"role": "user", "content": "Create a tag"},
+        {"role": "assistant", "content": "I'll create it.", "tool_calls": [{"id": "toolu_abc", "function": {"name": "create_tag", "arguments": "{}"}}]},
+        {"role": "tool", "tool_call_id": "toolu_abc", "content": "Created."},
+        {"role": "user", "content": "thanks"},
+    ]
+    out = _sanitize_messages_for_llm(messages)
+    assert len(out) == 4
+    assert out[1]["role"] == "assistant"
+    assert out[1].get("tool_calls") is not None
+    assert out[2] == {"role": "tool", "tool_call_id": "toolu_abc", "content": "Created."}
+    assert out[3] == {"role": "user", "content": "thanks"}
 
 
 @pytest.mark.asyncio

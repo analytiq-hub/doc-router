@@ -28,6 +28,67 @@ def _tool_call_to_dict(tc: Any) -> dict:
     return {"id": tid, "name": name, "arguments": args}
 
 
+def _tool_call_ids(msg: dict) -> list[str]:
+    """Extract tool call ids from an assistant message."""
+    tcs = msg.get("tool_calls") or []
+    return [
+        tc.get("id") if isinstance(tc, dict) else getattr(tc, "id", "")
+        for tc in tcs
+        if tc
+    ]
+
+
+def _sanitize_messages_for_llm(messages: list[dict]) -> list[dict]:
+    """
+    Ensure every assistant message with tool_calls is immediately followed by
+    tool_result (role "tool") messages. If not (e.g. after reload from thread),
+    drop tool_calls from that assistant message so the API receives a valid sequence.
+    """
+    out: list[dict] = []
+    i = 0
+    while i < len(messages):
+        m = messages[i]
+        role = m.get("role")
+        if role != "assistant" or not m.get("tool_calls"):
+            # Forward user, tool, or assistant-without-tool-calls as-is
+            if role == "user" and m.get("content") is not None:
+                out.append({"role": "user", "content": m.get("content")})
+            elif role == "assistant":
+                out.append({"role": "assistant", "content": m.get("content") or ""})
+            elif role == "tool":
+                out.append({"role": "tool", "tool_call_id": m["tool_call_id"], "content": m["content"]})
+            i += 1
+            continue
+        # Assistant with tool_calls: need matching tool results next
+        want_ids = set(_tool_call_ids(m))
+        if not want_ids:
+            out.append({"role": "assistant", "content": m.get("content")})
+            i += 1
+            continue
+        # Peek ahead for role "tool" messages that cover want_ids
+        got_ids: set[str] = set()
+        j = i + 1
+        while j < len(messages) and messages[j].get("role") == "tool":
+            got_ids.add(messages[j].get("tool_call_id") or "")
+            j += 1
+        if got_ids >= want_ids:
+            # Full set of tool results present; append assistant + tool messages
+            out.append({
+                "role": "assistant",
+                "content": m.get("content"),
+                "tool_calls": m["tool_calls"],
+            })
+            i += 1
+            while i < len(messages) and messages[i].get("role") == "tool":
+                out.append({"role": "tool", "tool_call_id": messages[i]["tool_call_id"], "content": messages[i]["content"]})
+                i += 1
+        else:
+            # Missing tool results (e.g. user navigated away and came back); send assistant as content-only
+            out.append({"role": "assistant", "content": m.get("content") or ""})
+            i += 1
+    return out
+
+
 async def _execute_tool_calls(
     context: dict,
     tool_calls: list[dict],
@@ -94,20 +155,21 @@ async def run_agent_turn(
     system_content = await build_system_message(
         analytiq_client, organization_id, document_id, working_state, resolved_mentions
     )
+    sanitized = _sanitize_messages_for_llm(messages)
     llm_messages = [{"role": "system", "content": system_content}]
-    for m in messages:
+    for m in sanitized:
         role = m.get("role")
         content = m.get("content")
-        if role == "user" and content:
+        if role == "user" and content is not None:
             llm_messages.append({"role": "user", "content": content})
-        elif role == "assistant" and content:
-            llm_messages.append({"role": "assistant", "content": content})
         elif role == "assistant" and m.get("tool_calls"):
             llm_messages.append({
                 "role": "assistant",
                 "content": m.get("content"),
                 "tool_calls": m["tool_calls"],
             })
+        elif role == "assistant" and content is not None:
+            llm_messages.append({"role": "assistant", "content": content})
         elif role == "tool":
             llm_messages.append({"role": "tool", "tool_call_id": m["tool_call_id"], "content": m["content"]})
 
