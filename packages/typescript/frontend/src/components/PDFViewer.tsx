@@ -29,6 +29,7 @@ import { saveAs } from 'file-saver';
 import { PanelGroup, Panel } from 'react-resizable-panels';
 import CheckIcon from '@mui/icons-material/Check';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
+import CropFreeIcon from '@mui/icons-material/CropFree';
 import { OCRProvider } from '@/contexts/OCRContext';
 import type { OCRBlock } from '@docrouter/sdk';
 import type { HighlightInfo } from '@/types/index';
@@ -182,6 +183,8 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
   const [ocrText, setOcrText] = useState<string>('');
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
+  const [showBoundingBoxes, setShowBoundingBoxes] = useState(false);
+  const [ocrBlocksForBoxes, setOcrBlocksForBoxes] = useState<OCRBlock[] | null>(null);
   const [fitMode, setFitMode] = useState<'width' | 'page' | 'manual'>('width');
 
   const formatFileSize = (bytes: number): string => {
@@ -481,6 +484,26 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
     handleMenuClose();
   }, [handleMenuClose]);
 
+  const handleBoundingBoxesToggle = useCallback(async () => {
+    const next = !showBoundingBoxes;
+    setShowBoundingBoxes(next);
+    if (next && ocrBlocksForBoxes === null && isOCRSupported(fileName)) {
+      try {
+        const blocks = await docRouterOrgApi.getOCRBlocks({ documentId: id });
+        setOcrBlocksForBoxes(blocks);
+      } catch (err) {
+        if (isOcrNotReadyError(err)) {
+          toast.info('OCR data not yet available');
+        } else {
+          console.error('Error loading OCR blocks:', err);
+          toast.error('Failed to load OCR bounding boxes');
+        }
+        // Leave null so user can retry by toggling off and on
+      }
+    }
+    handleMenuClose();
+  }, [showBoundingBoxes, ocrBlocksForBoxes, fileName, id, docRouterOrgApi, handleMenuClose]);
+
   const handleDownloadOcrText = async () => {
     if (!isOCRSupported(fileName)) {
       toast.error('OCR is not supported for this file type');
@@ -623,6 +646,51 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
       </div>
     );
   }, [highlightInfo]);
+
+  // Render OCR word bounding boxes overlay (when "Bounding Boxes" is on and OCR has completed)
+  const renderBoundingBoxes = useCallback((page: number) => {
+    if (!showBoundingBoxes || !ocrBlocksForBoxes?.length) return null;
+    const wordBlocks = ocrBlocksForBoxes.filter(
+      (b) => b.BlockType === 'WORD' && b.Page === page
+    );
+    if (!wordBlocks.length) return null;
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          width: '100%',
+          height: '100%',
+          top: 0,
+          left: 0,
+          pointerEvents: 'none',
+          zIndex: 2,
+        }}
+      >
+        {wordBlocks.map((block, index) => {
+          const { Width, Height, Left, Top } = block.Geometry.BoundingBox;
+          const wordText = block.Text ?? '';
+          return (
+            <Tooltip key={`${block.Id}-${index}`} title={wordText} arrow placement="top">
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `${Left * 100}%`,
+                  top: `${Top * 100}%`,
+                  width: `${Width * 100}%`,
+                  height: `${Height * 100}%`,
+                  border: '1px solid rgba(33, 150, 243, 0.8)',
+                  backgroundColor: 'rgba(33, 150, 243, 0.08)',
+                  boxSizing: 'border-box',
+                  pointerEvents: 'auto',
+                  cursor: 'default',
+                }}
+              />
+            </Tooltip>
+          );
+        })}
+      </div>
+    );
+  }, [showBoundingBoxes, ocrBlocksForBoxes]);
 
   // Add this near the other state declarations
   const [lastSearch, setLastSearch] = useState<{
@@ -863,6 +931,14 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
             Show OCR Text
             {showOcr && <CheckIcon fontSize="small" sx={{ ml: 1 }} />}
           </StyledMenuItem>
+          <StyledMenuItem
+            onClick={handleBoundingBoxesToggle}
+            disabled={!isOCRSupported(fileName)}
+          >
+            <CropFreeIcon fontSize="small" sx={{ mr: 1 }} />
+            Bounding Boxes
+            {showBoundingBoxes && <CheckIcon fontSize="small" sx={{ ml: 1 }} />}
+          </StyledMenuItem>
           <StyledMenuItem onClick={handleDownloadOcrText}>
             <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
             Download OCR Text
@@ -929,6 +1005,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo }: PDFViewerProps) => {
                         }}
                       >
                         {renderHighlights(index + 1)}
+                        {renderBoundingBoxes(index + 1)}
                       </Page>
                       {index < numPages! - 1 && <hr style={{ border: '2px solid black' }} />}
                     </div>
