@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { apiClient, getApiErrorMsg } from '@/utils/api';
 
 export interface AgentChatMessage {
@@ -16,6 +16,13 @@ export interface PendingToolCall {
   approved?: boolean;
 }
 
+export interface AgentThreadSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface AgentChatState {
   messages: AgentChatMessage[];
   pendingTurnId: string | null;
@@ -27,12 +34,33 @@ export interface AgentChatState {
   autoApprove: boolean;
   model: string;
   availableModels: string[];
+  /** Current thread id (null = new unsaved chat). */
+  threadId: string | null;
+  /** List of threads for this document. */
+  threads: AgentThreadSummary[];
+  /** Loading threads list or a single thread. */
+  threadsLoading: boolean;
 }
 
 const DEFAULT_MODEL = 'claude-sonnet-4-20250514';
 
-function getChatUrl(organizationId: string, documentId: string, path: 'chat' | 'chat/approve') {
-  return `/v0/orgs/${organizationId}/documents/${documentId}/${path}`;
+function getChatUrl(organizationId: string, documentId: string, path: string) {
+  const base = `/v0/orgs/${organizationId}/documents/${documentId}`;
+  return path === 'threads' ? `${base}/chat/threads` : `${base}/${path}`;
+}
+
+/** Normalize API message to frontend shape; tool_calls may be { id, name, arguments } or { id, type, function }. */
+function messageFromApi(m: { role: string; content?: string | null; tool_calls?: Array<{ id: string; name?: string; arguments?: string; function?: { name: string; arguments: string } }> }): AgentChatMessage {
+  const toolCalls = m.tool_calls?.map((tc) => ({
+    id: tc.id,
+    name: tc.name ?? tc.function?.name ?? '',
+    arguments: tc.arguments ?? tc.function?.arguments ?? '{}',
+  }));
+  return {
+    role: m.role as 'user' | 'assistant',
+    content: m.content ?? null,
+    toolCalls: toolCalls?.length ? toolCalls : undefined,
+  };
 }
 
 export function useAgentChat(organizationId: string, documentId: string) {
@@ -45,10 +73,105 @@ export function useAgentChat(organizationId: string, documentId: string) {
   const [autoApprove, setAutoApprove] = useState(false);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [threads, setThreads] = useState<AgentThreadSummary[]>([]);
+  const [threadsLoading, setThreadsLoading] = useState(false);
+
+  const loadThreads = useCallback(async () => {
+    setThreadsLoading(true);
+    try {
+      const { data } = await apiClient.get<AgentThreadSummary[]>(
+        getChatUrl(organizationId, documentId, 'threads')
+      );
+      setThreads(Array.isArray(data) ? data : []);
+    } catch {
+      setThreads([]);
+    } finally {
+      setThreadsLoading(false);
+    }
+  }, [organizationId, documentId]);
+
+  const loadThread = useCallback(
+    async (id: string) => {
+      setThreadsLoading(true);
+      setError(null);
+      try {
+        const { data } = await apiClient.get<{
+          id: string;
+          title: string;
+          messages: Array<{ role: string; content?: string | null; tool_calls?: Array<{ id: string; name?: string; arguments?: string; function?: { name: string; arguments: string } }> }>;
+          extraction: Record<string, unknown>;
+        }>(`${getChatUrl(organizationId, documentId, 'threads')}/${id}`);
+        setThreadId(data.id);
+        setMessages((data.messages ?? []).map(messageFromApi));
+        setExtraction(data.extraction && Object.keys(data.extraction).length > 0 ? data.extraction : null);
+        setPendingTurnId(null);
+        setPendingToolCalls([]);
+      } catch (err) {
+        setError(getApiErrorMsg(err) ?? 'Failed to load conversation');
+      } finally {
+        setThreadsLoading(false);
+      }
+    },
+    [organizationId, documentId]
+  );
+
+  const createThread = useCallback(async (): Promise<string | null> => {
+    try {
+      const { data } = await apiClient.post<{ thread_id: string }>(
+        getChatUrl(organizationId, documentId, 'threads'),
+        {}
+      );
+      const id = data.thread_id;
+      setThreads((prev) => [{ id, title: 'New chat', created_at: new Date().toISOString(), updated_at: new Date().toISOString() }, ...prev]);
+      return id;
+    } catch {
+      return null;
+    }
+  }, [organizationId, documentId]);
+
+  const deleteThread = useCallback(
+    async (id: string) => {
+      try {
+        await apiClient.delete(`${getChatUrl(organizationId, documentId, 'threads')}/${id}`);
+        setThreads((prev) => prev.filter((t) => t.id !== id));
+        if (threadId === id) {
+          setThreadId(null);
+          setMessages([]);
+          setExtraction(null);
+          setPendingTurnId(null);
+          setPendingToolCalls([]);
+        }
+      } catch (err) {
+        setError(getApiErrorMsg(err) ?? 'Failed to delete conversation');
+      }
+    },
+    [organizationId, documentId, threadId]
+  );
+
+  const startNewChat = useCallback(() => {
+    setThreadId(null);
+    setMessages([]);
+    setExtraction(null);
+    setPendingTurnId(null);
+    setPendingToolCalls([]);
+    setError(null);
+  }, []);
 
   const sendMessage = useCallback(
     async (content: string) => {
       if (!content.trim() || loading) return;
+
+      let currentThreadId = threadId;
+      if (!currentThreadId) {
+        const newId = await createThread();
+        if (!newId) {
+          setError('Failed to create conversation');
+          return;
+        }
+        currentThreadId = newId;
+        setThreadId(newId);
+      }
 
       const userMsg: AgentChatMessage = { role: 'user', content: content.trim() };
       setMessages((prev) => [...prev, userMsg]);
@@ -82,6 +205,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           model,
           stream: false,
           auto_approve: autoApprove,
+          thread_id: currentThreadId,
         });
 
         if (data.working_state?.extraction != null) {
@@ -104,6 +228,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           setPendingTurnId(null);
           setPendingToolCalls([]);
         }
+        await loadThreads();
       } catch (err) {
         const msg = getApiErrorMsg(err) ?? 'Failed to send message';
         setError(msg);
@@ -112,7 +237,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
         setLoading(false);
       }
     },
-    [organizationId, documentId, messages, model, autoApprove, loading]
+    [organizationId, documentId, messages, model, autoApprove, loading, threadId, createThread, loadThreads]
   );
 
   const approveToolCalls = useCallback(
@@ -131,6 +256,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
         }>(getChatUrl(organizationId, documentId, 'chat/approve'), {
           turn_id: pendingTurnId,
           approvals,
+          thread_id: threadId ?? undefined,
         });
 
         if (data.working_state?.extraction != null) {
@@ -153,13 +279,14 @@ export function useAgentChat(organizationId: string, documentId: string) {
             data.tool_calls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments }))
           );
         }
+        if (threadId) await loadThreads();
       } catch (err) {
         setError(getApiErrorMsg(err) ?? 'Failed to submit approvals');
       } finally {
         setLoading(false);
       }
     },
-    [organizationId, documentId, pendingTurnId, loading]
+    [organizationId, documentId, pendingTurnId, loading, threadId, loadThreads]
   );
 
   const loadModels = useCallback(async () => {
@@ -176,6 +303,10 @@ export function useAgentChat(organizationId: string, documentId: string) {
     }
   }, [organizationId, model]);
 
+  useEffect(() => {
+    loadThreads();
+  }, [loadThreads]);
+
   const state: AgentChatState = {
     messages,
     pendingTurnId,
@@ -186,6 +317,9 @@ export function useAgentChat(organizationId: string, documentId: string) {
     autoApprove,
     model,
     availableModels,
+    threadId,
+    threads,
+    threadsLoading,
   };
 
   return {
@@ -196,5 +330,10 @@ export function useAgentChat(organizationId: string, documentId: string) {
     setModel,
     setError,
     loadModels,
+    loadThreads,
+    loadThread,
+    createThread,
+    deleteThread,
+    startNewChat,
   };
 }
