@@ -83,6 +83,55 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "list_documents",
+            "description": "List documents in the organization with optional filters. Same as MCP list_documents.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "skip": {"type": "integer", "description": "Number of documents to skip", "default": 0},
+                    "limit": {"type": "integer", "description": "Max documents to return (1-100)", "default": 10},
+                    "name_search": {"type": "string", "description": "Search term for document names"},
+                    "tag_ids": {"type": "array", "items": {"type": "string"}, "description": "Filter by tag IDs (all must match)"},
+                    "metadata_search": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Metadata key-value pairs to filter by"},
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "update_document",
+            "description": "Update document metadata: name, tag_ids, and/or metadata. Same as MCP update_document. Omit document_id to update the current document.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string", "description": "Document ID (optional; defaults to current document)"},
+                    "document_name": {"type": "string", "description": "New display name for the document"},
+                    "tag_ids": {"type": "array", "items": {"type": "string"}, "description": "List of tag IDs to set on the document"},
+                    "metadata": {"type": "object", "additionalProperties": {"type": "string"}, "description": "Key-value metadata to set (string values only)"},
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_document",
+            "description": "Delete a document and its files. Same as MCP delete_document. Omit document_id to delete the current document.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "document_id": {"type": "string", "description": "Document ID (optional; defaults to current document)"},
+                },
+                "additionalProperties": False,
+            },
+        },
+    },
     # Schema
     {
         "type": "function",
@@ -378,6 +427,9 @@ _TOOL_HANDLERS: dict[str, Callable] = {
     "run_extraction": agent_tools.run_extraction,
     "get_extraction_result": agent_tools.get_extraction_result,
     "update_extraction_field": agent_tools.update_extraction_field,
+    "list_documents": agent_tools.list_documents,
+    "update_document": agent_tools.update_document,
+    "delete_document": agent_tools.delete_document,
     "create_schema": agent_tools.create_schema,
     "get_schema": agent_tools.get_schema,
     "list_schemas": agent_tools.list_schemas,

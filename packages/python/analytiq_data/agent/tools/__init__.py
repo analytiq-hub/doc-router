@@ -1,6 +1,7 @@
-# Agent tool implementations (schema, prompt, tag, extraction, help).
+# Agent tool implementations (schema, prompt, tag, extraction, document, help).
 # Each module exports async functions that take (context, params) and return a result dict.
 
+from .document_tools import list_documents, update_document, delete_document
 from .extraction_tools import (
     get_ocr_text,
     run_extraction,
@@ -33,6 +34,9 @@ from .tag_tools import (
 from .help_tools import help_schemas, help_prompts
 
 __all__ = [
+    "list_documents",
+    "update_document",
+    "delete_document",
     "get_ocr_text",
     "run_extraction",
     "get_extraction_result",
