@@ -138,11 +138,19 @@ export default function ThreadDropdown({
                     {GROUP_LABELS[key]}
                   </div>
                   {group.map((t) => (
-                    <button
+                    <div
                       key={t.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       onClick={() => { onSelectThread(t); setOpen(false); }}
-                      className={`flex items-center gap-2 w-full px-3 py-2 text-left text-sm group ${
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onSelectThread(t);
+                          setOpen(false);
+                        }
+                      }}
+                      className={`flex items-center gap-2 w-full px-3 py-2 text-left text-sm group cursor-pointer ${
                         t.id === threadId ? 'bg-blue-50 text-blue-900' : 'hover:bg-gray-50 text-gray-700'
                       }`}
                     >
@@ -156,7 +164,7 @@ export default function ThreadDropdown({
                       >
                         <DeleteOutlineIcon sx={{ fontSize: 16 }} />
                       </button>
-                    </button>
+                    </div>
                   ))}
                 </div>
               ))
