@@ -134,6 +134,42 @@ async def append_messages(
     return result.modified_count > 0
 
 
+async def truncate_and_append_messages(
+    analytiq_client: Any,
+    thread_id: str,
+    organization_id: str,
+    keep_message_count: int,
+    new_messages: list[dict],
+    extraction: dict | None = None,
+) -> bool:
+    """
+    Keep only the first keep_message_count messages in the thread, then append new_messages.
+    Used when the user resubmits from a prior turn so the persisted thread forgets later turns.
+    """
+    if keep_message_count < 0:
+        keep_message_count = 0
+    db = ad.common.get_async_db(analytiq_client)
+    coll = db[COLLECTION]
+    doc = await coll.find_one(
+        {"_id": ObjectId(thread_id), "organization_id": organization_id},
+        projection={"messages": 1},
+    )
+    if not doc:
+        return False
+    messages = doc.get("messages", [])
+    kept = messages[:keep_message_count] if messages else []
+    final_messages = kept + list(new_messages)
+    now = datetime.now(UTC)
+    update: dict = {"$set": {"messages": final_messages, "updated_at": now}}
+    if extraction is not None:
+        update["$set"]["extraction"] = extraction
+    result = await coll.update_one(
+        {"_id": ObjectId(thread_id), "organization_id": organization_id},
+        update,
+    )
+    return result.modified_count > 0
+
+
 async def update_thread_title(
     analytiq_client: Any,
     thread_id: str,

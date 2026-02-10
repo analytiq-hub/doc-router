@@ -36,6 +36,10 @@ class ChatRequest(BaseModel):
     stream: bool = Field(default=False, description="Stream response (SSE)")
     auto_approve: bool = Field(default=False, description="Execute all tool calls without pausing")
     thread_id: str | None = Field(default=None, description="If set, append user+assistant messages to this thread after success")
+    truncate_thread_to_message_count: int | None = Field(
+        default=None,
+        description="If set with thread_id, keep only this many messages in the thread before appending (for resubmit-from-turn).",
+    )
 
 
 class ApproveRequest(BaseModel):
@@ -151,13 +155,23 @@ async def post_chat(
             "tool_calls": result.get("tool_calls"),
         }
         extraction = (result.get("working_state") or {}).get("extraction")
-        await ad.agent.agent_threads.append_messages(
-            analytiq_client,
-            request.thread_id,
-            organization_id,
-            [user_msg, assistant_msg],
-            extraction=extraction,
-        )
+        if request.truncate_thread_to_message_count is not None:
+            await ad.agent.agent_threads.truncate_and_append_messages(
+                analytiq_client,
+                request.thread_id,
+                organization_id,
+                request.truncate_thread_to_message_count,
+                [user_msg, assistant_msg],
+                extraction=extraction,
+            )
+        else:
+            await ad.agent.agent_threads.append_messages(
+                analytiq_client,
+                request.thread_id,
+                organization_id,
+                [user_msg, assistant_msg],
+                extraction=extraction,
+            )
         # Optionally set title from first user message
         thread_doc = await ad.agent.agent_threads.get_thread(
             analytiq_client, request.thread_id, organization_id

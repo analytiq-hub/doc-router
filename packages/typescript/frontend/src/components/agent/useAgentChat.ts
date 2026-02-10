@@ -44,6 +44,23 @@ export interface AgentChatState {
 
 const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
 
+/**
+ * Returns messages that come before the given turn index (turns 0..turnIndex-1 only).
+ * Used when resubmitting from a turn: we pass only this context to the API so the model
+ * never sees the reasked question or any answers after it (newer answers are dropped).
+ */
+export function getMessagesBeforeTurn(messages: AgentChatMessage[], turnIndex: number): AgentChatMessage[] {
+  if (turnIndex <= 0) return [];
+  let userCount = 0;
+  for (let i = 0; i < messages.length; i++) {
+    if (messages[i].role === 'user') {
+      if (userCount === turnIndex) return messages.slice(0, i);
+      userCount++;
+    }
+  }
+  return messages.slice(0, messages.length);
+}
+
 function getChatUrl(organizationId: string, documentId: string, path: string) {
   const base = `/v0/orgs/${organizationId}/documents/${documentId}`;
   return path === 'threads' ? `${base}/chat/threads` : `${base}/${path}`;
@@ -240,6 +257,95 @@ export function useAgentChat(organizationId: string, documentId: string) {
     [organizationId, documentId, messages, model, autoApprove, loading, threadId, createThread, loadThreads]
   );
 
+  /** Send a new message with a specific history (e.g. after editing and resubmitting from a prior turn). Truncates conversation to history then sends content. */
+  const sendMessageWithHistory = useCallback(
+    async (history: AgentChatMessage[], content: string) => {
+      if (!content.trim() || loading) return;
+
+      const trimmed = content.trim();
+      let currentThreadId = threadId;
+      if (!currentThreadId) {
+        const newId = await createThread();
+        if (!newId) {
+          setError('Failed to create conversation');
+          return;
+        }
+        currentThreadId = newId;
+        setThreadId(newId);
+      }
+
+      const userMsg: AgentChatMessage = { role: 'user', content: trimmed };
+      setMessages([...history, userMsg]);
+      setError(null);
+      setLoading(true);
+
+      const messageListForApi = [
+        ...history.map((m) => ({
+          role: m.role,
+          content: m.content ?? '',
+          ...(m.toolCalls?.length && {
+            tool_calls: m.toolCalls.map((tc) => ({
+              id: tc.id,
+              type: 'function' as const,
+              function: { name: tc.name, arguments: tc.arguments },
+            })),
+          }),
+        })),
+        { role: 'user' as const, content: trimmed },
+      ];
+
+      const body: Record<string, unknown> = {
+        messages: messageListForApi,
+        mentions: [],
+        model,
+        stream: false,
+        auto_approve: autoApprove,
+        thread_id: currentThreadId,
+      };
+      if (currentThreadId && history.length > 0) {
+        body.truncate_thread_to_message_count = history.length;
+      }
+
+      try {
+        const { data } = await apiClient.post<{
+          text?: string;
+          turn_id?: string;
+          tool_calls?: Array<{ id: string; name: string; arguments: string }>;
+          working_state?: { extraction?: Record<string, unknown> };
+        }>(getChatUrl(organizationId, documentId, 'chat'), body);
+
+        if (data.working_state?.extraction != null) {
+          setExtraction(data.working_state.extraction);
+        }
+
+        const assistantMsg: AgentChatMessage = {
+          role: 'assistant',
+          content: data.text ?? null,
+          toolCalls: data.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? undefined,
+        };
+        setMessages((prev) => [...prev, assistantMsg]);
+
+        if (data.turn_id && data.tool_calls?.length) {
+          setPendingTurnId(data.turn_id);
+          setPendingToolCalls(
+            data.tool_calls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments }))
+          );
+        } else {
+          setPendingTurnId(null);
+          setPendingToolCalls([]);
+        }
+        await loadThreads();
+      } catch (err) {
+        const msg = getApiErrorMsg(err) ?? 'Failed to send message';
+        setError(msg);
+        setMessages([...history]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [organizationId, documentId, model, autoApprove, loading, threadId, createThread, loadThreads]
+  );
+
   const approveToolCalls = useCallback(
     async (approvals: Array<{ call_id: string; approved: boolean }>) => {
       if (!pendingTurnId || loading) return;
@@ -325,6 +431,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
   return {
     state,
     sendMessage,
+    sendMessageWithHistory,
     approveToolCalls,
     setAutoApprove,
     setModel,

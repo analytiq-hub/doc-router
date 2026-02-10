@@ -28,14 +28,14 @@ export default function AgentMessage({
 
   return (
     <div
-      className={`flex w-full ${isUser ? 'justify-end' : 'justify-start'}`}
+      className="w-full"
       data-testid={isUser ? 'agent-message-user' : 'agent-message-assistant'}
     >
       <div
-        className={`max-w-[85%] rounded-lg px-3 py-2 ${
+        className={`w-full rounded-lg px-3 py-2 ${
           isUser
-            ? 'bg-blue-100 text-blue-900'
-            : 'bg-gray-100 text-gray-900 border border-gray-200'
+            ? 'bg-gray-50 text-gray-900 border border-gray-200'
+            : 'bg-white text-gray-900 border border-gray-200'
         }`}
       >
         {message.content && (
