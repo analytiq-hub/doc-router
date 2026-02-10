@@ -67,7 +67,7 @@ export default function AgentChat({
     <div className="flex flex-col h-full overflow-hidden">
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
         {messages.length === 0 && !loading && (
-          <div className="text-gray-500 text-sm text-center py-8">
+          <div className="text-gray-500 text-xs text-center py-8">
             Send a message to start. Ask the agent to create a schema, create a prompt, or run extraction on this document.
           </div>
         )}
@@ -105,13 +105,13 @@ export default function AgentChat({
         )}
         {loading && (
           <div className="flex justify-start">
-            <div className="rounded-lg px-3 py-2 bg-gray-100 border border-gray-200 text-gray-500 text-sm">
+            <div className="rounded-lg px-3 py-2 bg-gray-100 border border-gray-200 text-gray-500 text-xs">
               Thinking…
             </div>
           </div>
         )}
         {error && (
-          <div className="rounded-lg px-3 py-2 bg-red-50 border border-red-200 text-red-700 text-sm">
+          <div className="rounded-lg px-3 py-2 bg-red-50 border border-red-200 text-red-700 text-xs">
             {error}
           </div>
         )}

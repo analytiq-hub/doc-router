@@ -39,7 +39,7 @@ export default function AgentMessage({
         }`}
       >
         {message.content && (
-          <div className="prose prose-sm max-w-none prose-p:my-1 prose-ul:my-1 prose-pre:my-1 prose-pre:text-xs">
+          <div className="prose prose-sm max-w-none text-[13px] prose-p:my-1 prose-ul:my-1 prose-pre:my-1 prose-pre:text-xs">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
           </div>
         )}
