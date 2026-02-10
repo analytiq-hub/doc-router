@@ -63,7 +63,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
     if (!showLeftPanel && !showChatPanel) return { left: 0, main: 100, right: 0 };
     if (!showLeftPanel) return { left: 0, main: 65, right: 35 };
     if (!showChatPanel) return { left: 30, main: 70, right: 0 };
-    return { left: 25, main: 50, right: 25 };
+    return { left: 25, main: 45, right: 30 };
   };
 
   const defaultSizes = getDefaultSizes();
