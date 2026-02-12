@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 # Drop unsupported provider/model params automatically (e.g., O-series temperature)
 litellm.drop_params = True
+# When thinking_blocks missing in assistant msg, drop thinking param (Anthropic + tools workaround)
+litellm.modify_params = True
 
 # Cache control directive for Anthropic/Bedrock prompt caching (ephemeral cache)
 _PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
@@ -207,6 +209,27 @@ def is_retryable_error(exception) -> bool:
     
     return False
 
+def _extract_thinking_from_response(message: Any) -> str | None:
+    """
+    Extract thinking/reasoning text from LLM response for display.
+    Uses reasoning_content (all providers) or concatenates thinking_blocks (Anthropic).
+    """
+    reasoning = getattr(message, "reasoning_content", None)
+    if reasoning and isinstance(reasoning, str) and reasoning.strip():
+        return reasoning.strip()
+    blocks = getattr(message, "thinking_blocks", None)
+    if blocks and isinstance(blocks, list):
+        parts = []
+        for b in blocks:
+            if isinstance(b, dict) and b.get("thinking"):
+                parts.append(str(b["thinking"]).strip())
+            elif hasattr(b, "thinking"):
+                parts.append(str(getattr(b, "thinking", "")).strip())
+        if parts:
+            return "\n\n".join(p for p in parts if p)
+    return None
+
+
 @stamina.retry(on=is_retryable_error)
 async def _litellm_acompletion_with_retry(
     model: str,
@@ -217,7 +240,8 @@ async def _litellm_acompletion_with_retry(
     aws_secret_access_key: Optional[str] = None,
     aws_region_name: Optional[str] = None,
     tools: Optional[List[Dict]] = None,
-    tool_choice: Optional[Union[str, Dict]] = None
+    tool_choice: Optional[Union[str, Dict]] = None,
+    thinking: Optional[Dict] = None,
 ):
     """
     Make an LLM call with stamina retry mechanism.
@@ -240,6 +264,9 @@ async def _litellm_acompletion_with_retry(
         Exception: If the call fails after all retries
     """
     temperature = get_temperature(model)
+    if thinking is not None:
+        # Anthropic requires temperature=1 when extended thinking is enabled
+        temperature = 1.0
     messages_to_send = _apply_prompt_caching(model, messages)
     params = {
         "model": model,
@@ -249,14 +276,14 @@ async def _litellm_acompletion_with_retry(
         "response_format": response_format,
         "aws_access_key_id": aws_access_key_id,
         "aws_secret_access_key": aws_secret_access_key,
-        "aws_region_name": aws_region_name
+        "aws_region_name": aws_region_name,
     }
-    
-    # Add tools if provided
     if tools:
         params["tools"] = tools
         params["tool_choice"] = tool_choice if tool_choice is not None else "auto"
-    
+    if thinking is not None:
+        params["thinking"] = thinking
+
     return await litellm.acompletion(**params)
 
 
@@ -269,7 +296,8 @@ async def agent_completion(
     aws_secret_access_key: Optional[str] = None,
     aws_region_name: Optional[str] = None,
     tools: Optional[List[Dict]] = None,
-    tool_choice: Optional[Union[str, Dict]] = None
+    tool_choice: Optional[Union[str, Dict]] = None,
+    thinking: Optional[Dict] = None,
 ):
     """
     Public wrapper for agent/chat use. Makes one LLM completion call with optional tools.
@@ -285,6 +313,7 @@ async def agent_completion(
         aws_region_name=aws_region_name,
         tools=tools,
         tool_choice=tool_choice,
+        thinking=thinking,
     )
 
 

@@ -4,24 +4,7 @@ import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react'
 import ReplayIcon from '@mui/icons-material/Replay';
 import type { AgentChatMessage, PendingToolCall } from './useAgentChat';
 import AgentMessage from './AgentMessage';
-
-/** Animated thinking indicator with pulsing dot and elapsed-time counter */
-function ThinkingIndicator() {
-  const [elapsed, setElapsed] = useState(0);
-  useEffect(() => {
-    const start = Date.now();
-    const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - start) / 1000));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-  return (
-    <div className="flex items-center gap-1.5 text-xs text-gray-400 py-1 px-1">
-      <span className="inline-block w-1.5 h-1.5 rounded-full bg-gray-400 animate-pulse" />
-      <span>Thinking{elapsed > 0 ? ` ${elapsed}s` : ''}</span>
-    </div>
-  );
-}
+import ThinkingBlock from './ThinkingBlock';
 
 /** One user message plus all following assistant messages until the next user message. */
 interface ChatTurn {
@@ -334,7 +317,7 @@ export default function AgentChat({
               </button>
             </div>
           )}
-          {loading && <ThinkingIndicator />}
+          {loading && <ThinkingBlock live />}
           {error && (
             <div className="rounded-lg px-3 py-2 bg-red-50 border border-red-200 text-red-700 text-xs">
               {error}

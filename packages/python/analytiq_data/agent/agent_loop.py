@@ -232,6 +232,10 @@ async def run_agent_turn(
             await ad.payments.check_spu_limits(organization_id, spu_check)
         except Exception as e:
             return {"error": str(e)}
+        thinking_param = None
+        if getattr(litellm, "supports_reasoning", None) and litellm.supports_reasoning(model=model):
+            thinking_param = {"type": "enabled", "budget_tokens": 4096}
+
         response = await ad.llm.agent_completion(
             model=model,
             messages=llm_messages,
@@ -241,15 +245,17 @@ async def run_agent_turn(
             aws_region_name=aws_region_name,
             tools=TOOL_DEFINITIONS,
             tool_choice="auto",
+            thinking=thinking_param,
         )
         message = response.choices[0].message
         tool_calls = getattr(message, "tool_calls", None) or []
         text = (message.content or "").strip()
+        thinking_text = ad.llm._extract_thinking_from_response(message)
 
         await _record_spu_for_llm_call(response, organization_id, llm_provider, model)
 
         if not tool_calls:
-            return {"text": text, "working_state": working_state}
+            return {"text": text, "thinking": thinking_text, "working_state": working_state}
 
         pending = [_tool_call_to_dict(tc) for tc in tool_calls]
         if not auto_approve:
@@ -269,16 +275,32 @@ async def run_agent_turn(
             return {
                 "turn_id": turn_id,
                 "text": text,
+                "thinking": thinking_text,
                 "tool_calls": pending,
                 "working_state": working_state,
             }
 
         assistant_msg, tool_msgs = await _execute_tool_calls(context, pending, approvals=None)
+        thinking_blocks = getattr(message, "thinking_blocks", None)
+        if thinking_blocks is not None:
+            # Convert to list of dicts for JSON serialization and Anthropic API
+            blocks = []
+            for b in thinking_blocks:
+                if isinstance(b, dict):
+                    blocks.append(b)
+                elif hasattr(b, "thinking"):
+                    blocks.append({
+                        "type": getattr(b, "type", "thinking"),
+                        "thinking": getattr(b, "thinking", ""),
+                        "signature": getattr(b, "signature", ""),
+                    })
+            if blocks:
+                assistant_msg["thinking_blocks"] = blocks
         llm_messages.append(assistant_msg)
         for tm in tool_msgs:
             llm_messages.append(tm)
 
-    return {"text": "(Max tool rounds reached.)", "working_state": working_state}
+    return {"text": "(Max tool rounds reached.)", "thinking": None, "working_state": working_state}
 
 
 async def run_agent_approve(
@@ -326,6 +348,10 @@ async def run_agent_approve(
     except Exception as e:
         return {"error": str(e)}
 
+    thinking_param = None
+    if getattr(litellm, "supports_reasoning", None) and litellm.supports_reasoning(model=model):
+        thinking_param = {"type": "enabled", "budget_tokens": 4096}
+
     response = await ad.llm.agent_completion(
         model=model,
         messages=llm_messages,
@@ -335,15 +361,17 @@ async def run_agent_approve(
         aws_region_name=aws_region_name,
         tools=TOOL_DEFINITIONS,
         tool_choice="auto",
+        thinking=thinking_param,
     )
     message = response.choices[0].message
     tool_calls = getattr(message, "tool_calls", None) or []
     text = (message.content or "").strip()
+    thinking_text = ad.llm._extract_thinking_from_response(message)
 
     await _record_spu_for_llm_call(response, state["organization_id"], llm_provider, model)
 
     if not tool_calls:
-        return {"text": text, "working_state": state["working_state"]}
+        return {"text": text, "thinking": thinking_text, "working_state": state["working_state"]}
 
     pending = [_tool_call_to_dict(tc) for tc in tool_calls]
     new_turn_id = generate_turn_id()
@@ -362,6 +390,7 @@ async def run_agent_approve(
     return {
         "turn_id": new_turn_id,
         "text": text,
+        "thinking": thinking_text,
         "tool_calls": pending,
         "working_state": state["working_state"],
     }

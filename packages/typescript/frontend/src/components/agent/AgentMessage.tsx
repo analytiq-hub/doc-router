@@ -5,6 +5,7 @@ import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { AgentChatMessage } from './useAgentChat';
 import ToolCallCard from './ToolCallCard';
+import ThinkingBlock from './ThinkingBlock';
 
 /** Renders diff content with colored add/remove lines, Cursor-style */
 function DiffBlock({ content }: { content: string }) {
@@ -150,6 +151,9 @@ export default function AgentMessage({
             : 'w-full text-gray-900'
         }
       >
+        {!isUser && message.thinking && (
+          <ThinkingBlock content={message.thinking} defaultExpanded={false} />
+        )}
         {message.content && (
           <div className="prose prose-sm max-w-none text-[13px] prose-p:my-1 prose-ul:my-1 prose-pre:my-1 prose-pre:text-xs">
             <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents} urlTransform={urlTransform}>{message.content}</ReactMarkdown>

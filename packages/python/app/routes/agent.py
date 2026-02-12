@@ -153,6 +153,7 @@ async def post_chat(
             "role": "assistant",
             "content": result.get("text"),
             "tool_calls": result.get("tool_calls"),
+            "thinking": result.get("thinking"),
         }
         extraction = (result.get("working_state") or {}).get("extraction")
         if request.truncate_thread_to_message_count is not None:
@@ -214,6 +215,7 @@ async def post_chat_approve(
             "role": "assistant",
             "content": result.get("text"),
             "tool_calls": result.get("tool_calls"),
+            "thinking": result.get("thinking"),
         }
         extraction = (result.get("working_state") or {}).get("extraction")
         await ad.agent.agent_threads.append_messages(

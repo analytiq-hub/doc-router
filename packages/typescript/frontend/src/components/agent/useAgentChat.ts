@@ -7,6 +7,8 @@ export interface AgentChatMessage {
   role: 'user' | 'assistant';
   content: string | null;
   toolCalls?: PendingToolCall[];
+  /** Extended thinking/reasoning from the model (Cursor-style). */
+  thinking?: string | null;
 }
 
 export interface PendingToolCall {
@@ -67,7 +69,7 @@ function getChatUrl(organizationId: string, documentId: string, path: string) {
 }
 
 /** Normalize API message to frontend shape; tool_calls may be { id, name, arguments } or { id, type, function }. */
-function messageFromApi(m: { role: string; content?: string | null; tool_calls?: Array<{ id: string; name?: string; arguments?: string; function?: { name: string; arguments: string } }> }): AgentChatMessage {
+function messageFromApi(m: { role: string; content?: string | null; tool_calls?: Array<{ id: string; name?: string; arguments?: string; function?: { name: string; arguments: string } }>; thinking?: string | null }): AgentChatMessage {
   const toolCalls = m.tool_calls?.map((tc) => ({
     id: tc.id,
     name: tc.name ?? tc.function?.name ?? '',
@@ -77,6 +79,7 @@ function messageFromApi(m: { role: string; content?: string | null; tool_calls?:
     role: m.role as 'user' | 'assistant',
     content: m.content ?? null,
     toolCalls: toolCalls?.length ? toolCalls : undefined,
+    thinking: m.thinking ?? undefined,
   };
 }
 
@@ -235,6 +238,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           turn_id?: string;
           tool_calls?: Array<{ id: string; name: string; arguments: string }>;
           working_state?: { extraction?: Record<string, unknown> };
+          thinking?: string;
         }>(getChatUrl(organizationId, documentId, 'chat'), {
           messages: messageListForApi,
           mentions: [],
@@ -252,6 +256,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           role: 'assistant',
           content: data.text ?? null,
           toolCalls: data.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? undefined,
+          thinking: data.thinking ?? undefined,
         };
         setMessages((prev) => [...prev, assistantMsg]);
 
@@ -335,6 +340,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           turn_id?: string;
           tool_calls?: Array<{ id: string; name: string; arguments: string }>;
           working_state?: { extraction?: Record<string, unknown> };
+          thinking?: string;
         }>(getChatUrl(organizationId, documentId, 'chat'), body, { signal: controller.signal });
 
         if (data.working_state?.extraction != null) {
@@ -345,6 +351,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           role: 'assistant',
           content: data.text ?? null,
           toolCalls: data.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? undefined,
+          thinking: data.thinking ?? undefined,
         };
         setMessages((prev) => [...prev, assistantMsg]);
 
@@ -386,6 +393,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           turn_id?: string;
           tool_calls?: Array<{ id: string; name: string; arguments: string }>;
           working_state?: { extraction?: Record<string, unknown> };
+          thinking?: string;
         }>(getChatUrl(organizationId, documentId, 'chat/approve'), {
           turn_id: pendingTurnId,
           approvals,
@@ -403,6 +411,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           role: 'assistant',
           content: data.text ?? null,
           toolCalls: data.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? undefined,
+          thinking: data.thinking ?? undefined,
         };
         setMessages((prev) => [...prev, assistantMsg]);
 
