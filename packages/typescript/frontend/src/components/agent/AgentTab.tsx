@@ -1,12 +1,14 @@
 'use client';
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
 import StopCircleIcon from '@mui/icons-material/StopCircle';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
+import MicIcon from '@mui/icons-material/Mic';
 import { useAgentChat, getMessagesBeforeTurn } from './useAgentChat';
 import AgentChat from './AgentChat';
 import ThreadDropdown from './ThreadDropdown';
+import { useDictation } from './useDictation';
 import type { AgentThreadSummary } from './useAgentChat';
 
 interface AgentTabProps {
@@ -31,12 +33,59 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
   } = useAgentChat(organizationId, documentId);
 
   const [input, setInput] = useState('');
+  const [interimTranscript, setInterimTranscript] = useState('');
+  const interimRef = useRef('');
   const [showModelDropUp, setShowModelDropUp] = useState(false);
   const modelDropRef = useRef<HTMLDivElement>(null);
+
+  const handleTranscript = useCallback(
+    (text: string, isFinal: boolean) => {
+      if (isFinal) {
+        setInput((prev) => prev + (prev ? ' ' : '') + text);
+        interimRef.current = '';
+        setInterimTranscript('');
+      } else {
+        interimRef.current = text;
+        setInterimTranscript(text);
+      }
+    },
+    []
+  );
+
+  const displayInput = input + (interimTranscript ? (input ? ' ' : '') + interimTranscript : '');
+  const hasText = displayInput.trim().length > 0;
+  const displayInputRef = useRef(displayInput);
+  displayInputRef.current = displayInput;
+
+  const handleDictationEnd = useCallback(() => {
+    const text = displayInputRef.current.trim();
+    if (text && !state.loading) {
+      setInput('');
+      setInterimTranscript('');
+      interimRef.current = '';
+      sendMessage(text);
+    }
+  }, [sendMessage, state.loading]);
+
+  const { supported: dictationSupported, isListening, toggle: toggleDictation, error: dictationError } = useDictation(
+    handleTranscript,
+    handleDictationEnd
+  );
 
   useEffect(() => {
     loadModels();
   }, [loadModels]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey && e.shiftKey && e.key === ' ') {
+        e.preventDefault();
+        if (dictationSupported) toggleDictation();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [dictationSupported, toggleDictation]);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -49,9 +98,11 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
   }, []);
 
   const handleSend = () => {
-    const text = input.trim();
+    const text = displayInput.trim();
     if (!text || state.loading) return;
     setInput('');
+    setInterimTranscript('');
+    interimRef.current = '';
     sendMessage(text);
   };
 
@@ -71,11 +122,18 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
 
   const inputBlock = (
     <div className="shrink-0 border-t border-gray-200 bg-white min-w-0">
+      {dictationError && (
+        <div className="px-3 pt-1 text-xs text-amber-600">{dictationError}</div>
+      )}
       <div className="px-3 pt-2 pb-1">
         <div className="rounded-lg border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 min-w-0">
           <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
+            value={displayInput}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setInterimTranscript('');
+              interimRef.current = '';
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -140,12 +198,38 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
           >
             <StopCircleIcon sx={{ fontSize: 24 }} />
           </button>
-        ) : (
+        ) : isListening ? (
+          <button
+            type="button"
+            onClick={toggleDictation}
+            className="flex items-center justify-center w-8 h-8 text-blue-600 hover:text-blue-700 shrink-0 animate-pulse ring-2 ring-blue-400/50 rounded-full"
+            title="Click to send"
+          >
+            <ArrowCircleUpIcon sx={{ fontSize: 24 }} />
+          </button>
+        ) : hasText ? (
           <button
             type="button"
             onClick={handleSend}
-            disabled={!input.trim()}
-            className="flex items-center justify-center w-8 h-8 text-gray-700 hover:text-blue-600 disabled:text-gray-300 disabled:cursor-not-allowed shrink-0"
+            className="flex items-center justify-center w-8 h-8 text-gray-700 hover:text-blue-600 shrink-0"
+            title="Send"
+          >
+            <ArrowCircleUpIcon sx={{ fontSize: 24 }} />
+          </button>
+        ) : dictationSupported ? (
+          <button
+            type="button"
+            onClick={toggleDictation}
+            className="flex items-center justify-center w-8 h-8 text-gray-500 hover:text-gray-700 shrink-0"
+            title="Voice input (Ctrl+Shift+Space)"
+          >
+            <MicIcon sx={{ fontSize: 24 }} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            disabled
+            className="flex items-center justify-center w-8 h-8 text-gray-300 cursor-not-allowed shrink-0"
             title="Send"
           >
             <ArrowCircleUpIcon sx={{ fontSize: 24 }} />
