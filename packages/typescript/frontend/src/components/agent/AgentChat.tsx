@@ -263,7 +263,7 @@ export default function AgentChat({
               ref={(el) => { turnRefs.current[turnIdx] = el; }}
               className="space-y-3"
             >
-              <div className={`w-full rounded-lg border border-gray-200 bg-gray-50 min-w-0 flex items-start gap-2${turnIdx === stickyTurnIndex ? ' invisible' : ''}`}>
+              <div className={`w-full rounded-lg border border-gray-200 bg-gray-50 min-w-0 flex items-start gap-2${turnIdx === stickyTurnIndex ? ' hidden' : ''}`}>
                 <textarea
                   value={editingPanelTurnIndex === turnIdx ? editingPanelValue : (turn.user.content ?? '')}
                   onChange={(e) => editingPanelTurnIndex === turnIdx && setEditingPanelValue(e.target.value)}
