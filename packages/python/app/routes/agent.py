@@ -35,6 +35,10 @@ class ChatRequest(BaseModel):
     model: str = Field(default="claude-sonnet-4-20250514", description="LLM model")
     stream: bool = Field(default=False, description="Stream response (SSE)")
     auto_approve: bool = Field(default=False, description="Execute all tool calls without pausing")
+    auto_approved_tools: list[str] | None = Field(
+        default=None,
+        description="Read-write tool names that are auto-approved (no pause). Empty = default (only read-only auto-approved).",
+    )
     thread_id: str | None = Field(default=None, description="If set, append user+assistant messages to this thread after success")
     truncate_thread_to_message_count: int | None = Field(
         default=None,
@@ -70,6 +74,11 @@ class CreateThreadBody(BaseModel):
 
 class CreateThreadResponse(BaseModel):
     thread_id: str
+
+
+class ToolsMetadata(BaseModel):
+    read_only: list[str]
+    read_write: list[str]
 
 
 async def _resolve_mentions(
@@ -134,6 +143,7 @@ async def post_chat(
     resolved = await _resolve_mentions(analytiq_client, organization_id, mentions_data)
     messages = [m.model_dump() for m in request.messages]
     # Phase 1: streaming not implemented; allow auto_approve without stream. When SSE is added, require stream=True when auto_approve=True.
+    auto_approved = set(request.auto_approved_tools) if request.auto_approved_tools is not None else None
     result = await ad.agent.run_agent_turn(
         analytiq_client=analytiq_client,
         organization_id=organization_id,
@@ -143,6 +153,7 @@ async def post_chat(
         model=request.model,
         auto_approve=request.auto_approve,
         resolved_mentions=resolved,
+        auto_approved_tools=auto_approved,
     )
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -154,6 +165,7 @@ async def post_chat(
             "content": result.get("text"),
             "tool_calls": result.get("tool_calls"),
             "thinking": result.get("thinking"),
+            "executed_rounds": result.get("executed_rounds"),
         }
         extraction = (result.get("working_state") or {}).get("extraction")
         if request.truncate_thread_to_message_count is not None:
@@ -218,6 +230,7 @@ async def post_chat_approve(
             "content": result.get("text"),
             "tool_calls": result.get("tool_calls"),
             "thinking": result.get("thinking"),
+            "executed_rounds": result.get("executed_rounds"),
         }
         extraction = (result.get("working_state") or {}).get("extraction")
         await ad.agent.agent_threads.append_messages(
@@ -229,6 +242,27 @@ async def post_chat_approve(
             extraction=extraction,
         )
     return result
+
+
+@agent_router.get(
+    "/v0/orgs/{organization_id}/documents/{document_id}/chat/tools",
+    response_model=ToolsMetadata,
+)
+async def get_chat_tools(
+    organization_id: str,
+    document_id: str,
+    current_user: User = Depends(get_org_user),
+):
+    """Get tool metadata: read-only vs read-write. Read-only tools never require approval."""
+    doc = await ad.common.doc.get_doc(
+        ad.common.get_analytiq_client(), document_id, organization_id
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return ToolsMetadata(
+        read_only=sorted(ad.agent.tool_registry.READ_ONLY_TOOLS),
+        read_write=sorted(ad.agent.tool_registry.READ_WRITE_TOOLS),
+    )
 
 
 @agent_router.get(

@@ -110,7 +110,7 @@ async def test_run_agent_turn_returns_turn_id_when_tool_calls_and_not_auto_appro
     msg.content = "I will create a schema."
     tc = MagicMock()
     tc.id = "call_1"
-    tc.function.name = "help_schemas"
+    tc.function.name = "create_schema"
     tc.function.arguments = "{}"
     msg.tool_calls = [tc]
     mock_litellm.return_value = MagicMock(
@@ -130,7 +130,43 @@ async def test_run_agent_turn_returns_turn_id_when_tool_calls_and_not_auto_appro
     assert "turn_id" in result
     assert result.get("text") == "I will create a schema."
     assert len(result.get("tool_calls", [])) == 1
-    assert result["tool_calls"][0]["name"] == "help_schemas"
+    assert result["tool_calls"][0]["name"] == "create_schema"
+
+
+@pytest.mark.asyncio
+async def test_run_agent_turn_read_only_tools_auto_approved(
+    mock_analytiq_client,
+    mock_payments,
+    mock_llm_key,
+    mock_llm_provider,
+    mock_litellm,
+    mock_build_system,
+    mock_completion_cost,
+):
+    """Read-only tools (e.g. help_schemas) are auto-approved even when auto_approve=False."""
+    msg = MagicMock()
+    msg.content = "Here is schema help."
+    tc = MagicMock()
+    tc.id = "call_1"
+    tc.function.name = "help_schemas"
+    tc.function.arguments = "{}"
+    msg.tool_calls = [tc]
+    mock_litellm.return_value = MagicMock(
+        choices=[MagicMock(message=msg)],
+        usage=MagicMock(prompt_tokens=10, completion_tokens=5),
+    )
+    result = await run_agent_turn(
+        analytiq_client=mock_analytiq_client,
+        organization_id="org1",
+        document_id="doc1",
+        user_id="user1",
+        messages=[{"role": "user", "content": "How do I create schemas?"}],
+        model="gpt-4o-mini",
+        auto_approve=False,
+    )
+    assert "error" not in result
+    assert "turn_id" not in result
+    assert result.get("text") == "(Max tool rounds reached.)"
 
 
 def test_sanitize_messages_strips_tool_calls_without_results():

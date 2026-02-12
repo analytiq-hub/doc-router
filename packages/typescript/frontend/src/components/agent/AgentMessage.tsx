@@ -121,6 +121,7 @@ interface AgentMessageProps {
   organizationId: string;
   onApprove?: (callId: string) => void;
   onReject?: (callId: string) => void;
+  onAlwaysApprove?: (toolName: string) => void;
   pendingCallIds?: Set<string>;
   disabled?: boolean;
   /** Tool calls that are already resolved (e.g. after approve round). */
@@ -132,6 +133,7 @@ export default function AgentMessage({
   organizationId,
   onApprove,
   onReject,
+  onAlwaysApprove,
   pendingCallIds,
   disabled,
   resolvedToolCalls,
@@ -151,6 +153,27 @@ export default function AgentMessage({
             : 'w-full text-gray-900'
         }
       >
+        {!isUser && message.executedRounds?.map((round, idx) => (
+          <React.Fragment key={idx}>
+            {round.thinking && (
+              <ThinkingBlock content={round.thinking} defaultExpanded={false} />
+            )}
+            {round.tool_calls && round.tool_calls.length > 0 && (
+              <div className="mt-1 space-y-0.5">
+                {round.tool_calls.map((tc) => (
+                  <ToolCallCard
+                    key={tc.id}
+                    toolCall={{ id: tc.id, name: tc.name, arguments: tc.arguments }}
+                    onApprove={() => {}}
+                    onReject={() => {}}
+                    resolved={true}
+                    approved={true}
+                  />
+                ))}
+              </div>
+            )}
+          </React.Fragment>
+        ))}
         {!isUser && message.thinking && (
           <ThinkingBlock content={message.thinking} defaultExpanded={false} />
         )}
@@ -171,6 +194,7 @@ export default function AgentMessage({
                   toolCall={tc}
                   onApprove={() => onApprove?.(tc.id)}
                   onReject={() => onReject?.(tc.id)}
+                  onAlwaysApprove={onAlwaysApprove}
                   disabled={disabled}
                   resolved={resolved ?? !isPending}
                   approved={approved}

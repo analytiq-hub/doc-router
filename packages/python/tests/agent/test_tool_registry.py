@@ -6,7 +6,22 @@ import pytest
 import sys
 from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from analytiq_data.agent.tool_registry import TOOL_DEFINITIONS, execute_tool
+from analytiq_data.agent.tool_registry import (
+    TOOL_DEFINITIONS,
+    execute_tool,
+    READ_ONLY_TOOLS,
+    READ_WRITE_TOOLS,
+    is_read_only_tool,
+)
+
+
+def test_read_only_and_read_write_tools():
+    """Read-only and read-write sets are disjoint and cover all defined tools."""
+    all_names = {t["function"]["name"] for t in TOOL_DEFINITIONS}
+    assert READ_ONLY_TOOLS | READ_WRITE_TOOLS == all_names
+    assert READ_ONLY_TOOLS & READ_WRITE_TOOLS == set()
+    assert is_read_only_tool("help_schemas")
+    assert not is_read_only_tool("create_schema")
 
 
 def test_tool_definitions_count():

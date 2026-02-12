@@ -13,7 +13,7 @@ import litellm
 
 from .session import generate_turn_id, set_turn_state, get_turn_state, clear_turn_state
 from .system_prompt import build_system_message
-from .tool_registry import TOOL_DEFINITIONS, execute_tool
+from .tool_registry import TOOL_DEFINITIONS, execute_tool, is_read_only_tool
 
 logger = logging.getLogger(__name__)
 
@@ -165,6 +165,45 @@ async def _record_spu_for_llm_call(
         # Don't fail the chat if SPU recording fails
 
 
+def _tool_auto_approved(
+    tool_name: str,
+    auto_approve: bool,
+    auto_approved_tools: set[str] | None,
+) -> bool:
+    """True if this tool should be auto-approved (no user confirmation needed)."""
+    if is_read_only_tool(tool_name):
+        return True
+    if auto_approve:
+        return True
+    if auto_approved_tools and tool_name in auto_approved_tools:
+        return True
+    return False
+
+
+def _any_tool_needs_approval(
+    pending: list[dict],
+    auto_approve: bool,
+    auto_approved_tools: set[str] | None,
+) -> bool:
+    """True if any tool call requires user approval."""
+    return any(
+        not _tool_auto_approved(tc.get("name", ""), auto_approve, auto_approved_tools)
+        for tc in pending
+    )
+
+
+def _build_effective_approvals(
+    pending: list[dict],
+    auto_approve: bool,
+    auto_approved_tools: set[str] | None,
+) -> dict[str, bool]:
+    """Build call_id -> approved for each tool call."""
+    return {
+        tc["id"]: _tool_auto_approved(tc.get("name", ""), auto_approve, auto_approved_tools)
+        for tc in pending
+    }
+
+
 async def run_agent_turn(
     analytiq_client: Any,
     organization_id: str,
@@ -175,6 +214,7 @@ async def run_agent_turn(
     auto_approve: bool,
     resolved_mentions: list[dict] | None = None,
     working_state: dict | None = None,
+    auto_approved_tools: set[str] | None = None,
 ) -> dict[str, Any]:
     """
     Run one or more agent steps. If auto_approve is False and the LLM returns tool_calls,
@@ -223,6 +263,7 @@ async def run_agent_turn(
         aws_region_name = aws.region_name
 
     iteration = 0
+    executed_rounds: list[dict] = []
     while iteration < MAX_TOOL_ROUNDS:
         iteration += 1
         try:
@@ -255,10 +296,16 @@ async def run_agent_turn(
         await _record_spu_for_llm_call(response, organization_id, llm_provider, model)
 
         if not tool_calls:
-            return {"text": text, "thinking": thinking_text, "working_state": working_state}
+            return {
+                "text": text,
+                "thinking": thinking_text,
+                "working_state": working_state,
+                "executed_rounds": executed_rounds if executed_rounds else None,
+            }
 
         pending = [_tool_call_to_dict(tc) for tc in tool_calls]
-        if not auto_approve:
+        needs_approval = _any_tool_needs_approval(pending, auto_approve, auto_approved_tools)
+        if needs_approval:
             turn_id = generate_turn_id()
             set_turn_state(turn_id, {
                 "messages": messages,
@@ -271,6 +318,8 @@ async def run_agent_turn(
                 "user_id": user_id,
                 "resolved_mentions": resolved_mentions,
                 "system_content": system_content,
+                "auto_approve": auto_approve,
+                "auto_approved_tools": list(auto_approved_tools) if auto_approved_tools else None,
             })
             return {
                 "turn_id": turn_id,
@@ -280,7 +329,9 @@ async def run_agent_turn(
                 "working_state": working_state,
             }
 
-        assistant_msg, tool_msgs = await _execute_tool_calls(context, pending, approvals=None)
+        effective = _build_effective_approvals(pending, auto_approve, auto_approved_tools)
+        executed_rounds.append({"thinking": thinking_text, "tool_calls": pending})
+        assistant_msg, tool_msgs = await _execute_tool_calls(context, pending, approvals=effective)
         thinking_blocks = getattr(message, "thinking_blocks", None)
         if thinking_blocks is not None:
             # Convert to list of dicts for JSON serialization and Anthropic API
@@ -300,7 +351,12 @@ async def run_agent_turn(
         for tm in tool_msgs:
             llm_messages.append(tm)
 
-    return {"text": "(Max tool rounds reached.)", "thinking": None, "working_state": working_state}
+    return {
+        "text": "(Max tool rounds reached.)",
+        "thinking": None,
+        "working_state": working_state,
+        "executed_rounds": executed_rounds if executed_rounds else None,
+    }
 
 
 async def run_agent_approve(
@@ -373,24 +429,147 @@ async def run_agent_approve(
     if not tool_calls:
         return {"text": text, "thinking": thinking_text, "working_state": state["working_state"]}
 
+    executed_rounds: list[dict] = []
     pending = [_tool_call_to_dict(tc) for tc in tool_calls]
-    new_turn_id = generate_turn_id()
-    set_turn_state(new_turn_id, {
-        "messages": state["messages"],
-        "llm_messages": llm_messages,
-        "pending_tool_calls": pending,
-        "working_state": dict(state["working_state"]),
-        "model": model,
-        "organization_id": state["organization_id"],
-        "document_id": state["document_id"],
-        "user_id": state["user_id"],
-        "resolved_mentions": state.get("resolved_mentions"),
-        "system_content": state.get("system_content"),
-    })
+    auto_approve = state.get("auto_approve", False)
+    auto_approved_list = state.get("auto_approved_tools")
+    auto_approved_tools = set(auto_approved_list) if auto_approved_list is not None else None
+
+    needs_approval = _any_tool_needs_approval(pending, auto_approve, auto_approved_tools)
+    if needs_approval:
+        new_turn_id = generate_turn_id()
+        set_turn_state(new_turn_id, {
+            "messages": state["messages"],
+            "llm_messages": llm_messages,
+            "pending_tool_calls": pending,
+            "working_state": dict(state["working_state"]),
+            "model": model,
+            "organization_id": state["organization_id"],
+            "document_id": state["document_id"],
+            "user_id": state["user_id"],
+            "resolved_mentions": state.get("resolved_mentions"),
+            "system_content": state.get("system_content"),
+            "auto_approve": auto_approve,
+            "auto_approved_tools": auto_approved_list,
+        })
+        return {
+            "turn_id": new_turn_id,
+            "text": text,
+            "thinking": thinking_text,
+            "tool_calls": pending,
+            "working_state": state["working_state"],
+        }
+
+    effective = _build_effective_approvals(pending, auto_approve, auto_approved_tools)
+    executed_rounds.append({"thinking": thinking_text, "tool_calls": pending})
+    assistant_msg, tool_msgs = await _execute_tool_calls(context, pending, approvals=effective)
+    thinking_blocks = getattr(message, "thinking_blocks", None)
+    if thinking_blocks is not None:
+        blocks = []
+        for b in thinking_blocks:
+            if isinstance(b, dict):
+                blocks.append(b)
+            elif hasattr(b, "thinking"):
+                blocks.append({
+                    "type": getattr(b, "type", "thinking"),
+                    "thinking": getattr(b, "thinking", ""),
+                    "signature": getattr(b, "signature", ""),
+                })
+        if blocks:
+            assistant_msg["thinking_blocks"] = blocks
+    llm_messages.append(assistant_msg)
+    for tm in tool_msgs:
+        llm_messages.append(tm)
+
+    # Call LLM again to process tool results (one extra round when auto-executing).
+    try:
+        spu_check = await ad.payments.get_spu_cost(model)
+        await ad.payments.check_spu_limits(state["organization_id"], spu_check)
+    except Exception as e:
+        return {"error": str(e)}
+
+    thinking_param = None
+    if getattr(litellm, "supports_reasoning", None) and litellm.supports_reasoning(model=model):
+        thinking_param = {"type": "enabled", "budget_tokens": 4096}
+
+    response = await ad.llm.agent_completion(
+        model=model,
+        messages=llm_messages,
+        api_key=api_key,
+        aws_access_key_id=aws_access_key_id,
+        aws_secret_access_key=aws_secret_access_key,
+        aws_region_name=aws_region_name,
+        tools=TOOL_DEFINITIONS,
+        tool_choice="auto",
+        thinking=thinking_param,
+    )
+    message = response.choices[0].message
+    tool_calls = getattr(message, "tool_calls", None) or []
+    text = (message.content or "").strip()
+    thinking_text = ad.llm._extract_thinking_from_response(message)
+
+    await _record_spu_for_llm_call(response, state["organization_id"], llm_provider, model)
+
+    if not tool_calls:
+        return {
+            "text": text,
+            "thinking": thinking_text,
+            "working_state": state["working_state"],
+            "executed_rounds": executed_rounds if executed_rounds else None,
+        }
+
+    # LLM returned more tool_calls; apply same approval logic.
+    pending = [_tool_call_to_dict(tc) for tc in tool_calls]
+    needs_approval = _any_tool_needs_approval(pending, auto_approve, auto_approved_tools)
+    if needs_approval:
+        new_turn_id = generate_turn_id()
+        set_turn_state(new_turn_id, {
+            "messages": state["messages"],
+            "llm_messages": llm_messages,
+            "pending_tool_calls": pending,
+            "working_state": dict(state["working_state"]),
+            "model": model,
+            "organization_id": state["organization_id"],
+            "document_id": state["document_id"],
+            "user_id": state["user_id"],
+            "resolved_mentions": state.get("resolved_mentions"),
+            "system_content": state.get("system_content"),
+            "auto_approve": auto_approve,
+            "auto_approved_tools": auto_approved_list,
+        })
+        return {
+            "turn_id": new_turn_id,
+            "text": text,
+            "thinking": thinking_text,
+            "tool_calls": pending,
+            "working_state": state["working_state"],
+        }
+
+    effective = _build_effective_approvals(pending, auto_approve, auto_approved_tools)
+    executed_rounds.append({"thinking": thinking_text, "tool_calls": pending})
+    assistant_msg, tool_msgs = await _execute_tool_calls(context, pending, approvals=effective)
+    thinking_blocks = getattr(message, "thinking_blocks", None)
+    if thinking_blocks is not None:
+        blocks = []
+        for b in thinking_blocks:
+            if isinstance(b, dict):
+                blocks.append(b)
+            elif hasattr(b, "thinking"):
+                blocks.append({
+                    "type": getattr(b, "type", "thinking"),
+                    "thinking": getattr(b, "thinking", ""),
+                    "signature": getattr(b, "signature", ""),
+                })
+        if blocks:
+            assistant_msg["thinking_blocks"] = blocks
+    llm_messages.append(assistant_msg)
+    for tm in tool_msgs:
+        llm_messages.append(tm)
+
+    # Only one extra round when auto-executing; return text (may be empty).
     return {
-        "turn_id": new_turn_id,
         "text": text,
         "thinking": thinking_text,
-        "tool_calls": pending,
         "working_state": state["working_state"],
+        "executed_rounds": executed_rounds if executed_rounds else None,
     }

@@ -13,6 +13,48 @@ from . import tools as agent_tools
 
 logger = logging.getLogger(__name__)
 
+# Read-only tools: never require approval (no create/update/delete).
+READ_ONLY_TOOLS: frozenset[str] = frozenset({
+    "get_ocr_text",
+    "get_extraction_result",
+    "list_documents",
+    "get_schema",
+    "list_schemas",
+    "validate_schema",
+    "validate_against_schema",
+    "get_prompt",
+    "list_prompts",
+    "get_tag",
+    "list_tags",
+    "help_schemas",
+    "help_prompts",
+})
+
+# Read-write tools: require approval unless auto_approve or in auto_approved_tools.
+READ_WRITE_TOOLS: frozenset[str] = frozenset({
+    "run_extraction",
+    "update_extraction_field",
+    "update_document",
+    "delete_document",
+    "create_schema",
+    "update_schema",
+    "delete_schema",
+    "create_prompt",
+    "update_prompt",
+    "delete_prompt",
+    "create_tag",
+    "update_tag",
+    "delete_tag",
+})
+
+
+def is_read_only_tool(name: str) -> bool:
+    return name in READ_ONLY_TOOLS
+
+
+def is_read_write_tool(name: str) -> bool:
+    return name in READ_WRITE_TOOLS
+
 
 def _json_serial_default(obj: Any) -> Any:
     """Convert non-JSON-serializable values for tool result payloads."""

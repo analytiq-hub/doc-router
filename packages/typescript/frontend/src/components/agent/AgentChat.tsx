@@ -33,6 +33,8 @@ interface AgentChatProps {
   loading: boolean;
   error: string | null;
   onApprove: (approvals: Array<{ call_id: string; approved: boolean }>) => void;
+  /** When user selects "Always approve" on a tool, add it to auto-approved list. */
+  onAlwaysApprove?: (toolName: string) => void;
   /** When user edits and resubmits the sticky question, restart conversation from that turn. */
   onEditAndResubmit?: (newContent: string, turnIndex: number) => void;
   disabled?: boolean;
@@ -83,6 +85,7 @@ export default function AgentChat({
   loading,
   error,
   onApprove,
+  onAlwaysApprove,
   onEditAndResubmit,
   disabled,
 }: AgentChatProps) {
@@ -289,6 +292,7 @@ export default function AgentChat({
                   organizationId={organizationId}
                   onApprove={(id) => handleApproveOne(id, true)}
                   onReject={(id) => handleApproveOne(id, false)}
+                  onAlwaysApprove={onAlwaysApprove}
                   pendingCallIds={pendingIds}
                   disabled={disabled}
                   resolvedToolCalls={resolvedMap}

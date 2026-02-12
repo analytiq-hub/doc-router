@@ -3,12 +3,33 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { apiClient, getApiErrorMsg } from '@/utils/api';
 
+export interface ExecutedRound {
+  thinking?: string | null;
+  tool_calls?: Array<{ id: string; name: string; arguments: string }>;
+}
+
+function normalizeExecutedRounds(
+  rounds?: Array<{ thinking?: string | null; tool_calls?: Array<{ id: string; name?: string; arguments?: string }> }> | null
+): ExecutedRound[] | undefined {
+  if (!rounds?.length) return undefined;
+  return rounds.map((r) => ({
+    thinking: r.thinking ?? null,
+    tool_calls: r.tool_calls?.map((tc) => ({
+      id: tc.id,
+      name: tc.name ?? '',
+      arguments: tc.arguments ?? '{}',
+    })),
+  }));
+}
+
 export interface AgentChatMessage {
   role: 'user' | 'assistant';
   content: string | null;
   toolCalls?: PendingToolCall[];
   /** Extended thinking/reasoning from the model (Cursor-style). */
   thinking?: string | null;
+  /** Rounds that were auto-executed (thinking + tool_calls). */
+  executedRounds?: ExecutedRound[];
 }
 
 export interface PendingToolCall {
@@ -34,8 +55,12 @@ export interface AgentChatState {
   loading: boolean;
   error: string | null;
   autoApprove: boolean;
+  /** Read-write tool names that are auto-approved when autoApprove is false. Empty = default. */
+  autoApprovedTools: string[];
   model: string;
   availableModels: string[];
+  /** Read-write tools from API (for tool permissions UI). */
+  readWriteTools: string[];
   /** Current thread id (null = new unsaved chat). */
   threadId: string | null;
   /** List of threads for this document. */
@@ -65,21 +90,31 @@ export function getMessagesBeforeTurn(messages: AgentChatMessage[], turnIndex: n
 
 function getChatUrl(organizationId: string, documentId: string, path: string) {
   const base = `/v0/orgs/${organizationId}/documents/${documentId}`;
-  return path === 'threads' ? `${base}/chat/threads` : `${base}/${path}`;
+  if (path === 'threads') return `${base}/chat/threads`;
+  if (path === 'tools') return `${base}/chat/tools`;
+  return `${base}/${path}`;
 }
 
 /** Normalize API message to frontend shape; tool_calls may be { id, name, arguments } or { id, type, function }. */
-function messageFromApi(m: { role: string; content?: string | null; tool_calls?: Array<{ id: string; name?: string; arguments?: string; function?: { name: string; arguments: string } }>; thinking?: string | null }): AgentChatMessage {
+function messageFromApi(m: {
+  role: string;
+  content?: string | null;
+  tool_calls?: Array<{ id: string; name?: string; arguments?: string; function?: { name: string; arguments: string } }>;
+  thinking?: string | null;
+  executed_rounds?: ExecutedRound[] | null;
+}): AgentChatMessage {
   const toolCalls = m.tool_calls?.map((tc) => ({
     id: tc.id,
     name: tc.name ?? tc.function?.name ?? '',
     arguments: tc.arguments ?? tc.function?.arguments ?? '{}',
   }));
+  const executedRounds = normalizeExecutedRounds(m.executed_rounds);
   return {
     role: m.role as 'user' | 'assistant',
     content: m.content ?? null,
     toolCalls: toolCalls?.length ? toolCalls : undefined,
     thinking: m.thinking ?? undefined,
+    executedRounds: executedRounds?.length ? executedRounds : undefined,
   };
 }
 
@@ -91,8 +126,10 @@ export function useAgentChat(organizationId: string, documentId: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoApprove, setAutoApprove] = useState(false);
+  const [autoApprovedTools, setAutoApprovedTools] = useState<string[]>([]);
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [readWriteTools, setReadWriteTools] = useState<string[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [threads, setThreads] = useState<AgentThreadSummary[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(false);
@@ -136,7 +173,13 @@ export function useAgentChat(organizationId: string, documentId: string) {
         const { data } = await apiClient.get<{
           id: string;
           title: string;
-          messages: Array<{ role: string; content?: string | null; tool_calls?: Array<{ id: string; name?: string; arguments?: string; function?: { name: string; arguments: string } }> }>;
+          messages: Array<{
+            role: string;
+            content?: string | null;
+            tool_calls?: Array<{ id: string; name?: string; arguments?: string; function?: { name: string; arguments: string } }>;
+            thinking?: string | null;
+            executed_rounds?: ExecutedRound[] | null;
+          }>;
           extraction: Record<string, unknown>;
         }>(`${getChatUrl(organizationId, documentId, 'threads')}/${id}`);
         setThreadId(data.id);
@@ -239,12 +282,14 @@ export function useAgentChat(organizationId: string, documentId: string) {
           tool_calls?: Array<{ id: string; name: string; arguments: string }>;
           working_state?: { extraction?: Record<string, unknown> };
           thinking?: string;
+          executed_rounds?: ExecutedRound[] | null;
         }>(getChatUrl(organizationId, documentId, 'chat'), {
           messages: messageListForApi,
           mentions: [],
           model,
           stream: false,
           auto_approve: autoApprove,
+          auto_approved_tools: autoApprove ? undefined : autoApprovedTools,
           thread_id: currentThreadId,
         }, { signal: controller.signal });
 
@@ -257,6 +302,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           content: data.text ?? null,
           toolCalls: data.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? undefined,
           thinking: data.thinking ?? undefined,
+          executedRounds: normalizeExecutedRounds(data.executed_rounds),
         };
         setMessages((prev) => [...prev, assistantMsg]);
 
@@ -280,7 +326,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
         setLoading(false);
       }
     },
-    [organizationId, documentId, messages, model, autoApprove, loading, threadId, createThread, loadThreads]
+    [organizationId, documentId, messages, model, autoApprove, autoApprovedTools, loading, threadId, createThread, loadThreads]
   );
 
   /** Send a new message with a specific history (e.g. after editing and resubmitting from a prior turn). Truncates conversation to history then sends content. */
@@ -328,6 +374,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
         model,
         stream: false,
         auto_approve: autoApprove,
+        auto_approved_tools: autoApprove ? undefined : autoApprovedTools,
         thread_id: currentThreadId,
       };
       if (currentThreadId && history.length > 0) {
@@ -352,6 +399,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           content: data.text ?? null,
           toolCalls: data.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? undefined,
           thinking: data.thinking ?? undefined,
+          executedRounds: normalizeExecutedRounds(data.executed_rounds),
         };
         setMessages((prev) => [...prev, assistantMsg]);
 
@@ -375,7 +423,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
         setLoading(false);
       }
     },
-    [organizationId, documentId, model, autoApprove, loading, threadId, createThread, loadThreads]
+    [organizationId, documentId, model, autoApprove, autoApprovedTools, loading, threadId, createThread, loadThreads]
   );
 
   const approveToolCalls = useCallback(
@@ -394,6 +442,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           tool_calls?: Array<{ id: string; name: string; arguments: string }>;
           working_state?: { extraction?: Record<string, unknown> };
           thinking?: string;
+          executed_rounds?: ExecutedRound[] | null;
         }>(getChatUrl(organizationId, documentId, 'chat/approve'), {
           turn_id: pendingTurnId,
           approvals,
@@ -412,6 +461,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           content: data.text ?? null,
           toolCalls: data.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? undefined,
           thinking: data.thinking ?? undefined,
+          executedRounds: normalizeExecutedRounds(data.executed_rounds),
         };
         setMessages((prev) => [...prev, assistantMsg]);
 
@@ -447,9 +497,46 @@ export function useAgentChat(organizationId: string, documentId: string) {
     }
   }, [organizationId, model]);
 
+  const loadTools = useCallback(async (): Promise<string[]> => {
+    try {
+      const { data } = await apiClient.get<{ read_only: string[]; read_write: string[] }>(
+        getChatUrl(organizationId, documentId, 'tools')
+      );
+      const tools = data.read_write ?? [];
+      setReadWriteTools(tools);
+      return tools;
+    } catch {
+      setReadWriteTools([]);
+      return [];
+    }
+  }, [organizationId, documentId]);
+
+  const toggleToolAutoApproved = useCallback((toolName: string) => {
+    setAutoApprovedTools((prev) =>
+      prev.includes(toolName) ? prev.filter((t) => t !== toolName) : [...prev, toolName]
+    );
+  }, []);
+
+  const enableAllTools = useCallback(async () => {
+    const tools = await loadTools();
+    if (tools.length) setAutoApprovedTools([...tools]);
+  }, [loadTools]);
+
+  const resetToolPermissions = useCallback(() => {
+    setAutoApprovedTools([]);
+  }, []);
+
+  const addToolToAutoApproved = useCallback((toolName: string) => {
+    setAutoApprovedTools((prev) => (prev.includes(toolName) ? prev : [...prev, toolName]));
+  }, []);
+
   useEffect(() => {
     loadThreads();
   }, [loadThreads]);
+
+  useEffect(() => {
+    loadTools();
+  }, [loadTools]);
 
   const state: AgentChatState = {
     messages,
@@ -459,8 +546,10 @@ export function useAgentChat(organizationId: string, documentId: string) {
     loading,
     error,
     autoApprove,
+    autoApprovedTools,
     model,
     availableModels,
+    readWriteTools,
     threadId,
     threads,
     threadsLoading,
@@ -473,6 +562,12 @@ export function useAgentChat(organizationId: string, documentId: string) {
     approveToolCalls,
     cancelRequest,
     setAutoApprove,
+    setAutoApprovedTools,
+    toggleToolAutoApproved,
+    enableAllTools,
+    resetToolPermissions,
+    addToolToAutoApproved,
+    loadTools,
     setModel,
     setError,
     loadModels,
