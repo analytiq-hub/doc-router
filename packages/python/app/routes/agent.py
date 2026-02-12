@@ -161,6 +161,7 @@ async def post_chat(
                 analytiq_client,
                 request.thread_id,
                 organization_id,
+                current_user.user_id,
                 request.truncate_thread_to_message_count,
                 [user_msg, assistant_msg],
                 extraction=extraction,
@@ -170,12 +171,13 @@ async def post_chat(
                 analytiq_client,
                 request.thread_id,
                 organization_id,
+                current_user.user_id,
                 [user_msg, assistant_msg],
                 extraction=extraction,
             )
         # Optionally set title from first user message
         thread_doc = await ad.agent.agent_threads.get_thread(
-            analytiq_client, request.thread_id, organization_id
+            analytiq_client, request.thread_id, organization_id, current_user.user_id
         )
         if thread_doc and thread_doc.get("title") == "New chat":
             first_content = None
@@ -185,7 +187,7 @@ async def post_chat(
                     break
             if first_content:
                 await ad.agent.agent_threads.update_thread_title(
-                    analytiq_client, request.thread_id, organization_id, first_content
+                    analytiq_client, request.thread_id, organization_id, current_user.user_id, first_content
                 )
     return result
 
@@ -222,6 +224,7 @@ async def post_chat_approve(
             ad.common.get_analytiq_client(),
             request.thread_id,
             organization_id,
+            current_user.user_id,
             [assistant_msg],
             extraction=extraction,
         )
@@ -245,7 +248,7 @@ async def list_threads(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     items = await ad.agent.agent_threads.list_threads(
-        ad.common.get_analytiq_client(), organization_id, document_id, limit=limit
+        ad.common.get_analytiq_client(), organization_id, document_id, current_user.user_id, limit=limit
     )
     return [ThreadSummary(**x) for x in items]
 
@@ -294,7 +297,7 @@ async def get_thread(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     thread_doc = await ad.agent.agent_threads.get_thread(
-        ad.common.get_analytiq_client(), thread_id, organization_id
+        ad.common.get_analytiq_client(), thread_id, organization_id, current_user.user_id
     )
     if not thread_doc:
         raise HTTPException(status_code=404, detail="Thread not found")
@@ -317,7 +320,7 @@ async def delete_thread(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     deleted = await ad.agent.agent_threads.delete_thread(
-        ad.common.get_analytiq_client(), thread_id, organization_id
+        ad.common.get_analytiq_client(), thread_id, organization_id, current_user.user_id
     )
     if not deleted:
         raise HTTPException(status_code=404, detail="Thread not found")
