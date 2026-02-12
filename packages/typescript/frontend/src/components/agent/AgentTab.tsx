@@ -180,6 +180,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
         <>
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <AgentChat
+              organizationId={organizationId}
               messages={state.messages}
               pendingToolCalls={state.pendingToolCalls}
               loading={state.loading}
@@ -196,6 +197,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
           {inputBlock}
           <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
             <AgentChat
+              organizationId={organizationId}
               messages={state.messages}
               pendingToolCalls={state.pendingToolCalls}
               loading={state.loading}

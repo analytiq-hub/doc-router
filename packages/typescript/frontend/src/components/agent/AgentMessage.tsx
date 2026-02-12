@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import ReactMarkdown from 'react-markdown';
+import React, { useMemo } from 'react';
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { AgentChatMessage } from './useAgentChat';
 import ToolCallCard from './ToolCallCard';
@@ -41,25 +41,83 @@ function DiffBlock({ content }: { content: string }) {
   );
 }
 
-/** Custom markdown components — renders diff code blocks with colored lines */
+/** URI scheme regex for custom resource links */
+const RESOURCE_URI_RE = /^(doc|schema_rev|schema|prompt_rev|prompt|tag|form_rev|form|kb):(.+)$/;
+
+/** Pass through our custom schemes; otherwise use defaultUrlTransform. React-markdown's defaultUrlTransform rejects non-http(s) protocols and returns '', which makes href="" resolve to the current page. */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars -- urlTransform signature requires (url, key, node)
+function urlTransform(url: string, _key: string, _node: unknown): string {
+  if (RESOURCE_URI_RE.test(url)) return url;
+  return defaultUrlTransform(url);
+}
+
+/** Map a custom URI scheme to an actual route */
+function resolveResourceUri(scheme: string, id: string, orgId: string): string {
+  switch (scheme) {
+    case 'doc':
+      return `/orgs/${orgId}/docs/${id}`;
+    case 'schema_rev':
+      return `/orgs/${orgId}/schemas/${id}`;
+    case 'schema':
+      return `/orgs/${orgId}/schemas/by-id/${id}`;
+    case 'prompt_rev':
+      return `/orgs/${orgId}/prompts/${id}`;
+    case 'prompt':
+      return `/orgs/${orgId}/prompts/by-id/${id}`;
+    case 'tag':
+      return `/orgs/${orgId}/tags/${id}`;
+    case 'form_rev':
+      return `/orgs/${orgId}/forms/${id}`;
+    case 'form':
+      return `/orgs/${orgId}/forms/by-id/${id}`;
+    case 'kb':
+      return `/orgs/${orgId}/knowledge-bases?tab=edit&kbId=${id}`;
+    default:
+      return '#';
+  }
+}
+
+/** Custom markdown components — renders diff code blocks with colored lines and resource links */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const markdownComponents: Record<string, React.ComponentType<any>> = {
-  pre({ children, ...props }: { children: React.ReactNode }) {
-    const child = React.Children.toArray(children)[0];
-    if (React.isValidElement(child)) {
-      const childProps = child.props as Record<string, unknown>;
-      const className = String(childProps?.className || '');
-      if (className.includes('language-diff')) {
-        const content = String(childProps?.children || '').replace(/\n$/, '');
-        return <DiffBlock content={content} />;
+function createMarkdownComponents(organizationId: string): Record<string, React.ComponentType<any>> {
+  return {
+    pre({ children, ...props }: { children: React.ReactNode }) {
+      const child = React.Children.toArray(children)[0];
+      if (React.isValidElement(child)) {
+        const childProps = child.props as Record<string, unknown>;
+        const className = String(childProps?.className || '');
+        if (className.includes('language-diff')) {
+          const content = String(childProps?.children || '').replace(/\n$/, '');
+          return <DiffBlock content={content} />;
+        }
       }
-    }
-    return <pre {...props}>{children}</pre>;
-  },
-};
+      return <pre {...props}>{children}</pre>;
+    },
+    a({ href, children, className, ...props }: { href?: string; children?: React.ReactNode; className?: string }) {
+      const linkClass = [className, 'text-blue-600 underline'].filter(Boolean).join(' ');
+      const match = href ? RESOURCE_URI_RE.exec(href) : null;
+      if (match) {
+        const [, scheme, id] = match;
+        const url = resolveResourceUri(scheme, id, organizationId);
+        return (
+          <a href={url} target="_blank" rel="noopener noreferrer" className={linkClass} {...props}>
+            {children}
+          </a>
+        );
+      }
+      // Regular external links also open in new tab
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer" className={linkClass} {...props}>
+          {children}
+        </a>
+      );
+    },
+  };
+}
 
 interface AgentMessageProps {
   message: AgentChatMessage;
+  organizationId: string;
   onApprove?: (callId: string) => void;
   onReject?: (callId: string) => void;
   pendingCallIds?: Set<string>;
@@ -70,6 +128,7 @@ interface AgentMessageProps {
 
 export default function AgentMessage({
   message,
+  organizationId,
   onApprove,
   onReject,
   pendingCallIds,
@@ -77,6 +136,7 @@ export default function AgentMessage({
   resolvedToolCalls,
 }: AgentMessageProps) {
   const isUser = message.role === 'user';
+  const mdComponents = useMemo(() => createMarkdownComponents(organizationId), [organizationId]);
 
   return (
     <div
@@ -92,7 +152,7 @@ export default function AgentMessage({
       >
         {message.content && (
           <div className="prose prose-sm max-w-none text-[13px] prose-p:my-1 prose-ul:my-1 prose-pre:my-1 prose-pre:text-xs">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{message.content}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents} urlTransform={urlTransform}>{message.content}</ReactMarkdown>
           </div>
         )}
         {message.toolCalls && message.toolCalls.length > 0 && (

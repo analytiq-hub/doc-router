@@ -44,6 +44,7 @@ function messagesToTurns(messages: AgentChatMessage[]): ChatTurn[] {
 }
 
 interface AgentChatProps {
+  organizationId: string;
   messages: AgentChatMessage[];
   pendingToolCalls: PendingToolCall[];
   loading: boolean;
@@ -93,6 +94,7 @@ function collapsedMinHeightRem(lines: number): number {
 }
 
 export default function AgentChat({
+  organizationId,
   messages,
   pendingToolCalls,
   loading,
@@ -301,6 +303,7 @@ export default function AgentChat({
                 <AgentMessage
                   key={idx}
                   message={msg}
+                  organizationId={organizationId}
                   onApprove={(id) => handleApproveOne(id, true)}
                   onReject={(id) => handleApproveOne(id, false)}
                   pendingCallIds={pendingIds}
