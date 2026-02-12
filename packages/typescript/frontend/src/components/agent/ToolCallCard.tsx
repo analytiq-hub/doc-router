@@ -5,7 +5,6 @@ import type { PendingToolCall } from './useAgentChat';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import CancelOutlinedIcon from '@mui/icons-material/CancelOutlined';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
-import ExpandLessIcon from '@mui/icons-material/ExpandLess';
 
 interface ToolCallCardProps {
   toolCall: PendingToolCall;
@@ -35,24 +34,25 @@ export default function ToolCallCard({
   const hasArgs = Object.keys(argsObj).length > 0;
 
   return (
-    <div className="rounded border border-gray-200 bg-gray-50/80 px-2 py-1 text-xs">
-      <div className="flex items-center gap-1.5 flex-wrap">
-        <span className="font-medium text-gray-700">{toolCall.name}</span>
-        {hasArgs && (
-          <button
-            type="button"
-            onClick={() => setShowRaw((v) => !v)}
-            className="flex items-center gap-0.5 text-gray-500 hover:text-gray-700"
-          >
-            {showRaw ? <ExpandLessIcon sx={{ fontSize: 12 }} /> : <ExpandMoreIcon sx={{ fontSize: 12 }} />}
-            {showRaw ? 'Hide' : 'Show'} params
-          </button>
+    <div className="group">
+      <div
+        className="flex items-center gap-1.5 py-0.5 text-xs cursor-pointer select-none"
+        onClick={() => hasArgs && setShowRaw((v) => !v)}
+      >
+        {hasArgs ? (
+          <ExpandMoreIcon
+            sx={{ fontSize: 14 }}
+            className={`text-gray-400 transition-transform duration-150 ${showRaw ? 'rotate-180' : ''}`}
+          />
+        ) : (
+          <span className="w-3.5" />
         )}
+        <span className="font-medium text-gray-600">{toolCall.name}</span>
         {!resolved && (
           <span className="flex items-center gap-0.5 ml-auto">
             <button
               type="button"
-              onClick={onApprove}
+              onClick={(e) => { e.stopPropagation(); onApprove(); }}
               disabled={disabled}
               className="p-0.5 rounded text-green-600 hover:bg-green-100 disabled:opacity-50"
               title="Approve"
@@ -61,7 +61,7 @@ export default function ToolCallCard({
             </button>
             <button
               type="button"
-              onClick={onReject}
+              onClick={(e) => { e.stopPropagation(); onReject(); }}
               disabled={disabled}
               className="p-0.5 rounded text-red-600 hover:bg-red-100 disabled:opacity-50"
               title="Reject"
@@ -72,14 +72,14 @@ export default function ToolCallCard({
         )}
         {resolved && (
           <span
-            className={`ml-auto text-[10px] font-medium ${approved ? 'text-green-600' : 'text-red-600'}`}
+            className={`ml-auto text-[10px] font-medium ${approved ? 'text-green-500' : 'text-red-500'}`}
           >
-            {approved ? '✓' : '✗'}
+            {approved ? '✓ approved' : '✗ rejected'}
           </span>
         )}
       </div>
       {showRaw && hasArgs && (
-        <pre className="mt-1 p-1.5 bg-white rounded border border-gray-200 text-[10px] overflow-x-auto max-h-24 overflow-y-auto">
+        <pre className="ml-5 mt-0.5 p-2 bg-gray-50 rounded border border-gray-100 text-[10px] overflow-x-auto max-h-24 overflow-y-auto">
           {JSON.stringify(argsObj, null, 2)}
         </pre>
       )}
