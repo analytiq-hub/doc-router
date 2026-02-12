@@ -125,11 +125,13 @@ export default function AgentChat({
       setStickyQuestion(null);
       return;
     }
-    const scrollTop = container.scrollTop;
+    // Use getBoundingClientRect for reliable comparison regardless of nesting
+    const containerTop = container.getBoundingClientRect().top;
+    const threshold = containerTop + STICKY_HEADER_HEIGHT + 8;
     let currentIndex = 0;
     for (let i = 0; i < turnRefs.current.length; i++) {
       const el = turnRefs.current[i];
-      if (el && el.offsetTop <= scrollTop) {
+      if (el && el.getBoundingClientRect().top <= threshold) {
         currentIndex = i;
       }
     }
@@ -231,7 +233,7 @@ export default function AgentChat({
               className={`flex-1 min-w-0 text-sm text-gray-700 bg-transparent border-0 py-1 px-0 focus:outline-none focus:ring-0 placeholder:text-gray-400 ${
                 editingSticky
                   ? 'max-h-[15rem] overflow-y-auto resize-none'
-                  : 'max-h-[6rem] overflow-hidden resize-none'
+                  : 'max-h-[10rem] overflow-hidden resize-none'
               }`}
               disabled={disabled}
               title="Click to expand. Edit and press Enter to resubmit (Shift+Enter for newline)"
@@ -261,7 +263,7 @@ export default function AgentChat({
               ref={(el) => { turnRefs.current[turnIdx] = el; }}
               className="space-y-3"
             >
-              <div className="w-full rounded-lg border border-gray-200 bg-gray-50 min-w-0 flex items-start gap-2">
+              <div className={`w-full rounded-lg border border-gray-200 bg-gray-50 min-w-0 flex items-start gap-2${turnIdx === stickyTurnIndex ? ' invisible' : ''}`}>
                 <textarea
                   value={editingPanelTurnIndex === turnIdx ? editingPanelValue : (turn.user.content ?? '')}
                   onChange={(e) => editingPanelTurnIndex === turnIdx && setEditingPanelValue(e.target.value)}
@@ -278,7 +280,7 @@ export default function AgentChat({
                   className={`flex-1 min-w-0 text-sm text-gray-700 bg-transparent border-0 rounded-lg py-2 px-3 focus:outline-none focus:ring-0 ${
                     editingPanelTurnIndex === turnIdx
                       ? 'max-h-[15rem] overflow-y-auto resize-none'
-                      : 'max-h-[6rem] overflow-hidden resize-none'
+                      : 'max-h-[10rem] overflow-hidden resize-none'
                   }`}
                   disabled={disabled}
                   title="Click to expand. Edit and press Enter or click resubmit (Shift+Enter for newline)"
