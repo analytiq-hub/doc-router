@@ -11,6 +11,9 @@ from analytiq_data.agent.agent_loop import (
     run_agent_approve,
     _sanitize_messages_for_llm,
     _record_spu_for_llm_call,
+    _tool_auto_approved,
+    _any_tool_needs_approval,
+    _build_effective_approvals,
 )
 from analytiq_data.agent.session import set_turn_state, get_turn_state, clear_turn_state, generate_turn_id
 
@@ -167,6 +170,262 @@ async def test_run_agent_turn_read_only_tools_auto_approved(
     assert "error" not in result
     assert "turn_id" not in result
     assert result.get("text") == "(Max tool rounds reached.)"
+
+
+@pytest.mark.asyncio
+async def test_run_agent_turn_auto_approved_tools_whitelist_auto_approves(
+    mock_analytiq_client,
+    mock_payments,
+    mock_llm_key,
+    mock_llm_provider,
+    mock_litellm,
+    mock_build_system,
+    mock_completion_cost,
+):
+    """Read-write tool in auto_approved_tools is auto-approved; no turn_id (executes without pause)."""
+    msg = MagicMock()
+    msg.content = "Creating schema."
+    tc = MagicMock()
+    tc.id = "call_1"
+    tc.function.name = "create_schema"
+    tc.function.arguments = "{}"
+    msg.tool_calls = [tc]
+    mock_litellm.return_value = MagicMock(
+        choices=[MagicMock(message=msg)],
+        usage=MagicMock(prompt_tokens=10, completion_tokens=5),
+    )
+    result = await run_agent_turn(
+        analytiq_client=mock_analytiq_client,
+        organization_id="org1",
+        document_id="doc1",
+        user_id="user1",
+        messages=[{"role": "user", "content": "Create a schema."}],
+        model="gpt-4o-mini",
+        auto_approve=False,
+        auto_approved_tools={"create_schema"},
+    )
+    assert "error" not in result
+    assert "turn_id" not in result
+    assert result.get("text") == "(Max tool rounds reached.)"
+
+
+@pytest.mark.asyncio
+async def test_run_agent_turn_auto_approved_tools_partial_whitelist_pauses(
+    mock_analytiq_client,
+    mock_payments,
+    mock_llm_key,
+    mock_llm_provider,
+    mock_litellm,
+    mock_build_system,
+    mock_completion_cost,
+):
+    """Read-write tool NOT in auto_approved_tools still pauses (create_tag whitelisted, create_schema not)."""
+    msg = MagicMock()
+    msg.content = "Creating schema."
+    tc = MagicMock()
+    tc.id = "call_1"
+    tc.function.name = "create_schema"
+    tc.function.arguments = "{}"
+    msg.tool_calls = [tc]
+    mock_litellm.return_value = MagicMock(
+        choices=[MagicMock(message=msg)],
+        usage=MagicMock(prompt_tokens=10, completion_tokens=5),
+    )
+    result = await run_agent_turn(
+        analytiq_client=mock_analytiq_client,
+        organization_id="org1",
+        document_id="doc1",
+        user_id="user1",
+        messages=[{"role": "user", "content": "Create a schema."}],
+        model="gpt-4o-mini",
+        auto_approve=False,
+        auto_approved_tools={"create_tag"},
+    )
+    assert "error" not in result
+    assert "turn_id" in result
+    assert len(result.get("tool_calls", [])) == 1
+    assert result["tool_calls"][0]["name"] == "create_schema"
+
+
+@pytest.mark.asyncio
+async def test_run_agent_turn_auto_approve_true_overrides_all(
+    mock_analytiq_client,
+    mock_payments,
+    mock_llm_key,
+    mock_llm_provider,
+    mock_litellm,
+    mock_build_system,
+    mock_completion_cost,
+):
+    """When auto_approve=True, all read-write tools execute without pause regardless of auto_approved_tools."""
+    msg = MagicMock()
+    msg.content = "Creating schema."
+    tc = MagicMock()
+    tc.id = "call_1"
+    tc.function.name = "create_schema"
+    tc.function.arguments = "{}"
+    msg.tool_calls = [tc]
+    mock_litellm.return_value = MagicMock(
+        choices=[MagicMock(message=msg)],
+        usage=MagicMock(prompt_tokens=10, completion_tokens=5),
+    )
+    result = await run_agent_turn(
+        analytiq_client=mock_analytiq_client,
+        organization_id="org1",
+        document_id="doc1",
+        user_id="user1",
+        messages=[{"role": "user", "content": "Create a schema."}],
+        model="gpt-4o-mini",
+        auto_approve=True,
+        auto_approved_tools=None,
+    )
+    assert "error" not in result
+    assert "turn_id" not in result
+    assert result.get("text") == "(Max tool rounds reached.)"
+
+
+@pytest.mark.asyncio
+async def test_run_agent_turn_auto_approved_tools_empty_set_pauses(
+    mock_analytiq_client,
+    mock_payments,
+    mock_llm_key,
+    mock_llm_provider,
+    mock_litellm,
+    mock_build_system,
+    mock_completion_cost,
+):
+    """Empty auto_approved_tools set: no extra whitelist; read-write tools still require approval."""
+    msg = MagicMock()
+    msg.content = "Creating schema."
+    tc = MagicMock()
+    tc.id = "call_1"
+    tc.function.name = "create_schema"
+    tc.function.arguments = "{}"
+    msg.tool_calls = [tc]
+    mock_litellm.return_value = MagicMock(
+        choices=[MagicMock(message=msg)],
+        usage=MagicMock(prompt_tokens=10, completion_tokens=5),
+    )
+    result = await run_agent_turn(
+        analytiq_client=mock_analytiq_client,
+        organization_id="org1",
+        document_id="doc1",
+        user_id="user1",
+        messages=[{"role": "user", "content": "Create a schema."}],
+        model="gpt-4o-mini",
+        auto_approve=False,
+        auto_approved_tools=set(),
+    )
+    assert "error" not in result
+    assert "turn_id" in result
+    assert result["tool_calls"][0]["name"] == "create_schema"
+
+
+# --- Unit tests for tool permission helpers ---
+
+
+def test_tool_auto_approved_read_only_always_true():
+    """Read-only tools are always auto-approved regardless of auto_approve or auto_approved_tools."""
+    for auto_approve in (True, False):
+        for auto_approved in (None, set(), {"create_schema"}):
+            assert _tool_auto_approved("help_schemas", auto_approve, auto_approved) is True
+            assert _tool_auto_approved("get_ocr_text", auto_approve, auto_approved) is True
+            assert _tool_auto_approved("list_tags", auto_approve, auto_approved) is True
+
+
+def test_tool_auto_approved_read_write_when_auto_approve_true():
+    """Read-write tools are auto-approved when auto_approve=True regardless of auto_approved_tools."""
+    assert _tool_auto_approved("create_schema", True, None) is True
+    assert _tool_auto_approved("create_schema", True, set()) is True
+    assert _tool_auto_approved("create_tag", True, {"create_schema"}) is True
+    assert _tool_auto_approved("delete_document", True, None) is True
+
+
+def test_tool_auto_approved_read_write_when_auto_approve_false_no_whitelist():
+    """Read-write tools require approval when auto_approve=False and auto_approved_tools is None or empty."""
+    assert _tool_auto_approved("create_schema", False, None) is False
+    assert _tool_auto_approved("create_tag", False, None) is False
+    assert _tool_auto_approved("create_schema", False, set()) is False
+    assert _tool_auto_approved("update_document", False, set()) is False
+
+
+def test_tool_auto_approved_read_write_when_in_whitelist():
+    """Read-write tools in auto_approved_tools are auto-approved when auto_approve=False."""
+    whitelist = {"create_schema", "create_tag"}
+    assert _tool_auto_approved("create_schema", False, whitelist) is True
+    assert _tool_auto_approved("create_tag", False, whitelist) is True
+    assert _tool_auto_approved("create_schema", False, {"create_schema"}) is True
+    assert _tool_auto_approved("create_tag", False, {"create_tag"}) is True
+
+
+def test_tool_auto_approved_read_write_when_not_in_whitelist():
+    """Read-write tools not in auto_approved_tools still require approval when auto_approve=False."""
+    assert _tool_auto_approved("create_prompt", False, {"create_schema"}) is False
+    assert _tool_auto_approved("delete_document", False, {"create_tag"}) is False
+    assert _tool_auto_approved("update_schema", False, {"create_schema"}) is False
+
+
+def test_any_tool_needs_approval_all_read_only():
+    """When all tools are read-only, none need approval."""
+    pending = [
+        {"id": "c1", "name": "help_schemas"},
+        {"id": "c2", "name": "get_ocr_text"},
+    ]
+    assert _any_tool_needs_approval(pending, False, None) is False
+    assert _any_tool_needs_approval(pending, False, set()) is False
+
+
+def test_any_tool_needs_approval_read_write_no_approval():
+    """When any read-write tool is not auto-approved, approval is needed."""
+    pending = [{"id": "c1", "name": "create_schema"}]
+    assert _any_tool_needs_approval(pending, False, None) is True
+    assert _any_tool_needs_approval(pending, False, set()) is True
+    assert _any_tool_needs_approval(pending, False, {"create_tag"}) is True
+
+
+def test_any_tool_needs_approval_all_auto_approved():
+    """When auto_approve=True or all tools in whitelist, no approval needed."""
+    pending = [{"id": "c1", "name": "create_schema"}]
+    assert _any_tool_needs_approval(pending, True, None) is False
+    assert _any_tool_needs_approval(pending, False, {"create_schema"}) is False
+
+
+def test_any_tool_needs_approval_mixed():
+    """Mixed read-only + read-write: approval needed if any read-write not approved."""
+    pending = [
+        {"id": "c1", "name": "help_schemas"},
+        {"id": "c2", "name": "create_schema"},
+    ]
+    assert _any_tool_needs_approval(pending, False, None) is True
+    assert _any_tool_needs_approval(pending, False, {"create_schema"}) is False
+    assert _any_tool_needs_approval(pending, False, {"create_tag"}) is True
+
+
+def test_any_tool_needs_approval_multiple_read_write():
+    """Multiple read-write tools: approval needed if any one is not approved."""
+    pending = [
+        {"id": "c1", "name": "create_schema"},
+        {"id": "c2", "name": "create_tag"},
+    ]
+    assert _any_tool_needs_approval(pending, False, None) is True
+    assert _any_tool_needs_approval(pending, False, {"create_schema"}) is True  # create_tag not in
+    assert _any_tool_needs_approval(pending, False, {"create_schema", "create_tag"}) is False
+
+
+def test_build_effective_approvals():
+    """_build_effective_approvals returns correct approved flag per call_id."""
+    pending = [
+        {"id": "call_1", "name": "help_schemas"},
+        {"id": "call_2", "name": "create_schema"},
+    ]
+    out = _build_effective_approvals(pending, False, None)
+    assert out == {"call_1": True, "call_2": False}
+
+    out = _build_effective_approvals(pending, False, {"create_schema"})
+    assert out == {"call_1": True, "call_2": True}
+
+    out = _build_effective_approvals(pending, True, None)
+    assert out == {"call_1": True, "call_2": True}
 
 
 def test_sanitize_messages_strips_tool_calls_without_results():
