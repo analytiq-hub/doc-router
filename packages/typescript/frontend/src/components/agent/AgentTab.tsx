@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useRef } from 'react';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { useAgentChat, getMessagesBeforeTurn } from './useAgentChat';
 import AgentChat from './AgentChat';
@@ -133,10 +133,10 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
           type="button"
           onClick={handleSend}
           disabled={!input.trim() || state.loading}
-          className="flex items-center justify-center w-8 h-8 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          className="flex items-center justify-center w-8 h-8 text-gray-700 hover:text-blue-600 disabled:text-gray-300 disabled:cursor-not-allowed shrink-0"
           title="Send"
         >
-          <ArrowUpwardIcon sx={{ fontSize: 18 }} />
+          <ArrowCircleUpIcon sx={{ fontSize: 24 }} />
         </button>
       </div>
     </div>

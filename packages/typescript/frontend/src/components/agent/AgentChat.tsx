@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ReplayIcon from '@mui/icons-material/Replay';
 import type { AgentChatMessage, PendingToolCall } from './useAgentChat';
 import AgentMessage from './AgentMessage';
 
@@ -246,7 +246,7 @@ export default function AgentChat({
                 className="shrink-0 p-1.5 rounded text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
                 title="Resubmit from this point"
               >
-                <ArrowUpwardIcon sx={{ fontSize: 18 }} />
+                <ReplayIcon sx={{ fontSize: 16 }} />
               </button>
             )}
             </div>
@@ -293,7 +293,7 @@ export default function AgentChat({
                     className="shrink-0 p-1.5 rounded text-gray-500 hover:bg-gray-100 hover:text-gray-700 disabled:opacity-50"
                     title="Resubmit from this point"
                   >
-                    <ArrowUpwardIcon sx={{ fontSize: 18 }} />
+                    <ReplayIcon sx={{ fontSize: 16 }} />
                   </button>
                 )}
               </div>
