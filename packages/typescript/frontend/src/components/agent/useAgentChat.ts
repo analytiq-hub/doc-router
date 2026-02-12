@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { apiClient, getApiErrorMsg } from '@/utils/api';
 
 export interface AgentChatMessage {
@@ -93,6 +93,23 @@ export function useAgentChat(organizationId: string, documentId: string) {
   const [threadId, setThreadId] = useState<string | null>(null);
   const [threads, setThreads] = useState<AgentThreadSummary[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const cancelRequest = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
+    setLoading(false);
+    setError(null);
+    // Remove the pending user message that got no response
+    setMessages((prev) => {
+      if (prev.length > 0 && prev[prev.length - 1].role === 'user') {
+        return prev.slice(0, -1);
+      }
+      return prev;
+    });
+  }, []);
 
   const loadThreads = useCallback(async () => {
     setThreadsLoading(true);
@@ -194,6 +211,8 @@ export function useAgentChat(organizationId: string, documentId: string) {
       setMessages((prev) => [...prev, userMsg]);
       setError(null);
       setLoading(true);
+      const controller = new AbortController();
+      abortRef.current = controller;
 
       const messageListForApi = [
         ...messages.map((m) => ({
@@ -223,7 +242,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           stream: false,
           auto_approve: autoApprove,
           thread_id: currentThreadId,
-        });
+        }, { signal: controller.signal });
 
         if (data.working_state?.extraction != null) {
           setExtraction(data.working_state.extraction);
@@ -247,10 +266,12 @@ export function useAgentChat(organizationId: string, documentId: string) {
         }
         await loadThreads();
       } catch (err) {
+        if (controller.signal.aborted) return;
         const msg = getApiErrorMsg(err) ?? 'Failed to send message';
         setError(msg);
         setMessages((prev) => prev.slice(0, -1));
       } finally {
+        abortRef.current = null;
         setLoading(false);
       }
     },
@@ -278,6 +299,8 @@ export function useAgentChat(organizationId: string, documentId: string) {
       setMessages([...history, userMsg]);
       setError(null);
       setLoading(true);
+      const controller = new AbortController();
+      abortRef.current = controller;
 
       const messageListForApi = [
         ...history.map((m) => ({
@@ -312,7 +335,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           turn_id?: string;
           tool_calls?: Array<{ id: string; name: string; arguments: string }>;
           working_state?: { extraction?: Record<string, unknown> };
-        }>(getChatUrl(organizationId, documentId, 'chat'), body);
+        }>(getChatUrl(organizationId, documentId, 'chat'), body, { signal: controller.signal });
 
         if (data.working_state?.extraction != null) {
           setExtraction(data.working_state.extraction);
@@ -336,10 +359,12 @@ export function useAgentChat(organizationId: string, documentId: string) {
         }
         await loadThreads();
       } catch (err) {
+        if (controller.signal.aborted) return;
         const msg = getApiErrorMsg(err) ?? 'Failed to send message';
         setError(msg);
         setMessages([...history]);
       } finally {
+        abortRef.current = null;
         setLoading(false);
       }
     },
@@ -352,6 +377,8 @@ export function useAgentChat(organizationId: string, documentId: string) {
 
       setLoading(true);
       setError(null);
+      const controller = new AbortController();
+      abortRef.current = controller;
 
       try {
         const { data } = await apiClient.post<{
@@ -363,7 +390,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           turn_id: pendingTurnId,
           approvals,
           thread_id: threadId ?? undefined,
-        });
+        }, { signal: controller.signal });
 
         if (data.working_state?.extraction != null) {
           setExtraction(data.working_state.extraction);
@@ -387,8 +414,10 @@ export function useAgentChat(organizationId: string, documentId: string) {
         }
         if (threadId) await loadThreads();
       } catch (err) {
+        if (controller.signal.aborted) return;
         setError(getApiErrorMsg(err) ?? 'Failed to submit approvals');
       } finally {
+        abortRef.current = null;
         setLoading(false);
       }
     },
@@ -433,6 +462,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
     sendMessage,
     sendMessageWithHistory,
     approveToolCalls,
+    cancelRequest,
     setAutoApprove,
     setModel,
     setError,

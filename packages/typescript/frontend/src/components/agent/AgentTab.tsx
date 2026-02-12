@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
+import StopCircleIcon from '@mui/icons-material/StopCircle';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
 import { useAgentChat, getMessagesBeforeTurn } from './useAgentChat';
 import AgentChat from './AgentChat';
@@ -19,6 +20,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
     sendMessage,
     sendMessageWithHistory,
     approveToolCalls,
+    cancelRequest,
     setAutoApprove,
     setModel,
     setError,
@@ -129,15 +131,26 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             </div>
           )}
         </div>
-        <button
-          type="button"
-          onClick={handleSend}
-          disabled={!input.trim() || state.loading}
-          className="flex items-center justify-center w-8 h-8 text-gray-700 hover:text-blue-600 disabled:text-gray-300 disabled:cursor-not-allowed shrink-0"
-          title="Send"
-        >
-          <ArrowCircleUpIcon sx={{ fontSize: 24 }} />
-        </button>
+        {state.loading ? (
+          <button
+            type="button"
+            onClick={cancelRequest}
+            className="flex items-center justify-center w-8 h-8 text-red-500 hover:text-red-700 shrink-0"
+            title="Stop"
+          >
+            <StopCircleIcon sx={{ fontSize: 24 }} />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={handleSend}
+            disabled={!input.trim()}
+            className="flex items-center justify-center w-8 h-8 text-gray-700 hover:text-blue-600 disabled:text-gray-300 disabled:cursor-not-allowed shrink-0"
+            title="Send"
+          >
+            <ArrowCircleUpIcon sx={{ fontSize: 24 }} />
+          </button>
+        )}
       </div>
     </div>
   );
