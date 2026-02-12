@@ -19,10 +19,6 @@ def _db(context: dict):
     return ad.common.get_async_db(context["analytiq_client"])
 
 
-def _is_valid_object_id(s: str) -> bool:
-    return len(s) == 24 and all(c in "0123456789abcdef" for c in s.lower())
-
-
 def _doc_to_serializable(doc: dict) -> dict:
     """Convert a doc from DB to JSON-friendly dict (id, document_name, tag_ids, metadata, etc.)."""
     upload_date = doc.get("upload_date")
@@ -92,7 +88,7 @@ async def delete_document(context: dict, params: dict) -> dict[str, Any]:
     document_id = params.get("document_id") or context.get("document_id")
     if not document_id:
         return {"error": "document_id is required (or use current document context)"}
-    if not _is_valid_object_id(document_id):
+    if not ad.common.is_valid_object_id(document_id):
         return {"error": "document_id must be a valid 24-character hex ID"}
 
     db = _db(context)
@@ -128,7 +124,7 @@ async def update_document(context: dict, params: dict) -> dict[str, Any]:
     document_id = params.get("document_id") or context.get("document_id")
     if not document_id:
         return {"error": "document_id is required (or use current document context)"}
-    if not _is_valid_object_id(document_id):
+    if not ad.common.is_valid_object_id(document_id):
         return {"error": "document_id must be a valid 24-character hex ID"}
 
     document_name = params.get("document_name")
@@ -147,7 +143,7 @@ async def update_document(context: dict, params: dict) -> dict[str, Any]:
             tag_ids = [str(t) for t in (tag_ids if isinstance(tag_ids, str) else [])]
         else:
             tag_ids = [str(t) for t in tag_ids]
-        invalid_format = [tid for tid in tag_ids if not _is_valid_object_id(tid)]
+        invalid_format = [tid for tid in tag_ids if not ad.common.is_valid_object_id(tid)]
         if invalid_format:
             return {"error": f"Invalid tag ID format (must be 24-char hex): {invalid_format}"}
         tags_cursor = db.tags.find(

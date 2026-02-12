@@ -1,10 +1,14 @@
 import asyncio
+import math
 import analytiq_data as ad
 import logging
 from typing import Dict, Any, Callable
 
 logger = logging.getLogger(__name__)
 
+# Max SPUs we might charge for a single LLM call (cap in compute_spu_to_charge).
+# Formula: ceil(200% * actual_cost / price_per_credit); this caps the result.
+MAX_SPU_PER_LLM_CALL = 50
 
 LLM_SPU_COSTS = {
     "gpt-4o-mini": 1,
@@ -15,6 +19,31 @@ LLM_SPU_COSTS = {
 
 check_payment_limits = None
 record_payment_usage = None
+get_price_per_credit = None  # Hook: () -> float, set by app.routes.payments
+
+
+def set_get_price_per_credit_hook(fn: Callable[[], float]) -> None:
+    """Set the function to get price per SPU credit (from Stripe config).
+    Note: fn is synchronous; if this ever becomes async, compute_spu_to_charge would need to change.
+    """
+    global get_price_per_credit
+    get_price_per_credit = fn
+
+
+def compute_spu_to_charge(actual_cost: float, min_spu: int = 1, cost_multiplier: float = 2.0) -> int:
+    """
+    Compute SPUs to charge such that we cover at least cost_multiplier (default 200%) of actual_cost.
+    Returns max(min_spu, ceil(cost_multiplier * actual_cost / price_per_credit)), capped at MAX_SPU_PER_LLM_CALL.
+    When price_per_credit is 0 or unavailable, returns min_spu.
+    """
+    if actual_cost is None or actual_cost <= 0:
+        return min_spu
+    price = get_price_per_credit() if get_price_per_credit else 0
+    if not price or price <= 0:
+        return min_spu
+    spus_from_cost = math.ceil(cost_multiplier * actual_cost / price)
+    return min(max(min_spu, spus_from_cost), MAX_SPU_PER_LLM_CALL)
+
 
 async def get_spu_cost(llm_model: str) -> int:
     """Get the SPU cost for a given LLM model"""

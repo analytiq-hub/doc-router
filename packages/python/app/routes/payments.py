@@ -261,10 +261,11 @@ async def init_payments(db):
 
     ad.payments.set_check_payment_limits_hook(check_payment_limits)
     ad.payments.set_record_payment_usage_hook(record_payment_usage)
-    
-    # Initialize dynamic configuration from Stripe
+
+    # Initialize dynamic configuration from Stripe (must run before get_price_per_credit hook)
     await get_credit_config()
     await get_tier_limits()
+    ad.payments.set_get_price_per_credit_hook(lambda: CREDIT_CONFIG.get("price_per_credit", 0.0))
 
     # Create indexes for payments_usage_records collection
     from analytiq_data.mongodb import ensure_index

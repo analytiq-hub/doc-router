@@ -127,6 +127,44 @@ async def _execute_tool_calls(
     return assistant_msg, tool_messages
 
 
+async def _record_spu_for_llm_call(
+    response: Any,
+    organization_id: str,
+    llm_provider: str,
+    model: str,
+) -> None:
+    """Record SPU usage after an LLM call. Charge at least 1 SPU, or ceil(200% of actual cost), capped at MAX_SPU_PER_LLM_CALL.
+    All logic is wrapped in try/except so failures (e.g. completion_cost, record_spu_usage) never fail the agent turn.
+    """
+    try:
+        usage = getattr(response, "usage", None)
+        try:
+            actual_cost = litellm.completion_cost(completion_response=response) if usage else 0.0
+        except Exception as e:
+            logger.warning(f"Could not compute LLM cost for model {model} (may not be in pricing table): {e}")
+            actual_cost = 0.0
+
+        prompt_tokens = getattr(usage, "prompt_tokens", None) or 0
+        completion_tokens = getattr(usage, "completion_tokens", None) or 0
+        total_tokens = getattr(usage, "total_tokens", None) or (prompt_tokens + completion_tokens)
+
+        spus_to_charge = ad.payments.compute_spu_to_charge(actual_cost)
+
+        await ad.payments.record_spu_usage(
+            organization_id,
+            spus_to_charge,
+            llm_provider=llm_provider,
+            llm_model=model,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            total_tokens=total_tokens,
+            actual_cost=actual_cost,
+        )
+    except Exception as e:
+        logger.error(f"Error recording SPU usage for document chat (model={model}): {e}")
+        # Don't fail the chat if SPU recording fails
+
+
 async def run_agent_turn(
     analytiq_client: Any,
     organization_id: str,
@@ -188,8 +226,10 @@ async def run_agent_turn(
     while iteration < MAX_TOOL_ROUNDS:
         iteration += 1
         try:
-            spu_cost = await ad.payments.get_spu_cost(model)
-            await ad.payments.check_spu_limits(organization_id, spu_cost)
+            # Pre-check uses get_spu_cost (model-based lower bound). Actual charge may be higher
+            # via compute_spu_to_charge(actual_cost). User could pass check but be charged more.
+            spu_check = await ad.payments.get_spu_cost(model)
+            await ad.payments.check_spu_limits(organization_id, spu_check)
         except Exception as e:
             return {"error": str(e)}
         response = await ad.llm.agent_completion(
@@ -203,8 +243,10 @@ async def run_agent_turn(
             tool_choice="auto",
         )
         message = response.choices[0].message
-        tool_calls = message.tool_calls if hasattr(message, "tool_calls") and message.tool_calls else []
+        tool_calls = getattr(message, "tool_calls", None) or []
         text = (message.content or "").strip()
+
+        await _record_spu_for_llm_call(response, organization_id, llm_provider, model)
 
         if not tool_calls:
             return {"text": text, "working_state": working_state}
@@ -278,8 +320,9 @@ async def run_agent_approve(
         aws_region_name = aws.region_name
 
     try:
-        spu_cost = await ad.payments.get_spu_cost(model)
-        await ad.payments.check_spu_limits(state["organization_id"], spu_cost)
+        # Pre-check uses get_spu_cost (model-based lower bound). Actual charge may be higher.
+        spu_check = await ad.payments.get_spu_cost(model)
+        await ad.payments.check_spu_limits(state["organization_id"], spu_check)
     except Exception as e:
         return {"error": str(e)}
 
@@ -294,8 +337,10 @@ async def run_agent_approve(
         tool_choice="auto",
     )
     message = response.choices[0].message
-    tool_calls = message.tool_calls if hasattr(message, "tool_calls") and message.tool_calls else []
+    tool_calls = getattr(message, "tool_calls", None) or []
     text = (message.content or "").strip()
+
+    await _record_spu_for_llm_call(response, state["organization_id"], llm_provider, model)
 
     if not tool_calls:
         return {"text": text, "working_state": state["working_state"]}

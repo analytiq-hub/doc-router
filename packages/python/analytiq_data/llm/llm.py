@@ -337,7 +337,7 @@ async def run_llm(analytiq_client,
         dict: The LLM result
     """
     # Normalize invalid prompt_revid (e.g. non-ObjectId from agent) to avoid ObjectId errors downstream
-    if prompt_revid != "default" and not ad.llm.models._is_valid_object_id(prompt_revid):
+    if prompt_revid != "default" and not ad.common.is_valid_object_id(prompt_revid):
         logger.info("prompt_revid %r is not a valid ObjectId, using default prompt", prompt_revid)
         prompt_revid = "default"
 
