@@ -45,8 +45,7 @@ export class TestServer {
       '-m', 'uvicorn',
       'app.main:app',
       '--host', '0.0.0.0',
-      '--port', this.config.port.toString(),
-      '--reload'
+      '--port', this.config.port.toString()
     ];
     
     console.log('Starting uvicorn with:');
@@ -206,7 +205,7 @@ export class TestServer {
     });
   }
 
-  private async waitForServer(maxRetries = 60): Promise<void> {
+  private async waitForServer(maxRetries = 120): Promise<void> {
     // Give the server a bit more time to initialize before first check
     await setTimeout(2000);
 
