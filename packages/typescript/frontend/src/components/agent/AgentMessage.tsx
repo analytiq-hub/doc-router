@@ -156,7 +156,7 @@ export default function AgentMessage({
         {!isUser && message.executedRounds?.map((round, idx) => (
           <React.Fragment key={idx}>
             {round.thinking && (
-              <ThinkingBlock content={round.thinking} defaultExpanded={false} />
+              <ThinkingBlock content={round.thinking} defaultExpanded={true} />
             )}
             {round.tool_calls && round.tool_calls.length > 0 && (
               <div className="mt-1 space-y-0.5">
@@ -175,7 +175,7 @@ export default function AgentMessage({
           </React.Fragment>
         ))}
         {!isUser && message.thinking && (
-          <ThinkingBlock content={message.thinking} defaultExpanded={false} />
+          <ThinkingBlock content={message.thinking} defaultExpanded={!!message.executedRounds?.length} />
         )}
         {message.content && (
           <div className="prose prose-sm max-w-none text-[13px] prose-p:my-1 prose-ul:my-1 prose-pre:my-1 prose-pre:text-xs">
