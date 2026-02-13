@@ -12,7 +12,7 @@ export default async function globalSetup() {
   process.env.ENV = 'pytest_ts';
   process.env.NEXTAUTH_SECRET = 'test_secret_key_for_tests';
   process.env.NEXTAUTH_URL = 'http://127.0.0.1:3000';
-  process.env.MONGODB_URI = 'mongodb://localhost:27017';
+  process.env.MONGODB_URI = 'mongodb://localhost:27017/?directConnection=true';
   process.env.FASTAPI_ROOT_PATH = '/';
   process.env.ADMIN_EMAIL = 'test-admin@example.com';
   process.env.ADMIN_PASSWORD = 'test-admin-password-123';
