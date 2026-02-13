@@ -233,6 +233,21 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     }
   }, [fileName, fileSize]);
 
+  // Suppress react-pdf's internal warning() call for AbortException which fires
+  // via the `warning` package before onRenderTextLayerError gets a chance to handle it.
+  useEffect(() => {
+    const orig = console.error;
+    console.error = (...args: unknown[]) => {
+      if (typeof args[0] === 'string' && args[0].includes('TextLayer task cancelled')) {
+        return;
+      }
+      orig.apply(console, args);
+    };
+    return () => {
+      console.error = orig;
+    };
+  }, []);
+
   const [originalRotation, setOriginalRotation] = useState(0);
 
   const handleLoadSuccess = ({ numPages }: { numPages: number }) => {
