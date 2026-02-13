@@ -26,6 +26,9 @@ export default async function RootLayout({
   const appSession = await getAppServerSession();
   return (
     <html lang="en">
+      <head>
+        <link rel="stylesheet" href="/formio.full.css" />
+      </head>
       <body>
         <ThemeRegistry>
           <SessionProvider session={appSession}>

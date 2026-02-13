@@ -26,11 +26,12 @@ export default function FormioProvider({
     // Only initialize Formio on the client side
     const initializeFormio = async () => {
       const { Formio, Templates } = await import("@tsed/react-formio");
-      const tailwind = await import("@tsed/tailwind-formio");
+      const tailwindModule = await import("@/lib/tailwind-formio-loader.cjs");
+      const tailwind = tailwindModule.default ?? tailwindModule;
 
       // Initialize Formio with Tailwind (uses Boxicons by default)
       // eslint-disable-next-line react-hooks/rules-of-hooks -- Formio.use is not a React hook
-      Formio.use(tailwind.default);
+      Formio.use(tailwind);
       Templates.framework = "tailwind";
     };
 
