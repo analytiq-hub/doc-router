@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, Awaitable, Callable, Optional
 
 import analytiq_data as ad
 import litellm
@@ -36,6 +36,33 @@ def _tool_call_ids(msg: dict) -> list[str]:
         for tc in tcs
         if tc
     ]
+
+
+def _thinking_blocks_for_api(thinking_blocks: Any) -> list[dict] | None:
+    """
+    Build thinking_blocks for sending to the API. Anthropic requires a non-empty
+    'signature' on each thinking block. Blocks from our streaming path have no signature,
+    so we only include blocks that have one; otherwise we omit thinking_blocks.
+    """
+    if not thinking_blocks:
+        return None
+    blocks = []
+    for b in thinking_blocks:
+        if isinstance(b, dict):
+            sig = b.get("signature") or ""
+            if not sig:
+                continue
+            blocks.append(b)
+        elif hasattr(b, "thinking"):
+            sig = getattr(b, "signature", "") or ""
+            if not sig:
+                continue
+            blocks.append({
+                "type": getattr(b, "type", "thinking"),
+                "thinking": getattr(b, "thinking", ""),
+                "signature": sig,
+            })
+    return blocks if blocks else None
 
 
 def _sanitize_messages_for_llm(messages: list[dict]) -> list[dict]:
@@ -93,10 +120,13 @@ async def _execute_tool_calls(
     context: dict,
     tool_calls: list[dict],
     approvals: dict[str, bool] | None = None,
+    on_tool_result: Optional[Callable[[dict], Awaitable[None]]] = None,
+    round_index: int = 0,
 ) -> tuple[list[dict], list[dict]]:
     """
     Execute tool calls. approvals: call_id -> True (approve) or False (reject).
     If approvals is None, treat all as approved.
+    If on_tool_result is set, called after each tool with {round_index, call_id, name, success, result?, error?}.
     Returns (assistant_message, tool_result_messages).
     """
     assistant_msg = {
@@ -114,16 +144,51 @@ async def _execute_tool_calls(
     tool_messages = []
     for tc in tool_calls:
         call_id = tc["id"]
+        name = tc.get("name", "")
         approved = approvals is None or approvals.get(call_id, False)
         if approved:
-            result_str = await execute_tool(tc["name"], context, tc["arguments"])
-            tool_messages.append({"role": "tool", "tool_call_id": call_id, "content": result_str})
+            try:
+                result_str = await execute_tool(tc["name"], context, tc["arguments"])
+                tool_messages.append({"role": "tool", "tool_call_id": call_id, "content": result_str})
+                if on_tool_result:
+                    preview = (result_str[:200] + "…") if len(result_str) > 200 else result_str
+                    await on_tool_result({
+                        "round_index": round_index,
+                        "call_id": call_id,
+                        "name": name,
+                        "success": True,
+                        "result": result_str,
+                        "preview": preview,
+                    })
+            except Exception as e:
+                err_msg = str(e)
+                tool_messages.append({
+                    "role": "tool",
+                    "tool_call_id": call_id,
+                    "content": json.dumps({"error": err_msg}),
+                })
+                if on_tool_result:
+                    await on_tool_result({
+                        "round_index": round_index,
+                        "call_id": call_id,
+                        "name": name,
+                        "success": False,
+                        "error": err_msg,
+                    })
         else:
             tool_messages.append({
                 "role": "tool",
                 "tool_call_id": call_id,
                 "content": json.dumps({"error": "User rejected this action."}),
             })
+            if on_tool_result:
+                await on_tool_result({
+                    "round_index": round_index,
+                    "call_id": call_id,
+                    "name": name,
+                    "success": False,
+                    "error": "User rejected this action.",
+                })
     return assistant_msg, tool_messages
 
 
@@ -215,6 +280,7 @@ async def run_agent_turn(
     resolved_mentions: list[dict] | None = None,
     working_state: dict | None = None,
     auto_approved_tools: set[str] | None = None,
+    stream_handler: Optional[Callable[[str, Any], Awaitable[None]]] = None,
 ) -> dict[str, Any]:
     """
     Run one or more agent steps. If auto_approve is False and the LLM returns tool_calls,
@@ -277,31 +343,79 @@ async def run_agent_turn(
         if getattr(litellm, "supports_reasoning", None) and litellm.supports_reasoning(model=model):
             thinking_param = {"type": "enabled", "budget_tokens": 4096}
 
-        response = await ad.llm.agent_completion(
-            model=model,
-            messages=llm_messages,
-            api_key=api_key,
-            aws_access_key_id=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key,
-            aws_region_name=aws_region_name,
-            tools=TOOL_DEFINITIONS,
-            tool_choice="auto",
-            thinking=thinking_param,
-        )
-        message = response.choices[0].message
+        if stream_handler:
+            # Phase 2: true LLM streaming — stream content/thinking deltas with round_index, then thinking_done, assistant_text_done, done
+            round_index = iteration - 1  # 0-indexed per plan
+            message = None
+            usage_obj = None
+            async for event_type, payload in ad.llm.agent_completion_stream(
+                model=model,
+                messages=llm_messages,
+                api_key=api_key,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_region_name=aws_region_name,
+                tools=TOOL_DEFINITIONS,
+                tool_choice="auto",
+                thinking=thinking_param,
+            ):
+                if event_type == "content":
+                    await stream_handler("assistant_text_chunk", {"chunk": payload, "round_index": round_index})
+                elif event_type == "thinking":
+                    await stream_handler("thinking_chunk", {"chunk": payload, "round_index": round_index})
+                elif event_type == "message":
+                    message = payload
+                elif event_type == "usage":
+                    usage_obj = payload
+            if usage_obj is not None:
+                fake_response = type("R", (), {"usage": usage_obj})()
+                await _record_spu_for_llm_call(fake_response, organization_id, llm_provider, model)
+            if message is None:
+                return {"error": "Stream did not return a message"}
+            tool_calls = getattr(message, "tool_calls", None) or []
+            text = (message.content or "").strip()
+            thinking_text = ad.llm._extract_thinking_from_response(message)
+            if not tool_calls:
+                if thinking_text:
+                    await stream_handler("thinking_done", {"thinking": thinking_text, "round_index": round_index})
+                await stream_handler("assistant_text_done", {"full_text": text, "round_index": round_index})
+                result = {
+                    "text": text,
+                    "thinking": thinking_text,
+                    "working_state": working_state,
+                    "executed_rounds": executed_rounds if executed_rounds else None,
+                }
+                await stream_handler("done", result)
+                return result
+            # Has tool_calls; fall through to existing tool handling (no done event yet)
+        else:
+            response = await ad.llm.agent_completion(
+                model=model,
+                messages=llm_messages,
+                api_key=api_key,
+                aws_access_key_id=aws_access_key_id,
+                aws_secret_access_key=aws_secret_access_key,
+                aws_region_name=aws_region_name,
+                tools=TOOL_DEFINITIONS,
+                tool_choice="auto",
+                thinking=thinking_param,
+            )
+            message = response.choices[0].message
+            await _record_spu_for_llm_call(response, organization_id, llm_provider, model)
+            tool_calls = getattr(message, "tool_calls", None) or []
+            text = (message.content or "").strip()
+            thinking_text = ad.llm._extract_thinking_from_response(message)
+            if not tool_calls:
+                return {
+                    "text": text,
+                    "thinking": thinking_text,
+                    "working_state": working_state,
+                    "executed_rounds": executed_rounds if executed_rounds else None,
+                }
+
         tool_calls = getattr(message, "tool_calls", None) or []
         text = (message.content or "").strip()
         thinking_text = ad.llm._extract_thinking_from_response(message)
-
-        await _record_spu_for_llm_call(response, organization_id, llm_provider, model)
-
-        if not tool_calls:
-            return {
-                "text": text,
-                "thinking": thinking_text,
-                "working_state": working_state,
-                "executed_rounds": executed_rounds if executed_rounds else None,
-            }
 
         pending = [_tool_call_to_dict(tc) for tc in tool_calls]
         needs_approval = _any_tool_needs_approval(pending, auto_approve, auto_approved_tools)
@@ -331,32 +445,40 @@ async def run_agent_turn(
 
         effective = _build_effective_approvals(pending, auto_approve, auto_approved_tools)
         executed_rounds.append({"thinking": thinking_text, "tool_calls": pending})
-        assistant_msg, tool_msgs = await _execute_tool_calls(context, pending, approvals=effective)
+        round_index = iteration - 1
+        if stream_handler:
+            await stream_handler("tool_calls", {"round_index": round_index, "tool_calls": pending})
+            async def on_tool_result(payload: dict) -> None:
+                await stream_handler("tool_result", payload)
+            assistant_msg, tool_msgs = await _execute_tool_calls(
+                context, pending, approvals=effective,
+                on_tool_result=on_tool_result, round_index=round_index,
+            )
+            await stream_handler("round_executed", {
+                "round_index": round_index,
+                "thinking": thinking_text,
+                "tool_calls": pending,
+            })
+        else:
+            assistant_msg, tool_msgs = await _execute_tool_calls(context, pending, approvals=effective)
         thinking_blocks = getattr(message, "thinking_blocks", None)
-        if thinking_blocks is not None:
-            # Convert to list of dicts for JSON serialization and Anthropic API
-            blocks = []
-            for b in thinking_blocks:
-                if isinstance(b, dict):
-                    blocks.append(b)
-                elif hasattr(b, "thinking"):
-                    blocks.append({
-                        "type": getattr(b, "type", "thinking"),
-                        "thinking": getattr(b, "thinking", ""),
-                        "signature": getattr(b, "signature", ""),
-                    })
-            if blocks:
-                assistant_msg["thinking_blocks"] = blocks
+        api_blocks = _thinking_blocks_for_api(thinking_blocks)
+        if api_blocks is not None:
+            assistant_msg["thinking_blocks"] = api_blocks
         llm_messages.append(assistant_msg)
         for tm in tool_msgs:
             llm_messages.append(tm)
 
-    return {
+    result = {
         "text": "(Max tool rounds reached.)",
         "thinking": None,
         "working_state": working_state,
         "executed_rounds": executed_rounds if executed_rounds else None,
     }
+    if stream_handler:
+        await stream_handler("assistant_text_done", {"full_text": result["text"], "round_index": iteration - 1})
+        await stream_handler("done", result)
+    return result
 
 
 async def run_agent_approve(
@@ -463,20 +585,9 @@ async def run_agent_approve(
     effective = _build_effective_approvals(pending, auto_approve, auto_approved_tools)
     executed_rounds.append({"thinking": thinking_text, "tool_calls": pending})
     assistant_msg, tool_msgs = await _execute_tool_calls(context, pending, approvals=effective)
-    thinking_blocks = getattr(message, "thinking_blocks", None)
-    if thinking_blocks is not None:
-        blocks = []
-        for b in thinking_blocks:
-            if isinstance(b, dict):
-                blocks.append(b)
-            elif hasattr(b, "thinking"):
-                blocks.append({
-                    "type": getattr(b, "type", "thinking"),
-                    "thinking": getattr(b, "thinking", ""),
-                    "signature": getattr(b, "signature", ""),
-                })
-        if blocks:
-            assistant_msg["thinking_blocks"] = blocks
+    api_blocks = _thinking_blocks_for_api(getattr(message, "thinking_blocks", None))
+    if api_blocks is not None:
+        assistant_msg["thinking_blocks"] = api_blocks
     llm_messages.append(assistant_msg)
     for tm in tool_msgs:
         llm_messages.append(tm)
@@ -548,20 +659,9 @@ async def run_agent_approve(
     effective = _build_effective_approvals(pending, auto_approve, auto_approved_tools)
     executed_rounds.append({"thinking": thinking_text, "tool_calls": pending})
     assistant_msg, tool_msgs = await _execute_tool_calls(context, pending, approvals=effective)
-    thinking_blocks = getattr(message, "thinking_blocks", None)
-    if thinking_blocks is not None:
-        blocks = []
-        for b in thinking_blocks:
-            if isinstance(b, dict):
-                blocks.append(b)
-            elif hasattr(b, "thinking"):
-                blocks.append({
-                    "type": getattr(b, "type", "thinking"),
-                    "thinking": getattr(b, "thinking", ""),
-                    "signature": getattr(b, "signature", ""),
-                })
-        if blocks:
-            assistant_msg["thinking_blocks"] = blocks
+    api_blocks = _thinking_blocks_for_api(getattr(message, "thinking_blocks", None))
+    if api_blocks is not None:
+        assistant_msg["thinking_blocks"] = api_blocks
     llm_messages.append(assistant_msg)
     for tm in tool_msgs:
         llm_messages.append(tm)

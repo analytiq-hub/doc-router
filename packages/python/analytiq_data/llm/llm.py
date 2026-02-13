@@ -317,6 +317,144 @@ async def agent_completion(
     )
 
 
+async def agent_completion_stream(
+    model: str,
+    messages: list,
+    api_key: str,
+    response_format: Optional[Dict] = None,
+    aws_access_key_id: Optional[str] = None,
+    aws_secret_access_key: Optional[str] = None,
+    aws_region_name: Optional[str] = None,
+    tools: Optional[List[Dict]] = None,
+    tool_choice: Optional[Union[str, Dict]] = None,
+    thinking: Optional[Dict] = None,
+):
+    """
+    Streaming version of agent completion. Yields ("content", str) for each content delta,
+    then ("message", message_like) with accumulated content and tool_calls, then ("usage", usage_like) if present.
+    Caller must record SPU using the usage object when present.
+    """
+    temperature = get_temperature(model)
+    if thinking is not None:
+        temperature = 1.0
+    messages_to_send = _apply_prompt_caching(model, messages)
+    params: Dict[str, Any] = {
+        "model": model,
+        "messages": messages_to_send,
+        "api_key": api_key,
+        "temperature": temperature,
+        "response_format": response_format,
+        "aws_access_key_id": aws_access_key_id,
+        "aws_secret_access_key": aws_secret_access_key,
+        "aws_region_name": aws_region_name,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    if tools:
+        params["tools"] = tools
+        params["tool_choice"] = tool_choice if tool_choice is not None else "auto"
+    if thinking is not None:
+        params["thinking"] = thinking
+
+    content_parts: list[str] = []
+    thinking_parts: list[str] = []
+    # Accumulate tool_calls by index (OpenAI stream sends partial deltas per index)
+    tool_calls_by_index: Dict[int, Dict[str, Any]] = {}
+    usage_obj: Any = None
+    chunk_count = 0
+
+    logger.info("agent_completion_stream start model=%s stream=True", model)
+    response = await litellm.acompletion(**params)
+    async for chunk in response:
+        chunk_count += 1
+        if chunk_count == 1 and isinstance(chunk, dict):
+            logger.debug("agent_completion_stream first chunk keys: %s", list(chunk.keys()))
+        choices = chunk.get("choices", []) if isinstance(chunk, dict) else getattr(chunk, "choices", None) or []
+        if not chunk or not choices or len(choices) == 0:
+            # Usage-only chunk (include_usage)
+            usage_obj = chunk.get("usage") if isinstance(chunk, dict) else getattr(chunk, "usage", None)
+            continue
+        c0 = choices[0]
+        delta = c0.get("delta") if isinstance(c0, dict) else (getattr(c0, "delta", None) if hasattr(c0, "delta") else None)
+        # Some providers send full message in one chunk instead of deltas
+        if not delta:
+            msg = c0.get("message") if isinstance(c0, dict) else getattr(c0, "message", None)
+            if msg:
+                msg_content = msg.get("content") if isinstance(msg, dict) else getattr(msg, "content", None)
+                if msg_content:
+                    content_parts.append(msg_content)
+                    yield ("content", msg_content)
+            continue
+        # Content delta
+        part = delta.get("content") if isinstance(delta, dict) else getattr(delta, "content", None)
+        if part:
+            content_parts.append(part)
+            yield ("content", part)
+        # Reasoning/thinking delta (Anthropic extended thinking, etc.)
+        thinking_part = (
+            delta.get("reasoning_content") if isinstance(delta, dict) else getattr(delta, "reasoning_content", None)
+        ) or (delta.get("thinking") if isinstance(delta, dict) else getattr(delta, "thinking", None))
+        if thinking_part:
+            thinking_parts.append(thinking_part)
+            yield ("thinking", thinking_part)
+        # Tool call deltas (merge by index)
+        tcs = delta.get("tool_calls") if isinstance(delta, dict) else getattr(delta, "tool_calls", None)
+        if tcs:
+            for tc in tcs:
+                idx = getattr(tc, "index", None) if not isinstance(tc, dict) else tc.get("index")
+                if idx is None:
+                    continue
+                if idx not in tool_calls_by_index:
+                    tool_calls_by_index[idx] = {"id": "", "function": {"name": "", "arguments": ""}}
+                cur = tool_calls_by_index[idx]
+                if isinstance(tc, dict):
+                    if tc.get("id"):
+                        cur["id"] = tc["id"]
+                    fn = tc.get("function") or {}
+                    if fn.get("name"):
+                        cur["function"]["name"] = fn["name"]
+                    if fn.get("arguments"):
+                        cur["function"]["arguments"] = cur["function"]["arguments"] + fn["arguments"]
+                else:
+                    if getattr(tc, "id", None):
+                        cur["id"] = tc.id
+                    fn = getattr(tc, "function", None)
+                    if fn and getattr(fn, "name", None):
+                        cur["function"]["name"] = fn.name
+                    if fn and getattr(fn, "arguments", None):
+                        cur["function"]["arguments"] = cur["function"]["arguments"] + fn.arguments
+
+    full_content = "".join(content_parts)
+    full_thinking = "".join(thinking_parts).strip() or None
+    logger.info(
+        "agent_completion_stream done model=%s chunks=%d content_parts=%d thinking_parts=%d full_content_len=%d",
+        model, chunk_count, len(content_parts), len(thinking_parts), len(full_content),
+    )
+    # When provider sends full response in one (or zero) content chunks, simulate streaming so UI shows progressive output
+    if full_content and len(content_parts) <= 1:
+        sim_chunk_size = 80
+        for i in range(0, len(full_content), sim_chunk_size):
+            yield ("content", full_content[i : i + sim_chunk_size])
+
+    # Build message-like object for agent_loop (content, tool_calls in OpenAI shape)
+    tool_calls_list = []
+    for i in sorted(tool_calls_by_index.keys()):
+        tc = tool_calls_by_index[i]
+        tool_calls_list.append(type("ToolCall", (), {
+            "id": tc["id"],
+            "function": type("Fn", (), {"name": tc["function"]["name"], "arguments": tc["function"]["arguments"]})(),
+        })())
+    message = type("Message", (), {
+        "content": full_content,
+        "tool_calls": tool_calls_list,
+        "thinking_blocks": [{"type": "thinking", "thinking": full_thinking}] if full_thinking else None,
+        "reasoning_content": full_thinking,
+    })()
+    yield ("message", message)
+    if usage_obj is not None:
+        yield ("usage", usage_obj)
+
+
 @stamina.retry(on=is_retryable_error)
 async def _litellm_acreate_file_with_retry(
     file: tuple,

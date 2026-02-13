@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { apiClient, getApiErrorMsg } from '@/utils/api';
+import { apiClient, getApiErrorMsg, getSessionToken } from '@/utils/api';
+
+const API_BASE = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || 'http://localhost:8000') : 'http://localhost:8000';
 
 export interface ExecutedRound {
   thinking?: string | null;
@@ -238,6 +240,202 @@ export function useAgentChat(organizationId: string, documentId: string) {
     setError(null);
   }, []);
 
+  /** Shared streaming chat: POST with stream: true, parse SSE, update state. Caller must have already appended the user message. */
+  const runStreamingChat = useCallback(
+    async (
+      body: Record<string, unknown>,
+      controller: AbortController,
+      onErrorRollback?: () => void
+    ): Promise<void> => {
+      const placeholder: AgentChatMessage = {
+        role: 'assistant',
+        content: '',
+        thinking: undefined,
+        executedRounds: undefined,
+      };
+      setMessages((prev) => [...prev, placeholder]);
+      let hadError = false;
+      try {
+        const token = await getSessionToken();
+        const url = `${API_BASE}${getChatUrl(organizationId, documentId, 'chat')}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            Accept: 'text/event-stream',
+            'Cache-Control': 'no-cache',
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+          credentials: 'include',
+        });
+        if (!res.ok) {
+          const errBody = await res.text();
+          let msg = `HTTP ${res.status}`;
+          try {
+            const j = JSON.parse(errBody);
+            if (j.detail) msg = typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail);
+          } catch {
+            if (errBody) msg = errBody.slice(0, 200);
+          }
+          throw new Error(msg);
+        }
+        const reader = res.body?.getReader();
+        if (!reader) throw new Error('No response body');
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let streamDone = false;
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() ?? '';
+            for (const line of lines) {
+              if (!line.startsWith('data: ')) continue;
+              try {
+                const data = JSON.parse(line.slice(6)) as {
+                  type?: string;
+                  error?: string;
+                  thinking?: string;
+                  chunk?: string;
+                  full_text?: string;
+                  round_index?: number;
+                  tool_calls?: Array<{ id: string; name: string; arguments: string }>;
+                  result?: {
+                    text?: string;
+                    turn_id?: string;
+                    tool_calls?: Array<{ id: string; name: string; arguments: string }>;
+                    working_state?: { extraction?: Record<string, unknown> };
+                    thinking?: string;
+                    executed_rounds?: ExecutedRound[] | null;
+                  };
+                };
+                if (data.type === 'error') {
+                  setError(data.error ?? 'Request failed');
+                  setMessages((prev) => prev.slice(0, -1));
+                  hadError = true;
+                  streamDone = true;
+                  break;
+                }
+                if (data.type === 'assistant_text_chunk' || data.type === 'text_chunk') {
+                  const chunk = data.chunk ?? '';
+                  setMessages((prev) => {
+                    const next = [...prev];
+                    const last = next[next.length - 1];
+                    if (last?.role === 'assistant')
+                      next[next.length - 1] = { ...last, content: (last.content ?? '') + chunk };
+                    return next;
+                  });
+                }
+                if (data.type === 'thinking_chunk') {
+                  const chunk = data.chunk ?? '';
+                  setMessages((prev) => {
+                    const next = [...prev];
+                    const last = next[next.length - 1];
+                    if (last?.role === 'assistant')
+                      next[next.length - 1] = { ...last, thinking: (last.thinking ?? '') + chunk };
+                    return next;
+                  });
+                }
+                if (data.type === 'assistant_text_done' && data.full_text !== undefined) {
+                  setMessages((prev) => {
+                    const next = [...prev];
+                    const last = next[next.length - 1];
+                    if (last?.role === 'assistant')
+                      next[next.length - 1] = { ...last, content: data.full_text ?? last.content ?? '' };
+                    return next;
+                  });
+                }
+                if (data.type === 'thinking_done' || data.type === 'thinking') {
+                  const thinking = data.thinking ?? null;
+                  setMessages((prev) => {
+                    const next = [...prev];
+                    const last = next[next.length - 1];
+                    if (last?.role === 'assistant')
+                      next[next.length - 1] = { ...last, thinking: thinking ?? last.thinking ?? null };
+                    return next;
+                  });
+                }
+                if (data.type === 'tool_calls' && data.tool_calls) {
+                  const round: ExecutedRound = { thinking: null, tool_calls: data.tool_calls };
+                  setMessages((prev) => {
+                    const next = [...prev];
+                    const last = next[next.length - 1];
+                    if (last?.role === 'assistant')
+                      next[next.length - 1] = {
+                        ...last,
+                        executedRounds: [...(last.executedRounds ?? []), round],
+                      };
+                    return next;
+                  });
+                }
+                if (data.type === 'round_executed') {
+                  const roundIndex = data.round_index ?? 0;
+                  const thinking = data.thinking ?? null;
+                  const toolCalls = data.tool_calls ?? [];
+                  setMessages((prev) => {
+                    const next = [...prev];
+                    const last = next[next.length - 1];
+                    if (last?.role === 'assistant' && last.executedRounds?.length) {
+                      const rounds = [...last.executedRounds];
+                      if (rounds[roundIndex] != null)
+                        rounds[roundIndex] = { thinking, tool_calls: toolCalls };
+                      else
+                        rounds.push({ thinking, tool_calls: toolCalls });
+                      next[next.length - 1] = { ...last, executedRounds: rounds };
+                    }
+                    return next;
+                  });
+                }
+                if (data.type === 'done' && data.result) {
+                  const r = data.result;
+                  if (r.working_state?.extraction != null) setExtraction(r.working_state.extraction);
+                  setMessages((prev) => {
+                    const next = [...prev];
+                    const last = next[next.length - 1];
+                    if (last?.role === 'assistant')
+                      next[next.length - 1] = {
+                        ...last,
+                        content: r.text ?? last.content ?? null,
+                        thinking: r.thinking ?? last.thinking ?? undefined,
+                        executedRounds: normalizeExecutedRounds(r.executed_rounds),
+                        toolCalls: r.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })),
+                      };
+                    return next;
+                  });
+                  if (r.turn_id && r.tool_calls?.length) {
+                    setPendingTurnId(r.turn_id);
+                    setPendingToolCalls(r.tool_calls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })));
+                  } else {
+                    setPendingTurnId(null);
+                    setPendingToolCalls([]);
+                  }
+                  streamDone = true;
+                  break;
+                }
+              } catch {
+                // ignore malformed SSE line
+              }
+            }
+            if (streamDone) break;
+          }
+        } finally {
+          reader.releaseLock();
+        }
+        if (!hadError) await loadThreads();
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setError(getApiErrorMsg(err) ?? 'Failed to send message');
+        if (onErrorRollback) onErrorRollback();
+        else setMessages((prev) => prev.slice(0, -1));
+      }
+    },
+    [organizationId, documentId, loadThreads]
+  );
+
   const sendMessage = useCallback(
     async (content: string) => {
       if (!content.trim() || loading) return;
@@ -275,61 +473,27 @@ export function useAgentChat(organizationId: string, documentId: string) {
         { role: 'user' as const, content: content.trim() },
       ];
 
+      const body: Record<string, unknown> = {
+        messages: messageListForApi,
+        mentions: [],
+        model,
+        stream: true,
+        auto_approve: autoApprove,
+        auto_approved_tools: autoApprove ? undefined : autoApprovedTools,
+        thread_id: currentThreadId,
+      };
+
       try {
-        const { data } = await apiClient.post<{
-          text?: string;
-          turn_id?: string;
-          tool_calls?: Array<{ id: string; name: string; arguments: string }>;
-          working_state?: { extraction?: Record<string, unknown> };
-          thinking?: string;
-          executed_rounds?: ExecutedRound[] | null;
-        }>(getChatUrl(organizationId, documentId, 'chat'), {
-          messages: messageListForApi,
-          mentions: [],
-          model,
-          stream: false,
-          auto_approve: autoApprove,
-          auto_approved_tools: autoApprove ? undefined : autoApprovedTools,
-          thread_id: currentThreadId,
-        }, { signal: controller.signal });
-
-        if (data.working_state?.extraction != null) {
-          setExtraction(data.working_state.extraction);
-        }
-
-        const assistantMsg: AgentChatMessage = {
-          role: 'assistant',
-          content: data.text ?? null,
-          toolCalls: data.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? undefined,
-          thinking: data.thinking ?? undefined,
-          executedRounds: normalizeExecutedRounds(data.executed_rounds),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-
-        if (data.turn_id && data.tool_calls?.length) {
-          setPendingTurnId(data.turn_id);
-          setPendingToolCalls(
-            data.tool_calls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments }))
-          );
-        } else {
-          setPendingTurnId(null);
-          setPendingToolCalls([]);
-        }
-        await loadThreads();
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        const msg = getApiErrorMsg(err) ?? 'Failed to send message';
-        setError(msg);
-        setMessages((prev) => prev.slice(0, -1));
+        await runStreamingChat(body, controller);
       } finally {
         abortRef.current = null;
         setLoading(false);
       }
     },
-    [organizationId, documentId, messages, model, autoApprove, autoApprovedTools, loading, threadId, createThread, loadThreads]
+    [organizationId, documentId, messages, model, autoApprove, autoApprovedTools, loading, threadId, createThread, runStreamingChat]
   );
 
-  /** Send a new message with a specific history (e.g. after editing and resubmitting from a prior turn). Truncates conversation to history then sends content. */
+  /** Send a new message with a specific history (e.g. after editing and resubmitting from a prior turn). Truncates conversation to history then sends content. Uses streaming like sendMessage. */
   const sendMessageWithHistory = useCallback(
     async (history: AgentChatMessage[], content: string) => {
       if (!content.trim() || loading) return;
@@ -372,7 +536,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
         messages: messageListForApi,
         mentions: [],
         model,
-        stream: false,
+        stream: true,
         auto_approve: autoApprove,
         auto_approved_tools: autoApprove ? undefined : autoApprovedTools,
         thread_id: currentThreadId,
@@ -382,49 +546,13 @@ export function useAgentChat(organizationId: string, documentId: string) {
       }
 
       try {
-        const { data } = await apiClient.post<{
-          text?: string;
-          turn_id?: string;
-          tool_calls?: Array<{ id: string; name: string; arguments: string }>;
-          working_state?: { extraction?: Record<string, unknown> };
-          thinking?: string;
-          executed_rounds?: ExecutedRound[] | null;
-        }>(getChatUrl(organizationId, documentId, 'chat'), body, { signal: controller.signal });
-
-        if (data.working_state?.extraction != null) {
-          setExtraction(data.working_state.extraction);
-        }
-
-        const assistantMsg: AgentChatMessage = {
-          role: 'assistant',
-          content: data.text ?? null,
-          toolCalls: data.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? undefined,
-          thinking: data.thinking ?? undefined,
-          executedRounds: normalizeExecutedRounds(data.executed_rounds),
-        };
-        setMessages((prev) => [...prev, assistantMsg]);
-
-        if (data.turn_id && data.tool_calls?.length) {
-          setPendingTurnId(data.turn_id);
-          setPendingToolCalls(
-            data.tool_calls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments }))
-          );
-        } else {
-          setPendingTurnId(null);
-          setPendingToolCalls([]);
-        }
-        await loadThreads();
-      } catch (err) {
-        if (controller.signal.aborted) return;
-        const msg = getApiErrorMsg(err) ?? 'Failed to send message';
-        setError(msg);
-        setMessages([...history]);
+        await runStreamingChat(body, controller, () => setMessages([...history]));
       } finally {
         abortRef.current = null;
         setLoading(false);
       }
     },
-    [organizationId, documentId, model, autoApprove, autoApprovedTools, loading, threadId, createThread, loadThreads]
+    [organizationId, documentId, model, autoApprove, autoApprovedTools, loading, threadId, createThread, runStreamingChat]
   );
 
   const approveToolCalls = useCallback(

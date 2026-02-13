@@ -1,11 +1,13 @@
 # agent.py — Document chat agent endpoints (chat + approve).
 
+import asyncio
 import json
 import logging
 from typing import Any
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Body, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 import analytiq_data as ad
@@ -124,6 +126,58 @@ async def _resolve_mentions(
     return resolved
 
 
+async def _append_assistant_to_thread(
+    analytiq_client,
+    organization_id: str,
+    request: ChatRequest,
+    messages: list[dict],
+    result: dict,
+    current_user: User,
+):
+    """Persist user + assistant messages to thread and optionally update title."""
+    user_msg = messages[-1]
+    assistant_msg = {
+        "role": "assistant",
+        "content": result.get("text"),
+        "tool_calls": result.get("tool_calls"),
+        "thinking": result.get("thinking"),
+        "executed_rounds": result.get("executed_rounds"),
+    }
+    extraction = (result.get("working_state") or {}).get("extraction")
+    if request.truncate_thread_to_message_count is not None:
+        await ad.agent.agent_threads.truncate_and_append_messages(
+            analytiq_client,
+            request.thread_id,
+            organization_id,
+            current_user.user_id,
+            request.truncate_thread_to_message_count,
+            [user_msg, assistant_msg],
+            extraction=extraction,
+        )
+    else:
+        await ad.agent.agent_threads.append_messages(
+            analytiq_client,
+            request.thread_id,
+            organization_id,
+            current_user.user_id,
+            [user_msg, assistant_msg],
+            extraction=extraction,
+        )
+    thread_doc = await ad.agent.agent_threads.get_thread(
+        analytiq_client, request.thread_id, organization_id, current_user.user_id
+    )
+    if thread_doc and thread_doc.get("title") == "New chat":
+        first_content = None
+        for m in thread_doc.get("messages", []):
+            if m.get("role") == "user" and m.get("content"):
+                first_content = (m.get("content") or "").strip()[:50]
+                break
+        if first_content:
+            await ad.agent.agent_threads.update_thread_title(
+                analytiq_client, request.thread_id, organization_id, current_user.user_id, first_content
+            )
+
+
 @agent_router.post("/v0/orgs/{organization_id}/documents/{document_id}/chat")
 async def post_chat(
     organization_id: str,
@@ -134,6 +188,7 @@ async def post_chat(
     """
     Start or continue a chat turn. If the agent returns tool calls and auto_approve is false,
     the response includes turn_id and tool_calls; use POST .../chat/approve to submit approvals.
+    When stream=True, returns SSE stream of thinking, text_chunk, and done events.
     """
     analytiq_client = ad.common.get_analytiq_client()
     doc = await ad.common.doc.get_doc(analytiq_client, document_id, organization_id)
@@ -142,8 +197,90 @@ async def post_chat(
     mentions_data = [m.model_dump() for m in request.mentions]
     resolved = await _resolve_mentions(analytiq_client, organization_id, mentions_data)
     messages = [m.model_dump() for m in request.messages]
-    # Phase 1: streaming not implemented; allow auto_approve without stream. When SSE is added, require stream=True when auto_approve=True.
     auto_approved = set(request.auto_approved_tools) if request.auto_approved_tools is not None else None
+
+    if request.stream:
+        logger.info("post_chat stream=True: using SSE streaming response")
+        queue: asyncio.Queue[tuple[str, Any]] = asyncio.Queue()
+        streamed_done: list[bool] = [False]
+
+        async def stream_handler(event_type: str, payload: Any) -> None:
+            if event_type == "done":
+                streamed_done[0] = True
+            await queue.put((event_type, payload))
+
+        async def run_turn() -> None:
+            try:
+                result = await ad.agent.run_agent_turn(
+                    analytiq_client=analytiq_client,
+                    organization_id=organization_id,
+                    document_id=document_id,
+                    user_id=current_user.user_id,
+                    messages=messages,
+                    model=request.model,
+                    auto_approve=request.auto_approve,
+                    resolved_mentions=resolved,
+                    auto_approved_tools=auto_approved,
+                    stream_handler=stream_handler,
+                )
+                if "error" in result:
+                    await queue.put(("error", result["error"]))
+                elif not streamed_done[0]:
+                    # Early return (e.g. needs_approval): send full result as done so client can handle it
+                    await queue.put(("done", result))
+            except Exception as e:
+                logger.exception("Agent turn failed during streaming")
+                await queue.put(("error", str(e)))
+
+        async def generate_sse():
+            task = asyncio.create_task(run_turn())
+            try:
+                while True:
+                    event_type, payload = await queue.get()
+                    if event_type == "error":
+                        yield f"data: {json.dumps({'type': 'error', 'error': payload})}\n\n"
+                        break
+                    if event_type == "assistant_text_chunk":
+                        p = payload if isinstance(payload, dict) else {"chunk": payload}
+                        yield f"data: {json.dumps({'type': 'assistant_text_chunk', 'chunk': p.get('chunk', ''), 'round_index': p.get('round_index', 0)})}\n\n"
+                    elif event_type == "thinking_chunk":
+                        p = payload if isinstance(payload, dict) else {"chunk": payload}
+                        yield f"data: {json.dumps({'type': 'thinking_chunk', 'chunk': p.get('chunk', ''), 'round_index': p.get('round_index', 0)})}\n\n"
+                    elif event_type == "assistant_text_done":
+                        p = payload if isinstance(payload, dict) else {"full_text": payload}
+                        yield f"data: {json.dumps({'type': 'assistant_text_done', 'full_text': p.get('full_text', ''), 'round_index': p.get('round_index', 0)})}\n\n"
+                    elif event_type == "thinking_done":
+                        p = payload if isinstance(payload, dict) else {"thinking": payload}
+                        yield f"data: {json.dumps({'type': 'thinking_done', 'thinking': p.get('thinking', ''), 'round_index': p.get('round_index', 0)})}\n\n"
+                    elif event_type == "tool_calls":
+                        p = payload if isinstance(payload, dict) else {}
+                        yield f"data: {json.dumps({'type': 'tool_calls', 'round_index': p.get('round_index', 0), 'tool_calls': p.get('tool_calls', [])})}\n\n"
+                    elif event_type == "tool_result":
+                        yield f"data: {json.dumps({'type': 'tool_result', **payload})}\n\n" if isinstance(payload, dict) else f"data: {json.dumps({'type': 'tool_result'})}\n\n"
+                    elif event_type == "round_executed":
+                        p = payload if isinstance(payload, dict) else {}
+                        yield f"data: {json.dumps({'type': 'round_executed', 'round_index': p.get('round_index', 0), 'thinking': p.get('thinking'), 'tool_calls': p.get('tool_calls', [])})}\n\n"
+                    elif event_type == "done":
+                        # Only persist to thread when this is the final response (no pending approval)
+                        if request.thread_id and messages and payload.get("turn_id") is None:
+                            await _append_assistant_to_thread(
+                                analytiq_client, organization_id, request, messages, payload, current_user
+                            )
+                        yield f"data: {json.dumps({'type': 'done', 'result': payload})}\n\n"
+                        break
+            finally:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+        return StreamingResponse(
+            generate_sse(),
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     result = await ad.agent.run_agent_turn(
         analytiq_client=analytiq_client,
         organization_id=organization_id,
@@ -159,48 +296,9 @@ async def post_chat(
         raise HTTPException(status_code=400, detail=result["error"])
 
     if request.thread_id and messages:
-        user_msg = messages[-1]
-        assistant_msg = {
-            "role": "assistant",
-            "content": result.get("text"),
-            "tool_calls": result.get("tool_calls"),
-            "thinking": result.get("thinking"),
-            "executed_rounds": result.get("executed_rounds"),
-        }
-        extraction = (result.get("working_state") or {}).get("extraction")
-        if request.truncate_thread_to_message_count is not None:
-            await ad.agent.agent_threads.truncate_and_append_messages(
-                analytiq_client,
-                request.thread_id,
-                organization_id,
-                current_user.user_id,
-                request.truncate_thread_to_message_count,
-                [user_msg, assistant_msg],
-                extraction=extraction,
-            )
-        else:
-            await ad.agent.agent_threads.append_messages(
-                analytiq_client,
-                request.thread_id,
-                organization_id,
-                current_user.user_id,
-                [user_msg, assistant_msg],
-                extraction=extraction,
-            )
-        # Optionally set title from first user message
-        thread_doc = await ad.agent.agent_threads.get_thread(
-            analytiq_client, request.thread_id, organization_id, current_user.user_id
+        await _append_assistant_to_thread(
+            analytiq_client, organization_id, request, messages, result, current_user
         )
-        if thread_doc and thread_doc.get("title") == "New chat":
-            first_content = None
-            for m in thread_doc.get("messages", []):
-                if m.get("role") == "user" and m.get("content"):
-                    first_content = (m.get("content") or "").strip()[:50]
-                    break
-            if first_content:
-                await ad.agent.agent_threads.update_thread_title(
-                    analytiq_client, request.thread_id, organization_id, current_user.user_id, first_content
-                )
     return result
 
 
