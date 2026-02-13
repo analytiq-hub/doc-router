@@ -41,7 +41,7 @@ export default function ThinkingBlock({
         )}
         {!live && hasContent && !expanded && (
           <span className="text-xs text-gray-400 truncate flex-1">
-            {content.length > 40 ? `${content.slice(0, 40)}…` : content}
+            {hasContent.length > 40 ? `${hasContent.slice(0, 40)}…` : hasContent}
           </span>
         )}
         <span className="flex-1" />

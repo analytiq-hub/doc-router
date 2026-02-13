@@ -388,6 +388,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           tool_calls?: Array<{ id: string; name: string; arguments: string }>;
           working_state?: { extraction?: Record<string, unknown> };
           thinking?: string;
+          executed_rounds?: ExecutedRound[] | null;
         }>(getChatUrl(organizationId, documentId, 'chat'), body, { signal: controller.signal });
 
         if (data.working_state?.extraction != null) {

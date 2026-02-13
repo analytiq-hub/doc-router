@@ -22,6 +22,7 @@ interface PDFViewerClientProps {
 export default function PDFViewerClient({ organizationId, id }: PDFViewerClientProps) {
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showPdfPanel, setShowPdfPanel] = useState(true);
+  const [showChatPanel, setShowChatPanel] = useState(false);
   const [highlightInfo, setHighlightInfo] = useState<HighlightInfo | undefined>();
   
   useEffect(() => {
@@ -29,7 +30,9 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
       showLeftPanel,
       setShowLeftPanel,
       showPdfPanel,
-      setShowPdfPanel
+      setShowPdfPanel,
+      showChatPanel,
+      setShowChatPanel
     };
 
     const event = new Event('pdfviewercontrols');
@@ -38,7 +41,7 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
     return () => {
       delete window.pdfViewerControls;
     };
-  }, [showLeftPanel, showPdfPanel]);
+  }, [showLeftPanel, showPdfPanel, showChatPanel]);
 
   useEffect(() => {
     console.log('Page - highlightedBlocks changed:', highlightInfo);
