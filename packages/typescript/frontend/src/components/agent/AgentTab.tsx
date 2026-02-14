@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import ArrowCircleUpIcon from '@mui/icons-material/ArrowCircleUp';
 import StopCircleIcon from '@mui/icons-material/StopCircle';
 import KeyboardArrowUpIcon from '@mui/icons-material/KeyboardArrowUp';
@@ -9,6 +9,7 @@ import { useAgentChat, getMessagesBeforeTurn } from './useAgentChat';
 import AgentChat from './AgentChat';
 import ThreadDropdown from './ThreadDropdown';
 import { useDictation } from './useDictation';
+import { DocRouterOrgApi } from '@/utils/api';
 import type { AgentThreadSummary } from './useAgentChat';
 
 interface AgentTabProps {
@@ -16,7 +17,57 @@ interface AgentTabProps {
   documentId: string;
 }
 
+/** Chat is only enabled when document state is llm_completed. */
+function isChatDisabled(state: string | null): boolean {
+  return state !== 'llm_completed';
+}
+
 export default function AgentTab({ organizationId, documentId }: AgentTabProps) {
+  const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
+  const [documentState, setDocumentState] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchState = async () => {
+      try {
+        try {
+          const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf' });
+          setDocumentState(doc.state);
+          return;
+        } catch {
+          // Non-PDF documents may not have pdf; try original
+        }
+        const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original' });
+        setDocumentState(doc.state);
+      } catch (error) {
+        console.error('Error fetching document state:', error);
+        setDocumentState(null);
+      }
+    };
+    fetchState();
+  }, [organizationId, documentId, docRouterOrgApi]);
+
+  useEffect(() => {
+    if (!isChatDisabled(documentState)) return;
+    const poll = setInterval(async () => {
+      try {
+        try {
+          const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf' });
+          setDocumentState(doc.state);
+          return;
+        } catch {
+          /* try original */
+        }
+        const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original' });
+        setDocumentState(doc.state);
+      } catch (error) {
+        console.error('Error polling document state:', error);
+      }
+    }, 2000);
+    return () => clearInterval(poll);
+  }, [documentState, documentId, docRouterOrgApi]);
+
+  const chatDisabled = isChatDisabled(documentState);
+
   const {
     state,
     sendMessage,
@@ -115,7 +166,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
 
   const handleSend = () => {
     const text = displayInput.trim();
-    if (!text || state.loading) return;
+    if (!text || state.loading || chatDisabled) return;
     setInput('');
     setInterimTranscript('');
     interimRef.current = '';
@@ -138,11 +189,20 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
 
   const inputBlock = (
     <div className="shrink-0 border-t border-gray-200 bg-white min-w-0">
+      {chatDisabled && (
+        <div className="px-3 pt-2 pb-1 text-sm text-amber-700 bg-amber-50 border-b border-amber-200">
+          {documentState === null
+            ? 'Checking document status…'
+            : documentState === 'ocr_failed' || documentState === 'llm_failed'
+              ? 'Document processing did not complete. Chat is not available.'
+              : 'Document is being processed. Chat will be available once processing is complete.'}
+        </div>
+      )}
       {dictationError && (
         <div className="px-3 pt-1 text-xs text-amber-600">{dictationError}</div>
       )}
       <div className="px-3 pt-2 pb-1">
-        <div className="rounded-lg border border-gray-300 bg-white focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 min-w-0">
+        <div className={`rounded-lg border border-gray-300 bg-white min-w-0 ${chatDisabled ? 'opacity-60' : 'focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500'}`}>
           <textarea
             value={displayInput}
             onChange={(e) => {
@@ -156,11 +216,11 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
                 handleSend();
               }
             }}
-            placeholder="Message the agent…"
+            placeholder={chatDisabled ? 'Waiting for document processing…' : 'Message the agent…'}
             rows={3}
             className="w-full min-h-[4rem] max-h-[12rem] py-2.5 px-3 text-sm resize-y border-0 focus:outline-none focus:ring-0 overflow-y-auto bg-transparent"
             style={{ scrollbarGutter: 'stable' }}
-            disabled={state.loading}
+            disabled={state.loading || chatDisabled}
           />
         </div>
       </div>
@@ -283,12 +343,13 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
           <button
             type="button"
             onClick={handleSend}
-            className="flex items-center justify-center w-8 h-8 text-gray-700 hover:text-blue-600 shrink-0"
+            disabled={chatDisabled}
+            className={`flex items-center justify-center w-8 h-8 shrink-0 ${chatDisabled ? 'text-gray-300 cursor-not-allowed' : 'text-gray-700 hover:text-blue-600'}`}
             title="Send"
           >
             <ArrowCircleUpIcon sx={{ fontSize: 24 }} />
           </button>
-        ) : dictationSupported ? (
+        ) : dictationSupported && !chatDisabled ? (
           <button
             type="button"
             onClick={toggleDictation}
@@ -346,7 +407,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
               onApprove={handleApprove}
               onAlwaysApprove={addToolToAutoApproved}
               onEditAndResubmit={handleEditAndResubmit}
-              disabled={state.loading}
+              disabled={state.loading || chatDisabled}
             />
           </div>
           {inputBlock}
@@ -366,7 +427,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
               onApprove={handleApprove}
               onAlwaysApprove={addToolToAutoApproved}
               onEditAndResubmit={handleEditAndResubmit}
-              disabled={state.loading}
+              disabled={state.loading || chatDisabled}
             />
           </div>
         </>
