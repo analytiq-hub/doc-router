@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { apiClient, getApiErrorMsg, getSessionToken } from '@/utils/api';
 
 const API_BASE = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || 'http://localhost:8000') : 'http://localhost:8000';
@@ -97,6 +97,29 @@ function getChatUrl(organizationId: string, documentId: string, path: string) {
   return `${base}/${path}`;
 }
 
+const AUTO_APPROVED_TOOLS_KEY = 'agent-auto-approved-tools';
+
+function loadAutoApprovedToolsFromStorage(organizationId: string, documentId: string): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(`${AUTO_APPROVED_TOOLS_KEY}-${organizationId}-${documentId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.every((x) => typeof x === 'string') ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveAutoApprovedToolsToStorage(organizationId: string, documentId: string, tools: string[]) {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(`${AUTO_APPROVED_TOOLS_KEY}-${organizationId}-${documentId}`, JSON.stringify(tools));
+  } catch {
+    // ignore
+  }
+}
+
 /** Normalize API message to frontend shape; tool_calls may be { id, name, arguments } or { id, type, function }. */
 function messageFromApi(m: {
   role: string;
@@ -128,7 +151,21 @@ export function useAgentChat(organizationId: string, documentId: string) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoApprove, setAutoApprove] = useState(false);
-  const [autoApprovedTools, setAutoApprovedTools] = useState<string[]>([]);
+  /** Refresh key to re-read from localStorage; source of truth is browser storage, not React state */
+  const [autoApprovedToolsRefresh, setAutoApprovedToolsRefresh] = useState(0);
+  const autoApprovedTools = useMemo(
+    () => loadAutoApprovedToolsFromStorage(organizationId, documentId),
+    [organizationId, documentId, autoApprovedToolsRefresh]
+  );
+  const setAutoApprovedTools = useCallback(
+    (updater: string[] | ((prev: string[]) => string[])) => {
+      const current = loadAutoApprovedToolsFromStorage(organizationId, documentId);
+      const next = typeof updater === 'function' ? updater(current) : updater;
+      saveAutoApprovedToolsToStorage(organizationId, documentId, next);
+      setAutoApprovedToolsRefresh((k) => k + 1);
+    },
+    [organizationId, documentId]
+  );
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [readWriteTools, setReadWriteTools] = useState<string[]>([]);
