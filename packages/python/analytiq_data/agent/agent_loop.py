@@ -576,7 +576,7 @@ async def run_agent_approve(
     await _record_spu_for_llm_call(response, state["organization_id"], llm_provider, model)
 
     if not tool_calls:
-        return {"text": text, "thinking": thinking_text, "working_state": state["working_state"]}
+        return {"text": text, "thinking": thinking_text, "working_state": state["working_state"], "model": model}
 
     executed_rounds: list[dict] = []
     pending = [_tool_call_to_dict(tc) for tc in tool_calls]
@@ -655,6 +655,7 @@ async def run_agent_approve(
             "thinking": thinking_text,
             "working_state": state["working_state"],
             "executed_rounds": executed_rounds if executed_rounds else None,
+            "model": model,
         }
 
     # LLM returned more tool_calls; apply same approval logic.
@@ -700,4 +701,5 @@ async def run_agent_approve(
         "thinking": thinking_text,
         "working_state": state["working_state"],
         "executed_rounds": executed_rounds if executed_rounds else None,
+        "model": model,
     }

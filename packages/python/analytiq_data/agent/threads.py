@@ -25,9 +25,10 @@ def _thread_doc(
     title: str | None = None,
     messages: list[dict] | None = None,
     extraction: dict | None = None,
+    model: str | None = None,
 ) -> dict:
     now = datetime.now(UTC)
-    return {
+    doc: dict = {
         "organization_id": organization_id,
         "document_id": document_id,
         "created_by": created_by,
@@ -37,6 +38,9 @@ def _thread_doc(
         "created_at": now,
         "updated_at": now,
     }
+    if model is not None:
+        doc["model"] = model
+    return doc
 
 
 async def list_threads(
@@ -87,6 +91,7 @@ async def get_thread(
         "title": doc.get("title", "New chat"),
         "messages": doc.get("messages", []),
         "extraction": doc.get("extraction") or {},
+        "model": doc.get("model"),
         "created_at": doc.get("created_at"),
         "updated_at": doc.get("updated_at"),
     }
@@ -114,9 +119,10 @@ async def append_messages(
     user_id: str,
     new_messages: list[dict],
     extraction: dict | None = None,
+    model: str | None = None,
 ) -> bool:
     """
-    Append messages to a thread and optionally set extraction.
+    Append messages to a thread and optionally set extraction and model.
     new_messages: list of { role, content?, tool_calls? } in API format.
     User must own the thread.
     """
@@ -131,6 +137,8 @@ async def append_messages(
     }
     if extraction is not None:
         update["$set"]["extraction"] = extraction
+    if model is not None:
+        update["$set"]["model"] = model
     result = await coll.update_one(
         {"_id": ObjectId(thread_id), "organization_id": organization_id, "created_by": user_id},
         update,
@@ -146,6 +154,7 @@ async def truncate_and_append_messages(
     keep_message_count: int,
     new_messages: list[dict],
     extraction: dict | None = None,
+    model: str | None = None,
 ) -> bool:
     """
     Keep only the first keep_message_count messages in the thread, then append new_messages.
@@ -169,6 +178,8 @@ async def truncate_and_append_messages(
     update: dict = {"$set": {"messages": final_messages, "updated_at": now}}
     if extraction is not None:
         update["$set"]["extraction"] = extraction
+    if model is not None:
+        update["$set"]["model"] = model
     result = await coll.update_one(
         {"_id": ObjectId(thread_id), "organization_id": organization_id, "created_by": user_id},
         update,

@@ -220,10 +220,12 @@ export function useAgentChat(organizationId: string, documentId: string) {
             executed_rounds?: ExecutedRound[] | null;
           }>;
           extraction: Record<string, unknown>;
+          model?: string | null;
         }>(`${getChatUrl(organizationId, documentId, 'threads')}/${id}`);
         setThreadId(data.id);
         setMessages((data.messages ?? []).map(messageFromApi));
         setExtraction(data.extraction && Object.keys(data.extraction).length > 0 ? data.extraction : null);
+        setModel(data.model && data.model.trim() ? data.model : DEFAULT_MODEL);
         setPendingTurnId(null);
         setPendingToolCalls([]);
       } catch (err) {

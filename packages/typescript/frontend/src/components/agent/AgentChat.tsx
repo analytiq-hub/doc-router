@@ -103,6 +103,10 @@ export default function AgentChat({
   const pendingIds = pendingCallIds(pendingToolCalls);
   const turns = useMemo(() => messagesToTurns(messages), [messages]);
 
+  // Track last computed values to avoid setState when unchanged (prevents ResizeObserver
+  // feedback loop: setState -> re-render -> layout change -> ResizeObserver -> setState).
+  const lastStickyRef = useRef<{ text: string | null; index: number } | null>(null);
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, loading]);
@@ -110,7 +114,11 @@ export default function AgentChat({
   const updateStickyQuestion = useCallback(() => {
     const container = scrollRef.current;
     if (!container || turns.length === 0) {
-      setStickyQuestion(null);
+      if (lastStickyRef.current?.text !== null || lastStickyRef.current?.index !== 0) {
+        lastStickyRef.current = { text: null, index: 0 };
+        setStickyQuestion(null);
+        setStickyTurnIndex(0);
+      }
       return;
     }
     // Use getBoundingClientRect for reliable comparison regardless of nesting
@@ -125,6 +133,13 @@ export default function AgentChat({
     }
     const turn = turns[currentIndex];
     const text = turn?.user.content?.trim() ?? null;
+    if (
+      lastStickyRef.current?.text === text &&
+      lastStickyRef.current?.index === currentIndex
+    ) {
+      return;
+    }
+    lastStickyRef.current = { text, index: currentIndex };
     setStickyQuestion(text);
     setStickyTurnIndex(currentIndex);
   }, [turns]);

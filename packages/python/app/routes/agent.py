@@ -66,6 +66,7 @@ class ThreadDetail(BaseModel):
     title: str
     messages: list[dict]
     extraction: dict
+    model: str | None = None
     created_at: Any
     updated_at: Any
 
@@ -153,6 +154,7 @@ async def _append_assistant_to_thread(
             request.truncate_thread_to_message_count,
             [user_msg, assistant_msg],
             extraction=extraction,
+            model=request.model,
         )
     else:
         await ad.agent.agent_threads.append_messages(
@@ -162,6 +164,7 @@ async def _append_assistant_to_thread(
             current_user.user_id,
             [user_msg, assistant_msg],
             extraction=extraction,
+            model=request.model,
         )
     thread_doc = await ad.agent.agent_threads.get_thread(
         analytiq_client, request.thread_id, organization_id, current_user.user_id
@@ -331,6 +334,7 @@ async def post_chat_approve(
             "executed_rounds": result.get("executed_rounds"),
         }
         extraction = (result.get("working_state") or {}).get("extraction")
+        model = result.get("model")
         await ad.agent.agent_threads.append_messages(
             ad.common.get_analytiq_client(),
             request.thread_id,
@@ -338,6 +342,7 @@ async def post_chat_approve(
             current_user.user_id,
             [assistant_msg],
             extraction=extraction,
+            model=model,
         )
     return result
 
