@@ -321,7 +321,13 @@ export default function AgentChat({
               </button>
             </div>
           )}
-          {loading && <ThinkingBlock live />}
+          {loading && (() => {
+            const last = messages[messages.length - 1];
+            const hasAnyAssistantContent = last?.role === 'assistant' && (
+              !!last.thinking?.trim() || !!last.content?.trim() || (last.executedRounds?.length ?? 0) > 0
+            );
+            return !hasAnyAssistantContent && <ThinkingBlock live />;
+          })()}
           {error && (
             <div className="rounded-lg px-3 py-2 bg-red-50 border border-red-200 text-red-700 text-xs">
               {error}

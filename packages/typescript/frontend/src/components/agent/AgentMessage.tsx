@@ -174,8 +174,8 @@ export default function AgentMessage({
             )}
           </React.Fragment>
         ))}
-        {!isUser && message.thinking && (
-          <ThinkingBlock content={message.thinking} defaultExpanded={!!message.executedRounds?.length} />
+        {!isUser && message.thinking && !message.executedRounds?.length && (
+          <ThinkingBlock content={message.thinking} defaultExpanded={false} />
         )}
         {message.content && (
           <div className="prose prose-sm max-w-none text-[13px] prose-p:my-1 prose-ul:my-1 prose-pre:my-1 prose-pre:text-xs">
