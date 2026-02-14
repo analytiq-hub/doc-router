@@ -23,7 +23,6 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
     sendMessageWithHistory,
     approveToolCalls,
     cancelRequest,
-    setAutoApprove,
     toggleToolAutoApproved,
     addToolToAutoApproved,
     enableAllTools,
@@ -205,11 +204,11 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
               type="button"
               onClick={() => { setShowToolsDropUp((v) => !v); setShowModelDropUp(false); }}
               className="flex items-center gap-0.5 text-[11px] text-gray-500 hover:text-gray-700 py-0.5"
-              title={state.autoApprove ? 'Tools (all auto-approved)' : state.autoApprovedTools.length > 0 ? `Tools (${state.autoApprovedTools.length} auto-approved)` : 'Tools'}
+              title={state.autoApprovedTools.length > 0 ? `Tools (${state.autoApprovedTools.length} auto-approved)` : 'Tools'}
             >
               <KeyboardArrowUpIcon sx={{ fontSize: 14 }} className={showToolsDropUp ? '' : 'rotate-180'} />
               <span>Tools</span>
-              {!state.autoApprove && state.autoApprovedTools.length > 0 && (
+              {state.autoApprovedTools.length > 0 && (
                 <span className="text-[10px] text-blue-600 font-medium">({state.autoApprovedTools.length})</span>
               )}
             </button>
@@ -220,54 +219,43 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
                 }`}
               >
                 <div className="px-2 pt-1 pb-2 space-y-1">
-                  <label className="flex items-center gap-2 text-[11px] text-gray-600 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={state.autoApprove}
-                      onChange={(e) => setAutoApprove(e.target.checked)}
-                      className="rounded"
-                    />
-                    Auto-approve all tools
-                  </label>
-                  {!state.autoApprove && (
-                    <div className="pt-1">
-                      <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1">
-                        Auto-approved tools
-                        {state.autoApprovedTools.length > 0 && (
-                          <span className="ml-1 text-blue-600 normal-case">({state.autoApprovedTools.length})</span>
-                        )}
-                      </div>
-                      <div className="flex gap-1 mb-1">
-                        <button
-                          type="button"
-                          onClick={() => enableAllTools()}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
-                        >
-                          Enable all
-                        </button>
-                        <button
-                          type="button"
-                          onClick={resetToolPermissions}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
-                        >
-                          Reset to default
-                        </button>
-                      </div>
-                      <div className="max-h-32 overflow-y-auto space-y-0.5">
-                        {state.readWriteTools.map((name) => (
-                          <label key={name} className="flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={state.autoApprovedTools.includes(name)}
-                              onChange={() => toggleToolAutoApproved(name)}
-                              className="rounded"
-                            />
-                            <span className="truncate">{name}</span>
-                          </label>
-                        ))}
-                      </div>
+                  <div className="pt-1">
+                    <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1">
+                      Auto-approved tools
+                      {state.autoApprovedTools.length > 0 && (
+                        <span className="ml-1 text-blue-600 normal-case">({state.autoApprovedTools.length})</span>
+                      )}
                     </div>
-                  )}
+                    <div className="flex gap-1 mb-1">
+                      <button
+                        type="button"
+                        onClick={() => enableAllTools()}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+                      >
+                        Enable all
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetToolPermissions}
+                        className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+                      >
+                        Reset to default
+                      </button>
+                    </div>
+                    <div className="max-h-32 overflow-y-auto space-y-0.5">
+                      {state.readWriteTools.map((name) => (
+                        <label key={name} className="flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={state.autoApprovedTools.includes(name)}
+                            onChange={() => toggleToolAutoApproved(name)}
+                            className="rounded"
+                          />
+                          <span className="truncate">{name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               </div>
             )}
@@ -351,6 +339,8 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
               organizationId={organizationId}
               messages={state.messages}
               pendingToolCalls={state.pendingToolCalls}
+              approvedCallIds={state.approvedCallIds}
+              readOnlyTools={state.readOnlyTools}
               loading={state.loading}
               error={state.error}
               onApprove={handleApprove}
@@ -369,6 +359,8 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
               organizationId={organizationId}
               messages={state.messages}
               pendingToolCalls={state.pendingToolCalls}
+              approvedCallIds={state.approvedCallIds}
+              readOnlyTools={state.readOnlyTools}
               loading={state.loading}
               error={state.error}
               onApprove={handleApprove}

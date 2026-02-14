@@ -18,6 +18,10 @@ interface ToolCallCardProps {
   /** If true, show as already resolved (no buttons). */
   resolved?: boolean;
   approved?: boolean;
+  /** If true, tool is always auto-approved (read-only); hide approval UI. */
+  isAutoApproved?: boolean;
+  /** If false, hide approval status for resolved tools (e.g. loaded threads). */
+  showApprovalStatus?: boolean;
 }
 
 export default function ToolCallCard({
@@ -28,6 +32,8 @@ export default function ToolCallCard({
   disabled,
   resolved,
   approved,
+  isAutoApproved,
+  showApprovalStatus = true,
 }: ToolCallCardProps) {
   const [showRaw, setShowRaw] = useState(false);
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
@@ -56,7 +62,7 @@ export default function ToolCallCard({
           <span className="w-3.5" />
         )}
         <span className="font-medium text-gray-600">{toolCall.name}</span>
-        {!resolved && (
+        {!resolved && !isAutoApproved && (
           <span className="flex items-center ml-auto rounded overflow-hidden border border-green-200">
             <button
               type="button"
@@ -142,11 +148,11 @@ export default function ToolCallCard({
             </Menu>
           </span>
         )}
-        {resolved && (
+        {resolved && !isAutoApproved && showApprovalStatus && (
           <span
             className={`ml-auto text-[10px] font-medium ${approved ? 'text-green-500' : 'text-red-500'}`}
           >
-            {approved ? '✓ approved' : '✗ rejected'}
+            {approved ? '✓ approved' : '✗ disapproved'}
           </span>
         )}
       </div>

@@ -52,6 +52,8 @@ export interface AgentChatState {
   messages: AgentChatMessage[];
   pendingTurnId: string | null;
   pendingToolCalls: PendingToolCall[];
+  /** Call IDs we've approved/rejected this session; merged with message-based resolution. */
+  approvedCallIds: Map<string, boolean>;
   /** Latest extraction from working_state (after run_extraction or from approve round). */
   extraction: Record<string, unknown> | null;
   loading: boolean;
@@ -63,6 +65,8 @@ export interface AgentChatState {
   availableModels: string[];
   /** Read-write tools from API (for tool permissions UI). */
   readWriteTools: string[];
+  /** Read-only tools from API (always auto-approved; no approval UI). */
+  readOnlyTools: string[];
   /** Current thread id (null = new unsaved chat). */
   threadId: string | null;
   /** List of threads for this document. */
@@ -124,7 +128,7 @@ function saveAutoApprovedToolsToStorage(organizationId: string, documentId: stri
 function messageFromApi(m: {
   role: string;
   content?: string | null;
-  tool_calls?: Array<{ id: string; name?: string; arguments?: string; function?: { name: string; arguments: string } }>;
+  tool_calls?: Array<{ id: string; name?: string; arguments?: string; function?: { name: string; arguments: string }; approved?: boolean }>;
   thinking?: string | null;
   executed_rounds?: ExecutedRound[] | null;
 }): AgentChatMessage {
@@ -132,6 +136,7 @@ function messageFromApi(m: {
     id: tc.id,
     name: tc.name ?? tc.function?.name ?? '',
     arguments: tc.arguments ?? tc.function?.arguments ?? '{}',
+    ...(tc.approved !== undefined && { approved: tc.approved }),
   }));
   const executedRounds = normalizeExecutedRounds(m.executed_rounds);
   return {
@@ -147,6 +152,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
   const [messages, setMessages] = useState<AgentChatMessage[]>([]);
   const [pendingTurnId, setPendingTurnId] = useState<string | null>(null);
   const [pendingToolCalls, setPendingToolCalls] = useState<PendingToolCall[]>([]);
+  const [approvedCallIds, setApprovedCallIds] = useState<Map<string, boolean>>(new Map());
   const [extraction, setExtraction] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -169,6 +175,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
   const [model, setModel] = useState(DEFAULT_MODEL);
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [readWriteTools, setReadWriteTools] = useState<string[]>([]);
+  const [readOnlyTools, setReadOnlyTools] = useState<string[]>([]);
   const [threadId, setThreadId] = useState<string | null>(null);
   const [threads, setThreads] = useState<AgentThreadSummary[]>([]);
   const [threadsLoading, setThreadsLoading] = useState(false);
@@ -228,6 +235,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
         setModel(data.model && data.model.trim() ? data.model : DEFAULT_MODEL);
         setPendingTurnId(null);
         setPendingToolCalls([]);
+        setApprovedCallIds(new Map());
       } catch (err) {
         setError(getApiErrorMsg(err) ?? 'Failed to load conversation');
       } finally {
@@ -262,6 +270,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
           setExtraction(null);
           setPendingTurnId(null);
           setPendingToolCalls([]);
+          setApprovedCallIds(new Map());
         }
       } catch (err) {
         setError(getApiErrorMsg(err) ?? 'Failed to delete conversation');
@@ -276,6 +285,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
     setExtraction(null);
     setPendingTurnId(null);
     setPendingToolCalls([]);
+    setApprovedCallIds(new Map());
     setError(null);
   }, []);
 
@@ -598,6 +608,13 @@ export function useAgentChat(organizationId: string, documentId: string) {
     async (approvals: Array<{ call_id: string; approved: boolean }>) => {
       if (!pendingTurnId || loading) return;
 
+      const approvalsMap = new Map(approvals.map((a) => [a.call_id, a.approved]));
+      setApprovedCallIds((prev) => {
+        const next = new Map(prev);
+        approvalsMap.forEach((v, k) => next.set(k, v));
+        return next;
+      });
+
       setLoading(true);
       setError(null);
       const controller = new AbortController();
@@ -631,7 +648,22 @@ export function useAgentChat(organizationId: string, documentId: string) {
           thinking: data.thinking ?? undefined,
           executedRounds: normalizeExecutedRounds(data.executed_rounds),
         };
-        setMessages((prev) => [...prev, assistantMsg]);
+        setMessages((prev) => {
+          const updated = prev.map((msg) => {
+            if (msg.role !== 'assistant' || !msg.toolCalls?.length) return msg;
+            const hasAnyToUpdate = msg.toolCalls.some((tc) => approvalsMap.has(tc.id));
+            if (!hasAnyToUpdate) return msg;
+            return {
+              ...msg,
+              toolCalls: msg.toolCalls.map((tc) => {
+                const a = approvalsMap.get(tc.id);
+                if (a === undefined) return tc;
+                return { ...tc, approved: a };
+              }),
+            };
+          });
+          return [...updated, assistantMsg];
+        });
 
         if (data.turn_id && data.tool_calls?.length) {
           setPendingTurnId(data.turn_id);
@@ -642,6 +674,11 @@ export function useAgentChat(organizationId: string, documentId: string) {
         if (threadId) await loadThreads();
       } catch (err) {
         if (controller.signal.aborted) return;
+        setApprovedCallIds((prev) => {
+          const next = new Map(prev);
+          approvalsMap.forEach((_, k) => next.delete(k));
+          return next;
+        });
         setError(getApiErrorMsg(err) ?? 'Failed to submit approvals');
       } finally {
         abortRef.current = null;
@@ -672,9 +709,11 @@ export function useAgentChat(organizationId: string, documentId: string) {
       );
       const tools = data.read_write ?? [];
       setReadWriteTools(tools);
+      setReadOnlyTools(data.read_only ?? []);
       return tools;
     } catch {
       setReadWriteTools([]);
+      setReadOnlyTools([]);
       return [];
     }
   }, [organizationId, documentId]);
@@ -710,6 +749,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
     messages,
     pendingTurnId,
     pendingToolCalls,
+    approvedCallIds,
     extraction,
     loading,
     error,
@@ -718,6 +758,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
     model,
     availableModels,
     readWriteTools,
+    readOnlyTools,
     threadId,
     threads,
     threadsLoading,

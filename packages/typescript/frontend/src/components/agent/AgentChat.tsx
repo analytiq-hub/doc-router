@@ -30,6 +30,10 @@ interface AgentChatProps {
   organizationId: string;
   messages: AgentChatMessage[];
   pendingToolCalls: PendingToolCall[];
+  /** Call IDs approved/rejected this session; merged with message-based resolution. */
+  approvedCallIds?: Map<string, boolean>;
+  /** Read-only tool names (always auto-approved; no approval UI). */
+  readOnlyTools?: string[];
   loading: boolean;
   error: string | null;
   onApprove: (approvals: Array<{ call_id: string; approved: boolean }>) => void;
@@ -40,18 +44,65 @@ interface AgentChatProps {
   disabled?: boolean;
 }
 
-/** Tracks which tool call IDs we've already resolved (approved/rejected) in a previous round. */
-const resolvedFromMessages = (messages: AgentChatMessage[]): Map<string, boolean> => {
-  const map = new Map<string, boolean>();
-  messages.forEach((m) => {
+/** Collect tool call IDs from executed rounds. */
+function toolCallIdsFromExecutedRounds(rounds?: Array<{ tool_calls?: Array<{ id: string }> }>): Set<string> {
+  const ids = new Set<string>();
+  rounds?.forEach((r) => r.tool_calls?.forEach((tc) => ids.add(tc.id)));
+  return ids;
+}
+
+/** Tool calls resolved from executed_rounds (loaded threads) - show as executed w/o approval status. */
+const executedOnlyIdsFromMessages = (messages: AgentChatMessage[]): Set<string> => {
+  const ids = new Set<string>();
+  messages.forEach((m, i) => {
+    const executedIdsInNext = (() => {
+      const nextMsg = messages[i + 1];
+      return nextMsg?.role === 'assistant' && nextMsg.executedRounds?.length
+        ? toolCallIdsFromExecutedRounds(nextMsg.executedRounds)
+        : null;
+    })();
+    const executedIdsInSame = m.executedRounds?.length
+      ? toolCallIdsFromExecutedRounds(m.executedRounds)
+      : null;
     if (m.role === 'assistant' && m.toolCalls?.length) {
       m.toolCalls.forEach((tc) => {
-        if ((tc as PendingToolCall & { approved?: boolean }).approved !== undefined) {
-          map.set(tc.id, (tc as PendingToolCall & { approved?: boolean }).approved ?? false);
+        if ((tc as PendingToolCall & { approved?: boolean }).approved === undefined &&
+            (executedIdsInNext?.has(tc.id) || executedIdsInSame?.has(tc.id))) {
+          ids.add(tc.id);
         }
       });
     }
   });
+  return ids;
+};
+
+/** Tracks which tool call IDs we've already resolved (approved/rejected) in a previous round. */
+const resolvedFromMessages = (
+  messages: AgentChatMessage[],
+  approvedCallIds?: Map<string, boolean>
+): Map<string, boolean> => {
+  const map = new Map<string, boolean>();
+  messages.forEach((m, i) => {
+    const executedIdsInNext = (() => {
+      const nextMsg = messages[i + 1];
+      return nextMsg?.role === 'assistant' && nextMsg.executedRounds?.length
+        ? toolCallIdsFromExecutedRounds(nextMsg.executedRounds)
+        : null;
+    })();
+    const executedIdsInSame = m.executedRounds?.length
+      ? toolCallIdsFromExecutedRounds(m.executedRounds)
+      : null;
+    if (m.role === 'assistant' && m.toolCalls?.length) {
+      m.toolCalls.forEach((tc) => {
+        if ((tc as PendingToolCall & { approved?: boolean }).approved !== undefined) {
+          map.set(tc.id, (tc as PendingToolCall & { approved?: boolean }).approved ?? false);
+        } else if (executedIdsInNext?.has(tc.id) || executedIdsInSame?.has(tc.id)) {
+          map.set(tc.id, true);
+        }
+      });
+    }
+  });
+  approvedCallIds?.forEach((v, k) => map.set(k, v));
   return map;
 };
 
@@ -82,6 +133,8 @@ export default function AgentChat({
   organizationId,
   messages,
   pendingToolCalls,
+  approvedCallIds,
+  readOnlyTools,
   loading,
   error,
   onApprove,
@@ -99,7 +152,11 @@ export default function AgentChat({
   const [editingPanelTurnIndex, setEditingPanelTurnIndex] = useState<number | null>(null);
   const [editingPanelValue, setEditingPanelValue] = useState('');
 
-  const resolvedMap = resolvedFromMessages(messages);
+  const resolvedMap = resolvedFromMessages(messages, approvedCallIds);
+  const executedOnlyIds = useMemo(
+    () => (approvedCallIds?.size ? new Set<string>() : executedOnlyIdsFromMessages(messages)),
+    [messages, approvedCallIds?.size]
+  );
   const pendingIds = pendingCallIds(pendingToolCalls);
   const turns = useMemo(() => messagesToTurns(messages), [messages]);
 
@@ -311,6 +368,8 @@ export default function AgentChat({
                   pendingCallIds={pendingIds}
                   disabled={disabled}
                   resolvedToolCalls={resolvedMap}
+                  executedOnlyIds={executedOnlyIds}
+                  readOnlyTools={readOnlyTools}
                 />
               ))}
             </div>

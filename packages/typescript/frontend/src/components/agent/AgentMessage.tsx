@@ -126,6 +126,10 @@ interface AgentMessageProps {
   disabled?: boolean;
   /** Tool calls that are already resolved (e.g. after approve round). */
   resolvedToolCalls?: Map<string, boolean>;
+  /** Tool call IDs from loaded threads (executed w/o approval status). */
+  executedOnlyIds?: Set<string>;
+  /** Read-only tool names (always auto-approved; no approval UI). */
+  readOnlyTools?: string[];
 }
 
 export default function AgentMessage({
@@ -137,6 +141,8 @@ export default function AgentMessage({
   pendingCallIds,
   disabled,
   resolvedToolCalls,
+  executedOnlyIds,
+  readOnlyTools,
 }: AgentMessageProps) {
   const isUser = message.role === 'user';
   const mdComponents = useMemo(() => createMarkdownComponents(organizationId), [organizationId]);
@@ -168,6 +174,8 @@ export default function AgentMessage({
                     onReject={() => {}}
                     resolved={true}
                     approved={true}
+                    isAutoApproved={readOnlyTools?.includes(tc.name)}
+                    showApprovalStatus={false}
                   />
                 ))}
               </div>
@@ -188,6 +196,8 @@ export default function AgentMessage({
               const isPending = pendingCallIds?.has(tc.id);
               const resolved = resolvedToolCalls?.has(tc.id);
               const approved = resolved ? resolvedToolCalls?.get(tc.id) : undefined;
+              const isAutoApproved = readOnlyTools?.includes(tc.name);
+              const showApprovalStatus = !executedOnlyIds?.has(tc.id);
               return (
                 <ToolCallCard
                   key={tc.id}
@@ -198,6 +208,8 @@ export default function AgentMessage({
                   disabled={disabled}
                   resolved={resolved ?? !isPending}
                   approved={approved}
+                  isAutoApproved={isAutoApproved}
+                  showApprovalStatus={showApprovalStatus}
                 />
               );
             })}
