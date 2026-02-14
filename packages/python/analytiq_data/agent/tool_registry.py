@@ -450,7 +450,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "function": {
             "name": "help_schemas",
             "description": "Get detailed guidance on creating schemas (format, constraints, examples). Call before creating or modifying schemas.",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            "parameters": {
+                "type": "object",
+                "properties": {"_": {"type": "string", "description": "Unused; omit when calling."}},
+                "additionalProperties": False,
+            },
         },
     },
     {
@@ -458,7 +462,11 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "function": {
             "name": "help_prompts",
             "description": "Get detailed guidance on creating prompts (format, linking to schemas, model selection). Call before creating or modifying prompts.",
-            "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+            "parameters": {
+                "type": "object",
+                "properties": {"_": {"type": "string", "description": "Unused; omit when calling."}},
+                "additionalProperties": False,
+            },
         },
     },
 ]
