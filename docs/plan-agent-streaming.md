@@ -1,10 +1,51 @@
 ## Plan: True Streaming for Document Agent
 
+### Implementation Status (as of 2026-02-14)
+
+**Phases 1–3 are implemented.** Phase 4 (streaming `/chat/approve`) is not yet started.
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 1 | Cosmetic stream of final text only | Done |
+| Phase 2 | True LLM streaming (`assistant_text_chunk`, `thinking_chunk`, `assistant_text_done`, `thinking_done`, `done`) | Done |
+| Phase 3 | Tool-related events (`tool_calls`, `tool_result`, `round_executed`) for `/chat` | Done |
+| Phase 4 | Streaming support for `/chat/approve` | Not started |
+
+#### What is implemented
+
+**Backend (`packages/python/analytiq_data/agent/`)**
+- `agent_loop.py`: Single `run_agent_turn()` handles both streaming and non-streaming via an optional `stream_handler` callback. When `stream_handler` is provided, emits `assistant_text_chunk`, `thinking_chunk`, `assistant_text_done`, `thinking_done`, `tool_calls`, `tool_result`, `round_executed`, and `done` events. LLM streaming goes through `ad.llm.agent_completion_stream()`.
+- `run_agent_approve()`: Non-streaming only. Executes tools, calls LLM once, returns JSON. Handles up to two additional LLM rounds for auto-approved follow-up tool calls.
+- `session.py`: In-memory turn state store keyed by `turn_id` with 5-minute TTL. Used when backend pauses on pending tool calls.
+- `system_prompt.py`: Builds system message with document context, OCR excerpt, resolved @mentions, current extraction, working state, and resource-link formatting instructions.
+- `threads.py`: MongoDB persistence for chat threads (`agent_threads` collection). Supports list, get, create, append, truncate-and-append, update title, delete.
+- `tool_registry.py`: 25 tools (13 read-only, 12 read-write). OpenAI function-calling format definitions + dispatch.
+- `tools/`: Six tool modules — `document_tools`, `extraction_tools`, `schema_tools`, `prompt_tools`, `tag_tools`, `help_tools`.
+
+**Backend routes (`packages/python/app/routes/agent.py`)**
+- `POST /chat`: Supports `stream: true` (SSE via `StreamingResponse` + `asyncio.Queue`) and `stream: false` (JSON).
+- `POST /chat/approve`: JSON only. Persists assistant message to thread.
+- `GET /chat/tools`: Returns read-only and read-write tool lists.
+- CRUD for threads: `GET/POST /chat/threads`, `GET/DELETE /chat/threads/{thread_id}`.
+
+**Frontend (`packages/typescript/frontend/src/components/agent/`)**
+- `useAgentChat.ts`: Main hook. SSE consumer in `runStreamingChat()` handles all event types. Thread management (create, load, delete, startNewChat). Auto-approved tools persisted in localStorage per org+doc. Custom event `agent-extraction-updated` dispatched on extraction changes.
+- `AgentTab.tsx`: Top-level component with input area, model/tools dropdowns, thread dropdown, dictation.
+- `AgentChat.tsx`: Renders conversation as turns (user + assistant groups). Sticky header with editable question for resubmit-from-turn. Approve all / reject all buttons.
+- `AgentMessage.tsx`: Renders assistant messages with markdown (ReactMarkdown + remark-gfm), custom resource URI links (`schema_rev:`, `prompt:`, etc.), diff blocks, thinking blocks, tool call cards, executed rounds.
+- `ToolCallCard.tsx`: Per-tool-call approve/reject/always-approve UI with expandable arguments.
+- `ThinkingBlock.tsx`: Collapsible thinking/reasoning display with live timer.
+- `ThreadDropdown.tsx`: Thread history dropdown with time grouping (today/yesterday/this week/older).
+- `ExtractionPanel.tsx`: Collapsible JSON display of current extraction (defined but not wired into the UI).
+- `useDictation.ts`: Web Speech API hook for voice input.
+
+---
+
 ### Goals
 
 - **True streaming** of:
-  - Assistant text (token/chunk level) as it’s generated
-  - Thinking/reasoning as it’s generated
+  - Assistant text (token/chunk level) as it's generated
+  - Thinking/reasoning as it's generated
   - Tool calls and tool results per round
   - Final summary (`executed_rounds`, `working_state`, etc.)
 - Preserve existing approval model (pause vs auto‑approve).
@@ -17,30 +58,28 @@
 All streaming uses a single SSE channel with JSON payloads that include a `type` field.
 
 - **Conversation lifecycle**
-  - `type: "error"`  
+  - `type: "error"`
     - `{ type, error }`
-  - `type: "done"`  
-    - `{ type: "done", final: FinalResult }`  
+  - `type: "done"`
+    - `{ type: "done", result: FinalResult }`
     - `FinalResult` ≈ current `result` dict (`text`, `thinking`, `executed_rounds`, `working_state`, `turn_id`, `tool_calls`).
 
 - **Assistant text + thinking**
-  - `type: "assistant_text_chunk"`  
+  - `type: "assistant_text_chunk"`
     - `{ type, chunk, round_index }`
-  - `type: "assistant_text_done"`  
-    - `{ type, full_text, round_index }` (optional, for reconciliation)
-  - `type: "thinking_chunk"` (optional, if provider exposes reasoning stream)  
+  - `type: "assistant_text_done"`
+    - `{ type, full_text, round_index }`
+  - `type: "thinking_chunk"`
     - `{ type, chunk, round_index }`
-  - `type: "thinking_done"`  
-    - `{ type, full_thinking, round_index }`
+  - `type: "thinking_done"`
+    - `{ type, thinking, round_index }`
 
 - **Tools / rounds**
-  - `type: "tool_calls"` (LLM decided to call tools)  
+  - `type: "tool_calls"` (LLM decided to call tools)
     - `{ type, round_index, tool_calls: [{ id, name, arguments }] }`
-  - `type: "tool_result"` (per tool or batched)  
-    - `{ type, round_index, call_id, name, success, result?, preview?, error? }`  
-      - `result` can contain the full tool output (e.g. structured JSON or text).
-      - `preview` is an optional short summary for compact UI display.
-  - `type: "round_executed"` (what is currently stored in `executed_rounds[i]`)  
+  - `type: "tool_result"` (per tool)
+    - `{ type, round_index, call_id, name, success, result?, preview?, error? }`
+  - `type: "round_executed"`
     - `{ type, round_index, thinking, tool_calls }`
 
 > **Note on `round_index`**: this is **0‑indexed** and increments once per LLM/tool round within a single turn.
@@ -49,276 +88,101 @@ All streaming uses a single SSE channel with JSON payloads that include a `type`
 
 ### 2. Backend: Streaming Agent Loop
 
-#### 2.1 APIs
+#### 2.1 Architecture (implemented)
 
-Keep two paths:
+A single `run_agent_turn()` function handles both paths:
 
-- **Non‑streaming (current behavior)**  
-  ```python
-  async def run_agent_turn(..., auto_approve: bool, ...) -> dict:
-      ...
-  ```
+```python
+async def run_agent_turn(
+    ...,
+    stream_handler: Optional[Callable[[str, Any], Awaitable[None]]] = None,
+) -> dict:
+```
 
-- **Streaming orchestrator (new)**  
-  ```python
-  class AgentEvent(TypedDict, total=False):
-      type: Literal[
-          "assistant_text_chunk",
-          "assistant_text_done",
-          "thinking_chunk",
-          "thinking_done",
-          "tool_calls",
-          "tool_result",
-          "round_executed",
-          "done",
-          "error",
-      ]
-      # plus payload fields as per schema above
+- When `stream_handler` is `None`: non-streaming path, uses `ad.llm.agent_completion()`, returns JSON dict.
+- When `stream_handler` is provided: streaming path, uses `ad.llm.agent_completion_stream()`, calls `stream_handler(event_type, payload)` for each event, returns final result dict.
 
-  async def stream_agent_turn(..., auto_approve: bool, ...) -> AsyncIterator[AgentEvent]:
-      ...
-  ```
+The route creates an `asyncio.Queue`, wraps it in a `stream_handler` closure, and runs the agent turn in a background task. The SSE generator reads from the queue and yields `data:` frames.
 
-#### 2.2 Per‑round behavior
+#### 2.2 Per‑round behavior (implemented)
 
-For each agent round (bounded by a `MAX_TOOL_ROUNDS` limit):
+For each agent round (bounded by `MAX_TOOL_ROUNDS = 10`):
 
-1. **Call LLM with streaming**
+1. **Call LLM with streaming** via `ad.llm.agent_completion_stream()` which yields `(event_type, payload)` tuples for `"content"`, `"thinking"`, `"message"`, and `"usage"` events.
 
-   ```python
-   async for delta in litellm.acompletion(..., stream=True):
-       # content deltas
-       if delta.choices[0].delta.content:
-           text_delta = delta.choices[0].delta.content
-           text_so_far += text_delta
-           yield {"type": "assistant_text_chunk", "chunk": text_delta, "round_index": i}
+2. **No tool calls** → emit `thinking_done` (if thinking), `assistant_text_done`, `done`, return.
 
-       # reasoning / thinking deltas (if supported)
-       if reasoning_delta:
-           thinking_so_far += reasoning_delta
-           yield {"type": "thinking_chunk", "chunk": reasoning_delta, "round_index": i}
-   ```
+3. **Has tool calls + needs approval** → save turn state in-memory, return `turn_id` + `tool_calls` via `done` event.
 
-   After the stream completes, we have the final assistant message with possible `tool_calls`.
+4. **Has tool calls + auto-approved** → emit `tool_calls`, execute tools (emitting `tool_result` per tool via `on_tool_result` callback), emit `round_executed`, append to `llm_messages`, continue loop.
 
-2. **No tool calls (final answer)**  
-   If `tool_calls == []`:
-
-   ```python
-   if text_so_far:
-       yield {"type": "assistant_text_done", "full_text": text_so_far, "round_index": i}
-   if thinking_so_far:
-       yield {"type": "thinking_done", "full_thinking": thinking_so_far, "round_index": i}
-
-   final_result = {
-       "text": text_so_far,
-       "thinking": thinking_so_far,
-       "working_state": working_state,
-       "executed_rounds": executed_rounds or None,
-   }
-   yield {"type": "done", "final": final_result}
-   return
-   ```
-
-3. **Has tool calls**
-
-   After streaming the LLM round:
-
-   ```python
-   if text_so_far:
-       yield {"type": "assistant_text_done", "full_text": text_so_far, "round_index": i}
-   if thinking_so_far:
-       yield {"type": "thinking_done", "full_thinking": thinking_so_far, "round_index": i}
-
-   pending = [_tool_call_to_dict(tc) for tc in tool_calls]
-   yield {"type": "tool_calls", "round_index": i, "tool_calls": pending}
-   ```
-
-   - **Approval required (`auto_approve=False` + write tools)**:
-
-     - Build `final_result`:
-
-       ```python
-       final_result = {
-           "text": text_so_far,
-           "thinking": thinking_so_far,
-           "working_state": working_state,
-           "tool_calls": pending,
-           "turn_id": generated_turn_id,
-       }
-       yield {"type": "done", "final": final_result}
-       return
-       ```
-
-     - State for `turn_id` is stored in the existing in‑memory session.
-
-   - **Auto‑approved (`auto_approve=True` or tool in `auto_approved_tools`)**:
-
-     - Execute each tool call:
-
-       ```python
-       for tc in pending:
-           result_str = await execute_tool(...)
-           yield {
-               "type": "tool_result",
-               "round_index": i,
-               "call_id": tc["id"],
-               "name": tc["name"],
-               "success": True/False,
-               "preview": result_preview,
-               "error": error_message_if_any,
-           }
-       ```
-
-     - Append to `executed_rounds`:
-
-       ```python
-       executed_rounds.append({"thinking": thinking_so_far, "tool_calls": pending})
-       yield {
-           "type": "round_executed",
-           "round_index": i,
-           "thinking": thinking_so_far,
-           "tool_calls": pending,
-       }
-       ```
-
-     - Add assistant+tool messages to `llm_messages` and continue loop to next round.
-
-4. **Max rounds reached**
-
-   After `MAX_TOOL_ROUNDS`:
-
-   ```python
-   final_result = {
-       "text": "(Max tool rounds reached.)",
-       "thinking": None,
-       "working_state": working_state,
-       "executed_rounds": executed_rounds or None,
-   }
-   yield {"type": "assistant_text_done", "full_text": final_result["text"], "round_index": i}
-   yield {"type": "done", "final": final_result}
-   return
-   ```
-
-5. **Approve path (`/chat/approve`)**
-
-   - Similar structure, but:
-     - First execute approved tools (no streaming).
-     - Then run **one** streaming LLM round, emitting the same events as above.
+5. **Max rounds reached** → emit `assistant_text_done` with "(Max tool rounds reached.)", emit `done`.
 
 ---
 
 ### 3. Backend Routes: `/chat` and `/chat/approve`
 
-#### 3.1 `/v0/orgs/{org}/documents/{doc}/chat`
+#### 3.1 `POST /v0/orgs/{org}/documents/{doc}/chat` (implemented)
 
-- **Non‑streaming (`request.stream == False`)**  
-  - Call `run_agent_turn(...)` as today.
-  - Persist final assistant message + `executed_rounds` + `working_state` into the thread as currently implemented.
+- **Non‑streaming (`stream=false`)**: Calls `run_agent_turn()` without `stream_handler`, returns JSON. Persists to thread via `_append_assistant_to_thread()`.
+- **Streaming (`stream=true`)**: Creates `asyncio.Queue`, runs `run_agent_turn()` with queue-based `stream_handler` in a background task. SSE generator reads from queue, emits `data:` frames. On `done` event with no `turn_id`, persists to thread inline.
 
-- **Streaming (`request.stream == True`)**
+#### 3.2 `POST /chat/approve` (implemented, non-streaming only)
 
-  ```python
-  @agent_router.post("/v0/orgs/{organization_id}/documents/{document_id}/chat")
-  async def post_chat(..., request: ChatRequest, ...):
-      ...
-      if request.stream:
-          async def generate_sse():
-              async for event in stream_agent_turn(...):
-                  yield f"data: {json.dumps(event)}\n\n"
-                  if event["type"] == "done" and event["final"].get("turn_id") is None:
-                      # Persist final assistant message to thread here
-          return StreamingResponse(generate_sse(), media_type="text/event-stream", ...)
+- Calls `run_agent_approve(turn_id, approvals)` which:
+  1. Retrieves and clears in-memory turn state.
+  2. Executes approved/rejected tools.
+  3. Calls LLM once with tool results.
+  4. If LLM returns more tool calls: applies same approval logic (up to one more auto-execute round).
+- Persists assistant message to thread if `thread_id` provided.
 
-      # Fallback non-streaming:
-      result = await run_agent_turn(...)
-      # Persist and return as JSON
-  ```
+#### 3.3 Other endpoints (implemented)
 
-#### 3.2 `/chat/approve`
-
-- Same pattern:
-  - `stream=False` → existing behavior with `run_agent_approve`.
-  - `stream=True` → `stream_agent_approve` that:
-    - Executes tools.
-    - Streams one LLM round via events.
-    - Emits `done` when complete; if `turn_id` still present, frontend will show new pending tool calls.
+- `GET /chat/tools`: Returns `{ read_only: [...], read_write: [...] }`.
+- `GET /chat/threads`: Lists threads for document+user, most recent first.
+- `POST /chat/threads`: Creates new thread.
+- `GET /chat/threads/{id}`: Gets thread with full messages and extraction.
+- `DELETE /chat/threads/{id}`: Deletes thread.
 
 ---
 
-### 4. Frontend: `useAgentChat` Streaming v2
+### 4. Frontend: `useAgentChat` Streaming (implemented)
 
 #### 4.1 Event handling
 
-Extend the SSE consumer in `useAgentChat` to handle the richer event set:
+The SSE consumer in `runStreamingChat()` handles:
 
-- **Initialization**
-  - On first event, append a placeholder assistant message:
+- **Initialization**: Appends placeholder `{ role: 'assistant', content: '', thinking: undefined, executedRounds: undefined }`.
+- **`assistant_text_chunk`**: Appends `chunk` to placeholder's `content`.
+- **`thinking_chunk`**: Appends `chunk` to placeholder's `thinking`.
+- **`assistant_text_done`**: Reconciles `content` with `full_text`.
+- **`thinking_done`**: Sets `thinking` on placeholder.
+- **`tool_calls`**: Pushes new `ExecutedRound` with tool calls into `executedRounds`.
+- **`round_executed`**: Merges thinking + tool_calls into existing round by index.
+- **`done`**: Reconciles final `content`, `thinking`, `executedRounds`, `toolCalls`. Updates extraction from `working_state`. Sets `pendingTurnId` + `pendingToolCalls` if `turn_id` present. Refreshes thread list.
+- **`error`**: Shows error, removes placeholder.
 
-    ```ts
-    const placeholder: AgentChatMessage = {
-      role: 'assistant',
-      content: '',
-      thinking: null,
-      executedRounds: [],
-      toolCalls: [],
-    };
-    ```
+#### 4.2 Approval flow (implemented)
 
-- **`assistant_text_chunk`**
-  - Append `chunk` to `content` of the placeholder.
+- `approveToolCalls()` POSTs to `/chat/approve` (non-streaming JSON).
+- Response may include new `turn_id` + `tool_calls` (chains approvals).
+- Updates extraction, dispatches `agent-extraction-updated` event.
 
-- **`assistant_text_done`**
-  - Optionally reconcile `content` with `full_text`.
+#### 4.3 Thread management (implemented)
 
-- **`thinking_chunk` / `thinking_done`**
-  - Accumulate into `message.thinking` (already rendered via `ThinkingBlock` in `AgentMessage`).
-
-- **`tool_calls`**
-  - Update:
-    - `pendingToolCalls` state (for approval UI).
-    - `message.toolCalls` so the current assistant message shows pending tool cards.
-
-- **`tool_result`**
-  - Update status/preview for the matching tool card (e.g. mark as completed, show error).
-
-- **`round_executed`**
-  - Push/merge into `message.executedRounds` so each auto‑executed round appears live (existing `AgentMessage` already renders `executedRounds`).
-
-- **`done`**
-  - Use `final` payload to:
-    - Reconcile `content`, `thinking`, `executedRounds`.
-    - Update `extraction` from `final.working_state.extraction`.
-    - Set `pendingTurnId` + `pendingToolCalls` if `final.turn_id` is present.
-  - Clear `loading`.
-
-- **`error`**
-  - Show error, remove placeholder assistant message, clear `loading`.
-
-#### 4.2 Approval flow
-
-- When `done.final.turn_id` is present:
-  - Treat as “pause for approval”:
-    - Show current text + thinking.
-    - Render pending tool cards from `final.tool_calls`.
-    - Set `pendingTurnId` and `pendingToolCalls` as today.
-  - Further streaming happens on `/chat/approve` when the user approves/rejects.
+- Auto-creates thread on first message if none selected.
+- `sendMessageWithHistory()` supports resubmit-from-turn with `truncate_thread_to_message_count`.
+- Thread list refreshed after each completed turn.
+- Auto-titles thread from first user message (first 50 chars).
 
 ---
 
 ### 5. Migration & Phasing
 
-1. **Phase 1 (current)**: Cosmetic stream of final text only (already implemented).
-2. **Phase 2**: Switch LLM calls in the agent loop to use `stream=True`, emit:
-   - `assistant_text_chunk`
-   - `assistant_text_done` (plus `thinking_done` as a fallback if no thinking chunks)
-   - `done` (no tool events yet, `/chat` only).
-3. **Phase 3**: Add tool‑related events for `/chat`:
-   - `tool_calls`, `tool_result`, `round_executed`
-   - Wire them into `useAgentChat` and `AgentMessage` for the initial `/chat` turn.
-4. **Phase 4**: Add streaming support to `/chat/approve` path with **identical event semantics** (including tool events) so approval responses stream in the same way as initial chat turns.
-
-This yields **true, progressive streaming** for both the assistant’s reasoning and text, plus live visibility into each tool round while preserving the existing approval model and non‑streaming APIs.
+1. **Phase 1**: Cosmetic stream of final text only. **Done.**
+2. **Phase 2**: True LLM streaming with `assistant_text_chunk`, `thinking_chunk`, `assistant_text_done`, `thinking_done`, `done`. **Done.**
+3. **Phase 3**: Tool-related events (`tool_calls`, `tool_result`, `round_executed`) for `/chat`. **Done.**
+4. **Phase 4**: Streaming support for `/chat/approve`. **Not started.**
 
 ---
 
@@ -326,82 +190,203 @@ This yields **true, progressive streaming** for both the assistant’s reasoning
 
 #### 6.1 Thinking streaming fallback
 
-- Not all providers expose reasoning/“thinking” tokens in a streaming‑friendly way.
-- Behavior:
+- Not all providers expose reasoning/"thinking" tokens in a streaming‑friendly way.
+- Implemented behavior:
   - If `thinking_chunk` events are emitted during the stream, they are used as‑is.
   - If no thinking deltas are available but the final message has `thinking`:
     - Emit a single `thinking_done` event with the full thinking content at the end of the round.
+  - `_should_use_thinking_param()` proactively skips the thinking parameter when the last assistant message has tool_calls but no thinking_blocks (avoids LiteLLM warning).
+  - `_thinking_blocks_for_api()` only includes thinking blocks that have a valid `signature` (required by Anthropic).
 
 #### 6.2 Tool call assembly from streamed deltas
 
-- OpenAI‑style streams may deliver tool_calls as partial JSON across multiple deltas.
-- The agent loop must:
-  - Accumulate raw tool_call deltas until the stream is finished.
-  - Only after having a complete, valid list of tool_calls:
-    - Construct the normalized `pending = [_tool_call_to_dict(...)]`.
-    - Emit a single `tool_calls` event per round.
+- `ad.llm.agent_completion_stream()` accumulates tool call deltas internally and yields a complete `message` object with resolved `tool_calls` only after the stream finishes.
+- The agent loop processes the complete tool_calls list as a batch.
 
 #### 6.3 Error handling during auto‑approve
 
-- If a tool execution fails while `auto_approve=True`:
-  - Emit a `tool_result` event with `success=False` and `error`.
-  - Still append that tool call to `executed_rounds` with the error context.
-  - Continue the loop and send the resulting tool messages to the LLM so it can self‑correct, unless:
-    - The failure is systemic (e.g. SPU limit, auth), in which case:
-      - Emit an `error` event and terminate the turn early.
+- If a tool execution fails:
+  - `_execute_tool_calls()` catches the exception and returns `{"error": err_msg}` as the tool result content.
+  - Emits `tool_result` with `success=False` and `error`.
+  - The error is sent to the LLM as a tool result so it can self-correct.
+- SPU limit errors terminate the turn early with `{"error": str(e)}`.
 
 #### 6.4 Cancellation / client abort
 
-- Frontend already uses an `AbortController` for `/chat`.
-- Backend behavior:
-  - When the HTTP client closes the SSE connection (or aborts):
-    - The FastAPI `StreamingResponse` generator should detect disconnect and stop iterating over `stream_agent_turn`.
-    - The agent loop should be allowed to finish the *current* LLM call/tool execution but not start new rounds.
-  - No `done` event is guaranteed on client‑initiated abort; frontend should:
-    - Treat abrupt end‑of‑stream with no `done` as “canceled”.
+- Frontend uses `AbortController` for the fetch request.
+- `cancelRequest()` aborts the controller, sets `loading=false`, removes the pending user message if no response was received.
+- Backend: the `generate_sse()` generator has a `finally` block that cancels the background task.
 
 #### 6.5 Thread persistence & reconnection
 
-- Thread persistence:
-  - Only when receiving a `done` event whose `final.turn_id is None` (no pending approval) do we persist the assistant message and `executed_rounds` to the thread.
-  - For approval flows (`turn_id` present), persistence remains in `/chat/approve` as today.
-- Reconnection:
-  - If the SSE connection drops mid‑stream:
-    - Frontend can re‑load the thread via existing `GET /chat/threads/{id}`.
-    - The stored thread state reflects only *completed* turns; partial streaming state is not persisted.
-    - UX: show partial assistant message as “canceled” and rely on the reloaded thread for authoritative history.
+- Persistence occurs only on `done` event where `turn_id is None` (no pending approval).
+- For approval flows, persistence is in `post_chat_approve`.
+- `_append_assistant_to_thread()` handles both append and truncate-and-append (for resubmit-from-turn).
+- On reconnection, frontend loads thread via `GET /chat/threads/{id}`; partial streaming state is lost.
 
 #### 6.6 Backpressure & chunking policy
 
-- To avoid flooding slow clients:
-  - Use *logical* chunks (e.g. small phrases or token groups) rather than single characters.
-  - Optionally buffer and flush:
-    - After N characters/tokens **or**
-    - On a short timer (e.g. every 30–50ms), whichever comes first.
-- The SSE queue in the route should either:
-  - Be bounded (log a warning if overflow occurs), or
-  - Drop older fine‑grained chunks in favor of newer ones in extreme cases (while still ultimately emitting `assistant_text_done` and `done`).
+- **Not yet implemented.** The SSE queue is unbounded (`asyncio.Queue()` with no maxsize).
+- Heartbeat/keepalive not implemented.
 
 #### 6.7 Event ordering guarantees
 
-- Within a **single round** (`round_index`), events must be emitted in a predictable order so the frontend can build a consistent view:
+Within a single round (`round_index`), events are emitted in order:
 
-  1. `thinking_chunk`* (0 or more)
-  2. `thinking_done` (if any thinking is present)
-  3. `assistant_text_chunk`* (0 or more)
-  4. `assistant_text_done` (if any text is present)
-  5. `tool_calls` (if any)
-  6. `tool_result`* (0 or more, for auto‑approved tools)
-  7. `round_executed` (when auto‑approved and tools executed)
+1. `thinking_chunk`* (0 or more)
+2. `assistant_text_chunk`* (0 or more) — note: thinking and text chunks may interleave depending on provider
+3. `thinking_done` (if thinking present)
+4. `assistant_text_done` (if text present)
+5. `tool_calls` (if any)
+6. `tool_result`* (0 or more, for auto‑approved tools)
+7. `round_executed` (when auto‑approved and tools executed)
 
-- `done` is emitted **after** the final round completes (or early on pause/error), and is unique per turn.
+`done` is emitted after the final round completes (or early on pause/error).
 
 #### 6.8 Heartbeat / keepalive
 
-- For long‑running tool executions or slow LLM responses, emit periodic SSE **comments** as heartbeats to avoid idle timeouts in proxies/load balancers:
+- **Not yet implemented.** Planned: emit `:keepalive\n\n` SSE comments when no data events for 10–20 seconds.
 
-  - Example heartbeat frame: `":keepalive\n\n"`
-  - Emitted from the route generator when no data events have been sent for a configurable interval (e.g. 10–20 seconds).
+---
 
+### 7. Known Bugs
 
+#### 7.1 BUG: In-memory session store doesn't scale and never GCs stale entries
+**File:** `packages/python/analytiq_data/agent/session.py:15`
 
+`_store` is a module-level dict. Entries that are never fetched via `get_turn_state` are never cleaned up — they accumulate forever. With multiple workers (e.g. gunicorn with multiple processes), the in-memory store is per-process, so a user could hit a different worker on the approve call and get "Turn expired or not found."
+
+**Fix:** Add periodic GC (e.g. sweep on each `set_turn_state` call), or move to Redis/MongoDB for cross-process state.
+
+#### 7.2 BUG: `handleApproveOne` inverts approval for all other tool calls
+**File:** `packages/typescript/frontend/src/components/agent/AgentChat.tsx:168-175`
+
+```ts
+const handleApproveOne = (callId: string, approved: boolean) => {
+  onApprove(
+    pendingToolCalls.map((tc) => ({
+      call_id: tc.id,
+      approved: tc.id === callId ? approved : !approved, // BUG: inverts others
+    }))
+  );
+};
+```
+
+When the user approves one tool call, every other pending tool call is set to `!approved` (i.e. rejected). The intended behavior is likely to only submit the clicked one, or to leave others as-is.
+
+#### 7.3 BUG: `run_agent_approve` returns stale text after auto-executing follow-up tool calls
+**File:** `packages/python/analytiq_data/agent/agent_loop.py:622-705`
+
+After the first LLM call in `run_agent_approve`, if the model returns more tool calls and they are all auto-approved, the code executes them but returns the text from *before* execution (line 699: `"text": text`). The user sees the text from the LLM call that produced the tool calls, not a final summary of the tool results.
+
+**Fix:** After executing auto-approved tools, call the LLM again (or return the text from the last LLM call in the chain).
+
+#### 7.4 BUG: `_sanitize_messages_for_llm` drops `thinking_blocks` field
+**File:** `packages/python/analytiq_data/agent/agent_loop.py:93-141`
+
+When reconstructing messages, the sanitizer only copies `role`, `content`, `tool_calls`, and `tool_call_id`. It drops `thinking_blocks` from assistant messages. Since `thinking_blocks` are required by the Anthropic API when continuing a conversation where thinking was present, this can cause API errors when reloading a thread.
+
+#### 7.5 BUG: Redundant `tool_calls`/`text`/`thinking_text` recomputation after if/else block
+**File:** `packages/python/analytiq_data/agent/agent_loop.py:442-444`
+
+Lines 442-444 re-extract `tool_calls`, `text`, and `thinking_text` from `message` after the streaming/non-streaming if/else block. In the non-streaming path, the function already returned if there are no tool calls. These lines only execute in the streaming path where the values were already computed. Harmless but confusing — should be removed.
+
+#### 7.6 BUG: `_tool_call_to_dict` has a redundant fallback
+**File:** `packages/python/analytiq_data/agent/agent_loop.py:25`
+
+```python
+tid = getattr(tc, "id", None) or getattr(tc, "id", "")
+```
+
+Both `getattr` calls access the same attribute `"id"`. The second is redundant; should likely be `tc.get("id", "")` for the dict fallback.
+
+#### 7.7 BUG: Thread `document_id` not validated on get/delete
+**File:** `packages/python/app/routes/agent.py:436-438`
+
+`get_thread` and `delete_thread` verify the document exists but don't check that `thread.document_id == document_id`. A user could access a thread from a different document if they know the thread_id, since `agent_threads.get_thread` only checks `organization_id` and `created_by`.
+
+**Fix:** Add `document_id` to the query filter in `get_thread` and `delete_thread` in `threads.py`.
+
+#### 7.8 BUG: `_set_nested` doesn't handle `None` intermediate values
+**File:** `packages/python/analytiq_data/agent/tools/extraction_tools.py:100-129`
+
+When traversing a path like `items.0.amount`, if `items[0]` is `None` (appended as a placeholder), the code tries to index into `None`, causing an `AttributeError` or `TypeError` not caught by the `(ValueError, KeyError, IndexError)` handler at line 157.
+
+**Fix:** Add `TypeError` and `AttributeError` to the except clause, or check for `None` during traversal.
+
+#### 7.9 BUG: `_resolve_mentions` doesn't validate ObjectId format
+**File:** `packages/python/app/routes/agent.py:87-127`
+
+If a user sends a malformed mention ID, `ObjectId(mid)` throws `bson.errors.InvalidId`, resulting in a 500 error.
+
+**Fix:** Wrap in try/except or validate format before calling `ObjectId()`.
+
+---
+
+### 8. Improvements
+
+#### 8.1 No rate limiting on chat/approve endpoints
+**File:** `packages/python/app/routes/agent.py`
+
+No rate limiting. A user could rapidly fire requests and incur large LLM costs. Consider per-user or per-org rate limiting.
+
+#### 8.2 Thread messages can grow unboundedly
+**File:** `packages/python/analytiq_data/agent/threads.py:115-146`
+
+`append_messages` uses `$push: {"$each": new_messages}` with no cap. A long conversation could exceed the 16MB BSON document limit. Consider capping messages per thread or paginating.
+
+#### 8.3 No MongoDB index on `agent_threads` collection
+**File:** `packages/python/analytiq_data/agent/threads.py:57-62`
+
+`list_threads` queries by `{organization_id, document_id, created_by}` and sorts by `updated_at`. Without a compound index, this will be a collection scan on larger deployments. Add a migration with an appropriate index.
+
+#### 8.4 `loadModels` has a stale closure over `model`
+**File:** `packages/typescript/frontend/src/components/agent/useAgentChat.ts:702-714`
+
+`loadModels` depends on `model` in its dependency array but also calls `setModel` conditionally. If `model` changes, the callback is recreated, which re-triggers any effect that depends on `loadModels`. Could cause redundant API calls.
+
+#### 8.5 `sendMessage` captures stale `messages` in its closure
+**File:** `packages/typescript/frontend/src/components/agent/useAgentChat.ts:518-573`
+
+`sendMessage` has `messages` in its dependency array and builds `messageListForApi` from the captured `messages` value. If messages are being updated from a previous streaming response when `sendMessage` is called, the captured `messages` could be stale. Using a ref for messages would be safer.
+
+#### 8.6 Approve endpoint doesn't support streaming
+**File:** `packages/python/app/routes/agent.py:308-347`
+
+`post_chat` supports `stream: true` for SSE, but `post_chat_approve` always returns JSON. If a tool call triggers a chain of auto-approved follow-ups, the user waits with no feedback. This is the Phase 4 gap.
+
+#### 8.7 `delete_schema` checks all prompt revisions, not just latest
+**File:** `packages/python/analytiq_data/agent/tools/schema_tools.py:229`
+
+`delete_schema` queries `prompt_revisions` for any revision that references the schema. A schema can never be deleted if it was ever used by any prompt, even if the current revision no longer uses it.
+
+**Fix:** Only check the latest revision per prompt_id.
+
+#### 8.8 `create_schema` auto-versions when name matches (case-insensitive)
+**File:** `packages/python/analytiq_data/agent/tools/schema_tools.py:74-80`
+
+If the LLM picks a name matching an existing schema, it silently creates a new version rather than a separate schema. The user asks to "create" but gets a version bump. Consider making this explicit in the tool description or returning a warning.
+
+#### 8.9 No test coverage for streaming path or thread persistence
+**File:** `packages/python/tests/agent/test_agent_loop.py`
+
+Tests cover the non-streaming path, session state, and helper functions. Missing coverage for:
+- SSE streaming path (`stream_handler` usage)
+- Thread creation/append on the approve endpoint
+- `truncate_and_append_messages` flow
+- End-to-end tool execution (tools are mocked at the LLM level)
+
+#### 8.10 Private API `ad.llm._extract_thinking_from_response` usage
+**File:** `packages/python/analytiq_data/agent/agent_loop.py:403`
+
+The agent loop calls `ad.llm._extract_thinking_from_response(message)` — a private function. If the LLM module is refactored, this breaks silently. Make it a public API or move the logic into the agent module.
+
+#### 8.11 `ExtractionPanel` component is unused
+**File:** `packages/typescript/frontend/src/components/agent/ExtractionPanel.tsx`
+
+`ExtractionPanel` is defined but not imported anywhere. The `extraction` state exists in `useAgentChat` but is never rendered. Either wire it up or remove.
+
+#### 8.12 SSE queue is unbounded
+**File:** `packages/python/app/routes/agent.py:207`
+
+`asyncio.Queue()` has no maxsize. For long-running turns with many tool rounds, the queue could grow large if the client reads slowly. Consider bounding or implementing backpressure.
