@@ -42,7 +42,9 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
   const [interimTranscript, setInterimTranscript] = useState('');
   const interimRef = useRef('');
   const [showModelDropUp, setShowModelDropUp] = useState(false);
+  const [showToolsDropUp, setShowToolsDropUp] = useState(false);
   const modelDropRef = useRef<HTMLDivElement>(null);
+  const toolsDropRef = useRef<HTMLDivElement>(null);
 
   const handleTranscript = useCallback(
     (text: string, isFinal: boolean) => {
@@ -83,8 +85,8 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
   }, [loadModels]);
 
   useEffect(() => {
-    if (showModelDropUp) loadTools();
-  }, [showModelDropUp, loadTools]);
+    if (showToolsDropUp) loadTools();
+  }, [showToolsDropUp, loadTools]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -99,8 +101,12 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
-      if (modelDropRef.current && !modelDropRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (modelDropRef.current && !modelDropRef.current.contains(target)) {
         setShowModelDropUp(false);
+      }
+      if (toolsDropRef.current && !toolsDropRef.current.contains(target)) {
+        setShowToolsDropUp(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -159,91 +165,112 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
         </div>
       </div>
       <div className="flex items-center justify-between px-3 pb-2 pt-0 gap-2">
-        <div className="relative flex items-center gap-2 min-w-0" ref={modelDropRef}>
-          <button
-            type="button"
-            onClick={() => setShowModelDropUp((v) => !v)}
-            className="flex items-center gap-0.5 text-[11px] text-gray-500 hover:text-gray-700 py-0.5"
-            title={state.autoApprove ? 'Model (all tools auto-approved)' : state.autoApprovedTools.length > 0 ? `Model · ${state.autoApprovedTools.length} tool(s) auto-approved` : 'Model · Tool permissions'}
-          >
-            <KeyboardArrowUpIcon sx={{ fontSize: 14 }} className={showModelDropUp ? '' : 'rotate-180'} />
-            <span className="max-w-[120px] truncate">{state.model}</span>
-            {!state.autoApprove && state.autoApprovedTools.length > 0 && (
-              <span className="text-[10px] text-blue-600 font-medium">({state.autoApprovedTools.length})</span>
-            )}
-          </button>
-          {showModelDropUp && (
-            <div
-              className={`absolute left-0 z-50 rounded-md border border-gray-200 bg-white shadow-lg py-1 min-w-[200px] max-h-[70vh] overflow-y-auto ${
-                state.messages.length > 0 ? 'bottom-full mb-1' : 'top-full mt-1'
-              }`}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="relative" ref={modelDropRef}>
+            <button
+              type="button"
+              onClick={() => { setShowModelDropUp((v) => !v); setShowToolsDropUp(false); }}
+              className="flex items-center gap-0.5 text-[11px] text-gray-500 hover:text-gray-700 py-0.5"
+              title="Model"
             >
-              {state.availableModels.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-gray-500">Loading models…</div>
-              ) : (
-                state.availableModels.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => { setModel(m); setShowModelDropUp(false); }}
-                    className={`block w-full text-left px-3 py-1.5 text-xs ${m === state.model ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
-                  >
-                    {m}
-                  </button>
-                ))
-              )}
-              <div className="border-t border-gray-100 mt-1 pt-1 px-2 space-y-1">
-                <label className="flex items-center gap-2 text-[11px] text-gray-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={state.autoApprove}
-                    onChange={(e) => setAutoApprove(e.target.checked)}
-                    className="rounded"
-                  />
-                  Auto-approve all tools
-                </label>
-                {!state.autoApprove && (
-                  <div className="pt-1">
-                    <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1">
-                      Tool permissions
-                      {state.autoApprovedTools.length > 0 && (
-                        <span className="ml-1 text-blue-600 normal-case">({state.autoApprovedTools.length} auto-approved)</span>
-                      )}
-                    </div>
-                    <div className="flex gap-1 mb-1">
-                      <button
-                        type="button"
-                        onClick={() => enableAllTools()}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
-                      >
-                        Enable all
-                      </button>
-                      <button
-                        type="button"
-                        onClick={resetToolPermissions}
-                        className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
-                      >
-                        Reset to default
-                      </button>
-                    </div>
-                    <div className="max-h-32 overflow-y-auto space-y-0.5">
-                      {state.readWriteTools.map((name) => (
-                        <label key={name} className="flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={state.autoApprovedTools.includes(name)}
-                            onChange={() => toggleToolAutoApproved(name)}
-                            className="rounded"
-                          />
-                          <span className="truncate">{name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
+              <KeyboardArrowUpIcon sx={{ fontSize: 14 }} className={showModelDropUp ? '' : 'rotate-180'} />
+              <span className="max-w-[120px] truncate">{state.model}</span>
+            </button>
+            {showModelDropUp && (
+              <div
+                className={`absolute left-0 z-50 rounded-md border border-gray-200 bg-white shadow-lg py-1 min-w-[200px] max-h-[70vh] overflow-y-auto ${
+                  state.messages.length > 0 ? 'bottom-full mb-1' : 'top-full mt-1'
+                }`}
+              >
+                {state.availableModels.length === 0 ? (
+                  <div className="px-3 py-2 text-xs text-gray-500">Loading models…</div>
+                ) : (
+                  state.availableModels.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => { setModel(m); setShowModelDropUp(false); }}
+                      className={`block w-full text-left px-3 py-1.5 text-xs ${m === state.model ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700 hover:bg-gray-50'}`}
+                    >
+                      {m}
+                    </button>
+                  ))
                 )}
               </div>
-            </div>
-          )}
+            )}
+          </div>
+          <div className="relative" ref={toolsDropRef}>
+            <button
+              type="button"
+              onClick={() => { setShowToolsDropUp((v) => !v); setShowModelDropUp(false); }}
+              className="flex items-center gap-0.5 text-[11px] text-gray-500 hover:text-gray-700 py-0.5"
+              title={state.autoApprove ? 'Tools (all auto-approved)' : state.autoApprovedTools.length > 0 ? `Tools (${state.autoApprovedTools.length} auto-approved)` : 'Tools'}
+            >
+              <KeyboardArrowUpIcon sx={{ fontSize: 14 }} className={showToolsDropUp ? '' : 'rotate-180'} />
+              <span>Tools</span>
+              {!state.autoApprove && state.autoApprovedTools.length > 0 && (
+                <span className="text-[10px] text-blue-600 font-medium">({state.autoApprovedTools.length})</span>
+              )}
+            </button>
+            {showToolsDropUp && (
+              <div
+                className={`absolute left-0 z-50 rounded-md border border-gray-200 bg-white shadow-lg py-1 min-w-[200px] max-h-[70vh] overflow-y-auto ${
+                  state.messages.length > 0 ? 'bottom-full mb-1' : 'top-full mt-1'
+                }`}
+              >
+                <div className="px-2 pt-1 pb-2 space-y-1">
+                  <label className="flex items-center gap-2 text-[11px] text-gray-600 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={state.autoApprove}
+                      onChange={(e) => setAutoApprove(e.target.checked)}
+                      className="rounded"
+                    />
+                    Auto-approve all tools
+                  </label>
+                  {!state.autoApprove && (
+                    <div className="pt-1">
+                      <div className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1">
+                        Auto-approved tools
+                        {state.autoApprovedTools.length > 0 && (
+                          <span className="ml-1 text-blue-600 normal-case">({state.autoApprovedTools.length})</span>
+                        )}
+                      </div>
+                      <div className="flex gap-1 mb-1">
+                        <button
+                          type="button"
+                          onClick={() => enableAllTools()}
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+                        >
+                          Enable all
+                        </button>
+                        <button
+                          type="button"
+                          onClick={resetToolPermissions}
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 hover:bg-gray-200 text-gray-700"
+                        >
+                          Reset to default
+                        </button>
+                      </div>
+                      <div className="max-h-32 overflow-y-auto space-y-0.5">
+                        {state.readWriteTools.map((name) => (
+                          <label key={name} className="flex items-center gap-1.5 text-[11px] text-gray-600 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={state.autoApprovedTools.includes(name)}
+                              onChange={() => toggleToolAutoApproved(name)}
+                              className="rounded"
+                            />
+                            <span className="truncate">{name}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         {state.loading ? (
           <button
