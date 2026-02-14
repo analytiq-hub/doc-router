@@ -300,7 +300,7 @@ export default function AgentChat({
               ))}
             </div>
           ))}
-          {pendingToolCalls.length > 0 && (
+          {pendingToolCalls.length > 1 && (
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs text-gray-500">Pending actions:</span>
               <button
