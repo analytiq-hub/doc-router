@@ -38,6 +38,31 @@ def _tool_call_ids(msg: dict) -> list[str]:
     ]
 
 
+def _should_use_thinking_param(messages: list[dict]) -> bool:
+    """
+    Return False when we should NOT pass thinking param to avoid LiteLLM warning.
+    When the last assistant message has tool_calls but no thinking_blocks,
+    Anthropic would reject thinking, and LiteLLM drops it with a warning.
+    Proactively skip thinking in that case.
+    """
+    last_assistant_with_tools = None
+    any_has_thinking = False
+    for m in messages:
+        if m.get("role") == "assistant":
+            tb = m.get("thinking_blocks")
+            if tb is not None and (not hasattr(tb, "__len__") or len(tb) > 0):
+                any_has_thinking = True
+            if m.get("tool_calls"):
+                last_assistant_with_tools = m
+    if last_assistant_with_tools is None:
+        return True  # No assistant with tools, safe to pass thinking
+    if any_has_thinking:
+        return True  # Some message has thinking_blocks, must keep thinking enabled
+    tb = last_assistant_with_tools.get("thinking_blocks")
+    has_blocks = tb is not None and (not hasattr(tb, "__len__") or len(tb) > 0)
+    return has_blocks  # Only pass thinking if last assistant has thinking_blocks
+
+
 def _thinking_blocks_for_api(thinking_blocks: Any) -> list[dict] | None:
     """
     Build thinking_blocks for sending to the API. Anthropic requires a non-empty
@@ -341,7 +366,8 @@ async def run_agent_turn(
             return {"error": str(e)}
         thinking_param = None
         if getattr(litellm, "supports_reasoning", None) and litellm.supports_reasoning(model=model):
-            thinking_param = {"type": "enabled", "budget_tokens": 4096}
+            if _should_use_thinking_param(llm_messages):
+                thinking_param = {"type": "enabled", "budget_tokens": 4096}
 
         if stream_handler:
             # Phase 2: true LLM streaming — stream content/thinking deltas with round_index, then thinking_done, assistant_text_done, done
@@ -528,7 +554,8 @@ async def run_agent_approve(
 
     thinking_param = None
     if getattr(litellm, "supports_reasoning", None) and litellm.supports_reasoning(model=model):
-        thinking_param = {"type": "enabled", "budget_tokens": 4096}
+        if _should_use_thinking_param(llm_messages):
+            thinking_param = {"type": "enabled", "budget_tokens": 4096}
 
     response = await ad.llm.agent_completion(
         model=model,
@@ -601,7 +628,8 @@ async def run_agent_approve(
 
     thinking_param = None
     if getattr(litellm, "supports_reasoning", None) and litellm.supports_reasoning(model=model):
-        thinking_param = {"type": "enabled", "budget_tokens": 4096}
+        if _should_use_thinking_param(llm_messages):
+            thinking_param = {"type": "enabled", "budget_tokens": 4096}
 
     response = await ad.llm.agent_completion(
         model=model,
