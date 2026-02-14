@@ -9,16 +9,17 @@
 
 ---
 
-## 1. Chat Tab on the Document Page
+## 1. Chat Panel on the Document Page
 
 **Current layout** (`/orgs/[orgId]/docs/[id]`):
 
 - **Left panel (PDFSidebar)**: Tabs **Extraction** | **Forms**.
-- **Right panel**: PDFViewer (PDF + optional OCR text panel).
+- **Center panel**: PDFViewer (PDF + optional OCR text panel).
+- **Right panel**: **Agent** chat (resizable, can be toggled).
 
-**Add a third tab: "Agent"** (next to Extraction and Forms in `PDFSidebar.tsx`).
+The Agent is a **separate right panel** (not a tab in the left sidebar). This three-panel layout keeps the chat visible alongside the PDF and extraction UI.
 
-When **Agent** is selected, the left panel shows:
+When the **Agent** panel is visible, it shows:
 
 1. **Chat message list**: Scrollable conversation history. Messages from the agent can contain text, code blocks (schema JSON, prompt text), and **pending action cards** (tool calls awaiting approval).
 2. **Pending action cards**: When the agent proposes a tool call (e.g. "Create schema 'Invoice'"), it appears as a card with:
@@ -28,10 +29,10 @@ When **Agent** is selected, the left panel shows:
 3. **Current extraction panel** (collapsible): Shows the latest extraction result (if any) — same field-value display as the Extraction tab. Updated live when the agent runs extraction or patches fields.
 4. **Chat input**: Text input with `@` mention autocomplete. Send button. Settings gear for auto-approve toggle and model selection.
 
-**Auto-approve toggle**: A setting (per-session, stored in frontend state) with options:
-- **Ask every time** (default): Every tool call shows as a pending action card.
-- **Auto-approve all**: Tool calls execute immediately, results stream back. The action cards still appear in the message list (for auditability) but are already in "approved" state.
-- Possible future: per-tool-type granularity (e.g. auto-approve reads, ask for writes).
+**Auto-approve options** (per-session, stored in frontend state):
+- **Ask every time** (default): Every read-write tool call shows as a pending action card. Read-only tools (get_*, list_*, validate_*, help_*) execute immediately.
+- **Auto-approve all**: All tool calls execute immediately, results stream back. The action cards still appear in the message list (for auditability) but are already in "approved" state.
+- **Per-tool granularity** (`auto_approved_tools`): The frontend can send a list of tool names that are auto-approved. E.g. `["run_extraction"]` — only run_extraction executes without pausing; other read-write tools still require approval.
 
 ---
 
@@ -117,9 +118,12 @@ The LLM agent has access to the same schema, prompt, and tag tools as the MCP se
 | Tool | Parameters | Effect |
 |------|-----------|--------|
 | `get_ocr_text` | `page_num?` | Returns OCR text for the current document (optionally a specific page). |
-| `run_extraction` | `prompt_revid?` | Runs LLM extraction on the current document with the given (or most recent) prompt. Returns the extraction result. |
-| `get_extraction_result` | `prompt_revid?` | Returns the current extraction result for the document. |
+| `run_extraction` | `prompt_revid?` | Runs LLM extraction on the current document. When `prompt_revid` is omitted, uses `working_state.prompt_revid` (from the last created/updated prompt). Returns the extraction result. |
+| `get_extraction_result` | `prompt_revid?` | Returns the current extraction result for the document. Reads from `working_state.extraction` (falling back to DB if not set). |
 | `update_extraction_field` | `path`, `value` | Patches a single field in the current extraction result. Returns updated extraction. |
+| `list_documents` | `skip?`, `limit?`, `name_search?`, `tag_ids?`, `metadata_search?` | Lists documents in the org with optional filters. Same as MCP list_documents. |
+| `update_document` | `document_id?`, `document_name?`, `tag_ids?`, `metadata?` | Updates document metadata. Omit `document_id` to update the current document. |
+| `delete_document` | `document_id?` | Deletes a document and its files. Omit `document_id` to delete the current document. |
 
 **Working extraction state**: The agent loop (`agent_loop.py`) maintains a `working_state` dict that tracks the current context:
 
@@ -139,7 +143,7 @@ working_state = {
 - `system_prompt.py` injects `working_state.extraction` into the system message each LLM turn so the agent sees the latest result.
 - For "proposed" documents (after auto-create), `working_state` is initialized from the document's `auto_create_schema_revid`, `auto_create_prompt_revid`, and the stored extraction result. The user can then refine via chat, which updates `working_state` normally.
 
-**Total: 23 tools** (7 schema + 5 prompt + 5 tag + 4 document/extraction + 2 help — see below).
+**Total: 26 tools** (7 schema + 5 prompt + 5 tag + 7 document/extraction + 2 help — see below).
 
 **Help tools** (injected as tool descriptions, not callable — the agent's system prompt includes this guidance):
 
@@ -187,7 +191,7 @@ Frontend                          Backend                          LLM
 
 **Key details**:
 
-- **`POST /v0/orgs/{org_id}/documents/{doc_id}/chat`**: Starts a chat turn. Body: `{ messages, mentions?, model?, stream? }`. Backend builds system message (document context, resolved mentions, tool definitions), sends to LLM.
+- **`POST /v0/orgs/{org_id}/documents/{doc_id}/chat`**: Starts a chat turn. Body: `{ messages, mentions?, model?, stream?, auto_approve?, auto_approved_tools?, thread_id?, truncate_thread_to_message_count? }`. Backend builds system message (document context, resolved mentions, tool definitions), sends to LLM. `auto_approved_tools` is a list of tool names that execute without pausing (e.g. `["run_extraction"]`). `thread_id` appends messages to that thread after success.
 - **Auth**: Chat and approve endpoints use the same document-level auth as other document routes (e.g. org member with access to the document). No additional checks.
 - **SPU / cost**: Each LLM call within the agent loop consumes SPU. Rather than estimating total cost upfront, **each individual LLM call checks SPU independently** — the agent loop's LLM calls go through litellm which already calls `check_spu_limits` per invocation (same as `run_llm`). If the org runs out of credits mid-loop, the current LLM call fails, the agent loop surfaces the error as a tool result or final message, and the turn ends. Similarly, `run_extraction` (which internally calls `run_llm`) does its own SPU check. This matches existing behavior and avoids needing to reserve or predict total credits for a multi-step turn.
 - **Streaming**: The backend streams text chunks via SSE as they arrive. When the LLM returns tool_calls, the backend streams a `tool_calls` event with the pending calls and **pauses** (does not execute them).
@@ -196,14 +200,16 @@ Frontend                          Backend                          LLM
 - **Auto-approve mode**: If the frontend sends `auto_approve: true` in the initial chat request, the backend executes all tool calls immediately without pausing — same as Claude Code's "allow all" mode. Tool calls still appear in the streamed output for auditability.
 - **Auto-approve requires streaming**: With `auto_approve: true`, a single request can involve 10+ LLM calls and tool executions. Non-streaming would hit HTTP timeouts. Therefore `auto_approve: true` requires `stream: true`; the backend rejects the request otherwise. In streaming mode the SSE connection stays open, and the frontend sees tool calls + results as they happen.
 
-### 3.3 Session state
+### 3.3 Session state and threads
 
-The chat/approve loop requires the backend to hold intermediate state (pending tool calls, message history for the current turn) between the two requests. Options:
+**Turn state (in-memory)**: The chat/approve loop requires the backend to hold intermediate state (pending tool calls, message history for the current turn) between the two requests. The `/chat` endpoint returns a `turn_id`. The `/chat/approve` endpoint references it. Backend holds pending state in a short-lived cache (e.g. dict keyed by turn_id, TTL 5 minutes). If the server restarts mid-turn, the user simply re-sends their message.
 
-- **In-memory with session ID**: The `/chat` endpoint returns a `turn_id`. The `/chat/approve` endpoint references it. Backend holds pending state in a short-lived cache (e.g. dict keyed by turn_id, TTL 5 minutes). Simple, works for v1.
-- **Database-backed sessions**: Store in MongoDB. More durable but overkill for v1.
+**Threads (persistent)**: In addition to turn state, the agent supports **threads** — persistent conversation histories stored in MongoDB. Each thread has an ID, title, messages, and extraction state. The frontend can:
+- Create a new thread or select an existing one via `ThreadDropdown`.
+- Send `thread_id` with the chat request to append messages to that thread after a successful turn.
+- Use `truncate_thread_to_message_count` when resubmitting from a prior turn (e.g. "try again from here") to avoid sending the full history.
 
-Recommendation: in-memory cache for v1. If the server restarts mid-turn, the user simply re-sends their message.
+Threads are stored in `analytiq_data/agent/threads.py` and exposed via `GET/POST /v0/orgs/{org_id}/documents/{doc_id}/threads`.
 
 ### 3.4 Context budget
 
@@ -287,7 +293,7 @@ When the user opens the document page:
 
 ### 6.1 Design principle: additive, not rewriting
 
-The agent is a **new module alongside existing code**. Existing route handlers, data layer files, and tests are not modified (except two small touchpoints: adding a tab button in `PDFSidebar.tsx` and registering a new router in `main.py`).
+The agent is a **new module alongside existing code**. Existing route handlers, data layer files, and tests are not modified (except small touchpoints: document page layout for the Agent panel, and registering a new router in `main.py`).
 
 The agent tool functions do their own DB operations directly (like the existing `analytiq_data/common/` helpers do), rather than calling route handlers. This avoids coupling the agent to FastAPI request/response and auth middleware.
 
@@ -303,12 +309,14 @@ packages/python/
 │   │   │   ├── schema_tools.py         # create/get/list/update/delete/validate schema
 │   │   │   ├── prompt_tools.py         # create/get/list/update/delete prompt
 │   │   │   ├── tag_tools.py            # create/get/list/update/delete tag
-│   │   │   ├── extraction_tools.py     # run_extraction, get/update result, get_ocr_text
+│   │   │   ├── extraction_tools.py    # run_extraction, get/update result, get_ocr_text
+│   │   │   ├── document_tools.py       # list_documents, update_document, delete_document
 │   │   │   └── help_tools.py           # help_schemas, help_prompts (reads knowledge_base md files)
 │   │   ├── tool_registry.py            # OpenAI function schemas for all tools + dispatch map
 │   │   ├── agent_loop.py              # Core loop: LLM call → check tool_calls → return or pause
-│   │   ├── system_prompt.py           # Builds system message (doc context, mentions, instructions)
-│   │   └── session.py                 # In-memory turn state cache (pending tool calls, TTL)
+│   │   ├── system_prompt.py            # Builds system message (doc context, mentions, instructions)
+│   │   ├── session.py                 # In-memory turn state cache (pending tool calls, TTL)
+│   │   └── threads.py                 # Persistent thread storage (MongoDB)
 │   ├── common/
 │   │   ├── schemas.py                 # EXISTING — keep as-is (get_schema_id, etc.)
 │   │   ├── prompts.py                 # EXISTING — keep as-is (get_prompt_id, etc.)
@@ -334,6 +342,7 @@ packages/python/
     │   ├── test_prompt_tools.py       # Unit tests for prompt tool functions
     │   ├── test_tag_tools.py          # Unit tests for tag tool functions
     │   ├── test_extraction_tools.py   # Unit tests for extraction tool functions
+    │   ├── test_document_tools.py     # Unit tests for document tool functions
     │   ├── test_tool_registry.py      # Tests for tool schema definitions + dispatch
     │   ├── test_agent_loop.py         # Tests for agent loop with mocked LLM
     │   ├── test_agent_chat.py         # Integration tests for chat/approve endpoints
@@ -348,19 +357,22 @@ packages/python/
 packages/typescript/frontend/src/
 ├── components/
 │   ├── agent/                         # NEW — self-contained agent UI
-│   │   ├── AgentTab.tsx               # Top-level tab component (orchestrates state)
+│   │   ├── AgentTab.tsx               # Top-level component (orchestrates state)
 │   │   ├── AgentChat.tsx              # Chat message list (scrollable, renders AgentMessage[])
-│   │   ├── AgentMessage.tsx           # Single message: text, code blocks, or tool call card
+│   │   ├── AgentMessage.tsx           # Single message: text, code blocks, tool call card, or thinking block
 │   │   ├── ToolCallCard.tsx           # Pending action: tool name, params, Approve/Reject/Edit
-│   │   ├── MentionInput.tsx           # Chat text input with @ trigger
-│   │   ├── MentionDropdown.tsx        # Autocomplete popover (schemas, prompts, tags)
-│   │   ├── ExtractionPanel.tsx        # Collapsible current extraction display
-│   │   ├── AutoCreateReview.tsx       # Banner for "proposed" auto-create results (Accept/Reject)
-│   │   └── useAgentChat.ts           # Hook: manages chat state, SSE streaming, approve calls
-│   ├── PDFSidebar.tsx                 # MODIFIED — add "Agent" tab button + render AgentTab
+│   │   ├── ThinkingBlock.tsx         # Renders extended thinking content (Anthropic o-series)
+│   │   ├── ThreadDropdown.tsx         # Thread selector (create, switch, group by date)
+│   │   ├── MentionInput.tsx           # Chat text input with @ trigger (TODO)
+│   │   ├── MentionDropdown.tsx        # Autocomplete popover (schemas, prompts, tags) (TODO)
+│   │   ├── ExtractionPanel.tsx       # Collapsible current extraction display
+│   │   ├── AutoCreateReview.tsx       # Banner for "proposed" auto-create results (Accept/Reject) (TODO)
+│   │   ├── useAgentChat.ts           # Hook: manages chat state, SSE streaming, approve calls
+│   │   └── useDictation.ts            # Voice input hook (optional)
 │   └── ...existing unchanged...
 ├── app/
-│   └── ...existing unchanged...
+│   └── orgs/[organizationId]/docs/[id]/
+│       └── page.tsx                   # MODIFIED — three-panel layout: PDFSidebar | PDFViewer | AgentTab
 └── ...
 ```
 
@@ -369,10 +381,10 @@ packages/typescript/frontend/src/
 | File | Change | Size |
 |------|--------|------|
 | `app/main.py` | Add `from app.routes.agent import agent_router` + `app.include_router(agent_router)` | 2 lines |
-| `PDFSidebar.tsx` | Add "Agent" tab button + conditional render of `<AgentTab />` | ~10 lines |
+| `app/orgs/[organizationId]/docs/[id]/page.tsx` | Three-panel layout: left (PDFSidebar), center (PDFViewer), right (AgentTab). Panel visibility toggles. | ~30 lines |
 | `worker/worker.py` | Add auto-create message handler (imports from `analytiq_data/agent/`) | ~15 lines |
 
-Everything else is new files.
+The Agent is rendered in the document page's right panel, not as a tab in PDFSidebar. Everything else is new files.
 
 ### 6.5 Key design decisions in the file structure
 
@@ -507,7 +519,7 @@ def mock_litellm(monkeypatch):
 ## 8. Implementation Order
 
 ### Phase 1: Backend agent core
-1. **Tool functions**: Implement `analytiq_data/agent/tools/` — all 23 tool functions, each doing direct DB operations. Test each with `test_*_tools.py`.
+1. **Tool functions**: Implement `analytiq_data/agent/tools/` — all 26 tool functions, each doing direct DB operations. Test each with `test_*_tools.py`.
 2. **Tool registry**: `tool_registry.py` — OpenAI function schemas + dispatch map. Test with `test_tool_registry.py`.
 3. **Agent loop**: `agent_loop.py` — core loop (LLM call → tool_calls check → pause or execute → loop). Test with `test_agent_loop.py` (mocked LLM).
 4. **System prompt**: `system_prompt.py` — builds system message from document context, OCR text, mentions, instructions.
@@ -520,28 +532,42 @@ def mock_litellm(monkeypatch):
 9. **useAgentChat hook**: SSE streaming, message state, approve/reject calls.
 10. **ToolCallCard**: Pending action cards with Approve/Reject.
 11. **ExtractionPanel**: Collapsible extraction result.
-12. **Auto-approve toggle**: Setting in chat input.
-13. **PDFSidebar.tsx**: Add "Agent" tab button.
+12. **Auto-approve toggle**: Setting in chat input (including `auto_approved_tools` for per-tool granularity).
+13. **Document page layout**: Three-panel layout with Agent in right panel; panel visibility toggles.
+14. **ThreadDropdown + threads**: Thread selector, create/switch threads, persist to backend.
+15. **ThinkingBlock**: Render extended thinking content for o-series models.
 
 ### Phase 3: @ mentions
-14. **MentionInput + MentionDropdown**: @ autocomplete fetching from existing list APIs.
-15. **Backend mention resolution**: Resolve mention IDs → inject full content into system message.
+16. **MentionInput + MentionDropdown**: @ autocomplete fetching from existing list APIs.
+17. **Backend mention resolution**: Resolve mention IDs → inject full content into system message.
 
 ### Phase 4: Auto-create on upload
-16. **Worker handler**: After OCR completes, enqueue auto-create task.
-17. **Headless agent run**: Same agent loop with `auto_approve=True`, fixed initial message, results stored as "proposed."
-18. **AutoCreateReview**: Banner in Agent tab for proposed results (Accept/Reject/Refine).
+18. **Worker handler**: After OCR completes, enqueue auto-create task.
+19. **Headless agent run**: Same agent loop with `auto_approve=True`, fixed initial message, results stored as "proposed."
+20. **AutoCreateReview**: Banner in Agent tab for proposed results (Accept/Reject/Refine).
 
 ### Phase 5: Polish
-19. **Model selection**: Dropdown in chat input.
-20. **Agent log replay**: Show headless agent conversation in Agent tab.
-21. **Save with tag shortcut**: Offer to assign tag after accepting.
+21. **Model selection**: Dropdown in chat input.
+22. **Agent log replay**: Show headless agent conversation in Agent tab.
+23. **Save with tag shortcut**: Offer to assign tag after accepting.
 
 ---
 
-## 9. Open Decisions
+## 9. Implementation Status
 
-- **Which LLM model for the agent**: Claude sonnet.
+| Phase | Status | Notes |
+|-------|--------|-------|
+| Phase 1: Backend agent core | **Done** | Tools, registry, loop, system prompt, session, chat/approve endpoints, threads |
+| Phase 2: Frontend chat tab | **Done** | AgentTab, AgentChat, AgentMessage, ToolCallCard, ExtractionPanel, useAgentChat, ThreadDropdown, ThinkingBlock |
+| Phase 3: @ mentions | **Not started** | MentionInput, MentionDropdown, backend resolution |
+| Phase 4: Auto-create on upload | **Not started** | Worker handler, headless agent, AutoCreateReview |
+| Phase 5: Polish | **Partial** | Model selection in chat; agent log replay, save-with-tag TBD |
+
+---
+
+## 10. Open Decisions
+
+- **Which LLM model for the agent**: Claude sonnet (default: `claude-sonnet-4-20250514`).
 - **Auto-create default on/off**: Per-upload toggle? Start with a per-upload checkbox, default off.
 - **Prompt visibility**: Auto-created prompts (before user accepts) — visible in Extraction tab or hidden? Recommendation: visible but marked as "(auto-created, pending review)".
 - **Max tool-call rounds**: max 10 tool calls in auto mode.
