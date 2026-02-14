@@ -24,14 +24,12 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
     approveToolCalls,
     cancelRequest,
     setAutoApprove,
-    setAutoApprovedTools,
     toggleToolAutoApproved,
     addToolToAutoApproved,
     enableAllTools,
     resetToolPermissions,
     loadTools,
     setModel,
-    setError,
     loadModels,
     loadThread,
     deleteThread,
@@ -63,7 +61,10 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
   const displayInput = input + (interimTranscript ? (input ? ' ' : '') + interimTranscript : '');
   const hasText = displayInput.trim().length > 0;
   const displayInputRef = useRef(displayInput);
-  displayInputRef.current = displayInput;
+
+  useEffect(() => {
+    displayInputRef.current = displayInput;
+  }, [displayInput]);
 
   const handleDictationEnd = useCallback(() => {
     const text = displayInputRef.current.trim();
