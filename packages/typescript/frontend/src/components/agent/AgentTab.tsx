@@ -173,7 +173,11 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             )}
           </button>
           {showModelDropUp && (
-            <div className="absolute bottom-full left-0 mb-1 z-50 rounded-md border border-gray-200 bg-white shadow-lg py-1 min-w-[200px] max-h-[70vh] overflow-y-auto">
+            <div
+              className={`absolute left-0 z-50 rounded-md border border-gray-200 bg-white shadow-lg py-1 min-w-[200px] max-h-[70vh] overflow-y-auto ${
+                state.messages.length > 0 ? 'bottom-full mb-1' : 'top-full mt-1'
+              }`}
+            >
               {state.availableModels.length === 0 ? (
                 <div className="px-3 py-2 text-xs text-gray-500">Loading models…</div>
               ) : (
