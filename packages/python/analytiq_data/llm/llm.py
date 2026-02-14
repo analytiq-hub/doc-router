@@ -33,19 +33,19 @@ def _apply_prompt_caching(model: str, messages: list, *, tools: Optional[List[Di
     Anthropic requires ~1024+ tokens for caching; we always add the directive
     and let the API decide. Other providers ignore cache_control.
 
-    Skip caching for Gemini/Vertex AI when tools are passed: their CachedContent
-    API disallows system_instruction, tools, or tool_config in GenerateContent.
-    Claude and GPT do not have this restriction.
+    Skip caching for Gemini/Vertex AI entirely: their CachedContent API has a
+    minimum token requirement (1024 for Flash, 4096 for Pro). Our system prompts
+    are often smaller, causing "Cached content is too small" errors. Claude and
+    GPT do not have this restriction.
     """
     if not messages or not supports_prompt_caching(model=model):
         return messages
-    if tools:
-        try:
-            _, provider, _, _ = litellm.get_llm_provider(model)
-            if provider in ("gemini", "vertex_ai"):
-                return messages
-        except Exception:
-            pass
+    try:
+        _, provider, _, _ = litellm.get_llm_provider(model)
+        if provider in ("gemini", "vertex_ai"):
+            return messages
+    except Exception:
+        pass
     first = messages[0]
     if first.get("role") != "system":
         return messages

@@ -335,7 +335,7 @@ def test_apply_prompt_caching_no_change_when_not_supported():
 
 
 def test_apply_prompt_caching_skipped_for_gemini_when_tools_passed():
-    """Prompt caching: skipped for Gemini when tools are passed (CachedContent + tools disallowed)."""
+    """Prompt caching: skipped for Gemini when tools are passed."""
     from analytiq_data.llm.llm import _apply_prompt_caching
 
     with patch("analytiq_data.llm.llm.supports_prompt_caching", return_value=True):
@@ -345,6 +345,20 @@ def test_apply_prompt_caching_skipped_for_gemini_when_tools_passed():
         ]
         tools = [{"type": "function", "function": {"name": "test", "description": "test"}}]
         out = _apply_prompt_caching("gemini/gemini-3-flash-preview", messages, tools=tools)
+    assert out is messages
+    assert out[0]["content"] == "You are a helpful assistant."
+
+
+def test_apply_prompt_caching_skipped_for_gemini_without_tools():
+    """Prompt caching: skipped for Gemini even without tools (min 1024 tokens for cached content)."""
+    from analytiq_data.llm.llm import _apply_prompt_caching
+
+    with patch("analytiq_data.llm.llm.supports_prompt_caching", return_value=True):
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello"},
+        ]
+        out = _apply_prompt_caching("gemini/gemini-3-flash-preview", messages)
     assert out is messages
     assert out[0]["content"] == "You are a helpful assistant."
 
