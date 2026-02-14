@@ -119,7 +119,7 @@ async def mock_litellm_acreate_file_with_retry(file, purpose, custom_llm_provide
     return MockLiteLLMFileResponse()
 
 
-async def mock_litellm_acompletion_with_retry(model, messages, api_key, temperature=0.1, response_format=None, aws_access_key_id=None, aws_secret_access_key=None, aws_region_name=None):
+async def mock_litellm_acompletion_with_retry(model, messages, api_key, temperature=0.1, response_format=None, aws_access_key_id=None, aws_secret_access_key=None, aws_region_name=None, **kwargs):
     """Mock implementation of _litellm_acompletion_with_retry that returns valid JSON."""
     # Always return a JSON object that looks like structured extraction
     mocked_json = {

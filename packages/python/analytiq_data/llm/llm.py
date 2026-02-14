@@ -253,6 +253,7 @@ async def _litellm_acompletion_with_retry(
     tools: Optional[List[Dict]] = None,
     tool_choice: Optional[Union[str, Dict]] = None,
     thinking: Optional[Dict] = None,
+    use_prompt_caching: bool = False,
 ):
     """
     Make an LLM call with stamina retry mechanism.
@@ -267,6 +268,7 @@ async def _litellm_acompletion_with_retry(
         aws_region_name: AWS region (for Bedrock)
         tools: Optional list of tools/functions for the model to call
         tool_choice: Optional tool choice parameter ("auto", "none", or specific function)
+        use_prompt_caching: If True, apply prompt caching (agent only; not for document processing)
         
     Returns:
         The LLM response
@@ -278,7 +280,7 @@ async def _litellm_acompletion_with_retry(
     if thinking is not None:
         # Anthropic requires temperature=1 when extended thinking is enabled
         temperature = 1.0
-    messages_to_send = _apply_prompt_caching(model, messages, tools=tools)
+    messages_to_send = _apply_prompt_caching(model, messages, tools=tools) if use_prompt_caching else messages
     params = {
         "model": model,
         "messages": messages_to_send,
@@ -325,6 +327,7 @@ async def agent_completion(
         tools=tools,
         tool_choice=tool_choice,
         thinking=thinking,
+        use_prompt_caching=True,
     )
 
 

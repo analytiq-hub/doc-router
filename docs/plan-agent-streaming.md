@@ -11,6 +11,8 @@
 | Phase 3 | Tool-related events (`tool_calls`, `tool_result`, `round_executed`) for `/chat` | Done |
 | Phase 4 | Streaming support for `/chat/approve` | Not started |
 
+**Known bugs status (as of 2026-02-14):** 2 fixed (7.1, 7.3), 1 partially fixed (7.7), 6 still open (7.2, 7.4, 7.5, 7.6, 7.8, 7.9). See section 7 for details.
+
 #### What is implemented
 
 **Backend (`packages/python/analytiq_data/agent/`)**
@@ -251,15 +253,17 @@ Within a single round (`round_index`), events are emitted in order:
 
 ### 7. Known Bugs
 
-#### 7.1 BUG: In-memory session store doesn't scale and never GCs stale entries
+#### 7.1 ~~BUG: In-memory session store doesn't scale and never GCs stale entries~~ (Fixed)
 **File:** `packages/python/analytiq_data/agent/session.py:15`
 
-`_store` is a module-level dict. Entries that are never fetched via `get_turn_state` are never cleaned up — they accumulate forever. With multiple workers (e.g. gunicorn with multiple processes), the in-memory store is per-process, so a user could hit a different worker on the approve call and get "Turn expired or not found."
+~~`_store` is a module-level dict. Entries that are never fetched via `get_turn_state` are never cleaned up — they accumulate forever.~~
 
-**Fix:** Add periodic GC (e.g. sweep on each `set_turn_state` call), or move to Redis/MongoDB for cross-process state.
+**Fixed (2026-02-14):** Lazy TTL-based eviction added — `get_turn_state` checks `_created_at` against `_TTL_SEC` (5 min) and deletes expired entries on read.
+
+**Remaining concern:** GC is lazy (only on read), so entries never fetched accumulate until process restart. The in-memory store is still per-process, so multi-worker deployments (e.g. gunicorn) may route the approve call to a different worker. Consider Redis/MongoDB for cross-process state.
 
 #### 7.2 BUG: `handleApproveOne` inverts approval for all other tool calls
-**File:** `packages/typescript/frontend/src/components/agent/AgentChat.tsx:168-175`
+**File:** `packages/typescript/frontend/src/components/agent/AgentChat.tsx:225-232`
 
 ```ts
 const handleApproveOne = (callId: string, approved: boolean) => {
@@ -274,12 +278,12 @@ const handleApproveOne = (callId: string, approved: boolean) => {
 
 When the user approves one tool call, every other pending tool call is set to `!approved` (i.e. rejected). The intended behavior is likely to only submit the clicked one, or to leave others as-is.
 
-#### 7.3 BUG: `run_agent_approve` returns stale text after auto-executing follow-up tool calls
-**File:** `packages/python/analytiq_data/agent/agent_loop.py:622-705`
+#### 7.3 ~~BUG: `run_agent_approve` returns stale text after auto-executing follow-up tool calls~~ (Fixed)
+**File:** `packages/python/analytiq_data/agent/agent_loop.py`
 
-After the first LLM call in `run_agent_approve`, if the model returns more tool calls and they are all auto-approved, the code executes them but returns the text from *before* execution (line 699: `"text": text`). The user sees the text from the LLM call that produced the tool calls, not a final summary of the tool results.
+~~After the first LLM call in `run_agent_approve`, if the model returns more tool calls and they are all auto-approved, the code executes them but returns the text from *before* execution. The user sees the text from the LLM call that produced the tool calls, not a final summary of the tool results.~~
 
-**Fix:** After executing auto-approved tools, call the LLM again (or return the text from the last LLM call in the chain).
+**Fixed (2026-02-14):** `run_agent_approve` now makes a second `agent_completion` call after executing auto-approved follow-up tool calls, returning fresh `text` and `thinking_text` from the final LLM response.
 
 #### 7.4 BUG: `_sanitize_messages_for_llm` drops `thinking_blocks` field
 **File:** `packages/python/analytiq_data/agent/agent_loop.py:93-141`
@@ -300,17 +304,17 @@ tid = getattr(tc, "id", None) or getattr(tc, "id", "")
 
 Both `getattr` calls access the same attribute `"id"`. The second is redundant; should likely be `tc.get("id", "")` for the dict fallback.
 
-#### 7.7 BUG: Thread `document_id` not validated on get/delete
-**File:** `packages/python/app/routes/agent.py:436-438`
+#### 7.7 BUG: Thread `document_id` not validated on get/delete (Partially fixed)
+**File:** `packages/python/app/routes/agent.py`, `packages/python/analytiq_data/agent/threads.py`
 
-`get_thread` and `delete_thread` verify the document exists but don't check that `thread.document_id == document_id`. A user could access a thread from a different document if they know the thread_id, since `agent_threads.get_thread` only checks `organization_id` and `created_by`.
+Route handlers for `get_thread` and `delete_thread` validate that the `document_id` exists, and queries are scoped by `organization_id` + `created_by`. However, the underlying `threads.get_thread` and `threads.delete_thread` functions do NOT include `document_id` in their MongoDB query filters. A user can access a thread from a different document within the same org if they know the `thread_id`.
 
 **Fix:** Add `document_id` to the query filter in `get_thread` and `delete_thread` in `threads.py`.
 
 #### 7.8 BUG: `_set_nested` doesn't handle `None` intermediate values
 **File:** `packages/python/analytiq_data/agent/tools/extraction_tools.py:100-129`
 
-When traversing a path like `items.0.amount`, if `items[0]` is `None` (appended as a placeholder), the code tries to index into `None`, causing an `AttributeError` or `TypeError` not caught by the `(ValueError, KeyError, IndexError)` handler at line 157.
+When traversing a path like `items.0.amount`, if `items[0]` is `None` (appended as a placeholder), the code tries to index into `None`, causing a `TypeError` not caught by the `(ValueError, KeyError, IndexError)` handler.
 
 **Fix:** Add `TypeError` and `AttributeError` to the except clause, or check for `None` during traversal.
 
