@@ -264,8 +264,8 @@ async def post_chat(
                         p = payload if isinstance(payload, dict) else {}
                         yield f"data: {json.dumps({'type': 'round_executed', 'round_index': p.get('round_index', 0), 'thinking': p.get('thinking'), 'tool_calls': p.get('tool_calls', [])})}\n\n"
                     elif event_type == "done":
-                        # Only persist to thread when this is the final response (no pending approval)
-                        if request.thread_id and messages and payload.get("turn_id") is None:
+                        # Persist user + assistant to thread (even when turn_id present, so user message is saved for title)
+                        if request.thread_id and messages:
                             await _append_assistant_to_thread(
                                 analytiq_client, organization_id, request, messages, payload, current_user
                             )
@@ -326,6 +326,7 @@ async def post_chat_approve(
         raise HTTPException(status_code=400, detail=result["error"])
 
     if request.thread_id:
+        analytiq_client = ad.common.get_analytiq_client()
         assistant_msg = {
             "role": "assistant",
             "content": result.get("text"),
@@ -336,7 +337,7 @@ async def post_chat_approve(
         extraction = (result.get("working_state") or {}).get("extraction")
         model = result.get("model")
         await ad.agent.agent_threads.append_messages(
-            ad.common.get_analytiq_client(),
+            analytiq_client,
             request.thread_id,
             organization_id,
             current_user.user_id,
@@ -344,6 +345,20 @@ async def post_chat_approve(
             extraction=extraction,
             model=model,
         )
+        # Update thread title from first user message if still "New chat"
+        thread_doc = await ad.agent.agent_threads.get_thread(
+            analytiq_client, request.thread_id, organization_id, current_user.user_id
+        )
+        if thread_doc and thread_doc.get("title") == "New chat":
+            first_content = None
+            for m in thread_doc.get("messages", []):
+                if m.get("role") == "user" and m.get("content"):
+                    first_content = (m.get("content") or "").strip()[:50]
+                    break
+            if first_content:
+                await ad.agent.agent_threads.update_thread_title(
+                    analytiq_client, request.thread_id, organization_id, current_user.user_id, first_content
+                )
     return result
 
 
