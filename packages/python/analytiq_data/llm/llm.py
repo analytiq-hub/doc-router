@@ -26,15 +26,26 @@ litellm.modify_params = True
 _PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
 
 
-def _apply_prompt_caching(model: str, messages: list) -> list:
+def _apply_prompt_caching(model: str, messages: list, *, tools: Optional[List[Dict]] = None) -> list:
     """
     When the model supports prompt caching, convert the first (system) message
     to content-block form with cache_control so the provider caches it.
     Anthropic requires ~1024+ tokens for caching; we always add the directive
     and let the API decide. Other providers ignore cache_control.
+
+    Skip caching for Gemini/Vertex AI when tools are passed: their CachedContent
+    API disallows system_instruction, tools, or tool_config in GenerateContent.
+    Claude and GPT do not have this restriction.
     """
     if not messages or not supports_prompt_caching(model=model):
         return messages
+    if tools:
+        try:
+            _, provider, _, _ = litellm.get_llm_provider(model)
+            if provider in ("gemini", "vertex_ai"):
+                return messages
+        except Exception:
+            pass
     first = messages[0]
     if first.get("role") != "system":
         return messages
@@ -267,7 +278,7 @@ async def _litellm_acompletion_with_retry(
     if thinking is not None:
         # Anthropic requires temperature=1 when extended thinking is enabled
         temperature = 1.0
-    messages_to_send = _apply_prompt_caching(model, messages)
+    messages_to_send = _apply_prompt_caching(model, messages, tools=tools)
     params = {
         "model": model,
         "messages": messages_to_send,
@@ -337,7 +348,7 @@ async def agent_completion_stream(
     temperature = get_temperature(model)
     if thinking is not None:
         temperature = 1.0
-    messages_to_send = _apply_prompt_caching(model, messages)
+    messages_to_send = _apply_prompt_caching(model, messages, tools=tools)
     params: Dict[str, Any] = {
         "model": model,
         "messages": messages_to_send,

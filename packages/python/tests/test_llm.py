@@ -334,3 +334,33 @@ def test_apply_prompt_caching_no_change_when_not_supported():
     assert out[0]["content"] == "You are a helpful assistant."
 
 
+def test_apply_prompt_caching_skipped_for_gemini_when_tools_passed():
+    """Prompt caching: skipped for Gemini when tools are passed (CachedContent + tools disallowed)."""
+    from analytiq_data.llm.llm import _apply_prompt_caching
+
+    with patch("analytiq_data.llm.llm.supports_prompt_caching", return_value=True):
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello"},
+        ]
+        tools = [{"type": "function", "function": {"name": "test", "description": "test"}}]
+        out = _apply_prompt_caching("gemini/gemini-3-flash-preview", messages, tools=tools)
+    assert out is messages
+    assert out[0]["content"] == "You are a helpful assistant."
+
+
+def test_apply_prompt_caching_applied_for_claude_when_tools_passed():
+    """Prompt caching: still applied for Claude when tools are passed (Claude supports it)."""
+    from analytiq_data.llm.llm import _apply_prompt_caching
+
+    with patch("analytiq_data.llm.llm.supports_prompt_caching", return_value=True):
+        messages = [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Hello"},
+        ]
+        tools = [{"type": "function", "function": {"name": "test", "description": "test"}}]
+        out = _apply_prompt_caching("anthropic/claude-sonnet-4-5-20250929", messages, tools=tools)
+    assert len(out) == 2
+    assert out[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+
+
