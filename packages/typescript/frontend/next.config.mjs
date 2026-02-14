@@ -1,11 +1,15 @@
 /** @type {import('next').NextConfig} */
 //import { withPlugins } from 'next-compose-plugins';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import TerserPlugin from 'terser-webpack-plugin';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig = {  
   transpilePackages: ['@tsed/react-formio', '@tsed/tailwind-formio', '@docrouter/sdk'],
-  // Turbopack config (Next.js 16+)
-  turbopack: {},
+  // Include files from monorepo parent for file: dependencies (production build)
+  outputFileTracingRoot: path.join(__dirname, '..'),
   // Webpack config for compatibility (Turbopack will use this as fallback)
   webpack: (config) => {
     if (config.optimization) {

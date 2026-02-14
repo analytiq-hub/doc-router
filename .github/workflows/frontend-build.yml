@@ -4,19 +4,17 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - 'frontend/**'
+      - 'packages/typescript/frontend/**'
+      - 'packages/typescript/sdk/**'
   pull_request:
     branches: [ "main" ]
     paths:
-      - 'frontend/**'
+      - 'packages/typescript/frontend/**'
+      - 'packages/typescript/sdk/**'
 
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    defaults:
-      run:
-        working-directory: ./frontend
 
     steps:
     - uses: actions/checkout@v4
@@ -26,11 +24,17 @@ jobs:
       with:
         node-version: '24'
 
+    - name: Build SDK
+      run: npm ci && npm run build
+      working-directory: ./packages/typescript/sdk
+
     - name: Install dependencies
       run: npm ci
+      working-directory: ./packages/typescript/frontend
 
     - name: Build
       run: npm run build
+      working-directory: ./packages/typescript/frontend
       env:
         NEXT_PUBLIC_FASTAPI_FRONTEND_URL: 'http://localhost:8000'
       timeout-minutes: 15 
