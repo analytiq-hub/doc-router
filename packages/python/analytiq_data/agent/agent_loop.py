@@ -174,9 +174,19 @@ async def _execute_tool_calls(
         ],
     }
     tool_messages = []
+    doc_id = context.get("document_id", "")
     for tc in tool_calls:
         call_id = tc["id"]
         name = tc.get("name", "")
+        args_raw = tc.get("arguments", "{}")
+        try:
+            args_preview = json.dumps(json.loads(args_raw))[:400] if args_raw else "{}"
+        except json.JSONDecodeError:
+            args_preview = (args_raw[:400] + "…") if len(args_raw) > 400 else (args_raw or "{}")
+        logger.info(
+            "tool_call document_id=%s round=%s name=%s call_id=%s arguments=%s",
+            doc_id, round_index, name, call_id, args_preview,
+        )
         approved = approvals is None or approvals.get(call_id, False)
         if approved:
             try:
@@ -448,6 +458,10 @@ async def run_agent_turn(
 
         # tool_calls, text, thinking_text already set in the if/else branches above
         pending = [_tool_call_to_dict(tc) for tc in tool_calls]
+        logger.info(
+            "agent_loop document_id=%s round=%s tool_calls=%s",
+            document_id, iteration, [p.get("name") for p in pending],
+        )
         needs_approval = _any_tool_needs_approval(pending, auto_approve, auto_approved_tools)
         if needs_approval:
             turn_id = generate_turn_id()
@@ -471,6 +485,7 @@ async def run_agent_turn(
                 "thinking": thinking_text,
                 "tool_calls": pending,
                 "working_state": working_state,
+                "executed_rounds": executed_rounds if executed_rounds else None,
             }
 
         effective = _build_effective_approvals(pending, auto_approve, auto_approved_tools)
@@ -540,6 +555,7 @@ async def run_agent_approve(
     for tm in tool_msgs:
         llm_messages.append(tm)
 
+    executed_rounds: list[dict] = [{"thinking": None, "tool_calls": pending}]
     model = state["model"]
     llm_provider = ad.llm.get_llm_model_provider(model)
     api_key = await ad.llm.get_llm_key(context["analytiq_client"], llm_provider)
@@ -581,11 +597,13 @@ async def run_agent_approve(
 
     if not tool_calls:
         # Include the approved tool calls as an executed round so thread reload shows what ran
-        approved_round = [{"thinking": None, "tool_calls": pending}]
-        return {"text": text, "thinking": thinking_text, "working_state": state["working_state"], "model": model, "executed_rounds": approved_round}
+        return {"text": text, "thinking": thinking_text, "working_state": state["working_state"], "model": model, "executed_rounds": executed_rounds}
 
-    executed_rounds: list[dict] = []
     pending = [_tool_call_to_dict(tc) for tc in tool_calls]
+    logger.info(
+        "agent_loop document_id=%s approve_round tool_calls=%s",
+        state["document_id"], [p.get("name") for p in pending],
+    )
     auto_approve = state.get("auto_approve", False)
     auto_approved_list = state.get("auto_approved_tools")
     auto_approved_tools = set(auto_approved_list) if auto_approved_list is not None else None
@@ -613,6 +631,7 @@ async def run_agent_approve(
             "thinking": thinking_text,
             "tool_calls": pending,
             "working_state": state["working_state"],
+            "executed_rounds": executed_rounds if executed_rounds else None,
         }
 
     effective = _build_effective_approvals(pending, auto_approve, auto_approved_tools)
@@ -666,6 +685,10 @@ async def run_agent_approve(
 
     # LLM returned more tool_calls; apply same approval logic.
     pending = [_tool_call_to_dict(tc) for tc in tool_calls]
+    logger.info(
+        "agent_loop document_id=%s approve_continue_round tool_calls=%s",
+        state["document_id"], [p.get("name") for p in pending],
+    )
     needs_approval = _any_tool_needs_approval(pending, auto_approve, auto_approved_tools)
     if needs_approval:
         new_turn_id = generate_turn_id()
@@ -689,6 +712,7 @@ async def run_agent_approve(
             "thinking": thinking_text,
             "tool_calls": pending,
             "working_state": state["working_state"],
+            "executed_rounds": executed_rounds if executed_rounds else None,
         }
 
     effective = _build_effective_approvals(pending, auto_approve, auto_approved_tools)

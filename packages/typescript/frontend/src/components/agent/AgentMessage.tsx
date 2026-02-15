@@ -130,6 +130,8 @@ interface AgentMessageProps {
   executedOnlyIds?: Set<string>;
   /** Read-only tool names (always auto-approved; no approval UI). */
   readOnlyTools?: string[];
+  /** Tool call IDs that were already displayed for approval (in toolCalls). Exclude these from executedRounds to avoid duplication. Tools executed twice (different call_ids) still show twice. */
+  idsShownForApproval?: Set<string>;
 }
 
 export default function AgentMessage({
@@ -143,9 +145,20 @@ export default function AgentMessage({
   resolvedToolCalls,
   executedOnlyIds,
   readOnlyTools,
+  idsShownForApproval,
 }: AgentMessageProps) {
   const isUser = message.role === 'user';
   const mdComponents = useMemo(() => createMarkdownComponents(organizationId), [organizationId]);
+
+  const displayedRounds = useMemo(() => {
+    if (!message.executedRounds?.length || !idsShownForApproval?.size) return message.executedRounds;
+    return message.executedRounds
+      .map((r) => ({
+        ...r,
+        tool_calls: r.tool_calls?.filter((tc) => !idsShownForApproval?.has(tc.id)),
+      }))
+      .filter((r) => (r.tool_calls?.length ?? 0) > 0);
+  }, [message.executedRounds, idsShownForApproval]);
 
   return (
     <div
@@ -159,7 +172,7 @@ export default function AgentMessage({
             : 'w-full text-gray-900'
         }
       >
-        {!isUser && message.executedRounds?.map((round, idx) => (
+        {!isUser && displayedRounds?.map((round, idx) => (
           <React.Fragment key={idx}>
             {round.thinking && (
               <ThinkingBlock content={round.thinking} defaultExpanded={true} />
@@ -182,7 +195,7 @@ export default function AgentMessage({
             )}
           </React.Fragment>
         ))}
-        {!isUser && message.thinking && !message.executedRounds?.length && (
+        {!isUser && message.thinking && !displayedRounds?.length && (
           <ThinkingBlock content={message.thinking} defaultExpanded={false} />
         )}
         {message.content && (

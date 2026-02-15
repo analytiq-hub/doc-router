@@ -462,7 +462,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
                         ...last,
                         content: r.text ?? last.content ?? null,
                         thinking: r.thinking ?? last.thinking ?? undefined,
-                        executedRounds: normalizeExecutedRounds(r.executed_rounds),
+                        executedRounds: normalizeExecutedRounds(r.executed_rounds) ?? last.executedRounds,
                         toolCalls: r.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })),
                       };
                     return next;
@@ -657,12 +657,18 @@ export function useAgentChat(organizationId: string, documentId: string) {
         setPendingTurnId(null);
         setPendingToolCalls([]);
 
+        const approvedCallIds = new Set(approvals.filter((a) => a.approved).map((a) => a.call_id));
+        const rawRounds = normalizeExecutedRounds(data.executed_rounds) ?? [];
+        const filteredRounds = rawRounds.map((r) => ({
+          ...r,
+          tool_calls: r.tool_calls?.filter((tc) => !approvedCallIds.has(tc.id)),
+        })).filter((r) => (r.tool_calls?.length ?? 0) > 0);
         const assistantMsg: AgentChatMessage = {
           role: 'assistant',
           content: data.text ?? null,
           toolCalls: data.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? undefined,
           thinking: data.thinking ?? undefined,
-          executedRounds: normalizeExecutedRounds(data.executed_rounds),
+          executedRounds: filteredRounds.length ? filteredRounds : undefined,
         };
         setMessages((prev) => {
           const updated = prev.map((msg) => {
