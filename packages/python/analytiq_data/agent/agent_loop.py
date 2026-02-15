@@ -22,7 +22,7 @@ MAX_TOOL_ROUNDS = 10
 
 def _tool_call_to_dict(tc: Any) -> dict:
     """Convert litellm tool_call object to dict with id, function.name, function.arguments."""
-    tid = getattr(tc, "id", None) or getattr(tc, "id", "")
+    tid = getattr(tc, "id", None) or (tc.get("id", "") if isinstance(tc, dict) else "")
     name = tc.function.name if hasattr(tc, "function") else tc.get("function", {}).get("name", "")
     args = tc.function.arguments if hasattr(tc, "function") else tc.get("function", {}).get("arguments", "{}")
     return {"id": tid, "name": name, "arguments": args}
@@ -125,11 +125,18 @@ def _sanitize_messages_for_llm(messages: list[dict]) -> list[dict]:
             j += 1
         if got_ids >= want_ids:
             # Full set of tool results present; append assistant + tool messages
-            out.append({
+            assistant_entry: dict = {
                 "role": "assistant",
                 "content": m.get("content"),
                 "tool_calls": m["tool_calls"],
-            })
+            }
+            # Preserve thinking_blocks (required by Anthropic API when continuing with thinking)
+            tb = m.get("thinking_blocks")
+            if tb:
+                api_blocks = _thinking_blocks_for_api(tb)
+                if api_blocks:
+                    assistant_entry["thinking_blocks"] = api_blocks
+            out.append(assistant_entry)
             i += 1
             while i < len(messages) and messages[i].get("role") == "tool":
                 out.append({"role": "tool", "tool_call_id": messages[i]["tool_call_id"], "content": messages[i]["content"]})
@@ -439,10 +446,7 @@ async def run_agent_turn(
                     "executed_rounds": executed_rounds if executed_rounds else None,
                 }
 
-        tool_calls = getattr(message, "tool_calls", None) or []
-        text = (message.content or "").strip()
-        thinking_text = ad.llm._extract_thinking_from_response(message)
-
+        # tool_calls, text, thinking_text already set in the if/else branches above
         pending = [_tool_call_to_dict(tc) for tc in tool_calls]
         needs_approval = _any_tool_needs_approval(pending, auto_approve, auto_approved_tools)
         if needs_approval:
@@ -576,7 +580,9 @@ async def run_agent_approve(
     await _record_spu_for_llm_call(response, state["organization_id"], llm_provider, model)
 
     if not tool_calls:
-        return {"text": text, "thinking": thinking_text, "working_state": state["working_state"], "model": model}
+        # Include the approved tool calls as an executed round so thread reload shows what ran
+        approved_round = [{"thinking": None, "tool_calls": pending}]
+        return {"text": text, "thinking": thinking_text, "working_state": state["working_state"], "model": model, "executed_rounds": approved_round}
 
     executed_rounds: list[dict] = []
     pending = [_tool_call_to_dict(tc) for tc in tool_calls]

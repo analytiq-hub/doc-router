@@ -188,12 +188,24 @@ export function useAgentChat(organizationId: string, documentId: string) {
     }
     setLoading(false);
     setError(null);
-    // Remove the pending user message that got no response
+    // Remove trailing user message (no response yet) or empty assistant placeholder from abort
     setMessages((prev) => {
-      if (prev.length > 0 && prev[prev.length - 1].role === 'user') {
-        return prev.slice(0, -1);
+      let trimmed = prev;
+      // Remove empty assistant placeholder left by aborted stream
+      if (
+        trimmed.length > 0 &&
+        trimmed[trimmed.length - 1].role === 'assistant' &&
+        !trimmed[trimmed.length - 1].content?.trim() &&
+        !trimmed[trimmed.length - 1].thinking?.trim() &&
+        !(trimmed[trimmed.length - 1].executedRounds?.length)
+      ) {
+        trimmed = trimmed.slice(0, -1);
       }
-      return prev;
+      // Remove the pending user message that got no response
+      if (trimmed.length > 0 && trimmed[trimmed.length - 1].role === 'user') {
+        trimmed = trimmed.slice(0, -1);
+      }
+      return trimmed !== prev ? trimmed : prev;
     });
   }, []);
 
@@ -581,6 +593,10 @@ export function useAgentChat(organizationId: string, documentId: string) {
         { role: 'user' as const, content: trimmed },
       ];
 
+      // Clear stale approval state from any previous turn before starting the new stream
+      setPendingTurnId(null);
+      setPendingToolCalls([]);
+
       const body: Record<string, unknown> = {
         messages: messageListForApi,
         mentions: [],
@@ -590,7 +606,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
         auto_approved_tools: autoApprove ? undefined : autoApprovedTools,
         thread_id: currentThreadId,
       };
-      if (currentThreadId && history.length > 0) {
+      if (currentThreadId) {
         body.truncate_thread_to_message_count = history.length;
       }
 

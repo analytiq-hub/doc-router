@@ -11,7 +11,7 @@
 | Phase 3 | Tool-related events (`tool_calls`, `tool_result`, `round_executed`) for `/chat` | Done |
 | Phase 4 | Streaming support for `/chat/approve` | Not started |
 
-**Known bugs status (as of 2026-02-14):** 2 fixed (7.1, 7.3), 1 partially fixed (7.7), 6 still open (7.2, 7.4, 7.5, 7.6, 7.8, 7.9). See section 7 for details.
+**Known bugs status (as of 2026-02-14):** 3 fixed (7.1, 7.2, 7.3), 1 partially fixed (7.7), 5 still open (7.4, 7.5, 7.6, 7.8, 7.9). See section 7 for details.
 
 #### What is implemented
 
@@ -262,21 +262,12 @@ Within a single round (`round_index`), events are emitted in order:
 
 **Remaining concern:** GC is lazy (only on read), so entries never fetched accumulate until process restart. The in-memory store is still per-process, so multi-worker deployments (e.g. gunicorn) may route the approve call to a different worker. Consider Redis/MongoDB for cross-process state.
 
-#### 7.2 BUG: `handleApproveOne` inverts approval for all other tool calls
+#### 7.2 ~~BUG: `handleApproveOne` inverts approval for all other tool calls~~ (Fixed)
 **File:** `packages/typescript/frontend/src/components/agent/AgentChat.tsx:225-232`
 
-```ts
-const handleApproveOne = (callId: string, approved: boolean) => {
-  onApprove(
-    pendingToolCalls.map((tc) => ({
-      call_id: tc.id,
-      approved: tc.id === callId ? approved : !approved, // BUG: inverts others
-    }))
-  );
-};
-```
+~~When the user approves one tool call, every other pending tool call is set to `!approved` (i.e. rejected). The intended behavior is likely to only submit the clicked one, or to leave others as-is.~~
 
-When the user approves one tool call, every other pending tool call is set to `!approved` (i.e. rejected). The intended behavior is likely to only submit the clicked one, or to leave others as-is.
+**Fixed (2026-02-14):** Changed `!approved` to `false` for non-clicked tool calls. When approving one, that one is approved and others are rejected. When rejecting one, that one is rejected and others are also rejected (no longer incorrectly approved).
 
 #### 7.3 ~~BUG: `run_agent_approve` returns stale text after auto-executing follow-up tool calls~~ (Fixed)
 **File:** `packages/python/analytiq_data/agent/agent_loop.py`

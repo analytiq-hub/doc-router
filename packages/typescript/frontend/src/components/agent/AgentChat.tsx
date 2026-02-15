@@ -51,9 +51,15 @@ function toolCallIdsFromExecutedRounds(rounds?: Array<{ tool_calls?: Array<{ id:
   return ids;
 }
 
-/** Tool calls resolved from executed_rounds (loaded threads) - show as executed w/o approval status. */
-const executedOnlyIdsFromMessages = (messages: AgentChatMessage[]): Set<string> => {
+/** Tool calls from loaded threads - hide approval status for all (no Approve button on refresh). */
+function executedOnlyIdsFromMessages(
+  messages: AgentChatMessage[],
+  hasPendingApproval: boolean
+): Set<string> {
   const ids = new Set<string>();
+  if (hasPendingApproval) {
+    return ids;
+  }
   messages.forEach((m, i) => {
     const executedIdsInNext = (() => {
       const nextMsg = messages[i + 1];
@@ -64,17 +70,31 @@ const executedOnlyIdsFromMessages = (messages: AgentChatMessage[]): Set<string> 
     const executedIdsInSame = m.executedRounds?.length
       ? toolCallIdsFromExecutedRounds(m.executedRounds)
       : null;
-    if (m.role === 'assistant' && m.toolCalls?.length) {
-      m.toolCalls.forEach((tc) => {
+    if (m.role === 'assistant') {
+      m.toolCalls?.forEach((tc) => {
         if ((tc as PendingToolCall & { approved?: boolean }).approved === undefined &&
             (executedIdsInNext?.has(tc.id) || executedIdsInSame?.has(tc.id))) {
           ids.add(tc.id);
         }
       });
+      executedIdsInSame?.forEach((id) => ids.add(id));
+      executedIdsInNext?.forEach((id) => ids.add(id));
     }
   });
   return ids;
-};
+}
+
+/** Tool call IDs from history - when no pending approval, hide approval UI for all. */
+function allToolCallIdsFromMessages(messages: AgentChatMessage[]): Set<string> {
+  const ids = new Set<string>();
+  messages.forEach((m) => {
+    if (m.role === 'assistant') {
+      m.toolCalls?.forEach((tc) => ids.add(tc.id));
+      m.executedRounds?.forEach((r) => r.tool_calls?.forEach((tc) => ids.add(tc.id)));
+    }
+  });
+  return ids;
+}
 
 /** Tracks which tool call IDs we've already resolved (approved/rejected) in a previous round. */
 const resolvedFromMessages = (
@@ -153,11 +173,19 @@ export default function AgentChat({
   const [editingPanelValue, setEditingPanelValue] = useState('');
 
   const resolvedMap = resolvedFromMessages(messages, approvedCallIds);
+  const hasPendingApproval = pendingToolCalls.length > 0;
   const executedOnlyIds = useMemo(
-    () => (approvedCallIds?.size ? new Set<string>() : executedOnlyIdsFromMessages(messages)),
-    [messages, approvedCallIds?.size]
+    () =>
+      approvedCallIds?.size
+        ? new Set<string>()
+        : hasPendingApproval
+          ? executedOnlyIdsFromMessages(messages, true)
+          : allToolCallIdsFromMessages(messages),
+    [messages, approvedCallIds?.size, hasPendingApproval]
   );
   const pendingIds = pendingCallIds(pendingToolCalls);
+  // For multi-call batches, hide individual approve/reject buttons — use batch buttons instead.
+  const individualPendingIds = pendingToolCalls.length > 1 ? new Set<string>() : pendingIds;
   const turns = useMemo(() => messagesToTurns(messages), [messages]);
 
   // Track last computed values to avoid setState when unchanged (prevents ResizeObserver
@@ -223,12 +251,8 @@ export default function AgentChat({
   }, [updateStickyQuestion]);
 
   const handleApproveOne = (callId: string, approved: boolean) => {
-    onApprove(
-      pendingToolCalls.map((tc) => ({
-        call_id: tc.id,
-        approved: tc.id === callId ? approved : !approved,
-      }))
-    );
+    // Only used for single-call batches; multi-call batches use Approve/Reject all.
+    onApprove([{ call_id: callId, approved }]);
   };
 
   const handleApproveAll = () => {
@@ -365,7 +389,7 @@ export default function AgentChat({
                   onApprove={(id) => handleApproveOne(id, true)}
                   onReject={(id) => handleApproveOne(id, false)}
                   onAlwaysApprove={onAlwaysApprove}
-                  pendingCallIds={pendingIds}
+                  pendingCallIds={individualPendingIds}
                   disabled={disabled}
                   resolvedToolCalls={resolvedMap}
                   executedOnlyIds={executedOnlyIds}

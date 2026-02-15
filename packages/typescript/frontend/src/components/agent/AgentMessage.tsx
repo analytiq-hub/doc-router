@@ -194,10 +194,12 @@ export default function AgentMessage({
           <div className="mt-1 space-y-0.5">
             {message.toolCalls.map((tc) => {
               const isPending = pendingCallIds?.has(tc.id);
-              const resolved = resolvedToolCalls?.has(tc.id);
-              const approved = resolved ? resolvedToolCalls?.get(tc.id) : undefined;
+              const resolvedFromMap = resolvedToolCalls?.has(tc.id);
+              const approved = resolvedFromMap ? resolvedToolCalls?.get(tc.id) : undefined;
               const isAutoApproved = readOnlyTools?.includes(tc.name);
-              const showApprovalStatus = !executedOnlyIds?.has(tc.id);
+              const inExecutedOnly = executedOnlyIds?.has(tc.id);
+              const showApprovalStatus = !inExecutedOnly;
+              const resolved = (resolvedFromMap ?? !isPending) || !!inExecutedOnly;
               return (
                 <ToolCallCard
                   key={tc.id}
@@ -206,7 +208,7 @@ export default function AgentMessage({
                   onReject={() => onReject?.(tc.id)}
                   onAlwaysApprove={onAlwaysApprove}
                   disabled={disabled}
-                  resolved={resolved ?? !isPending}
+                  resolved={resolved}
                   approved={approved}
                   isAutoApproved={isAutoApproved}
                   showApprovalStatus={showApprovalStatus}
