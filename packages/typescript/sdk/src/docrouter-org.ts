@@ -1,9 +1,11 @@
 import { HttpClient } from './http-client';
 import {
   DocRouterOrgConfig,
+  UploadDocumentsParams,
   UploadDocumentsResponse,
   ListDocumentsResponse,
   GetDocumentResponse,
+  GetDocumentMetadataResponse,
   GetOCRMetadataResponse,
   RunLLMResponse,
   GetLLMResultResponse,
@@ -109,7 +111,7 @@ export class DocRouterOrg {
 
   // ---------------- Documents ----------------
 
-  async uploadDocuments(params: { documents: Array<{ name: string; content: string; tag_ids?: string[]; metadata?: Record<string, string>; }>; }): Promise<UploadDocumentsResponse> {
+  async uploadDocuments(params: UploadDocumentsParams): Promise<UploadDocumentsResponse> {
     const documentsPayload = params.documents.map(doc => {
       // Handle both plain base64 and data URLs
       let base64Content: string;
@@ -135,10 +137,11 @@ export class DocRouterOrg {
       return payload;
     });
 
-    return this.http.post<UploadDocumentsResponse>(
-      `/v0/orgs/${this.organizationId}/documents`,
-      { documents: documentsPayload }
-    );
+    const body: { documents: typeof documentsPayload; auto_create_enabled?: boolean } = { documents: documentsPayload };
+    if (params.auto_create_enabled !== undefined) {
+      body.auto_create_enabled = params.auto_create_enabled;
+    }
+    return this.http.post<UploadDocumentsResponse>(`/v0/orgs/${this.organizationId}/documents`, body);
   }
 
   async listDocuments(params?: { skip?: number; limit?: number; tagIds?: string; nameSearch?: string; metadataSearch?: string; }): Promise<ListDocumentsResponse> {
@@ -168,6 +171,9 @@ export class DocRouterOrg {
       type: string;
       metadata: Record<string, string>;
       content: string;
+      auto_create_status?: string;
+      auto_create_schema_revid?: string;
+      auto_create_prompt_revid?: string;
     }>(`/v0/orgs/${this.organizationId}/documents/${documentId}?file_type=${fileType}`);
 
     const binaryContent = atob(response.content);
@@ -187,8 +193,26 @@ export class DocRouterOrg {
       tag_ids: response.tag_ids,
       type: response.type,
       metadata: response.metadata,
-      content: bytes.buffer
+      content: bytes.buffer,
+      auto_create_status: response.auto_create_status,
+      auto_create_schema_revid: response.auto_create_schema_revid,
+      auto_create_prompt_revid: response.auto_create_prompt_revid,
     };
+  }
+
+  async getDocumentMetadata(params: { documentId: string; }): Promise<GetDocumentMetadataResponse> {
+    const { documentId } = params;
+    return this.http.get<GetDocumentMetadataResponse>(`/v0/orgs/${this.organizationId}/documents/${documentId}/metadata`);
+  }
+
+  async acceptAutoCreate(params: { documentId: string; }) {
+    const { documentId } = params;
+    return this.http.post(`/v0/orgs/${this.organizationId}/documents/${documentId}/auto-create/accept`);
+  }
+
+  async rejectAutoCreate(params: { documentId: string; }) {
+    const { documentId } = params;
+    return this.http.post(`/v0/orgs/${this.organizationId}/documents/${documentId}/auto-create/reject`);
   }
 
   async updateDocument(params: { documentId: string; documentName?: string; tagIds?: string[]; metadata?: Record<string, string>; }) {

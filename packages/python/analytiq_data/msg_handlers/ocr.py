@@ -60,6 +60,9 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
             # Post a message to the KB indexing queue (for .txt/.md files that can be indexed)
             kb_msg = {"document_id": document_id}
             await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
+            # Post auto-create if enabled
+            if doc.get("auto_create_enabled"):
+                await ad.queue.send_msg(analytiq_client, "auto_create", msg={"document_id": document_id})
             return
 
         # Update state to OCR processing
@@ -138,6 +141,12 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
         # Post a message to the KB indexing queue (OCR-gated indexing)
         kb_msg = {"document_id": document_id}
         await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
+
+        # Post auto-create task if document has auto_create_enabled (set on upload)
+        doc_after = await ad.common.doc.get_doc(analytiq_client, document_id)
+        if doc_after and doc_after.get("auto_create_enabled"):
+            auto_create_msg = {"document_id": document_id}
+            await ad.queue.send_msg(analytiq_client, "auto_create", msg=auto_create_msg)
     
     except Exception as e:
         logger.error(f"Error processing OCR msg: {e}")

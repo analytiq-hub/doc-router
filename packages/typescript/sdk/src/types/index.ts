@@ -115,6 +115,8 @@ export interface UploadDocument {
 
 export interface UploadDocumentsParams {
   documents: UploadDocument[];
+  /** If true, run headless agent after OCR to propose schema, prompt, and extraction */
+  auto_create_enabled?: boolean;
 }
 
 export interface UploadedDocument {
@@ -148,6 +150,20 @@ export interface GetDocumentResponse {
   type: string;
   metadata: Record<string, string>;
   content: ArrayBuffer;
+  /** Auto-create: "proposed" | "accepted" | "rejected" | "failed" */
+  auto_create_status?: string;
+  auto_create_schema_revid?: string;
+  auto_create_prompt_revid?: string;
+}
+
+export interface GetDocumentMetadataResponse {
+  id: string;
+  pdf_id: string;
+  document_name: string;
+  state: string;
+  auto_create_status?: string;
+  auto_create_schema_revid?: string;
+  auto_create_prompt_revid?: string;
 }
 
 export interface UpdateDocumentParams {

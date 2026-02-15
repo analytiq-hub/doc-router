@@ -486,7 +486,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
   );
 
   const sendMessage = useCallback(
-    async (content: string) => {
+    async (content: string, mentions: Array<{ type: string; id: string }> = []) => {
       if (!content.trim() || loading) return;
 
       let currentThreadId = threadId;
@@ -524,7 +524,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
 
       const body: Record<string, unknown> = {
         messages: messageListForApi,
-        mentions: [],
+        mentions: mentions.map((m) => ({ type: m.type, id: m.id })),
         model,
         stream: true,
         auto_approve: autoApprove,
@@ -544,7 +544,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
 
   /** Send a new message with a specific history (e.g. after editing and resubmitting from a prior turn). Truncates conversation to history then sends content. Uses streaming like sendMessage. */
   const sendMessageWithHistory = useCallback(
-    async (history: AgentChatMessage[], content: string) => {
+    async (history: AgentChatMessage[], content: string, mentions: Array<{ type: string; id: string }> = []) => {
       if (!content.trim() || loading) return;
 
       const trimmed = content.trim();
@@ -583,7 +583,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
 
       const body: Record<string, unknown> = {
         messages: messageListForApi,
-        mentions: [],
+        mentions: mentions.map((m) => ({ type: m.type, id: m.id })),
         model,
         stream: true,
         auto_approve: autoApprove,

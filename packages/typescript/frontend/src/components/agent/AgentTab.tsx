@@ -8,6 +8,8 @@ import MicIcon from '@mui/icons-material/Mic';
 import { useAgentChat, getMessagesBeforeTurn } from './useAgentChat';
 import AgentChat from './AgentChat';
 import ThreadDropdown from './ThreadDropdown';
+import MentionInput, { type MentionRef } from './MentionInput';
+import AutoCreateReview from './AutoCreateReview';
 import { useDictation } from './useDictation';
 import { DocRouterOrgApi } from '@/utils/api';
 import type { AgentThreadSummary } from './useAgentChat';
@@ -25,46 +27,35 @@ function isChatDisabled(state: string | null): boolean {
 export default function AgentTab({ organizationId, documentId }: AgentTabProps) {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [documentState, setDocumentState] = useState<string | null>(null);
+  const [autoCreateStatus, setAutoCreateStatus] = useState<string | null>(null);
+  const [autoCreateSchemaRevId, setAutoCreateSchemaRevId] = useState<string | null>(null);
+  const [autoCreatePromptRevId, setAutoCreatePromptRevId] = useState<string | null>(null);
+
+  const fetchMetadata = useCallback(async () => {
+    try {
+      const meta = await docRouterOrgApi.getDocumentMetadata({ documentId });
+      setDocumentState(meta.state);
+      setAutoCreateStatus(meta.auto_create_status ?? null);
+      setAutoCreateSchemaRevId(meta.auto_create_schema_revid ?? null);
+      setAutoCreatePromptRevId(meta.auto_create_prompt_revid ?? null);
+    } catch (error) {
+      console.error('Error fetching document metadata:', error);
+      setDocumentState(null);
+      setAutoCreateStatus(null);
+      setAutoCreateSchemaRevId(null);
+      setAutoCreatePromptRevId(null);
+    }
+  }, [documentId, docRouterOrgApi]);
 
   useEffect(() => {
-    const fetchState = async () => {
-      try {
-        try {
-          const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf' });
-          setDocumentState(doc.state);
-          return;
-        } catch {
-          // Non-PDF documents may not have pdf; try original
-        }
-        const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original' });
-        setDocumentState(doc.state);
-      } catch (error) {
-        console.error('Error fetching document state:', error);
-        setDocumentState(null);
-      }
-    };
-    fetchState();
-  }, [organizationId, documentId, docRouterOrgApi]);
+    fetchMetadata();
+  }, [fetchMetadata]);
 
   useEffect(() => {
     if (!isChatDisabled(documentState)) return;
-    const poll = setInterval(async () => {
-      try {
-        try {
-          const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf' });
-          setDocumentState(doc.state);
-          return;
-        } catch {
-          /* try original */
-        }
-        const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original' });
-        setDocumentState(doc.state);
-      } catch (error) {
-        console.error('Error polling document state:', error);
-      }
-    }, 2000);
+    const poll = setInterval(fetchMetadata, 2000);
     return () => clearInterval(poll);
-  }, [documentState, documentId, docRouterOrgApi]);
+  }, [documentState, fetchMetadata]);
 
   const chatDisabled = isChatDisabled(documentState);
 
@@ -87,6 +78,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
   } = useAgentChat(organizationId, documentId);
 
   const [input, setInput] = useState('');
+  const [mentions, setMentions] = useState<MentionRef[]>([]);
   const [interimTranscript, setInterimTranscript] = useState('');
   const interimRef = useRef('');
   const [showModelDropUp, setShowModelDropUp] = useState(false);
@@ -122,7 +114,8 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
       setInput('');
       setInterimTranscript('');
       interimRef.current = '';
-      sendMessage(text);
+      setMentions([]);
+      sendMessage(text, []);
     }
   }, [sendMessage, state.loading]);
 
@@ -170,7 +163,8 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
     setInput('');
     setInterimTranscript('');
     interimRef.current = '';
-    sendMessage(text);
+    sendMessage(text, mentions);
+    setMentions([]);
   };
 
   const handleApprove = (approvals: Array<{ call_id: string; approved: boolean }>) => {
@@ -203,10 +197,11 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
       )}
       <div className="px-3 pt-2 pb-1">
         <div className={`rounded-lg border border-gray-300 bg-white min-w-0 ${chatDisabled ? 'opacity-60' : 'focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500'}`}>
-          <textarea
+          <MentionInput
             value={displayInput}
-            onChange={(e) => {
-              setInput(e.target.value);
+            onChange={(v, m) => {
+              setInput(v);
+              setMentions(m);
               setInterimTranscript('');
               interimRef.current = '';
             }}
@@ -216,11 +211,15 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
                 handleSend();
               }
             }}
-            placeholder={chatDisabled ? 'Waiting for document processing…' : 'Message the agent…'}
+            placeholder={chatDisabled ? 'Waiting for document processing…' : 'Message the agent… (type @ to mention schemas, prompts, tags)'}
             rows={3}
             className="w-full min-h-[4rem] max-h-[12rem] py-2.5 px-3 text-sm resize-y border-0 focus:outline-none focus:ring-0 overflow-y-auto bg-transparent"
-            style={{ scrollbarGutter: 'stable' }}
             disabled={state.loading || chatDisabled}
+            fetchApi={{
+              listSchemas: (p) => docRouterOrgApi.listSchemas(p ?? {}),
+              listPrompts: (p) => docRouterOrgApi.listPrompts(p ?? {}),
+              listTags: (p) => docRouterOrgApi.listTags(p ?? {}),
+            }}
           />
         </div>
       </div>
@@ -374,8 +373,21 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
 
   const hasMessages = state.messages.length > 0;
 
+  const showAutoCreateReview = autoCreateStatus === 'proposed' && autoCreateSchemaRevId && autoCreatePromptRevId;
+
   return (
     <div className="flex flex-col h-full min-h-0 bg-white">
+      {/* Auto-create review banner */}
+      {showAutoCreateReview && (
+        <AutoCreateReview
+          organizationId={organizationId}
+          documentId={documentId}
+          schemaRevId={autoCreateSchemaRevId}
+          promptRevId={autoCreatePromptRevId}
+          onAccept={fetchMetadata}
+          onReject={fetchMetadata}
+        />
+      )}
       {/* Header: thread dropdown */}
       <div className="shrink-0 flex items-center gap-2 px-2 py-1.5 border-b border-gray-200 bg-gray-50/50">
         <ThreadDropdown

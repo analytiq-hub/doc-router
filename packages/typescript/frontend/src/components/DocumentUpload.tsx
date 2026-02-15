@@ -32,6 +32,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [metadataFields, setMetadataFields] = useState<Array<{id: string, key: string, value: string}>>([]);
+  const [autoCreateEnabled, setAutoCreateEnabled] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const [activeStep, setActiveStep] = useState(0);
 
@@ -114,7 +115,8 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
 
     try {
       const response = await docRouterOrgApi.uploadDocuments({
-        documents: filesWithTagsAndMetadata
+        documents: filesWithTagsAndMetadata,
+        auto_create_enabled: autoCreateEnabled,
       });
       
       // Create a more detailed success message
@@ -131,6 +133,7 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
       setFiles([]);
       setSelectedTags([]); // Reset selected tags after successful upload
       setMetadataFields([]); // Reset metadata after successful upload
+      setAutoCreateEnabled(false); // Reset auto-create option
       setActiveStep(0); // Reset to first step
     } catch (error) {
       console.error('Error uploading files:', error);
@@ -388,6 +391,23 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
                   selectedTagIds={selectedTags}
                   onChange={setSelectedTags}
                 />
+              </div>
+
+              {/* Metadata Section */}
+              {/* Auto-create option */}
+              <div>
+                <h4 className="text-md font-medium mb-3">Auto-create</h4>
+                <label className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={autoCreateEnabled}
+                    onChange={(e) => setAutoCreateEnabled(e.target.checked)}
+                    className="mt-1 rounded"
+                  />
+                  <span className="text-sm text-gray-600">
+                    After OCR, run the agent to automatically propose a schema and prompt for this document. You can review and accept or reject the proposal in the Agent tab.
+                  </span>
+                </label>
               </div>
 
               {/* Metadata Section */}

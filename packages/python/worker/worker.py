@@ -131,6 +131,39 @@ async def worker_kb_index(worker_id: str) -> None:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)  # Sleep longer on errors to prevent tight loop
 
+async def worker_auto_create(worker_id: str) -> None:
+    """
+    Worker for auto-create jobs (headless agent to propose schema, prompt, extraction).
+    Triggered after OCR when document has auto_create_enabled.
+    """
+    ENV = os.getenv("ENV", "dev")
+    analytiq_client = ad.common.get_analytiq_client(env=ENV, name=worker_id)
+    logger.info(f"Starting worker {worker_id}")
+
+    last_heartbeat = datetime.now(UTC)
+
+    while True:
+        try:
+            now = datetime.now(UTC)
+            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
+                logger.info(f"Worker {worker_id} heartbeat")
+                last_heartbeat = now
+
+            msg = await ad.queue.recv_msg(analytiq_client, "auto_create")
+            if msg:
+                logger.info(f"Worker {worker_id} processing auto-create msg: {msg}")
+                try:
+                    await ad.msg_handlers.process_auto_create_msg(analytiq_client, msg)
+                except Exception as e:
+                    logger.error(f"Error processing auto-create message {msg.get('_id')}: {str(e)}")
+                    await ad.queue.delete_msg(analytiq_client, "auto_create", str(msg["_id"]), status="failed")
+            else:
+                await asyncio.sleep(0.2)
+
+        except Exception as e:
+            logger.error(f"Worker {worker_id} encountered error: {str(e)}")
+            await asyncio.sleep(1)
+
 async def worker_kb_reconcile(worker_id: str) -> None:
     """
     Worker for periodic KB reconciliation.
@@ -276,16 +309,17 @@ async def main():
     # Re-read the environment variables, in case they were changed by unit tests
     N_WORKERS = int(os.getenv("N_WORKERS", "1"))
 
-    # Create N_WORKERS workers of worker_ocr, worker_llm, worker_kb_index, and worker_webhook
+    # Create N_WORKERS workers of worker_ocr, worker_llm, worker_kb_index, worker_auto_create, and worker_webhook
     # Only one KB reconciliation worker needed (checks all KBs periodically)
     ocr_workers = [worker_ocr(f"ocr_{i}") for i in range(N_WORKERS)]
     llm_workers = [worker_llm(f"llm_{i}") for i in range(N_WORKERS)]
     kb_index_workers = [worker_kb_index(f"kb_index_{i}") for i in range(N_WORKERS)]
+    auto_create_workers = [worker_auto_create(f"auto_create_{i}") for i in range(N_WORKERS)]
     webhook_workers = [worker_webhook(f"webhook_{i}") for i in range(N_WORKERS)]
     kb_reconcile_worker = [worker_kb_reconcile("kb_reconcile_0")]
 
     # Run all workers concurrently
-    await asyncio.gather(*ocr_workers, *llm_workers, *kb_index_workers, *webhook_workers, *kb_reconcile_worker)
+    await asyncio.gather(*ocr_workers, *llm_workers, *kb_index_workers, *auto_create_workers, *webhook_workers, *kb_reconcile_worker)
 
 if __name__ == "__main__":
     # Configure logging to ensure it's visible

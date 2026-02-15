@@ -33,6 +33,10 @@ class DocumentUpload(BaseModel):
 
 class DocumentsUpload(BaseModel):
     documents: List[DocumentUpload]
+    auto_create_enabled: bool = Field(
+        default=False,
+        description="If True, run headless agent after OCR to propose schema, prompt, and extraction",
+    )
 
 class DocumentMetadata(BaseModel):
     id: str
@@ -56,6 +60,10 @@ class DocumentResponse(BaseModel):
     type: str | None = None   # MIME type of the returned file (original/pdf)
     metadata: Optional[Dict[str, str]] = {}  # Optional key-value metadata pairs
     content: str  # Base64 encoded content
+    # Auto-create (schema/prompt proposed by headless agent)
+    auto_create_status: Optional[str] = None  # "proposed" | "accepted" | "rejected" | "failed"
+    auto_create_schema_revid: Optional[str] = None
+    auto_create_prompt_revid: Optional[str] = None
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -63,6 +71,17 @@ class ListDocumentsResponse(BaseModel):
     documents: List[DocumentMetadata]
     total_count: int
     skip: int
+
+class DocumentMetadataResponse(BaseModel):
+    """Lightweight document metadata (no file content)"""
+    id: str
+    pdf_id: str
+    document_name: str
+    state: str
+    auto_create_status: Optional[str] = None
+    auto_create_schema_revid: Optional[str] = None
+    auto_create_prompt_revid: Optional[str] = None
+
 
 class DocumentUpdate(BaseModel):
     """Schema for updating document metadata"""
@@ -180,7 +199,8 @@ async def upload_document(
             "state": ad.common.doc.DOCUMENT_STATE_UPLOADED,
             "tag_ids": document.tag_ids,
             "metadata": document.metadata,
-            "organization_id": organization_id
+            "organization_id": organization_id,
+            "auto_create_enabled": documents_upload.auto_create_enabled,
         }
         
         await ad.common.save_doc(analytiq_client, document_metadata)
@@ -436,8 +456,92 @@ async def get_document(
         tag_ids=document.get("tag_ids", []),
         type=returned_mime,
         metadata=document.get("metadata", {}),
-        content=base64.b64encode(file["blob"]).decode('utf-8')
+        content=base64.b64encode(file["blob"]).decode('utf-8'),
+        auto_create_status=document.get("auto_create_status"),
+        auto_create_schema_revid=document.get("auto_create_schema_revid"),
+        auto_create_prompt_revid=document.get("auto_create_prompt_revid"),
     )
+
+
+@documents_router.get("/v0/orgs/{organization_id}/documents/{document_id}/metadata", response_model=DocumentMetadataResponse)
+async def get_document_metadata(
+    organization_id: str,
+    document_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Get document metadata without file content (for polling state, auto_create status)"""
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    document = await db.docs.find_one({
+        "_id": ObjectId(document_id),
+        "organization_id": organization_id
+    })
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return DocumentMetadataResponse(
+        id=str(document["_id"]),
+        pdf_id=document.get("pdf_id", document["document_id"]),
+        document_name=document["user_file_name"],
+        state=document.get("state", ""),
+        auto_create_status=document.get("auto_create_status"),
+        auto_create_schema_revid=document.get("auto_create_schema_revid"),
+        auto_create_prompt_revid=document.get("auto_create_prompt_revid"),
+    )
+
+
+@documents_router.post("/v0/orgs/{organization_id}/documents/{document_id}/auto-create/accept")
+async def accept_auto_create(
+    organization_id: str,
+    document_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Accept auto-created schema and prompt. Marks status as accepted."""
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    document = await db.docs.find_one({
+        "_id": ObjectId(document_id),
+        "organization_id": organization_id
+    })
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if document.get("auto_create_status") != "proposed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot accept: auto_create_status is {document.get('auto_create_status')}, expected 'proposed'"
+        )
+    await db.docs.update_one(
+        {"_id": ObjectId(document_id), "organization_id": organization_id},
+        {"$set": {"auto_create_status": "accepted", "auto_create_done_at": datetime.now(UTC)}}
+    )
+    return {"message": "Auto-create accepted"}
+
+
+@documents_router.post("/v0/orgs/{organization_id}/documents/{document_id}/auto-create/reject")
+async def reject_auto_create(
+    organization_id: str,
+    document_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Reject auto-created schema and prompt. Marks status as rejected."""
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    document = await db.docs.find_one({
+        "_id": ObjectId(document_id),
+        "organization_id": organization_id
+    })
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if document.get("auto_create_status") != "proposed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot reject: auto_create_status is {document.get('auto_create_status')}, expected 'proposed'"
+        )
+    await db.docs.update_one(
+        {"_id": ObjectId(document_id), "organization_id": organization_id},
+        {"$set": {"auto_create_status": "rejected", "auto_create_done_at": datetime.now(UTC)}}
+    )
+    return {"message": "Auto-create rejected"}
+
 
 @documents_router.delete("/v0/orgs/{organization_id}/documents/{document_id}")
 async def delete_document(
