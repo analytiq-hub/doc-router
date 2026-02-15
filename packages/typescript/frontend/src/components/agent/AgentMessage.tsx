@@ -178,7 +178,7 @@ export default function AgentMessage({
               <ThinkingBlock content={round.thinking} defaultExpanded={true} />
             )}
             {round.tool_calls && round.tool_calls.length > 0 && (
-              <div className="mt-1 space-y-0.5">
+              <div className="mt-1 space-y-1">
                 {round.tool_calls.map((tc) => (
                   <ToolCallCard
                     key={tc.id}
@@ -204,7 +204,7 @@ export default function AgentMessage({
           </div>
         )}
         {message.toolCalls && message.toolCalls.length > 0 && (
-          <div className="mt-1 space-y-0.5">
+          <div className="mt-1 space-y-1">
             {message.toolCalls.map((tc) => {
               const isPending = pendingCallIds?.has(tc.id);
               const resolvedFromMap = resolvedToolCalls?.has(tc.id);

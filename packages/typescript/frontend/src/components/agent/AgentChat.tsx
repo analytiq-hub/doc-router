@@ -381,31 +381,33 @@ export default function AgentChat({
                   </button>
                 )}
               </div>
-              {turn.assistants.map((msg, idx) => {
-                const idsShownForApproval = (() => {
-                  const ids = new Set<string>();
-                  for (let i = 0; i < idx; i++) {
-                    turn.assistants[i].toolCalls?.forEach((tc) => ids.add(tc.id));
-                  }
-                  return ids.size ? ids : undefined;
-                })();
-                return (
-                  <AgentMessage
-                    key={idx}
-                    message={msg}
-                    organizationId={organizationId}
-                    onApprove={(id) => handleApproveOne(id, true)}
-                    onReject={(id) => handleApproveOne(id, false)}
-                    onAlwaysApprove={onAlwaysApprove}
-                    pendingCallIds={individualPendingIds}
-                    disabled={disabled}
-                    resolvedToolCalls={resolvedMap}
-                    executedOnlyIds={executedOnlyIds}
-                    readOnlyTools={readOnlyTools}
-                    idsShownForApproval={idsShownForApproval}
-                  />
-                );
-              })}
+              <div className="space-y-1">
+                {turn.assistants.map((msg, idx) => {
+                  const idsShownForApproval = (() => {
+                    const ids = new Set<string>();
+                    for (let i = 0; i < idx; i++) {
+                      turn.assistants[i].toolCalls?.forEach((tc) => ids.add(tc.id));
+                    }
+                    return ids.size ? ids : undefined;
+                  })();
+                  return (
+                    <AgentMessage
+                      key={idx}
+                      message={msg}
+                      organizationId={organizationId}
+                      onApprove={(id) => handleApproveOne(id, true)}
+                      onReject={(id) => handleApproveOne(id, false)}
+                      onAlwaysApprove={onAlwaysApprove}
+                      pendingCallIds={individualPendingIds}
+                      disabled={disabled}
+                      resolvedToolCalls={resolvedMap}
+                      executedOnlyIds={executedOnlyIds}
+                      readOnlyTools={readOnlyTools}
+                      idsShownForApproval={idsShownForApproval}
+                    />
+                  );
+                })}
+              </div>
             </div>
           ))}
           {pendingToolCalls.length > 1 && (
