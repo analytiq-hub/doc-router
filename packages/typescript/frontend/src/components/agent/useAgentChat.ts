@@ -457,16 +457,25 @@ export function useAgentChat(organizationId: string, documentId: string) {
                   setMessages((prev) => {
                     const next = [...prev];
                     const last = next[next.length - 1];
-                    if (last?.role === 'assistant')
+                    if (last?.role === 'assistant') {
+                      // Prefer streamed content when backend sends empty text, or when streamed is longer (multi-round)
+                      const backendText = r.text != null && r.text !== '' ? r.text : null;
+                      const streamedContent = last.content ?? null;
+                      const finalContent =
+                        streamedContent && (!backendText || streamedContent.length >= backendText.length)
+                          ? streamedContent
+                          : backendText ?? streamedContent;
                       next[next.length - 1] = {
                         ...last,
-                        content: r.text ?? last.content ?? null,
+                        content: finalContent,
                         thinking: r.thinking ?? last.thinking ?? undefined,
                         executedRounds: normalizeExecutedRounds(r.executed_rounds) ?? last.executedRounds,
                         toolCalls: r.tool_calls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })),
                       };
+                    }
                     return next;
-                  });
+                  }
+                  );
                   if (r.turn_id && r.tool_calls?.length) {
                     setPendingTurnId(r.turn_id);
                     setPendingToolCalls(r.tool_calls.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })));
