@@ -573,3 +573,187 @@ def mock_litellm(monkeypatch):
 - **Max tool-call rounds**: max 10 tool calls in auto mode.
 
 ---
+
+## 11. Cross-Model Compatibility
+
+The agent currently works best with Anthropic Claude models due to several Anthropic-specific assumptions in the backend. To support GPT, Gemini, and Grok models equally, the following issues must be addressed.
+
+### 11.1 Thinking / extended reasoning parameter format
+
+**File**: `analytiq_data/llm/llm.py` (`agent_completion_stream`)
+
+**Problem**: The `thinking` parameter (`{"type": "enabled", "budget_tokens": N}`) is Anthropic-only. OpenAI uses `reasoning_effort` (string: "low"/"medium"/"high"). Gemini uses `thinking_config` (dict with `thinking_budget`). Grok does not support extended thinking.
+
+**Fix**: Add a model-family dispatcher before the LiteLLM call:
+
+```python
+def _thinking_params(model: str, budget: int) -> dict:
+    provider = _provider(model)  # "anthropic" | "openai" | "google" | "groq" | etc.
+    if provider == "anthropic":
+        return {"thinking": {"type": "enabled", "budget_tokens": budget}}
+    elif provider == "openai":
+        # Map budget to effort level
+        if budget >= 8000:
+            return {"reasoning_effort": "high"}
+        elif budget >= 3000:
+            return {"reasoning_effort": "medium"}
+        return {"reasoning_effort": "low"}
+    elif provider == "google":
+        return {"thinking_config": {"thinking_budget": budget}}
+    else:
+        return {}  # Provider doesn't support thinking
+```
+
+A `_provider(model)` helper can derive the provider from the model string prefix (e.g. `gpt-` → openai, `claude-` → anthropic, `gemini-` → google, `llama-` / `grok-` → groq).
+
+### 11.2 Temperature forced to 1.0 for thinking models
+
+**File**: `analytiq_data/llm/llm.py`, line ~280
+
+**Problem**: Anthropic requires `temperature = 1.0` when extended thinking is enabled. Other providers do not have this constraint and may produce worse results at temperature 1.0.
+
+**Fix**: Only force temperature for Anthropic:
+
+```python
+if thinking_enabled:
+    if _provider(model) == "anthropic":
+        params["temperature"] = 1.0
+    # Other providers: leave temperature at default or user-specified value
+```
+
+### 11.3 Thinking blocks in thread persistence
+
+**File**: `analytiq_data/agent/agent_loop.py` (`_sanitize_messages_for_llm`)
+
+**Problem**: `thinking_blocks` with `signature` fields are Anthropic-specific. When a thread is saved with Anthropic thinking blocks and later replayed with a non-Anthropic model, the LLM receives content it doesn't understand.
+
+**Fix**: Strip thinking blocks when the current model provider differs from the one that produced them:
+
+```python
+def _sanitize_messages_for_llm(messages: list[dict], model: str) -> list[dict]:
+    provider = _provider(model)
+    for msg in sanitized:
+        if msg.get("role") == "assistant":
+            tb = msg.get("thinking_blocks")
+            if tb and provider != "anthropic":
+                # Non-Anthropic models don't understand thinking_blocks;
+                # optionally prepend a summary to content instead
+                del msg["thinking_blocks"]
+```
+
+Alternatively, store a `provider` field on each assistant message in the thread so sanitization knows the origin.
+
+### 11.4 System prompt complexity for weaker models
+
+**File**: `analytiq_data/agent/system_prompt.py`
+
+**Problem**: The system prompt includes OCR text (up to 8000 chars), extraction state, resolved mentions, tool instructions, and resource-ID formatting rules. Smaller models (GPT-4o-mini, Gemini Flash, Grok) have weaker instruction-following and lose track of multi-step tool chains in long contexts.
+
+**Fix**:
+1. **Tiered system prompts**: Simplify the system prompt for smaller models. Remove the resource-ID formatting section and verbose instructions. Keep only the essentials: document context, current extraction, and a concise instruction block.
+2. **Reduce OCR excerpt**: For smaller models, cap `OCR_EXCERPT_MAX_CHARS` at 4000 instead of 8000.
+3. **Fewer simultaneous instructions**: Split "validate then create" into clearer step-by-step language. For weaker models, consider removing the `validate_schema` pre-flight instruction entirely (since `create_schema` already validates internally).
+
+```python
+def _instructions_for_model(model: str) -> str:
+    if _is_large_model(model):  # claude-opus, gpt-4o, gemini-pro
+        return FULL_INSTRUCTIONS
+    else:
+        return COMPACT_INSTRUCTIONS  # Shorter, fewer rules
+```
+
+### 11.5 Parallel tool calls (GPT batching)
+
+**File**: `analytiq_data/agent/tool_registry.py` (tool definitions sent to LLM)
+
+**Problem**: OpenAI models aggressively batch tool calls — e.g. calling `create_schema` and `create_prompt` in parallel, even though `create_prompt` needs the `schema_revid` from `create_schema`. This causes failures because the second tool lacks the output of the first.
+
+**Fix**: Set `parallel_tool_calls: false` in the LiteLLM completion request for OpenAI models:
+
+```python
+if _provider(model) == "openai":
+    params["parallel_tool_calls"] = False
+```
+
+This forces GPT to make tool calls sequentially, matching the behavior Claude uses by default. LiteLLM passes this parameter through to the OpenAI API.
+
+### 11.6 Tool descriptions lack examples
+
+**File**: `analytiq_data/agent/tool_registry.py`
+
+**Problem**: Tool descriptions are terse (e.g. "Creates a new schema in the org"). Claude models infer correct argument structures from minimal descriptions; other models often produce malformed arguments.
+
+**Fix**: Add `example` or more detailed `description` fields to tool parameter schemas:
+
+```python
+{
+    "name": "create_schema",
+    "description": "Creates a new schema. The response_format must be a valid OpenAI Structured Outputs object with type 'json_schema'. Example response_format: {\"type\": \"json_schema\", \"json_schema\": {\"name\": \"Invoice\", \"strict\": true, \"schema\": {\"type\": \"object\", \"properties\": {\"total\": {\"type\": \"number\", \"description\": \"Invoice total\"}}, \"required\": [\"total\"], \"additionalProperties\": false}}}",
+    ...
+}
+```
+
+For critical tools (`create_schema`, `create_prompt`, `run_extraction`), include a concrete example in the description.
+
+### 11.7 No tool-call retry on malformed arguments
+
+**File**: `analytiq_data/agent/agent_loop.py`
+
+**Problem**: When the LLM produces invalid JSON in tool call arguments, the agent loop fails the tool and returns the error. Some models (especially smaller ones) produce slightly malformed JSON on the first attempt but can self-correct if given the error.
+
+**Fix**: Add a retry mechanism for argument parsing errors:
+
+```python
+try:
+    args = json.loads(tool_call.function.arguments)
+except json.JSONDecodeError as e:
+    # Return error as tool result so LLM can retry
+    tool_results.append({
+        "role": "tool",
+        "tool_call_id": tool_call.id,
+        "content": json.dumps({
+            "error": f"Invalid JSON in arguments: {e}. Please retry with valid JSON."
+        })
+    })
+    continue
+```
+
+This is already partially handled but should be explicit and consistent across all tool dispatch paths.
+
+### 11.8 Implementation priority
+
+| Issue | Impact | Effort | Priority |
+|-------|--------|--------|----------|
+| 11.1 Thinking param format | High — breaks non-Anthropic models with thinking | Medium | P0 |
+| 11.2 Temperature forcing | Medium — degrades quality on non-Anthropic | Low | P0 |
+| 11.5 Parallel tool calls | High — GPT models fail on dependent tool chains | Low | P0 |
+| 11.6 Tool descriptions | Medium — malformed args on weaker models | Medium | P1 |
+| 11.7 Tool-call retry | Medium — recoverable failures become fatal | Low | P1 |
+| 11.4 System prompt complexity | Medium — weaker models lose instructions | Medium | P2 |
+| 11.3 Thinking blocks persistence | Low — only affects thread switching across providers | Low | P2 |
+
+### 11.9 Helper: model provider detection
+
+All fixes above depend on a `_provider(model)` helper. Implement this once:
+
+```python
+def _provider(model: str) -> str:
+    """Return provider family from model string."""
+    model_lower = model.lower()
+    if model_lower.startswith(("claude-", "anthropic/")):
+        return "anthropic"
+    elif model_lower.startswith(("gpt-", "o1-", "o3-", "openai/")):
+        return "openai"
+    elif model_lower.startswith(("gemini-", "google/")):
+        return "google"
+    elif model_lower.startswith(("llama-", "grok-", "groq/")):
+        return "groq"
+    # LiteLLM prefixed models: "openai/gpt-4o", "anthropic/claude-3"
+    if "/" in model:
+        return model.split("/")[0]
+    return "unknown"
+```
+
+Place this in `analytiq_data/llm/llm.py` (or a new `analytiq_data/llm/utils.py`) and import from the agent loop and system prompt modules.
+
+---
