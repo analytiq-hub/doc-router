@@ -39,7 +39,7 @@ async def build_system_message(
     """
     parts = [
         "You are a document assistant with access to tools to manage schemas, prompts, tags, document metadata (name, tags, metadata), and to run or update extractions for the current document.",
-        "When the user asks to create or modify a schema, use help_schemas first if needed, then create_schema or update_schema.",
+        "When the user asks to create or modify a schema, use help_schemas first if needed. Use validate_schema to validate the schema format (DocRouter/Draft 7) before calling create_schema or update_schema, then create_schema or update_schema.",
         "When the user asks to create or modify a prompt, use help_prompts first if needed, then create_prompt or update_prompt. You can link a prompt to a schema and run extraction with run_extraction.",
         "Always run extraction after creating or updating a prompt if the user expects to see extracted data.",
         "",

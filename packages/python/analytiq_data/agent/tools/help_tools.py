@@ -27,12 +27,10 @@ async def help_schemas(context: dict, params: dict) -> dict[str, Any]:
     if path:
         try:
             text = path.read_text(encoding="utf-8")
-            # Cap size for LLM context (~8k chars is enough for key sections)
-            if len(text) > 12000:
-                text = text[:12000] + "\n\n[... truncated ...]"
             return {"content": text}
         except Exception as e:
             logger.warning("Could not read schemas.md: %s", e)
+    logger.error(f"Could not read schemas.md: {e}")
     return {
         "content": (
             "DocRouter Schema Guidelines:\n"
@@ -51,11 +49,10 @@ async def help_prompts(context: dict, params: dict) -> dict[str, Any]:
     if path:
         try:
             text = path.read_text(encoding="utf-8")
-            if len(text) > 12000:
-                text = text[:12000] + "\n\n[... truncated ...]"
             return {"content": text}
         except Exception as e:
             logger.warning("Could not read prompts.md: %s", e)
+    logger.error(f"Could not read prompts.md: {e}")
     return {
         "content": (
             "DocRouter Prompt Guidelines:\n"
