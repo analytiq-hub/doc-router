@@ -257,10 +257,10 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "validate_schema",
-            "description": "Validate a schema (JSON string or object) for DocRouter compliance and Draft 7.",
+            "description": "Validate a schema (JSON string or object) for DocRouter compliance and Draft 7. Call this before create_schema or update_schema; do not save a schema until validate_schema returns valid.",
             "parameters": {
                 "type": "object",
-                "properties": {"schema": {"description": "JSON string or object of the schema"}},
+                "properties": {"schema": {"description": "JSON string or object of the schema (full response_format)"}},
                 "required": ["schema"],
                 "additionalProperties": False,
             },
