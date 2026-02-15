@@ -51,16 +51,12 @@ export default function ToolCallCard({
     <div className="group">
       <div
         className="flex items-center gap-1.5 py-0.5 text-xs cursor-pointer select-none"
-        onClick={() => hasArgs && setShowRaw((v) => !v)}
+        onClick={() => setShowRaw((v) => !v)}
       >
-        {hasArgs ? (
-          <ExpandMoreIcon
-            sx={{ fontSize: 14 }}
-            className={`text-gray-400 transition-transform duration-150 ${showRaw ? 'rotate-180' : ''}`}
-          />
-        ) : (
-          <span className="w-3.5" />
-        )}
+        <ExpandMoreIcon
+          sx={{ fontSize: 14 }}
+          className={`text-gray-400 transition-transform duration-150 shrink-0 ${showRaw ? 'rotate-180' : ''}`}
+        />
         <span className="font-medium text-gray-600">{toolCall.name}</span>
         {!resolved && !isAutoApproved && (
           <span className="flex items-center ml-auto rounded overflow-hidden border border-green-200">
@@ -156,9 +152,9 @@ export default function ToolCallCard({
           </span>
         )}
       </div>
-      {showRaw && hasArgs && (
+      {showRaw && (
         <pre className="ml-5 mt-0.5 p-2 bg-gray-50 rounded border border-gray-100 text-[10px] overflow-x-auto max-h-24 overflow-y-auto">
-          {JSON.stringify(argsObj, null, 2)}
+          {hasArgs ? JSON.stringify(argsObj, null, 2) : '{}'}
         </pre>
       )}
     </div>
