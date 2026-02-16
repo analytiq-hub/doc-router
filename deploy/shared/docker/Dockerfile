@@ -6,8 +6,9 @@ WORKDIR /app
 COPY packages/typescript/sdk/ ./packages/typescript/sdk/
 # Install SDK dependencies first
 RUN cd packages/typescript/sdk && npm install
-# Copy frontend package.json
+# Copy frontend package.json and scripts (postinstall runs patch-formio-css.js)
 COPY packages/typescript/frontend/package*.json ./packages/typescript/frontend/
+COPY packages/typescript/frontend/scripts/ ./packages/typescript/frontend/scripts/
 # Install frontend dependencies (this will build the SDK via the prepare script)
 RUN cd packages/typescript/frontend && npm install
 
