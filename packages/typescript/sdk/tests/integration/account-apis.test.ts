@@ -291,7 +291,8 @@ describe('DocRouterAccount Missing APIs Integration Tests', () => {
       await expect(client.setLLMProviderConfig('test-provider', {
         token: 'test-key',
         enabled: true,
-        litellm_models_enabled: null
+        litellm_models_enabled: null,
+        litellm_models_chat_agent: null
       })).rejects.toThrow();
     });
   });

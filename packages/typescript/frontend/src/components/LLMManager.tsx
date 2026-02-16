@@ -47,12 +47,14 @@ const LLMManager: React.FC = () => {
 
   const handleSaveLLMToken = async () => {
     if (!editingProvider) return;
+    const provider = llmProviders.find(p => p.name === editingProvider);
 
     try {
       await docRouterAccountApi.setLLMProviderConfig(editingProvider, {
         token: editTokenValue,
         enabled: true,
-        litellm_models_enabled: null
+        litellm_models_enabled: provider?.litellm_models_enabled ?? null,
+        litellm_models_chat_agent: provider?.litellm_models_chat_agent ?? null
       });
       setEditModalOpen(false);
       // Refresh the LLM providers list
@@ -65,11 +67,13 @@ const LLMManager: React.FC = () => {
   };
 
   const handleDeleteLLMToken = async (providerName: string) => {
+    const provider = llmProviders.find(p => p.name === providerName);
     try {
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         token: null,
         enabled: false,
-        litellm_models_enabled: null
+        litellm_models_enabled: provider?.litellm_models_enabled ?? null,
+        litellm_models_chat_agent: provider?.litellm_models_chat_agent ?? null
       });
       // Refresh the LLM providers list
       const response = await docRouterAccountApi.listLLMProviders();
@@ -95,11 +99,13 @@ const LLMManager: React.FC = () => {
   };
 
   const handleToggleProvider = async (providerName: string, enabled: boolean) => {
+    const provider = llmProviders.find(p => p.name === providerName);
     try {
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled,
-        token: null,
-        litellm_models_enabled: null
+        token: provider?.token ?? null,
+        litellm_models_enabled: provider?.litellm_models_enabled ?? null,
+        litellm_models_chat_agent: provider?.litellm_models_chat_agent ?? null
       });
       // Refresh the LLM providers list
       const response = await docRouterAccountApi.listLLMProviders();
@@ -118,11 +124,14 @@ const LLMManager: React.FC = () => {
       const updatedModels = enabled
         ? [...provider.litellm_models_enabled, model]
         : provider.litellm_models_enabled.filter(m => m !== model);
+      const chatAgent = provider.litellm_models_chat_agent ?? [];
+      const updatedChatAgent = chatAgent.filter(m => updatedModels.includes(m));
 
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled: provider.enabled,
         token: provider.token,
-        litellm_models_enabled: updatedModels
+        litellm_models_enabled: updatedModels,
+        litellm_models_chat_agent: updatedChatAgent
       });
       // Refresh the LLM providers list
       const response = await docRouterAccountApi.listLLMProviders();

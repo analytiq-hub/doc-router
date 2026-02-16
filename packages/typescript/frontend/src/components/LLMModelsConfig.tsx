@@ -53,11 +53,14 @@ const LLMModelsConfig: React.FC = () => {
       const updatedModels = enabled
         ? [...provider.litellm_models_enabled, model]
         : provider.litellm_models_enabled.filter(m => m !== model);
+      const chatAgent = provider.litellm_models_chat_agent ?? [];
+      const updatedChatAgent = chatAgent.filter(m => updatedModels.includes(m));
 
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled: provider.enabled,
         token: provider.token,
-        litellm_models_enabled: updatedModels
+        litellm_models_enabled: updatedModels,
+        litellm_models_chat_agent: updatedChatAgent
       });
 
       // Refresh providers data
