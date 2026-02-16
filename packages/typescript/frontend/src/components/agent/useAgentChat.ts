@@ -722,7 +722,8 @@ export function useAgentChat(organizationId: string, documentId: string) {
   const loadModels = useCallback(async () => {
     try {
       const { data } = await apiClient.get<{ models: string[] }>(
-        `/v0/orgs/${organizationId}/llm/models`
+        `/v0/orgs/${organizationId}/llm/models`,
+        { params: { chat_only: true } }
       );
       setAvailableModels(data.models ?? []);
       if (data.models?.length && !data.models.includes(model)) {

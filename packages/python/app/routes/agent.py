@@ -193,6 +193,11 @@ async def post_chat(
     the response includes turn_id and tool_calls; use POST .../chat/approve to submit approvals.
     When stream=True, returns SSE stream of thinking, text_chunk, and done events.
     """
+    if ad.llm.is_embedding_model(request.model):
+        raise HTTPException(
+            status_code=400,
+            detail="Embedding models are not allowed for the chat agent. Please select a chat model.",
+        )
     analytiq_client = ad.common.get_analytiq_client()
     doc = await ad.common.doc.get_doc(analytiq_client, document_id, organization_id)
     if not doc:

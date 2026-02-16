@@ -517,6 +517,7 @@ async def test_embedding_model(
 @llm_router.get("/v0/orgs/{organization_id}/llm/models", response_model=ListOrgLLMModelsResponse)
 async def list_org_llm_models(
     organization_id: str,
+    chat_only: bool = Query(False, description="If true, return only chat models (exclude embedding models). Use for chat agent."),
     current_user: User = Depends(get_org_user)
 ):
     """List enabled LLM model names for the organization"""
@@ -534,6 +535,9 @@ async def list_org_llm_models(
         # Only return enabled models
         models = provider.get("litellm_models_enabled", [])
         model_names.extend(models)
+
+    if chat_only:
+        model_names = [m for m in model_names if ad.llm.is_chat_model(m)]
 
     return ListOrgLLMModelsResponse(models=model_names)
 
