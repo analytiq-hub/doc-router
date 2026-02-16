@@ -56,9 +56,9 @@ async def setup_llm_providers(analytiq_client):
                 provider_config = {**config}
                 update = True
             else:
-                # Merge config fields into provider_config, but preserve the token
+                # Merge config fields into provider_config, but preserve the token and user-set chat agent models
                 for key, value in config.items():
-                    if key not in ["token", "token_created_at"]:
+                    if key not in ["token", "token_created_at", "litellm_models_chat_agent"]:
                         if provider_config.get(key) != value:
                             provider_config[key] = value
                             update = True
@@ -147,6 +147,24 @@ async def setup_llm_providers(analytiq_client):
                 provider_config["litellm_models_enabled"] = models_ordered
                 update = True
 
+            # litellm_models_chat_agent: subset of litellm_models_available for agent chat
+            models_chat_agent = provider_config.get("litellm_models_chat_agent", [])
+            if not models_chat_agent and config.get("litellm_models_chat_agent"):
+                provider_config["litellm_models_chat_agent"] = config["litellm_models_chat_agent"]
+                models_chat_agent = config["litellm_models_chat_agent"]
+                update = True
+            for model in list(provider_config.get("litellm_models_chat_agent", [])):
+                if model not in provider_config["litellm_models_available"]:
+                    provider_config["litellm_models_chat_agent"].remove(model)
+                    update = True
+            models_chat_agent_ordered = sorted(
+                provider_config["litellm_models_chat_agent"],
+                key=lambda x: model_position.get(x, float("inf"))
+            )
+            if models_chat_agent_ordered != provider_config["litellm_models_chat_agent"]:
+                provider_config["litellm_models_chat_agent"] = models_chat_agent_ordered
+                update = True
+
             if update:
                 logger.info(f"Updating provider config for {provider}")
                 logger.info(f"Provider config: {provider_config}")
@@ -195,6 +213,10 @@ def get_llm_providers() -> dict:
                 "claude-sonnet-4-5-20250929",
                 "claude-opus-4-5-20251101"
                 ],
+            "litellm_models_chat_agent": [
+                "claude-sonnet-4-5-20250929",
+                "claude-opus-4-5-20251101"
+                ],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -205,6 +227,7 @@ def get_llm_providers() -> dict:
             "litellm_provider": "azure",
             "litellm_models_available": ["azure/gpt-4.1-nano"],
             "litellm_models_enabled": ["azure/gpt-4.1-nano"],
+            "litellm_models_chat_agent": [],
             "enabled": False,
             "token" : "",
             "token_created_at": None,
@@ -215,6 +238,7 @@ def get_llm_providers() -> dict:
             "litellm_provider": "azure_ai",
             "litellm_models_available": ["azure_ai/deepseek-v3"],
             "litellm_models_enabled": ["azure_ai/deepseek-v3"],
+            "litellm_models_chat_agent": ["azure_ai/deepseek-v3"],
             "enabled": False,
             "token" : "",
             "token_created_at": None,
@@ -233,6 +257,9 @@ def get_llm_providers() -> dict:
                 "anthropic.claude-3-5-sonnet-20240620-v1:0",
                 "us.anthropic.claude-sonnet-4-20250514-v1:0",
                 "us.anthropic.claude-opus-4-20250514-v1:0",
+                "us.anthropic.claude-opus-4-1-20250805-v1:0"
+            ],
+            "litellm_models_chat_agent": [
                 "us.anthropic.claude-opus-4-1-20250805-v1:0"
             ],
             "enabled": False,
@@ -255,6 +282,10 @@ def get_llm_providers() -> dict:
                 "gemini/gemini-3-flash-preview",
                 "gemini/gemini-3-pro-preview"
             ],
+            "litellm_models_chat_agent": [
+                "gemini/gemini-3-flash-preview",
+                "gemini/gemini-3-pro-preview"
+            ],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -265,6 +296,7 @@ def get_llm_providers() -> dict:
             "litellm_provider": "groq",
             "litellm_models_available": ["groq/deepseek-r1-distill-llama-70b"],
             "litellm_models_enabled": ["groq/deepseek-r1-distill-llama-70b"],
+            "litellm_models_chat_agent": [],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -275,6 +307,7 @@ def get_llm_providers() -> dict:
             "litellm_provider": "mistral",
             "litellm_models_available": ["mistral/mistral-tiny"],
             "litellm_models_enabled": ["mistral/mistral-tiny"],
+            "litellm_models_chat_agent": [],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -297,6 +330,9 @@ def get_llm_providers() -> dict:
                 "text-embedding-3-small",
                 "text-embedding-3-large"
             ],
+            "litellm_models_chat_agent": [
+                "gpt-5.2"
+            ],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -307,6 +343,7 @@ def get_llm_providers() -> dict:
             "litellm_provider": "openrouter",
             "litellm_models_available": ["openrouter/openai/gpt-5.2-chat"],
             "litellm_models_enabled": ["openrouter/openai/gpt-5.2-chat"],
+            "litellm_models_chat_agent": ["openrouter/openai/gpt-5.2-chat"],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -317,6 +354,7 @@ def get_llm_providers() -> dict:
             "litellm_provider": "vertex_ai",
             "litellm_models_available": ["gemini-1.5-flash"],
             "litellm_models_enabled": ["gemini-1.5-flash"],
+            "litellm_models_chat_agent": ["gemini-1.5-flash"],
             "enabled": False,
             "token" : "",
             "token_created_at": None,
@@ -327,6 +365,7 @@ def get_llm_providers() -> dict:
             "litellm_provider": "xai",
             "litellm_models_available": ["xai/grok-4-fast-reasoning"],
             "litellm_models_enabled": ["xai/grok-4-fast-reasoning"],
+            "litellm_models_chat_agent": ["xai/grok-4-fast-reasoning"],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -344,6 +383,18 @@ def get_supported_models() -> list[str]:
     llm_models = []
     for provider, config in llm_providers.items():
         llm_models.extend(config["litellm_models_enabled"])
+
+    return llm_models
+
+
+def get_chat_agent_models() -> list[str]:
+    """
+    Get the list of models enabled for the chat agent (subset of enabled per provider).
+    """
+    llm_providers = get_llm_providers()
+    llm_models = []
+    for provider, config in llm_providers.items():
+        llm_models.extend(config.get("litellm_models_chat_agent", config["litellm_models_enabled"]))
 
     return llm_models
 

@@ -363,6 +363,7 @@ export interface LLMProvider {
   litellm_provider: string;
   litellm_models_enabled: string[];
   litellm_models_available: string[];
+  litellm_models_chat_agent: string[];
   enabled: boolean;
   token: string | null;
   token_created_at: string | null;
@@ -374,6 +375,7 @@ export interface ListLLMProvidersResponse {
 
 export interface SetLLMProviderConfigRequest {
   litellm_models_enabled: string[] | null;
+  litellm_models_chat_agent: string[] | null;
   enabled: boolean | null;
   token: string | null;
 }

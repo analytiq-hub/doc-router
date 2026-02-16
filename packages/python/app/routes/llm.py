@@ -71,6 +71,7 @@ class LLMProvider(BaseModel):
     litellm_provider: str
     litellm_models_available: List[str]
     litellm_models_enabled: List[str]
+    litellm_models_chat_agent: List[str]
     enabled: bool = False
     token: str | None = None
     token_created_at: datetime | None = None
@@ -80,6 +81,7 @@ class ListLLMProvidersResponse(BaseModel):
 
 class SetLLMProviderConfigRequest(BaseModel):
     litellm_models_enabled: List[str] | None = None
+    litellm_models_chat_agent: List[str] | None = None
     enabled: bool | None = None
     token: str | None = None
 
@@ -529,11 +531,13 @@ async def list_org_llm_models(
     # Get all enabled providers
     providers = await cursor.to_list(length=None)
 
-    # Collect all enabled model names
+    # Collect model names: when chat_only (agent dropdown), use chat-agent list; else all enabled
     model_names = []
     for provider in providers:
-        # Only return enabled models
-        models = provider.get("litellm_models_enabled", [])
+        if chat_only:
+            models = provider.get("litellm_models_chat_agent", provider.get("litellm_models_enabled", []))
+        else:
+            models = provider.get("litellm_models_enabled", [])
         model_names.extend(models)
 
     if chat_only:
@@ -656,6 +660,7 @@ async def list_llm_providers(
             litellm_provider=provider["litellm_provider"],
             litellm_models_enabled=provider["litellm_models_enabled"],
             litellm_models_available=provider["litellm_models_available"],
+            litellm_models_chat_agent=provider.get("litellm_models_chat_agent", provider["litellm_models_enabled"]),
             enabled=provider["enabled"],
             token=token,
             token_created_at=provider["token_created_at"]
@@ -697,6 +702,17 @@ async def set_llm_provider_config(
     
         # Save the reordered list
         elem["litellm_models_enabled"] = litellm_models_enabled_ordered
+
+    if request.litellm_models_chat_agent is not None:
+        if len(request.litellm_models_chat_agent) > 0:
+            for model in request.litellm_models_chat_agent:
+                if model not in elem["litellm_models_available"]:
+                    raise HTTPException(status_code=400, detail=f"Model '{model}' is not available for provider '{provider_name}'")
+        litellm_models_chat_agent_ordered = sorted(
+            request.litellm_models_chat_agent,
+            key=lambda x: elem["litellm_models_available"].index(x) if x in elem["litellm_models_available"] else float("inf")
+        )
+        elem["litellm_models_chat_agent"] = litellm_models_chat_agent_ordered
 
     if request.enabled is not None:
         elem["enabled"] = request.enabled

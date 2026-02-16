@@ -57,6 +57,8 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
     fetchData();
   }, [providerName, docRouterAccountApi]);
 
+  const chatAgentModels = provider?.litellm_models_chat_agent ?? provider?.litellm_models_enabled ?? [];
+
   const handleToggleModel = async (model: string, enabled: boolean) => {
     if (!provider) return;
 
@@ -68,7 +70,8 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled: provider.enabled,
         token: provider.token,
-        litellm_models_enabled: updatedModels
+        litellm_models_enabled: updatedModels,
+        litellm_models_chat_agent: chatAgentModels.filter(m => updatedModels.includes(m))
       });
 
       // Refresh provider data
@@ -80,6 +83,36 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
     } catch (error) {
       console.error('Error toggling model:', error);
       setError('An error occurred while updating the model.');
+    }
+  };
+
+  const handleToggleChatAgent = async (model: string, enabled: boolean) => {
+    if (!provider) return;
+
+    try {
+      const updatedChatAgent = enabled
+        ? [...chatAgentModels, model]
+        : chatAgentModels.filter(m => m !== model);
+      if (updatedChatAgent.some(m => !provider.litellm_models_enabled.includes(m))) {
+        setError('Chat agent models must be a subset of enabled models.');
+        return;
+      }
+
+      await docRouterAccountApi.setLLMProviderConfig(providerName, {
+        enabled: provider.enabled,
+        token: provider.token,
+        litellm_models_enabled: provider.litellm_models_enabled,
+        litellm_models_chat_agent: updatedChatAgent
+      });
+
+      const response = await docRouterAccountApi.listLLMProviders();
+      const updatedProvider = response.providers.find(p => p.name === providerName);
+      if (updatedProvider) {
+        setProvider(updatedProvider);
+      }
+    } catch (err) {
+      console.error('Error toggling chat agent model:', err);
+      setError('An error occurred while updating the chat agent model.');
     }
   };
 
@@ -103,7 +136,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
     setSelectedEmbeddingModel('');
   };
 
-  // Chat models columns (with test button)
+  // Chat models columns (with test button and chat agent toggle)
   const chatModelColumns: GridColDef[] = [
     { field: 'litellm_model', headerName: 'Model Name', flex: 1, minWidth: 150 },
     {
@@ -117,6 +150,21 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
           onChange={(e) => handleToggleModel(params.row.litellm_model, e.target.checked)}
           size="small"
           color="primary"
+        />
+      ),
+    },
+    {
+      field: 'chat_agent',
+      headerName: 'Chat Agent',
+      width: 120,
+      minWidth: 120,
+      renderCell: (params: GridRenderCellParams) => (
+        <Switch
+          checked={chatAgentModels.includes(params.row.litellm_model)}
+          onChange={(e) => handleToggleChatAgent(params.row.litellm_model, e.target.checked)}
+          size="small"
+          color="secondary"
+          disabled={!provider?.litellm_models_enabled.includes(params.row.litellm_model)}
         />
       ),
     },
@@ -203,6 +251,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
       {chatModelRows.length > 0 && (
         <div className="mb-6">
           <h3 className="text-lg font-semibold mb-2">Chat Models</h3>
+          <p className="text-sm text-gray-600 mb-2">Use <strong>Chat Agent</strong> to allow a model in the document chat agent (conversation UI). Only enabled models can be selected.</p>
           <div className="w-full overflow-x-auto">
             <DataGrid
               rows={chatModelRows}
