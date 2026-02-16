@@ -26,7 +26,7 @@ export default function FormioProvider({
     // Only initialize Formio on the client side
     const initializeFormio = async () => {
       const { Formio, Templates } = await import("@tsed/react-formio");
-      const tailwindModule = await import("@/lib/tailwind-formio-loader.cjs");
+      const tailwindModule = await import("@tsed/tailwind-formio");
       const tailwind = tailwindModule.default ?? tailwindModule;
 
       // Initialize Formio with Tailwind (uses Boxicons by default)
