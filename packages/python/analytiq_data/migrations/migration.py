@@ -1973,6 +1973,22 @@ class AddQueueAndCollectionIndexes(Migration):
             )
             logger.info("Created docs org_upload_date_idx index")
 
+            # 4. llm_runs: compound index for fallback lookup
+            #    find_one({document_id, prompt_id}, sort: {prompt_version: -1})
+            await db.llm_runs.create_index(
+                [("document_id", 1), ("prompt_id", 1), ("prompt_version", -1)],
+                name="doc_prompt_version_idx",
+                background=True,
+            )
+            # llm_runs: compound index for exact revision lookup
+            #    find_one({document_id, prompt_revid}, sort: {_id: -1})
+            await db.llm_runs.create_index(
+                [("document_id", 1), ("prompt_revid", 1)],
+                name="doc_prompt_revid_idx",
+                background=True,
+            )
+            logger.info("Created llm_runs indexes")
+
             return True
         except Exception as e:
             logger.error(f"Failed to create indexes: {e}")
@@ -1990,7 +2006,9 @@ class AddQueueAndCollectionIndexes(Migration):
             await db.document_index.drop_index("kb_id_document_id_unique_idx")
             await db.document_index.drop_index("document_id_idx")
             await db.docs.drop_index("org_upload_date_idx")
-            logger.info("Successfully removed queue/document_index/docs indexes")
+            await db.llm_runs.drop_index("doc_prompt_version_idx")
+            await db.llm_runs.drop_index("doc_prompt_revid_idx")
+            logger.info("Successfully removed queue/document_index/docs/llm_runs indexes")
             return True
         except Exception as e:
             logger.error(f"Failed to remove indexes: {e}")
