@@ -1921,6 +1921,82 @@ class AddWebhookDeliveriesIndexes(Migration):
             logger.error(f"Failed to remove webhook_deliveries indexes: {e}")
             return False
 
+
+class AddQueueAndCollectionIndexes(Migration):
+    """Add indexes for queue collections, document_index, and docs to optimize common queries."""
+
+    def __init__(self):
+        super().__init__(
+            description="Add indexes for queue polling, document_index lookups, and docs listing"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            # 1. Queue collections: compound index on {status, created_at} for
+            #    find_one_and_update({status: "pending"}, sort: {created_at: 1})
+            #    Include static queues + any dynamic queues.kb_index_* collections
+            queue_collections = ["queues.ocr", "queues.llm", "queues.webhook"]
+            all_collections = await db.list_collection_names()
+            for coll_name in all_collections:
+                if coll_name.startswith("queues.kb_index_") and coll_name not in queue_collections:
+                    queue_collections.append(coll_name)
+            for coll_name in queue_collections:
+                await db[coll_name].create_index(
+                    [("status", 1), ("created_at", 1)],
+                    name="status_created_at_idx",
+                    background=True,
+                )
+            logger.info("Created queue indexes for %s", queue_collections)
+
+            # 2. document_index: compound unique index on {kb_id, document_id}
+            #    Used by upserts, deletes, find_one lookups
+            await db.document_index.create_index(
+                [("kb_id", 1), ("document_id", 1)],
+                unique=True,
+                name="kb_id_document_id_unique_idx",
+                background=True,
+            )
+            # Also index document_id alone for cascade-delete lookups
+            await db.document_index.create_index(
+                [("document_id", 1)],
+                name="document_id_idx",
+                background=True,
+            )
+            logger.info("Created document_index indexes")
+
+            # 3. docs: compound index on {organization_id, upload_date desc}
+            #    Used by paginated listing: find({organization_id: ...}).sort("upload_date", -1)
+            await db.docs.create_index(
+                [("organization_id", 1), ("upload_date", -1)],
+                name="org_upload_date_idx",
+                background=True,
+            )
+            logger.info("Created docs org_upload_date_idx index")
+
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create indexes: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            all_collections = await db.list_collection_names()
+            queue_collections = [c for c in all_collections if c.startswith("queues.")]
+            for coll_name in queue_collections:
+                try:
+                    await db[coll_name].drop_index("status_created_at_idx")
+                except Exception:
+                    pass  # Collection may not exist or index not present
+            await db.document_index.drop_index("kb_id_document_id_unique_idx")
+            await db.document_index.drop_index("document_id_idx")
+            await db.docs.drop_index("org_upload_date_idx")
+            logger.info("Successfully removed queue/document_index/docs indexes")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to remove indexes: {e}")
+            return False
+
+
 # List of all migrations in order
 MIGRATIONS = [
     OcrKeyMigration(),
@@ -1948,6 +2024,7 @@ MIGRATIONS = [
     UpgradeTokens(),
     AddAccessTokenUniquenessIndex(),
     AddWebhookDeliveriesIndexes(),
+    AddQueueAndCollectionIndexes(),
     # Add more migrations here
 ]
 
