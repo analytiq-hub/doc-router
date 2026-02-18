@@ -1989,6 +1989,33 @@ class AddQueueAndCollectionIndexes(Migration):
             )
             logger.info("Created llm_runs indexes")
 
+            # 5. knowledge_bases: compound index for reconciliation polling
+            #    find({reconcile_enabled: true, status: {$in: [...]}})
+            await db.knowledge_bases.create_index(
+                [("reconcile_enabled", 1), ("status", 1)],
+                name="reconcile_status_idx",
+                background=True,
+            )
+            logger.info("Created knowledge_bases reconcile_status_idx index")
+
+            # 6. prompt_revisions: compound index for listing latest revision per prompt
+            #    aggregate([{$match: {prompt_id: {$in: [...]}}}, {$sort: {_id: -1}}, {$group: ...}])
+            await db.prompt_revisions.create_index(
+                [("prompt_id", 1), ("_id", -1)],
+                name="prompt_id_latest_idx",
+                background=True,
+            )
+            logger.info("Created prompt_revisions prompt_id_latest_idx index")
+
+            # 7. schema_revisions: compound index for listing latest revision per schema
+            #    aggregate([{$match: {schema_id: {$in: [...]}}}, {$sort: {_id: -1}}, {$group: ...}])
+            await db.schema_revisions.create_index(
+                [("schema_id", 1), ("_id", -1)],
+                name="schema_id_latest_idx",
+                background=True,
+            )
+            logger.info("Created schema_revisions schema_id_latest_idx index")
+
             return True
         except Exception as e:
             logger.error(f"Failed to create indexes: {e}")
@@ -2008,7 +2035,10 @@ class AddQueueAndCollectionIndexes(Migration):
             await db.docs.drop_index("org_upload_date_idx")
             await db.llm_runs.drop_index("doc_prompt_version_idx")
             await db.llm_runs.drop_index("doc_prompt_revid_idx")
-            logger.info("Successfully removed queue/document_index/docs/llm_runs indexes")
+            await db.knowledge_bases.drop_index("reconcile_status_idx")
+            await db.prompt_revisions.drop_index("prompt_id_latest_idx")
+            await db.schema_revisions.drop_index("schema_id_latest_idx")
+            logger.info("Successfully removed all added indexes")
             return True
         except Exception as e:
             logger.error(f"Failed to remove indexes: {e}")
