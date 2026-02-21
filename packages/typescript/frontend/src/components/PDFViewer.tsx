@@ -142,7 +142,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     };
   }, [documentPage?.pdfContent, documentPage?.loading, documentPage?.error, documentPage?.documentName]);
 
-  // When no context (e.g. used outside document page), fetch PDF ourselves.
+  // When no context (e.g. used outside document page), fetch PDF and set blob URL. Single parse by <Document>; onLoadError on failure.
   useEffect(() => {
     if (documentPage != null) return;
     let isMounted = true;
@@ -152,7 +152,6 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
         const blob = new Blob([response.content], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         if (isMounted) {
-          await pdfjs.getDocument({ data: response.content }).promise;
           setFile(url);
           fileRef.current = url;
           setFileName(response.document_name);

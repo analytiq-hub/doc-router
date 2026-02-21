@@ -37,6 +37,7 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const completionFetchStartedRef = useRef(false);
   const api = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
 
   const fetchDocument = useCallback(async () => {
@@ -75,8 +76,10 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
+      completionFetchStartedRef.current = false;
       return;
     }
+    completionFetchStartedRef.current = false;
     pollRef.current = setInterval(async () => {
       try {
         const { data: meta } = await apiClient.get<{ state: string; document_name: string }>(
@@ -85,6 +88,8 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
         setDocumentState(meta.state ?? null);
         setDocumentName(meta.document_name ?? null);
         if (meta.state === 'llm_completed' || meta.state === 'ocr_completed') {
+          if (completionFetchStartedRef.current) return;
+          completionFetchStartedRef.current = true;
           if (pollRef.current) {
             clearInterval(pollRef.current);
             pollRef.current = null;
@@ -102,6 +107,7 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
         clearInterval(pollRef.current);
         pollRef.current = null;
       }
+      completionFetchStartedRef.current = false;
     };
   }, [documentState, documentId, organizationId, api]);
 
