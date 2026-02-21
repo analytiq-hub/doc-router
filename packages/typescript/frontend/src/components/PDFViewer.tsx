@@ -113,7 +113,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const containerRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<string | null>(null);
 
-  // When DocumentPageContext provides PDF, use it (single fetch for the whole page).
+  // When DocumentPageContext provides PDF, set blob URL directly. react-pdf <Document> will parse once; onLoadError handles invalid PDFs.
   useEffect(() => {
     if (!documentPage) return;
     if (documentPage.error) {
@@ -125,32 +125,15 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       setLoading(documentPage.loading);
       return;
     }
-    let isMounted = true;
     const content = documentPage.pdfContent;
     const blob = new Blob([content], { type: 'application/pdf' });
     const url = URL.createObjectURL(blob);
-    // Pass a copy to pdf.js so the worker can transfer it without detaching the buffer used by the Blob
-    const contentForWorker = content.slice(0);
-    pdfjs.getDocument({ data: contentForWorker }).promise.then(() => {
-      if (isMounted) {
-        setFile(url);
-        fileRef.current = url;
-        setFileName(documentPage.documentName ?? '');
-        setFileSize(blob.size);
-        setLoading(false);
-      } else {
-        URL.revokeObjectURL(url);
-      }
-    }).catch((err) => {
-      console.error('Error loading PDF:', err);
-      if (isMounted) {
-        setError('Failed to load PDF. Please try again.');
-        setLoading(false);
-      }
-      URL.revokeObjectURL(url);
-    });
+    setFile(url);
+    fileRef.current = url;
+    setFileName(documentPage.documentName ?? '');
+    setFileSize(blob.size);
+    setLoading(false);
     return () => {
-      isMounted = false;
       if (fileRef.current) {
         URL.revokeObjectURL(fileRef.current);
         fileRef.current = null;
@@ -275,22 +258,15 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
   const [originalRotation, setOriginalRotation] = useState(0);
 
-  const handleLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
+  const handleLoadSuccess = (pdf: pdfjs.PDFDocumentProxy) => {
+    setNumPages(pdf.numPages);
     setPageNumber(1);
-    pageRefs.current = new Array(numPages).fill(null);
-    
-    pdfjs.getDocument(file!).promise.then((pdf) => {
-      extractDocumentProperties(pdf);
-      
-      // Get the first page and check its rotation
-      pdf.getPage(1).then((page) => {
-        const viewport = page.getViewport({ scale: 1 });
-        setPdfDimensions({ width: viewport.width, height: viewport.height });
-        
-        // Store the original rotation
-        setOriginalRotation(page.rotate || 0);
-      });
+    pageRefs.current = new Array(pdf.numPages).fill(null);
+    extractDocumentProperties(pdf);
+    pdf.getPage(1).then((page) => {
+      const viewport = page.getViewport({ scale: 1 });
+      setPdfDimensions({ width: viewport.width, height: viewport.height });
+      setOriginalRotation(page.rotate || 0);
     });
   };
 
@@ -583,6 +559,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     };
 
     const fetchDocumentState = async (): Promise<string | null> => {
+      if (documentPage?.documentState != null) return documentPage.documentState;
       try {
         const list = await docRouterOrgApi.listDocuments({ limit: 100, skip: 0 });
         const doc = list.documents.find((d) => d.id === id);
@@ -620,7 +597,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [showBoundingBoxes, ocrBlocksForBoxes, fileName, id, docRouterOrgApi]);
+  }, [showBoundingBoxes, ocrBlocksForBoxes, fileName, id, docRouterOrgApi, documentPage?.documentState]);
 
   const handleDownloadOcrText = async () => {
     if (!isOCRSupported(fileName)) {

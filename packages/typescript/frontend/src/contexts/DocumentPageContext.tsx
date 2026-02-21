@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { DocRouterOrgApi } from '@/utils/api';
+import { DocRouterOrgApi, apiClient } from '@/utils/api';
 
 export interface DocumentPageData {
   /** PDF file content; null until loaded or if failed. */
@@ -68,7 +68,7 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
     fetchDocument();
   }, [fetchDocument]);
 
-  // Poll state while processing so chat/sidebar see completion without each polling separately
+  // Poll state via metadata-only endpoint (no PDF binary). When completed, fetch full document once.
   useEffect(() => {
     if (documentState !== 'ocr_processing' && documentState !== 'llm_processing') {
       if (pollRef.current) {
@@ -79,15 +79,19 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
     }
     pollRef.current = setInterval(async () => {
       try {
-        const response = await api.getDocument({ documentId, fileType: 'pdf' });
-        setDocumentState(response.state ?? null);
-        if (response.state === 'llm_completed' || response.state === 'ocr_completed') {
-          setPdfContent(response.content);
-          setDocumentName(response.document_name ?? null);
+        const { data: meta } = await apiClient.get<{ state: string; document_name: string }>(
+          `/v0/orgs/${organizationId}/documents/${documentId}/metadata`
+        );
+        setDocumentState(meta.state ?? null);
+        setDocumentName(meta.document_name ?? null);
+        if (meta.state === 'llm_completed' || meta.state === 'ocr_completed') {
           if (pollRef.current) {
             clearInterval(pollRef.current);
             pollRef.current = null;
           }
+          const response = await api.getDocument({ documentId, fileType: 'pdf' });
+          setPdfContent(response.content);
+          setDocumentName(response.document_name ?? null);
         }
       } catch {
         // keep polling on error
@@ -99,7 +103,7 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
         pollRef.current = null;
       }
     };
-  }, [documentState, documentId, api]);
+  }, [documentState, documentId, organizationId, api]);
 
   const refresh = useCallback(async () => {
     setLoading(true);

@@ -374,6 +374,38 @@ async def list_documents(
         skip=skip
     )
 
+@documents_router.get("/v0/orgs/{organization_id}/documents/{document_id}/metadata", response_model=DocumentMetadata)
+async def get_document_metadata(
+    organization_id: str,
+    document_id: str,
+    current_user: User = Depends(get_org_user)
+):
+    """Get document metadata (including state) without downloading file content. Use for polling during processing."""
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    document = await db.docs.find_one({
+        "_id": ObjectId(document_id),
+        "organization_id": organization_id
+    })
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    try:
+        doc_type = get_mime_type(document["user_file_name"])
+    except Exception:
+        doc_type = None
+    return DocumentMetadata(
+        id=str(document["_id"]),
+        pdf_id=document.get("pdf_id", document["document_id"]),
+        document_name=document["user_file_name"],
+        upload_date=document["upload_date"].replace(tzinfo=UTC),
+        uploaded_by=document["uploaded_by"],
+        state=document.get("state", ""),
+        tag_ids=document.get("tag_ids", []),
+        type=doc_type,
+        metadata=document.get("metadata", {}),
+    )
+
+
 @documents_router.get("/v0/orgs/{organization_id}/documents/{document_id}", response_model=DocumentResponse)
 async def get_document(
     organization_id: str,

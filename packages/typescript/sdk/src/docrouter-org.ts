@@ -4,6 +4,7 @@ import {
   UploadDocumentsResponse,
   ListDocumentsResponse,
   GetDocumentResponse,
+  GetDocumentMetadataResponse,
   GetOCRMetadataResponse,
   RunLLMResponse,
   GetLLMResultResponse,
@@ -189,6 +190,13 @@ export class DocRouterOrg {
       metadata: response.metadata,
       content: bytes.buffer
     };
+  }
+
+  async getDocumentMetadata(params: { documentId: string }): Promise<GetDocumentMetadataResponse> {
+    const { documentId } = params;
+    return this.http.get<GetDocumentMetadataResponse>(
+      `/v0/orgs/${this.organizationId}/documents/${documentId}/metadata`
+    );
   }
 
   async updateDocument(params: { documentId: string; documentName?: string; tagIds?: string[]; metadata?: Record<string, string>; }) {

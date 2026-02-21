@@ -137,6 +137,18 @@ export interface GetDocumentParams {
   fileType: string;
 }
 
+export interface GetDocumentMetadataResponse {
+  id: string;
+  pdf_id: string;
+  document_name: string;
+  upload_date: string;
+  uploaded_by: string;
+  state: string;
+  tag_ids: string[];
+  type: string | null;
+  metadata: Record<string, string>;
+}
+
 export interface GetDocumentResponse {
   id: string;
   pdf_id: string;
