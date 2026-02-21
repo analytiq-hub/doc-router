@@ -769,13 +769,7 @@ export function useAgentChat(organizationId: string, documentId: string) {
     setAutoApprovedTools((prev) => (prev.includes(toolName) ? prev : [...prev, toolName]));
   }, []);
 
-  useEffect(() => {
-    loadThreads();
-  }, [loadThreads]);
-
-  useEffect(() => {
-    loadTools();
-  }, [loadTools]);
+  // Defer threads and tools: loaded on first use (thread dropdown open / tools dropdown open), not on mount
 
   const state: AgentChatState = {
     messages,

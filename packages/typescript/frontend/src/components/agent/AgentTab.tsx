@@ -88,6 +88,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
     loadTools,
     setModel,
     loadModels,
+    loadThreads,
     loadThread,
     deleteThread,
     startNewChat,
@@ -138,9 +139,10 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
     handleDictationEnd
   );
 
+  // Defer models/tools until user opens the dropdowns (avoids blocking initial page Finish)
   useEffect(() => {
-    loadModels();
-  }, [loadModels]);
+    if (showModelDropUp) loadModels();
+  }, [showModelDropUp, loadModels]);
 
   useEffect(() => {
     if (showToolsDropUp) loadTools();
@@ -393,6 +395,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
             onNewChat={startNewChat}
             onDeleteThread={deleteThread}
             newChatLabel="New chat"
+            onOpen={loadThreads}
         />
       </div>
 

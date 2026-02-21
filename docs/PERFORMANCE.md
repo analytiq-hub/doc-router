@@ -84,8 +84,8 @@ From network waterfalls (87 requests, ~6.44 MB transferred):
   - Consolidate org-scoped list fetches (knowledge-bases, forms, prompts, schemas, tags, docs, dashboard) so they are not triggered twice with different `_rsc` for the same data.
 - **Fix duplicate organizations fetch**
   - In `OrganizationContext`, move the in-flight guard (`fetchInFlightRef`) to be set synchronously before the `async` call (before `await`), not inside a closure. In React 18 Strict Mode, effects fire twice; a `useRef` guard set inside an async callback can be seen as `false` by the second invocation. Setting it synchronously at the top of the effect body prevents this.
-- **Defer non-critical API calls**
-  - Load chat threads/tools/LLM models after first paint or when the user opens the chat panel, so they don't stretch the "Finish" time of the initial page. `AgentTab` is already lazy-loaded via `dynamic()`, but the API calls inside it fire immediately on mount regardless of whether the panel is visible.
+- **Defer non-critical API calls** ✅ **Done**
+  - Chat panel is visible immediately. Threads, tools, and models are loaded on first use: threads when the user opens the thread dropdown, tools when they open the tools dropdown, models when they open the model dropdown. This avoids threads/tools/models requests on initial page load so they don't stretch "Finish" time.
 
 ### 3. Infrastructure
 
@@ -107,4 +107,4 @@ From network waterfalls (87 requests, ~6.44 MB transferred):
 - [x] Frontend: parallelize `listPrompts` + `getLLMResult` in `PDFExtractionSidebar` instead of sequential waterfall.
 - [x] Frontend: remove `llmResults`/`loadingPrompts`/`failedPrompts` from `fetchData` effect dependency array; use refs for guards.
 - [x] Frontend: fix `fetchInFlightRef` guard in `OrganizationContext` to be set synchronously (before `await`) to survive React 18 Strict Mode double-invocation.
-- [ ] Frontend: defer `AgentTab` API calls (threads, tools, models) until the chat panel is first expanded.
+- [x] Frontend: defer `AgentTab` API calls (threads, tools, models) until the chat panel is first expanded.

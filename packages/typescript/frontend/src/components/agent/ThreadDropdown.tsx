@@ -15,6 +15,8 @@ interface ThreadDropdownProps {
   onDeleteThread: (id: string) => void;
   /** Optional trigger label when no thread selected */
   newChatLabel?: string;
+  /** Called when the dropdown is opened (e.g. to load threads on first open) */
+  onOpen?: () => void;
 }
 
 function relativeTime(iso: string): string {
@@ -83,6 +85,7 @@ export default function ThreadDropdown({
   onNewChat,
   onDeleteThread,
   newChatLabel = 'New chat',
+  onOpen,
 }: ThreadDropdownProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -103,7 +106,10 @@ export default function ThreadDropdown({
     <div className="relative" ref={ref}>
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          if (!open) onOpen?.();
+          setOpen((o) => !o);
+        }}
         className="flex items-center gap-1.5 px-2 py-1.5 rounded border border-gray-300 bg-white text-sm text-gray-700 hover:bg-gray-50 min-w-0 max-w-[200px]"
         title="Conversation history"
       >
