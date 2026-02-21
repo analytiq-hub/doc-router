@@ -37,6 +37,7 @@ import CheckIcon from '@mui/icons-material/Check';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import CropFreeIcon from '@mui/icons-material/CropFree';
 import { OCRProvider } from '@/contexts/OCRContext';
+import { useDocumentPage } from '@/contexts/DocumentPageContext';
 import type { OCRBlock } from '@docrouter/sdk';
 import type { HighlightInfo } from '@/types/index';
 
@@ -99,6 +100,7 @@ interface PDFViewerProps {
 }
 
 const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes }: PDFViewerProps) => {
+  const documentPage = useDocumentPage();
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -109,68 +111,91 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const [rotation, setRotation] = useState(0);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-  
-  // Use a fileRef to store the file URL, which doesn't trigger re-renders when it changes.
-  // The cleanup function now uses this ref to revoke the URL.
-  //This approach resolves the dependency warning without causing unnecessary re-renders.
   const fileRef = useRef<string | null>(null);
 
-  // This is a tricky effect hook. It needs to clean up
-  // the file URL when the component unmounts. The hook cleanup can be called while
-  // the hook is still running, for example, before the axios request completes.
-  // We handle this by checking if isMounted is true before setting the file URL.
+  // When DocumentPageContext provides PDF, use it (single fetch for the whole page).
   useEffect(() => {
+    if (!documentPage) return;
+    if (documentPage.error) {
+      setError(documentPage.error);
+      setLoading(false);
+      return;
+    }
+    if (!documentPage.pdfContent) {
+      setLoading(documentPage.loading);
+      return;
+    }
     let isMounted = true;
+    const content = documentPage.pdfContent;
+    const blob = new Blob([content], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    // Pass a copy to pdf.js so the worker can transfer it without detaching the buffer used by the Blob
+    const contentForWorker = content.slice(0);
+    pdfjs.getDocument({ data: contentForWorker }).promise.then(() => {
+      if (isMounted) {
+        setFile(url);
+        fileRef.current = url;
+        setFileName(documentPage.documentName ?? '');
+        setFileSize(blob.size);
+        setLoading(false);
+      } else {
+        URL.revokeObjectURL(url);
+      }
+    }).catch((err) => {
+      console.error('Error loading PDF:', err);
+      if (isMounted) {
+        setError('Failed to load PDF. Please try again.');
+        setLoading(false);
+      }
+      URL.revokeObjectURL(url);
+    });
+    return () => {
+      isMounted = false;
+      if (fileRef.current) {
+        URL.revokeObjectURL(fileRef.current);
+        fileRef.current = null;
+      }
+      setFile(null);
+    };
+  }, [documentPage?.pdfContent, documentPage?.loading, documentPage?.error, documentPage?.documentName]);
 
+  // When no context (e.g. used outside document page), fetch PDF ourselves.
+  useEffect(() => {
+    if (documentPage != null) return;
+    let isMounted = true;
     const loadPDF = async () => {
       try {
-        const response = await docRouterOrgApi.getDocument(
-          {
-            documentId: id,
-            fileType: "pdf"
-          }
-        );
-        
-        // Create a blob from the array buffer
+        const response = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
         const blob = new Blob([response.content], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
-
         if (isMounted) {
-          // Load the PDF data directly instead of using the blob URL
-          const loadingTask = pdfjs.getDocument({ data: response.content });
-          await loadingTask.promise;  // Wait for PDF to load before continuing
-          
-          setFile(url);  // Keep the URL for download/print functionality
+          await pdfjs.getDocument({ data: response.content }).promise;
+          setFile(url);
           fileRef.current = url;
-          setLoading(false);
-
-          // Use metadata from the response
           setFileName(response.document_name);
           setFileSize(blob.size);
+          setLoading(false);
         } else {
-          if (url) {
-            URL.revokeObjectURL(url);
-          }
+          URL.revokeObjectURL(url);
         }
-      } catch (error) {
-        console.error('Error loading PDF:', error);
+      } catch (err) {
+        console.error('Error loading PDF:', err);
         if (isMounted) {
           setError('Failed to load PDF. Please try again.');
           setLoading(false);
         }
       }
     };
-
     loadPDF();
-
     return () => {
       isMounted = false;
       if (fileRef.current) {
         URL.revokeObjectURL(fileRef.current);
+        fileRef.current = null;
       }
       setFile(null);
     };
-  }, [id, organizationId, docRouterOrgApi]);
+  }, [documentPage, id, docRouterOrgApi]);
 
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
 

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { DocRouterAccountApi } from '@/utils/api'
 import { Organization } from '@docrouter/sdk'
 import { useAppSession } from '@/contexts/AppSessionContext'
@@ -34,6 +34,7 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const pathname = usePathname()
   const { session, status } = useAppSession()
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), [])
+  const fetchInFlightRef = useRef(false)
 
   // Extract organization ID from pathname if we're on an organization-specific page
   const getOrganizationIdFromPath = useCallback(() => {
@@ -52,22 +53,21 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     const fetchOrganizations = async () => {
       if (status === 'loading') return;
 
-      try {
-        const appSession = session as AppSession | null;
-        if (!appSession?.user?.id) {
-          console.warn('No user ID found in session');
-          setIsLoading(false);
-          return;
-        }
+      const appSession = session as AppSession | null;
+      if (!appSession?.user?.id) {
+        console.warn('No user ID found in session');
+        setIsLoading(false);
+        return;
+      }
 
-        // Fetch all organizations the user is a member of
+      if (fetchInFlightRef.current) return;
+      fetchInFlightRef.current = true;
+
+      try {
         const response = await docRouterAccountApi.listOrganizations({ userId: appSession.user.id, limit: 50 });
 
-        // Filtering logic based on page and user role
         let filtered: Organization[] = response.organizations;
         const isSysAdmin = appSession.user.role === 'admin';
-
-        // If on settings/organizations page or a specific org settings page
         const isSettingsPage = pathname.startsWith('/settings/organizations');
         if (isSettingsPage) {
           if (isSysAdmin) {
@@ -78,14 +78,14 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             );
           }
         }
-        // Otherwise, show all organizations where user is a member
         setOrganizations(filtered);
       } catch (error) {
         console.error('Failed to fetch organizations:', error);
       } finally {
         setIsLoading(false);
+        fetchInFlightRef.current = false;
       }
-    }
+    };
 
     fetchOrganizations();
   }, [pathname, session, status, docRouterAccountApi]);

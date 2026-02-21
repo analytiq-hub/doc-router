@@ -11,6 +11,7 @@ import {
 import { DocRouterOrgApi } from '@/utils/api';
 import type { Prompt } from '@docrouter/sdk';
 import { useOCR, OCRProvider } from '@/contexts/OCRContext';
+import { useDocumentPage } from '@/contexts/DocumentPageContext';
 import type { GetLLMResultResponse } from '@docrouter/sdk';
 import type { HighlightInfo } from '@/contexts/OCRContext';
 
@@ -31,6 +32,7 @@ interface EditingState {
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
+  const documentPage = useDocumentPage();
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const { loadOCRBlocks, findBlocksWithContext } = useOCR();
   const [llmResults, setLlmResults] = useState<Record<string, GetLLMResultResponse>>({});
@@ -41,153 +43,110 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   const [failedPrompts, setFailedPrompts] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [editMode, setEditMode] = useState<boolean>(false);
-  const [documentState, setDocumentState] = useState<string | null>(null);
+  const [localDocumentState, setLocalDocumentState] = useState<string | null>(null);
+
+  const [localDocumentName, setLocalDocumentName] = useState<string | null>(null);
+  const documentState = documentPage?.documentState ?? localDocumentState;
+  const documentName = documentPage?.documentName ?? localDocumentName;
 
   useEffect(() => {
     const fetchData = async () => {
-      let fetchedState: string | null = null;
+      let fetchedState: string | null = documentPage?.documentState ?? null;
       try {
-        // Fetch document state to check if processing
-        try {
-          const docResponse = await docRouterOrgApi.getDocument({
-            documentId: id,
-            fileType: "pdf"
-          });
-          fetchedState = docResponse.state;
-          setDocumentState(fetchedState);
-        } catch (error) {
-          console.error('Error fetching document state:', error);
+        if (!documentPage) {
+          try {
+            const docResponse = await docRouterOrgApi.getDocument({
+              documentId: id,
+              fileType: 'pdf',
+            });
+            fetchedState = docResponse.state;
+            setLocalDocumentState(fetchedState);
+            setLocalDocumentName(docResponse.document_name ?? null);
+          } catch (error) {
+            console.error('Error fetching document state:', error);
+          }
         }
 
-        const promptsResponse = await docRouterOrgApi.listPrompts({document_id: id, limit: 100 });
+        const promptsResponse = await docRouterOrgApi.listPrompts({ document_id: id, limit: 100 });
         setMatchingPrompts(promptsResponse.prompts);
-        
-        // Fetch default prompt results (only if document is not still processing)
-        // Check state first to avoid unnecessary API calls
+
         const isProcessing = fetchedState === 'ocr_processing' || fetchedState === 'llm_processing';
         if (!isProcessing) {
           setLoadingPrompts(prev => new Set(prev).add('default'));
           try {
             const defaultResults = await docRouterOrgApi.getLLMResult({
-              documentId: id, 
+              documentId: id,
               promptRevId: 'default',
-              fallback: false
+              fallback: false,
             });
-            setLlmResults(prev => ({
-              ...prev,
-              'default': defaultResults
-            }));
-            setLoadingPrompts(prev => {
-              const next = new Set(prev);
-              next.delete('default');
-              return next;
-            });
+            setLlmResults(prev => ({ ...prev, 'default': defaultResults }));
+            setLoadingPrompts(prev => { const next = new Set(prev); next.delete('default'); return next; });
           } catch (error) {
-            // Only log as error if it's not a 404 (not found is expected if LLM hasn't run yet)
             const errorMessage = error instanceof Error ? error.message : String(error);
             const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404');
-            if (!isNotFound) {
-              console.error('Error fetching default results:', error);
-            }
-            // Mark as failed only if document is not processing
+            if (!isNotFound) console.error('Error fetching default results:', error);
             setFailedPrompts(prev => new Set(prev).add('default'));
-            setLoadingPrompts(prev => {
-              const next = new Set(prev);
-              next.delete('default');
-              return next;
-            });
+            setLoadingPrompts(prev => { const next = new Set(prev); next.delete('default'); return next; });
           }
         }
       } catch (error) {
         console.error('Error fetching prompts:', error);
       }
     };
-    
-    fetchData();
-  }, [organizationId, id, docRouterOrgApi]);
 
-  // Poll document state when processing
+    fetchData();
+  }, [organizationId, id, docRouterOrgApi, documentPage?.documentState]);
+
+  // When using shared context, it polls document state; when state becomes llm_completed, fetch default results if needed
   useEffect(() => {
-    if (!documentState || (documentState !== 'ocr_processing' && documentState !== 'llm_processing')) {
+    if (documentPage?.documentState !== 'llm_completed') return;
+    if (llmResults['default'] || loadingPrompts.has('default') || failedPrompts.has('default')) return;
+    setLoadingPrompts(prev => new Set(prev).add('default'));
+    docRouterOrgApi.getLLMResult({ documentId: id, promptRevId: 'default', fallback: false })
+      .then((defaultResults) => {
+        setLlmResults(prev => ({ ...prev, 'default': defaultResults }));
+        setFailedPrompts(prev => { const next = new Set(prev); next.delete('default'); return next; });
+      })
+      .catch((error) => {
+        const msg = error instanceof Error ? error.message : String(error);
+        if (!msg.includes('not found') && !msg.includes('404')) console.error('Error fetching default results:', error);
+        setFailedPrompts(prev => new Set(prev).add('default'));
+      })
+      .finally(() => {
+        setLoadingPrompts(prev => { const next = new Set(prev); next.delete('default'); return next; });
+      });
+  }, [documentPage?.documentState, docRouterOrgApi, id]);
+
+  // When not using context, poll document state when processing
+  useEffect(() => {
+    if (documentPage != null || !documentState || (documentState !== 'ocr_processing' && documentState !== 'llm_processing')) {
       return;
     }
-
     const pollInterval = setInterval(async () => {
       try {
-        const docResponse = await docRouterOrgApi.getDocument({
-          documentId: id,
-          fileType: "pdf"
-        });
-        setDocumentState(docResponse.state);
-        
-        // If processing completed, try to fetch results again
-        if (docResponse.state === 'llm_completed' || docResponse.state === 'ocr_completed') {
-          // Try to fetch default results if not already loaded
-          if (!llmResults['default'] && !loadingPrompts.has('default') && !failedPrompts.has('default')) {
-            setLoadingPrompts(prev => new Set(prev).add('default'));
-            try {
-              const defaultResults = await docRouterOrgApi.getLLMResult({
-                documentId: id, 
-                promptRevId: 'default',
-                fallback: false
-              });
-              setLlmResults(prev => ({
-                ...prev,
-                'default': defaultResults
-              }));
-              setFailedPrompts(prev => {
-                const next = new Set(prev);
-                next.delete('default');
-                return next;
-              });
-              setLoadingPrompts(prev => {
-                const next = new Set(prev);
-                next.delete('default');
-                return next;
-              });
-            } catch (error) {
-              // Only log as error if it's not a 404 (not found is expected if LLM hasn't run yet)
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404');
-              if (!isNotFound) {
-                console.error('Error fetching default results after processing:', error);
-              }
-              setLoadingPrompts(prev => {
-                const next = new Set(prev);
-                next.delete('default');
-                return next;
-              });
-            }
+        const docResponse = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
+        setLocalDocumentState(docResponse.state);
+        if ((docResponse.state === 'llm_completed' || docResponse.state === 'ocr_completed') &&
+            !llmResults['default'] && !loadingPrompts.has('default') && !failedPrompts.has('default')) {
+          setLoadingPrompts(prev => new Set(prev).add('default'));
+          try {
+            const defaultResults = await docRouterOrgApi.getLLMResult({
+              documentId: id, promptRevId: 'default', fallback: false,
+            });
+            setLlmResults(prev => ({ ...prev, 'default': defaultResults }));
+          } catch {
+            setFailedPrompts(prev => new Set(prev).add('default'));
           }
+          setLoadingPrompts(prev => { const next = new Set(prev); next.delete('default'); return next; });
         }
       } catch (error) {
         console.error('Error polling document state:', error);
       }
-    }, 2000); // Poll every 2 seconds
-
+    }, 2000);
     return () => clearInterval(pollInterval);
-  }, [documentState, id, organizationId, docRouterOrgApi, llmResults, loadingPrompts, failedPrompts]);
-
-  const [documentName, setDocumentName] = useState<string | null>(null);
+  }, [documentPage, documentState, id, docRouterOrgApi, llmResults, loadingPrompts, failedPrompts]);
 
   useEffect(() => {
-    // Fetch document name for OCR support check
-    const fetchDocumentName = async () => {
-      try {
-        const docResponse = await docRouterOrgApi.getDocument({
-          documentId: id,
-          fileType: "pdf"
-        });
-        setDocumentName(docResponse.document_name);
-      } catch (error) {
-        console.error('Error fetching document name:', error);
-      }
-    };
-    fetchDocumentName();
-  }, [id, docRouterOrgApi]);
-
-  useEffect(() => {
-    // Load OCR blocks in the background (only if OCR is supported)
     if (documentName) {
       loadOCRBlocks(organizationId, id, documentName);
     }
@@ -204,15 +163,16 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     if (!llmResults[promptId]) {
       setLoadingPrompts(prev => new Set(prev).add(promptId));
       try {
-        // Refresh document state before fetching
-        try {
-          const docResponse = await docRouterOrgApi.getDocument({
-            documentId: id,
-            fileType: "pdf"
-          });
-          setDocumentState(docResponse.state);
-        } catch (error) {
-          console.error('Error fetching document state:', error);
+        if (!documentPage) {
+          try {
+            const docResponse = await docRouterOrgApi.getDocument({
+              documentId: id,
+              fileType: 'pdf',
+            });
+            setLocalDocumentState(docResponse.state);
+          } catch (error) {
+            console.error('Error fetching document state:', error);
+          }
         }
 
         const results = await docRouterOrgApi.getLLMResult({

@@ -6,6 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { Box } from '@mui/material';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useState, useEffect } from 'react';
+import { DocumentPageProvider } from '@/contexts/DocumentPageContext';
 const PDFSidebar = dynamic(() => import('@/components/PDFSidebar'), {
   ssr: false,
   loading: () => <div className="h-64 flex items-center justify-center">Loading sidebar...</div>
@@ -72,51 +73,53 @@ const PDFViewerPage = ({ params }: PageProps) => {
   const pdfId = Array.isArray(id) ? id[0] : id;
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <PanelGroup direction="horizontal" style={{ width: '100%', height: '100%' }}>
-          {showLeftPanel && (
-            <>
-              <Panel defaultSize={defaultSizes.left} minSize={15} order={1}>
-                <Box sx={{ height: '100%', overflow: 'auto' }}>
-                  <PDFSidebar 
+    <DocumentPageProvider organizationId={organizationId} documentId={pdfId}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+          <PanelGroup direction="horizontal" style={{ width: '100%', height: '100%' }}>
+            {showLeftPanel && (
+              <>
+                <Panel defaultSize={defaultSizes.left} minSize={15} order={1}>
+                  <Box sx={{ height: '100%', overflow: 'auto' }}>
+                    <PDFSidebar 
+                      organizationId={organizationId} 
+                      id={pdfId}
+                      onHighlight={setHighlightInfo}
+                      onClearHighlight={() => setHighlightInfo(undefined)}
+                    />
+                  </Box>
+                </Panel>
+                <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
+              </>
+            )}
+
+            {showPdfPanel && (
+              <Panel defaultSize={defaultSizes.main} minSize={20} order={2}>
+                <Box sx={{ height: '100%', overflow: 'hidden' }}>
+                  <PDFViewer 
                     organizationId={organizationId} 
                     id={pdfId}
-                    onHighlight={setHighlightInfo}
-                    onClearHighlight={() => setHighlightInfo(undefined)}
+                    highlightInfo={highlightInfo}
+                    initialShowBoundingBoxes={showBoundingBoxesFromUrl}
                   />
                 </Box>
               </Panel>
-              <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
-            </>
-          )}
+            )}
 
-          {showPdfPanel && (
-            <Panel defaultSize={defaultSizes.main} minSize={20} order={2}>
-              <Box sx={{ height: '100%', overflow: 'hidden' }}>
-                <PDFViewer 
-                  organizationId={organizationId} 
-                  id={pdfId}
-                  highlightInfo={highlightInfo}
-                  initialShowBoundingBoxes={showBoundingBoxesFromUrl}
-                />
-              </Box>
-            </Panel>
-          )}
-
-          {showChatPanel && (
-            <>
-              <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
-              <Panel defaultSize={defaultSizes.right} minSize={20} order={3}>
-                <Box sx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-                  <AgentTab organizationId={organizationId} documentId={pdfId} />
-                </Box>
-              </Panel>
-            </>
-          )}
-        </PanelGroup>
+            {showChatPanel && (
+              <>
+                <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
+                <Panel defaultSize={defaultSizes.right} minSize={20} order={3}>
+                  <Box sx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                    <AgentTab organizationId={organizationId} documentId={pdfId} />
+                  </Box>
+                </Panel>
+              </>
+            )}
+          </PanelGroup>
+        </Box>
       </Box>
-    </Box>
+    </DocumentPageProvider>
   );
 };
 
