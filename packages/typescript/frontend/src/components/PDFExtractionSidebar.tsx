@@ -50,10 +50,19 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   const documentState = documentPage?.documentState ?? localDocumentState;
   const documentName = documentPage?.documentName ?? localDocumentName;
 
+  // Refs mirror state so the fetch effect can read current values without being in the dependency array
+  const llmResultsRef = React.useRef(llmResults);
+  const loadingPromptsRef = React.useRef(loadingPrompts);
+  const failedPromptsRef = React.useRef(failedPrompts);
+  llmResultsRef.current = llmResults;
+  loadingPromptsRef.current = loadingPrompts;
+  failedPromptsRef.current = failedPrompts;
+
   useEffect(() => {
     defaultLlmFetchStartedRef.current = false;
   }, [id]);
 
+  // Single effect: get document state, then fetch prompts and default LLM result in parallel (no duplicate fetch, no serial waterfall)
   useEffect(() => {
     const fetchData = async () => {
       let fetchedState: string | null = documentPage?.documentState ?? null;
@@ -72,29 +81,50 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
           }
         }
 
-        const promptsResponse = await docRouterOrgApi.listPrompts({ document_id: id, limit: 100 });
-        setMatchingPrompts(promptsResponse.prompts);
-
         const isProcessing = fetchedState === 'ocr_processing' || fetchedState === 'llm_processing';
-        const alreadyHaveDefault = llmResults['default'] || loadingPrompts.has('default') || failedPrompts.has('default') || defaultLlmFetchStartedRef.current;
-        if (!isProcessing && !alreadyHaveDefault) {
+        const alreadyHaveDefault =
+          llmResultsRef.current['default'] ||
+          loadingPromptsRef.current.has('default') ||
+          failedPromptsRef.current.has('default') ||
+          defaultLlmFetchStartedRef.current;
+        const needDefault = !isProcessing && !alreadyHaveDefault;
+
+        if (needDefault) {
           defaultLlmFetchStartedRef.current = true;
           setLoadingPrompts(prev => new Set(prev).add('default'));
-          try {
-            const defaultResults = await docRouterOrgApi.getLLMResult({
-              documentId: id,
-              promptRevId: 'default',
-              fallback: false,
+        }
+
+        const listPromptsPromise = docRouterOrgApi.listPrompts({ document_id: id, limit: 100 });
+        const defaultPromise = needDefault
+          ? docRouterOrgApi
+              .getLLMResult({ documentId: id, promptRevId: 'default', fallback: false })
+              .then((data): { success: true; data: GetLLMResultResponse } => ({ success: true, data }))
+              .catch((error): { success: false; error: unknown } => ({ success: false, error }))
+          : Promise.resolve<null>(null);
+
+        const [promptsResponse, defaultResult] = await Promise.all([listPromptsPromise, defaultPromise]);
+
+        setMatchingPrompts(promptsResponse.prompts);
+
+        if (needDefault && defaultResult !== null) {
+          if (defaultResult.success) {
+            setLlmResults(prev => ({ ...prev, 'default': defaultResult.data }));
+            setFailedPrompts(prev => {
+              const next = new Set(prev);
+              next.delete('default');
+              return next;
             });
-            setLlmResults(prev => ({ ...prev, 'default': defaultResults }));
-            setLoadingPrompts(prev => { const next = new Set(prev); next.delete('default'); return next; });
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
+          } else {
+            const errorMessage = defaultResult.error instanceof Error ? defaultResult.error.message : String(defaultResult.error);
             const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404');
-            if (!isNotFound) console.error('Error fetching default results:', error);
+            if (!isNotFound) console.error('Error fetching default results:', defaultResult.error);
             setFailedPrompts(prev => new Set(prev).add('default'));
-            setLoadingPrompts(prev => { const next = new Set(prev); next.delete('default'); return next; });
           }
+          setLoadingPrompts(prev => {
+            const next = new Set(prev);
+            next.delete('default');
+            return next;
+          });
         }
       } catch (error) {
         console.error('Error fetching prompts:', error);
@@ -102,28 +132,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     };
 
     fetchData();
-  }, [organizationId, id, docRouterOrgApi, documentPage?.documentState, llmResults, loadingPrompts, failedPrompts]);
-
-  // When using shared context, it polls document state; when state becomes llm_completed, fetch default results if needed
-  useEffect(() => {
-    if (documentPage?.documentState !== 'llm_completed') return;
-    if (llmResults['default'] || loadingPrompts.has('default') || failedPrompts.has('default') || defaultLlmFetchStartedRef.current) return;
-    defaultLlmFetchStartedRef.current = true;
-    setLoadingPrompts(prev => new Set(prev).add('default'));
-    docRouterOrgApi.getLLMResult({ documentId: id, promptRevId: 'default', fallback: false })
-      .then((defaultResults) => {
-        setLlmResults(prev => ({ ...prev, 'default': defaultResults }));
-        setFailedPrompts(prev => { const next = new Set(prev); next.delete('default'); return next; });
-      })
-      .catch((error) => {
-        const msg = error instanceof Error ? error.message : String(error);
-        if (!msg.includes('not found') && !msg.includes('404')) console.error('Error fetching default results:', error);
-        setFailedPrompts(prev => new Set(prev).add('default'));
-      })
-      .finally(() => {
-        setLoadingPrompts(prev => { const next = new Set(prev); next.delete('default'); return next; });
-      });
-  }, [documentPage?.documentState, docRouterOrgApi, id]);
+  }, [organizationId, id, docRouterOrgApi, documentPage?.documentState, documentPage]);
 
   // When not using context, poll document state when processing
   useEffect(() => {

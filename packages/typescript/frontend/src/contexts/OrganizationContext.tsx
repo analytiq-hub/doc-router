@@ -50,19 +50,20 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, [pathname])
 
   useEffect(() => {
+    if (status === 'loading') return;
+
+    const appSession = session as AppSession | null;
+    if (!appSession?.user?.id) {
+      console.warn('No user ID found in session');
+      setIsLoading(false);
+      return;
+    }
+
+    // Set synchronously before any await so React 18 Strict Mode double-invocation doesn't trigger duplicate fetches
+    if (fetchInFlightRef.current) return;
+    fetchInFlightRef.current = true;
+
     const fetchOrganizations = async () => {
-      if (status === 'loading') return;
-
-      const appSession = session as AppSession | null;
-      if (!appSession?.user?.id) {
-        console.warn('No user ID found in session');
-        setIsLoading(false);
-        return;
-      }
-
-      if (fetchInFlightRef.current) return;
-      fetchInFlightRef.current = true;
-
       try {
         const response = await docRouterAccountApi.listOrganizations({ userId: appSession.user.id, limit: 50 });
 
