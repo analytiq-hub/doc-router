@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useCallback, useEffect, useRef, useMemo } from 'react';
-import { DocRouterOrgApi, apiClient } from '@/utils/api';
+import { DocRouterOrgApi } from '@/utils/api';
 
 export interface DocumentPageData {
   /** PDF file content; null until loaded or if failed. */
@@ -82,9 +82,7 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
     completionFetchStartedRef.current = false;
     pollRef.current = setInterval(async () => {
       try {
-        const { data: meta } = await apiClient.get<{ state: string; document_name: string }>(
-          `/v0/orgs/${organizationId}/documents/${documentId}/metadata`
-        );
+        const meta = await api.getDocumentMetadata({ documentId });
         setDocumentState(meta.state ?? null);
         setDocumentName(meta.document_name ?? null);
         if (meta.state === 'llm_completed' || meta.state === 'ocr_completed') {
@@ -109,7 +107,7 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
       }
       completionFetchStartedRef.current = false;
     };
-  }, [documentState, documentId, organizationId, api]);
+  }, [documentState, documentId, api]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
