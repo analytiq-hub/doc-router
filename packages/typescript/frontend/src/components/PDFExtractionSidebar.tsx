@@ -44,10 +44,15 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [editMode, setEditMode] = useState<boolean>(false);
   const [localDocumentState, setLocalDocumentState] = useState<string | null>(null);
+  const defaultLlmFetchStartedRef = React.useRef(false);
 
   const [localDocumentName, setLocalDocumentName] = useState<string | null>(null);
   const documentState = documentPage?.documentState ?? localDocumentState;
   const documentName = documentPage?.documentName ?? localDocumentName;
+
+  useEffect(() => {
+    defaultLlmFetchStartedRef.current = false;
+  }, [id]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -71,7 +76,9 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
         setMatchingPrompts(promptsResponse.prompts);
 
         const isProcessing = fetchedState === 'ocr_processing' || fetchedState === 'llm_processing';
-        if (!isProcessing) {
+        const alreadyHaveDefault = llmResults['default'] || loadingPrompts.has('default') || failedPrompts.has('default') || defaultLlmFetchStartedRef.current;
+        if (!isProcessing && !alreadyHaveDefault) {
+          defaultLlmFetchStartedRef.current = true;
           setLoadingPrompts(prev => new Set(prev).add('default'));
           try {
             const defaultResults = await docRouterOrgApi.getLLMResult({
@@ -95,12 +102,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     };
 
     fetchData();
-  }, [organizationId, id, docRouterOrgApi, documentPage?.documentState]);
+  }, [organizationId, id, docRouterOrgApi, documentPage?.documentState, llmResults, loadingPrompts, failedPrompts]);
 
   // When using shared context, it polls document state; when state becomes llm_completed, fetch default results if needed
   useEffect(() => {
     if (documentPage?.documentState !== 'llm_completed') return;
-    if (llmResults['default'] || loadingPrompts.has('default') || failedPrompts.has('default')) return;
+    if (llmResults['default'] || loadingPrompts.has('default') || failedPrompts.has('default') || defaultLlmFetchStartedRef.current) return;
+    defaultLlmFetchStartedRef.current = true;
     setLoadingPrompts(prev => new Set(prev).add('default'));
     docRouterOrgApi.getLLMResult({ documentId: id, promptRevId: 'default', fallback: false })
       .then((defaultResults) => {

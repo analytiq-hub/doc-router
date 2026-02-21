@@ -54,11 +54,9 @@ interface LayoutProps {
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
   const { currentOrganization } = useOrganization();
-  
-  // Initialize with a default value that works for both server and client
+
   const [open, setOpen] = useState(true);
-  const [isClient, setIsClient] = useState(false);
-  
+
   const { session, status } = useAppSession();
   const router = useRouter();
   const pathname = usePathname();
@@ -66,31 +64,43 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   const [forceUpdate, setForceUpdate] = useState(0);
   const [pdfControls, setPdfControls] = useState<PDFViewerControlsType | null>(null);
 
-  // Load sidebar state from localStorage after component mounts (client-side only)
+  // Derive org id from the URL path — usePathname() is stable on both server and client,
+  // so this never causes a hydration mismatch and never produces /orgs/undefined links.
+  const orgIdForLinks =
+    (pathname.match(/^\/orgs\/([^/]+)/)?.[1] as string | undefined) ?? currentOrganization?.id ?? null;
+
+  // Load sidebar state from localStorage on mount
   useEffect(() => {
-    setIsClient(true);
     const savedSidebarState = localStorage.getItem('sidebarOpen');
     if (savedSidebarState !== null) {
-      setOpen(JSON.parse(savedSidebarState));
+      setTimeout(() => setOpen(JSON.parse(savedSidebarState)), 0);
     }
   }, []);
 
-  // Save sidebar state to localStorage whenever it changes (client-side only)
+  // Save sidebar state to localStorage whenever it changes
   useEffect(() => {
-    if (isClient) {
-      localStorage.setItem('sidebarOpen', JSON.stringify(open));
-    }
-  }, [open, isClient]);
+    localStorage.setItem('sidebarOpen', JSON.stringify(open));
+  }, [open]);
 
-  const fileMenuItems = [
-    { text: 'Dashboard', icon: DashboardIcon, tooltip: 'Dashboard', href: `/orgs/${currentOrganization?.id}/dashboard`},
-    { text: 'Documents', icon: DocumentIcon, tooltip: 'Documents', href: `/orgs/${currentOrganization?.id}/docs`},
-    { text: 'Tags', icon: LocalOfferIcon, tooltip: 'Tags', href: `/orgs/${currentOrganization?.id}/tags`},  
-    { text: 'Schemas', icon: SchemaIcon, tooltip: 'Schemas', href: `/orgs/${currentOrganization?.id}/schemas`},
-    { text: 'Prompts', icon: PromptIcon, tooltip: 'Prompts', href: `/orgs/${currentOrganization?.id}/prompts`},
-    { text: 'Forms', icon: FormsIcon, tooltip: 'Forms', href: `/orgs/${currentOrganization?.id}/forms`},
-    { text: 'Knowledge Bases', icon: KnowledgeBaseIcon, tooltip: 'Knowledge Bases', href: `/orgs/${currentOrganization?.id}/knowledge-bases`},
-  ];
+  const fileMenuItems: MenuItem[] = orgIdForLinks
+    ? [
+        { text: 'Dashboard', icon: DashboardIcon, tooltip: 'Dashboard', href: `/orgs/${orgIdForLinks}/dashboard` },
+        { text: 'Documents', icon: DocumentIcon, tooltip: 'Documents', href: `/orgs/${orgIdForLinks}/docs` },
+        { text: 'Tags', icon: LocalOfferIcon, tooltip: 'Tags', href: `/orgs/${orgIdForLinks}/tags` },
+        { text: 'Schemas', icon: SchemaIcon, tooltip: 'Schemas', href: `/orgs/${orgIdForLinks}/schemas` },
+        { text: 'Prompts', icon: PromptIcon, tooltip: 'Prompts', href: `/orgs/${orgIdForLinks}/prompts` },
+        { text: 'Forms', icon: FormsIcon, tooltip: 'Forms', href: `/orgs/${orgIdForLinks}/forms` },
+        { text: 'Knowledge Bases', icon: KnowledgeBaseIcon, tooltip: 'Knowledge Bases', href: `/orgs/${orgIdForLinks}/knowledge-bases` },
+      ]
+    : [
+        { text: 'Dashboard', icon: DashboardIcon, tooltip: 'Dashboard', href: '#' },
+        { text: 'Documents', icon: DocumentIcon, tooltip: 'Documents', href: '#' },
+        { text: 'Tags', icon: LocalOfferIcon, tooltip: 'Tags', href: '#' },
+        { text: 'Schemas', icon: SchemaIcon, tooltip: 'Schemas', href: '#' },
+        { text: 'Prompts', icon: PromptIcon, tooltip: 'Prompts', href: '#' },
+        { text: 'Forms', icon: FormsIcon, tooltip: 'Forms', href: '#' },
+        { text: 'Knowledge Bases', icon: KnowledgeBaseIcon, tooltip: 'Knowledge Bases', href: '#' },
+      ];
 
   const systemMenuItems = [
     { text: 'About', icon: AboutIcon, tooltip: 'About Page', href: '/' },
@@ -106,10 +116,14 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         }
       }
     };
-    
+
     window.addEventListener('resize', handleResize);
-    handleResize();
-    return () => window.removeEventListener('resize', handleResize);
+    // Defer initial run to avoid synchronous setState in effect
+    const timer = setTimeout(handleResize, 0);
+    return () => {
+      clearTimeout(timer);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   // Keep the existing PDF controls effects
@@ -123,7 +137,11 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    setPdfControls(window.pdfViewerControls || null);
+    // Defer setState to avoid synchronous setState in effect (cascading renders)
+    const timer = setTimeout(() => {
+      setPdfControls(window.pdfViewerControls || null);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [forceUpdate]);
 
   useEffect(() => {
@@ -135,40 +153,55 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     }
   }, [status, router, pathname]);
 
-  // Update the renderMenuItem function to match burger icon size and alignment
+  // Update the renderMenuItem function to match burger icon size and alignment.
+  // Use array.join(' ') for classNames so server and client never get whitespace/newline mismatch (hydration).
   const renderMenuItem = (item: MenuItem) => {
     const Icon = item.icon;
-    const isSelected = pathname === item.href || pathname.startsWith(item.href + '/');
-    
+    const isPlaceholder = item.href === '#';
+    const isSelected = !isPlaceholder && (pathname === item.href || pathname.startsWith(item.href + '/'));
+
+    const outerClasses = [
+      'flex items-center h-10 w-full rounded-md',
+      isSelected ? 'bg-blue-100' : 'hover:bg-blue-100',
+      'transition-colors duration-200 px-3',
+    ].join(' ');
+    const iconWrapClasses = ['flex items-center justify-center', open ? 'w-6' : 'w-full'].join(' ');
+    const labelClasses = ['ml-3 pr-3 pt-1 text-sm font-medium whitespace-nowrap', isSelected ? 'text-blue-600' : 'text-gray-700'].join(' ');
+
+    const content = (
+      <div className={outerClasses}>
+        <div className={iconWrapClasses}>
+          <Icon className="h-6 w-6 shrink-0" />
+        </div>
+        {open && (
+          <span className={labelClasses}>
+            {item.text}
+          </span>
+        )}
+      </div>
+    );
+
+    if (isPlaceholder) {
+      return (
+        <span
+          key={item.text}
+          className="block px-2 py-1 cursor-not-allowed opacity-70"
+          title={!open ? item.tooltip : 'Select an organization'}
+        >
+          {content}
+        </span>
+      );
+    }
+
     return (
       <Link
         key={item.text}
         href={item.href}
         className="block px-2 py-1"
         title={!open ? item.tooltip : ''}
+        prefetch={true}
       >
-        <div
-          className={`
-            flex items-center
-            h-10 w-full
-            rounded-md
-            ${isSelected ? 'bg-blue-100' : 'hover:bg-blue-100'}
-            transition-colors duration-200
-            px-3
-          `}
-        >
-          <div className={`
-            flex items-center justify-center
-            ${open ? 'w-6' : 'w-full'}
-          `}>
-            <Icon className="h-6 w-6 shrink-0" />
-          </div>
-          {open && (
-            <span className={`ml-3 pr-3 pt-1 text-sm font-medium whitespace-nowrap ${isSelected ? 'text-blue-600' : 'text-gray-700'}`}>
-              {item.text}
-            </span>
-          )}
-        </div>
+        {content}
       </Link>
     );
   };
@@ -178,14 +211,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
       {/* Header */}
       <header className="bg-blue-600 border-b border-blue-700">
         <div className="flex h-16 items-center justify-between px-3">
-          <div className="flex items-center">
+          <div className="flex shrink-0 items-center">
             <button
               onClick={() => setOpen(!open)}
               className="p-2 rounded-md hover:bg-blue-500"
             >
               <Bars3Icon className="h-6 w-6 text-white" />
             </button>
-            <Link href={session && currentOrganization?.id ? `/orgs/${currentOrganization.id}/dashboard` : session ? '/dashboard' : '/'} className={`${open ? 'ml-3' : 'ml-6'} text-xl font-semibold text-white`}>
+            <Link
+              href={session && orgIdForLinks ? `/orgs/${orgIdForLinks}/dashboard` : session ? '/dashboard' : '/'}
+              className={`${open ? 'ml-3' : 'ml-6'} text-xl font-semibold text-white`}
+            >
               <span className="block sm:hidden">DocRouter.AI</span>
               <span className="hidden sm:block">Smart Document Router</span>
             </Link>
@@ -210,14 +246,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside 
-          className={`
-            flex-shrink-0 
-            transition-all duration-300 ease-in-out 
-            bg-blue-50
-            border-r border-gray-200
-            ${open ? 'w-48' : 'w-16'}
-          `}
+        <aside
+          className={`flex-shrink-0 transition-all duration-300 ease-in-out bg-blue-50 border-r border-gray-200 ${open ? 'w-48' : 'w-16'}`}
         >
           <nav className="flex h-full flex-col overflow-hidden">
             {status === 'authenticated' && (

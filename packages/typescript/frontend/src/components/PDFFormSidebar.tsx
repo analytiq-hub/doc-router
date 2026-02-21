@@ -42,17 +42,19 @@ const PDFFormSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
   const [llmResults, setLlmResults] = useState<Record<string, GetLLMResultResponse>>({});
   const [llmResultsLoading, setLlmResultsLoading] = useState<Set<string>>(new Set());
   const [llmResultsFailed, setLlmResultsFailed] = useState<Set<string>>(new Set());
-  const [formInitialData, setFormInitialData] = useState<Record<string, Record<string, unknown>>>({});
+  const [formInitialData, setFormInitialData] = useState<Record<string, Record<string, unknown>>({});
+  const [documentName, setDocumentName] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
-      // Get document metadata only (no file content) to access tags
+      // Get document metadata only (no file content) for tags and name (single request)
       const documentResponse = await docRouterOrgApi.getDocument({
         documentId: id,
         fileType: 'original',
         includeContent: false
       });
-      
+
+      setDocumentName(documentResponse.document_name ?? null);
       const documentTags = documentResponse.tag_ids || [];
       setDocumentTags(documentTags);
 
@@ -81,25 +83,6 @@ const PDFFormSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
-
-  const [documentName, setDocumentName] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Fetch document name for OCR support check (metadata only)
-    const fetchDocumentName = async () => {
-      try {
-        const docResponse = await docRouterOrgApi.getDocument({
-          documentId: id,
-          fileType: "original",
-          includeContent: false
-        });
-        setDocumentName(docResponse.document_name);
-      } catch (error) {
-        console.error('Error fetching document name:', error);
-      }
-    };
-    fetchDocumentName();
-  }, [id, docRouterOrgApi]);
 
   useEffect(() => {
     // Load OCR blocks in the background (only if OCR is supported)

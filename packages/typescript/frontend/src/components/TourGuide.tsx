@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useAppSession } from '@/contexts/AppSessionContext';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { setHasSeenTour, hasSeenTour } from '@/utils/tourGuide';
 
@@ -29,67 +29,75 @@ const TourGuide = () => {
   const [tooltipReady, setTooltipReady] = useState<boolean>(false);
   const { session } = useAppSession();
   const router = useRouter();
+  const pathname = usePathname();
   const { currentOrganization } = useOrganization();
 
+  // Use org id from URL when on /orgs/[id]/... so tour steps never point to /orgs/undefined
+  const orgIdForTour =
+    (pathname.match(/^\/orgs\/([^/]+)/)?.[1] as string | undefined) ?? currentOrganization?.id ?? null;
+
   // Define the tour steps with useMemo
-  const tourSteps = useMemo<TourStep[]>(() => [
-    {
-      id: 'schemas',
-      title: 'Create Schemas',
-      content: 'Define document schemas to extract structured data from your documents.',
-      selector: '[data-tour="schema-create"]',
-      position: 'right',
-      page: `/orgs/${currentOrganization?.id}/schemas?tab=schema-create`
-    },
-    {
-      id: 'prompts',
-      title: 'Create Prompts',
-      content: 'Create and manage prompts to guide AI in processing your documents.',
-      selector: '[data-tour="prompt-create"]',
-      position: 'right',
-      page: `/orgs/${currentOrganization?.id}/prompts?tab=prompt-create`
-    },
-    {
+  const tourSteps = useMemo<TourStep[]>(() => {
+    if (!orgIdForTour) return [];
+    return [
+      {
+        id: 'schemas',
+        title: 'Create Schemas',
+        content: 'Define document schemas to extract structured data from your documents.',
+        selector: '[data-tour="schema-create"]',
+        position: 'right',
+        page: `/orgs/${orgIdForTour}/schemas?tab=schema-create`
+      },
+      {
+        id: 'prompts',
+        title: 'Create Prompts',
+        content: 'Create and manage prompts to guide AI in processing your documents.',
+        selector: '[data-tour="prompt-create"]',
+        position: 'right',
+        page: `/orgs/${orgIdForTour}/prompts?tab=prompt-create`
+      },
+      {
         id: 'prompt-schema',
         title: 'Assign Schema',
         content: 'Assign a schema to your prompt.',
         selector: '[data-tour="prompt-schema-select"]',
         position: 'top',
-        page: `/orgs/${currentOrganization?.id}/prompts?tab=prompt-create`
-    },
-    {
+        page: `/orgs/${orgIdForTour}/prompts?tab=prompt-create`
+      },
+      {
         id: 'prompt-model',
         title: 'Assign Model',
         content: 'Assign a model to your prompt.',
         selector: '[data-tour="prompt-model-select"]',
         position: 'top',
-        page: `/orgs/${currentOrganization?.id}/prompts?tab=prompt-create`
-    },
-    {
+        page: `/orgs/${orgIdForTour}/prompts?tab=prompt-create`
+      },
+      {
         id: 'upload',
         title: 'Upload Docs',
         content: 'Upload your documents for processing.',
         selector: '[data-tour="upload-documents"]',
         position: 'right',
-        page: `/orgs/${currentOrganization?.id}/docs?tab=upload`
-    },
-    {
-      id: 'documents',
-      title: 'Documents',
-      content: 'Click on a document to view the extracted data.',
-      selector: '[data-tour="documents"]',
-      position: 'bottom',
-      page: `/orgs/${currentOrganization?.id}/docs?tab=documents`
-    },
-    {
-      id: 'tags',
-      title: 'Configure Tags',
-      content: 'With tags, you can determine which prompts are used for which documents.',
-      selector: '[data-tour="tag-create"]',
-      position: 'right',
-      page: `/orgs/${currentOrganization?.id}/tags?tab=tag-create`
-    }
-  ], [currentOrganization?.id]);
+        page: `/orgs/${orgIdForTour}/docs?tab=upload`
+      },
+      {
+        id: 'documents',
+        title: 'Documents',
+        content: 'Click on a document to view the extracted data.',
+        selector: '[data-tour="documents"]',
+        position: 'bottom',
+        page: `/orgs/${orgIdForTour}/docs?tab=documents`
+      },
+      {
+        id: 'tags',
+        title: 'Configure Tags',
+        content: 'With tags, you can determine which prompts are used for which documents.',
+        selector: '[data-tour="tag-create"]',
+        position: 'right',
+        page: `/orgs/${orgIdForTour}/tags?tab=tag-create`
+      }
+    ];
+  }, [orgIdForTour]);
 
   // Check if this is the user's first login
   useEffect(() => {

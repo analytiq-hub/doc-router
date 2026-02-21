@@ -6,10 +6,24 @@ import TerserPlugin from 'terser-webpack-plugin';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-const nextConfig = {  
+const nextConfig = {
   transpilePackages: ['@tsed/react-formio', '@tsed/tailwind-formio', '@docrouter/sdk'],
   // Include files from monorepo parent for file: dependencies (production build)
   outputFileTracingRoot: path.join(__dirname, '..'),
+  // Long-lived cache for hashed static assets (chunks, CSS) so reloads use browser cache
+  async headers() {
+    return [
+      {
+        source: '/_next/static/:path*',
+        headers: [
+          {
+            key: 'Cache-Control',
+            value: 'public, max-age=31536000, immutable',
+          },
+        ],
+      },
+    ];
+  },
   // Webpack config for compatibility (Turbopack will use this as fallback)
   webpack: (config) => {
     if (config.optimization) {
