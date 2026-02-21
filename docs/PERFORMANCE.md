@@ -43,8 +43,8 @@ From network waterfalls (87 requests, ~6.44 MB transferred):
 
 - **Next.js static asset caching**
   In `packages/typescript/frontend/next.config.mjs`, `headers()` was added so `/_next/static/*` is served with:
-  - `Cache-Control: public, max-age=31536000, immutable`
-  So hashed JS/CSS can be cached by the browser for 1 year; reloads should serve them from cache (0 B transferred for those URLs) when the hosting layer does not override these headers (e.g. self-hosted Node/Docker).
+  - `Cache-Control: public, max-age=28800`
+  Static cache age: **8 hours** (`max-age=28800`), so a post-midnight release is picked up after the next refresh the following day. The hosting layer must not override these headers (e.g. self-hosted Node/Docker).
   **Note:** On Vercel, static assets may already get similar headers; if you use a CDN/reverse proxy, ensure it does not strip or shorten `Cache-Control` for `/_next/static/*`.
 
 ---
@@ -60,12 +60,12 @@ From network waterfalls (87 requests, ~6.44 MB transferred):
   - OCR data is immutable once computed — add `Cache-Control: private, max-age=3600` (or even `immutable`) so the browser never re-fetches the same blocks on reload.
 - **LLM result** (`/llm/result`):
   - Reduce payload (e.g. omit heavy fields until needed).
-  - Add short-lived HTTP cache headers (e.g. `Cache-Control: private, max-age=60`) or ETag so repeated loads for the same doc don't always hit the server.
+  - Do **not** cache (data is dynamic per document).
 - **Prompts** (`/prompts?skip=0&limit=100&document_id=...`):
   - 4.4 s for a list query suggests a missing MongoDB index. Add a compound index on `{ org_id, document_id }` (or whichever fields the query filters on).
-  - Add `Cache-Control: private, max-age=30, stale-while-revalidate=60` since the list changes only on user action.
+  - Do **not** cache (list is dynamic).
 - **Chat threads/tools, LLM models**:
-  - `GET /llm/models?chat_only=true` is static per deployment — cache aggressively (`max-age=300`).
+  - `GET /llm/models?chat_only=true` is static per deployment — cache aggressively (e.g. `max-age=300` or longer).
   - Threads/tools: add DB indexes; consider HTTP ETag so unchanged responses return 304.
 - **Account/organizations**:
   - Cache per user/session where possible; avoid duplicate calls (see frontend).
@@ -100,7 +100,7 @@ From network waterfalls (87 requests, ~6.44 MB transferred):
 
 - [x] Cache-Control for `/_next/static/*` in Next.js config (done in repo).
 - [ ] Ensure deployment/CDN does not override or strip those headers.
-- [ ] Backend: compress and/or paginate OCR blocks; add `Cache-Control` for OCR blocks (immutable), LLM result (short TTL), and prompts/models (short TTL).
+- [ ] Backend: compress and/or paginate OCR blocks; add `Cache-Control` for OCR blocks (immutable). Do not cache LLM result or prompts; add `Cache-Control` for models endpoint only (e.g. `max-age=300`).
 - [ ] Backend: add MongoDB compound index on `prompts` collection for `{ org_id, document_id }` (prompts query taking 4.4 s suggests a missing index).
 - [x] Frontend: fix `organizationId` so no `/orgs/undefined` RSC requests (derive from pathname in Layout + TourGuide).
 - [ ] Frontend: merge the two competing `useEffect` hooks in `PDFExtractionSidebar` that both fetch the default LLM result.

@@ -10,7 +10,7 @@ const nextConfig = {
   transpilePackages: ['@tsed/react-formio', '@tsed/tailwind-formio', '@docrouter/sdk'],
   // Include files from monorepo parent for file: dependencies (production build)
   outputFileTracingRoot: path.join(__dirname, '..'),
-  // Long-lived cache for hashed static assets (chunks, CSS) so reloads use browser cache
+  // Cache for hashed static assets (chunks, CSS); 8h max so post-midnight release is picked up next day
   async headers() {
     return [
       {
@@ -18,7 +18,7 @@ const nextConfig = {
         headers: [
           {
             key: 'Cache-Control',
-            value: 'public, max-age=31536000, immutable',
+            value: 'public, max-age=28800',
           },
         ],
       },
