@@ -146,24 +146,12 @@ export const OrganizationProvider: React.FC<{ children: React.ReactNode }> = ({ 
       setCurrentOrganization(organization)
       localStorage.setItem('currentOrganizationId', organizationId)
       
-      // If we're on an organization-specific page, update the URL
+      // If we're on an organization-specific page, go to the new org's dashboard
       const orgIdFromPath = getOrganizationIdFromPath()
       if (orgIdFromPath && orgIdFromPath !== organizationId) {
-        // We're switching to a different organization while on an org-specific page
-        // Redirect to the same page for the new organization
-        let newPath: string
-        
-        if (pathname.startsWith('/orgs/')) {
-          // Handle /orgs/[organizationId] paths
-          newPath = pathname.replace(`/orgs/${orgIdFromPath}`, `/orgs/${organizationId}`)
-        } else if (pathname.startsWith('/settings/organizations/')) {
-          // Handle /settings/organizations/[organizationId] paths
-          newPath = pathname.replace(`/settings/organizations/${orgIdFromPath}`, `/settings/organizations/${organizationId}`)
-        } else {
-          return // No URL update needed
+        if (pathname.startsWith('/orgs/') || pathname.startsWith('/settings/organizations/')) {
+          window.location.href = `/orgs/${organizationId}/dashboard`
         }
-        
-        window.location.href = newPath
       }
     }
   }, [organizations, getOrganizationIdFromPath, pathname])
