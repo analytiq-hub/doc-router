@@ -1,0 +1,110 @@
+# Doc Router app.docrouter.ai – Load performance (8.27s)
+
+## Why reload takes ~8.27 seconds
+
+From network waterfalls (87 requests, ~6.44 MB transferred):
+
+1. **Backend API latency (dominant)**
+   - **`/fastapi/v0/orgs/.../ocr/download/blocks/{document_id}`** – ~5.4 s
+     - Returns full OCR blocks JSON; large payload + TTFB.
+   - **`/fastapi/v0/orgs/.../llm/result/{document_id}`** – ~3.2 s (and duplicate calls ~1.5–1.7 s later)
+   - **`/fastapi/v0/orgs/.../prompts?...`** – ~2.7–4.4 s
+   - **`/fastapi/v0/orgs/.../documents/...?file_type=pdf`** – ~2.3 s (PDF binary)
+   - **`/fastapi/v0/account/organizations`** – ~2.0–2.2 s (two calls)
+   - **`/fastapi/v0/orgs/.../chat/threads`**, **`/chat/tools`**, **`/llm/models/chat_only`** – ~2.7–3.2 s each
+
+2. **No browser caching of static assets**
+   - All ~80+ JS chunks and CSS show **200** (full download).
+   - No **304 Not Modified** or "from disk cache" for `_next/static/chunks/*.js` or `_next/static/media/*.mjs`.
+   - So every reload re-downloads 6+ MB of JS/CSS (e.g. `4442.*.js` ~1.2 s, `pdf.worker.min.*.mjs` ~1.0–1.7 s).
+
+3. **Redundant / duplicate requests**
+   - **`/orgs/undefined/docs`** and **`/orgs/undefined/dashboard`** – ~3.27–3.28 s each (RSC/prefetch with `organizationId` not yet resolved).
+   - Same org data fetched twice with different `_rsc` params (e.g. knowledge-bases, forms, prompts, schemas, tags, docs, dashboard).
+   - **Document + LLM**: `DocumentPageProvider` fetches the document once; `PDFExtractionSidebar` can still call `getDocument(pdf)` when `documentPage` is null, then `listPrompts` and `getLLMResult`, so document (and possibly LLM) are effectively fetched more than once on cold load.
+   - **Duplicate LLM result fetch**: `PDFExtractionSidebar` has two separate `useEffect` hooks that can both trigger `getLLMResult('default')`:
+     - Lines 57–105: `fetchData` — starts the fetch and sets `defaultLlmFetchStartedRef.current = true`
+     - Lines 108–126: fires when `documentPage?.documentState === 'llm_completed'`
+     Both effects run on initial render when the context already has `llm_completed` state. There is a race: both see `defaultLlmFetchStartedRef.current === false` before either writes `true`, so two requests fire for the same LLM result.
+   - **Duplicate org list fetch**: `GET /account/organizations` fires twice simultaneously. The `fetchInFlightRef` guard in `OrganizationContext` is supposed to prevent this, but React 18 Strict Mode invokes effects twice in development. Also, a session status change between `loading` and `authenticated` can trigger a second execution of the same effect before the ref is set.
+
+4. **Serial fetch waterfall in `PDFExtractionSidebar`**
+   The `fetchData` effect chain is fully sequential:
+   `get document state` → `listPrompts` (4.4 s) → `getLLMResult` (1.6 s)
+   This creates a ~6 s serial chain before extraction results appear. The prompts and LLM result fetches are independent once document state is known; they could be parallelised. Additionally, the `fetchData` `useEffect` dependency array includes `llmResults`, `loadingPrompts`, and `failedPrompts` (line 105), causing the effect to re-subscribe and potentially re-run on every state change within the sidebar.
+
+5. **DOMContentLoaded / Load vs Finish**
+   - **DOMContentLoaded** ~235 ms, **Load** ~425 ms (initial HTML + critical resources).
+   - **Finish** ~8.27 s = when **all** network requests (including slow API and all JS chunks) complete. So "total load" in the network tab is dominated by those slow API and uncached static requests.
+
+---
+
+## What was changed in this repo
+
+- **Next.js static asset caching**
+  In `packages/typescript/frontend/next.config.mjs`, `headers()` was added so `/_next/static/*` is served with:
+  - `Cache-Control: public, max-age=31536000, immutable`
+  So hashed JS/CSS can be cached by the browser for 1 year; reloads should serve them from cache (0 B transferred for those URLs) when the hosting layer does not override these headers (e.g. self-hosted Node/Docker).
+  **Note:** On Vercel, static assets may already get similar headers; if you use a CDN/reverse proxy, ensure it does not strip or shorten `Cache-Control` for `/_next/static/*`.
+
+---
+
+## Further optimizations (recommended)
+
+### 1. Backend API (highest impact)
+
+- **OCR blocks** (`/ocr/download/blocks`):
+  - Ensure response is gzip'd.
+  - Consider pagination or "by-page" endpoint so the client doesn't wait for the full document's blocks.
+  - Add DB/cache indexing if `get_ocr_json` is slow (e.g. blob key lookups).
+  - OCR data is immutable once computed — add `Cache-Control: private, max-age=3600` (or even `immutable`) so the browser never re-fetches the same blocks on reload.
+- **LLM result** (`/llm/result`):
+  - Reduce payload (e.g. omit heavy fields until needed).
+  - Add short-lived HTTP cache headers (e.g. `Cache-Control: private, max-age=60`) or ETag so repeated loads for the same doc don't always hit the server.
+- **Prompts** (`/prompts?skip=0&limit=100&document_id=...`):
+  - 4.4 s for a list query suggests a missing MongoDB index. Add a compound index on `{ org_id, document_id }` (or whichever fields the query filters on).
+  - Add `Cache-Control: private, max-age=30, stale-while-revalidate=60` since the list changes only on user action.
+- **Chat threads/tools, LLM models**:
+  - `GET /llm/models?chat_only=true` is static per deployment — cache aggressively (`max-age=300`).
+  - Threads/tools: add DB indexes; consider HTTP ETag so unchanged responses return 304.
+- **Account/organizations**:
+  - Cache per user/session where possible; avoid duplicate calls (see frontend).
+
+### 2. Frontend
+
+- **Fix `orgs/undefined`** ✅ **Done**
+  - Layout sidebar and header now derive org id from the URL path (`/orgs/[id]/...`) when `currentOrganization` is not yet loaded, so links never point to `/orgs/undefined/...` and Next.js no longer prefetches those bad URLs. TourGuide steps use the same pathname-derived org id. When no org id is available (e.g. not on an org page), sidebar menu items render as non-clickable placeholders.
+- **Fix duplicate LLM result fetch in `PDFExtractionSidebar`**
+  - Merge the two `useEffect` hooks (lines 57–105 and 108–126 of `PDFExtractionSidebar.tsx`) that both trigger `getLLMResult('default')` into a single effect, or move the `defaultLlmFetchStartedRef` check inside an atomic `useCallback` that both effects call, ensuring the ref is set before the async call returns.
+- **Break serial fetch waterfall in `PDFExtractionSidebar`**
+  - Once document state is available from `DocumentPageContext`, fire `listPrompts` and `getLLMResult('default')` in parallel (`Promise.all`). Currently they are sequential: prompts finish → LLM fetch starts, adding ~4 s to display time.
+  - Remove `llmResults`, `loadingPrompts`, and `failedPrompts` from the `fetchData` `useEffect` dependency array (line 105); use refs for those guards instead to avoid the effect re-running on every state update.
+- **Deduplicate data fetching**
+  - Rely on `DocumentPageProvider` for the initial document; avoid a second full `getDocument(pdf)` in `PDFExtractionSidebar` when context is briefly null (show loading and wait for context rather than racing ahead).
+  - Consolidate org-scoped list fetches (knowledge-bases, forms, prompts, schemas, tags, docs, dashboard) so they are not triggered twice with different `_rsc` for the same data.
+- **Fix duplicate organizations fetch**
+  - In `OrganizationContext`, move the in-flight guard (`fetchInFlightRef`) to be set synchronously before the `async` call (before `await`), not inside a closure. In React 18 Strict Mode, effects fire twice; a `useRef` guard set inside an async callback can be seen as `false` by the second invocation. Setting it synchronously at the top of the effect body prevents this.
+- **Defer non-critical API calls**
+  - Load chat threads/tools/LLM models after first paint or when the user opens the chat panel, so they don't stretch the "Finish" time of the initial page. `AgentTab` is already lazy-loaded via `dynamic()`, but the API calls inside it fire immediately on mount regardless of whether the panel is visible.
+
+### 3. Infrastructure
+
+- **CDN**
+  - Serve `/_next/static/*` (and optionally API if you add cache rules) from a CDN to reduce latency for JS/CSS and, if applicable, API.
+- **HTTP/2**
+  - Ensure the app and any reverse proxy use HTTP/2 so many small requests (e.g. chunks) are multiplexed efficiently.
+
+---
+
+## Quick checklist
+
+- [x] Cache-Control for `/_next/static/*` in Next.js config (done in repo).
+- [ ] Ensure deployment/CDN does not override or strip those headers.
+- [ ] Backend: compress and/or paginate OCR blocks; add `Cache-Control` for OCR blocks (immutable), LLM result (short TTL), and prompts/models (short TTL).
+- [ ] Backend: add MongoDB compound index on `prompts` collection for `{ org_id, document_id }` (prompts query taking 4.4 s suggests a missing index).
+- [x] Frontend: fix `organizationId` so no `/orgs/undefined` RSC requests (derive from pathname in Layout + TourGuide).
+- [ ] Frontend: merge the two competing `useEffect` hooks in `PDFExtractionSidebar` that both fetch the default LLM result.
+- [ ] Frontend: parallelize `listPrompts` + `getLLMResult` in `PDFExtractionSidebar` instead of sequential waterfall.
+- [ ] Frontend: remove `llmResults`/`loadingPrompts`/`failedPrompts` from `fetchData` effect dependency array; use refs for guards.
+- [ ] Frontend: fix `fetchInFlightRef` guard in `OrganizationContext` to be set synchronously (before `await`) to survive React 18 Strict Mode double-invocation.
+- [ ] Frontend: defer `AgentTab` API calls (threads, tools, models) until the chat panel is first expanded.
