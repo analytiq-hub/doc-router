@@ -42,7 +42,7 @@ const PDFFormSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
   const [llmResults, setLlmResults] = useState<Record<string, GetLLMResultResponse>>({});
   const [llmResultsLoading, setLlmResultsLoading] = useState<Set<string>>(new Set());
   const [llmResultsFailed, setLlmResultsFailed] = useState<Set<string>>(new Set());
-  const [formInitialData, setFormInitialData] = useState<Record<string, Record<string, unknown>>({});
+  const [formInitialData, setFormInitialData] = useState<Record<string, Record<string, unknown>>>({});
   const [documentName, setDocumentName] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
