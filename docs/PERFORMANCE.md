@@ -101,7 +101,7 @@ From network waterfalls (87 requests, ~6.44 MB transferred):
 - [x] Cache-Control for `/_next/static/*` in Next.js config (done in repo).
 - [ ] Ensure deployment/CDN does not override or strip those headers.
 - [ ] Backend: compress and/or paginate OCR blocks; add `Cache-Control` for OCR blocks (immutable). Do not cache LLM result or prompts; add `Cache-Control` for models endpoint only (e.g. `max-age=300`).
-- [ ] Backend: add MongoDB compound index on `prompts` collection for `{ org_id, document_id }` (prompts query taking 4.4 s suggests a missing index).
+- [x] Backend: add MongoDB compound index on `prompts` collection for list_prompts (organization_id + prompt_revisions tag_ids).
 - [x] Frontend: fix `organizationId` so no `/orgs/undefined` RSC requests (derive from pathname in Layout + TourGuide).
 - [x] Frontend: merge the two competing `useEffect` hooks in `PDFExtractionSidebar` that both fetch the default LLM result.
 - [x] Frontend: parallelize `listPrompts` + `getLLMResult` in `PDFExtractionSidebar` instead of sequential waterfall.

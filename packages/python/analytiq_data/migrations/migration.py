@@ -2045,6 +2045,48 @@ class AddQueueAndCollectionIndexes(Migration):
             return False
 
 
+class AddPromptsListIndexes(Migration):
+    """Add indexes to speed up list_prompts (org prompts + document_id/tag filtering)."""
+
+    def __init__(self):
+        super().__init__(
+            description="Add prompts organization_id index and prompt_revisions tag_ids index for list_prompts"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            # prompts: list_prompts first does find({"organization_id": organization_id})
+            await db.prompts.create_index(
+                [("organization_id", 1)],
+                name="organization_id_idx",
+                background=True,
+            )
+            logger.info("Created prompts organization_id_idx index")
+
+            # prompt_revisions: when document_id is provided we $match tag_ids; multikey index supports that
+            await db.prompt_revisions.create_index(
+                [("prompt_id", 1), ("tag_ids", 1)],
+                name="prompt_id_tag_ids_idx",
+                background=True,
+            )
+            logger.info("Created prompt_revisions prompt_id_tag_ids_idx index")
+
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create prompts list indexes: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            await db.prompts.drop_index("organization_id_idx")
+            await db.prompt_revisions.drop_index("prompt_id_tag_ids_idx")
+            logger.info("Dropped prompts list indexes")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to drop prompts list indexes: {e}")
+            return False
+
+
 # List of all migrations in order
 MIGRATIONS = [
     OcrKeyMigration(),
@@ -2073,6 +2115,7 @@ MIGRATIONS = [
     AddAccessTokenUniquenessIndex(),
     AddWebhookDeliveriesIndexes(),
     AddQueueAndCollectionIndexes(),
+    AddPromptsListIndexes(),
     # Add more migrations here
 ]
 
