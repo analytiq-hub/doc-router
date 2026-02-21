@@ -66,7 +66,7 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
       <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <PanelGroup direction="horizontal" style={{ width: '100%', height: '100%' }}>
+        <PanelGroup id={`doc-viewer-panels-${id}`} direction="horizontal" style={{ width: '100%', height: '100%' }}>
           {showLeftPanel && (
             <>
               <Panel defaultSize={panelSizes.left}>

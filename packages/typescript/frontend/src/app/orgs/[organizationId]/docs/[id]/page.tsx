@@ -76,7 +76,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
     <DocumentPageProvider organizationId={organizationId} documentId={pdfId}>
       <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          <PanelGroup direction="horizontal" style={{ width: '100%', height: '100%' }}>
+          <PanelGroup id={`doc-page-panels-${pdfId}`} direction="horizontal" style={{ width: '100%', height: '100%' }}>
             {showLeftPanel && (
               <>
                 <Panel defaultSize={defaultSizes.left} minSize={15} order={1}>

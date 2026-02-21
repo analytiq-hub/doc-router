@@ -1053,7 +1053,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       </Toolbar>
       
       <OCRProvider>
-        <PanelGroup direction="horizontal" style={{ flexGrow: 1 }}>
+        <PanelGroup id={`pdf-viewer-panels-${id}`} direction="horizontal" style={{ flexGrow: 1 }}>
           <Panel defaultSize={70}>
             <div ref={containerRef} style={{ height: '100%', overflowY: 'auto', padding: '16px' }}>
               {loading ? (
