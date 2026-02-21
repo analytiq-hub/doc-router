@@ -79,9 +79,9 @@ From network waterfalls (87 requests, ~6.44 MB transferred):
 - **Break serial fetch waterfall in `PDFExtractionSidebar`**
   - Once document state is available from `DocumentPageContext`, fire `listPrompts` and `getLLMResult('default')` in parallel (`Promise.all`). Currently they are sequential: prompts finish → LLM fetch starts, adding ~4 s to display time.
   - Remove `llmResults`, `loadingPrompts`, and `failedPrompts` from the `fetchData` `useEffect` dependency array (line 105); use refs for those guards instead to avoid the effect re-running on every state update.
-- **Deduplicate data fetching**
-  - Rely on `DocumentPageProvider` for the initial document; avoid a second full `getDocument(pdf)` in `PDFExtractionSidebar` when context is briefly null (show loading and wait for context rather than racing ahead).
-  - Consolidate org-scoped list fetches (knowledge-bases, forms, prompts, schemas, tags, docs, dashboard) so they are not triggered twice with different `_rsc` for the same data.
+- **Deduplicate data fetching** (partial) ✅ **Sidebar/document**
+  - `PDFExtractionSidebar` now waits briefly (250ms) when `documentPage` is null so `DocumentPageProvider` can set context first; only then does it call `getDocument` if context is still null, avoiding a duplicate fetch when the provider is about to load.
+  - Consolidate org-scoped list fetches (knowledge-bases, forms, prompts, schemas, tags, docs, dashboard) so they are not triggered twice with different `_rsc` for the same data — **not yet done**.
 - **Fix duplicate organizations fetch**
   - In `OrganizationContext`, move the in-flight guard (`fetchInFlightRef`) to be set synchronously before the `async` call (before `await`), not inside a closure. In React 18 Strict Mode, effects fire twice; a `useRef` guard set inside an async callback can be seen as `false` by the second invocation. Setting it synchronously at the top of the effect body prevents this.
 - **Defer non-critical API calls** ✅ **Done**

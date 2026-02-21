@@ -54,30 +54,46 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   const llmResultsRef = React.useRef(llmResults);
   const loadingPromptsRef = React.useRef(loadingPrompts);
   const failedPromptsRef = React.useRef(failedPrompts);
+  const documentPageRef = React.useRef(documentPage);
   llmResultsRef.current = llmResults;
   loadingPromptsRef.current = loadingPrompts;
   failedPromptsRef.current = failedPrompts;
+  documentPageRef.current = documentPage;
 
   useEffect(() => {
     defaultLlmFetchStartedRef.current = false;
   }, [id]);
 
-  // Single effect: get document state, then fetch prompts and default LLM result in parallel (no duplicate fetch, no serial waterfall)
+  // Single effect: get document state from context when possible; only call getDocument after a short wait if context is still null (avoids duplicate fetch with DocumentPageProvider)
   useEffect(() => {
+    const WAIT_FOR_CONTEXT_MS = 250;
+
     const fetchData = async () => {
-      let fetchedState: string | null = documentPage?.documentState ?? null;
+      const ctx = documentPageRef.current;
+      let fetchedState: string | null = ctx?.documentState ?? null;
+      let fetchedName: string | null = ctx?.documentName ?? null;
+
       try {
-        if (!documentPage) {
-          try {
-            const docResponse = await docRouterOrgApi.getDocument({
-              documentId: id,
-              fileType: 'pdf',
-            });
-            fetchedState = docResponse.state;
-            setLocalDocumentState(fetchedState);
-            setLocalDocumentName(docResponse.document_name ?? null);
-          } catch (error) {
-            console.error('Error fetching document state:', error);
+        if (!ctx) {
+          // Context not available yet: wait briefly so DocumentPageProvider can set it and we avoid a duplicate getDocument
+          await new Promise((r) => setTimeout(r, WAIT_FOR_CONTEXT_MS));
+          const ctxAfterWait = documentPageRef.current;
+          if (ctxAfterWait) {
+            fetchedState = ctxAfterWait.documentState ?? null;
+            fetchedName = ctxAfterWait.documentName ?? null;
+          } else {
+            try {
+              const docResponse = await docRouterOrgApi.getDocument({
+                documentId: id,
+                fileType: 'pdf',
+              });
+              fetchedState = docResponse.state;
+              fetchedName = docResponse.document_name ?? null;
+              setLocalDocumentState(fetchedState);
+              setLocalDocumentName(fetchedName);
+            } catch (error) {
+              console.error('Error fetching document state:', error);
+            }
           }
         }
 
