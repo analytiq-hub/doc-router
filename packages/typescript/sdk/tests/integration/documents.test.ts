@@ -231,6 +231,26 @@ describe('Documents Integration Tests', () => {
       expect(response.id).toBe(docId);
       expect(response.content).toBeDefined();
     });
+
+    test('should get document metadata without content', async () => {
+      const uploadResponse = await client.uploadDocuments({
+        documents: [{
+          name: 'metadata-only-test.pdf',
+          content: createMinimalPdfBase64(),
+        }]
+      });
+      const docId = uploadResponse.documents[0].document_id;
+
+      const response = await client.getDocumentMetadata({ documentId: docId });
+
+      expect(response.id).toBe(docId);
+      expect(response.document_name).toBe('metadata-only-test.pdf');
+      expect(response.state).toBeDefined();
+      expect(response.upload_date).toBeDefined();
+      expect(response.tag_ids).toBeDefined();
+      expect(Array.isArray(response.tag_ids)).toBe(true);
+      expect((response as { content?: unknown }).content).toBeUndefined();
+    });
   });
 
   describe('update', () => {

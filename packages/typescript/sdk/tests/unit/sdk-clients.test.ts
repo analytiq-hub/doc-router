@@ -67,6 +67,7 @@ describe('SDK Client Unit Tests', () => {
       expect(typeof client.uploadDocuments).toBe('function');
       expect(typeof client.listDocuments).toBe('function');
       expect(typeof client.getDocument).toBe('function');
+      expect(typeof client.getDocumentMetadata).toBe('function');
       expect(typeof client.updateDocument).toBe('function');
       expect(typeof client.deleteDocument).toBe('function');
       expect(typeof client.getOCRBlocks).toBe('function');

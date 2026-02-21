@@ -296,7 +296,20 @@ async def test_upload_document(test_db, pdf_fixture, request, mock_auth):
         assert uploaded_doc["document_name"] == test_pdf["name"]
         assert uploaded_doc["metadata"] == test_metadata
         
-        # Step 3: Get the specific document to verify its content
+        # Step 3: Get document metadata only (no file content) for lightweight polling
+        metadata_response = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}/metadata",
+            headers=get_auth_headers()
+        )
+        assert metadata_response.status_code == 200
+        meta_data = metadata_response.json()
+        assert meta_data["id"] == document_id
+        assert meta_data["document_name"] == test_pdf["name"]
+        assert meta_data["metadata"] == test_metadata
+        assert "state" in meta_data
+        assert "content" not in meta_data, "Metadata endpoint must not return file content"
+
+        # Step 4: Get the specific document to verify its content
         get_response = client.get(
             f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
             headers=get_auth_headers()
@@ -314,7 +327,9 @@ async def test_upload_document(test_db, pdf_fixture, request, mock_auth):
         retrieved_content = base64.b64decode(doc_data["content"])
         assert original_content == retrieved_content, "Retrieved document content doesn't match the uploaded content"
         
-        # Optional: For completeness, test document deletion
+        # Optional: Verify metadata endpoint returns 404 after delete (tested below)
+
+        # Step 5: For completeness, test document deletion
         delete_response = client.delete(
             f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
             headers=get_auth_headers()
@@ -334,6 +349,55 @@ async def test_upload_document(test_db, pdf_fixture, request, mock_auth):
         pass  # mock_auth fixture handles cleanup
 
     logger.info(f"test_upload_document() end with {test_pdf['name']}")
+
+
+@pytest.mark.asyncio
+async def test_get_document_metadata(test_db, small_pdf, mock_auth):
+    """GET /documents/{id}/metadata returns metadata without file content (for polling)."""
+    upload_data = {
+        "documents": [{
+            "name": small_pdf["name"],
+            "content": small_pdf["content"],
+            "tag_ids": [],
+            "metadata": {"source": "metadata_test"},
+        }]
+    }
+    upload_response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents",
+        json=upload_data,
+        headers=get_auth_headers(),
+    )
+    assert upload_response.status_code == 200
+    document_id = upload_response.json()["documents"][0]["document_id"]
+
+    meta_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}/metadata",
+        headers=get_auth_headers(),
+    )
+    assert meta_response.status_code == 200
+    data = meta_response.json()
+    assert data["id"] == document_id
+    assert data["document_name"] == small_pdf["name"]
+    assert data["metadata"] == {"source": "metadata_test"}
+    assert "state" in data
+    assert "upload_date" in data
+    assert "tag_ids" in data
+    assert "content" not in data
+
+    # 404 for missing document
+    missing_id = str(ObjectId())
+    not_found = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{missing_id}/metadata",
+        headers=get_auth_headers(),
+    )
+    assert not_found.status_code == 404
+
+    # Cleanup
+    client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
+        headers=get_auth_headers(),
+    )
+
 
 @pytest.mark.asyncio
 async def test_document_lifecycle(test_db, small_pdf, mock_auth):

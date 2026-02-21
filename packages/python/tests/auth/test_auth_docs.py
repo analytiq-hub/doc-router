@@ -51,6 +51,17 @@ async def test_doc_permissions(org_and_users, test_db):
     resp = client.get(f"/v0/orgs/{org_id}/documents/{doc_id}", headers=get_token_headers(outsider["token"]))
     assert resp.status_code in (401, 403, 404), f"Outsider should NOT be able to get document, got {resp.status_code}: {resp.text}"
 
+    # --- GET metadata (no content) ---
+    resp = client.get(f"/v0/orgs/{org_id}/documents/{doc_id}/metadata", headers=get_token_headers(admin["token"]))
+    assert resp.status_code == 200, f"Admin should be able to get document metadata, got {resp.status_code}: {resp.text}"
+    assert "content" not in resp.json(), "Metadata endpoint must not return content"
+
+    resp = client.get(f"/v0/orgs/{org_id}/documents/{doc_id}/metadata", headers=get_token_headers(member["token"]))
+    assert resp.status_code == 200, f"Member should be able to get document metadata, got {resp.status_code}: {resp.text}"
+
+    resp = client.get(f"/v0/orgs/{org_id}/documents/{doc_id}/metadata", headers=get_token_headers(outsider["token"]))
+    assert resp.status_code in (401, 403, 404), f"Outsider should NOT be able to get document metadata, got {resp.status_code}: {resp.text}"
+
     # --- UPDATE ---
     update_data = {"document_name": "newname.pdf", "metadata": {"test_type": "auth_test", "updated": "true"}}
     resp = client.put(f"/v0/orgs/{org_id}/documents/{doc_id}", json=update_data, headers=get_token_headers(admin["token"]))
