@@ -14,8 +14,12 @@ if (!fs.existsSync(src)) {
   process.exit(0);
 }
 
+const FA_CDN = 'https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/fonts';
+
 let css = fs.readFileSync(src, 'utf8');
 css = css.replace(/\s*\*zoom:\s*1;\s*/g, ' ');
+// Form.io references fonts at relative path fonts/ → /fonts/ which don't exist. Point to CDN.
+css = css.replace(/url\s*\(\s*['"]?fonts\/fontawesome-webfont\.(eot|woff2|woff|ttf|svg)([^'"]*)['"]?\s*\)/g, (m, ext, q) => `url('${FA_CDN}/fontawesome-webfont.${ext}${q}')`);
 fs.mkdirSync(path.dirname(dest), { recursive: true });
 fs.writeFileSync(dest, css);
 console.log('patch-formio-css: wrote public/formio.full.css');
