@@ -3,14 +3,14 @@
 
 /* Formio full CSS is loaded via <link> in layout (patched copy in public/) */
 
-/* Import all CSS files before Tailwind directives */
-@import "@tsed/tailwind-formio/styles/index.css";
-@import './formio-custom.css';
-@import 'react-toastify/dist/ReactToastify.css';
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Import formio theme and other CSS after Tailwind so utilities take precedence */
+@import "@tsed/tailwind-formio/styles/index.css";
+@import './formio-custom.css';
+@import 'react-toastify/dist/ReactToastify.css';
 
 :root {
   --background: #ecf0f1;
