@@ -215,9 +215,17 @@ export class DocRouterOrg {
 
   // ---------------- OCR ----------------
 
-  async getOCRBlocks(params: { documentId: string; }): Promise<OCRBlock[]> {
-    const { documentId } = params;
-    return this.http.get<OCRBlock[]>(`/v0/orgs/${this.organizationId}/ocr/download/blocks/${documentId}`);
+  /**
+   * Get OCR blocks for a document.
+   * @param format - 'gzip' (default) requests compressed response for smaller transfer; 'plain' for raw JSON (backward compatible).
+   * Browser/axios automatically decompresses gzip responses.
+   */
+  async getOCRBlocks(params: { documentId: string; format?: 'plain' | 'gzip' }): Promise<OCRBlock[]> {
+    const { documentId, format = 'gzip' } = params;
+    return this.http.get<OCRBlock[]>(
+      `/v0/orgs/${this.organizationId}/ocr/download/blocks/${documentId}`,
+      { params: { format } }
+    );
   }
 
   async getOCRText(params: { documentId: string; pageNum?: number; }): Promise<string> {

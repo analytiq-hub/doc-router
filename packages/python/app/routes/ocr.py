@@ -1,8 +1,10 @@
 # ocr.py
 
 # Standard library imports
+import gzip
+import json
 import logging
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel
 
 # Third-party imports
@@ -29,17 +31,21 @@ class GetOCRMetadataResponse(BaseModel):
 async def download_ocr_blocks(
     organization_id: str,
     document_id: str,
-    current_user: User = Depends(get_org_user)
+    format: Literal["plain", "gzip"] = Query(
+        "plain",
+        description="Response format: 'plain' (default, raw JSON) or 'gzip' (gzip-compressed JSON)",
+    ),
+    current_user: User = Depends(get_org_user),
 ):
-    """Download OCR blocks for a document"""
-    logger.debug(f"download_ocr_blocks() start: document_id: {document_id}")
+    """Download OCR blocks for a document. Use format=gzip for compressed response."""
+    logger.debug(f"download_ocr_blocks() start: document_id: {document_id}, format: {format}")
     analytiq_client = ad.common.get_analytiq_client()
 
     document = await ad.common.get_doc(analytiq_client, document_id)
-    
+
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    
+
     file_name = document.get("user_file_name", "")
     if not ad.common.doc.ocr_supported(file_name):
         raise HTTPException(status_code=404, detail="OCR not supported for this document extension")
@@ -48,8 +54,18 @@ async def download_ocr_blocks(
     ocr_json = await ad.common.get_ocr_json(analytiq_client, document_id)
     if ocr_json is None:
         raise HTTPException(status_code=404, detail="OCR data not found")
-    
-    return JSONResponse(content=ocr_json)
+
+    headers = {"Cache-Control": "private, max-age=3600"}
+
+    if format == "gzip":
+        body = gzip.compress(json.dumps(ocr_json).encode("utf-8"))
+        return Response(
+            content=body,
+            media_type="application/json",
+            headers={**headers, "Content-Encoding": "gzip"},
+        )
+
+    return JSONResponse(content=ocr_json, headers=headers)
 
 @ocr_router.get("/v0/orgs/{organization_id}/ocr/download/text/{document_id}", response_model=str)
 async def download_ocr_text(

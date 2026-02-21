@@ -93,6 +93,38 @@ describe('SDK Client Unit Tests', () => {
       expect(typeof client.reconcileAllKnowledgeBases).toBe('function');
     });
 
+    test('getOCRBlocks accepts format param and requests gzip by default', async () => {
+      const mockGet = jest.fn().mockResolvedValue([]);
+      const client = new DocRouterOrg({
+        baseURL: 'https://api.example.com',
+        orgToken: 'org-token',
+        organizationId: 'org-123'
+      });
+      (client as unknown as { http: { get: jest.Mock } }).http.get = mockGet;
+
+      await client.getOCRBlocks({ documentId: 'doc-456' });
+      expect(mockGet).toHaveBeenCalledWith(
+        '/v0/orgs/org-123/ocr/download/blocks/doc-456',
+        { params: { format: 'gzip' } }
+      );
+    });
+
+    test('getOCRBlocks can request plain format', async () => {
+      const mockGet = jest.fn().mockResolvedValue([]);
+      const client = new DocRouterOrg({
+        baseURL: 'https://api.example.com',
+        orgToken: 'org-token',
+        organizationId: 'org-123'
+      });
+      (client as unknown as { http: { get: jest.Mock } }).http.get = mockGet;
+
+      await client.getOCRBlocks({ documentId: 'doc-789', format: 'plain' });
+      expect(mockGet).toHaveBeenCalledWith(
+        '/v0/orgs/org-123/ocr/download/blocks/doc-789',
+        { params: { format: 'plain' } }
+      );
+    });
+
     test('should update org token', () => {
       const client = new DocRouterOrg({
         baseURL: 'https://api.example.com',

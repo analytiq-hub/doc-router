@@ -54,10 +54,10 @@ From network waterfalls (87 requests, ~6.44 MB transferred):
 ### 1. Backend API (highest impact)
 
 - **OCR blocks** (`/ocr/download/blocks`):
-  - Ensure response is gzip'd.
-  - Consider pagination or "by-page" endpoint so the client doesn't wait for the full document's blocks.
+  - ✅ **Done:** `Cache-Control: private, max-age=3600` (1h) added in `app/routes/ocr.py`.
+  - Ensure response is gzip'd (optional).
+  - Consider pagination or "by-page" endpoint so the client doesn't wait for the full document's blocks (optional).
   - Add DB/cache indexing if `get_ocr_json` is slow (e.g. blob key lookups).
-  - OCR data is immutable once computed — add `Cache-Control: private, max-age=3600` (or even `immutable`) so the browser never re-fetches the same blocks on reload.
 - **LLM result** (`/llm/result`):
   - Reduce payload (e.g. omit heavy fields until needed).
   - Do **not** cache (data is dynamic per document).
@@ -100,7 +100,8 @@ From network waterfalls (87 requests, ~6.44 MB transferred):
 
 - [x] Cache-Control for `/_next/static/*` in Next.js config (done in repo).
 - [ ] Ensure deployment/CDN does not override or strip those headers.
-- [ ] Backend: compress and/or paginate OCR blocks; add `Cache-Control` for OCR blocks (immutable). Do not cache LLM result or prompts; add `Cache-Control` for models endpoint only (e.g. `max-age=300`).
+- [ ] Backend: compress and/or paginate OCR blocks (optional). Do not cache LLM result or prompts; add `Cache-Control` for models endpoint only (e.g. `max-age=300`).
+- [x] Backend: add `Cache-Control: private, max-age=3600` for OCR blocks endpoint.
 - [x] Backend: add MongoDB compound index on `prompts` collection for list_prompts (organization_id + prompt_revisions tag_ids).
 - [x] Frontend: fix `organizationId` so no `/orgs/undefined` RSC requests (derive from pathname in Layout + TourGuide).
 - [x] Frontend: merge the two competing `useEffect` hooks in `PDFExtractionSidebar` that both fetch the default LLM result.

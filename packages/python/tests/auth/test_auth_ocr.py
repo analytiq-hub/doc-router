@@ -35,6 +35,10 @@ async def test_ocr_permissions(org_and_users, test_db):
     resp = client.get(url_blocks, headers=get_token_headers(outsider["token"]))
     assert resp.status_code in (401, 403), f"Outsider should NOT be able to access OCR blocks, got {resp.status_code}: {resp.text}"
 
+    # OCR blocks with format=gzip (same permissions as plain)
+    resp = client.get(url_blocks, params={"format": "gzip"}, headers=get_token_headers(admin["token"]))
+    assert resp.status_code in (200, 404), f"Admin should be able to access OCR blocks (gzip), got {resp.status_code}: {resp.text}"
+
     # --- OCR TEXT ---
     url_text = f"/v0/orgs/{org_id}/ocr/download/text/{doc_id}"
     resp = client.get(url_text, headers=get_token_headers(admin["token"]))
