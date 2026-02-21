@@ -9,6 +9,7 @@ import {
   ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 import { DocRouterOrgApi } from '@/utils/api';
+import { WAIT_FOR_CONTEXT_MS } from '@/utils/performance';
 import type { Prompt } from '@docrouter/sdk';
 import { useOCR, OCRProvider } from '@/contexts/OCRContext';
 import { useDocumentPage } from '@/contexts/DocumentPageContext';
@@ -66,8 +67,6 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
 
   // Single effect: get document state from context when possible; only call getDocument after a short wait if context is still null (avoids duplicate fetch with DocumentPageProvider)
   useEffect(() => {
-    const WAIT_FOR_CONTEXT_MS = 250;
-
     const fetchData = async () => {
       const ctx = documentPageRef.current;
       let fetchedState: string | null = ctx?.documentState ?? null;

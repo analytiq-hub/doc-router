@@ -6,6 +6,7 @@ import { pdfjs, Document, Page } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { DocRouterOrgApi } from '@/utils/api';
+import { WAIT_FOR_CONTEXT_MS } from '@/utils/performance';
 import { isOCRSupported, isOcrNotReadyError } from '@/utils/ocr-utils';
 
 /** Document states that indicate an error; stop polling for OCR/bounding boxes when these are set. */
@@ -112,6 +113,8 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<string | null>(null);
+  const documentPageRef = useRef(documentPage);
+  documentPageRef.current = documentPage;
 
   // When DocumentPageContext provides PDF, set blob URL directly. react-pdf <Document> will parse once; onLoadError handles invalid PDFs.
   useEffect(() => {
@@ -140,13 +143,16 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       }
       setFile(null);
     };
-  }, [documentPage?.pdfContent, documentPage?.loading, documentPage?.error, documentPage?.documentName]);
+  }, [documentPage, documentPage?.pdfContent, documentPage?.loading, documentPage?.error, documentPage?.documentName]);
 
-  // When no context (e.g. used outside document page), fetch PDF and set blob URL. Single parse by <Document>; onLoadError on failure.
+  // When no context: wait briefly for DocumentPageProvider so we don't duplicate GET document (same doc page). Then fetch if still no context.
   useEffect(() => {
     if (documentPage != null) return;
     let isMounted = true;
     const loadPDF = async () => {
+      await new Promise((r) => setTimeout(r, WAIT_FOR_CONTEXT_MS));
+      if (!isMounted) return;
+      if (documentPageRef.current != null) return; // Context appeared; avoid duplicate fetch
       try {
         const response = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
         if (response.content == null) {

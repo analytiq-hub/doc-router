@@ -108,3 +108,15 @@ From network waterfalls (87 requests, ~6.44 MB transferred):
 - [x] Frontend: remove `llmResults`/`loadingPrompts`/`failedPrompts` from `fetchData` effect dependency array; use refs for guards.
 - [x] Frontend: fix `fetchInFlightRef` guard in `OrganizationContext` to be set synchronously (before `await`) to survive React 18 Strict Mode double-invocation.
 - [x] Frontend: defer `AgentTab` API calls (threads, tools, models) until the chat panel is first expanded.
+- [x] Frontend: `PDFViewer` waits 250ms for `DocumentPageContext` before calling `getDocument`, avoiding duplicate `documents/...?file_type=pdf` when provider is loading.
+
+---
+
+## Network trace (reload) – static vs dynamic
+
+**Static (cache):** `/_next/static/*` (JS, CSS, `pdf.worker.min.mjs`) is already served with `Cache-Control: public, max-age=28800` in `next.config.mjs`. With cache enabled, reloads should serve these from disk. Ensure deployment/CDN does not strip these headers. Favicon: reference it consistently (one URL) so it can be cached.
+
+**Dynamic (deduplicate):** From traces, duplicate GETs were seen for:
+- **`/v0/account/organizations`** – Guard in `OrganizationContext` is set synchronously to avoid double fetch; other call sites (dashboard, OrganizationManager, UserInviteModal) are different routes. If duplicates remain on the doc page, consider a shared client-side cache (e.g. SWR/React Query) keyed by URL+params.
+- **`/v0/orgs/.../documents/...?file_type=pdf`** – `DocumentPageContext` fetches once; `PDFExtractionSidebar` and `PDFViewer` now wait 250ms for context before calling `getDocument`, so the doc page should issue a single document fetch.
+- **`/v0/orgs/.../prompts`**, **`/llm/result`**, **`/ocr/download/blocks`** – If still duplicated, ensure a single effect/hook per document (refs and dependency arrays as in `PDFExtractionSidebar`). OCR has a per-`OCRProvider` cache; one provider per doc page would avoid duplicate OCR fetches.
