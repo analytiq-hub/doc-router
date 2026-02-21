@@ -4377,9 +4377,6 @@ span[role=link] {
   cursor: pointer;
 }
 
-.hidden {
-  display: none !important;
-}
 .formbuilder {
   position: relative;
 }
