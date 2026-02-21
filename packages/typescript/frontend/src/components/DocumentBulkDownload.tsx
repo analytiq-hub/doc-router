@@ -75,6 +75,9 @@ export const DocumentBulkDownload = forwardRef<DocumentBulkDownloadRef, Document
       const suffix = lastDotIndex !== -1 ? fileName.substring(lastDotIndex) : '';
       const downloadFileName = `${prefix}_${doc.id}${suffix}`;
 
+      if (response.content == null) {
+        throw new Error('Document content not available');
+      }
       const serverType: string | undefined = response.type as string | undefined;
       const blob = new Blob([response.content], { type: serverType });
 

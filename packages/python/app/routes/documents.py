@@ -55,7 +55,7 @@ class DocumentResponse(BaseModel):
     tag_ids: List[str] = []  # List of tag IDs
     type: str | None = None   # MIME type of the returned file (original/pdf)
     metadata: Optional[Dict[str, str]] = {}  # Optional key-value metadata pairs
-    content: str  # Base64 encoded content
+    content: Optional[str] = None  # Base64 encoded content; omitted when include_content=false (backward compatible: default request returns content)
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
@@ -374,49 +374,21 @@ async def list_documents(
         skip=skip
     )
 
-@documents_router.get("/v0/orgs/{organization_id}/documents/{document_id}/metadata", response_model=DocumentMetadata)
-async def get_document_metadata(
-    organization_id: str,
-    document_id: str,
-    current_user: User = Depends(get_org_user)
-):
-    """Get document metadata (including state) without downloading file content. Use for polling during processing."""
-    analytiq_client = ad.common.get_analytiq_client()
-    db = ad.common.get_async_db(analytiq_client)
-    document = await db.docs.find_one({
-        "_id": ObjectId(document_id),
-        "organization_id": organization_id
-    })
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-    try:
-        doc_type = get_mime_type(document["user_file_name"])
-    except Exception:
-        doc_type = None
-    return DocumentMetadata(
-        id=str(document["_id"]),
-        pdf_id=document.get("pdf_id", document["document_id"]),
-        document_name=document["user_file_name"],
-        upload_date=document["upload_date"].replace(tzinfo=UTC),
-        uploaded_by=document["uploaded_by"],
-        state=document.get("state", ""),
-        tag_ids=document.get("tag_ids", []),
-        type=doc_type,
-        metadata=document.get("metadata", {}),
-    )
-
-
 @documents_router.get("/v0/orgs/{organization_id}/documents/{document_id}", response_model=DocumentResponse)
 async def get_document(
     organization_id: str,
     document_id: str,
-    file_type: str = Query(default="original", 
-                           enum=["original", "pdf"], 
+    file_type: str = Query(default="original",
+                           enum=["original", "pdf"],
                            description="Which file to retrieve: 'original' or 'pdf'"),
+    include_content: bool = Query(
+        True,
+        description="If false, return only metadata without file content (e.g. for polling). Default true for backward compatibility.",
+    ),
     current_user: User = Depends(get_org_user)
 ):
-    """Get a document (original or associated PDF)"""
-    logger.debug(f"get_document() start: document_id: {document_id}, file_type: {file_type}")
+    """Get a document (original or associated PDF). Use include_content=false for metadata-only (no file download)."""
+    logger.debug(f"get_document() start: document_id: {document_id}, file_type: {file_type}, include_content: {include_content}")
     analytiq_client = ad.common.get_analytiq_client()
     db = ad.common.get_async_db(analytiq_client)
 
@@ -425,28 +397,44 @@ async def get_document(
         "_id": ObjectId(document_id),
         "organization_id": organization_id
     })
-    
+
     if not document:
         logger.debug(f"get_document() document not found: {document}")
         raise HTTPException(status_code=404, detail="Document not found")
-        
+
     logger.debug(f"get_document() found document: {document}")
 
-    # Decide which file to return
+    # Metadata-only path: no file fetch (backward compatible: default include_content=True still returns content)
+    if not include_content:
+        try:
+            returned_mime = get_mime_type(document["user_file_name"])
+        except Exception:
+            returned_mime = None
+        return DocumentResponse(
+            id=str(document["_id"]),
+            pdf_id=document.get("pdf_id", document["document_id"]),
+            document_name=document["user_file_name"],
+            upload_date=document["upload_date"].replace(tzinfo=UTC),
+            uploaded_by=document["uploaded_by"],
+            state=document.get("state", ""),
+            tag_ids=document.get("tag_ids", []),
+            type=returned_mime,
+            metadata=document.get("metadata", {}),
+            content=None,
+        )
+
+    # Full response: resolve file and return content
     if file_type == "pdf":
         file_name = document.get("pdf_file_name", document.get("mongo_file_name"))
     else:
         file_name = document.get("mongo_file_name")
 
-    # Get the file from mongodb
     file = await ad.common.get_file_async(analytiq_client, file_name)
     if file is None:
         raise HTTPException(status_code=404, detail="File not found")
 
     logger.debug(f"get_document() got file: {file_name}")
 
-    # Determine MIME type for the file being returned
-    # Prefer stored metadata.type; fall back to inferring from original name
     try:
         returned_mime = file["metadata"].get("type")
     except Exception:
@@ -457,7 +445,6 @@ async def get_document(
         except Exception:
             returned_mime = None
 
-    # Return flattened response
     return DocumentResponse(
         id=str(document["_id"]),
         pdf_id=document.get("pdf_id", document["document_id"]),
@@ -468,7 +455,7 @@ async def get_document(
         tag_ids=document.get("tag_ids", []),
         type=returned_mime,
         metadata=document.get("metadata", {}),
-        content=base64.b64encode(file["blob"]).decode('utf-8')
+        content=base64.b64encode(file["blob"]).decode("utf-8"),
     )
 
 @documents_router.delete("/v0/orgs/{organization_id}/documents/{document_id}")

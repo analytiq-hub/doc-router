@@ -46,10 +46,11 @@ const PDFFormSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
 
   const fetchData = useCallback(async () => {
     try {
-      // Get document metadata to access tags
-      const documentResponse = await docRouterOrgApi.getDocument({ 
-        documentId: id, 
-        fileType: 'original' 
+      // Get document metadata only (no file content) to access tags
+      const documentResponse = await docRouterOrgApi.getDocument({
+        documentId: id,
+        fileType: 'original',
+        includeContent: false
       });
       
       const documentTags = documentResponse.tag_ids || [];
@@ -84,12 +85,13 @@ const PDFFormSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
   const [documentName, setDocumentName] = useState<string | null>(null);
 
   useEffect(() => {
-    // Fetch document name for OCR support check
+    // Fetch document name for OCR support check (metadata only)
     const fetchDocumentName = async () => {
       try {
         const docResponse = await docRouterOrgApi.getDocument({
           documentId: id,
-          fileType: "original"
+          fileType: "original",
+          includeContent: false
         });
         setDocumentName(docResponse.document_name);
       } catch (error) {

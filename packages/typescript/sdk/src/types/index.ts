@@ -135,18 +135,8 @@ export interface UploadDocumentsResponse {
 export interface GetDocumentParams {
   documentId: string;
   fileType: string;
-}
-
-export interface GetDocumentMetadataResponse {
-  id: string;
-  pdf_id: string;
-  document_name: string;
-  upload_date: string;
-  uploaded_by: string;
-  state: string;
-  tag_ids: string[];
-  type: string | null;
-  metadata: Record<string, string>;
+  /** If false, return only metadata (no file content). Default true for backward compatibility. */
+  includeContent?: boolean;
 }
 
 export interface GetDocumentResponse {
@@ -157,9 +147,10 @@ export interface GetDocumentResponse {
   uploaded_by: string;
   state: string;
   tag_ids: string[];
-  type: string;
+  type: string | null;
   metadata: Record<string, string>;
-  content: ArrayBuffer;
+  /** Present when includeContent is true (default); null when includeContent is false. */
+  content: ArrayBuffer | null;
 }
 
 export interface UpdateDocumentParams {

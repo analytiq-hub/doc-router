@@ -210,6 +210,9 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
       // Create a blob from the array buffer
       // Infer MIME type from file extension to avoid forcing .pdf downloads
       const fileName = doc.document_name || response.document_name;
+      if (response.content == null) {
+        throw new Error('Document content not available');
+      }
       // Use server-reported MIME type when available
       const serverType: string | undefined = response.type as string | undefined;
       const blob = new Blob([response.content], { type: serverType });

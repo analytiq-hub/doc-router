@@ -149,6 +149,9 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     const loadPDF = async () => {
       try {
         const response = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
+        if (response.content == null) {
+          throw new Error('Document content not available');
+        }
         const blob = new Blob([response.content], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         if (isMounted) {

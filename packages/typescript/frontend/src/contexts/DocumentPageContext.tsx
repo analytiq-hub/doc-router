@@ -44,7 +44,7 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
     try {
       setError(null);
       const response = await api.getDocument({ documentId, fileType: 'pdf' });
-      setPdfContent(response.content);
+      setPdfContent(response.content ?? null);
       setDocumentName(response.document_name ?? null);
       setDocumentState(response.state ?? null);
     } catch (e) {
@@ -69,7 +69,7 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
     fetchDocument();
   }, [fetchDocument]);
 
-  // Poll state via metadata-only endpoint (no PDF binary). When completed, fetch full document once.
+  // Poll state via GET document with include_content=false (no PDF binary). When completed, fetch full document once.
   useEffect(() => {
     if (documentState !== 'ocr_processing' && documentState !== 'llm_processing') {
       if (pollRef.current) {
@@ -82,7 +82,7 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
     completionFetchStartedRef.current = false;
     pollRef.current = setInterval(async () => {
       try {
-        const meta = await api.getDocumentMetadata({ documentId });
+        const meta = await api.getDocument({ documentId, fileType: 'pdf', includeContent: false });
         setDocumentState(meta.state ?? null);
         setDocumentName(meta.document_name ?? null);
         if (meta.state === 'llm_completed' || meta.state === 'ocr_completed') {
@@ -93,7 +93,7 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
             pollRef.current = null;
           }
           const response = await api.getDocument({ documentId, fileType: 'pdf' });
-          setPdfContent(response.content);
+          setPdfContent(response.content ?? null);
           setDocumentName(response.document_name ?? null);
         }
       } catch {

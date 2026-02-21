@@ -4,7 +4,6 @@ import {
   UploadDocumentsResponse,
   ListDocumentsResponse,
   GetDocumentResponse,
-  GetDocumentMetadataResponse,
   GetOCRMetadataResponse,
   RunLLMResponse,
   GetLLMResultResponse,
@@ -156,8 +155,12 @@ export class DocRouterOrg {
     });
   }
 
-  async getDocument(params: { documentId: string; fileType: string; }): Promise<GetDocumentResponse> {
-    const { documentId, fileType } = params;
+  async getDocument(params: { documentId: string; fileType: string; includeContent?: boolean }): Promise<GetDocumentResponse> {
+    const { documentId, fileType, includeContent = true } = params;
+    const query = new URLSearchParams({ file_type: fileType });
+    if (includeContent === false) {
+      query.set('include_content', 'false');
+    }
     const response = await this.http.get<{
       id: string;
       pdf_id: string;
@@ -166,16 +169,20 @@ export class DocRouterOrg {
       uploaded_by: string;
       state: string;
       tag_ids: string[];
-      type: string;
+      type: string | null;
       metadata: Record<string, string>;
-      content: string;
-    }>(`/v0/orgs/${this.organizationId}/documents/${documentId}?file_type=${fileType}`);
+      content: string | null;
+    }>(`/v0/orgs/${this.organizationId}/documents/${documentId}?${query.toString()}`);
 
-    const binaryContent = atob(response.content);
-    const len = binaryContent.length;
-    const bytes = new Uint8Array(len);
-    for (let i = 0; i < len; i++) {
-      bytes[i] = binaryContent.charCodeAt(i);
+    let content: ArrayBuffer | null = null;
+    if (response.content != null && response.content.length > 0) {
+      const binaryContent = atob(response.content);
+      const len = binaryContent.length;
+      const bytes = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        bytes[i] = binaryContent.charCodeAt(i);
+      }
+      content = bytes.buffer;
     }
 
     return {
@@ -186,17 +193,10 @@ export class DocRouterOrg {
       uploaded_by: response.uploaded_by,
       state: response.state,
       tag_ids: response.tag_ids,
-      type: response.type,
+      type: response.type ?? null,
       metadata: response.metadata,
-      content: bytes.buffer
+      content
     };
-  }
-
-  async getDocumentMetadata(params: { documentId: string }): Promise<GetDocumentMetadataResponse> {
-    const { documentId } = params;
-    return this.http.get<GetDocumentMetadataResponse>(
-      `/v0/orgs/${this.organizationId}/documents/${documentId}/metadata`
-    );
   }
 
   async updateDocument(params: { documentId: string; documentName?: string; tagIds?: string[]; metadata?: Record<string, string>; }) {

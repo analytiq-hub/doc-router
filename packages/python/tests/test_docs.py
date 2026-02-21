@@ -296,9 +296,10 @@ async def test_upload_document(test_db, pdf_fixture, request, mock_auth):
         assert uploaded_doc["document_name"] == test_pdf["name"]
         assert uploaded_doc["metadata"] == test_metadata
         
-        # Step 3: Get document metadata only (no file content) for lightweight polling
+        # Step 3: Get document metadata only (include_content=false) for lightweight polling
         metadata_response = client.get(
-            f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}/metadata",
+            f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
+            params={"include_content": False},
             headers=get_auth_headers()
         )
         assert metadata_response.status_code == 200
@@ -307,9 +308,9 @@ async def test_upload_document(test_db, pdf_fixture, request, mock_auth):
         assert meta_data["document_name"] == test_pdf["name"]
         assert meta_data["metadata"] == test_metadata
         assert "state" in meta_data
-        assert "content" not in meta_data, "Metadata endpoint must not return file content"
+        assert meta_data.get("content") is None, "include_content=false must not return file content"
 
-        # Step 4: Get the specific document to verify its content
+        # Step 4: Get the specific document (default include_content=true) to verify content
         get_response = client.get(
             f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
             headers=get_auth_headers()
@@ -352,8 +353,8 @@ async def test_upload_document(test_db, pdf_fixture, request, mock_auth):
 
 
 @pytest.mark.asyncio
-async def test_get_document_metadata(test_db, small_pdf, mock_auth):
-    """GET /documents/{id}/metadata returns metadata without file content (for polling)."""
+async def test_get_document_metadata_only(test_db, small_pdf, mock_auth):
+    """GET /documents/{id}?include_content=false returns metadata without file content (for polling)."""
     upload_data = {
         "documents": [{
             "name": small_pdf["name"],
@@ -371,7 +372,8 @@ async def test_get_document_metadata(test_db, small_pdf, mock_auth):
     document_id = upload_response.json()["documents"][0]["document_id"]
 
     meta_response = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}/metadata",
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
+        params={"include_content": False},
         headers=get_auth_headers(),
     )
     assert meta_response.status_code == 200
@@ -382,17 +384,53 @@ async def test_get_document_metadata(test_db, small_pdf, mock_auth):
     assert "state" in data
     assert "upload_date" in data
     assert "tag_ids" in data
-    assert "content" not in data
+    assert data.get("content") is None
 
     # 404 for missing document
     missing_id = str(ObjectId())
     not_found = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/documents/{missing_id}/metadata",
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{missing_id}",
+        params={"include_content": False},
         headers=get_auth_headers(),
     )
     assert not_found.status_code == 404
 
     # Cleanup
+    client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
+        headers=get_auth_headers(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_document_backward_compatible_default_includes_content(test_db, small_pdf, mock_auth):
+    """Default GET /documents/{id} (no include_content param) returns full content for backward compatibility."""
+    upload_data = {
+        "documents": [{
+            "name": small_pdf["name"],
+            "content": small_pdf["content"],
+            "tag_ids": [],
+            "metadata": {},
+        }]
+    }
+    upload_response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents",
+        json=upload_data,
+        headers=get_auth_headers(),
+    )
+    assert upload_response.status_code == 200
+    document_id = upload_response.json()["documents"][0]["document_id"]
+
+    # No query params: must return content (backward compatible)
+    get_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
+        headers=get_auth_headers(),
+    )
+    assert get_response.status_code == 200
+    data = get_response.json()
+    assert data["id"] == document_id
+    assert "content" in data and data["content"] is not None and len(data["content"]) > 0
+
     client.delete(
         f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
         headers=get_auth_headers(),

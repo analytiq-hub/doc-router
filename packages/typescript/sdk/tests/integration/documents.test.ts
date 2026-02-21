@@ -241,7 +241,7 @@ describe('Documents Integration Tests', () => {
       });
       const docId = uploadResponse.documents[0].document_id;
 
-      const response = await client.getDocumentMetadata({ documentId: docId });
+      const response = await client.getDocument({ documentId: docId, fileType: 'original', includeContent: false });
 
       expect(response.id).toBe(docId);
       expect(response.document_name).toBe('metadata-only-test.pdf');
@@ -249,7 +249,7 @@ describe('Documents Integration Tests', () => {
       expect(response.upload_date).toBeDefined();
       expect(response.tag_ids).toBeDefined();
       expect(Array.isArray(response.tag_ids)).toBe(true);
-      expect((response as { content?: unknown }).content).toBeUndefined();
+      expect(response.content).toBeNull();
     });
   });
 
