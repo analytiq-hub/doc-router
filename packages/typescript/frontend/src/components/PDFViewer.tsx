@@ -35,7 +35,6 @@ import { PanelGroup, Panel } from 'react-resizable-panels';
 import CheckIcon from '@mui/icons-material/Check';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import CropFreeIcon from '@mui/icons-material/CropFree';
-import { OCRProvider } from '@/contexts/OCRContext';
 import type { OCRBlock } from '@docrouter/sdk';
 import type { HighlightInfo } from '@/types/index';
 
@@ -1102,8 +1101,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
         </Menu>
       </Toolbar>
       
-      <OCRProvider>
-        <PanelGroup id={`pdf-viewer-panels-${id}`} direction="horizontal" style={{ flexGrow: 1 }}>
+      <PanelGroup id={`pdf-viewer-panels-${id}`} direction="horizontal" style={{ flexGrow: 1 }}>
           <Panel defaultSize={70}>
             <div ref={containerRef} style={{ height: '100%', overflowY: 'auto', padding: '16px' }}>
               {loading ? (
@@ -1192,7 +1190,6 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
             </Panel>
           )}
         </PanelGroup>
-      </OCRProvider>
 
       <Dialog 
         open={showProperties} 

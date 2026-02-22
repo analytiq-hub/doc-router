@@ -5,4 +5,4 @@ export * from './organizations';
 export * from './payments';
 export * from './users';
 export * from './tokens';
-export type { HighlightInfo } from '@/contexts/OCRContext';
+export type { HighlightInfo } from '@/hooks/useOCRBlocks';

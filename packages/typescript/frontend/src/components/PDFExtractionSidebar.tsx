@@ -10,9 +10,9 @@ import {
 } from '@heroicons/react/24/outline';
 import { DocRouterOrgApi } from '@/utils/api';
 import type { Prompt } from '@docrouter/sdk';
-import { useOCR, OCRProvider } from '@/contexts/OCRContext';
+import { useOCRBlocks } from '@/hooks/useOCRBlocks';
 import type { GetLLMResultResponse } from '@docrouter/sdk';
-import type { HighlightInfo } from '@/contexts/OCRContext';
+import type { HighlightInfo } from '@/hooks/useOCRBlocks';
 
 interface Props {
   organizationId: string;
@@ -32,7 +32,7 @@ type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string
 
 const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const { loadOCRBlocks, findBlocksWithContext } = useOCR();
+  const { loadOCRBlocks, findBlocksWithContext } = useOCRBlocks();
   const [llmResults, setLlmResults] = useState<Record<string, GetLLMResultResponse>>({});
   const [matchingPrompts, setMatchingPrompts] = useState<Prompt[]>([]);
   const [runningPrompts, setRunningPrompts] = useState<Set<string>>(new Set());
@@ -1107,13 +1107,4 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   );
 };
 
-// Wrap the component with OCRProvider
-const PDFExtractionSidebar = (props: Props) => {
-  return (
-    <OCRProvider>
-      <PDFExtractionSidebarContent {...props} />
-    </OCRProvider>
-  );
-};
-
-export default PDFExtractionSidebar;
+export default PDFExtractionSidebarContent;

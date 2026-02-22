@@ -6,8 +6,8 @@ import {
 } from '@heroicons/react/24/outline';
 import { DocRouterOrgApi } from '@/utils/api';
 import type { Form } from '@docrouter/sdk';
-import { useOCR, OCRProvider } from '@/contexts/OCRContext';
-import type { HighlightInfo } from '@/contexts/OCRContext';
+import { useOCRBlocks } from '@/hooks/useOCRBlocks';
+import type { HighlightInfo } from '@/hooks/useOCRBlocks';
 import dynamic from 'next/dynamic';
 
 const FormioRenderer = dynamic(() => import('./FormioRenderer'), {
@@ -28,7 +28,7 @@ interface Props {
 
 const PDFFormSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const { loadOCRBlocks, findBlocksWithContext } = useOCR();
+  const { loadOCRBlocks, findBlocksWithContext } = useOCRBlocks();
   
   // Form-related state
   const [documentTags, setDocumentTags] = useState<string[]>([]);
@@ -584,12 +584,4 @@ const PDFFormSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
   );
 };
 
-const PDFFormSidebar = (props: Props) => {
-  return (
-    <OCRProvider>
-      <PDFFormSidebarContent {...props} />
-    </OCRProvider>
-  );
-};
-
-export default PDFFormSidebar;
+export default PDFFormSidebarContent;
