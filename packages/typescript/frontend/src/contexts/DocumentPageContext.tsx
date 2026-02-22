@@ -42,7 +42,12 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const completionFetchStartedRef = useRef(false);
+  const pdfContentRef = useRef<ArrayBuffer | null>(null);
   const api = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
+
+  useEffect(() => {
+    pdfContentRef.current = pdfContent;
+  }, [pdfContent]);
 
   /** Set both pdfContent and the stable pdfFile wrapper together. */
   const setContent = useCallback((content: ArrayBuffer | null) => {
@@ -59,6 +64,12 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
       setContent(response.content ?? null);
       setDocumentName(response.document_name ?? null);
       setDocumentState(response.state ?? null);
+      // Only mark loading complete when we have PDF content or document is not still processing
+      const hasContent = (response.content ?? null) != null;
+      const stillProcessing = ['ocr_processing', 'llm_processing'].includes(response.state ?? '');
+      if (hasContent || !stillProcessing) {
+        setLoading(false);
+      }
     } catch (e) {
       try {
         const fallback = await api.getDocument({ documentId, fileType: 'original' });
@@ -104,9 +115,15 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
             clearInterval(pollRef.current);
             pollRef.current = null;
           }
-          const response = await api.getDocument({ documentId, fileType: 'pdf' });
-          setContent(response.content ?? null);
-          setDocumentName(response.document_name ?? null);
+          setDocumentState(meta.state ?? null);
+          setDocumentName(meta.document_name ?? null);
+          // Only fetch full PDF if we don't already have it; avoids new ArrayBuffer reference and "file prop changed but equal" warning
+          if (pdfContentRef.current == null) {
+            const response = await api.getDocument({ documentId, fileType: 'pdf' });
+            setContent(response.content ?? null);
+            setDocumentName(response.document_name ?? null);
+            setLoading(false);
+          }
         }
       } catch {
         // keep polling on error

@@ -85,6 +85,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
               const docResponse = await docRouterOrgApi.getDocument({
                 documentId: id,
                 fileType: 'pdf',
+                includeContent: false,
               });
               fetchedState = docResponse.state;
               fetchedName = docResponse.document_name ?? null;
@@ -156,7 +157,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     }
     const pollInterval = setInterval(async () => {
       try {
-        const docResponse = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
+        const docResponse = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf', includeContent: false });
         setLocalDocumentState(docResponse.state);
         if ((docResponse.state === 'llm_completed' || docResponse.state === 'ocr_completed') &&
             !llmResults['default'] && !loadingPrompts.has('default') && !failedPrompts.has('default')) {
@@ -200,6 +201,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
             const docResponse = await docRouterOrgApi.getDocument({
               documentId: id,
               fileType: 'pdf',
+              includeContent: false,
             });
             setLocalDocumentState(docResponse.state);
           } catch (error) {

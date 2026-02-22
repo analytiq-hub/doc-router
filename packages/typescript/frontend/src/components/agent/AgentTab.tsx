@@ -37,13 +37,13 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
     const fetchState = async () => {
       try {
         try {
-          const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf' });
+          const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf', includeContent: false });
           setLocalDocumentState(doc.state);
           return;
         } catch {
           // Non-PDF documents may not have pdf; try original
         }
-        const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original' });
+        const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original', includeContent: false });
         setLocalDocumentState(doc.state);
       } catch (error) {
         console.error('Error fetching document state:', error);
@@ -58,13 +58,13 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
     const poll = setInterval(async () => {
       try {
         try {
-          const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf' });
+          const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf', includeContent: false });
           setLocalDocumentState(doc.state);
           return;
         } catch {
           /* try original */
         }
-        const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original' });
+        const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original', includeContent: false });
         setLocalDocumentState(doc.state);
       } catch (error) {
         console.error('Error polling document state:', error);

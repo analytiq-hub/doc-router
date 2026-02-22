@@ -113,6 +113,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   // pdfFile is a stable { data: ArrayBuffer } reference managed by DocumentPageContext,
   // so react-pdf never sees a "changed but equal" file prop.
   const loading = documentPage == null || documentPage.loading;
+  // documentPage?.error = fetch/API errors; pdfLoadError = react-pdf onLoadError (parse/display failures).
   const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
   const error = documentPage?.error ?? pdfLoadError;
   const pdfFile = documentPage?.pdfFile ?? null;
@@ -1035,6 +1036,10 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                     </div>
                   ))}
                 </Document>
+              ) : (documentPage?.documentState === 'ocr_processing' || documentPage?.documentState === 'llm_processing') ? (
+                <Typography color="text.secondary" align="center" sx={{ py: 2 }}>
+                  Document is being processed. PDF will appear when ready.
+                </Typography>
               ) : (
                 <Typography color="error" align="center">
                   No PDF file available.

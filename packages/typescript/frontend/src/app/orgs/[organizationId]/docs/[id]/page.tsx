@@ -55,10 +55,6 @@ const PDFViewerPage = ({ params }: PageProps) => {
     };
   }, [showLeftPanel, showPdfPanel, showChatPanel]);
 
-  useEffect(() => {
-    console.log('Page - highlightedBlocks changed:', highlightInfo);
-  }, [highlightInfo]);
-
   // Three panels: extraction (left) | PDF (center) | agent (right, optional)
   const getDefaultSizes = () => {
     if (!showLeftPanel && !showChatPanel) return { left: 0, main: 100, right: 0 };
