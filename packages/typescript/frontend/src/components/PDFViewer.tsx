@@ -106,17 +106,16 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [error, setError] = useState<string | null>(null);
-  const [file, setFile] = useState<string | null>(null);
+  const [file, setFile] = useState<{ data: ArrayBuffer } | null>(null);
   const [loading, setLoading] = useState(true);
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-  const fileRef = useRef<string | null>(null);
   const documentPageRef = useRef(documentPage);
   documentPageRef.current = documentPage;
 
-  // When DocumentPageContext provides PDF, set blob URL directly. react-pdf <Document> will parse once; onLoadError handles invalid PDFs.
+  // When DocumentPageContext provides PDF, pass ArrayBuffer directly to react-pdf to avoid blob URL lifecycle (revocation causing "Unexpected server response (0)").
   useEffect(() => {
     if (!documentPage) return;
     if (documentPage.error) {
@@ -129,18 +128,11 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       return;
     }
     const content = documentPage.pdfContent;
-    const blob = new Blob([content], { type: 'application/pdf' });
-    const url = URL.createObjectURL(blob);
-    setFile(url);
-    fileRef.current = url;
+    setFile(prev => prev?.data === content ? prev : { data: content });
     setFileName(documentPage.documentName ?? '');
-    setFileSize(blob.size);
+    setFileSize(content.byteLength);
     setLoading(false);
     return () => {
-      if (fileRef.current) {
-        URL.revokeObjectURL(fileRef.current);
-        fileRef.current = null;
-      }
       setFile(null);
     };
   }, [documentPage, documentPage?.pdfContent, documentPage?.loading, documentPage?.error, documentPage?.documentName]);
@@ -158,16 +150,11 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
         if (response.content == null) {
           throw new Error('Document content not available');
         }
-        const blob = new Blob([response.content], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
         if (isMounted) {
-          setFile(url);
-          fileRef.current = url;
+          setFile({ data: response.content });
           setFileName(response.document_name);
-          setFileSize(blob.size);
+          setFileSize(response.content.byteLength);
           setLoading(false);
-        } else {
-          URL.revokeObjectURL(url);
         }
       } catch (err) {
         console.error('Error loading PDF:', err);
@@ -180,10 +167,6 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     loadPDF();
     return () => {
       isMounted = false;
-      if (fileRef.current) {
-        URL.revokeObjectURL(fileRef.current);
-        fileRef.current = null;
-      }
       setFile(null);
     };
   }, [documentPage, id, docRouterOrgApi]);
@@ -248,21 +231,6 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       setDocumentProperties({ 'Error': 'Failed to extract document properties' });
     }
   }, [fileName, fileSize]);
-
-  // Suppress react-pdf's internal warning() call for AbortException which fires
-  // via the `warning` package before onRenderTextLayerError gets a chance to handle it.
-  useEffect(() => {
-    const orig = console.error;
-    console.error = (...args: unknown[]) => {
-      if (typeof args[0] === 'string' && args[0].includes('TextLayer task cancelled')) {
-        return;
-      }
-      orig.apply(console, args);
-    };
-    return () => {
-      console.error = orig;
-    };
-  }, []);
 
   const [originalRotation, setOriginalRotation] = useState(0);
 
@@ -425,7 +393,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
             adjustedScale = Math.max(optimalScale, 0.1);
           }
 
-          setScale(adjustedScale);
+          setScale(prev => Math.abs(prev - adjustedScale) < 0.001 ? prev : adjustedScale);
         }
     });
 
@@ -468,35 +436,27 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const printIframeRef = useRef<HTMLIFrameElement>(null);
 
   const handlePrint = () => {
-    if (file) {
-      // Create a temporary iframe
+    if (file && 'data' in file) {
       const iframe = printIframeRef.current;
       if (!iframe) return;
 
-      // Set the source of the iframe to the PDF file
-      iframe.src = file;
+      const blob = new Blob([file.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      iframe.src = url;
 
-      // Wait for the iframe to load
       iframe.onload = () => {
-        // Print the iframe content
         iframe.contentWindow?.print();
+        URL.revokeObjectURL(url);
       };
     }
     handleMenuClose();
   };
 
   const handleSave = () => {
-    if (file) {
-      fetch(file)
-        .then(response => response.blob())
-        .then(blob => {
-          const defaultFileName = fileName || `Document_${id}.pdf`;
-          saveAs(blob, defaultFileName);
-        })
-        .catch(error => {
-          console.error('Error saving the file:', error);
-          // Optionally, you can show an error message to the user here
-        });
+    if (file && 'data' in file) {
+      const blob = new Blob([file.data], { type: 'application/pdf' });
+      const defaultFileName = fileName || `Document_${id}.pdf`;
+      saveAs(blob, defaultFileName);
     }
     handleMenuClose();
   };
@@ -1099,13 +1059,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                         height={pdfDimensions.height}
                         scale={scale}
                         rotate={originalRotation}
-                        onRenderTextLayerError={(error) => {
-                          if (error.name === 'AbortException') {
-                            // Silently ignore TextLayer task cancelled errors as they are expected during re-renders
-                            return;
-                          }
-                          console.error('TextLayer render error:', error);
-                        }}
+                        renderTextLayer={false}
                       >
                         {renderHighlights(index + 1)}
                         {renderBoundingBoxes(index + 1)}
