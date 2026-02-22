@@ -249,13 +249,13 @@ async def list_prompts(
     logger.info(f"list_prompts() start: organization_id: {organization_id}, skip: {skip}, limit: {limit}, document_id: {document_id}, tag_ids: {tag_ids}")
     db = ad.common.get_async_db()
     
-    # First, get prompts that belong to the organization
-    # Base query for prompts in org, with optional name search
+    # First, get prompts that belong to the organization (project only _id and name to reduce data and latency)
     prompts_query = {"organization_id": organization_id}
     if name_search:
         prompts_query["name"] = {"$regex": name_search, "$options": "i"}
+    prompts_projection = {"_id": 1, "name": 1}
 
-    org_prompts = await db.prompts.find(prompts_query).to_list(None)
+    org_prompts = await db.prompts.find(prompts_query, prompts_projection).to_list(None)
     
     if not org_prompts:
         return ListPromptsResponse(prompts=[], total_count=0, skip=skip)

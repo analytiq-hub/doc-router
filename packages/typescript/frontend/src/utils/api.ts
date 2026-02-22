@@ -194,8 +194,10 @@ export class DocRouterOrgApi extends DocRouterOrg {
 }
 
 // In-flight promise cache for listOrganizations to avoid duplicate concurrent requests
-// (e.g. from OrganizationProvider and dashboard redirect or React Strict Mode)
-const listOrgsCache = new Map<string, Promise<ListOrganizationsResponse>>();
+const listOrgsInFlight = new Map<string, Promise<ListOrganizationsResponse>>();
+// Short-lived TTL cache so sequential calls (e.g. right after first resolves) reuse the response
+const LIST_ORGS_TTL_MS = 5000;
+const listOrgsTtlCache = new Map<string, { response: ListOrganizationsResponse; ts: number }>();
 
 function listOrgsCacheKey(params?: {
   userId?: string;
@@ -239,18 +241,26 @@ export class DocRouterAccountApi extends DocRouterAccount {
   }
 
   /**
-   * Override to deduplicate concurrent identical listOrganizations requests.
-   * Reuses the in-flight promise so only one network call is made.
+   * Override to deduplicate listOrganizations: in-flight requests share one promise,
+   * and a short TTL cache avoids a second network call when a duplicate runs right after the first resolves.
    */
   override async listOrganizations(params?: Parameters<DocRouterAccount['listOrganizations']>[0]): Promise<ListOrganizationsResponse> {
     const key = listOrgsCacheKey(params);
-    const existing = listOrgsCache.get(key);
-    if (existing) return existing;
 
-    const promise = super.listOrganizations(params).finally(() => {
-      listOrgsCache.delete(key);
+    const now = Date.now();
+    const ttlEntry = listOrgsTtlCache.get(key);
+    if (ttlEntry && now - ttlEntry.ts < LIST_ORGS_TTL_MS) return ttlEntry.response;
+
+    const inFlight = listOrgsInFlight.get(key);
+    if (inFlight) return inFlight;
+
+    const promise = super.listOrganizations(params).then((response) => {
+      listOrgsTtlCache.set(key, { response, ts: Date.now() });
+      return response;
+    }).finally(() => {
+      listOrgsInFlight.delete(key);
     });
-    listOrgsCache.set(key, promise);
+    listOrgsInFlight.set(key, promise);
     return promise;
   }
 }

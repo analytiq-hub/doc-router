@@ -199,7 +199,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         href={item.href}
         className="block px-2 py-1"
         title={!open ? item.tooltip : ''}
-        prefetch={true}
+        prefetch={false}
       >
         {content}
       </Link>
