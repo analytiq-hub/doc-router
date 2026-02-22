@@ -6,6 +6,9 @@ import { DocRouterOrgApi } from '@/utils/api';
 export interface DocumentPageData {
   /** PDF file content; null until loaded or if failed. */
   pdfContent: ArrayBuffer | null;
+  /** Stable wrapper around pdfContent for passing directly to react-pdf <Document file={...}>.
+   *  Object reference only changes when the ArrayBuffer identity changes, preventing unnecessary reloads. */
+  pdfFile: { data: ArrayBuffer } | null;
   documentName: string | null;
   documentState: string | null;
   loading: boolean;
@@ -32,6 +35,7 @@ interface DocumentPageProviderProps {
  */
 export function DocumentPageProvider({ organizationId, documentId, children }: DocumentPageProviderProps) {
   const [pdfContent, setPdfContent] = useState<ArrayBuffer | null>(null);
+  const [pdfFile, setPdfFile] = useState<{ data: ArrayBuffer } | null>(null);
   const [documentName, setDocumentName] = useState<string | null>(null);
   const [documentState, setDocumentState] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -40,29 +44,37 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
   const completionFetchStartedRef = useRef(false);
   const api = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
 
+  /** Set both pdfContent and the stable pdfFile wrapper together. */
+  const setContent = useCallback((content: ArrayBuffer | null) => {
+    setPdfContent(content);
+    setPdfFile(prev =>
+      prev?.data === content ? prev : content ? { data: content } : null
+    );
+  }, []);
+
   const fetchDocument = useCallback(async () => {
     try {
       setError(null);
       const response = await api.getDocument({ documentId, fileType: 'pdf' });
-      setPdfContent(response.content ?? null);
+      setContent(response.content ?? null);
       setDocumentName(response.document_name ?? null);
       setDocumentState(response.state ?? null);
     } catch (e) {
       try {
         const fallback = await api.getDocument({ documentId, fileType: 'original' });
-        setPdfContent(null);
+        setContent(null);
         setDocumentName(fallback.document_name ?? null);
         setDocumentState(fallback.state ?? null);
       } catch {
         setError(e instanceof Error ? e.message : 'Failed to load document');
         setDocumentState(null);
         setDocumentName(null);
-        setPdfContent(null);
+        setContent(null);
       }
     } finally {
       setLoading(false);
     }
-  }, [documentId, api]);
+  }, [documentId, api, setContent]);
 
   useEffect(() => {
     setLoading(true);
@@ -93,7 +105,7 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
             pollRef.current = null;
           }
           const response = await api.getDocument({ documentId, fileType: 'pdf' });
-          setPdfContent(response.content ?? null);
+          setContent(response.content ?? null);
           setDocumentName(response.document_name ?? null);
         }
       } catch {
@@ -107,21 +119,25 @@ export function DocumentPageProvider({ organizationId, documentId, children }: D
       }
       completionFetchStartedRef.current = false;
     };
-  }, [documentState, documentId, api]);
+  }, [documentState, documentId, api, setContent]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     await fetchDocument();
   }, [fetchDocument]);
 
-  const value: DocumentPageData = {
-    pdfContent,
-    documentName,
-    documentState,
-    loading,
-    error,
-    refresh,
-  };
+  const value = useMemo<DocumentPageData>(
+    () => ({
+      pdfContent,
+      pdfFile,
+      documentName,
+      documentState,
+      loading,
+      error,
+      refresh,
+    }),
+    [pdfContent, pdfFile, documentName, documentState, loading, error, refresh]
+  );
 
   return (
     <DocumentPageContext.Provider value={value}>

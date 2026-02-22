@@ -6,7 +6,6 @@ import { pdfjs, Document, Page } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { DocRouterOrgApi } from '@/utils/api';
-import { WAIT_FOR_CONTEXT_MS } from '@/utils/performance';
 import { isOCRSupported, isOcrNotReadyError } from '@/utils/ocr-utils';
 
 /** Document states that indicate an error; stop polling for OCR/bounding boxes when these are set. */
@@ -105,71 +104,18 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
-  const [error, setError] = useState<string | null>(null);
-  const [file, setFile] = useState<{ data: ArrayBuffer } | null>(null);
-  const [loading, setLoading] = useState(true);
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
-  const documentPageRef = useRef(documentPage);
-  documentPageRef.current = documentPage;
 
-  // When DocumentPageContext provides PDF, pass ArrayBuffer directly to react-pdf to avoid blob URL lifecycle (revocation causing "Unexpected server response (0)").
-  useEffect(() => {
-    if (!documentPage) return;
-    if (documentPage.error) {
-      setError(documentPage.error);
-      setLoading(false);
-      return;
-    }
-    if (!documentPage.pdfContent) {
-      setLoading(documentPage.loading);
-      return;
-    }
-    const content = documentPage.pdfContent;
-    setFile(prev => prev?.data === content ? prev : { data: content });
-    setFileName(documentPage.documentName ?? '');
-    setFileSize(content.byteLength);
-    setLoading(false);
-    return () => {
-      setFile(null);
-    };
-  }, [documentPage, documentPage?.pdfContent, documentPage?.loading, documentPage?.error, documentPage?.documentName]);
-
-  // When no context: wait briefly for DocumentPageProvider so we don't duplicate GET document (same doc page). Then fetch if still no context.
-  useEffect(() => {
-    if (documentPage != null) return;
-    let isMounted = true;
-    const loadPDF = async () => {
-      await new Promise((r) => setTimeout(r, WAIT_FOR_CONTEXT_MS));
-      if (!isMounted) return;
-      if (documentPageRef.current != null) return; // Context appeared; avoid duplicate fetch
-      try {
-        const response = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
-        if (response.content == null) {
-          throw new Error('Document content not available');
-        }
-        if (isMounted) {
-          setFile({ data: response.content });
-          setFileName(response.document_name);
-          setFileSize(response.content.byteLength);
-          setLoading(false);
-        }
-      } catch (err) {
-        console.error('Error loading PDF:', err);
-        if (isMounted) {
-          setError('Failed to load PDF. Please try again.');
-          setLoading(false);
-        }
-      }
-    };
-    loadPDF();
-    return () => {
-      isMounted = false;
-      setFile(null);
-    };
-  }, [documentPage, id, docRouterOrgApi]);
+  // Derive loading, error, and file directly from context.
+  // pdfFile is a stable { data: ArrayBuffer } reference managed by DocumentPageContext,
+  // so react-pdf never sees a "changed but equal" file prop.
+  const loading = documentPage == null || documentPage.loading;
+  const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
+  const error = documentPage?.error ?? pdfLoadError;
+  const pdfFile = documentPage?.pdfFile ?? null;
 
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -186,6 +132,13 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const [documentProperties, setDocumentProperties] = useState<Record<string, string> | null>(null);
   const [fileName, setFileName] = useState<string>('');
   const [fileSize, setFileSize] = useState<number>(0);
+
+  // Keep fileName and fileSize in sync with context (used by Document Properties, OCR, print/download).
+  useEffect(() => {
+    setFileName(documentPage?.documentName ?? '');
+    setFileSize(documentPage?.pdfFile?.data.byteLength ?? 0);
+  }, [documentPage?.documentName, documentPage?.pdfFile]);
+
   const [showOcr, setShowOcr] = useState(false);
   const [ocrText, setOcrText] = useState<string>('');
   const [ocrLoading, setOcrLoading] = useState(false);
@@ -226,8 +179,12 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
       console.log('Extracted properties:', properties);
       setDocumentProperties(properties);
-    } catch (error) {
-      console.error('Error extracting document properties:', error);
+    } catch (err) {
+      // Document may have been destroyed (e.g. file prop changed) before async call completed.
+      if (err instanceof Error && (err.message?.includes('messageHandler') || err.message?.includes('sendWithPromise'))) {
+        return;
+      }
+      console.error('Error extracting document properties:', err);
       setDocumentProperties({ 'Error': 'Failed to extract document properties' });
     }
   }, [fileName, fileSize]);
@@ -238,16 +195,26 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     setNumPages(pdf.numPages);
     setPageNumber(1);
     pageRefs.current = new Array(pdf.numPages).fill(null);
-    extractDocumentProperties(pdf);
+    void extractDocumentProperties(pdf).catch((err: unknown) => {
+      // Guard against unexpected rejections not caught inside extractDocumentProperties
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('messageHandler') || msg.includes('sendWithPromise')) return;
+      console.error('extractDocumentProperties failed unexpectedly:', err);
+    });
     pdf.getPage(1).then((page) => {
       const viewport = page.getViewport({ scale: 1 });
       setPdfDimensions({ width: viewport.width, height: viewport.height });
       setOriginalRotation(page.rotate || 0);
+    }).catch((err: unknown) => {
+      // Document may have been destroyed (e.g. file prop changed) before getPage completed.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('messageHandler') || msg.includes('sendWithPromise')) return;
+      console.error('getPage(1) failed', err);
     });
   };
 
   const handleLoadError = (error: { message: string }) => {
-    setError(error.message);
+    setPdfLoadError(error.message);
     console.error('PDF Load Error:', error);
   };
 
@@ -436,11 +403,11 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const printIframeRef = useRef<HTMLIFrameElement>(null);
 
   const handlePrint = () => {
-    if (file && 'data' in file) {
+    if (pdfFile) {
       const iframe = printIframeRef.current;
       if (!iframe) return;
 
-      const blob = new Blob([file.data], { type: 'application/pdf' });
+      const blob = new Blob([pdfFile.data], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
       iframe.src = url;
 
@@ -453,8 +420,8 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   };
 
   const handleSave = () => {
-    if (file && 'data' in file) {
-      const blob = new Blob([file.data], { type: 'application/pdf' });
+    if (pdfFile) {
+      const blob = new Blob([pdfFile.data], { type: 'application/pdf' });
       const defaultFileName = fileName || `Document_${id}.pdf`;
       saveAs(blob, defaultFileName);
     }
@@ -1026,9 +993,9 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                 <div>Loading PDF...</div>
               ) : error ? (
                 <Typography color="error" align="center">{error}</Typography>
-              ) : file ? (
+              ) : pdfFile ? (
                 <Document
-                  file={file}
+                  file={pdfFile}
                   onLoadSuccess={handleLoadSuccess}
                   onLoadError={handleLoadError}
                 >

@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { Box } from '@mui/material';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useState, useEffect } from 'react';
+import { DocumentPageProvider } from '@/contexts/DocumentPageContext';
 const PDFSidebar = dynamic(() => import('@/components/PDFSidebar'), {
   ssr: false,
   loading: () => <div className="h-64 flex items-center justify-center">Loading sidebar...</div>
@@ -24,7 +25,7 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
   const [showPdfPanel, setShowPdfPanel] = useState(true);
   const [showChatPanel, setShowChatPanel] = useState(false);
   const [highlightInfo, setHighlightInfo] = useState<HighlightInfo | undefined>();
-  
+
   useEffect(() => {
     window.pdfViewerControls = {
       showLeftPanel,
@@ -43,10 +44,6 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
     };
   }, [showLeftPanel, showPdfPanel, showChatPanel]);
 
-  useEffect(() => {
-    console.log('Page - highlightedBlocks changed:', highlightInfo);
-  }, [highlightInfo]);
-
   const getPanelSizes = () => {
     if (!showLeftPanel) {
       return {
@@ -64,38 +61,40 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
   const panelSizes = getPanelSizes();
 
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-      <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-        <PanelGroup id={`doc-viewer-panels-${id}`} direction="horizontal" style={{ width: '100%', height: '100%' }}>
-          {showLeftPanel && (
-            <>
-              <Panel defaultSize={panelSizes.left}>
-                <Box sx={{ height: '100%', overflow: 'auto' }}>
-                  <PDFSidebar 
-                    organizationId={organizationId} 
+    <DocumentPageProvider organizationId={organizationId} documentId={id}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
+          <PanelGroup id={`doc-viewer-panels-${id}`} direction="horizontal" style={{ width: '100%', height: '100%' }}>
+            {showLeftPanel && (
+              <>
+                <Panel defaultSize={panelSizes.left}>
+                  <Box sx={{ height: '100%', overflow: 'auto' }}>
+                    <PDFSidebar
+                      organizationId={organizationId}
+                      id={id}
+                      onHighlight={setHighlightInfo}
+                      onClearHighlight={() => setHighlightInfo(undefined)}
+                    />
+                  </Box>
+                </Panel>
+                <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
+              </>
+            )}
+
+            {showPdfPanel && (
+              <Panel defaultSize={panelSizes.main}>
+                <Box sx={{ height: '100%', overflow: 'hidden' }}>
+                  <PDFViewer
+                    organizationId={organizationId}
                     id={id}
-                    onHighlight={setHighlightInfo}
-                    onClearHighlight={() => setHighlightInfo(undefined)}
+                    highlightInfo={highlightInfo}
                   />
                 </Box>
               </Panel>
-              <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
-            </>
-          )}
-          
-          {showPdfPanel && (
-            <Panel defaultSize={panelSizes.main}>
-              <Box sx={{ height: '100%', overflow: 'hidden' }}>
-                <PDFViewer 
-                  organizationId={organizationId} 
-                  id={id}
-                  highlightInfo={highlightInfo}
-                />
-              </Box>
-            </Panel>
-          )}
-        </PanelGroup>
+            )}
+          </PanelGroup>
+        </Box>
       </Box>
-    </Box>
+    </DocumentPageProvider>
   );
 }
