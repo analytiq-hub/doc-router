@@ -2,6 +2,7 @@ import axios, { isAxiosError } from 'axios';
 import { getSession } from 'next-auth/react';
 import { AppSession } from '@/types/AppSession';
 import { DocRouterOrg, DocRouterAccount } from '@docrouter/sdk';
+import type { ListOrganizationsResponse } from '@docrouter/sdk';
 
 // Session cache to avoid repeated calls
 let sessionCache: { session: AppSession | null; timestamp: number } | null = null;
@@ -192,25 +193,65 @@ export class DocRouterOrgApi extends DocRouterOrg {
   }
 }
 
+// In-flight promise cache for listOrganizations to avoid duplicate concurrent requests
+// (e.g. from OrganizationProvider and dashboard redirect or React Strict Mode)
+const listOrgsCache = new Map<string, Promise<ListOrganizationsResponse>>();
+
+function listOrgsCacheKey(params?: {
+  userId?: string;
+  organizationId?: string;
+  nameSearch?: string;
+  memberSearch?: string;
+  skip?: number;
+  limit?: number;
+}): string {
+  if (!params) return 'default';
+  const p = params;
+  return [
+    p.userId ?? '',
+    p.organizationId ?? '',
+    p.nameSearch ?? '',
+    p.memberSearch ?? '',
+    p.skip ?? 0,
+    p.limit ?? 10,
+  ].join('|');
+}
+
 export class DocRouterAccountApi extends DocRouterAccount {
   constructor() {
     super({
       baseURL: NEXT_PUBLIC_FASTAPI_FRONTEND_URL,
       accountToken: '', // Empty token so tokenProvider will be used
     });
-    
+
     // Set up token provider that gets called on every request
     this.getHttpClient().updateTokenProvider(async () => {
       // First try to use global session (pre-fetched from context)
       let session = getGlobalSession();
-      
+
       // Fallback to cached session if global session is not available
       if (!session) {
         session = await getCachedSession();
       }
-      
+
       return session?.apiAccessToken || '';
     });
+  }
+
+  /**
+   * Override to deduplicate concurrent identical listOrganizations requests.
+   * Reuses the in-flight promise so only one network call is made.
+   */
+  override async listOrganizations(params?: Parameters<DocRouterAccount['listOrganizations']>[0]): Promise<ListOrganizationsResponse> {
+    const key = listOrgsCacheKey(params);
+    const existing = listOrgsCache.get(key);
+    if (existing) return existing;
+
+    const promise = super.listOrganizations(params).finally(() => {
+      listOrgsCache.delete(key);
+    });
+    listOrgsCache.set(key, promise);
+    return promise;
   }
 }
 

@@ -198,13 +198,11 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
 
   const inputBlock = (
     <div className="shrink-0 border-t border-gray-200 bg-white min-w-0">
-      {chatDisabled && (
+      {chatDisabled && documentState !== null && (
         <div className="px-3 pt-2 pb-1 text-sm text-amber-700 bg-amber-50 border-b border-amber-200">
-          {documentState === null
-            ? 'Checking document status…'
-            : documentState === 'ocr_failed' || documentState === 'llm_failed'
-              ? 'Document processing did not complete. Chat is not available.'
-              : 'Document is being processed. Chat will be available once processing is complete.'}
+          {documentState === 'ocr_failed' || documentState === 'llm_failed'
+            ? 'Document processing did not complete. Chat is not available.'
+            : 'Document is being processed. Chat will be available once processing is complete.'}
         </div>
       )}
       {dictationError && (

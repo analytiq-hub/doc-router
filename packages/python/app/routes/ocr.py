@@ -1,6 +1,7 @@
 # ocr.py
 
 # Standard library imports
+import asyncio
 import gzip
 import json
 import logging
@@ -58,7 +59,11 @@ async def download_ocr_blocks(
     headers = {"Cache-Control": "private, max-age=3600"}
 
     if format == "gzip":
-        body = gzip.compress(json.dumps(ocr_json).encode("utf-8"))
+        # Run CPU-bound json.dumps + gzip.compress in a thread pool so the event loop is not blocked
+        def _serialize_and_compress(data: list) -> bytes:
+            return gzip.compress(json.dumps(data).encode("utf-8"))
+
+        body = await asyncio.to_thread(_serialize_and_compress, ocr_json)
         return Response(
             content=body,
             media_type="application/json",
