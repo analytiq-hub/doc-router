@@ -6,7 +6,6 @@ import { useSearchParams } from 'next/navigation';
 import { Box } from '@mui/material';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useState, useEffect } from 'react';
-import { DocumentPageProvider } from '@/contexts/DocumentPageContext';
 const PDFSidebar = dynamic(() => import('@/components/PDFSidebar'), {
   ssr: false,
   loading: () => <div className="h-64 flex items-center justify-center">Loading sidebar...</div>
@@ -69,8 +68,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
   const pdfId = Array.isArray(id) ? id[0] : id;
 
   return (
-    <DocumentPageProvider organizationId={organizationId} documentId={pdfId}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           <PanelGroup id={`doc-page-panels-${pdfId}`} direction="horizontal" style={{ width: '100%', height: '100%' }}>
             {showLeftPanel && (
@@ -115,7 +113,6 @@ const PDFViewerPage = ({ params }: PageProps) => {
           </PanelGroup>
         </Box>
       </Box>
-    </DocumentPageProvider>
   );
 };
 

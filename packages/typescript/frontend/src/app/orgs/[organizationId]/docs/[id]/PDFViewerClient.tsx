@@ -4,7 +4,6 @@ import dynamic from 'next/dynamic';
 import { Box } from '@mui/material';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useState, useEffect } from 'react';
-import { DocumentPageProvider } from '@/contexts/DocumentPageContext';
 const PDFSidebar = dynamic(() => import('@/components/PDFSidebar'), {
   ssr: false,
   loading: () => <div className="h-64 flex items-center justify-center">Loading sidebar...</div>
@@ -61,8 +60,7 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
   const panelSizes = getPanelSizes();
 
   return (
-    <DocumentPageProvider organizationId={organizationId} documentId={id}>
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
           <PanelGroup id={`doc-viewer-panels-${id}`} direction="horizontal" style={{ width: '100%', height: '100%' }}>
             {showLeftPanel && (
@@ -95,6 +93,5 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
           </PanelGroup>
         </Box>
       </Box>
-    </DocumentPageProvider>
   );
 }
