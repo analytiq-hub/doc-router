@@ -5,12 +5,13 @@
 
 @tailwind base;
 @tailwind components;
-@tailwind utilities;
 
-/* Import formio theme and other CSS after Tailwind so utilities take precedence */
+/* Formio theme before Tailwind utilities so our utilities (e.g. sm: breakpoints) take precedence */
 @import "@tsed/tailwind-formio/styles/index.css";
 @import './formio-custom.css';
 @import 'react-toastify/dist/ReactToastify.css';
+
+@tailwind utilities;
 
 :root {
   --background: #ecf0f1;

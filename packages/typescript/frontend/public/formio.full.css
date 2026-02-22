@@ -4377,9 +4377,7 @@ span[role=link] {
   cursor: pointer;
 }
 
-.hidden {
-  display: none !important;
-}
+.formio-form .hidden, .formio-builder .hidden, .formio-dialog .hidden { display: none !important; }
 .formbuilder {
   position: relative;
 }
