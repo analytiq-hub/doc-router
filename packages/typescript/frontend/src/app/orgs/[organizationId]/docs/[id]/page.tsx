@@ -6,6 +6,8 @@ import { useSearchParams } from 'next/navigation';
 import { Box } from '@mui/material';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { useState, useEffect } from 'react';
+
+const AGENT_PANEL_BREAKPOINT = 640;
 const PDFSidebar = dynamic(() => import('@/components/PDFSidebar'), {
   ssr: false,
   loading: () => <div className="h-64 flex items-center justify-center">Loading sidebar...</div>
@@ -15,6 +17,7 @@ const AgentTab = dynamic(() => import('@/components/agent/AgentTab'), {
   loading: () => <div className="h-32 flex items-center justify-center">Loading agent...</div>
 });
 import type { HighlightInfo } from '@/types/index';
+import type { PDFViewerControlsType } from '@/components/Layout';
 
 const PDFViewer = dynamic(() => import('@/components/PDFViewer'), {
   ssr: false,
@@ -35,16 +38,30 @@ const PDFViewerPage = ({ params }: PageProps) => {
   const [showPdfPanel, setShowPdfPanel] = useState(true);
   const [showChatPanel, setShowChatPanel] = useState(true);
   const [highlightInfo, setHighlightInfo] = useState<HighlightInfo | undefined>();
-  
+  const [isSmallScreen, setIsSmallScreen] = useState(false);
+
   useEffect(() => {
-    window.pdfViewerControls = {
+    const check = () => setIsSmallScreen(window.innerWidth <= AGENT_PANEL_BREAKPOINT);
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
+
+  useEffect(() => {
+    if (isSmallScreen) setShowChatPanel(false);
+  }, [isSmallScreen]);
+
+  useEffect(() => {
+    const controls: PDFViewerControlsType = {
       showLeftPanel,
       setShowLeftPanel,
       showPdfPanel,
       setShowPdfPanel,
       showChatPanel,
-      setShowChatPanel
+      setShowChatPanel,
+      isSmallScreen
     };
+    window.pdfViewerControls = controls;
 
     const event = new Event('pdfviewercontrols');
     window.dispatchEvent(event);
@@ -52,7 +69,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
     return () => {
       delete window.pdfViewerControls;
     };
-  }, [showLeftPanel, showPdfPanel, showChatPanel]);
+  }, [showLeftPanel, showPdfPanel, showChatPanel, isSmallScreen]);
 
   // Three panels: extraction (left) | PDF (center) | agent (right, optional)
   const getDefaultSizes = () => {

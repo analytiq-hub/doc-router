@@ -14,6 +14,7 @@ interface PDFViewerControlsProps {
   setShowPdfPanel: React.Dispatch<React.SetStateAction<boolean>>;
   showChatPanel?: boolean;
   setShowChatPanel?: React.Dispatch<React.SetStateAction<boolean>>;
+  isSmallScreen?: boolean;
   sidebarMode?: 'extraction' | 'forms';
 }
 
@@ -24,6 +25,7 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
   setShowPdfPanel,
   showChatPanel = true,
   setShowChatPanel = () => {},
+  isSmallScreen = false,
   sidebarMode = 'extraction',
 }) => {
   return (
@@ -70,26 +72,28 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
         )}
       </button>
 
-      <button
-        onClick={() => setShowChatPanel(prev => !prev)}
-        className={`
-          flex items-center justify-center
-          w-8 h-[31px]
-          rounded
-          transition-colors duration-150
-          ${showChatPanel 
-            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' 
-            : 'text-blue-200 hover:bg-blue-500 hover:text-white'
-          }
-        `}
-        title={showChatPanel ? "Hide Chat Panel" : "Show Chat Panel"}
-      >
-        {showChatPanel ? (
-          <ChatIcon className="w-4 h-4" />
-        ) : (
-          <ChatOutlinedIcon className="w-4 h-4" />
-        )}
-      </button>
+      {!isSmallScreen && (
+        <button
+          onClick={() => setShowChatPanel(prev => !prev)}
+          className={`
+            flex items-center justify-center
+            w-8 h-[31px]
+            rounded
+            transition-colors duration-150
+            ${showChatPanel 
+              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' 
+              : 'text-blue-200 hover:bg-blue-500 hover:text-white'
+            }
+          `}
+          title={showChatPanel ? "Hide Chat Panel" : "Show Chat Panel"}
+        >
+          {showChatPanel ? (
+            <ChatIcon className="w-4 h-4" />
+          ) : (
+            <ChatOutlinedIcon className="w-4 h-4" />
+          )}
+        </button>
+      )}
     </div>
   );
 };

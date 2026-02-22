@@ -23,14 +23,15 @@ import {
 import { SvgIconProps } from '@mui/material';
 import TourGuide from '@/components/TourGuide';
 
-// First, let's fix the type errors
-interface PDFViewerControlsType {
+// First, let's fix the type errors (exported for use in doc viewer page)
+export interface PDFViewerControlsType {
   showLeftPanel: boolean;
   setShowLeftPanel: React.Dispatch<React.SetStateAction<boolean>>;
   showPdfPanel: boolean;
   setShowPdfPanel: React.Dispatch<React.SetStateAction<boolean>>;
   showChatPanel: boolean;
   setShowChatPanel: React.Dispatch<React.SetStateAction<boolean>>;
+  isSmallScreen?: boolean;
 }
 
 declare global {
