@@ -3,7 +3,6 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { pdfjs, Document, Page } from 'react-pdf';
-import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { DocRouterOrgApi } from '@/utils/api';
 import { isOCRSupported, isOcrNotReadyError } from '@/utils/ocr-utils';
@@ -1145,6 +1144,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                         scale={scale}
                         rotate={originalRotation}
                         renderTextLayer={false}
+                        renderAnnotationLayer={false}
                       >
                         {renderHighlights(index + 1)}
                         {renderBoundingBoxes(index + 1)}
