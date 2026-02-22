@@ -9,10 +9,8 @@ import {
   ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
 import { DocRouterOrgApi } from '@/utils/api';
-import { WAIT_FOR_CONTEXT_MS } from '@/utils/performance';
 import type { Prompt } from '@docrouter/sdk';
 import { useOCR, OCRProvider } from '@/contexts/OCRContext';
-import { useDocumentPage } from '@/contexts/DocumentPageContext';
 import type { GetLLMResultResponse } from '@docrouter/sdk';
 import type { HighlightInfo } from '@/contexts/OCRContext';
 
@@ -33,7 +31,6 @@ interface EditingState {
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
 const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
-  const documentPage = useDocumentPage();
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const { loadOCRBlocks, findBlocksWithContext } = useOCR();
   const [llmResults, setLlmResults] = useState<Record<string, GetLLMResultResponse>>({});
@@ -44,57 +41,42 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   const [failedPrompts, setFailedPrompts] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<EditingState | null>(null);
   const [editMode, setEditMode] = useState<boolean>(false);
-  const [localDocumentState, setLocalDocumentState] = useState<string | null>(null);
+  const [documentState, setDocumentState] = useState<string | null>(null);
   const defaultLlmFetchStartedRef = React.useRef(false);
 
-  const [localDocumentName, setLocalDocumentName] = useState<string | null>(null);
-  const documentState = documentPage?.documentState ?? localDocumentState;
-  const documentName = documentPage?.documentName ?? localDocumentName;
+  const [documentName, setDocumentName] = useState<string | null>(null);
 
   // Refs mirror state so the fetch effect can read current values without being in the dependency array
   const llmResultsRef = React.useRef(llmResults);
   const loadingPromptsRef = React.useRef(loadingPrompts);
   const failedPromptsRef = React.useRef(failedPrompts);
-  const documentPageRef = React.useRef(documentPage);
   llmResultsRef.current = llmResults;
   loadingPromptsRef.current = loadingPrompts;
   failedPromptsRef.current = failedPrompts;
-  documentPageRef.current = documentPage;
 
   useEffect(() => {
     defaultLlmFetchStartedRef.current = false;
   }, [id]);
 
-  // Single effect: get document state from context when possible; only call getDocument after a short wait if context is still null (avoids duplicate fetch with DocumentPageProvider)
+  // Fetch document metadata (state, name) then load prompts and default LLM result.
   useEffect(() => {
     const fetchData = async () => {
-      const ctx = documentPageRef.current;
-      let fetchedState: string | null = ctx?.documentState ?? null;
-      let fetchedName: string | null = ctx?.documentName ?? null;
+      let fetchedState: string | null = null;
+      let fetchedName: string | null = null;
 
       try {
-        if (!ctx) {
-          // Context not available yet: wait briefly so DocumentPageProvider can set it and we avoid a duplicate getDocument
-          await new Promise((r) => setTimeout(r, WAIT_FOR_CONTEXT_MS));
-          const ctxAfterWait = documentPageRef.current;
-          if (ctxAfterWait) {
-            fetchedState = ctxAfterWait.documentState ?? null;
-            fetchedName = ctxAfterWait.documentName ?? null;
-          } else {
-            try {
-              const docResponse = await docRouterOrgApi.getDocument({
-                documentId: id,
-                fileType: 'pdf',
-                includeContent: false,
-              });
-              fetchedState = docResponse.state;
-              fetchedName = docResponse.document_name ?? null;
-              setLocalDocumentState(fetchedState);
-              setLocalDocumentName(fetchedName);
-            } catch (error) {
-              console.error('Error fetching document state:', error);
-            }
-          }
+        try {
+          const docResponse = await docRouterOrgApi.getDocument({
+            documentId: id,
+            fileType: 'pdf',
+            includeContent: false,
+          });
+          fetchedState = docResponse.state;
+          fetchedName = docResponse.document_name ?? null;
+          setDocumentState(fetchedState);
+          setDocumentName(fetchedName);
+        } catch (error) {
+          console.error('Error fetching document metadata:', error);
         }
 
         const isProcessing = fetchedState === 'ocr_processing' || fetchedState === 'llm_processing';
@@ -148,17 +130,17 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     };
 
     fetchData();
-  }, [organizationId, id, docRouterOrgApi, documentPage?.documentState, documentPage]);
+  }, [organizationId, id, docRouterOrgApi]);
 
-  // When not using context, poll document state when processing
+  // Poll document state when processing
   useEffect(() => {
-    if (documentPage != null || !documentState || (documentState !== 'ocr_processing' && documentState !== 'llm_processing')) {
+    if (!documentState || (documentState !== 'ocr_processing' && documentState !== 'llm_processing')) {
       return;
     }
     const pollInterval = setInterval(async () => {
       try {
         const docResponse = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf', includeContent: false });
-        setLocalDocumentState(docResponse.state);
+        setDocumentState(docResponse.state);
         if ((docResponse.state === 'llm_completed' || docResponse.state === 'ocr_completed') &&
             !llmResults['default'] && !loadingPrompts.has('default') && !failedPrompts.has('default')) {
           setLoadingPrompts(prev => new Set(prev).add('default'));
@@ -177,7 +159,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
       }
     }, 2000);
     return () => clearInterval(pollInterval);
-  }, [documentPage, documentState, id, docRouterOrgApi, llmResults, loadingPrompts, failedPrompts]);
+  }, [documentState, id, docRouterOrgApi, llmResults, loadingPrompts, failedPrompts]);
 
   useEffect(() => {
     if (documentName) {
@@ -196,19 +178,6 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     if (!llmResults[promptId]) {
       setLoadingPrompts(prev => new Set(prev).add(promptId));
       try {
-        if (!documentPage) {
-          try {
-            const docResponse = await docRouterOrgApi.getDocument({
-              documentId: id,
-              fileType: 'pdf',
-              includeContent: false,
-            });
-            setLocalDocumentState(docResponse.state);
-          } catch (error) {
-            console.error('Error fetching document state:', error);
-          }
-        }
-
         const results = await docRouterOrgApi.getLLMResult({
           documentId: id, 
           promptRevId: promptId,

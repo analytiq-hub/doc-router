@@ -37,7 +37,6 @@ import CheckIcon from '@mui/icons-material/Check';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import CropFreeIcon from '@mui/icons-material/CropFree';
 import { OCRProvider } from '@/contexts/OCRContext';
-import { useDocumentPage } from '@/contexts/DocumentPageContext';
 import type { OCRBlock } from '@docrouter/sdk';
 import type { HighlightInfo } from '@/types/index';
 
@@ -100,7 +99,6 @@ interface PDFViewerProps {
 }
 
 const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes }: PDFViewerProps) => {
-  const documentPage = useDocumentPage();
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -109,14 +107,102 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // Derive loading, error, and file directly from context.
-  // pdfFile is a stable { data: ArrayBuffer } reference managed by DocumentPageContext,
-  // so react-pdf never sees a "changed but equal" file prop.
-  const loading = documentPage == null || documentPage.loading;
-  // documentPage?.error = fetch/API errors; pdfLoadError = react-pdf onLoadError (parse/display failures).
+  // PDF fetch state: this component fetches the full document and keeps a stable pdfFile ref for react-pdf.
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [pdfContent, setPdfContentState] = useState<ArrayBuffer | null>(null);
+  const [pdfFile, setPdfFile] = useState<{ data: ArrayBuffer } | null>(null);
+  const [documentName, setDocumentName] = useState<string | null>(null);
+  const [documentState, setDocumentState] = useState<string | null>(null);
+  const pdfContentRef = useRef<ArrayBuffer | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const completionFetchStartedRef = useRef(false);
+
+  useEffect(() => {
+    pdfContentRef.current = pdfContent;
+  }, [pdfContent]);
+
+  const setContent = useCallback((content: ArrayBuffer | null) => {
+    setPdfContentState(content);
+    setPdfFile(prev =>
+      prev?.data === content ? prev : content ? { data: content } : null
+    );
+  }, []);
+
+  const fetchDocument = useCallback(async () => {
+    try {
+      setFetchError(null);
+      const response = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
+      setContent(response.content ?? null);
+      setDocumentName(response.document_name ?? null);
+      setDocumentState(response.state ?? null);
+      const hasContent = (response.content ?? null) != null;
+      const stillProcessing = ['ocr_processing', 'llm_processing'].includes(response.state ?? '');
+      if (hasContent || !stillProcessing) {
+        setLoading(false);
+      }
+    } catch (e) {
+      setFetchError(e instanceof Error ? e.message : 'Failed to load document');
+      setDocumentState(null);
+      setDocumentName(null);
+      setContent(null);
+      setLoading(false);
+    }
+  }, [id, docRouterOrgApi, setContent]);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchDocument();
+  }, [fetchDocument]);
+
+  // When document is processing, poll metadata; when completed, fetch full PDF only if we don't have it yet.
+  useEffect(() => {
+    if (documentState !== 'ocr_processing' && documentState !== 'llm_processing') {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      completionFetchStartedRef.current = false;
+      return;
+    }
+    completionFetchStartedRef.current = false;
+    pollRef.current = setInterval(async () => {
+      try {
+        const meta = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf', includeContent: false });
+        setDocumentState(meta.state ?? null);
+        setDocumentName(meta.document_name ?? null);
+        if (meta.state === 'llm_completed' || meta.state === 'ocr_completed') {
+          if (completionFetchStartedRef.current) return;
+          completionFetchStartedRef.current = true;
+          if (pollRef.current) {
+            clearInterval(pollRef.current);
+            pollRef.current = null;
+          }
+          setDocumentState(meta.state ?? null);
+          setDocumentName(meta.document_name ?? null);
+          if (pdfContentRef.current == null) {
+            const response = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
+            setContent(response.content ?? null);
+            setDocumentName(response.document_name ?? null);
+            setLoading(false);
+          }
+        }
+      } catch {
+        // keep polling on error
+      }
+    }, 2000);
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      completionFetchStartedRef.current = false;
+    };
+  }, [documentState, id, docRouterOrgApi, setContent]);
+
+  // Fetch errors vs react-pdf parse/display errors
   const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
-  const error = documentPage?.error ?? pdfLoadError;
-  const pdfFile = documentPage?.pdfFile ?? null;
+  const error = fetchError ?? pdfLoadError;
 
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -134,11 +220,11 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const [fileName, setFileName] = useState<string>('');
   const [fileSize, setFileSize] = useState<number>(0);
 
-  // Keep fileName and fileSize in sync with context (used by Document Properties, OCR, print/download).
+  // Keep fileName and fileSize in sync with local document state (used by Document Properties, OCR, print/download).
   useEffect(() => {
-    setFileName(documentPage?.documentName ?? '');
-    setFileSize(documentPage?.pdfFile?.data.byteLength ?? 0);
-  }, [documentPage?.documentName, documentPage?.pdfFile]);
+    setFileName(documentName ?? '');
+    setFileSize(pdfFile?.data.byteLength ?? 0);
+  }, [documentName, pdfFile]);
 
   const [showOcr, setShowOcr] = useState(false);
   const [ocrText, setOcrText] = useState<string>('');
@@ -495,7 +581,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     };
 
     const fetchDocumentState = async (): Promise<string | null> => {
-      if (documentPage?.documentState != null) return documentPage.documentState;
+      if (documentState != null) return documentState;
       try {
         const list = await docRouterOrgApi.listDocuments({ limit: 100, skip: 0 });
         const doc = list.documents.find((d) => d.id === id);
@@ -533,7 +619,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       cancelled = true;
       if (intervalId) clearInterval(intervalId);
     };
-  }, [showBoundingBoxes, ocrBlocksForBoxes, fileName, id, docRouterOrgApi, documentPage?.documentState]);
+  }, [showBoundingBoxes, ocrBlocksForBoxes, fileName, id, docRouterOrgApi, documentState]);
 
   const handleDownloadOcrText = async () => {
     if (!isOCRSupported(fileName)) {
@@ -1036,7 +1122,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                     </div>
                   ))}
                 </Document>
-              ) : (documentPage?.documentState === 'ocr_processing' || documentPage?.documentState === 'llm_processing') ? (
+              ) : (documentState === 'ocr_processing' || documentState === 'llm_processing') ? (
                 <Typography color="text.secondary" align="center" sx={{ py: 2 }}>
                   Document is being processed. PDF will appear when ready.
                 </Typography>

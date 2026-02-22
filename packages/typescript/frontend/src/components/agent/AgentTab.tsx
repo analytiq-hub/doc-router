@@ -10,7 +10,6 @@ import AgentChat from './AgentChat';
 import ThreadDropdown from './ThreadDropdown';
 import { useDictation } from './useDictation';
 import { DocRouterOrgApi } from '@/utils/api';
-import { useDocumentPage } from '@/contexts/DocumentPageContext';
 import type { AgentThreadSummary } from './useAgentChat';
 
 interface AgentTabProps {
@@ -24,54 +23,48 @@ function isChatDisabled(state: string | null): boolean {
 }
 
 export default function AgentTab({ organizationId, documentId }: AgentTabProps) {
-  const documentPage = useDocumentPage();
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const [localDocumentState, setLocalDocumentState] = useState<string | null>(null);
+  const [documentState, setDocumentState] = useState<string | null>(null);
 
-  // When DocumentPageContext provides state, use it (avoids duplicate GET document).
-  const documentState = documentPage?.documentState ?? localDocumentState;
-
-  // Only fetch/poll when not using shared context
   useEffect(() => {
-    if (documentPage != null) return;
     const fetchState = async () => {
       try {
         try {
           const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf', includeContent: false });
-          setLocalDocumentState(doc.state);
+          setDocumentState(doc.state);
           return;
         } catch {
           // Non-PDF documents may not have pdf; try original
         }
         const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original', includeContent: false });
-        setLocalDocumentState(doc.state);
+        setDocumentState(doc.state);
       } catch (error) {
         console.error('Error fetching document state:', error);
-        setLocalDocumentState(null);
+        setDocumentState(null);
       }
     };
     fetchState();
-  }, [documentPage, organizationId, documentId, docRouterOrgApi]);
+  }, [documentId, docRouterOrgApi]);
 
   useEffect(() => {
-    if (documentPage != null || !isChatDisabled(documentState)) return;
+    if (!isChatDisabled(documentState)) return;
     const poll = setInterval(async () => {
       try {
         try {
           const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf', includeContent: false });
-          setLocalDocumentState(doc.state);
+          setDocumentState(doc.state);
           return;
         } catch {
           /* try original */
         }
         const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original', includeContent: false });
-        setLocalDocumentState(doc.state);
+        setDocumentState(doc.state);
       } catch (error) {
         console.error('Error polling document state:', error);
       }
     }, 2000);
     return () => clearInterval(poll);
-  }, [documentPage, documentState, documentId, docRouterOrgApi]);
+  }, [documentState, documentId, docRouterOrgApi]);
 
   const chatDisabled = isChatDisabled(documentState);
 
