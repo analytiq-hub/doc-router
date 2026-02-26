@@ -337,9 +337,11 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
         }
       }
 
+      // Use the stored prompt_revid from the result (not the requested key) so that
+      // when GET was done with fallback=true we update the actual stored record.
       const result = await docRouterOrgApi.updateLLMResult({
         documentId: id,
-        promptId: editing.promptId,
+        promptId: currentResult.prompt_revid,
         result: updatedResult,
         isVerified: false
       });
@@ -724,10 +726,10 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
         // Remove the item at the specified index
         current.splice(arrayIndex, 1);
         
-        // Update the result with API
+        // Update the result with API (use stored prompt_revid for fallback compatibility)
         const apiResult = await docRouterOrgApi.updateLLMResult({
           documentId: id,
-          promptId: promptId,
+          promptId: result.prompt_revid,
           result: updatedResult,
           isVerified: false
         });
@@ -786,10 +788,10 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
       if (Array.isArray(parent[lastKey])) {
         parent[lastKey].push(defaultValue);
         
-        // Update the result with API
+        // Update the result with API (use stored prompt_revid for fallback compatibility)
         const apiResult = await docRouterOrgApi.updateLLMResult({
           documentId: id,
-          promptId: promptId,
+          promptId: result.prompt_revid,
           result: updatedResult,
           isVerified: false
         });
@@ -859,10 +861,10 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
       if (Array.isArray(parent[lastKey])) {
         parent[lastKey].push(defaultValue);
         
-        // Update the result with API
+        // Update the result with API (use stored prompt_revid for fallback compatibility)
         const apiResult = await docRouterOrgApi.updateLLMResult({
           documentId: id,
-          promptId: promptId,
+          promptId: result.prompt_revid,
           result: updatedResult,
           isVerified: false
         });
