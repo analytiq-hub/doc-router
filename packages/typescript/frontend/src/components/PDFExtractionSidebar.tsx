@@ -389,28 +389,30 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
       
       if (editing && editing.promptId === promptId && editing.key === fullKey) {
         return (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 min-w-0">
             <input
               type="text"
               value={editing.value}
               onChange={(e) => setEditing({ ...editing, value: e.target.value })}
-              className="flex-1 px-2 py-1 text-sm border rounded"
+              className="min-w-0 w-0 flex-1 px-2 py-1 text-sm border rounded"
               autoFocus
             />
-            <button
-              onClick={handleSave}
-              className="p-1 text-green-600 hover:bg-gray-100 rounded"
-              title="Save changes"
-            >
-              <CheckIcon className="w-4 h-4" />
-            </button>
-            <button
-              onClick={handleCancel}
-              className="p-1 text-red-600 hover:bg-gray-100 rounded"
-              title="Cancel"
-            >
-              <XMarkIcon className="w-4 h-4" />
-            </button>
+            <div className="flex items-center flex-shrink-0 gap-0.5">
+              <button
+                onClick={handleSave}
+                className="p-1.5 text-green-600 hover:bg-gray-100 rounded"
+                title="Save changes"
+              >
+                <CheckIcon className="w-4 h-4" />
+              </button>
+              <button
+                onClick={handleCancel}
+                className="p-1.5 text-red-600 hover:bg-gray-100 rounded"
+                title="Cancel"
+              >
+                <XMarkIcon className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         );
       }
@@ -498,29 +500,31 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
               
               if (editing && editing.promptId === promptId && editing.key === arrayItemKey) {
                 return (
-                  <div key={index} className="flex items-center gap-2 pl-2 border-l-2 border-gray-200">
-                    <span className="text-gray-500 text-xs w-6">[{index}]</span>
+                  <div key={index} className="flex items-center gap-2 min-w-0 pl-2 border-l-2 border-gray-200">
+                    <span className="text-gray-500 text-xs w-6 flex-shrink-0">[{index}]</span>
                     <input
                       type="text"
                       value={editing.value}
                       onChange={(e) => setEditing({ ...editing, value: e.target.value })}
-                      className="flex-1 px-2 py-1 text-sm border rounded"
+                      className="min-w-0 w-0 flex-1 px-2 py-1 text-sm border rounded"
                       autoFocus
                     />
-                    <button
-                      onClick={handleSave}
-                      className="p-1 text-green-600 hover:bg-gray-100 rounded"
-                      title="Save changes"
-                    >
-                      <CheckIcon className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={handleCancel}
-                      className="p-1 text-red-600 hover:bg-gray-100 rounded"
-                      title="Cancel"
-                    >
-                      <XMarkIcon className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center flex-shrink-0 gap-0.5">
+                      <button
+                        onClick={handleSave}
+                        className="p-1.5 text-green-600 hover:bg-gray-100 rounded"
+                        title="Save changes"
+                      >
+                        <CheckIcon className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={handleCancel}
+                        className="p-1.5 text-red-600 hover:bg-gray-100 rounded"
+                        title="Cancel"
+                      >
+                        <XMarkIcon className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 );
               }
@@ -588,13 +592,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
             const arrayItemKey = `${parentKey}[${index}]`;
             
             return (
-              <div key={index} className="border rounded p-2 bg-gray-50">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="font-medium text-sm text-gray-700">Item {index}</span>
+              <div key={index} className="border rounded p-2 bg-gray-50 min-w-0">
+                <div className="flex justify-between items-center gap-2 min-w-0 mb-2">
+                  <span className="font-medium text-sm text-gray-700 min-w-0 truncate">Item {index}</span>
                   {editMode && (
                     <button
                       onClick={() => handleArrayItemDelete(promptId, arrayItemKey)}
-                      className="p-1 text-red-600 hover:bg-gray-100 rounded"
+                      className="p-1.5 text-red-600 hover:bg-gray-100 rounded flex-shrink-0"
                       title="Delete item"
                     >
                       <XMarkIcon className="w-4 h-4" />
