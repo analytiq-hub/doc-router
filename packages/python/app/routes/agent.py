@@ -34,7 +34,7 @@ class MentionRef(BaseModel):
 class ChatRequest(BaseModel):
     messages: list[ChatMessage] = Field(..., description="Conversation history")
     mentions: list[MentionRef] = Field(default_factory=list, description="Resolved @ mention refs")
-    model: str = Field(default="claude-sonnet-4-20250514", description="LLM model")
+    model: str = Field(default="claude-sonnet-4-6", description="LLM model")
     stream: bool = Field(default=False, description="Stream response (SSE)")
     auto_approve: bool = Field(default=False, description="Execute all tool calls without pausing")
     auto_approved_tools: list[str] | None = Field(

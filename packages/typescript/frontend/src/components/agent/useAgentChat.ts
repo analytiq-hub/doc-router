@@ -75,7 +75,7 @@ export interface AgentChatState {
   threadsLoading: boolean;
 }
 
-const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
 
 /**
  * Returns messages that come before the given turn index (turns 0..turnIndex-1 only).
