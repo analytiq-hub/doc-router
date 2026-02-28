@@ -127,10 +127,26 @@ Use `terraform-aws-modules/eks/aws`:
 
 Two `aws_ecr_repository` resources: `doc-router-frontend`, `doc-router-backend`. Optional lifecycle policy to keep the last N images.
 
+### S3 app bucket (inline in `main.tf`)
+
+One `aws_s3_bucket` for document storage (`doc-router-data-<account>`), with AES256 SSE. Separate from the Terraform state bucket.
+
 ### IAM (inline in `main.tf`)
 
-- Node group role: `AmazonEKSWorkerNodePolicy`, `AmazonEKS_CNI_Policy`, `AmazonEC2ContainerRegistryReadOnly`.
-- EBS CSI IRSA role: trusts the OIDC provider, has the EBS CSI controller policy (required for MongoDB PVCs).
+**EKS node group role:**
+- `AmazonEKSWorkerNodePolicy`, `AmazonEKS_CNI_Policy`, `AmazonEC2ContainerRegistryReadOnly`.
+- EBS CSI IRSA role with the EBS CSI controller policy (required for MongoDB PVCs).
+
+**App IAM user + role** (same pattern as `analytiq-terraform/modules/docrouter`):
+
+- `aws_iam_user` (`doc-router-app-user`) + `aws_iam_access_key` — credentials injected into `secrets.yaml` as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
+- `aws_iam_role` (`doc-router-app-role`) assumed by the user, with:
+  - `AmazonTextractFullAccess`
+  - `AmazonSESFullAccess`
+  - Inline S3 policy: `PutObject`, `GetObject`, `ListBucket`, `DeleteObject` on the app bucket.
+- Bedrock `InvokeModel` / `InvokeModelWithResponseStream` on `arn:aws:bedrock:*::foundation-model/*` and `arn:aws:bedrock:*:*:inference-profile/*` attached **directly to the user** (not the role) — this matches the existing pattern; Bedrock is called using the user's access key directly, not through role assumption.
+
+Access key ID and secret are Terraform outputs (sensitive) and must be supplied to `secrets.yaml` before deploying.
 
 ### Helm releases (inline in `main.tf`)
 
@@ -148,6 +164,15 @@ A single `ClusterIssuer` for Let's Encrypt is applied via a `null_resource` loca
 ### Key outputs
 
 - `cluster_name`, `frontend_repo_url`, `backend_repo_url`
+- `app_user_access_key_id`, `app_user_secret_access_key` (sensitive)
+- `app_bucket_name`, `app_role_arn`
+
+### Manual steps in the AWS console (cannot be automated via Terraform)
+
+| Step | Where | Notes |
+|---|---|---|
+| Enable Bedrock model access | Bedrock → Model access | Request access to each model (Claude, Titan, etc.) per region. IAM permissions alone are not enough — models must be explicitly enabled. |
+| SES production access (if email is used) | SES → Account dashboard | New accounts start in sandbox mode; can only send to verified addresses. Request production access or verify sender + all recipient addresses while in sandbox. |
 
 ---
 
