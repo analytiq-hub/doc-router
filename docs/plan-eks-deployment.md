@@ -54,8 +54,12 @@ description = "Build and push frontend/backend images to ECR"
 run = "./deploy/kubernetes/scripts/build-push-eks.sh"
 
 [tasks.deploy-eks]
-description = "Deploy app to our EKS (build-push + apply overlay)"
+description = "Build, push, and deploy to our EKS"
 depends = ["build-push-eks"]
+run = "./deploy/kubernetes/scripts/deploy-eks.sh"
+
+[tasks.redeploy-eks]
+description = "Deploy to our EKS without rebuilding images (config/secret changes only)"
 run = "./deploy/kubernetes/scripts/deploy-eks.sh"
 
 [tasks."deploy-customer"]
@@ -87,6 +91,9 @@ Before running any EKS/customer task that needs AWS or kubectl, set `AWS_PROFILE
 doc-router/
   .mise.toml        # tool versions (terraform, awscli, kubectl, kustomize) + deploy tasks
   deploy/
+    scripts/
+      apply-terraform.sh       # sources .env + overlay, exports TF_VAR_*, runs terraform
+      generate-k8s-config.sh   # produces configmap.yaml + secrets.yaml from env vars
     terraform/
       analytiq-prod/     # our production account
       analytiq-test/     # our test/staging account
@@ -98,6 +105,12 @@ doc-router/
         kind/            # local dev (existing)
         eks/             # our hosted EKS instance(s)
         customer-example/ # template — copy per customer cluster
+      scripts/
+        build-push-eks.sh
+        deploy-eks.sh
+        deploy-customer.sh
+        deploy-kind.sh
+        setup-kind.sh
 ```
 
 Each directory under `deploy/terraform/` is an independent root module for one AWS account. State files are gitignored. **Variable values (region, CIDR, cluster name, bucket name, etc.) are not stored in the repo** — they come from `.env` and overlays; a deploy script sources those and exports `TF_VAR_*` before running Terraform.
@@ -218,22 +231,21 @@ One `aws_s3_bucket` for document storage. **Bucket name comes from `var.app_buck
   - `AmazonTextractFullAccess`
   - `AmazonSESFullAccess`
   - Inline S3 policy: `PutObject`, `GetObject`, `ListBucket`, `DeleteObject` on the app bucket.
+- `aws_s3_bucket_policy` on the app bucket granting `s3:*` to the app role principal (matches the pattern in `analytiq-terraform/modules/docrouter`).
 - Bedrock `InvokeModel` / `InvokeModelWithResponseStream` on `arn:aws:bedrock:*::foundation-model/*` and `arn:aws:bedrock:*:*:inference-profile/*` attached **directly to the user** (not the role) — this matches the existing pattern; Bedrock is called using the user's access key directly, not through role assumption.
 
 Access key ID and secret are Terraform outputs (sensitive). You manually copy them into your `.env.eks` when you create or update that file; `generate-k8s-config.sh` then produces `secrets.yaml` from the env files. No automation: all env files are maintained by hand (see below).
 
 ### Helm releases (inline in `main.tf`)
 
-| Chart | Purpose |
-|---|---|
-| `ingress-nginx/ingress-nginx` (or `kubernetes/ingress-nginx`) | Ingress controller, exposes an AWS NLB/ELB |
-| `jetstack/cert-manager` | TLS certificate automation via Let's Encrypt |
-| `aws-ebs-csi-driver` | EBS volumes for MongoDB PVCs |
-| `metrics-server` | Enables HPA |
+| Chart | Purpose | Notable config |
+|---|---|---|
+| `ingress-nginx/ingress-nginx` | Ingress controller, exposes an AWS NLB/ELB | Watches all namespaces by default |
+| `jetstack/cert-manager` | TLS certificate automation via Let's Encrypt | `crds.enabled = true` (or `installCRDs = true` for older chart versions) — required or ClusterIssuer will fail |
+| `aws-ebs-csi-driver` | EBS volumes for MongoDB PVCs | `serviceAccount.annotations."eks.amazonaws.com/role-arn"` must be set to the EBS CSI IRSA role ARN, or the driver cannot provision EBS volumes and PVCs will stay Pending |
+| `metrics-server` | Enables HPA | — |
 
-The NGINX Ingress controller watches all namespaces by default — no extra config needed per namespace.
-
-A single `ClusterIssuer` for Let's Encrypt is applied via a `null_resource` local-exec with `depends_on = [helm_release.cert_manager]` and a readiness check before applying the issuer YAML.
+A single `ClusterIssuer` for Let's Encrypt is applied via a `null_resource` local-exec with `depends_on = [helm_release.cert_manager]` and a readiness check before applying the issuer YAML. The issuer manifest is templated with `LETSENCRYPT_EMAIL` (required by Let's Encrypt). Add `LETSENCRYPT_EMAIL` to `.env` or the overlay and include it in the `TF_VAR_*` exports (or pass it directly to the `null_resource` script).
 
 ### Key outputs
 
@@ -270,6 +282,7 @@ All environment and secret values are maintained in **manually created** env fil
 | `REGION` | `region` | `us-east-1` |
 | `VPC_CIDR` | `vpc_cidr` | `10.0.0.0/16` |
 | `ENVIRONMENT` | `environment` | `prod`, `test`, etc. |
+| `LETSENCRYPT_EMAIL` | `letsencrypt_email` | Contact email for Let's Encrypt ClusterIssuer; required by ACME protocol |
 
 You create and edit env files by hand. Deployment scripts only **read** them: they export `TF_VAR_*` for Terraform and call `generate-k8s-config.sh` to produce `configmap.yaml` and `secrets.yaml`. After the first Terraform apply, copy the app user access key ID and secret from Terraform outputs into the overlay (e.g. `.env.eks`) for subsequent K8s deploys.
 
@@ -290,10 +303,9 @@ You create and edit env files by hand. Deployment scripts only **read** them: th
 
 ```
 base/
-  kustomization.yaml          # frontend + backend + worker only; no configmap.yaml or secrets.yaml
+  kustomization.yaml          # frontend + backend only; no configmap.yaml or secrets.yaml
   frontend/{deployment,service,ingress}.yaml
   backend/{deployment,service,hpa.yaml}
-  worker/deployment.yaml
   components/
     mongodb/
       kustomization.yaml      # kind: Component
@@ -304,6 +316,7 @@ base/
 Base does not contain or reference `configmap.yaml` or `secrets.yaml`. Each overlay keeps its own (generated by the deploy script from that overlay's env files).
 
 - `base/frontend/ingress.yaml`: path rules only, no `ingressClassName`/`host`/`tls`.
+- `base/worker/` deleted entirely (deployment + service) — the worker process already runs as a subprocess inside the backend pod (see [base/backend/deployment.yaml](deploy/kubernetes/base/backend/deployment.yaml)).
 - `base/mongodb/pvc.yaml` deleted — PVCs are created by the StatefulSet `volumeClaimTemplates`.
 - MongoDB `Service` is headless `ClusterIP` — not exposed through the ingress controller, unreachable from outside the cluster.
 
@@ -440,6 +453,19 @@ labels:
 
 ---
 
+## `deploy/scripts/generate-k8s-config.sh`
+
+Reads env vars from the environment (already sourced by the caller) and writes two files into a given output directory:
+
+- **`configmap.yaml`** — non-sensitive app config (`NEXTAUTH_URL`, `APP_BUCKET_NAME`, `REGION`, `ENVIRONMENT`, etc.).
+- **`secrets.yaml`** — sensitive values (`MONGODB_URI`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `NEXTAUTH_SECRET`, `OPENAI_API_KEY`, etc.).
+
+Usage: `./deploy/scripts/generate-k8s-config.sh <output-dir>`
+
+The script does not source env files itself — the caller (deploy script) sources `.env` + the overlay first, then calls this script. Output files are gitignored in every overlay directory. Both files reference the same `doc-router-config` and `doc-router-secrets` names that the base Deployment manifests reference via `envFrom`.
+
+---
+
 ## Deployment scripts
 
 Deploy workflows are invoked via **`mise run <task>`** (see [Tool versions and deploy tasks (mise)](#tool-versions-and-deploy-tasks-mise)). The scripts below are what those tasks call.
@@ -481,7 +507,6 @@ Assumes Terraform has run, `kubectl` context points at the cluster, and you have
 4. `kubectl apply -k deploy/kubernetes/overlays/eks`
 5. `kubectl rollout status deployment/frontend -n doc-router`
 6. `kubectl rollout status deployment/backend -n doc-router`
-7. `kubectl rollout status deployment/worker -n doc-router`
 
 ### `deploy/kubernetes/scripts/deploy-customer.sh`
 
@@ -491,7 +516,7 @@ Takes overlay name as argument (e.g. `customer-acme`). Assumes you have **manual
 2. Run `generate-k8s-config.sh` with output directory set to `deploy/kubernetes/overlays/<overlay-name>/`.
 3. Optionally update image tags in that overlay's kustomization.
 4. `kubectl apply -k deploy/kubernetes/overlays/<overlay-name>`.
-5. `kubectl rollout status` for frontend, backend, and worker in that namespace.
+5. `kubectl rollout status` for frontend and backend in that namespace.
 
 ---
 
