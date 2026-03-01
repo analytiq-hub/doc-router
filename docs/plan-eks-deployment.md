@@ -42,6 +42,7 @@ terraform = "~1.9"
 awscli    = "latest"
 kubectl   = "latest"
 kustomize = "latest"
+flux2     = "latest"
 
 [tasks.apply-terraform]
 description = "Run Terraform apply with vars from .env + overlay"
@@ -54,12 +55,12 @@ description = "Build and push frontend/backend images to ECR"
 run = "./deploy/kubernetes/scripts/build-push-eks.sh"
 
 [tasks.deploy-eks]
-description = "Build, push, and deploy to our EKS"
+description = "Build, push images and push manifests OCI artifact to ECR (Flux applies)"
 depends = ["build-push-eks"]
 run = "./deploy/kubernetes/scripts/deploy-eks.sh"
 
 [tasks.redeploy-eks]
-description = "Deploy to our EKS without rebuilding images (config/secret changes only)"
+description = "Push manifests OCI artifact only — no image rebuild (config/secret changes)"
 run = "./deploy/kubernetes/scripts/deploy-eks.sh"
 
 [tasks."deploy-customer"]
@@ -105,6 +106,9 @@ doc-router/
         kind/            # local dev (existing)
         eks/             # our hosted EKS instance(s)
         customer-example/ # template — copy per customer cluster
+      flux/
+        eks/             # Flux OCIRepository + Kustomization template (applied once per cluster)
+        customer-example/ # template for customer clusters
       scripts/
         build-push-eks.sh
         deploy-eks.sh
@@ -212,7 +216,12 @@ Use `terraform-aws-modules/eks/aws`:
 
 ### ECR (inline in `main.tf`)
 
-Two `aws_ecr_repository` resources: `doc-router-frontend`, `doc-router-backend`. Optional lifecycle policy to keep the last N images.
+Three `aws_ecr_repository` resources:
+
+- `doc-router-frontend`, `doc-router-backend` — app images.
+- `doc-router/manifests` — Flux OCI artifacts (one per deploy, lifecycle policy keeps last N).
+
+The manifests repo is in the same ECR registry; Flux pulls from it using the node instance profile (`AmazonEC2ContainerRegistryReadOnly`), so no separate IRSA is needed for Flux.
 
 ### S3 app bucket (inline in `main.tf`)
 
@@ -244,6 +253,7 @@ Access key ID and secret are Terraform outputs (sensitive). You manually copy th
 | `jetstack/cert-manager` | TLS certificate automation via Let's Encrypt | `crds.enabled = true` (or `installCRDs = true` for older chart versions) — required or ClusterIssuer will fail |
 | `aws-ebs-csi-driver` | EBS volumes for MongoDB PVCs | `serviceAccount.annotations."eks.amazonaws.com/role-arn"` must be set to the EBS CSI IRSA role ARN, or the driver cannot provision EBS volumes and PVCs will stay Pending |
 | `metrics-server` | Enables HPA | — |
+| `fluxcd-community/flux2` | GitOps reconciliation — pulls OCI manifests from ECR and applies them; self-heals on drift | Installed via Helm after cluster is ready; no `flux bootstrap` or GitHub access needed |
 
 A single `ClusterIssuer` for Let's Encrypt is applied via a `null_resource` local-exec with `depends_on = [helm_release.cert_manager]` and a readiness check before applying the issuer YAML. The issuer manifest is templated with `LETSENCRYPT_EMAIL` (required by Let's Encrypt). Add `LETSENCRYPT_EMAIL` to `.env` or the overlay and include it in the `TF_VAR_*` exports (or pass it directly to the `null_resource` script).
 
@@ -451,6 +461,54 @@ labels:
 
 **External MongoDB**: omit the component entirely; set `MONGODB_URI` in `secrets.yaml` to their Atlas/managed instance. No `mongodb-storageclass-patch.yaml` needed.
 
+### `deploy/kubernetes/flux/eks/`
+
+A single template applied once per cluster. `ocirepository.yaml` uses shell variable syntax (`${ECR_ACCOUNT_ID}`, `${REGION}`) so the same files work for `analytiq-prod`, `analytiq-test`, or any other EKS account — bootstrap fills them in via `envsubst`. These files are committed.
+
+```
+flux/eks/
+  ocirepository.yaml    # points Flux at ECR; uses provider: aws (node instance profile auth)
+  kustomization.yaml    # Flux Kustomization: which overlay path to apply, reconcile interval
+```
+
+**`ocirepository.yaml`**:
+
+```yaml
+apiVersion: source.toolkit.fluxcd.io/v1beta2
+kind: OCIRepository
+metadata:
+  name: doc-router
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: oci://${ECR_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/doc-router/manifests
+  ref:
+    tag: latest
+  provider: aws
+```
+
+**`kustomization.yaml`** (Flux `kustomize.toolkit.fluxcd.io/v1`, not a kustomize `Kustomization`):
+
+```yaml
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: doc-router
+  namespace: flux-system
+spec:
+  interval: 5m
+  prune: true          # deletes resources removed from the manifests
+  sourceRef:
+    kind: OCIRepository
+    name: doc-router
+  path: ./overlays/eks
+  targetNamespace: doc-router
+```
+
+`prune: true` enables self-healing: resources drifted or deleted manually are restored on the next reconcile (default every 5 minutes; also triggered immediately on each new artifact push).
+
+Customer clusters get their own `flux/customer-<name>/` with an `OCIRepository` (also using `envsubst` at bootstrap time) pointing at the same or a different registry and a `Kustomization` pointing at `./overlays/customer-<name>`.
+
 ---
 
 ## `deploy/scripts/generate-k8s-config.sh`
@@ -499,24 +557,37 @@ cd deploy/terraform/customer-acme && terraform init && terraform apply
 
 ### `deploy/kubernetes/scripts/deploy-eks.sh`
 
-Assumes Terraform has run, `kubectl` context points at the cluster, and you have **manually created** `.env` and `.env.eks` (including app IAM keys from Terraform outputs if needed).
+Assumes Terraform has run, Flux is bootstrapped in the cluster, and you have **manually created** `.env` and `.env.eks`.
 
-1. Merge `.env` + `.env.eks` (read-only; script does not create or modify env files).
-2. Run `generate-k8s-config.sh` with output directory set to `deploy/kubernetes/overlays/eks/` to generate `configmap.yaml` and `secrets.yaml` there.
-3. `cd deploy/kubernetes/overlays/eks && kustomize edit set image analytiqhub/doc-router-frontend=<ECR_FRONTEND_URL>:<TAG> analytiqhub/doc-router-backend=<ECR_BACKEND_URL>:<TAG>` — updates `kustomization.yaml` in place. This is the intended usage: `kustomization.yaml` is the committed declaration of what image is deployed. After apply, the script commits the change (`git add kustomization.yaml && git commit -m "deploy: update eks image to <TAG>"`) so every deployment is recorded in git history.
-4. `kubectl apply -k deploy/kubernetes/overlays/eks`
-5. `kubectl rollout status deployment/frontend -n doc-router`
-6. `kubectl rollout status deployment/backend -n doc-router`
+1. Merge `.env` + `.env.eks` (read-only).
+2. Run `generate-k8s-config.sh` → writes `configmap.yaml` and `secrets.yaml` into `deploy/kubernetes/overlays/eks/` (gitignored).
+3. `kustomize edit set image` in `overlays/eks/kustomization.yaml` to set the new image tags (modifies the file locally; not committed).
+4. Push the entire `deploy/kubernetes/` directory as a Flux OCI artifact to ECR:
+   ```bash
+   TAG=$(git rev-parse --short HEAD)
+   flux push artifact oci://<account>.dkr.ecr.<region>.amazonaws.com/doc-router/manifests:$TAG \
+     --path=./deploy/kubernetes \
+     --provider=aws \
+     --source="$(git remote get-url origin)" \
+     --revision="$(git rev-parse HEAD)"
+   flux tag artifact oci://<account>.dkr.ecr.<region>.amazonaws.com/doc-router/manifests:$TAG \
+     --tag latest
+   ```
+   > **Note:** `secrets.yaml` (containing `MONGODB_URI`, AWS credentials, etc.) is bundled into this OCI artifact. ECR repositories are private and IAM-access-controlled, so this is an acceptable trade-off — but be aware that credentials live in the artifact and should be rotated via the normal env-file + redeploy workflow.
+5. Reset the locally modified `kustomization.yaml`: `git checkout deploy/kubernetes/overlays/eks/kustomization.yaml`.
+6. Flux detects the new `latest` artifact within its reconcile interval (default 1 minute) and applies the changes. Self-healing: any manual cluster changes are reverted within 5 minutes.
+7. Optionally watch: `flux get kustomizations -n flux-system --watch`.
 
 ### `deploy/kubernetes/scripts/deploy-customer.sh`
 
-Takes overlay name as argument (e.g. `customer-acme`). Assumes you have **manually created** `.env` and `.env.customer-<name>`.
+Takes overlay name as argument (e.g. `customer-acme`). Assumes you have **manually created** `.env` and `.env.customer-<name>`, and Flux is bootstrapped in the customer cluster.
 
-1. Merge `.env` + `.env.customer-<name>` (read-only; script does not create or modify env files).
-2. Run `generate-k8s-config.sh` with output directory set to `deploy/kubernetes/overlays/<overlay-name>/`.
-3. Optionally update image tags in that overlay's kustomization.
-4. `kubectl apply -k deploy/kubernetes/overlays/<overlay-name>`.
-5. `kubectl rollout status` for frontend and backend in that namespace.
+1. Merge `.env` + `.env.customer-<name>` (read-only).
+2. Run `generate-k8s-config.sh` → writes `configmap.yaml` and `secrets.yaml` into `deploy/kubernetes/overlays/<overlay-name>/` (gitignored).
+3. `kustomize edit set image` in that overlay's `kustomization.yaml` to set the new image tags (local modification; not committed).
+4. `flux push artifact` to the customer's registry (ECR or their own), tag as `latest`.
+5. Reset the locally modified `kustomization.yaml`.
+6. Flux in the customer cluster reconciles and applies. Watch with `flux get kustomizations -n flux-system --watch`.
 
 ---
 
@@ -548,6 +619,13 @@ terraform apply
 # 3. Update kubeconfig (cluster name from .env: CLUSTER_NAME=doc-router)
 set -a; source .env; source .env.eks; set +a
 mise run update-kubeconfig
+
+# 4. Bootstrap Flux — apply OCIRepository + Flux Kustomization to the cluster (run once)
+#    ECR_ACCOUNT_ID is derived at runtime; REGION comes from the sourced env
+ECR_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+export ECR_ACCOUNT_ID REGION
+envsubst < deploy/kubernetes/flux/eks-prod/ocirepository.yaml | kubectl apply -f -
+kubectl apply -f deploy/kubernetes/flux/eks-prod/kustomization.yaml
 ```
 
 ### Adding a second AWS account
@@ -577,10 +655,18 @@ mise run deploy-eks
 ### Onboarding a customer cluster (possibly another AWS account)
 
 1. Copy `overlays/customer-example` to `overlays/customer-<name>`.
-2. Fill in `namespace.yaml` and `ingress-patch.yaml`.
-3. Create `.env.customer-<name>` with `APP_BUCKET_NAME`, `CLUSTER_NAME=doc-router` (if same), `REGION`, and any customer-specific or AWS account vars (e.g. `AWS_PROFILE`). If you provision their EKS with Terraform, copy `deploy/terraform/analytiq-prod` to `deploy/terraform/customer-<name>`, update `providers.tf` (state bucket/table), and run `mise run apply-terraform -- customer-<name> deploy/terraform/customer-<name>`.
-4. Point `kubectl` at their cluster (and `AWS_PROFILE` if different account).
-5. `mise run deploy-customer -- customer-<name>`
+2. Copy `flux/customer-example` to `flux/customer-<name>`; update `ocirepository.yaml` with their registry URL.
+3. Fill in `namespace.yaml` and `ingress-patch.yaml`.
+4. Create `.env.customer-<name>` with `APP_BUCKET_NAME`, `CLUSTER_NAME`, `REGION`, and any AWS account vars. If provisioning their EKS with Terraform, copy `deploy/terraform/analytiq-prod` to `deploy/terraform/customer-<name>`, update `providers.tf`, and run `mise run apply-terraform -- customer-<name> deploy/terraform/customer-<name>`.
+5. Point `kubectl` at their cluster.
+6. Bootstrap Flux in their cluster:
+   ```bash
+   ECR_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+   export ECR_ACCOUNT_ID REGION
+   envsubst < deploy/kubernetes/flux/customer-<name>/ocirepository.yaml | kubectl apply -f -
+   kubectl apply -f deploy/kubernetes/flux/customer-<name>/kustomization.yaml
+   ```
+7. `mise run deploy-customer -- customer-<name>`
 
 ### Teardown
 
