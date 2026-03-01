@@ -111,7 +111,7 @@ provider "helm" {
 Use `terraform-aws-modules/vpc/aws`:
 
 - `/16` CIDR.
-- 2 public subnets (Traefik LoadBalancer, NAT gateway) across 2 AZs.
+- 2 public subnets (NGINX Ingress LoadBalancer, NAT gateway) across 2 AZs.
 - 2 private subnets (worker nodes) across 2 AZs.
 - One NAT gateway.
 
@@ -146,18 +146,18 @@ One `aws_s3_bucket` for document storage (`doc-router-data-<account>`), with AES
   - Inline S3 policy: `PutObject`, `GetObject`, `ListBucket`, `DeleteObject` on the app bucket.
 - Bedrock `InvokeModel` / `InvokeModelWithResponseStream` on `arn:aws:bedrock:*::foundation-model/*` and `arn:aws:bedrock:*:*:inference-profile/*` attached **directly to the user** (not the role) — this matches the existing pattern; Bedrock is called using the user's access key directly, not through role assumption.
 
-Access key ID and secret are Terraform outputs (sensitive) and must be supplied to `secrets.yaml` before deploying.
+Access key ID and secret are Terraform outputs (sensitive). You manually copy them into your `.env.eks` when you create or update that file; `generate-k8s-config.sh` then produces `secrets.yaml` from the env files. No automation: all env files are maintained by hand (see below).
 
 ### Helm releases (inline in `main.tf`)
 
 | Chart | Purpose |
 |---|---|
-| `traefik/traefik` | Ingress controller, exposes an AWS NLB |
+| `ingress-nginx/ingress-nginx` (or `kubernetes/ingress-nginx`) | Ingress controller, exposes an AWS NLB/ELB |
 | `jetstack/cert-manager` | TLS certificate automation via Let's Encrypt |
 | `aws-ebs-csi-driver` | EBS volumes for MongoDB PVCs |
 | `metrics-server` | Enables HPA |
 
-Traefik watches all namespaces by default — no extra config needed per namespace.
+The NGINX Ingress controller watches all namespaces by default — no extra config needed per namespace.
 
 A single `ClusterIssuer` for Let's Encrypt is applied via a `null_resource` local-exec with `depends_on = [helm_release.cert_manager]` and a readiness check before applying the issuer YAML.
 
@@ -176,13 +176,28 @@ A single `ClusterIssuer` for Let's Encrypt is applied via a `null_resource` loca
 
 ---
 
+## Env files (all manual)
+
+All environment and secret values are maintained in **manually created** env files. Nothing generates or updates these files automatically (e.g. not from Terraform outputs).
+
+| File | Used by | Notes |
+|------|---------|--------|
+| `.env` | All overlays (merged with overlay-specific file) | Shared defaults; gitignored. |
+| `.env.kind` | Kind overlay | Kind-specific overrides; gitignored. |
+| `.env.eks` | EKS overlay | EKS-specific values (e.g. ECR URLs, app IAM keys from Terraform outputs); gitignored. |
+| `.env.customer-<name>` | Customer overlay | Customer-specific values; gitignored. |
+
+You create and edit these files by hand. Deployment scripts only **read** them and call `generate-k8s-config.sh` to produce `configmap.yaml` and `secrets.yaml` in the overlay directory. For EKS, after Terraform apply you copy the app user access key ID and secret from Terraform outputs (or AWS console) into `.env.eks` yourself.
+
+---
+
 ## Kubernetes manifests (`deploy/kubernetes/`)
 
 ### Design rules for multi-namespace support
 
 1. **`base/` owns no `Namespace` resource** — each overlay provides its own `namespace.yaml`.
 2. **`base/` sets no `ingressClassName`, `host`, or TLS** in the Ingress — overlays own those.
-3. **`base/` does not include `configmap.yaml` or `secrets.yaml`** — each overlay generates and includes its own.
+3. **`base/` does not include `configmap.yaml` or `secrets.yaml`** — base's kustomization never lists them. Each overlay generates (or provides) these files in **its own directory** and includes them in its `resources:` so config and secrets are per-overlay and base stays shared.
 4. Each overlay sets `namespace:` in its `kustomization.yaml`; Kustomize rewrites all resource namespaces automatically.
 5. Use `labels:` (not `commonLabels:`) in overlays — `commonLabels` also mutates pod selectors and breaks rolling updates on existing Deployments.
 6. **MongoDB is a Kustomize component** — overlays that want in-cluster MongoDB include it; overlays using external MongoDB omit it and supply `MONGODB_URI` in their `secrets.yaml`.
@@ -191,9 +206,7 @@ A single `ClusterIssuer` for Let's Encrypt is applied via a `null_resource` loca
 
 ```
 base/
-  kustomization.yaml          # frontend + backend + worker only
-  configmap.yaml              # not included by base — each overlay includes its own
-  secrets.yaml                # not included by base — each overlay includes its own
+  kustomization.yaml          # frontend + backend + worker only; no configmap.yaml or secrets.yaml
   frontend/{deployment,service,ingress}.yaml
   backend/{deployment,service,hpa.yaml}
   worker/deployment.yaml
@@ -204,9 +217,11 @@ base/
       service.yaml            # headless ClusterIP — not reachable outside the cluster
 ```
 
+Base does not contain or reference `configmap.yaml` or `secrets.yaml`. Each overlay keeps its own (generated by the deploy script from that overlay's env files).
+
 - `base/frontend/ingress.yaml`: path rules only, no `ingressClassName`/`host`/`tls`.
 - `base/mongodb/pvc.yaml` deleted — PVCs are created by the StatefulSet `volumeClaimTemplates`.
-- MongoDB `Service` is headless `ClusterIP` — not exposed through Traefik, unreachable from outside the cluster.
+- MongoDB `Service` is headless `ClusterIP` — not exposed through the ingress controller, unreachable from outside the cluster.
 
 ### `deploy/kubernetes/overlays/eks/`
 
@@ -261,9 +276,32 @@ labels:
     includeSelectors: false
 ```
 
-**`ingress-patch.yaml`**: sets `ingressClassName: traefik`, real hostname, TLS spec, and `cert-manager.io/cluster-issuer: letsencrypt-prod` annotation.
+**`ingress-patch.yaml`**: sets `ingressClassName: nginx`, real hostname, TLS spec, and `cert-manager.io/cluster-issuer: letsencrypt-prod` annotation.
 
 **`mongodb-storageclass-patch.yaml`**: sets `storageClassName: gp3` on the StatefulSet `volumeClaimTemplates`. Only needed when the mongodb component is included.
+
+### `deploy/kubernetes/overlays/kind/` (local dev)
+
+Kind uses the same design: overlay supplies namespace, configmap, and secrets; no values in base.
+
+**Setup:**
+
+- Manually create `.env` and `.env.kind` (gitignored). Populate with local dev values (e.g. `NEXTAUTH_URL=http://localhost:3000`, `MONGODB_URI` for the in-cluster Mongo or a local Mongo).
+- Run the existing **deploy-kind.sh** (or equivalent): it merges `.env` + `.env.kind`, runs `generate-k8s-config.sh` with **output directory** set to `deploy/kubernetes/overlays/kind/`, builds Docker images, loads them into kind with `kind load docker-image`, then `kubectl apply -k deploy/kubernetes/overlays/kind`.
+
+**Overlay layout:**
+
+```
+overlays/kind/
+  kustomization.yaml
+  namespace.yaml
+  ingress-patch.yaml          # ingressClassName: nginx for kind
+  configmap.yaml              # gitignored — generated by deploy-kind.sh into this dir
+  secrets.yaml                 # gitignored — generated by deploy-kind.sh into this dir
+  mongodb-storageclass-patch.yaml   # optional; kind often uses default storage
+```
+
+**`kustomization.yaml`** includes `resources: [../../base, namespace.yaml, configmap.yaml, secrets.yaml]`, `components: [../../base/components/mongodb]` (in-cluster MongoDB for local dev), and `patches` for ingress. Images point to local tags (e.g. `analytiqhub/doc-router-frontend:latest`); no ECR. No automation of env files — you maintain `.env` and `.env.kind` by hand.
 
 ### `deploy/kubernetes/overlays/customer-example/`
 
@@ -310,7 +348,7 @@ labels:
     includeSelectors: false
 ```
 
-`ingress-patch.yaml` sets the customer's ingress class (`nginx`, `traefik`, `alb`, `gce`, etc.) and hostname.
+`ingress-patch.yaml` sets the customer's ingress class (`nginx`, `alb`, `gce`, etc.) and hostname.
 
 **In-cluster MongoDB**: add `components: [../../base/components/mongodb]` and a `mongodb-storageclass-patch.yaml` for their storage class.
 
@@ -331,9 +369,9 @@ labels:
 
 ### `deploy/kubernetes/scripts/deploy-eks.sh`
 
-Assumes Terraform has run and `kubectl` context points at the cluster.
+Assumes Terraform has run, `kubectl` context points at the cluster, and you have **manually created** `.env` and `.env.eks` (including app IAM keys from Terraform outputs if needed).
 
-1. Merge `.env` + `.env.eks`.
+1. Merge `.env` + `.env.eks` (read-only; script does not create or modify env files).
 2. Run `generate-k8s-config.sh` with output directory set to `deploy/kubernetes/overlays/eks/` to generate `configmap.yaml` and `secrets.yaml` there.
 3. `kustomize edit set image` in `overlays/eks/kustomization.yaml` to pin image tags.
 4. `kubectl apply -k deploy/kubernetes/overlays/eks`
@@ -343,9 +381,9 @@ Assumes Terraform has run and `kubectl` context points at the cluster.
 
 ### `deploy/kubernetes/scripts/deploy-customer.sh`
 
-Takes overlay name as argument (e.g. `customer-acme`).
+Takes overlay name as argument (e.g. `customer-acme`). Assumes you have **manually created** `.env` and `.env.customer-<name>`.
 
-1. Merge `.env` + `.env.customer-<name>`.
+1. Merge `.env` + `.env.customer-<name>` (read-only; script does not create or modify env files).
 2. Run `generate-k8s-config.sh` with output directory set to `deploy/kubernetes/overlays/<overlay-name>/`.
 3. Optionally update image tags in that overlay's kustomization.
 4. `kubectl apply -k deploy/kubernetes/overlays/<overlay-name>`.
@@ -383,17 +421,25 @@ cp -r deploy/terraform/analytiq-prod deploy/terraform/analytiq-test
 
 ### Per-deployment (our EKS)
 
+Ensure `.env` and `.env.eks` exist and are up to date (including app IAM keys from Terraform outputs if you rotated them). Then:
+
 ```bash
 export AWS_PROFILE=<account-profile>
 deploy/kubernetes/scripts/build-push-eks.sh
 deploy/kubernetes/scripts/deploy-eks.sh
 ```
 
+### Kind (local dev)
+
+1. Manually create `.env` and `.env.kind` (gitignored).
+2. Run `deploy/kubernetes/scripts/setup-kind.sh` once to create the cluster (if not already).
+3. Run `deploy/kubernetes/scripts/deploy-kind.sh` — it generates config/secrets into `overlays/kind/`, builds images, loads into kind, applies the overlay.
+
 ### Onboarding a customer cluster
 
 1. Copy `overlays/customer-example` to `overlays/customer-<name>`.
 2. Fill in `namespace.yaml` and `ingress-patch.yaml`.
-3. Create `.env.customer-<name>` locally (gitignored).
+3. Manually create `.env.customer-<name>` (gitignored).
 4. Point `kubectl` at their cluster.
 5. `./deploy-customer.sh customer-<name>`
 
