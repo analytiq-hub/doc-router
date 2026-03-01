@@ -5,8 +5,25 @@
 - Deploy doc-router to AWS EKS (our own cluster, one or more namespaces).
 - Deploy doc-router to a customer's existing Kubernetes cluster (any provider).
 - Docker images built from the existing multi-stage Dockerfile, stored in ECR.
-- Terraform manages all AWS infrastructure; Kustomize overlays manage all Kubernetes resources.
-- **Single source of config:** all deployment and app config comes from `.env`, with one overlay per customer (e.g. `.env.eks`, `.env.customer-acme`). Each customer deployment can target a different AWS account. EKS cluster name can be the same in all accounts (e.g. `doc-router`). S3 app bucket name is set in `.env` or the overlay (e.g. `APP_BUCKET_NAME`).
+- Terraform manages all AWS infrastructure; a **Helm chart** is the single source of truth for Kubernetes packaging.
+- Flux delivers the chart via **HelmRelease** (OCI-sourced) and continuously reconciles cluster state.
+- **Single source of config:** all deployment and app config comes from `.env` plus an overlay per environment (e.g. `.env.eks`, `.env.customer-acme`). Each customer deployment can target a different AWS account.
+
+---
+
+## Goals and Non-Goals
+
+### Goals
+- **Single source of truth** for Kubernetes packaging: one Helm chart, versioned with semver.
+- **Two deployment scenarios**:
+  1. Customer installs into an existing Kubernetes cluster using our scripts.
+  2. We run SaaS on EKS (cluster we provision), using the same chart + Flux.
+- **Safe upgrades**: old pods stay up until new ones are ready; migrations are orchestrated safely.
+- **GitOps-style reconciliation** via Flux, without CI/CD pipelines — deploy and upgrade with shell commands.
+
+### Non-Goals
+- Customers do not need to adopt our Git workflow; they pin a chart version and run scripts.
+- No GitHub Actions, Argo CD, or proprietary deployment services required.
 
 ---
 
@@ -14,34 +31,34 @@
 
 All configuration is driven by **`.env`** plus an **overlay file** per deployment:
 
-| Overlay file        | Used for              | AWS account / cluster      |
-|---------------------|------------------------|----------------------------|
-| `.env`              | Shared defaults        | —                          |
-| `.env.kind`         | Local Kind cluster     | —                          |
-| `.env.eks`          | Our hosted EKS         | One of our accounts        |
-| `.env.customer-<name>` | Customer deployment | Any account (per customer) |
+| Overlay file           | Used for               | AWS account / cluster      |
+|------------------------|------------------------|----------------------------|
+| `.env`                 | Shared defaults        | —                          |
+| `.env.kind`            | Local Kind cluster     | —                          |
+| `.env.eks`             | Our hosted EKS         | One of our accounts        |
+| `.env.customer-<name>` | Customer deployment    | Any account (per customer) |
 
-- **Cluster name:** Set `CLUSTER_NAME=doc-router` in `.env` (or overlay) so the same name can be used in every account.
-- **Bucket name:** Set `APP_BUCKET_NAME` in `.env` or the overlay (e.g. `APP_BUCKET_NAME=doc-router-data-prod`). Terraform uses it to create the bucket and IAM policy; `generate-k8s-config.sh` includes it in the app's configmap/secrets so the running app knows which bucket to use.
-- **Different AWS account per customer:** Set `AWS_PROFILE` (or equivalent) when sourcing the overlay; Terraform and `kubectl` use that identity. Each customer can have its own Terraform state directory (e.g. `deploy/terraform/customer-acme`) and overlay `.env.customer-acme`.
+- **Cluster name:** Set `CLUSTER_NAME=doc-router` in `.env` (or overlay); the same name can be used in every account.
+- **Bucket name:** Set `APP_BUCKET_NAME` in `.env` or the overlay (e.g. `APP_BUCKET_NAME=doc-router-data-prod`). Terraform uses it to create the bucket and IAM policy; the deploy scripts render it into Helm values so the running app knows which bucket to use.
+- **Different AWS account per customer:** Set `AWS_PROFILE` when sourcing the overlay. Each customer can have its own Terraform state directory and overlay file.
+- **Helm values:** non-secret config is rendered into a `values-<overlay>.yaml` file (gitignored) by the deploy script and passed to Flux as a `values:` stanza in the HelmRelease (or as a ConfigMap/Secret `valuesFrom`). Secrets (API keys, DB URI, AWS credentials) are rendered into a Kubernetes Secret (`doc-router-secrets`) and referenced via `valuesFrom` in the HelmRelease.
 
-Terraform does **not** use `terraform.tfvars` for these values. A script (or you) sources `.env` and the overlay, exports `TF_VAR_*` for Terraform, then runs `terraform apply` in the correct account directory.
+Terraform does **not** use `terraform.tfvars`. A script sources `.env` and the overlay, exports `TF_VAR_*` for Terraform, then runs `terraform apply`.
 
 ---
 
 ## Tool versions and deploy tasks (mise)
 
-All deployment scripts are run via **mise** so that Terraform, AWS CLI, kubectl, and kustomize versions are pinned and consistent. Install [mise](https://mise.jdx.dev/), then from the repo root run `mise install` to install the tools; use `mise run <task>` to run deploy workflows.
+All deployment scripts are run via **mise** so that Terraform, AWS CLI, kubectl, helm, and flux versions are pinned and consistent. Install [mise](https://mise.jdx.dev/), then from the repo root run `mise install`.
 
-**Repo root:** a `.mise.toml` defines tool versions and tasks:
+**`.mise.toml`** at repo root:
 
 ```toml
-# .mise.toml at repo root
 [tools]
 terraform = "~1.9"
 awscli    = "latest"
 kubectl   = "latest"
-kustomize = "latest"
+helm      = "latest"
 flux2     = "latest"
 
 [tasks.apply-terraform]
@@ -50,39 +67,49 @@ run = "./deploy/scripts/apply-terraform.sh"
 # Usage: mise run apply-terraform -- <overlay> <terraform-dir>
 # Example: mise run apply-terraform -- eks deploy/terraform/analytiq-prod
 
-[tasks.build-push-eks]
+[tasks.build-push]
 description = "Build and push frontend/backend images to ECR"
-run = "./deploy/kubernetes/scripts/build-push-eks.sh"
+run = "./deploy/scripts/build-push.sh"
+
+[tasks.publish-chart]
+description = "Package and push the Helm chart as an OCI artifact to ECR"
+run = "./deploy/scripts/publish-chart.sh"
+
+[tasks.k8s-install]
+description = "Install Flux + HelmRelease into a cluster (first time)"
+run = "./deploy/scripts/k8s-install.sh"
+# Usage: mise run k8s-install -- <overlay> <chart-version>
+# Example: mise run k8s-install -- eks 1.4.0
+
+[tasks.k8s-upgrade]
+description = "Upgrade to a new chart version via Flux HelmRelease"
+run = "./deploy/scripts/k8s-upgrade.sh"
+# Usage: mise run k8s-upgrade -- <overlay> <chart-version>
+
+[tasks.k8s-rollback]
+description = "Roll back the HelmRelease to a previous chart version"
+run = "./deploy/scripts/k8s-rollback.sh"
+# Usage: mise run k8s-rollback -- <overlay> <chart-version>
 
 [tasks.deploy-eks]
-description = "Build, push images and push manifests OCI artifact to ECR (Flux applies)"
-depends = ["build-push-eks"]
-run = "./deploy/kubernetes/scripts/deploy-eks.sh"
-
-[tasks.redeploy-eks]
-description = "Push manifests OCI artifact only — no image rebuild (config/secret changes)"
-run = "./deploy/kubernetes/scripts/deploy-eks.sh"
-
-[tasks."deploy-customer"]
-description = "Deploy app to a customer overlay"
-run = "./deploy/kubernetes/scripts/deploy-customer.sh"
-# Usage: mise run deploy-customer -- <overlay-name>
-# Example: mise run deploy-customer -- customer-acme
+description = "Build images, publish chart, upgrade EKS HelmRelease"
+depends = ["build-push", "publish-chart"]
+run = "./deploy/scripts/k8s-upgrade.sh"
 
 [tasks.deploy-kind]
 description = "Deploy to local Kind cluster"
-run = "./deploy/kubernetes/scripts/deploy-kind.sh"
+run = "./deploy/scripts/deploy-kind.sh"
 
 [tasks.setup-kind]
 description = "Create Kind cluster (run once)"
-run = "./deploy/kubernetes/scripts/setup-kind.sh"
+run = "./deploy/scripts/setup-kind.sh"
 
 [tasks.update-kubeconfig]
-description = "Update kubeconfig for EKS (source .env + overlay first for CLUSTER_NAME, REGION)"
+description = "Update kubeconfig for EKS"
 run = "aws eks update-kubeconfig --name ${CLUSTER_NAME:-doc-router} --region ${REGION}"
 ```
 
-Before running any EKS/customer task that needs AWS or kubectl, set `AWS_PROFILE` (or source `.env` and the overlay) so the correct account is used. The scripts themselves source `.env` and the overlay for app config; they do not set `AWS_PROFILE`.
+Before running any EKS/customer task that needs AWS or kubectl, set `AWS_PROFILE` (or source `.env` and the overlay) so the correct account is used. Scripts source `.env` and the overlay for app config; they do not set `AWS_PROFILE`.
 
 ---
 
@@ -90,44 +117,61 @@ Before running any EKS/customer task that needs AWS or kubectl, set `AWS_PROFILE
 
 ```
 doc-router/
-  .mise.toml        # tool versions (terraform, awscli, kubectl, kustomize) + deploy tasks
+  .mise.toml        # tool versions + deploy tasks
+  charts/
+    doc-router/     # Helm chart — single source of truth for K8s packaging
+      Chart.yaml
+      values.yaml              # defaults; never real secrets
+      templates/
+        frontend/
+          deployment.yaml
+          service.yaml
+          ingress.yaml
+        backend/
+          deployment.yaml
+          service.yaml
+          hpa.yaml
+        mongodb/
+          statefulset.yaml     # conditional: enabled by values.mongodb.enabled
+          service.yaml
+        migration-job.yaml     # runs as pre-upgrade/pre-install Helm hook
+        configmap.yaml
+        pdb.yaml
   deploy/
     scripts/
       apply-terraform.sh       # sources .env + overlay, exports TF_VAR_*, runs terraform
-      generate-k8s-config.sh   # produces configmap.yaml + secrets.yaml from env vars
+      build-push.sh            # builds images, pushes to ECR
+      publish-chart.sh         # packages and pushes chart OCI artifact to ECR
+      k8s-install.sh           # first-time install: Flux + OCIRepository + HelmRelease + Secret
+      k8s-upgrade.sh           # patches HelmRelease chart version, reconciles
+      k8s-rollback.sh          # patches version back to previous, reconciles
+      deploy-kind.sh           # local Kind deploy (helm upgrade --install)
+      setup-kind.sh            # create Kind cluster
     terraform/
-      analytiq-prod/     # our production account
-      analytiq-test/     # our test/staging account
-      customer-<name>/   # if we ever provision EKS for a customer
-      .gitignore         # .terraform/, terraform.tfstate*
-    kubernetes/
-      base/              # shared, cluster-agnostic app manifests
-      overlays/
-        kind/            # local dev (existing)
-        eks/             # our hosted EKS instance(s)
-        customer-example/ # template — copy per customer cluster
-      flux/
-        eks/             # Flux OCIRepository + Kustomization template (applied once per cluster)
-        customer-example/ # template for customer clusters
-      scripts/
-        build-push-eks.sh
-        deploy-eks.sh
-        deploy-customer.sh
-        deploy-kind.sh
-        setup-kind.sh
+      analytiq-prod/           # our production account
+      analytiq-test/           # our test/staging account
+      customer-<name>/         # if we provision EKS for a customer
+      .gitignore               # .terraform/, terraform.tfstate*
+    flux/
+      eks/                     # Flux OCIRepository + HelmRelease (applied once per cluster)
+        ocirepository.yaml
+        helmrelease.yaml
+      customer-example/        # template for customer clusters
+        ocirepository.yaml
+        helmrelease.yaml
 ```
 
-Each directory under `deploy/terraform/` is an independent root module for one AWS account. State files are gitignored. **Variable values (region, CIDR, cluster name, bucket name, etc.) are not stored in the repo** — they come from `.env` and overlays; a deploy script sources those and exports `TF_VAR_*` before running Terraform.
+Each directory under `deploy/terraform/` is an independent root module for one AWS account. State files are gitignored. Variable values come from `.env` and overlays; deploy scripts export `TF_VAR_*` before running Terraform.
 
-Customer clusters with a ready-made Kubernetes environment only need a Kustomize overlay — no Terraform.
+Customer clusters with a ready-made Kubernetes environment only need the Flux manifests and a values Secret — no Terraform.
 
 ---
 
 ## Terraform (`deploy/terraform/<account>/`)
 
-Each account directory is self-contained: its own `providers.tf` with a hardcoded backend for that account's S3 bucket. No flags to remember, no risk of applying to the wrong account.
+Each account directory is self-contained: its own `providers.tf` with a hardcoded backend for that account's S3 bucket.
 
-**Variables:** All inputs (region, cluster name, app bucket name, VPC CIDR, environment, etc.) are defined in `variables.tf` and supplied at apply time via **environment variables** `TF_VAR_<name>` (e.g. `TF_VAR_region`, `TF_VAR_cluster_name`, `TF_VAR_app_bucket_name`). The deploy script sources `.env` and the overlay (e.g. `.env.eks` or `.env.customer-acme`), then exports the corresponding `TF_VAR_*` from that env (see [Env files](#env-files-all-manual) and [Deployment scripts](#deployment-scripts)). You do **not** create or commit `terraform.tfvars`.
+**Variables:** All inputs are defined in `variables.tf` and supplied at apply time via **environment variables** `TF_VAR_<name>`. The deploy script sources `.env` and the overlay, then exports the corresponding `TF_VAR_*`. You do **not** create or commit `terraform.tfvars`.
 
 ```
 deploy/terraform/analytiq-prod/
@@ -137,11 +181,11 @@ deploy/terraform/analytiq-prod/
   outputs.tf
 ```
 
-Adding a new account: `cp -r analytiq-prod <new-account>`, update `providers.tf` (bucket/table names for state). Config for that account lives in an overlay (e.g. `.env.customer-acme`) and is passed in via `TF_VAR_*` when running Terraform.
+Adding a new account: `cp -r analytiq-prod <new-account>`, update `providers.tf` (bucket/table names for state only).
 
-### Remote state (same pattern as `analytiq-terraform`)
+### Remote state
 
-S3 bucket and DynamoDB table defined directly in `main.tf` alongside all other resources:
+S3 bucket and DynamoDB table defined directly in `main.tf`:
 
 - S3 bucket (`analytiq-terraform-state-eks-<account>`): versioning enabled, AES256 SSE, `prevent_destroy`.
 - DynamoDB table (`terraform-state-eks-<account>-locking`): `PAY_PER_REQUEST`, hash key `LockID`, `prevent_destroy`.
@@ -183,7 +227,6 @@ provider "aws" {
 }
 
 # Helm provider uses aws eks get-token at runtime (exec plugin).
-# Evaluated lazily — works in the same apply as the cluster creation.
 provider "helm" {
   kubernetes {
     host                   = module.eks.cluster_endpoint
@@ -212,20 +255,20 @@ Use `terraform-aws-modules/eks/aws`:
 
 - Cluster and nodes in private subnets.
 - Managed node group: `t3.medium` or `t3.large`, min/desired/max = 2/2/5.
-- OIDC provider enabled (for future IRSA use, e.g. External Secrets Operator).
+- OIDC provider enabled (for IRSA, e.g. External Secrets Operator).
 
 ### ECR (inline in `main.tf`)
 
 Three `aws_ecr_repository` resources:
 
 - `doc-router-frontend`, `doc-router-backend` — app images.
-- `doc-router/manifests` — Flux OCI artifacts (one per deploy, lifecycle policy keeps last N).
+- `doc-router/chart` — Helm chart OCI artifacts (one per release, lifecycle policy keeps last N).
 
-The manifests repo is in the same ECR registry; Flux pulls from it using the node instance profile (`AmazonEC2ContainerRegistryReadOnly`), so no separate IRSA is needed for Flux.
+Flux pulls the chart from ECR using the node instance profile (`AmazonEC2ContainerRegistryReadOnly`), so no separate IRSA is needed for Flux.
 
 ### S3 app bucket (inline in `main.tf`)
 
-One `aws_s3_bucket` for document storage. **Bucket name comes from `var.app_bucket_name`**, which is set via `TF_VAR_app_bucket_name` — the deploy script exports this from the overlay's `APP_BUCKET_NAME` (see [Config from .env and overlays](#config-from-env-and-overlays)). Same name is used in the app's configmap/secrets so the running app knows which bucket to use. Bucket has AES256 SSE and is separate from the Terraform state bucket.
+One `aws_s3_bucket` for document storage. Bucket name comes from `var.app_bucket_name` (set via `TF_VAR_app_bucket_name`). The deploy script also renders this name into Helm values / the values Secret so the running app knows which bucket to use. Bucket has AES256 SSE and is separate from the Terraform state bucket.
 
 ### IAM (inline in `main.tf`)
 
@@ -235,359 +278,366 @@ One `aws_s3_bucket` for document storage. **Bucket name comes from `var.app_buck
 
 **App IAM user + role** (same pattern as `analytiq-terraform/modules/docrouter`):
 
-- `aws_iam_user` (`doc-router-app-user`) + `aws_iam_access_key` — credentials injected into `secrets.yaml` as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
+- `aws_iam_user` (`doc-router-app-user`) + `aws_iam_access_key` — credentials injected into the `doc-router-secrets` Kubernetes Secret as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
 - `aws_iam_role` (`doc-router-app-role`) assumed by the user, with:
   - `AmazonTextractFullAccess`
   - `AmazonSESFullAccess`
   - Inline S3 policy: `PutObject`, `GetObject`, `ListBucket`, `DeleteObject` on the app bucket.
-- `aws_s3_bucket_policy` on the app bucket granting `s3:*` to the app role principal (matches the pattern in `analytiq-terraform/modules/docrouter`).
-- Bedrock `InvokeModel` / `InvokeModelWithResponseStream` on `arn:aws:bedrock:*::foundation-model/*` and `arn:aws:bedrock:*:*:inference-profile/*` attached **directly to the user** (not the role) — this matches the existing pattern; Bedrock is called using the user's access key directly, not through role assumption.
+- `aws_s3_bucket_policy` granting `s3:*` to the app role principal.
+- Bedrock `InvokeModel` / `InvokeModelWithResponseStream` on `arn:aws:bedrock:*::foundation-model/*` and `arn:aws:bedrock:*:*:inference-profile/*` attached **directly to the user** — Bedrock is called using the user's access key directly, not through role assumption.
 
-Access key ID and secret are Terraform outputs (sensitive). You manually copy them into your `.env.eks` when you create or update that file; `generate-k8s-config.sh` then produces `secrets.yaml` from the env files. No automation: all env files are maintained by hand (see below).
+Access key ID and secret are Terraform outputs (sensitive). Copy them into your `.env.eks` after the first Terraform apply.
 
 ### Helm releases (inline in `main.tf`)
 
 | Chart | Purpose | Notable config |
 |---|---|---|
 | `ingress-nginx/ingress-nginx` | Ingress controller, exposes an AWS NLB/ELB | Watches all namespaces by default |
-| `jetstack/cert-manager` | TLS certificate automation via Let's Encrypt | `crds.enabled = true` (or `installCRDs = true` for older chart versions) — required or ClusterIssuer will fail |
-| `aws-ebs-csi-driver` | EBS volumes for MongoDB PVCs | `serviceAccount.annotations."eks.amazonaws.com/role-arn"` must be set to the EBS CSI IRSA role ARN, or the driver cannot provision EBS volumes and PVCs will stay Pending |
+| `jetstack/cert-manager` | TLS certificate automation via Let's Encrypt | `crds.enabled = true` — required or ClusterIssuer will fail |
+| `aws-ebs-csi-driver` | EBS volumes for MongoDB PVCs | `serviceAccount.annotations."eks.amazonaws.com/role-arn"` must be set to the EBS CSI IRSA role ARN |
 | `metrics-server` | Enables HPA | — |
-| `fluxcd-community/flux2` | GitOps reconciliation — pulls OCI manifests from ECR and applies them; self-heals on drift | Installed via Helm after cluster is ready; no `flux bootstrap` or GitHub access needed |
+| `fluxcd-community/flux2` | GitOps reconciliation — pulls Helm chart from ECR and applies HelmRelease; self-heals on drift | Installed via Helm after cluster is ready; no `flux bootstrap` or GitHub access needed |
 
-A single `ClusterIssuer` for Let's Encrypt is applied via a `null_resource` local-exec with `depends_on = [helm_release.cert_manager]` and a readiness check before applying the issuer YAML. The issuer manifest is templated with `LETSENCRYPT_EMAIL` (required by Let's Encrypt). Add `LETSENCRYPT_EMAIL` to `.env` or the overlay and include it in the `TF_VAR_*` exports (or pass it directly to the `null_resource` script).
+A single `ClusterIssuer` for Let's Encrypt is applied via a `null_resource` local-exec with `depends_on = [helm_release.cert_manager]`. Add `LETSENCRYPT_EMAIL` to `.env` or the overlay and include it in the `TF_VAR_*` exports.
 
 ### Key outputs
 
-- `cluster_name`, `frontend_repo_url`, `backend_repo_url`
+- `cluster_name`, `frontend_repo_url`, `backend_repo_url`, `chart_repo_url`
 - `app_user_access_key_id`, `app_user_secret_access_key` (sensitive)
 - `app_bucket_name`, `app_role_arn`
 
-### Manual steps in the AWS console (cannot be automated via Terraform)
+### Manual steps in the AWS console
 
 | Step | Where | Notes |
 |---|---|---|
-| Enable Bedrock model access | Bedrock → Model access | Request access to each model (Claude, Titan, etc.) per region. IAM permissions alone are not enough — models must be explicitly enabled. |
-| SES production access (if email is used) | SES → Account dashboard | New accounts start in sandbox mode; can only send to verified addresses. Request production access or verify sender + all recipient addresses while in sandbox. |
+| Enable Bedrock model access | Bedrock → Model access | Request access to each model per region. IAM permissions alone are not enough. |
+| SES production access | SES → Account dashboard | New accounts start in sandbox mode. Request production access or verify sender + recipient addresses. |
 
 ---
 
 ## Env files (all manual)
 
-All environment and secret values are maintained in **manually created** env files. Nothing generates or updates these files automatically (e.g. not from Terraform outputs). They are the **single source of truth** for both Terraform (via `TF_VAR_*` exported from the same env) and the app (via `generate-k8s-config.sh` → configmap/secrets).
+All environment and secret values are maintained in **manually created** env files. Nothing generates or updates these files automatically.
 
 | File | Used by | Notes |
 |------|---------|--------|
-| `.env` | All overlays (merged with overlay-specific file) | Shared defaults (e.g. `CLUSTER_NAME=doc-router`); gitignored. |
+| `.env` | All overlays | Shared defaults (e.g. `CLUSTER_NAME=doc-router`); gitignored. |
 | `.env.kind` | Kind overlay | Kind-specific overrides; gitignored. |
 | `.env.eks` | EKS overlay | EKS-specific: `APP_BUCKET_NAME`, `REGION`, ECR URLs, app IAM keys from Terraform outputs; gitignored. |
-| `.env.customer-<name>` | Customer overlay | Customer-specific; can target a different AWS account (`AWS_PROFILE`); gitignored. |
+| `.env.customer-<name>` | Customer overlay | Customer-specific; can target a different AWS account; gitignored. |
 
-**Variables that drive Terraform** (set in `.env` or overlay; deploy script exports as `TF_VAR_<name>` before `terraform apply`):
+**Variables that drive Terraform** (exported as `TF_VAR_<name>` before `terraform apply`):
 
-| Env var (in .env / overlay) | Terraform variable | Example / notes |
-|-----------------------------|--------------------|------------------|
-| `CLUSTER_NAME` | `cluster_name` | `doc-router` (same in all accounts if desired) |
-| `APP_BUCKET_NAME` | `app_bucket_name` | `doc-router-data-prod`; also passed to app via configmap/secrets |
+| Env var | Terraform variable | Example |
+|---|---|---|
+| `CLUSTER_NAME` | `cluster_name` | `doc-router` |
+| `APP_BUCKET_NAME` | `app_bucket_name` | `doc-router-data-prod` |
 | `REGION` | `region` | `us-east-1` |
 | `VPC_CIDR` | `vpc_cidr` | `10.0.0.0/16` |
-| `ENVIRONMENT` | `environment` | `prod`, `test`, etc. |
-| `LETSENCRYPT_EMAIL` | `letsencrypt_email` | Contact email for Let's Encrypt ClusterIssuer; required by ACME protocol |
+| `ENVIRONMENT` | `environment` | `prod` |
+| `LETSENCRYPT_EMAIL` | `letsencrypt_email` | required by ACME |
 
-You create and edit env files by hand. Deployment scripts only **read** them: they export `TF_VAR_*` for Terraform and call `generate-k8s-config.sh` to produce `configmap.yaml` and `secrets.yaml`. After the first Terraform apply, copy the app user access key ID and secret from Terraform outputs into the overlay (e.g. `.env.eks`) for subsequent K8s deploys.
+Deploy scripts only **read** env files: they export `TF_VAR_*` for Terraform and render Helm values / Kubernetes Secrets. After the first Terraform apply, copy the app user access key ID and secret from Terraform outputs into the overlay (e.g. `.env.eks`).
 
 ---
 
-## Kubernetes manifests (`deploy/kubernetes/`)
+## Helm chart (`charts/doc-router/`)
 
-### Design rules for multi-namespace support
+The Helm chart is the **single source of truth** for all Kubernetes resources. It replaces the previous Kustomize base + overlays approach.
 
-1. **`base/` owns no `Namespace` resource** — each overlay provides its own `namespace.yaml`.
-2. **`base/` sets no `ingressClassName`, `host`, or TLS** in the Ingress — overlays own those.
-3. **`base/` does not include `configmap.yaml` or `secrets.yaml`** — base's kustomization never lists them. Each overlay generates (or provides) these files in **its own directory** and includes them in its `resources:` so config and secrets are per-overlay and base stays shared.
-4. Each overlay sets `namespace:` in its `kustomization.yaml`; Kustomize rewrites all resource namespaces automatically.
-5. Use `labels:` (not `commonLabels:`) in overlays — `commonLabels` also mutates pod selectors and breaks rolling updates on existing Deployments.
-6. **MongoDB is a Kustomize component** — overlays that want in-cluster MongoDB include it; overlays using external MongoDB omit it and supply `MONGODB_URI` in their `secrets.yaml`.
+### Chart design rules
 
-### `deploy/kubernetes/base/`
+1. **No hardcoded cluster-specific values** — everything cluster-specific comes from Helm values (hostname, ingress class, storage class, image tags, etc.).
+2. **Separate Deployments for frontend and backend** — both are part of one Helm release and updated together. Use `RollingUpdate` with `maxUnavailable: 0` on both.
+3. **MongoDB is opt-in** — controlled by `mongodb.enabled` in values. Clusters using an external MongoDB set `mongodb.enabled: false` and provide `mongodbUri` in the values Secret.
+4. **No `Namespace` resource in the chart** — the namespace is created by the install script (or pre-exists in the customer cluster). Chart resources are scoped to the namespace set in the HelmRelease.
+5. **PodDisruptionBudget** — included in the chart to prevent voluntary disruptions from dropping below a floor during upgrades.
 
-```
-base/
-  kustomization.yaml          # frontend + backend only; no configmap.yaml or secrets.yaml
-  frontend/{deployment,service,ingress}.yaml
-  backend/{deployment,service,hpa.yaml}
-  components/
-    mongodb/
-      kustomization.yaml      # kind: Component
-      statefulset.yaml        # credentials via secretKeyRef, no hardcoded values
-      service.yaml            # headless ClusterIP — not reachable outside the cluster
-```
-
-Base does not contain or reference `configmap.yaml` or `secrets.yaml`. Each overlay keeps its own (generated by the deploy script from that overlay's env files).
-
-- `base/frontend/ingress.yaml`: path rules only, no `ingressClassName`/`host`/`tls`.
-- `base/worker/` deleted entirely (deployment + service) — the worker process already runs as a subprocess inside the backend pod (see [base/backend/deployment.yaml](deploy/kubernetes/base/backend/deployment.yaml)).
-- `base/mongodb/pvc.yaml` deleted — PVCs are created by the StatefulSet `volumeClaimTemplates`.
-- MongoDB `Service` is headless `ClusterIP` — not exposed through the ingress controller, unreachable from outside the cluster.
-
-### `deploy/kubernetes/overlays/eks/`
-
-```
-overlays/eks/
-  kustomization.yaml
-  namespace.yaml
-  ingress-patch.yaml
-  mongodb-storageclass-patch.yaml
-  configmap.yaml    # gitignored — generated by deploy-eks.sh
-  secrets.yaml      # gitignored — generated by deploy-eks.sh
-```
-
-**`kustomization.yaml`**:
+### `charts/doc-router/values.yaml` (defaults, no secrets)
 
 ```yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
+image:
+  frontend:
+    repository: analytiqhub/doc-router-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  backend:
+    repository: analytiqhub/doc-router-backend
+    tag: latest
+    pullPolicy: IfNotPresent
 
-namespace: doc-router
+ingress:
+  enabled: true
+  className: nginx
+  host: ""           # required; set in overlay values
+  tls: true
+  clusterIssuer: letsencrypt-prod
+
+mongodb:
+  enabled: true
+  storageClassName: standard    # override per cluster (e.g. gp3 on EKS)
+  storage: 10Gi
+
+replicaCount:
+  frontend: 2
+  backend: 2
 
 resources:
-  - ../../base
-  - namespace.yaml
-  - configmap.yaml
-  - secrets.yaml
+  frontend:
+    requests: { cpu: "100m", memory: "256Mi" }
+    limits:   { cpu: "500m", memory: "512Mi" }
+  backend:
+    requests: { cpu: "250m", memory: "512Mi" }
+    limits:   { cpu: "1000m", memory: "1Gi" }
 
-components:
-  - ../../base/components/mongodb   # omit this line to use external MongoDB instead
+# Non-secret config (rendered into ConfigMap by the chart)
+config:
+  appBucketName: ""
+  region: ""
+  environment: prod
+  nextauthUrl: ""
 
-patches:
-  - path: ingress-patch.yaml
-    target:
-      kind: Ingress
-      name: frontend-ingress
-  - path: mongodb-storageclass-patch.yaml
-    target:
-      kind: StatefulSet
-      name: mongodb
-
-images:
-  - name: analytiqhub/doc-router-frontend
-    newName: <ECR_FRONTEND_URL>
-    newTag: <TAG>
-  - name: analytiqhub/doc-router-backend
-    newName: <ECR_BACKEND_URL>
-    newTag: <TAG>
-
-labels:
-  - pairs:
-      environment: eks
-    includeSelectors: false
+# Secret values — reference an existing Kubernetes Secret created by the install script
+# The HelmRelease uses valuesFrom to merge these into the release.
+# secretName: doc-router-secrets
 ```
 
-**`ingress-patch.yaml`**: sets `ingressClassName: nginx`, real hostname, TLS spec, and `cert-manager.io/cluster-issuer: letsencrypt-prod` annotation.
+### Migration job
 
-**`mongodb-storageclass-patch.yaml`**: sets `storageClassName: gp3` on the StatefulSet `volumeClaimTemplates`. Only needed when the mongodb component is included.
+`templates/migration-job.yaml` runs as a Helm `pre-upgrade` / `pre-install` hook. It is idempotent (MongoDB schema migrations use up/down scripts that check state). The app Deployments include an `initContainer` that waits for the migration Job's completion marker (a ConfigMap or a readiness endpoint) before the app containers start accepting traffic.
 
-### `deploy/kubernetes/overlays/kind/` (local dev)
+---
 
-Kind uses the same design: overlay supplies namespace, configmap, and secrets; no values in base.
+## Upgrade stability
 
-**Setup:**
+### Deployment strategy (must-have)
 
-- Manually create `.env` and `.env.kind` (gitignored). Populate with local dev values (e.g. `NEXTAUTH_URL=http://localhost:3000`, `MONGODB_URI` for the in-cluster Mongo or a local Mongo).
-- Run the existing **deploy-kind.sh** (or equivalent): it merges `.env` + `.env.kind`, runs `generate-k8s-config.sh` with **output directory** set to `deploy/kubernetes/overlays/kind/`, builds Docker images, loads them into kind with `kind load docker-image`, then `kubectl apply -k deploy/kubernetes/overlays/kind`.
-
-**Overlay layout:**
-
-```
-overlays/kind/
-  kustomization.yaml
-  namespace.yaml
-  ingress-patch.yaml          # ingressClassName: nginx for kind
-  configmap.yaml              # gitignored — generated by deploy-kind.sh into this dir
-  secrets.yaml                 # gitignored — generated by deploy-kind.sh into this dir
-  mongodb-storageclass-patch.yaml   # optional; kind often uses default storage
-```
-
-**`kustomization.yaml`** includes `resources: [../../base, namespace.yaml, configmap.yaml, secrets.yaml]`, `components: [../../base/components/mongodb]` (in-cluster MongoDB for local dev), and `patches` for ingress. Images point to local tags (e.g. `analytiqhub/doc-router-frontend:latest`); no ECR. No automation of env files — you maintain `.env` and `.env.kind` by hand.
-
-### `deploy/kubernetes/overlays/customer-example/`
-
-```
-overlays/customer-example/
-  kustomization.yaml
-  namespace.yaml       # name: doc-router (or doc-router-<customer>)
-  ingress-patch.yaml   # their ingress class, hostname, TLS secret
-  configmap.yaml       # gitignored — generated by deploy-customer.sh
-  secrets.yaml         # gitignored — generated by deploy-customer.sh
-```
-
-**`kustomization.yaml`**:
+Both frontend and backend Deployments:
 
 ```yaml
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-
-namespace: doc-router
-
-resources:
-  - ../../base
-  - namespace.yaml
-  - configmap.yaml
-  - secrets.yaml
-
-patches:
-  - path: ingress-patch.yaml
-    target:
-      kind: Ingress
-      name: frontend-ingress
-
-images:
-  - name: analytiqhub/doc-router-frontend
-    newName: <REGISTRY>/doc-router-frontend
-    newTag: <TAG>
-  - name: analytiqhub/doc-router-backend
-    newName: <REGISTRY>/doc-router-backend
-    newTag: <TAG>
-
-labels:
-  - pairs:
-      customer: example
-    includeSelectors: false
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 0
+    maxSurge: 1
 ```
 
-`ingress-patch.yaml` sets the customer's ingress class (`nginx`, `alb`, `gce`, etc.) and hostname.
+This guarantees Kubernetes brings up new pods first and only retires old ones after they are ready.
 
-**In-cluster MongoDB**: add `components: [../../base/components/mongodb]` and a `mongodb-storageclass-patch.yaml` for their storage class.
+### Health gates (must-have)
 
-**External MongoDB**: omit the component entirely; set `MONGODB_URI` in `secrets.yaml` to their Atlas/managed instance. No `mongodb-storageclass-patch.yaml` needed.
+- **Readiness probes** on both containers — new pods don't receive traffic until truly ready.
+- **Liveness probes** — self-heal on deadlock situations.
+- **PodDisruptionBudget** — `minAvailable: 1` on each Deployment; prevents node drains from fully evicting the app.
 
-### `deploy/kubernetes/flux/eks/`
+### Flux HelmRelease health checks (recommended)
 
-A single template applied once per cluster. `ocirepository.yaml` uses shell variable syntax (`${ECR_ACCOUNT_ID}`, `${REGION}`) so the same files work for `analytiq-prod`, `analytiq-test`, or any other EKS account — bootstrap fills them in via `envsubst`. These files are committed.
-
+```yaml
+install:
+  remediation:
+    retries: 3
+upgrade:
+  remediation:
+    retries: 3
+    remediateLastFailure: true
+rollback:
+  timeout: 5m
 ```
-flux/eks/
-  ocirepository.yaml    # points Flux at ECR; uses provider: aws (node instance profile auth)
-  kustomization.yaml    # Flux Kustomization: which overlay path to apply, reconcile interval
-```
 
-**`ocirepository.yaml`**:
+### Versioning discipline
+
+A single semver version ties together:
+- The Helm chart version (in `Chart.yaml`)
+- Both container image tags
+
+The deploy workflow builds images tagged `<git-sha>`, publishes the chart at the new semver, and the upgrade script patches the HelmRelease to that version. Rollback patches the version back to the previous release.
+
+---
+
+## Database and migrations
+
+Migrations are the #1 place upgrades break.
+
+### Approach: backward-compatible migrations
+
+1. Migrations only **add** (new fields, indexes, collections) — never drop or rename fields that old code still uses.
+2. Deploy the new app version (pods roll safely with mixed-version pods possible during rollout).
+3. Optional cleanup migrations run in a later release.
+
+### How migrations run
+
+A dedicated **Helm hook Job** (`pre-upgrade` / `pre-install`) runs the migration script before any pod replacement begins. Requirements:
+- The Job must be **idempotent** — safe to re-run on partial failure.
+- The app Deployments should not accept traffic until the Job succeeds (enforced via readiness probes and the Flux `upgrade.remediation` policy).
+
+Rollback strategy: MongoDB migrations are forward-only in normal operation. If a rollback is needed, restore from a backup taken before the upgrade.
+
+---
+
+## Flux setup (HelmRelease delivery)
+
+### Chart source: OCI registry
+
+The Helm chart is published as an OCI artifact to ECR (`doc-router/chart`). Flux pulls it using an `OCIRepository` and applies it with a `HelmRelease`.
+
+**Why OCI:**
+- Enterprise-friendly: container registries are commonly allowed even when Git hosts are blocked.
+- Immutable artifacts: pin exact chart versions.
+- Aligns chart distribution with how container images are already distributed.
+
+### `deploy/flux/eks/ocirepository.yaml`
+
+Uses shell variable syntax (`${ECR_ACCOUNT_ID}`, `${REGION}`) filled in via `envsubst` at bootstrap time:
 
 ```yaml
 apiVersion: source.toolkit.fluxcd.io/v1beta2
 kind: OCIRepository
 metadata:
-  name: doc-router
+  name: doc-router-chart
   namespace: flux-system
 spec:
   interval: 1m
-  url: oci://${ECR_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/doc-router/manifests
+  url: oci://${ECR_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/doc-router/chart
   ref:
-    tag: latest
+    semver: ">=1.0.0"
   provider: aws
 ```
 
-**`kustomization.yaml`** (Flux `kustomize.toolkit.fluxcd.io/v1`, not a kustomize `Kustomization`):
+### `deploy/flux/eks/helmrelease.yaml`
 
 ```yaml
-apiVersion: kustomize.toolkit.fluxcd.io/v1
-kind: Kustomization
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
 metadata:
   name: doc-router
-  namespace: flux-system
+  namespace: doc-router
 spec:
   interval: 5m
-  prune: true          # deletes resources removed from the manifests
-  sourceRef:
-    kind: OCIRepository
-    name: doc-router
-  path: ./overlays/eks
-  targetNamespace: doc-router
+  chart:
+    spec:
+      chart: doc-router
+      version: "1.4.0"    # pinned; updated by k8s-upgrade.sh
+      sourceRef:
+        kind: OCIRepository
+        name: doc-router-chart
+        namespace: flux-system
+  values:
+    ingress:
+      host: app.example.com
+      className: nginx
+    mongodb:
+      storageClassName: gp3
+    image:
+      frontend:
+        repository: ${ECR_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/doc-router-frontend
+        tag: "abc1234"
+      backend:
+        repository: ${ECR_ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/doc-router-backend
+        tag: "abc1234"
+    config:
+      appBucketName: doc-router-data-prod
+      region: us-east-1
+      environment: prod
+      nextauthUrl: https://app.example.com
+  valuesFrom:
+    - kind: Secret
+      name: doc-router-secrets    # created by k8s-install.sh from .env + overlay
+  install:
+    remediation:
+      retries: 3
+  upgrade:
+    remediation:
+      retries: 3
+      remediateLastFailure: true
+  rollback:
+    timeout: 5m
 ```
 
-`prune: true` enables self-healing: resources drifted or deleted manually are restored on the next reconcile (default every 5 minutes; also triggered immediately on each new artifact push).
+The `doc-router-secrets` Kubernetes Secret contains sensitive values rendered by the install/upgrade script from `.env` and the overlay (MongoDB URI, AWS credentials, NextAuth secret, API keys). It is **not** stored in the OCI artifact or committed to the repo.
 
-Customer clusters get their own `flux/customer-<name>/` with an `OCIRepository` (also using `envsubst` at bootstrap time) pointing at the same or a different registry and a `Kustomization` pointing at `./overlays/customer-<name>`.
+`prune: true` in the Kustomization that manages the HelmRelease enables self-healing: resources drifted or deleted manually are restored on the next reconcile.
 
----
-
-## `deploy/scripts/generate-k8s-config.sh`
-
-Reads env vars from the environment (already sourced by the caller) and writes two files into a given output directory:
-
-- **`configmap.yaml`** — non-sensitive app config (`NEXTAUTH_URL`, `APP_BUCKET_NAME`, `REGION`, `ENVIRONMENT`, etc.).
-- **`secrets.yaml`** — sensitive values (`MONGODB_URI`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `NEXTAUTH_SECRET`, `OPENAI_API_KEY`, etc.).
-
-Usage: `./deploy/scripts/generate-k8s-config.sh <output-dir>`
-
-The script does not source env files itself — the caller (deploy script) sources `.env` + the overlay first, then calls this script. Output files are gitignored in every overlay directory. Both files reference the same `doc-router-config` and `doc-router-secrets` names that the base Deployment manifests reference via `envFrom`.
+Customer clusters get their own `flux/customer-<name>/` with an `OCIRepository` (same chart registry, or theirs) and a `HelmRelease` pointing at their values.
 
 ---
 
 ## Deployment scripts
 
-Deploy workflows are invoked via **`mise run <task>`** (see [Tool versions and deploy tasks (mise)](#tool-versions-and-deploy-tasks-mise)). The scripts below are what those tasks call.
+Deploy workflows are invoked via **`mise run <task>`**.
 
-### `deploy/scripts/apply-terraform.sh` (or equivalent)
+### `deploy/scripts/apply-terraform.sh`
 
-Runs Terraform with all variables coming from `.env` and an overlay. Use this so you never rely on `terraform.tfvars`.
+1. Takes two arguments: **overlay name** and **Terraform directory**.
+2. Sources `.env` and `.env.<overlay>`, exports `TF_VAR_region`, `TF_VAR_cluster_name`, `TF_VAR_app_bucket_name`, `TF_VAR_vpc_cidr`, `TF_VAR_environment` (and others).
+3. Optionally sets `AWS_PROFILE` from the overlay.
+4. Runs `terraform init` (if needed) and `terraform apply`.
 
-1. Takes two arguments: **overlay name** (e.g. `eks` or `customer-acme`) and **Terraform directory** (e.g. `deploy/terraform/analytiq-prod` or `deploy/terraform/customer-acme`). Alternatively, the overlay can specify the Terraform dir in an env var (e.g. `TERRAFORM_DIR`) so the script only needs the overlay name.
-2. Sources `.env` and `.env.<overlay>` (e.g. `.env.eks` or `.env.customer-acme`) in that order. Exports `TF_VAR_region`, `TF_VAR_cluster_name`, `TF_VAR_app_bucket_name`, `TF_VAR_vpc_cidr`, `TF_VAR_environment` (and any other Terraform variables) from the corresponding env vars (`REGION`, `CLUSTER_NAME`, `APP_BUCKET_NAME`, `VPC_CIDR`, `ENVIRONMENT`). Does not create or edit env files.
-3. Optionally sets `AWS_PROFILE` from the overlay so each customer can target a different account.
-4. Runs `terraform init` (if needed) and `terraform apply` in the given Terraform directory.
-
-Example (manual equivalent):
-
-```bash
-export AWS_PROFILE=acme-prod   # from .env.customer-acme if needed
-set -a; source .env; source .env.customer-acme; set +a
-export TF_VAR_region="$REGION" TF_VAR_cluster_name="$CLUSTER_NAME" TF_VAR_app_bucket_name="$APP_BUCKET_NAME" TF_VAR_vpc_cidr="$VPC_CIDR" TF_VAR_environment="$ENVIRONMENT"
-cd deploy/terraform/customer-acme && terraform init && terraform apply
-```
-
-### `deploy/kubernetes/scripts/build-push-eks.sh`
+### `deploy/scripts/build-push.sh`
 
 1. Read AWS account ID (`aws sts get-caller-identity`) and region.
 2. Construct ECR URLs for frontend and backend.
-3. Log in to ECR: `aws ecr get-login-password | docker login --username AWS --password-stdin <account>.dkr.ecr.<region>.amazonaws.com`.
-4. `docker build --target frontend` and `--target backend` using `deploy/shared/docker/Dockerfile`.
+3. Log in to ECR: `aws ecr get-login-password | docker login --username AWS --password-stdin`.
+4. `docker build --target frontend` and `--target backend` using the multi-stage Dockerfile.
 5. Tag with `<ECR_URL>:<git-sha>` (and `:latest`).
 6. `docker push` both images.
 
-### `deploy/kubernetes/scripts/deploy-eks.sh`
+### `deploy/scripts/publish-chart.sh`
 
-Assumes Terraform has run, Flux is bootstrapped in the cluster, and you have **manually created** `.env` and `.env.eks`.
+1. Bump `version` in `charts/doc-router/Chart.yaml` to the new semver (or accept it as an argument).
+2. Set `appVersion` to the current git SHA.
+3. `helm package charts/doc-router` → produces `doc-router-<version>.tgz`.
+4. Log in to ECR.
+5. `helm push doc-router-<version>.tgz oci://<account>.dkr.ecr.<region>.amazonaws.com/doc-router/chart`
 
-1. Merge `.env` + `.env.eks` (read-only).
-2. Run `generate-k8s-config.sh` → writes `configmap.yaml` and `secrets.yaml` into `deploy/kubernetes/overlays/eks/` (gitignored).
-3. `kustomize edit set image` in `overlays/eks/kustomization.yaml` to set the new image tags (modifies the file locally; not committed).
-4. Push the entire `deploy/kubernetes/` directory as a Flux OCI artifact to ECR:
-   ```bash
-   TAG=$(git rev-parse --short HEAD)
-   flux push artifact oci://<account>.dkr.ecr.<region>.amazonaws.com/doc-router/manifests:$TAG \
-     --path=./deploy/kubernetes \
-     --provider=aws \
-     --source="$(git remote get-url origin)" \
-     --revision="$(git rev-parse HEAD)"
-   flux tag artifact oci://<account>.dkr.ecr.<region>.amazonaws.com/doc-router/manifests:$TAG \
-     --tag latest
-   ```
-   > **Note:** `secrets.yaml` (containing `MONGODB_URI`, AWS credentials, etc.) is bundled into this OCI artifact. ECR repositories are private and IAM-access-controlled, so this is an acceptable trade-off — but be aware that credentials live in the artifact and should be rotated via the normal env-file + redeploy workflow.
-5. Reset the locally modified `kustomization.yaml`: `git checkout deploy/kubernetes/overlays/eks/kustomization.yaml`.
-6. Flux detects the new `latest` artifact within its reconcile interval (default 1 minute) and applies the changes. Self-healing: any manual cluster changes are reverted within 5 minutes.
-7. Optionally watch: `flux get kustomizations -n flux-system --watch`.
+### `deploy/scripts/k8s-install.sh`
 
-### `deploy/kubernetes/scripts/deploy-customer.sh`
+First-time install for a cluster. Takes overlay name and chart version as arguments. Assumes Flux is already running (installed by Terraform).
 
-Takes overlay name as argument (e.g. `customer-acme`). Assumes you have **manually created** `.env` and `.env.customer-<name>`, and Flux is bootstrapped in the customer cluster.
+1. Source `.env` + overlay.
+2. Create namespace if it doesn't exist.
+3. Create (or update) the `doc-router-secrets` Kubernetes Secret from env vars (MongoDB URI, AWS credentials, NextAuth secret, API keys, etc.).
+4. Fill in `deploy/flux/<overlay>/ocirepository.yaml` and `helmrelease.yaml` via `envsubst` (ECR account ID, region, image tags, hostname, chart version).
+5. `kubectl apply -f` the filled-in OCIRepository and HelmRelease.
+6. Wait: `flux reconcile helmrelease doc-router -n doc-router --with-source --timeout=5m`
 
-1. Merge `.env` + `.env.customer-<name>` (read-only).
-2. Run `generate-k8s-config.sh` → writes `configmap.yaml` and `secrets.yaml` into `deploy/kubernetes/overlays/<overlay-name>/` (gitignored).
-3. `kustomize edit set image` in that overlay's `kustomization.yaml` to set the new image tags (local modification; not committed).
-4. `flux push artifact` to the customer's registry (ECR or their own), tag as `latest`.
-5. Reset the locally modified `kustomization.yaml`.
-6. Flux in the customer cluster reconciles and applies. Watch with `flux get kustomizations -n flux-system --watch`.
+### `deploy/scripts/k8s-upgrade.sh`
+
+1. Source `.env` + overlay.
+2. Build + push images (or accept pre-built tags).
+3. Publish new chart version to ECR.
+4. (Re-)create/update `doc-router-secrets` if any secret values changed.
+5. Patch the HelmRelease `.spec.chart.spec.version` to the new chart version and update image tags in `.spec.values`.
+6. `flux reconcile helmrelease doc-router -n doc-router --with-source`
+7. Watch: `flux get helmreleases -n doc-router --watch`
+
+### `deploy/scripts/k8s-rollback.sh`
+
+1. Takes overlay name and the previous chart version as arguments.
+2. Patch the HelmRelease `.spec.chart.spec.version` back to the previous version and image tags back to the corresponding images.
+3. `flux reconcile helmrelease doc-router -n doc-router --with-source`
+
+### Kind (local dev)
+
+`deploy/scripts/deploy-kind.sh` — uses `helm upgrade --install` directly (no Flux required for local dev):
+
+1. Source `.env` + `.env.kind`.
+2. Build images locally; `kind load docker-image` both.
+3. Create namespace + `doc-router-secrets` Secret.
+4. `helm upgrade --install doc-router charts/doc-router -n doc-router --values <rendered-values-file>`
+
+---
+
+## Secrets and configuration
+
+The app is open source; secrets are never stored in the chart repo or OCI artifacts.
+
+Options for managing the `doc-router-secrets` Kubernetes Secret per cluster:
+
+| Option | How |
+|---|---|
+| **Script-created Secret** (default) | `k8s-install.sh` / `k8s-upgrade.sh` render the Secret from `.env` + overlay and apply it with `kubectl apply`. Simplest path. |
+| **External Secrets Operator** | Map values from AWS Secrets Manager or Parameter Store into the Secret. Best for production; requires ESO installed in the cluster (add as a Helm release in Terraform). |
+| **SOPS / KSOPS** | Encrypt the values file with customer-managed keys; Flux decrypts on reconcile. Good for customers who want GitOps for secrets too. |
 
 ---
 
@@ -595,78 +645,65 @@ Takes overlay name as argument (e.g. `customer-acme`). Assumes you have **manual
 
 ### First-time setup for a new AWS account
 
-Install tools and ensure env is set up:
-
 ```bash
 mise install
-```
 
-Create `.env` and an overlay (e.g. `.env.eks`) with at least: `CLUSTER_NAME=doc-router`, `APP_BUCKET_NAME=doc-router-data-prod`, `REGION`, `VPC_CIDR`, `ENVIRONMENT`. Then:
-
-```bash
 export AWS_PROFILE=<account-profile>
 
 # 1. First apply — backend "s3" commented out; creates S3 + DynamoDB + cluster
-#    Variables come from .env + overlay (script exports TF_VAR_*)
 mise run apply-terraform -- eks deploy/terraform/analytiq-prod
 
-# 2. Uncomment backend "s3" in providers.tf, then migrate state to S3
+# 2. Uncomment backend "s3" in providers.tf, migrate state to S3
 cd deploy/terraform/analytiq-prod
 terraform init      # answer "yes" to copy local state → S3
-# Re-source .env + overlay and export TF_VAR_* again, then:
+# Re-source .env + overlay and export TF_VAR_*, then:
 terraform apply
 
-# 3. Update kubeconfig (cluster name from .env: CLUSTER_NAME=doc-router)
+# 3. Update kubeconfig
 set -a; source .env; source .env.eks; set +a
 mise run update-kubeconfig
 
-# 4. Bootstrap Flux — apply OCIRepository + Flux Kustomization to the cluster (run once)
-#    ECR_ACCOUNT_ID is derived at runtime; REGION comes from the sourced env
-ECR_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-export ECR_ACCOUNT_ID REGION
-envsubst < deploy/kubernetes/flux/eks-prod/ocirepository.yaml | kubectl apply -f -
-kubectl apply -f deploy/kubernetes/flux/eks-prod/kustomization.yaml
+# 4. Build images + publish first chart version
+mise run build-push
+mise run publish-chart    # creates e.g. 1.0.0
+
+# 5. Bootstrap Flux app (Flux itself installed by Terraform)
+mise run k8s-install -- eks 1.0.0
+```
+
+### Per-deployment (our EKS)
+
+```bash
+export AWS_PROFILE=<account-profile>
+mise run deploy-eks    # build-push + publish-chart + k8s-upgrade
 ```
 
 ### Adding a second AWS account
 
 ```bash
 cp -r deploy/terraform/analytiq-prod deploy/terraform/analytiq-test
-# Edit providers.tf: update bucket + dynamodb_table names for state only.
-# Create a new overlay (e.g. .env.eks-test) with APP_BUCKET_NAME, REGION, CLUSTER_NAME=doc-router, etc.
-# Run first-time setup with the new directory and overlay; no terraform.tfvars.
-```
-
-### Per-deployment (our EKS)
-
-Ensure `.env` and `.env.eks` exist and are up to date (including app IAM keys from Terraform outputs if you rotated them). Then:
-
-```bash
-export AWS_PROFILE=<account-profile>
-mise run deploy-eks
+# Edit providers.tf: update bucket + dynamodb_table names for state.
+# Create .env.eks-test with APP_BUCKET_NAME, REGION, CLUSTER_NAME=doc-router, etc.
+# Run first-time setup with the new directory and overlay.
 ```
 
 ### Kind (local dev)
 
-1. Manually create `.env` and `.env.kind` (gitignored).
-2. Run `mise run setup-kind` once to create the cluster (if not already).
-3. Run `mise run deploy-kind` — it generates config/secrets into `overlays/kind/`, builds images, loads into kind, applies the overlay.
+```bash
+mise run setup-kind    # once
+# Create .env and .env.kind
+mise run deploy-kind
+```
 
-### Onboarding a customer cluster (possibly another AWS account)
+### Onboarding a customer cluster
 
-1. Copy `overlays/customer-example` to `overlays/customer-<name>`.
-2. Copy `flux/customer-example` to `flux/customer-<name>`; update `ocirepository.yaml` with their registry URL.
-3. Fill in `namespace.yaml` and `ingress-patch.yaml`.
-4. Create `.env.customer-<name>` with `APP_BUCKET_NAME`, `CLUSTER_NAME`, `REGION`, and any AWS account vars. If provisioning their EKS with Terraform, copy `deploy/terraform/analytiq-prod` to `deploy/terraform/customer-<name>`, update `providers.tf`, and run `mise run apply-terraform -- customer-<name> deploy/terraform/customer-<name>`.
-5. Point `kubectl` at their cluster.
-6. Bootstrap Flux in their cluster:
-   ```bash
-   ECR_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-   export ECR_ACCOUNT_ID REGION
-   envsubst < deploy/kubernetes/flux/customer-<name>/ocirepository.yaml | kubectl apply -f -
-   kubectl apply -f deploy/kubernetes/flux/customer-<name>/kustomization.yaml
-   ```
-7. `mise run deploy-customer -- customer-<name>`
+1. Copy `deploy/flux/customer-example` to `deploy/flux/customer-<name>`.
+2. Create `.env.customer-<name>` with `APP_BUCKET_NAME`, `CLUSTER_NAME`, `REGION`, and any AWS account vars.
+3. Point `kubectl` at their cluster.
+4. `mise run k8s-install -- customer-<name> <chart-version>`
+5. For subsequent upgrades: `mise run k8s-upgrade -- customer-<name> <new-chart-version>`
+
+If provisioning their EKS with Terraform, copy `deploy/terraform/analytiq-prod` to `deploy/terraform/customer-<name>`, update `providers.tf`, and run `mise run apply-terraform -- customer-<name> deploy/terraform/customer-<name>` first.
 
 ### Teardown
 
@@ -675,3 +712,10 @@ export AWS_PROFILE=<account-profile>
 cd deploy/terraform/analytiq-prod
 terraform destroy
 ```
+
+### Manual steps in the AWS console
+
+| Step | Where | Notes |
+|---|---|---|
+| Enable Bedrock model access | Bedrock → Model access | Request access to each model per region. IAM permissions alone are not enough. |
+| SES production access | SES → Account dashboard | New accounts start in sandbox mode. Request production access or verify addresses. |
