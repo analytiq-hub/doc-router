@@ -6,6 +6,78 @@
 - Deploy doc-router to a customer's existing Kubernetes cluster (any provider).
 - Docker images built from the existing multi-stage Dockerfile, stored in ECR.
 - Terraform manages all AWS infrastructure; Kustomize overlays manage all Kubernetes resources.
+- **Single source of config:** all deployment and app config comes from `.env`, with one overlay per customer (e.g. `.env.eks`, `.env.customer-acme`). Each customer deployment can target a different AWS account. EKS cluster name can be the same in all accounts (e.g. `doc-router`). S3 app bucket name is set in `.env` or the overlay (e.g. `APP_BUCKET_NAME`).
+
+---
+
+## Config from .env and overlays
+
+All configuration is driven by **`.env`** plus an **overlay file** per deployment:
+
+| Overlay file        | Used for              | AWS account / cluster      |
+|---------------------|------------------------|----------------------------|
+| `.env`              | Shared defaults        | —                          |
+| `.env.kind`         | Local Kind cluster     | —                          |
+| `.env.eks`          | Our hosted EKS         | One of our accounts        |
+| `.env.customer-<name>` | Customer deployment | Any account (per customer) |
+
+- **Cluster name:** Set `CLUSTER_NAME=doc-router` in `.env` (or overlay) so the same name can be used in every account.
+- **Bucket name:** Set `APP_BUCKET_NAME` in `.env` or the overlay (e.g. `APP_BUCKET_NAME=doc-router-data-prod`). Terraform uses it to create the bucket and IAM policy; `generate-k8s-config.sh` includes it in the app's configmap/secrets so the running app knows which bucket to use.
+- **Different AWS account per customer:** Set `AWS_PROFILE` (or equivalent) when sourcing the overlay; Terraform and `kubectl` use that identity. Each customer can have its own Terraform state directory (e.g. `deploy/terraform/customer-acme`) and overlay `.env.customer-acme`.
+
+Terraform does **not** use `terraform.tfvars` for these values. A script (or you) sources `.env` and the overlay, exports `TF_VAR_*` for Terraform, then runs `terraform apply` in the correct account directory.
+
+---
+
+## Tool versions and deploy tasks (mise)
+
+All deployment scripts are run via **mise** so that Terraform, AWS CLI, kubectl, and kustomize versions are pinned and consistent. Install [mise](https://mise.jdx.dev/), then from the repo root run `mise install` to install the tools; use `mise run <task>` to run deploy workflows.
+
+**Repo root:** a `.mise.toml` defines tool versions and tasks:
+
+```toml
+# .mise.toml at repo root
+[tools]
+terraform = "~1.9"
+awscli    = "latest"
+kubectl   = "latest"
+kustomize = "latest"
+
+[tasks.apply-terraform]
+description = "Run Terraform apply with vars from .env + overlay"
+run = "./deploy/scripts/apply-terraform.sh"
+# Usage: mise run apply-terraform -- <overlay> <terraform-dir>
+# Example: mise run apply-terraform -- eks deploy/terraform/analytiq-prod
+
+[tasks.build-push-eks]
+description = "Build and push frontend/backend images to ECR"
+run = "./deploy/kubernetes/scripts/build-push-eks.sh"
+
+[tasks.deploy-eks]
+description = "Deploy app to our EKS (build-push + apply overlay)"
+depends = ["build-push-eks"]
+run = "./deploy/kubernetes/scripts/deploy-eks.sh"
+
+[tasks."deploy-customer"]
+description = "Deploy app to a customer overlay"
+run = "./deploy/kubernetes/scripts/deploy-customer.sh"
+# Usage: mise run deploy-customer -- <overlay-name>
+# Example: mise run deploy-customer -- customer-acme
+
+[tasks.deploy-kind]
+description = "Deploy to local Kind cluster"
+run = "./deploy/kubernetes/scripts/deploy-kind.sh"
+
+[tasks.setup-kind]
+description = "Create Kind cluster (run once)"
+run = "./deploy/kubernetes/scripts/setup-kind.sh"
+
+[tasks.update-kubeconfig]
+description = "Update kubeconfig for EKS (source .env + overlay first for CLUSTER_NAME, REGION)"
+run = "aws eks update-kubeconfig --name ${CLUSTER_NAME:-doc-router} --region ${REGION}"
+```
+
+Before running any EKS/customer task that needs AWS or kubectl, set `AWS_PROFILE` (or source `.env` and the overlay) so the correct account is used. The scripts themselves source `.env` and the overlay for app config; they do not set `AWS_PROFILE`.
 
 ---
 
@@ -13,12 +85,13 @@
 
 ```
 doc-router/
+  .mise.toml        # tool versions (terraform, awscli, kubectl, kustomize) + deploy tasks
   deploy/
     terraform/
       analytiq-prod/     # our production account
       analytiq-test/     # our test/staging account
       customer-<name>/   # if we ever provision EKS for a customer
-      .gitignore         # *.tfvars, .terraform/, terraform.tfstate*
+      .gitignore         # .terraform/, terraform.tfstate*
     kubernetes/
       base/              # shared, cluster-agnostic app manifests
       overlays/
@@ -27,7 +100,7 @@ doc-router/
         customer-example/ # template — copy per customer cluster
 ```
 
-Each directory under `deploy/terraform/` is an independent root module for one AWS account. `terraform.tfvars` and state files are gitignored so account IDs, CIDRs, and secrets never reach the public repo.
+Each directory under `deploy/terraform/` is an independent root module for one AWS account. State files are gitignored. **Variable values (region, CIDR, cluster name, bucket name, etc.) are not stored in the repo** — they come from `.env` and overlays; a deploy script sources those and exports `TF_VAR_*` before running Terraform.
 
 Customer clusters with a ready-made Kubernetes environment only need a Kustomize overlay — no Terraform.
 
@@ -37,16 +110,17 @@ Customer clusters with a ready-made Kubernetes environment only need a Kustomize
 
 Each account directory is self-contained: its own `providers.tf` with a hardcoded backend for that account's S3 bucket. No flags to remember, no risk of applying to the wrong account.
 
+**Variables:** All inputs (region, cluster name, app bucket name, VPC CIDR, environment, etc.) are defined in `variables.tf` and supplied at apply time via **environment variables** `TF_VAR_<name>` (e.g. `TF_VAR_region`, `TF_VAR_cluster_name`, `TF_VAR_app_bucket_name`). The deploy script sources `.env` and the overlay (e.g. `.env.eks` or `.env.customer-acme`), then exports the corresponding `TF_VAR_*` from that env (see [Env files](#env-files-all-manual) and [Deployment scripts](#deployment-scripts)). You do **not** create or commit `terraform.tfvars`.
+
 ```
 deploy/terraform/analytiq-prod/
   main.tf           # VPC + EKS + ECR + IAM + Helm releases + S3/DynamoDB for tf state
   providers.tf      # aws + helm providers; backend "s3" commented out until first apply
-  variables.tf
+  variables.tf      # region, cluster_name, app_bucket_name, vpc_cidr, environment, etc.
   outputs.tf
-  terraform.tfvars  # gitignored — region, CIDR, cluster name, etc.
 ```
 
-Adding a new account: `cp -r analytiq-prod <new-account>`, update `providers.tf` (bucket/table names) and `terraform.tfvars`.
+Adding a new account: `cp -r analytiq-prod <new-account>`, update `providers.tf` (bucket/table names for state). Config for that account lives in an overlay (e.g. `.env.customer-acme`) and is passed in via `TF_VAR_*` when running Terraform.
 
 ### Remote state (same pattern as `analytiq-terraform`)
 
@@ -129,7 +203,7 @@ Two `aws_ecr_repository` resources: `doc-router-frontend`, `doc-router-backend`.
 
 ### S3 app bucket (inline in `main.tf`)
 
-One `aws_s3_bucket` for document storage (`doc-router-data-<account>`), with AES256 SSE. Separate from the Terraform state bucket.
+One `aws_s3_bucket` for document storage. **Bucket name comes from `var.app_bucket_name`**, which is set via `TF_VAR_app_bucket_name` — the deploy script exports this from the overlay's `APP_BUCKET_NAME` (see [Config from .env and overlays](#config-from-env-and-overlays)). Same name is used in the app's configmap/secrets so the running app knows which bucket to use. Bucket has AES256 SSE and is separate from the Terraform state bucket.
 
 ### IAM (inline in `main.tf`)
 
@@ -178,16 +252,26 @@ A single `ClusterIssuer` for Let's Encrypt is applied via a `null_resource` loca
 
 ## Env files (all manual)
 
-All environment and secret values are maintained in **manually created** env files. Nothing generates or updates these files automatically (e.g. not from Terraform outputs).
+All environment and secret values are maintained in **manually created** env files. Nothing generates or updates these files automatically (e.g. not from Terraform outputs). They are the **single source of truth** for both Terraform (via `TF_VAR_*` exported from the same env) and the app (via `generate-k8s-config.sh` → configmap/secrets).
 
 | File | Used by | Notes |
 |------|---------|--------|
-| `.env` | All overlays (merged with overlay-specific file) | Shared defaults; gitignored. |
+| `.env` | All overlays (merged with overlay-specific file) | Shared defaults (e.g. `CLUSTER_NAME=doc-router`); gitignored. |
 | `.env.kind` | Kind overlay | Kind-specific overrides; gitignored. |
-| `.env.eks` | EKS overlay | EKS-specific values (e.g. ECR URLs, app IAM keys from Terraform outputs); gitignored. |
-| `.env.customer-<name>` | Customer overlay | Customer-specific values; gitignored. |
+| `.env.eks` | EKS overlay | EKS-specific: `APP_BUCKET_NAME`, `REGION`, ECR URLs, app IAM keys from Terraform outputs; gitignored. |
+| `.env.customer-<name>` | Customer overlay | Customer-specific; can target a different AWS account (`AWS_PROFILE`); gitignored. |
 
-You create and edit these files by hand. Deployment scripts only **read** them and call `generate-k8s-config.sh` to produce `configmap.yaml` and `secrets.yaml` in the overlay directory. For EKS, after Terraform apply you copy the app user access key ID and secret from Terraform outputs (or AWS console) into `.env.eks` yourself.
+**Variables that drive Terraform** (set in `.env` or overlay; deploy script exports as `TF_VAR_<name>` before `terraform apply`):
+
+| Env var (in .env / overlay) | Terraform variable | Example / notes |
+|-----------------------------|--------------------|------------------|
+| `CLUSTER_NAME` | `cluster_name` | `doc-router` (same in all accounts if desired) |
+| `APP_BUCKET_NAME` | `app_bucket_name` | `doc-router-data-prod`; also passed to app via configmap/secrets |
+| `REGION` | `region` | `us-east-1` |
+| `VPC_CIDR` | `vpc_cidr` | `10.0.0.0/16` |
+| `ENVIRONMENT` | `environment` | `prod`, `test`, etc. |
+
+You create and edit env files by hand. Deployment scripts only **read** them: they export `TF_VAR_*` for Terraform and call `generate-k8s-config.sh` to produce `configmap.yaml` and `secrets.yaml`. After the first Terraform apply, copy the app user access key ID and secret from Terraform outputs into the overlay (e.g. `.env.eks`) for subsequent K8s deploys.
 
 ---
 
@@ -358,6 +442,26 @@ labels:
 
 ## Deployment scripts
 
+Deploy workflows are invoked via **`mise run <task>`** (see [Tool versions and deploy tasks (mise)](#tool-versions-and-deploy-tasks-mise)). The scripts below are what those tasks call.
+
+### `deploy/scripts/apply-terraform.sh` (or equivalent)
+
+Runs Terraform with all variables coming from `.env` and an overlay. Use this so you never rely on `terraform.tfvars`.
+
+1. Takes two arguments: **overlay name** (e.g. `eks` or `customer-acme`) and **Terraform directory** (e.g. `deploy/terraform/analytiq-prod` or `deploy/terraform/customer-acme`). Alternatively, the overlay can specify the Terraform dir in an env var (e.g. `TERRAFORM_DIR`) so the script only needs the overlay name.
+2. Sources `.env` and `.env.<overlay>` (e.g. `.env.eks` or `.env.customer-acme`) in that order. Exports `TF_VAR_region`, `TF_VAR_cluster_name`, `TF_VAR_app_bucket_name`, `TF_VAR_vpc_cidr`, `TF_VAR_environment` (and any other Terraform variables) from the corresponding env vars (`REGION`, `CLUSTER_NAME`, `APP_BUCKET_NAME`, `VPC_CIDR`, `ENVIRONMENT`). Does not create or edit env files.
+3. Optionally sets `AWS_PROFILE` from the overlay so each customer can target a different account.
+4. Runs `terraform init` (if needed) and `terraform apply` in the given Terraform directory.
+
+Example (manual equivalent):
+
+```bash
+export AWS_PROFILE=acme-prod   # from .env.customer-acme if needed
+set -a; source .env; source .env.customer-acme; set +a
+export TF_VAR_region="$REGION" TF_VAR_cluster_name="$CLUSTER_NAME" TF_VAR_app_bucket_name="$APP_BUCKET_NAME" TF_VAR_vpc_cidr="$VPC_CIDR" TF_VAR_environment="$ENVIRONMENT"
+cd deploy/terraform/customer-acme && terraform init && terraform apply
+```
+
 ### `deploy/kubernetes/scripts/build-push-eks.sh`
 
 1. Read AWS account ID (`aws sts get-caller-identity`) and region.
@@ -395,28 +499,39 @@ Takes overlay name as argument (e.g. `customer-acme`). Assumes you have **manual
 
 ### First-time setup for a new AWS account
 
+Install tools and ensure env is set up:
+
+```bash
+mise install
+```
+
+Create `.env` and an overlay (e.g. `.env.eks`) with at least: `CLUSTER_NAME=doc-router`, `APP_BUCKET_NAME=doc-router-data-prod`, `REGION`, `VPC_CIDR`, `ENVIRONMENT`. Then:
+
 ```bash
 export AWS_PROFILE=<account-profile>
 
 # 1. First apply — backend "s3" commented out; creates S3 + DynamoDB + cluster
-cd deploy/terraform/analytiq-prod
-terraform init && terraform apply
+#    Variables come from .env + overlay (script exports TF_VAR_*)
+mise run apply-terraform -- eks deploy/terraform/analytiq-prod
 
 # 2. Uncomment backend "s3" in providers.tf, then migrate state to S3
+cd deploy/terraform/analytiq-prod
 terraform init      # answer "yes" to copy local state → S3
+# Re-source .env + overlay and export TF_VAR_* again, then:
 terraform apply
 
-# 3. Update kubeconfig
-aws eks update-kubeconfig --name doc-router --region <region>
+# 3. Update kubeconfig (cluster name from .env: CLUSTER_NAME=doc-router)
+set -a; source .env; source .env.eks; set +a
+mise run update-kubeconfig
 ```
 
 ### Adding a second AWS account
 
 ```bash
 cp -r deploy/terraform/analytiq-prod deploy/terraform/analytiq-test
-# Edit providers.tf: update bucket + dynamodb_table names
-# Edit terraform.tfvars: update region, CIDR, cluster name, etc.
-# Then run the first-time setup above with the new directory and AWS_PROFILE
+# Edit providers.tf: update bucket + dynamodb_table names for state only.
+# Create a new overlay (e.g. .env.eks-test) with APP_BUCKET_NAME, REGION, CLUSTER_NAME=doc-router, etc.
+# Run first-time setup with the new directory and overlay; no terraform.tfvars.
 ```
 
 ### Per-deployment (our EKS)
@@ -425,23 +540,22 @@ Ensure `.env` and `.env.eks` exist and are up to date (including app IAM keys fr
 
 ```bash
 export AWS_PROFILE=<account-profile>
-deploy/kubernetes/scripts/build-push-eks.sh
-deploy/kubernetes/scripts/deploy-eks.sh
+mise run deploy-eks
 ```
 
 ### Kind (local dev)
 
 1. Manually create `.env` and `.env.kind` (gitignored).
-2. Run `deploy/kubernetes/scripts/setup-kind.sh` once to create the cluster (if not already).
-3. Run `deploy/kubernetes/scripts/deploy-kind.sh` — it generates config/secrets into `overlays/kind/`, builds images, loads into kind, applies the overlay.
+2. Run `mise run setup-kind` once to create the cluster (if not already).
+3. Run `mise run deploy-kind` — it generates config/secrets into `overlays/kind/`, builds images, loads into kind, applies the overlay.
 
-### Onboarding a customer cluster
+### Onboarding a customer cluster (possibly another AWS account)
 
 1. Copy `overlays/customer-example` to `overlays/customer-<name>`.
 2. Fill in `namespace.yaml` and `ingress-patch.yaml`.
-3. Manually create `.env.customer-<name>` (gitignored).
-4. Point `kubectl` at their cluster.
-5. `./deploy-customer.sh customer-<name>`
+3. Create `.env.customer-<name>` with `APP_BUCKET_NAME`, `CLUSTER_NAME=doc-router` (if same), `REGION`, and any customer-specific or AWS account vars (e.g. `AWS_PROFILE`). If you provision their EKS with Terraform, copy `deploy/terraform/analytiq-prod` to `deploy/terraform/customer-<name>`, update `providers.tf` (state bucket/table), and run `mise run apply-terraform -- customer-<name> deploy/terraform/customer-<name>`.
+4. Point `kubectl` at their cluster (and `AWS_PROFILE` if different account).
+5. `mise run deploy-customer -- customer-<name>`
 
 ### Teardown
 
