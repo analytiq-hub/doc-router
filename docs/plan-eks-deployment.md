@@ -503,7 +503,7 @@ Assumes Terraform has run, `kubectl` context points at the cluster, and you have
 
 1. Merge `.env` + `.env.eks` (read-only; script does not create or modify env files).
 2. Run `generate-k8s-config.sh` with output directory set to `deploy/kubernetes/overlays/eks/` to generate `configmap.yaml` and `secrets.yaml` there.
-3. `kustomize edit set image` in `overlays/eks/kustomization.yaml` to pin image tags.
+3. `cd deploy/kubernetes/overlays/eks && kustomize edit set image analytiqhub/doc-router-frontend=<ECR_FRONTEND_URL>:<TAG> analytiqhub/doc-router-backend=<ECR_BACKEND_URL>:<TAG>` — updates `kustomization.yaml` in place. This is the intended usage: `kustomization.yaml` is the committed declaration of what image is deployed. After apply, the script commits the change (`git add kustomization.yaml && git commit -m "deploy: update eks image to <TAG>"`) so every deployment is recorded in git history.
 4. `kubectl apply -k deploy/kubernetes/overlays/eks`
 5. `kubectl rollout status deployment/frontend -n doc-router`
 6. `kubectl rollout status deployment/backend -n doc-router`
