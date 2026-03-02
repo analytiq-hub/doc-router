@@ -14,6 +14,35 @@
 
 ---
 
+## Implementation phases
+
+Build incrementally. Kind already works — migrate it to the Helm chart first, then add EKS on top of a proven chart.
+
+### Phase 1 — Helm chart on Kind (no EKS yet)
+
+1. Write `charts/doc-router/` targeting Kind: three Deployments (frontend, backend, worker), MongoDB StatefulSet, Ingress with `/fastapi` rewrite, ConfigMap, PDB.
+2. Rewrite `scripts/deploy-kind.sh` to use `helm upgrade --install` with a rendered `values-kind.yaml` instead of Kustomize.
+3. Keep `scripts/setup-kind.sh` as-is — it already works.
+4. Delete `deploy/kubernetes/` once the Helm path is confirmed working on Kind.
+
+At the end of Phase 1, Kind works exactly as before but driven by Helm. Kustomize is gone.
+
+### Phase 2 — Harden the chart on Kind
+
+- Add upgrade stability: `maxUnavailable: 0`, readiness/liveness probes carried from the existing manifests, PodDisruptionBudgets.
+- Add migration Job hook, test idempotency locally.
+- Test chart upgrades on Kind (bump chart version, re-run `deploy-kind.sh`, verify no downtime).
+
+### Phase 3 — EKS
+
+- Add `scripts/k8s-install.sh`, `k8s-upgrade.sh`, `k8s-rollback.sh` — same chart, different values.
+- Create `doc-router-ops` repo with Terraform and Flux manifests.
+- The chart itself needs no changes for EKS — only values differ (ECR repos, `gp3` storage class, TLS enabled, Flux HelmRelease instead of direct `helm install`).
+
+**Flux and cert-manager are EKS-only.** Kind uses `helm upgrade --install` directly (no Flux needed) and runs at `localhost` with no TLS (no cert-manager needed).
+
+---
+
 ## Two-repo structure
 
 Everything lives across **two repositories**:
@@ -40,11 +69,13 @@ doc-router/
         frontend/
           deployment.yaml
           service.yaml
-          ingress.yaml
+          ingress.yaml      # routes / → frontend, /fastapi → backend (with rewrite)
         backend/
           deployment.yaml
           service.yaml
           hpa.yaml
+        worker/
+          deployment.yaml   # same image as backend, command overridden to run worker.py
         mongodb/
           statefulset.yaml  # conditional: rendered only when mongodb.enabled=true
           service.yaml
@@ -76,22 +107,24 @@ image:
     repository: analytiqhub/doc-router-backend
     tag: latest
     pullPolicy: IfNotPresent
+  # worker uses the same image as backend; pullPolicy follows backend
 
 ingress:
   enabled: true
   className: nginx
-  host: ""            # required; set per cluster
-  tls: true
-  clusterIssuer: letsencrypt-prod
+  host: ""              # required; set per cluster
+  tls: true             # set to false for Kind (no cert-manager on local dev)
+  clusterIssuer: letsencrypt-prod   # ignored when tls=false
 
 mongodb:
   enabled: true
-  storageClassName: standard   # override per cluster (e.g. gp3 on EKS)
+  storageClassName: standard   # "" for Kind (uses default); gp3 for EKS
   storage: 10Gi
 
 replicaCount:
   frontend: 2
   backend: 2
+  worker: 1
 
 resources:
   frontend:
@@ -100,6 +133,9 @@ resources:
   backend:
     requests: { cpu: "250m", memory: "512Mi" }
     limits:   { cpu: "1000m", memory: "1Gi" }
+  worker:
+    requests: { cpu: "250m", memory: "512Mi" }
+    limits:   { cpu: "500m", memory: "1Gi" }
 
 # Non-secret config (rendered into ConfigMap by the chart)
 config:
@@ -107,9 +143,33 @@ config:
   region: ""
   environment: prod
   nextauthUrl: ""
+  fastapiRootPath: "/fastapi"   # must match the ingress rewrite prefix
 
 # Secrets are never in values.yaml.
-# The HelmRelease uses valuesFrom to merge doc-router-secrets into the release.
+# The HelmRelease (EKS) uses valuesFrom to merge doc-router-secrets into the release.
+# deploy-kind.sh creates the doc-router-secrets Secret directly before calling helm install.
+```
+
+### Kind-specific values (`values-kind.yaml`, gitignored, rendered by `deploy-kind.sh`)
+
+```yaml
+image:
+  frontend:
+    pullPolicy: Never   # images are kind load-ed, not pulled from a registry
+  backend:
+    pullPolicy: Never
+
+ingress:
+  host: localhost
+  tls: false            # no cert-manager on Kind
+
+mongodb:
+  storageClassName: ""  # uses Kind's default storage class
+
+replicaCount:
+  frontend: 1
+  backend: 1
+  worker: 1
 ```
 
 ### `deploy/flux/example/ocirepository.yaml`
@@ -366,7 +426,7 @@ One bucket for document storage. Name from `var.app_bucket_name` (set via `TF_VA
 ## Helm chart design rules
 
 1. **No hardcoded cluster-specific values** — everything cluster-specific (hostname, ingress class, storage class, image repos, bucket name) comes from Helm values.
-2. **Two separate Deployments** (frontend + backend) in one Helm release, updated together. `RollingUpdate` with `maxUnavailable: 0` on both.
+2. **Three separate Deployments** (frontend, backend, worker) in one Helm release, updated together. Worker uses the same image as backend with an overridden command. `RollingUpdate` with `maxUnavailable: 0` on frontend and backend; worker can use `Recreate` (single replica, stateless queue consumer).
 3. **MongoDB is opt-in** — `mongodb.enabled: true/false`. When false, `mongodbUri` comes from the values Secret.
 4. **No `Namespace` resource in the chart** — the namespace is created by the install script or pre-exists.
 5. **PodDisruptionBudget** included — `minAvailable: 1` on each Deployment.
@@ -375,8 +435,9 @@ One bucket for document storage. Name from `var.app_bucket_name` (set via `TF_VA
 
 ## Upgrade stability
 
-### Deployment strategy (both Deployments)
+### Deployment strategy
 
+Frontend and backend:
 ```yaml
 strategy:
   type: RollingUpdate
@@ -385,7 +446,13 @@ strategy:
     maxSurge: 1
 ```
 
-New pods come up and pass readiness before old pods are terminated. Combined with readiness probes, liveness probes, and PDB this prevents any downtime during a rolling upgrade.
+Worker (single replica, stateless queue consumer — brief gap acceptable):
+```yaml
+strategy:
+  type: Recreate
+```
+
+New frontend/backend pods come up and pass readiness before old pods are terminated. Combined with readiness probes, liveness probes, and PDB this prevents any downtime during a rolling upgrade.
 
 ### Flux HelmRelease health checks
 
@@ -453,7 +520,7 @@ Rollback strategy: MongoDB migrations are forward-only. Rollback means restoring
 
 ## Workflow summary
 
-All ops work runs from **`doc-router-ops/`**. Compound targets use `make`; everything else calls scripts directly.
+All ops work runs from **`doc-router-ops/`** by calling scripts directly.
 
 ### First-time setup for a new AWS account
 
