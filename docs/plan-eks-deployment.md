@@ -186,7 +186,7 @@ spec:
 
 ```
 doc-router-ops/
-  .mise.toml              # tool versions + all operational tasks
+  README.md               # documents scripts and workflow
   scripts/
     apply-terraform.sh    # sources .env + overlay, exports TF_VAR_*, runs terraform
     build-push.sh         # builds images, pushes to ECR
@@ -216,53 +216,7 @@ doc-router-ops/
 
 The committed `clusters/*/flux/` files contain our real ECR account ID, region, pinned chart version, and non-secret cluster-specific values. **Secrets are never committed** — they live in the `doc-router-secrets` Kubernetes Secret, created at install time from the env files.
 
-### `.mise.toml` (in `doc-router-ops`)
-
-```toml
-[tools]
-terraform = "~1.9"
-awscli    = "latest"
-kubectl   = "latest"
-helm      = "latest"
-flux2     = "latest"
-
-[tasks.apply-terraform]
-description = "Run Terraform apply with vars from .env + overlay"
-run = "./scripts/apply-terraform.sh"
-# Usage: mise run apply-terraform -- <overlay> <terraform-dir>
-# Example: mise run apply-terraform -- eks terraform/analytiq-prod
-
-[tasks.build-push]
-description = "Build and push frontend/backend images to ECR"
-run = "./scripts/build-push.sh"
-
-[tasks.publish-chart]
-description = "Package Helm chart, push OCI artifact to ECR"
-run = "./scripts/publish-chart.sh"
-
-[tasks.deploy-eks]
-description = "Build images, publish chart, upgrade EKS HelmRelease"
-depends = ["build-push", "publish-chart"]
-run = "../doc-router/scripts/k8s-upgrade.sh"
-# Assumes doc-router is checked out alongside doc-router-ops
-
-[tasks.k8s-install]
-description = "First-time install into a cluster"
-run = "../doc-router/scripts/k8s-install.sh"
-# Usage: mise run k8s-install -- <overlay> <chart-version>
-
-[tasks.k8s-upgrade]
-description = "Upgrade to a new chart version via Flux HelmRelease"
-run = "../doc-router/scripts/k8s-upgrade.sh"
-
-[tasks.k8s-rollback]
-description = "Roll back the HelmRelease to a previous chart version"
-run = "../doc-router/scripts/k8s-rollback.sh"
-
-[tasks.update-kubeconfig]
-description = "Update kubeconfig for EKS"
-run = "aws eks update-kubeconfig --name ${CLUSTER_NAME:-doc-router} --region ${REGION}"
-```
+**Required tools:** `terraform ~1.9`, `awscli`, `kubectl`, `helm`, `flux2` — install manually or via your preferred version manager. Workflow is documented in `README.md`.
 
 ---
 
@@ -499,35 +453,35 @@ Rollback strategy: MongoDB migrations are forward-only. Rollback means restoring
 
 ## Workflow summary
 
-All tasks run from **`doc-router-ops/`** via `mise run <task>` (which calls scripts in both repos as needed).
+All ops work runs from **`doc-router-ops/`**. Compound targets use `make`; everything else calls scripts directly.
 
 ### First-time setup for a new AWS account
 
 ```bash
 # In doc-router-ops/
-mise install
 export AWS_PROFILE=<account-profile>
 
-# 1. Create S3 + DynamoDB + EKS cluster (backend "s3" commented out)
-mise run apply-terraform -- eks terraform/analytiq-prod
+# 1. Create S3 + DynamoDB + EKS cluster (backend "s3" commented out in providers.tf)
+./scripts/apply-terraform.sh eks terraform/analytiq-prod
 
 # 2. Migrate Terraform state to S3
+#    Uncomment backend "s3" in terraform/analytiq-prod/providers.tf, then:
 cd terraform/analytiq-prod
-# uncomment backend "s3" in providers.tf, then:
 terraform init    # answer "yes" to copy local state → S3
 # re-source .env + .env.eks and re-export TF_VAR_*, then:
 terraform apply
+cd ../..
 
 # 3. Update kubeconfig
 set -a; source .env; source .env.eks; set +a
-mise run update-kubeconfig
+aws eks update-kubeconfig --name "${CLUSTER_NAME:-doc-router}" --region "${REGION}"
 
 # 4. Build images + publish first chart version
-mise run build-push
-mise run publish-chart    # e.g. 1.0.0
+./scripts/build-push.sh
+./scripts/publish-chart.sh 1.0.0
 
 # 5. Bootstrap Flux app (Flux itself installed by Terraform above)
-mise run k8s-install -- eks 1.0.0
+../doc-router/scripts/k8s-install.sh eks 1.0.0
 ```
 
 ### Per-deployment (our EKS)
@@ -535,7 +489,9 @@ mise run k8s-install -- eks 1.0.0
 ```bash
 # In doc-router-ops/
 export AWS_PROFILE=<account-profile>
-mise run deploy-eks    # build-push + publish-chart + k8s-upgrade
+./scripts/build-push.sh
+./scripts/publish-chart.sh 1.5.0
+../doc-router/scripts/k8s-upgrade.sh eks 1.5.0
 ```
 
 ### Adding a second AWS account
@@ -546,7 +502,7 @@ cp -r terraform/analytiq-prod terraform/analytiq-test
 # Edit terraform/analytiq-test/providers.tf: update state bucket + DynamoDB table names.
 # Create .env.eks-test with APP_BUCKET_NAME, REGION, CLUSTER_NAME, etc.
 # Copy clusters/analytiq-prod/ → clusters/analytiq-test/, update helmrelease.yaml values.
-# Run first-time setup with the new directory and overlay.
+# Run first-time setup steps above with the new directory and overlay.
 ```
 
 ### Kind (local dev)
@@ -554,7 +510,7 @@ cp -r terraform/analytiq-prod terraform/analytiq-test
 ```bash
 # In doc-router/ — no doc-router-ops needed for local dev
 ./scripts/setup-kind.sh    # once
-# Create .env and .env.kind locally
+# Create .env and .env.kind
 ./scripts/deploy-kind.sh
 ```
 
@@ -562,24 +518,25 @@ cp -r terraform/analytiq-prod terraform/analytiq-test
 
 ```bash
 # In doc-router-ops/
+
 # 1. Copy cluster config template
 cp -r clusters/customer-example clusters/customer-acme
 
 # 2. Create overlay
 cp .env.eks .env.customer-acme
-# Edit .env.customer-acme: set APP_BUCKET_NAME, CLUSTER_NAME, REGION, AWS_PROFILE, APP_HOST, etc.
+# Edit .env.customer-acme: APP_BUCKET_NAME, CLUSTER_NAME, REGION, AWS_PROFILE, APP_HOST, etc.
 
 # 3. Point kubectl at their cluster
 kubectl config use-context <their-cluster-context>
 
 # 4. Install
-mise run k8s-install -- customer-acme 1.4.0
+../doc-router/scripts/k8s-install.sh customer-acme 1.4.0
 
 # 5. Subsequent upgrades
-mise run k8s-upgrade -- customer-acme 1.5.0
+../doc-router/scripts/k8s-upgrade.sh customer-acme 1.5.0
 ```
 
-If provisioning their EKS with Terraform: `cp -r terraform/analytiq-prod terraform/customer-acme`, update `providers.tf`, then `mise run apply-terraform -- customer-acme terraform/customer-acme` before the install step.
+If provisioning their EKS with Terraform first: `cp -r terraform/analytiq-prod terraform/customer-acme`, update `providers.tf`, then `./scripts/apply-terraform.sh customer-acme terraform/customer-acme`.
 
 ### Teardown
 
