@@ -32,27 +32,32 @@ set -a
 [ -f "$PROJECT_ROOT/.env" ]      && source "$PROJECT_ROOT/.env"
 [ -f "$PROJECT_ROOT/.env.kind" ] && source "$PROJECT_ROOT/.env.kind"
 set +a
+#
+# IMAGE_TAG can be provided from the environment (e.g. IMAGE_TAG=abc123 make deploy-kind).
+# If not provided, default to a timestamp-based tag so every deploy gets a unique image tag.
+IMAGE_TAG="${IMAGE_TAG:-$(date +%Y%m%d%H%M%S)}"
+echo "Using image tag: $IMAGE_TAG"
 
 # NEXT_PUBLIC_FASTAPI_FRONTEND_URL is baked into the Next.js build at build time.
 NEXT_PUBLIC_FASTAPI_FRONTEND_URL="${NEXT_PUBLIC_FASTAPI_FRONTEND_URL:-http://localhost/fastapi}"
 
 # --- Build images ---
 echo "Building frontend image..."
-docker build -t analytiqhub/doc-router-frontend:latest \
+docker build -t analytiqhub/doc-router-frontend:"$IMAGE_TAG" \
   --target frontend \
   --build-arg NEXT_PUBLIC_FASTAPI_FRONTEND_URL="$NEXT_PUBLIC_FASTAPI_FRONTEND_URL" \
   --build-arg NODE_ENV=production \
   -f deploy/shared/docker/Dockerfile .
 
 echo "Building backend image..."
-docker build -t analytiqhub/doc-router-backend:latest \
+docker build -t analytiqhub/doc-router-backend:"$IMAGE_TAG" \
   --target backend \
   -f deploy/shared/docker/Dockerfile .
 
 # --- Load images into Kind ---
 echo "Loading images into Kind cluster '$CLUSTER_NAME'..."
-kind load docker-image analytiqhub/doc-router-frontend:latest --name "$CLUSTER_NAME"
-kind load docker-image analytiqhub/doc-router-backend:latest  --name "$CLUSTER_NAME"
+kind load docker-image analytiqhub/doc-router-frontend:"$IMAGE_TAG" --name "$CLUSTER_NAME"
+kind load docker-image analytiqhub/doc-router-backend:"$IMAGE_TAG"  --name "$CLUSTER_NAME"
 
 # --- Namespace ---
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
@@ -89,6 +94,8 @@ echo "Running helm upgrade --install..."
 helm upgrade --install "$RELEASE" "$CHART_DIR" \
   --namespace "$NAMESPACE" \
   --values "$VALUES_KIND" \
+  --set image.frontend.tag="$IMAGE_TAG" \
+  --set image.backend.tag="$IMAGE_TAG" \
   --atomic \
   --timeout 5m \
   --wait
