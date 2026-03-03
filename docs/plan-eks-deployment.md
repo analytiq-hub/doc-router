@@ -47,7 +47,7 @@ Goal: deploy the proven chart to AWS EKS using direct `helm upgrade --install` a
 Add five scripts to `deploy/scripts/`:
 
 - **`build-push.sh`** — ECR login, `docker build --target frontend/backend`, tag `<ECR_URL>:<git-sha>` + `:latest`, push both images.
-- **`publish-chart.sh`** — `helm package deploy/charts/doc-router --version <semver>`, ECR login, `helm push` OCI artifact to `doc-router/chart` ECR repo.
+- **`publish-chart.sh`** — `helm package deploy/charts/doc-router --version <semver>`, ECR login, `helm push` OCI artifact to `doc-router-chart` ECR repo.
 - **`k8s-install.sh`** — first-time install. Sources env overlay, creates namespace, creates `doc-router-secrets` Secret, runs `helm upgrade --install oci://... --version <semver>` with non-secret values via `--set`, waits with `--wait --timeout 10m`.
 - **`k8s-upgrade.sh`** — upgrades a running release. Updates the `doc-router-secrets` Secret if any secret values changed, then runs `helm upgrade oci://... --version <semver> --reuse-values --set image.*.tag=<new-tag> --wait`.
 - **`k8s-rollback.sh`** — runs `helm rollback doc-router <revision> -n doc-router --wait`.
@@ -69,7 +69,7 @@ analytiq-terraform/applications/eks/
 `main.tf` provisions:
 - **VPC** — `/16` CIDR, 2 public subnets (NAT + NLB) + 2 private subnets (nodes) across 2 AZs, one NAT gateway.
 - **EKS cluster** — nodes in private subnets, managed node group (`t3.medium`/`t3.large`, min/desired/max = 2/2/5), OIDC enabled.
-- **ECR repos** — `doc-router-frontend`, `doc-router-backend`, `doc-router/chart` (OCI artifacts).
+- **ECR repos** — `doc-router-frontend`, `doc-router-backend`, `doc-router-chart` (OCI artifacts).
 - **Helm releases** — ingress-nginx, cert-manager (`crds.enabled=true`), aws-ebs-csi-driver, metrics-server.
 - **ClusterIssuer** — applied via `null_resource` local-exec after cert-manager is ready.
 
@@ -78,7 +78,7 @@ analytiq-terraform/applications/eks/
 `publish-chart.sh` packages the chart and pushes it as an OCI artifact to ECR:
 ```bash
 helm package deploy/charts/doc-router --version <semver>
-helm push doc-router-<semver>.tgz oci://<ECR_REGISTRY>/doc-router/chart
+helm push doc-router-<semver>.tgz oci://<ECR_REGISTRY>/doc-router-chart
 ```
 
 The chart itself needs no changes for EKS — only values differ (`gp3` storage class, TLS enabled, ECR image repos, real hostnames).
@@ -414,7 +414,7 @@ CHART_VERSION=${2:?chart version required}   # semver
 helm package deploy/charts/doc-router --version "$CHART_VERSION"
 aws ecr get-login-password --region "$REGION" \
   | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
-helm push "doc-router-${CHART_VERSION}.tgz" "oci://${CHART_REGISTRY}/doc-router/chart"
+helm push "doc-router-${CHART_VERSION}.tgz" "oci://${CHART_REGISTRY}/doc-router-chart"
 rm "doc-router-${CHART_VERSION}.tgz"
 ```
 
@@ -437,7 +437,7 @@ aws ecr get-login-password --region "$REGION" \
   | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
 
 helm upgrade --install doc-router \
-  "oci://${CHART_REGISTRY}/doc-router/chart" \
+  "oci://${CHART_REGISTRY}/doc-router-chart" \
   --version "$CHART_VERSION" \
   --namespace doc-router \
   --set ingress.host="$APP_HOST" \
@@ -471,7 +471,7 @@ aws ecr get-login-password --region "$REGION" \
   | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
 
 helm upgrade doc-router \
-  "oci://${CHART_REGISTRY}/doc-router/chart" \
+  "oci://${CHART_REGISTRY}/doc-router-chart" \
   --version "$CHART_VERSION" \
   --namespace doc-router \
   --reuse-values \
