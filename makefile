@@ -227,10 +227,10 @@ down-compose-clean:
 	echo "Removed containers and volumes"
 
 setup-kind:
-	cd deploy/kubernetes/scripts && ./setup-kind.sh
+	./deploy/scripts/setup-kind.sh
 
 deploy-kind:
-	cd deploy/kubernetes/scripts && ./deploy-kind.sh
+	./deploy/scripts/deploy-kind.sh
 
 down-kind:
 	@CLUSTER_NAME=$${CLUSTER_NAME:-doc-router}; \

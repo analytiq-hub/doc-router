@@ -20,9 +20,9 @@ Build incrementally. Kind already works — migrate it to the Helm chart first, 
 
 ### Phase 1 — Helm chart on Kind (no EKS yet)
 
-1. Write `charts/doc-router/` targeting Kind: three Deployments (frontend, backend, worker), MongoDB StatefulSet, Ingress with `/fastapi` rewrite, ConfigMap, PDB.
-2. Rewrite `scripts/deploy-kind.sh` to use `helm upgrade --install` with a rendered `values-kind.yaml` instead of Kustomize.
-3. Keep `scripts/setup-kind.sh` as-is — it already works.
+1. Write `deploy/charts/doc-router/` targeting Kind: two Deployments (frontend, backend), MongoDB StatefulSet, Ingress with `/fastapi` rewrite, ConfigMap, PDB. Worker runs embedded in the backend pod (same as docker-compose / start.sh).
+2. Rewrite `deploy/scripts/deploy-kind.sh` to use `helm upgrade --install` with a rendered `values-kind.yaml` instead of Kustomize.
+3. Keep `deploy/scripts/setup-kind.sh` as-is — it already works.
 4. Delete `deploy/kubernetes/` once the Helm path is confirmed working on Kind.
 
 At the end of Phase 1, Kind works exactly as before but driven by Helm. Kustomize is gone.
@@ -35,7 +35,7 @@ At the end of Phase 1, Kind works exactly as before but driven by Helm. Kustomiz
 
 ### Phase 3 — EKS
 
-- Add `scripts/k8s-install.sh`, `k8s-upgrade.sh`, `k8s-rollback.sh` — same chart, different values.
+- Add `deploy/scripts/k8s-install.sh`, `k8s-upgrade.sh`, `k8s-rollback.sh` — same chart, different values.
 - Create `doc-router-ops` repo with Terraform and Flux manifests.
 - The chart itself needs no changes for EKS — only values differ (ECR repos, `gp3` storage class, TLS enabled, Flux HelmRelease instead of direct `helm install`).
 
@@ -61,41 +61,40 @@ The Helm chart and install scripts are public because customers need them and th
 ```
 doc-router/
   packages/                 # app source — frontend, backend (unchanged)
-  charts/
-    doc-router/             # Helm chart — single source of truth for K8s packaging
-      Chart.yaml
-      values.yaml           # safe defaults only; no secrets, no real URLs or hostnames
-      templates/
-        frontend/
-          deployment.yaml
-          service.yaml
-          ingress.yaml      # routes / → frontend, /fastapi → backend (with rewrite)
-        backend/
-          deployment.yaml
-          service.yaml
-          hpa.yaml
-        worker/
-          deployment.yaml   # same image as backend, command overridden to run worker.py
-        mongodb/
-          statefulset.yaml  # conditional: rendered only when mongodb.enabled=true
-          service.yaml
-        migration-job.yaml  # Helm pre-upgrade/pre-install hook
-        configmap.yaml
-        pdb.yaml
-  scripts/                  # customer-facing; also used by doc-router-ops
-    k8s-install.sh          # first-time install into any cluster
-    k8s-upgrade.sh          # upgrade to a new chart version
-    k8s-rollback.sh         # roll back to a previous chart version
-    deploy-kind.sh          # local Kind deploy (helm upgrade --install, no Flux)
-    setup-kind.sh           # create local Kind cluster
   deploy/
+    charts/
+      doc-router/           # Helm chart — single source of truth for K8s packaging
+        Chart.yaml
+        values.yaml         # safe defaults only; no secrets, no real URLs or hostnames
+        templates/
+          frontend/
+            deployment.yaml
+            service.yaml
+            ingress.yaml    # routes / → frontend, /fastapi → backend (with rewrite)
+          backend/
+            deployment.yaml
+            service.yaml
+            hpa.yaml
+          mongodb/
+            statefulset.yaml  # conditional: rendered only when mongodb.enabled=true
+            service.yaml
+          migration-job.yaml  # Helm pre-upgrade/pre-install hook
+          configmap.yaml
+          pdb.yaml
+    scripts/                  # customer-facing; also used by doc-router-ops
+      k8s-install.sh          # first-time install into any cluster
+      k8s-upgrade.sh          # upgrade to a new chart version
+      k8s-rollback.sh         # roll back to a previous chart version
+      deploy-kind.sh          # local Kind deploy (helm upgrade --install, no Flux)
+      setup-kind.sh           # create local Kind cluster
+      values-kind.yaml        # committed Kind-specific overrides (no secrets)
     flux/
-      example/              # Flux manifest templates customers copy and adapt
-        ocirepository.yaml  # uses ${VARIABLE} placeholders; filled by envsubst
+      example/                # Flux manifest templates customers copy and adapt
+        ocirepository.yaml    # uses ${VARIABLE} placeholders; filled by envsubst
         helmrelease.yaml
 ```
 
-### `charts/doc-router/values.yaml` (defaults, no secrets)
+### `deploy/charts/doc-router/values.yaml` (defaults, no secrets)
 
 ```yaml
 image:
@@ -150,7 +149,7 @@ config:
 # deploy-kind.sh creates the doc-router-secrets Secret directly before calling helm install.
 ```
 
-### Kind-specific values (`values-kind.yaml`, gitignored, rendered by `deploy-kind.sh`)
+### `deploy/scripts/values-kind.yaml` (committed Kind-specific overrides, no secrets)
 
 ```yaml
 image:
@@ -426,7 +425,7 @@ One bucket for document storage. Name from `var.app_bucket_name` (set via `TF_VA
 ## Helm chart design rules
 
 1. **No hardcoded cluster-specific values** — everything cluster-specific (hostname, ingress class, storage class, image repos, bucket name) comes from Helm values.
-2. **Three separate Deployments** (frontend, backend, worker) in one Helm release, updated together. Worker uses the same image as backend with an overridden command. `RollingUpdate` with `maxUnavailable: 0` on frontend and backend; worker can use `Recreate` (single replica, stateless queue consumer).
+2. **Two Deployments** (frontend, backend) in one Helm release, updated together. Worker runs embedded in the backend pod (same as docker-compose / start.sh: `worker.py &` then `uvicorn`). `RollingUpdate` with `maxUnavailable: 0` on both.
 3. **MongoDB is opt-in** — `mongodb.enabled: true/false`. When false, `mongodbUri` comes from the values Secret.
 4. **No `Namespace` resource in the chart** — the namespace is created by the install script or pre-exists.
 5. **PodDisruptionBudget** included — `minAvailable: 1` on each Deployment.
@@ -437,7 +436,8 @@ One bucket for document storage. Name from `var.app_bucket_name` (set via `TF_VA
 
 ### Deployment strategy
 
-Frontend and backend:
+Both frontend and backend use `RollingUpdate`. Worker runs embedded in the backend pod and upgrades with it.
+
 ```yaml
 strategy:
   type: RollingUpdate
@@ -446,13 +446,7 @@ strategy:
     maxSurge: 1
 ```
 
-Worker (single replica, stateless queue consumer — brief gap acceptable):
-```yaml
-strategy:
-  type: Recreate
-```
-
-New frontend/backend pods come up and pass readiness before old pods are terminated. Combined with readiness probes, liveness probes, and PDB this prevents any downtime during a rolling upgrade.
+New pods come up and pass readiness before old pods are terminated. Combined with readiness probes, liveness probes, and PDB this prevents any downtime during a rolling upgrade.
 
 ### Flux HelmRelease health checks
 
@@ -486,7 +480,7 @@ Rollback strategy: MongoDB migrations are forward-only. Rollback means restoring
 
 ## Deployment scripts
 
-### In `doc-router/scripts/` (public — used by customers and by us)
+### In `doc-router/deploy/scripts/` (public — used by customers and by us)
 
 **`k8s-install.sh`** — first-time install into any cluster. Takes overlay name and chart version.
 
@@ -514,7 +508,7 @@ Rollback strategy: MongoDB migrations are forward-only. Rollback means restoring
 
 **`build-push.sh`** — ECR login, `docker build --target frontend/backend`, tag `<ECR_URL>:<git-sha>` + `:latest`, push both images.
 
-**`publish-chart.sh`** — `helm package charts/doc-router`, ECR login, `helm push` OCI artifact to `doc-router/chart`.
+**`publish-chart.sh`** — `helm package deploy/charts/doc-router`, ECR login, `helm push` OCI artifact to `doc-router/chart`.
 
 ---
 
@@ -548,7 +542,7 @@ aws eks update-kubeconfig --name "${CLUSTER_NAME:-doc-router}" --region "${REGIO
 ./scripts/publish-chart.sh 1.0.0
 
 # 5. Bootstrap Flux app (Flux itself installed by Terraform above)
-../doc-router/scripts/k8s-install.sh eks 1.0.0
+../doc-router/deploy/scripts/k8s-install.sh eks 1.0.0
 ```
 
 ### Per-deployment (our EKS)
@@ -558,7 +552,7 @@ aws eks update-kubeconfig --name "${CLUSTER_NAME:-doc-router}" --region "${REGIO
 export AWS_PROFILE=<account-profile>
 ./scripts/build-push.sh
 ./scripts/publish-chart.sh 1.5.0
-../doc-router/scripts/k8s-upgrade.sh eks 1.5.0
+../doc-router/deploy/scripts/k8s-upgrade.sh eks 1.5.0
 ```
 
 ### Adding a second AWS account
@@ -576,9 +570,9 @@ cp -r terraform/analytiq-prod terraform/analytiq-test
 
 ```bash
 # In doc-router/ — no doc-router-ops needed for local dev
-./scripts/setup-kind.sh    # once
+./deploy/scripts/setup-kind.sh    # once
 # Create .env and .env.kind
-./scripts/deploy-kind.sh
+./deploy/scripts/deploy-kind.sh
 ```
 
 ### Onboarding a customer cluster
@@ -597,10 +591,10 @@ cp .env.eks .env.customer-acme
 kubectl config use-context <their-cluster-context>
 
 # 4. Install
-../doc-router/scripts/k8s-install.sh customer-acme 1.4.0
+../doc-router/deploy/scripts/k8s-install.sh customer-acme 1.4.0
 
 # 5. Subsequent upgrades
-../doc-router/scripts/k8s-upgrade.sh customer-acme 1.5.0
+../doc-router/deploy/scripts/k8s-upgrade.sh customer-acme 1.5.0
 ```
 
 If provisioning their EKS with Terraform first: `cp -r terraform/analytiq-prod terraform/customer-acme`, update `providers.tf`, then `./scripts/apply-terraform.sh customer-acme terraform/customer-acme`.
