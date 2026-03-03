@@ -42,7 +42,8 @@ help:
 	@echo "Shutdown (Direct):"
 	@echo "  make down-compose            - Stop Docker Compose containers"
 	@echo "  make down-compose-clean      - Stop Docker Compose and remove volumes"
-	@echo "  make down-kind               - Delete Kubernetes kind cluster"
+	@echo "  make down-kind               - Uninstall doc-router from Kind cluster (keeps cluster running)"
+	@echo "  make destroy-kind            - Delete the Kind cluster entirely"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make tests                   - Run Python unit tests"
@@ -197,14 +198,17 @@ down:
 	choice=$$(gum choose --header "Select shutdown target:" \
 		"Docker Compose (stop containers)" \
 		"Docker Compose (stop and remove volumes)" \
-		"Kubernetes (kind)"); \
+		"Kubernetes (kind) — uninstall app" \
+		"Kubernetes (kind) — destroy cluster"); \
 	case "$$choice" in \
 		"Docker Compose (stop containers)") \
 			$(MAKE) down-compose;; \
 		"Docker Compose (stop and remove volumes)") \
 			$(MAKE) down-compose-clean;; \
-		"Kubernetes (kind)") \
+		"Kubernetes (kind) — uninstall app") \
 			$(MAKE) down-kind;; \
+		"Kubernetes (kind) — destroy cluster") \
+			$(MAKE) destroy-kind;; \
 		*) \
 			echo "No selection made or cancelled."; \
 			exit 1;; \
@@ -234,6 +238,9 @@ deploy-kind:
 
 down-kind:
 	./deploy/scripts/down-kind.sh
+
+destroy-kind:
+	./deploy/scripts/destroy-kind.sh
 
 tests: setup-python
 	. .venv/bin/activate && pytest -n auto packages/python/tests/
@@ -293,4 +300,4 @@ dockerhub-push: dockerhub-push-frontend dockerhub-push-backend
 dockerhub-build-push: dockerhub-build dockerhub-push
 	@echo "✅ Build and push complete!"
 
-.PHONY: help deploy-dev tests setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-compose-dockerhub deploy-compose-dockerhub-embedded deploy-kind down down-compose down-compose-clean down-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean
+.PHONY: help deploy-dev tests setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-compose-dockerhub deploy-compose-dockerhub-embedded deploy-kind down down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean

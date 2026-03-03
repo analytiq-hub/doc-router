@@ -1,10 +1,17 @@
-from datetime import datetime, UTC
+import asyncio
+import socket
+from datetime import datetime, UTC, timedelta
 import os
 import logging
+
+from pymongo.errors import DuplicateKeyError
 
 import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
+
+LOCK_TTL_SECONDS = 300        # stale lock expires after 5 minutes
+LOCK_RETRY_INTERVAL_SECONDS = 2
 
 class Migration:
     def __init__(self, description: str):
@@ -28,17 +35,66 @@ async def get_current_version(db) -> int:
     )
     return migration_doc["version"] if migration_doc else 0
 
+async def _acquire_migration_lock(db, holder: str) -> bool:
+    """Try once to acquire the distributed migration lock. Returns True on success."""
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(seconds=LOCK_TTL_SECONDS)
+    try:
+        await db.migration_lock.insert_one({
+            "_id": "migration_lock",
+            "locked_at": now,
+            "expires_at": expires_at,
+            "holder": holder,
+        })
+        return True
+    except DuplicateKeyError:
+        # Lock exists — atomically steal it if it has expired
+        result = await db.migration_lock.find_one_and_update(
+            {"_id": "migration_lock", "expires_at": {"$lt": now}},
+            {"$set": {"locked_at": now, "expires_at": expires_at, "holder": holder}},
+            return_document=True,
+        )
+        return result is not None
+
+
+async def _release_migration_lock(db, holder: str) -> None:
+    """Release the lock if we still hold it."""
+    await db.migration_lock.delete_one({"_id": "migration_lock", "holder": holder})
+
+
 async def run_migrations(analytiq_client, target_version: int = None) -> None:
-    """Run all pending migrations or up to target_version"""
+    """Run all pending migrations, protected by a distributed blocking MongoDB lock."""
     db = analytiq_client.mongodb_async[analytiq_client.env]
-    current_version = await get_current_version(db)
-    
+
     if target_version is None:
         target_version = len(MIGRATIONS)
-        
-    logger.info(f"Db current version: {current_version}, target version: {target_version}")
+
+    # Fast path: skip lock acquisition if already up-to-date
+    current_version = await get_current_version(db)
+    if current_version >= target_version:
+        logger.info(f"Db already at version {current_version}, no migrations needed.")
+        return
+
+    holder = socket.gethostname()
+    logger.info(f"Acquiring migration lock (holder={holder})...")
+
+    # Block until we acquire the lock
+    while True:
+        if await _acquire_migration_lock(db, holder):
+            break
+        logger.info(
+            f"Migration lock held by another process. "
+            f"Retrying in {LOCK_RETRY_INTERVAL_SECONDS}s..."
+        )
+        await asyncio.sleep(LOCK_RETRY_INTERVAL_SECONDS)
+
+    logger.info(f"Migration lock acquired by {holder}.")
 
     try:
+        # Re-check version: another pod may have finished migrating while we waited
+        current_version = await get_current_version(db)
+        logger.info(f"Db current version: {current_version}, target version: {target_version}")
+
         if target_version > current_version:
             # Run migrations up
             for migration in MIGRATIONS[current_version:target_version]:
@@ -57,7 +113,7 @@ async def run_migrations(analytiq_client, target_version: int = None) -> None:
                     )
                 else:
                     raise Exception(f"Migration {migration.version} failed")
-                    
+
         elif target_version < current_version:
             # Run migrations down
             for migration in reversed(MIGRATIONS[target_version:current_version]):
@@ -75,10 +131,13 @@ async def run_migrations(analytiq_client, target_version: int = None) -> None:
                     )
                 else:
                     raise Exception(f"Migration revert {migration.version} failed")
-                    
+
     except Exception as e:
         logger.error(f"Migration failed: {e}")
         raise
+    finally:
+        await _release_migration_lock(db, holder)
+        logger.info(f"Migration lock released by {holder}.")
 
 # Example migration for OCR key renaming
 class OcrKeyMigration(Migration):

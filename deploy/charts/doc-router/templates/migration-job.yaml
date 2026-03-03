@@ -6,7 +6,7 @@ metadata:
   labels:
     {{- include "doc-router.labels" . | nindent 4 }}
   annotations:
-    "helm.sh/hook": pre-upgrade,pre-install
+    "helm.sh/hook": pre-upgrade
     "helm.sh/hook-weight": "-5"
     "helm.sh/hook-delete-policy": hook-succeeded,before-hook-creation
 spec:
@@ -19,8 +19,8 @@ spec:
         image: {{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}
         imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
         command: ["sh", "-c", "cd /app/packages/python && python3 migrate.py"]
+        # Only the Secret is available at pre-install time (ConfigMap is created by Helm later).
+        # migrate.py only needs MONGODB_URI and ENV from the Secret.
         envFrom:
-        - configMapRef:
-            name: doc-router-config
         - secretRef:
             name: doc-router-secrets
