@@ -6,11 +6,11 @@
 - Deploy doc-router to a customer's existing Kubernetes cluster (any provider).
 - Docker images built from the existing multi-stage Dockerfile, stored in ECR.
 - Terraform manages all AWS infrastructure; a **Helm chart** is the single source of truth for Kubernetes packaging.
-- Flux delivers the chart via **HelmRelease** (OCI-sourced) and continuously reconciles cluster state.
+- The chart is published as an OCI artifact to ECR and installed with `helm upgrade --install` directly — no GitOps controller required.
 
 ### Non-Goals
 - Customers do not need to adopt our Git workflow; they pin a chart version and run scripts.
-- No GitHub Actions, Argo CD, or proprietary deployment services required.
+- No GitHub Actions, Argo CD, Flux, or proprietary deployment services required.
 
 ---
 
@@ -40,21 +40,20 @@ Goal: prove the chart supports zero-downtime upgrades before adding EKS complexi
 
 ### Phase 3 — EKS
 
-Goal: deploy the proven chart to AWS EKS using Flux for continuous reconciliation.
+Goal: deploy the proven chart to AWS EKS using direct `helm upgrade --install` against the OCI chart in ECR.
 
 #### 3a — EKS scripts (in `doc-router`, public)
 
 Add three scripts to `deploy/scripts/`:
 
-- **`k8s-install.sh`** — first-time install. Sources env overlay, creates namespace, creates `doc-router-secrets` Secret, applies Flux OCIRepository + HelmRelease manifests via `envsubst | kubectl apply`, waits for Flux reconciliation.
-- **`k8s-upgrade.sh`** — upgrades a running release. Updates secrets if changed, patches HelmRelease chart version + image tags, runs `flux reconcile`.
-- **`k8s-rollback.sh`** — patches HelmRelease back to the previous pinned version and reconciles.
+- **`k8s-install.sh`** — first-time install. Sources env overlay, creates namespace, creates `doc-router-secrets` Secret, runs `helm upgrade --install oci://... --version <semver>` with non-secret values passed via `--set`, waits with `--wait --timeout 10m`.
+- **`k8s-upgrade.sh`** — upgrades a running release. Updates the `doc-router-secrets` Secret if any secret values changed, then runs `helm upgrade oci://... --version <semver> --reuse-values --set image.*.tag=<new-tag> --wait`.
+- **`k8s-rollback.sh`** — runs `helm rollback doc-router <revision> -n doc-router --wait`.
 
 #### 3b — `doc-router-ops` repo (private)
 
 Create a new private repository with:
-- `terraform/` — one root module per AWS account (VPC, EKS, ECR, IAM, S3, Helm add-ons: ingress-nginx, cert-manager, Flux, EBS CSI, metrics-server).
-- `clusters/` — filled-in Flux manifests per cluster (OCIRepository + HelmRelease with real ECR URLs and values).
+- `terraform/` — one root module per AWS account (VPC, EKS, ECR, IAM, S3, Helm add-ons: ingress-nginx, cert-manager, EBS CSI, metrics-server).
 - `scripts/` — `apply-terraform.sh`, `build-push.sh`, `publish-chart.sh`.
 - `.env`, `.env.eks`, `.env.customer-*` — gitignored secret/config overlays.
 
@@ -68,7 +67,7 @@ helm push doc-router-<semver>.tgz oci://<ECR_REGISTRY>/doc-router/chart
 
 The chart itself needs no changes for EKS — only values differ (`gp3` storage class, TLS enabled, ECR image repos, real hostnames).
 
-**Flux and cert-manager are EKS-only.** Kind uses `helm upgrade --install` directly (no Flux, no TLS).
+**cert-manager is EKS-only.** Kind uses `helm upgrade --install` directly with TLS disabled.
 
 ---
 
@@ -78,8 +77,8 @@ Everything lives across **two repositories**:
 
 | Repo | Visibility | Contains |
 |---|---|---|
-| `doc-router` | **Public / open source** | App source code, Helm chart, customer-facing install scripts, example Flux templates |
-| `doc-router-ops` | **Private** | Terraform, filled-in Flux manifests for our clusters, operational scripts, env files |
+| `doc-router` | **Public / open source** | App source code, Helm chart, customer-facing install scripts |
+| `doc-router-ops` | **Private** | Terraform, operational scripts, env files |
 
 The Helm chart and install scripts are public because customers need them and they contain nothing sensitive. Terraform, our real ECR URLs, cluster-specific values, and env files are private.
 
@@ -114,13 +113,9 @@ doc-router/
       k8s-install.sh          # first-time install into any cluster
       k8s-upgrade.sh          # upgrade to a new chart version
       k8s-rollback.sh         # roll back to a previous chart version
-      deploy-kind.sh          # local Kind deploy (helm upgrade --install, no Flux)
+      deploy-kind.sh          # local Kind deploy (helm upgrade --install)
       setup-kind.sh           # create local Kind cluster
       values-kind.yaml        # committed Kind-specific overrides (no secrets)
-    flux/
-      example/                # Flux manifest templates customers copy and adapt
-        ocirepository.yaml    # uses ${VARIABLE} placeholders; filled by envsubst
-        helmrelease.yaml
 ```
 
 ### `deploy/charts/doc-router/values.yaml` (defaults, no secrets)
@@ -174,8 +169,9 @@ config:
   fastapiRootPath: "/fastapi"   # must match the ingress rewrite prefix
 
 # Secrets are never in values.yaml.
-# The HelmRelease (EKS) uses valuesFrom to merge doc-router-secrets into the release.
-# deploy-kind.sh creates the doc-router-secrets Secret directly before calling helm install.
+# All scripts (deploy-kind.sh, k8s-install.sh) create the doc-router-secrets Secret
+# directly via kubectl before calling helm upgrade --install. The chart reads secrets
+# from that Secret via envFrom — they are never passed as Helm values.
 ```
 
 ### `deploy/scripts/values-kind.yaml` (committed Kind-specific overrides, no secrets)
@@ -200,74 +196,6 @@ replicaCount:
   worker: 1
 ```
 
-### `deploy/flux/example/ocirepository.yaml`
-
-Template customers copy and fill in. `${VARIABLE}` placeholders are substituted via `envsubst` by the install script.
-
-```yaml
-apiVersion: source.toolkit.fluxcd.io/v1beta2
-kind: OCIRepository
-metadata:
-  name: doc-router-chart
-  namespace: flux-system
-spec:
-  interval: 1m
-  url: oci://${CHART_REGISTRY}/doc-router/chart
-  ref:
-    semver: ">=${CHART_VERSION}"
-  provider: aws    # change to generic for non-ECR registries
-```
-
-### `deploy/flux/example/helmrelease.yaml`
-
-```yaml
-apiVersion: helm.toolkit.fluxcd.io/v2
-kind: HelmRelease
-metadata:
-  name: doc-router
-  namespace: doc-router
-spec:
-  interval: 5m
-  chart:
-    spec:
-      chart: doc-router
-      version: "${CHART_VERSION}"
-      sourceRef:
-        kind: OCIRepository
-        name: doc-router-chart
-        namespace: flux-system
-  values:
-    ingress:
-      host: "${APP_HOST}"
-      className: "${INGRESS_CLASS}"
-    mongodb:
-      storageClassName: "${STORAGE_CLASS}"
-    image:
-      frontend:
-        repository: "${FRONTEND_IMAGE_REPO}"
-        tag: "${IMAGE_TAG}"
-      backend:
-        repository: "${BACKEND_IMAGE_REPO}"
-        tag: "${IMAGE_TAG}"
-    config:
-      appBucketName: "${APP_BUCKET_NAME}"
-      region: "${REGION}"
-      environment: "${ENVIRONMENT}"
-      nextauthUrl: "${NEXTAUTH_URL}"
-  valuesFrom:
-    - kind: Secret
-      name: doc-router-secrets   # created by k8s-install.sh
-  install:
-    remediation:
-      retries: 3
-  upgrade:
-    remediation:
-      retries: 3
-      remediateLastFailure: true
-  rollback:
-    timeout: 5m
-```
-
 ---
 
 ## `doc-router-ops` (private repo)
@@ -284,27 +212,12 @@ doc-router-ops/
     analytiq-test/        # our staging AWS account
     customer-<name>/      # only needed if we provision EKS for a customer
     .gitignore            # .terraform/, terraform.tfstate*
-  clusters/
-    analytiq-prod/
-      flux/
-        ocirepository.yaml   # filled in, committed — our real ECR URL, account ID
-        helmrelease.yaml     # filled in, committed — pinned chart version, real values
-    analytiq-test/
-      flux/
-        ocirepository.yaml
-        helmrelease.yaml
-    customer-acme/           # one directory per customer we manage
-      flux/
-        ocirepository.yaml   # points at our ECR (or their registry)
-        helmrelease.yaml     # their hostname, storage class, etc.
   .env                    # gitignored — shared defaults
   .env.eks                # gitignored — our EKS overlay
   .env.customer-acme      # gitignored — customer-specific overlay
 ```
 
-The committed `clusters/*/flux/` files contain our real ECR account ID, region, pinned chart version, and non-secret cluster-specific values. **Secrets are never committed** — they live in the `doc-router-secrets` Kubernetes Secret, created at install time from the env files.
-
-**Required tools:** `terraform ~1.9`, `awscli`, `kubectl`, `helm`, `flux2` — install manually or via your preferred version manager. Workflow is documented in `README.md`.
+**Required tools:** `terraform ~1.9`, `awscli`, `kubectl`, `helm` — install manually or via your preferred version manager. Workflow is documented in `README.md`.
 
 ---
 
@@ -409,8 +322,6 @@ Three repositories:
 - `doc-router-frontend`, `doc-router-backend` — app images.
 - `doc-router/chart` — Helm chart OCI artifacts (lifecycle policy keeps last N).
 
-Flux pulls from ECR using the node instance profile (`AmazonEC2ContainerRegistryReadOnly`) — no separate IRSA needed.
-
 ### S3 app bucket (inline in `main.tf`)
 
 One bucket for document storage. Name from `var.app_bucket_name` (set via `TF_VAR_app_bucket_name` from `.env.eks`). AES256 SSE. Separate from the Terraform state bucket.
@@ -433,7 +344,6 @@ One bucket for document storage. Name from `var.app_bucket_name` (set via `TF_VA
 | `jetstack/cert-manager` | TLS via Let's Encrypt | `crds.enabled = true` required |
 | `aws-ebs-csi-driver` | EBS volumes for MongoDB | `serviceAccount.annotations."eks.amazonaws.com/role-arn"` must be set |
 | `metrics-server` | Enables HPA | — |
-| `fluxcd-community/flux2` | GitOps — pulls chart from ECR, applies HelmRelease | No `flux bootstrap` or GitHub needed |
 
 `ClusterIssuer` applied via `null_resource` local-exec after cert-manager is ready. `LETSENCRYPT_EMAIL` comes from `.env` / overlay.
 
@@ -477,23 +387,13 @@ strategy:
 
 New pods come up and pass readiness before old pods are terminated. Combined with readiness probes, liveness probes, and PDB this prevents any downtime during a rolling upgrade.
 
-### Flux HelmRelease health checks
+### Helm wait
 
-```yaml
-install:
-  remediation:
-    retries: 3
-upgrade:
-  remediation:
-    retries: 3
-    remediateLastFailure: true
-rollback:
-  timeout: 5m
-```
+All upgrade and install commands use `--wait --timeout 10m`. Helm polls until all Deployments reach their desired ready count before returning success. On failure the operator sees the error immediately and can inspect pod events; rollback is a manual `helm rollback` or `k8s-rollback.sh`.
 
 ### Versioning discipline
 
-One semver version ties together the chart version (`Chart.yaml`) and both container image tags. The upgrade script sets all three atomically. Rollback patches all three back.
+One semver version ties together the chart version (`Chart.yaml`) and both container image tags. The upgrade script sets all three atomically. Rollback patches all three back via `helm rollback`.
 
 ---
 
@@ -516,20 +416,20 @@ Rollback strategy: MongoDB migrations are forward-only. Rollback means restoring
 1. Source `.env` + overlay (from `doc-router-ops/`).
 2. Create namespace if it doesn't exist.
 3. Create `doc-router-secrets` Kubernetes Secret from env vars (MongoDB URI, AWS credentials, NextAuth secret, API keys).
-4. Fill in `deploy/flux/example/` templates via `envsubst` and `kubectl apply -f` the result.
-5. Wait: `flux reconcile helmrelease doc-router -n doc-router --with-source --timeout=5m`
+4. `helm upgrade --install doc-router oci://${CHART_REGISTRY}/doc-router/chart --version ${CHART_VERSION} -n doc-router --set ingress.host=... --set image.*.repository=... --set image.*.tag=... --set config.* --wait --timeout 10m`
 
 **`k8s-upgrade.sh`** — upgrades a running cluster.
 
 1. Source `.env` + overlay.
 2. Update `doc-router-secrets` if any secret values changed.
-3. Patch the HelmRelease `.spec.chart.spec.version` and image tags.
-4. `flux reconcile helmrelease doc-router -n doc-router --with-source`
-5. Watch: `flux get helmreleases -n doc-router --watch`
+3. `helm upgrade doc-router oci://${CHART_REGISTRY}/doc-router/chart --version ${CHART_VERSION} -n doc-router --reuse-values --set image.frontend.tag=${IMAGE_TAG} --set image.backend.tag=${IMAGE_TAG} --wait --timeout 10m`
 
-**`k8s-rollback.sh`** — roll back by patching version + image tags back and reconciling.
+**`k8s-rollback.sh`** — rolls back to a previous Helm revision.
 
-**`deploy-kind.sh`** — local Kind dev; uses `helm upgrade --install` directly, no Flux.
+1. Source `.env` + overlay.
+2. `helm rollback doc-router -n doc-router --wait` (rolls back to the previous revision; pass an explicit revision number to target a specific one).
+
+**`deploy-kind.sh`** — local Kind dev; uses `helm upgrade --install` directly against the local chart path.
 
 ### In `doc-router-ops/scripts/` (private — our ops only)
 
@@ -570,7 +470,7 @@ aws eks update-kubeconfig --name "${CLUSTER_NAME:-doc-router}" --region "${REGIO
 ./scripts/build-push.sh
 ./scripts/publish-chart.sh 1.0.0
 
-# 5. Bootstrap Flux app (Flux itself installed by Terraform above)
+# 5. Install app into the cluster
 ../doc-router/deploy/scripts/k8s-install.sh eks 1.0.0
 ```
 
@@ -591,7 +491,6 @@ export AWS_PROFILE=<account-profile>
 cp -r terraform/analytiq-prod terraform/analytiq-test
 # Edit terraform/analytiq-test/providers.tf: update state bucket + DynamoDB table names.
 # Create .env.eks-test with APP_BUCKET_NAME, REGION, CLUSTER_NAME, etc.
-# Copy clusters/analytiq-prod/ → clusters/analytiq-test/, update helmrelease.yaml values.
 # Run first-time setup steps above with the new directory and overlay.
 ```
 
@@ -609,20 +508,17 @@ cp -r terraform/analytiq-prod terraform/analytiq-test
 ```bash
 # In doc-router-ops/
 
-# 1. Copy cluster config template
-cp -r clusters/customer-example clusters/customer-acme
-
-# 2. Create overlay
+# 1. Create overlay
 cp .env.eks .env.customer-acme
 # Edit .env.customer-acme: APP_BUCKET_NAME, CLUSTER_NAME, REGION, AWS_PROFILE, APP_HOST, etc.
 
-# 3. Point kubectl at their cluster
+# 2. Point kubectl at their cluster
 kubectl config use-context <their-cluster-context>
 
-# 4. Install
+# 3. Install
 ../doc-router/deploy/scripts/k8s-install.sh customer-acme 1.4.0
 
-# 5. Subsequent upgrades
+# 4. Subsequent upgrades
 ../doc-router/deploy/scripts/k8s-upgrade.sh customer-acme 1.5.0
 ```
 
