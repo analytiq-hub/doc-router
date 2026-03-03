@@ -233,13 +233,7 @@ deploy-kind:
 	./deploy/scripts/deploy-kind.sh
 
 down-kind:
-	@CLUSTER_NAME=$${CLUSTER_NAME:-doc-router}; \
-	if kind get clusters | grep -q "^$$CLUSTER_NAME$$"; then \
-		echo "Deleting kind cluster: $$CLUSTER_NAME"; \
-		kind delete cluster --name $$CLUSTER_NAME; \
-	else \
-		echo "Kind cluster $$CLUSTER_NAME does not exist"; \
-	fi
+	./deploy/scripts/down-kind.sh
 
 tests: setup-python
 	. .venv/bin/activate && pytest -n auto packages/python/tests/
