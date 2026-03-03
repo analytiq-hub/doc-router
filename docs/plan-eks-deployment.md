@@ -18,28 +18,59 @@
 
 Build incrementally. Kind already works — migrate it to the Helm chart first, then add EKS on top of a proven chart.
 
-### Phase 1 — Helm chart on Kind (no EKS yet)
+### Phase 1 — Helm chart on Kind ✅ DONE
 
-1. Write `deploy/charts/doc-router/` targeting Kind: two Deployments (frontend, backend), MongoDB StatefulSet, Ingress with `/fastapi` rewrite, ConfigMap, PDB. Worker runs embedded in the backend pod (same as docker-compose / start.sh).
-2. Rewrite `deploy/scripts/deploy-kind.sh` to use `helm upgrade --install` with a rendered `values-kind.yaml` instead of Kustomize.
-3. Keep `deploy/scripts/setup-kind.sh` as-is — it already works.
-4. Delete `deploy/kubernetes/` once the Helm path is confirmed working on Kind.
+1. Wrote `deploy/charts/doc-router/`: two Deployments (frontend, backend with embedded worker), MongoDB StatefulSet, Ingress with `/fastapi` rewrite, ConfigMap, PDB.
+2. Rewrote `deploy/scripts/deploy-kind.sh` to use `helm upgrade --install` with `values-kind.yaml`.
+3. Kept `deploy/scripts/setup-kind.sh` as-is.
+4. Deleted `deploy/kubernetes/` (old Kustomize manifests).
 
-At the end of Phase 1, Kind works exactly as before but driven by Helm. Kustomize is gone.
+Kind works exactly as before but driven by Helm. Kustomize is gone.
 
 ### Phase 2 — Harden the chart on Kind
 
-- Add upgrade stability: `maxUnavailable: 0`, readiness/liveness probes carried from the existing manifests, PodDisruptionBudgets.
-- Add migration Job hook, test idempotency locally.
-- Test chart upgrades on Kind (bump chart version, re-run `deploy-kind.sh`, verify no downtime).
+Goal: prove the chart supports zero-downtime upgrades before adding EKS complexity.
+
+1. **Rolling upgrade strategy** — set `maxUnavailable: 0` and `maxSurge: 1` on both Deployments so upgrades never take a pod down before a replacement is ready.
+2. **Migration Job hook** — add a Helm `pre-upgrade`/`pre-install` Job that runs DB migrations before new pods are rolled out. Test idempotency: re-run `make deploy-kind` twice, verify no errors.
+3. **Upgrade test on Kind** — bump `Chart.yaml` version, change an image tag, run `make deploy-kind`. Verify:
+   - `helm history doc-router -n doc-router` shows two revisions.
+   - No downtime: frontend stays reachable throughout the rollout.
+   - `helm rollback doc-router 1 -n doc-router` restores the previous revision cleanly.
+
+At the end of Phase 2, the chart is upgrade-safe and rollback-tested on Kind.
 
 ### Phase 3 — EKS
 
-- Add `deploy/scripts/k8s-install.sh`, `k8s-upgrade.sh`, `k8s-rollback.sh` — same chart, different values.
-- Create `doc-router-ops` repo with Terraform and Flux manifests.
-- The chart itself needs no changes for EKS — only values differ (ECR repos, `gp3` storage class, TLS enabled, Flux HelmRelease instead of direct `helm install`).
+Goal: deploy the proven chart to AWS EKS using Flux for continuous reconciliation.
 
-**Flux and cert-manager are EKS-only.** Kind uses `helm upgrade --install` directly (no Flux needed) and runs at `localhost` with no TLS (no cert-manager needed).
+#### 3a — EKS scripts (in `doc-router`, public)
+
+Add three scripts to `deploy/scripts/`:
+
+- **`k8s-install.sh`** — first-time install. Sources env overlay, creates namespace, creates `doc-router-secrets` Secret, applies Flux OCIRepository + HelmRelease manifests via `envsubst | kubectl apply`, waits for Flux reconciliation.
+- **`k8s-upgrade.sh`** — upgrades a running release. Updates secrets if changed, patches HelmRelease chart version + image tags, runs `flux reconcile`.
+- **`k8s-rollback.sh`** — patches HelmRelease back to the previous pinned version and reconciles.
+
+#### 3b — `doc-router-ops` repo (private)
+
+Create a new private repository with:
+- `terraform/` — one root module per AWS account (VPC, EKS, ECR, IAM, S3, Helm add-ons: ingress-nginx, cert-manager, Flux, EBS CSI, metrics-server).
+- `clusters/` — filled-in Flux manifests per cluster (OCIRepository + HelmRelease with real ECR URLs and values).
+- `scripts/` — `apply-terraform.sh`, `build-push.sh`, `publish-chart.sh`.
+- `.env`, `.env.eks`, `.env.customer-*` — gitignored secret/config overlays.
+
+#### 3c — OCI chart publishing
+
+`publish-chart.sh` packages the chart and pushes it as an OCI artifact to ECR:
+```bash
+helm package deploy/charts/doc-router --version <semver>
+helm push doc-router-<semver>.tgz oci://<ECR_REGISTRY>/doc-router/chart
+```
+
+The chart itself needs no changes for EKS — only values differ (`gp3` storage class, TLS enabled, ECR image repos, real hostnames).
+
+**Flux and cert-manager are EKS-only.** Kind uses `helm upgrade --install` directly (no Flux, no TLS).
 
 ---
 
