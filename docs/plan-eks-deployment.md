@@ -42,20 +42,36 @@ Goal: prove the chart supports zero-downtime upgrades before adding EKS complexi
 
 Goal: deploy the proven chart to AWS EKS using direct `helm upgrade --install` against the OCI chart in ECR.
 
-#### 3a — EKS scripts (in `doc-router`, public)
+#### 3a — EKS scripts (in `doc-router/deploy/scripts/`, public)
 
-Add three scripts to `deploy/scripts/`:
+Add five scripts to `deploy/scripts/`:
 
-- **`k8s-install.sh`** — first-time install. Sources env overlay, creates namespace, creates `doc-router-secrets` Secret, runs `helm upgrade --install oci://... --version <semver>` with non-secret values passed via `--set`, waits with `--wait --timeout 10m`.
+- **`build-push.sh`** — ECR login, `docker build --target frontend/backend`, tag `<ECR_URL>:<git-sha>` + `:latest`, push both images.
+- **`publish-chart.sh`** — `helm package deploy/charts/doc-router --version <semver>`, ECR login, `helm push` OCI artifact to `doc-router/chart` ECR repo.
+- **`k8s-install.sh`** — first-time install. Sources env overlay, creates namespace, creates `doc-router-secrets` Secret, runs `helm upgrade --install oci://... --version <semver>` with non-secret values via `--set`, waits with `--wait --timeout 10m`.
 - **`k8s-upgrade.sh`** — upgrades a running release. Updates the `doc-router-secrets` Secret if any secret values changed, then runs `helm upgrade oci://... --version <semver> --reuse-values --set image.*.tag=<new-tag> --wait`.
 - **`k8s-rollback.sh`** — runs `helm rollback doc-router <revision> -n doc-router --wait`.
 
-#### 3b — `doc-router-ops` repo (private)
+All scripts source a gitignored `.env` + overlay (e.g. `.env.eks`) for secrets and cluster-specific values. They contain no hardcoded sensitive values and are safe to commit publicly.
 
-Create a new private repository with:
-- `terraform/` — one root module per AWS account (VPC, EKS, ECR, IAM, S3, Helm add-ons: ingress-nginx, cert-manager, EBS CSI, metrics-server).
-- `scripts/` — `apply-terraform.sh`, `build-push.sh`, `publish-chart.sh`.
-- `.env`, `.env.eks`, `.env.customer-*` — gitignored secret/config overlays.
+#### 3b — EKS Terraform (in `analytiq-terraform/applications/eks/`)
+
+Add a new application directory to the existing `analytiq-terraform` repo. The existing `applications/docrouter/` (IAM user/role + S3) is **unchanged** — EKS is additive.
+
+```
+analytiq-terraform/applications/eks/
+  main.tf       # VPC + EKS cluster + ECR repos + Helm add-ons
+  providers.tf  # aws + helm providers; s3 backend commented out until first apply
+  var.tf        # region, cluster_name, vpc_cidr, environment, letsencrypt_email
+  outputs.tf    # cluster_name, frontend_repo_url, backend_repo_url, chart_repo_url
+```
+
+`main.tf` provisions:
+- **VPC** — `/16` CIDR, 2 public subnets (NAT + NLB) + 2 private subnets (nodes) across 2 AZs, one NAT gateway.
+- **EKS cluster** — nodes in private subnets, managed node group (`t3.medium`/`t3.large`, min/desired/max = 2/2/5), OIDC enabled.
+- **ECR repos** — `doc-router-frontend`, `doc-router-backend`, `doc-router/chart` (OCI artifacts).
+- **Helm releases** — ingress-nginx, cert-manager (`crds.enabled=true`), aws-ebs-csi-driver, metrics-server.
+- **ClusterIssuer** — applied via `null_resource` local-exec after cert-manager is ready.
 
 #### 3c — OCI chart publishing
 
@@ -71,16 +87,16 @@ The chart itself needs no changes for EKS — only values differ (`gp3` storage 
 
 ---
 
-## Two-repo structure
+## Repo structure
 
-Everything lives across **two repositories**:
+Everything lives in the **existing two repositories** — no new private ops repo needed:
 
 | Repo | Visibility | Contains |
 |---|---|---|
-| `doc-router` | **Public / open source** | App source code, Helm chart, customer-facing install scripts |
-| `doc-router-ops` | **Private** | Terraform, operational scripts, env files |
+| `doc-router` | **Public / open source** | App source, Helm chart, all deploy scripts (build/publish/install/upgrade/rollback), env file templates |
+| `analytiq-terraform` | **Private** | Existing IAM/S3 infra + new `applications/eks/` for EKS cluster + ECR |
 
-The Helm chart and install scripts are public because customers need them and they contain nothing sensitive. Terraform, our real ECR URLs, cluster-specific values, and env files are private.
+Scripts contain no hardcoded secrets — all sensitive values come from gitignored env files. Env files (`.env`, `.env.eks`, `.env.customer-*`) live gitignored in `doc-router/` root alongside the existing Kind `.env`.
 
 ---
 
@@ -109,13 +125,18 @@ doc-router/
           migration-job.yaml  # Helm pre-upgrade/pre-install hook
           configmap.yaml
           pdb.yaml
-    scripts/                  # customer-facing; also used by doc-router-ops
+    scripts/
+      build-push.sh           # build + push images to ECR
+      publish-chart.sh        # package + push OCI chart to ECR
       k8s-install.sh          # first-time install into any cluster
       k8s-upgrade.sh          # upgrade to a new chart version
       k8s-rollback.sh         # roll back to a previous chart version
       deploy-kind.sh          # local Kind deploy (helm upgrade --install)
       setup-kind.sh           # create local Kind cluster
       values-kind.yaml        # committed Kind-specific overrides (no secrets)
+  .env                        # gitignored — shared defaults (Kind + EKS)
+  .env.eks                    # gitignored — EKS overlay (ECR URLs, cluster name, etc.)
+  .env.customer-<name>        # gitignored — per-customer overlay
 ```
 
 ### `deploy/charts/doc-router/values.yaml` (defaults, no secrets)
@@ -198,78 +219,23 @@ replicaCount:
 
 ---
 
-## `doc-router-ops` (private repo)
+## `analytiq-terraform` (private repo)
+
+Existing structure unchanged. Only addition:
 
 ```
-doc-router-ops/
-  README.md               # documents scripts and workflow
-  scripts/
-    apply-terraform.sh    # sources .env + overlay, exports TF_VAR_*, runs terraform
-    build-push.sh         # builds images, pushes to ECR
-    publish-chart.sh      # packages chart, pushes OCI artifact to ECR
-  terraform/
-    analytiq-prod/        # our production AWS account — independent root module
-    analytiq-test/        # our staging AWS account
-    customer-<name>/      # only needed if we provision EKS for a customer
-    .gitignore            # .terraform/, terraform.tfstate*
-  .env                    # gitignored — shared defaults
-  .env.eks                # gitignored — our EKS overlay
-  .env.customer-acme      # gitignored — customer-specific overlay
+analytiq-terraform/
+  applications/
+    docrouter/    # existing — IAM user/role + S3 bucket (unchanged)
+    eks/          # NEW — EKS cluster + ECR repos
+      main.tf
+      providers.tf
+      var.tf
+      outputs.tf
+  modules/        # existing (unchanged)
 ```
 
-**Required tools:** `terraform ~1.9`, `awscli`, `kubectl`, `helm` — install manually or via your preferred version manager. Workflow is documented in `README.md`.
-
----
-
-## Env files (in `doc-router-ops`, all manual)
-
-All environment and secret values are maintained in **manually created, gitignored** env files in `doc-router-ops`. Nothing generates or updates them automatically — they are the single source of truth for both Terraform and the Kubernetes Secrets.
-
-| File | Used for |
-|---|---|
-| `.env` | Shared defaults across all overlays (e.g. `CLUSTER_NAME=doc-router`) |
-| `.env.eks` | Our EKS: `APP_BUCKET_NAME`, `REGION`, ECR URLs, app IAM keys from Terraform outputs |
-| `.env.customer-<name>` | Per-customer: their `APP_BUCKET_NAME`, `CLUSTER_NAME`, `REGION`, `AWS_PROFILE` |
-
-**Variables exported as `TF_VAR_*` before `terraform apply`:**
-
-| Env var | Terraform variable | Example |
-|---|---|---|
-| `CLUSTER_NAME` | `cluster_name` | `doc-router` |
-| `APP_BUCKET_NAME` | `app_bucket_name` | `doc-router-data-prod` |
-| `REGION` | `region` | `us-east-1` |
-| `VPC_CIDR` | `vpc_cidr` | `10.0.0.0/16` |
-| `ENVIRONMENT` | `environment` | `prod` |
-| `LETSENCRYPT_EMAIL` | `letsencrypt_email` | required by ACME |
-
-After the first Terraform apply, copy the app user access key ID and secret from Terraform outputs into `.env.eks`.
-
----
-
-## Terraform (`doc-router-ops/terraform/<account>/`)
-
-Each account directory is a self-contained root module with its own `providers.tf` hardcoded to that account's S3 state backend. No `terraform.tfvars` — all variables come from `TF_VAR_*` exported by `apply-terraform.sh`.
-
-```
-terraform/analytiq-prod/
-  main.tf       # VPC + EKS + ECR + IAM + Helm releases + S3/DynamoDB for tf state
-  providers.tf  # aws + helm providers; backend "s3" commented out until first apply
-  variables.tf  # region, cluster_name, app_bucket_name, vpc_cidr, environment, etc.
-  outputs.tf
-```
-
-Adding a new account: `cp -r analytiq-prod <new-account>`, update `providers.tf` (state bucket + DynamoDB table names only).
-
-### Remote state
-
-- S3 bucket (`analytiq-terraform-state-eks-<account>`): versioning enabled, AES256 SSE, `prevent_destroy`.
-- DynamoDB table (`terraform-state-eks-<account>-locking`): `PAY_PER_REQUEST`, hash key `LockID`, `prevent_destroy`.
-
-**Two-step bootstrap (first time only):**
-1. `backend "s3"` commented out → `terraform init && terraform apply` (creates S3 + DynamoDB + cluster using local state).
-2. Uncomment `backend "s3"` → `terraform init` (migrates state to S3) → `terraform apply`.
-
-**`providers.tf`**:
+### `applications/eks/providers.tf`
 
 ```hcl
 terraform {
@@ -308,35 +274,15 @@ provider "helm" {
 }
 ```
 
-### VPC
+### Remote state (two-step bootstrap, same pattern as existing modules)
 
-`terraform-aws-modules/vpc/aws`: `/16` CIDR, 2 public subnets (NAT + NLB) + 2 private subnets (nodes) across 2 AZs, one NAT gateway.
+- S3 bucket (`analytiq-terraform-state-eks-prod`): versioning enabled, AES256 SSE, `prevent_destroy`.
+- DynamoDB table (`terraform-state-eks-prod-locking`): `PAY_PER_REQUEST`, hash key `LockID`, `prevent_destroy`.
 
-### EKS
+1. `backend "s3"` commented out → `terraform init && terraform apply` (local state, creates S3 + DynamoDB + cluster).
+2. Uncomment `backend "s3"` → `terraform init` (migrates state to S3) → `terraform apply`.
 
-`terraform-aws-modules/eks/aws`: cluster and nodes in private subnets, managed node group (`t3.medium` / `t3.large`, min/desired/max = 2/2/5), OIDC provider enabled.
-
-### ECR (inline in `main.tf`)
-
-Three repositories:
-- `doc-router-frontend`, `doc-router-backend` — app images.
-- `doc-router/chart` — Helm chart OCI artifacts (lifecycle policy keeps last N).
-
-### S3 app bucket (inline in `main.tf`)
-
-One bucket for document storage. Name from `var.app_bucket_name` (set via `TF_VAR_app_bucket_name` from `.env.eks`). AES256 SSE. Separate from the Terraform state bucket.
-
-### IAM (inline in `main.tf`)
-
-**Node group role:** `AmazonEKSWorkerNodePolicy`, `AmazonEKS_CNI_Policy`, `AmazonEC2ContainerRegistryReadOnly`, EBS CSI IRSA role (required for MongoDB PVCs).
-
-**App user + role** (same pattern as `analytiq-terraform/modules/docrouter`):
-- `aws_iam_user` (`doc-router-app-user`) + `aws_iam_access_key` → injected into `doc-router-secrets` as `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY`.
-- `aws_iam_role` (`doc-router-app-role`) assumed by the user: `AmazonTextractFullAccess`, `AmazonSESFullAccess`, inline S3 policy on the app bucket.
-- `aws_s3_bucket_policy` granting `s3:*` to the app role principal.
-- Bedrock `InvokeModel` / `InvokeModelWithResponseStream` attached **directly to the user** (Bedrock is called with the user's access key, not through role assumption).
-
-### Helm releases (inline in `main.tf`)
+### Helm releases installed by Terraform
 
 | Chart | Purpose | Notes |
 |---|---|---|
@@ -345,12 +291,10 @@ One bucket for document storage. Name from `var.app_bucket_name` (set via `TF_VA
 | `aws-ebs-csi-driver` | EBS volumes for MongoDB | `serviceAccount.annotations."eks.amazonaws.com/role-arn"` must be set |
 | `metrics-server` | Enables HPA | — |
 
-`ClusterIssuer` applied via `null_resource` local-exec after cert-manager is ready. `LETSENCRYPT_EMAIL` comes from `.env` / overlay.
+`ClusterIssuer` applied via `null_resource` local-exec after cert-manager is ready.
 
 ### Key outputs
 - `cluster_name`, `frontend_repo_url`, `backend_repo_url`, `chart_repo_url`
-- `app_user_access_key_id`, `app_user_secret_access_key` (sensitive)
-- `app_bucket_name`, `app_role_arn`
 
 ### Manual steps in the AWS console
 
@@ -358,6 +302,36 @@ One bucket for document storage. Name from `var.app_bucket_name` (set via `TF_VA
 |---|---|---|
 | Enable Bedrock model access | Bedrock → Model access | IAM permissions alone are not enough; models must be explicitly enabled per region. |
 | SES production access | SES → Account dashboard | New accounts start in sandbox; request production access or verify sender + recipient addresses. |
+
+---
+
+## Env files (gitignored in `doc-router/`)
+
+All environment and secret values are maintained in **manually created, gitignored** env files. Nothing generates or updates them automatically — they are the single source of truth for scripts.
+
+| File | Used for |
+|---|---|
+| `.env` | Shared defaults (e.g. `CLUSTER_NAME=doc-router`) |
+| `.env.eks` | EKS overlay: `APP_BUCKET_NAME`, `REGION`, ECR URLs, AWS credentials from `applications/docrouter` outputs |
+| `.env.customer-<name>` | Per-customer: their `APP_BUCKET_NAME`, `CLUSTER_NAME`, `REGION`, `AWS_PROFILE` |
+
+**Variables needed in `.env.eks`:**
+
+| Var | Example | Source |
+|---|---|---|
+| `CLUSTER_NAME` | `doc-router` | Terraform var |
+| `REGION` | `us-east-1` | Terraform var |
+| `CHART_REGISTRY` | `<account-id>.dkr.ecr.us-east-1.amazonaws.com` | `chart_repo_url` output |
+| `FRONTEND_IMAGE_REPO` | `<account-id>.dkr.ecr.us-east-1.amazonaws.com/doc-router-frontend` | `frontend_repo_url` output |
+| `BACKEND_IMAGE_REPO` | `<account-id>.dkr.ecr.us-east-1.amazonaws.com/doc-router-backend` | `backend_repo_url` output |
+| `APP_BUCKET_NAME` | `docrouter-test` | Existing `applications/docrouter` output |
+| `APP_HOST` | `app.example.com` | DNS record you create |
+| `STORAGE_CLASS` | `gp3` | EKS standard |
+| `AWS_ACCESS_KEY_ID` | — | Existing `applications/docrouter` output |
+| `AWS_SECRET_ACCESS_KEY` | — | Existing `applications/docrouter` output |
+| `MONGODB_URI` | — | Manual |
+| `NEXTAUTH_SECRET` | — | Manual (`openssl rand -base64 32`) |
+| `NEXTAUTH_URL` | `https://app.example.com` | DNS record you create |
 
 ---
 
@@ -409,104 +383,160 @@ Rollback strategy: MongoDB migrations are forward-only. Rollback means restoring
 
 ## Deployment scripts
 
-### In `doc-router/deploy/scripts/` (public — used by customers and by us)
+### `build-push.sh`
 
-**`k8s-install.sh`** — first-time install into any cluster. Takes overlay name and chart version.
+```bash
+# Sources .env + overlay for ECR URLs
+set -a; source .env; source ".env.${1:?overlay required}"; set +a
+IMAGE_TAG=${2:?image tag required}   # e.g. git sha or semver
 
-1. Source `.env` + overlay (from `doc-router-ops/`).
-2. Create namespace if it doesn't exist.
-3. Create `doc-router-secrets` Kubernetes Secret from env vars (MongoDB URI, AWS credentials, NextAuth secret, API keys).
-4. `helm upgrade --install doc-router oci://${CHART_REGISTRY}/doc-router/chart --version ${CHART_VERSION} -n doc-router --set ingress.host=... --set image.*.repository=... --set image.*.tag=... --set config.* --wait --timeout 10m`
+aws ecr get-login-password --region "$REGION" \
+  | docker login --username AWS --password-stdin "$CHART_REGISTRY"
 
-**`k8s-upgrade.sh`** — upgrades a running cluster.
+docker build --target frontend -t "$FRONTEND_IMAGE_REPO:$IMAGE_TAG" \
+  -t "$FRONTEND_IMAGE_REPO:latest" -f deploy/shared/docker/Dockerfile .
+docker push "$FRONTEND_IMAGE_REPO:$IMAGE_TAG"
+docker push "$FRONTEND_IMAGE_REPO:latest"
 
-1. Source `.env` + overlay.
-2. Update `doc-router-secrets` if any secret values changed.
-3. `helm upgrade doc-router oci://${CHART_REGISTRY}/doc-router/chart --version ${CHART_VERSION} -n doc-router --reuse-values --set image.frontend.tag=${IMAGE_TAG} --set image.backend.tag=${IMAGE_TAG} --wait --timeout 10m`
+docker build --target backend -t "$BACKEND_IMAGE_REPO:$IMAGE_TAG" \
+  -t "$BACKEND_IMAGE_REPO:latest" -f deploy/shared/docker/Dockerfile .
+docker push "$BACKEND_IMAGE_REPO:$IMAGE_TAG"
+docker push "$BACKEND_IMAGE_REPO:latest"
+```
 
-**`k8s-rollback.sh`** — rolls back to a previous Helm revision.
+### `publish-chart.sh`
 
-1. Source `.env` + overlay.
-2. `helm rollback doc-router -n doc-router --wait` (rolls back to the previous revision; pass an explicit revision number to target a specific one).
+```bash
+# Sources .env + overlay for CHART_REGISTRY
+set -a; source .env; source ".env.${1:?overlay required}"; set +a
+CHART_VERSION=${2:?chart version required}   # semver
 
-**`deploy-kind.sh`** — local Kind dev; uses `helm upgrade --install` directly against the local chart path.
+helm package deploy/charts/doc-router --version "$CHART_VERSION"
+aws ecr get-login-password --region "$REGION" \
+  | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
+helm push "doc-router-${CHART_VERSION}.tgz" "oci://${CHART_REGISTRY}/doc-router/chart"
+rm "doc-router-${CHART_VERSION}.tgz"
+```
 
-### In `doc-router-ops/scripts/` (private — our ops only)
+### `k8s-install.sh`
 
-**`apply-terraform.sh`** — sources `.env` + overlay, exports `TF_VAR_*`, runs `terraform init && terraform apply` in the given account directory.
+```bash
+set -a; source .env; source ".env.${1:?overlay required}"; set +a
+CHART_VERSION=${2:?chart version required}
 
-**`build-push.sh`** — ECR login, `docker build --target frontend/backend`, tag `<ECR_URL>:<git-sha>` + `:latest`, push both images.
+kubectl create namespace doc-router --dry-run=client -o yaml | kubectl apply -f -
 
-**`publish-chart.sh`** — `helm package deploy/charts/doc-router`, ECR login, `helm push` OCI artifact to `doc-router/chart`.
+kubectl create secret generic doc-router-secrets \
+  --from-literal=MONGODB_URI="$MONGODB_URI" \
+  --from-literal=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+  --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+  --from-literal=NEXTAUTH_SECRET="$NEXTAUTH_SECRET" \
+  --namespace doc-router --dry-run=client -o yaml | kubectl apply -f -
+
+aws ecr get-login-password --region "$REGION" \
+  | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
+
+helm upgrade --install doc-router \
+  "oci://${CHART_REGISTRY}/doc-router/chart" \
+  --version "$CHART_VERSION" \
+  --namespace doc-router \
+  --set ingress.host="$APP_HOST" \
+  --set ingress.className=nginx \
+  --set mongodb.storageClassName="$STORAGE_CLASS" \
+  --set image.frontend.repository="$FRONTEND_IMAGE_REPO" \
+  --set image.backend.repository="$BACKEND_IMAGE_REPO" \
+  --set image.frontend.tag="$IMAGE_TAG" \
+  --set image.backend.tag="$IMAGE_TAG" \
+  --set config.appBucketName="$APP_BUCKET_NAME" \
+  --set config.region="$REGION" \
+  --set config.nextauthUrl="$NEXTAUTH_URL" \
+  --wait --timeout 10m
+```
+
+### `k8s-upgrade.sh`
+
+```bash
+set -a; source .env; source ".env.${1:?overlay required}"; set +a
+CHART_VERSION=${2:?chart version required}
+
+# Refresh secrets in case any values changed
+kubectl create secret generic doc-router-secrets \
+  --from-literal=MONGODB_URI="$MONGODB_URI" \
+  --from-literal=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
+  --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
+  --from-literal=NEXTAUTH_SECRET="$NEXTAUTH_SECRET" \
+  --namespace doc-router --dry-run=client -o yaml | kubectl apply -f -
+
+aws ecr get-login-password --region "$REGION" \
+  | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
+
+helm upgrade doc-router \
+  "oci://${CHART_REGISTRY}/doc-router/chart" \
+  --version "$CHART_VERSION" \
+  --namespace doc-router \
+  --reuse-values \
+  --set image.frontend.tag="$IMAGE_TAG" \
+  --set image.backend.tag="$IMAGE_TAG" \
+  --wait --timeout 10m
+```
+
+### `k8s-rollback.sh`
+
+```bash
+set -a; source .env; source ".env.${1:?overlay required}"; set +a
+REVISION=${2:-0}   # 0 = previous revision; pass explicit number to target a specific one
+
+helm rollback doc-router "$REVISION" --namespace doc-router --wait
+```
 
 ---
 
 ## Workflow summary
 
-All ops work runs from **`doc-router-ops/`** by calling scripts directly.
-
-### First-time setup for a new AWS account
+### First-time EKS setup
 
 ```bash
-# In doc-router-ops/
-export AWS_PROFILE=<account-profile>
+# In analytiq-terraform/applications/eks/
+# (backend "s3" commented out in providers.tf)
+terraform init && terraform apply
 
-# 1. Create S3 + DynamoDB + EKS cluster (backend "s3" commented out in providers.tf)
-./scripts/apply-terraform.sh eks terraform/analytiq-prod
-
-# 2. Migrate Terraform state to S3
-#    Uncomment backend "s3" in terraform/analytiq-prod/providers.tf, then:
-cd terraform/analytiq-prod
-terraform init    # answer "yes" to copy local state → S3
-# re-source .env + .env.eks and re-export TF_VAR_*, then:
+# Migrate state to S3: uncomment backend "s3", then:
+terraform init   # answer "yes"
 terraform apply
-cd ../..
 
-# 3. Update kubeconfig
-set -a; source .env; source .env.eks; set +a
-aws eks update-kubeconfig --name "${CLUSTER_NAME:-doc-router}" --region "${REGION}"
+# Update kubeconfig
+aws eks update-kubeconfig --name doc-router --region us-east-1
 
-# 4. Build images + publish first chart version
-./scripts/build-push.sh
-./scripts/publish-chart.sh 1.0.0
+# Back in doc-router/ — fill in .env and .env.eks from terraform outputs
+# Build images + publish first chart version
+./deploy/scripts/build-push.sh eks <git-sha>
+./deploy/scripts/publish-chart.sh eks 1.0.0
 
-# 5. Install app into the cluster
-../doc-router/deploy/scripts/k8s-install.sh eks 1.0.0
+# Install app
+./deploy/scripts/k8s-install.sh eks 1.0.0
 ```
 
-### Per-deployment (our EKS)
+### Per-deployment
 
 ```bash
-# In doc-router-ops/
-export AWS_PROFILE=<account-profile>
-./scripts/build-push.sh
-./scripts/publish-chart.sh 1.5.0
-../doc-router/deploy/scripts/k8s-upgrade.sh eks 1.5.0
-```
-
-### Adding a second AWS account
-
-```bash
-# In doc-router-ops/
-cp -r terraform/analytiq-prod terraform/analytiq-test
-# Edit terraform/analytiq-test/providers.tf: update state bucket + DynamoDB table names.
-# Create .env.eks-test with APP_BUCKET_NAME, REGION, CLUSTER_NAME, etc.
-# Run first-time setup steps above with the new directory and overlay.
+# In doc-router/
+./deploy/scripts/build-push.sh eks <git-sha>
+./deploy/scripts/publish-chart.sh eks 1.5.0
+./deploy/scripts/k8s-upgrade.sh eks 1.5.0
 ```
 
 ### Kind (local dev)
 
 ```bash
-# In doc-router/ — no doc-router-ops needed for local dev
+# In doc-router/ — no Terraform needed
 ./deploy/scripts/setup-kind.sh    # once
-# Create .env and .env.kind
 ./deploy/scripts/deploy-kind.sh
 ```
 
 ### Onboarding a customer cluster
 
 ```bash
-# In doc-router-ops/
+# In doc-router/
 
 # 1. Create overlay
 cp .env.eks .env.customer-acme
@@ -516,18 +546,15 @@ cp .env.eks .env.customer-acme
 kubectl config use-context <their-cluster-context>
 
 # 3. Install
-../doc-router/deploy/scripts/k8s-install.sh customer-acme 1.4.0
+./deploy/scripts/k8s-install.sh customer-acme 1.4.0
 
 # 4. Subsequent upgrades
-../doc-router/deploy/scripts/k8s-upgrade.sh customer-acme 1.5.0
+./deploy/scripts/k8s-upgrade.sh customer-acme 1.5.0
 ```
-
-If provisioning their EKS with Terraform first: `cp -r terraform/analytiq-prod terraform/customer-acme`, update `providers.tf`, then `./scripts/apply-terraform.sh customer-acme terraform/customer-acme`.
 
 ### Teardown
 
 ```bash
-# In doc-router-ops/
-export AWS_PROFILE=<account-profile>
-cd terraform/analytiq-prod && terraform destroy
+# In analytiq-terraform/applications/eks/
+terraform destroy
 ```
