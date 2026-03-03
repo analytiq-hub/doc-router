@@ -1,0 +1,41 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: doc-router-ingress
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "doc-router.labels" . | nindent 4 }}
+  {{- if .Values.ingress.tls }}
+  annotations:
+    cert-manager.io/cluster-issuer: {{ .Values.ingress.clusterIssuer | quote }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  rules:
+  - http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 3000
+      - path: /fastapi
+        pathType: Prefix
+        backend:
+          service:
+            name: backend
+            port:
+              number: 8000
+    {{- if .Values.ingress.host }}
+    host: {{ .Values.ingress.host }}
+    {{- end }}
+  {{- if .Values.ingress.tls }}
+  tls:
+  - hosts:
+    - {{ .Values.ingress.host }}
+    secretName: doc-router-tls
+  {{- end }}
+{{- end }}

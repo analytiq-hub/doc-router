@@ -1,0 +1,29 @@
+{{- if gt (int .Values.replicaCount.frontend) 1 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: frontend-pdb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "doc-router.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: frontend
+---
+{{- end }}
+{{- if gt (int .Values.replicaCount.backend) 1 }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: backend-pdb
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "doc-router.labels" . | nindent 4 }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: backend
+{{- end }}

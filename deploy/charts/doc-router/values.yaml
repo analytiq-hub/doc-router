@@ -1,0 +1,49 @@
+image:
+  frontend:
+    repository: analytiqhub/doc-router-frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  backend:
+    repository: analytiqhub/doc-router-backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  # worker.py runs embedded in the backend pod (same as docker-compose / start.sh)
+
+ingress:
+  enabled: true
+  className: nginx
+  host: ""              # required; set per cluster
+  tls: true             # set to false for Kind (no cert-manager on local dev)
+  clusterIssuer: letsencrypt-prod   # ignored when tls=false
+
+mongodb:
+  enabled: true
+  storageClassName: standard   # "" for Kind (uses default storage class); gp3 for EKS
+  storage: 10Gi
+
+replicaCount:
+  frontend: 2
+  backend: 2
+
+resources:
+  frontend:
+    requests: { cpu: "250m", memory: "512Mi" }
+    limits:   { cpu: "500m", memory: "1Gi" }
+  backend:
+    requests: { cpu: "250m", memory: "512Mi" }
+    limits:   { cpu: "500m", memory: "1Gi" }
+  mongodb:
+    requests: { cpu: "250m", memory: "512Mi" }
+    limits:   { cpu: "500m", memory: "1Gi" }
+
+# Non-secret config rendered into the doc-router-config ConfigMap.
+# Secrets are never in values.yaml — they come from the doc-router-secrets
+# Kubernetes Secret created by deploy-kind.sh (Kind) or k8s-install.sh (EKS).
+config:
+  environment: prod
+  nextauthUrl: ""                       # e.g. https://app.example.com
+  nextPublicFastapiUrl: ""              # e.g. https://app.example.com/fastapi
+  fastapiRootPath: "/fastapi"           # must match the ingress path prefix
+  nWorkers: "4"
+  appBucketName: ""                     # AWS S3 bucket for document storage
+  region: ""                            # AWS region
