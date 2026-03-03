@@ -27,18 +27,16 @@ Build incrementally. Kind already works — migrate it to the Helm chart first, 
 
 Kind works exactly as before but driven by Helm. Kustomize is gone.
 
-### Phase 2 — Harden the chart on Kind
+### Phase 2 — Harden the chart on Kind ✅ DONE
 
 Goal: prove the chart supports zero-downtime upgrades before adding EKS complexity.
 
-1. **Rolling upgrade strategy** — set `maxUnavailable: 0` and `maxSurge: 1` on both Deployments so upgrades never take a pod down before a replacement is ready.
-2. **Migration Job hook** — add a Helm `pre-upgrade`/`pre-install` Job that runs DB migrations before new pods are rolled out. Test idempotency: re-run `make deploy-kind` twice, verify no errors.
-3. **Upgrade test on Kind** — bump `Chart.yaml` version, change an image tag, run `make deploy-kind`. Verify:
+1. **Rolling upgrade strategy** ✅ — `maxUnavailable: 0` and `maxSurge: 1` on both Deployments. Upgrades never take a pod down before a replacement is ready.
+2. **Migration Job hook** ✅ — Helm `pre-upgrade`/`pre-install` Job (`deploy/charts/doc-router/templates/migration-job.yaml`) runs `packages/python/migrate.py` before new pods roll out. Same script used by the `migrate` service added to all four docker-compose files (runs and completes before backend starts).
+3. **Upgrade test on Kind** — bump `Chart.yaml` version, re-run `make deploy-kind`. Verify:
    - `helm history doc-router -n doc-router` shows two revisions.
    - No downtime: frontend stays reachable throughout the rollout.
    - `helm rollback doc-router 1 -n doc-router` restores the previous revision cleanly.
-
-At the end of Phase 2, the chart is upgrade-safe and rollback-tested on Kind.
 
 ### Phase 3 — EKS
 

@@ -34,12 +34,34 @@ services:
         reservations:
           memory: 512M
 
+  migrate:
+    image: analytiqhub/doc-router-backend:latest
+    build:
+      context: ../..
+      dockerfile: deploy/shared/docker/Dockerfile
+      target: backend
+    environment:
+      - ENV=${ENV:-dev}
+      - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+    command: sh -c "cd /app/packages/python && python3 migrate.py"
+    networks:
+      - doc-router-local-network
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     image: analytiqhub/doc-router-backend:latest
     build:
       context: ../..
       dockerfile: deploy/shared/docker/Dockerfile
       target: backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     environment:
       # Runtime environment
       - ENV=${ENV:-dev}

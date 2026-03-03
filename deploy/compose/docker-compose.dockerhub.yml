@@ -29,9 +29,27 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  migrate:
+    image: analytiqhub/doc-router-backend:latest
+    # No build section - pulls from DockerHub
+    environment:
+      - ENV=${ENV:-dev}
+      - MONGODB_URI=${MONGODB_URI:-mongodb://YOUR_HOST_IP:27017}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+    command: sh -c "cd /app/packages/python && python3 migrate.py"
+    networks:
+      - doc-router-network
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: "no"
+
   backend:
     image: analytiqhub/doc-router-backend:latest
     # No build section - pulls from DockerHub
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     environment:
       # Runtime environment
       - ENV=${ENV:-dev}
