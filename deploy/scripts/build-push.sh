@@ -22,6 +22,9 @@ set -a
 [ -f "$PROJECT_ROOT/.env.$OVERLAY" ] && source "$PROJECT_ROOT/.env.$OVERLAY"
 set +a
 
+# Use AWS_PROFILE for all tooling; drop any static key vars from .env
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
 : "${CHART_REGISTRY:?".env.$OVERLAY must set CHART_REGISTRY"}"
 : "${FRONTEND_IMAGE_REPO:?".env.$OVERLAY must set FRONTEND_IMAGE_REPO"}"
 : "${BACKEND_IMAGE_REPO:?".env.$OVERLAY must set BACKEND_IMAGE_REPO"}"

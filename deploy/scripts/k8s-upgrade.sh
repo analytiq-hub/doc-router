@@ -28,6 +28,12 @@ set -a
 [ -f "$PROJECT_ROOT/.env.$OVERLAY" ] && source "$PROJECT_ROOT/.env.$OVERLAY"
 set +a
 
+# Save app runtime AWS credentials before unsetting CLI env vars.
+# The unset ensures AWS_PROFILE (SSO) is used for aws/helm/kubectl tooling.
+_APP_AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
+_APP_AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
 : "${CHART_REGISTRY:?".env.$OVERLAY must set CHART_REGISTRY"}"
 : "${CHART_REPO_URL:?".env.$OVERLAY must set CHART_REPO_URL"}"
 : "${FRONTEND_IMAGE_REPO:?".env.$OVERLAY must set FRONTEND_IMAGE_REPO"}"
@@ -48,8 +54,8 @@ kubectl create secret generic doc-router-secrets \
   --from-literal=MONGODB_URI="${MONGODB_URI}" \
   --from-literal=ADMIN_EMAIL="${ADMIN_EMAIL}" \
   --from-literal=ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
-  --from-literal=AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}" \
-  --from-literal=AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}" \
+  --from-literal=AWS_ACCESS_KEY_ID="${_APP_AWS_ACCESS_KEY_ID}" \
+  --from-literal=AWS_SECRET_ACCESS_KEY="${_APP_AWS_SECRET_ACCESS_KEY}" \
   --from-literal=AWS_S3_BUCKET_NAME="${APP_BUCKET_NAME}" \
   --from-literal=OPENAI_API_KEY="${OPENAI_API_KEY}" \
   --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
