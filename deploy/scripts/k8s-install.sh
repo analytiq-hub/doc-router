@@ -1,9 +1,9 @@
 #!/bin/bash
 # First-time install of doc-router into any Kubernetes cluster.
-# Usage: ./deploy/scripts/k8s-install.sh <overlay> <chart-version>
-#   overlay        — env overlay name, e.g. "eks" or "customer-acme"
-#   chart-version  — semver of the OCI chart to install, e.g. "1.0.0"
+# Usage: ./deploy/scripts/k8s-install.sh <overlay>
+#   overlay  — env overlay name, e.g. "eks" or "customer-acme"
 #
+# Chart version is read from deploy/charts/doc-router/Chart.yaml.
 # IMAGE_TAG may be set in the environment; defaults to the current git SHA.
 # Required env vars (from overlay): CHART_REGISTRY, CHART_REPO_URL,
 #   FRONTEND_IMAGE_REPO, BACKEND_IMAGE_REPO, REGION, APP_HOST, NEXTAUTH_URL,
@@ -11,11 +11,12 @@
 
 set -eo pipefail
 
-OVERLAY=${1:?"Usage: $0 <overlay> <chart-version>"}
-CHART_VERSION=${2:?"Usage: $0 <overlay> <chart-version>"}
+OVERLAY=${1:?"Usage: $0 <overlay>"}
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+CHART_VERSION="$(grep '^version:' "$PROJECT_ROOT/deploy/charts/doc-router/Chart.yaml" | awk '{print $2}')"
 
 NAMESPACE="doc-router"
 RELEASE="doc-router"
