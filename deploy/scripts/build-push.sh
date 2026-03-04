@@ -66,4 +66,3 @@ docker push "$BACKEND_IMAGE_REPO:latest"
 
 echo ""
 echo "Done. IMAGE_TAG=$IMAGE_TAG"
-echo "  Export IMAGE_TAG=$IMAGE_TAG before running k8s-install.sh or k8s-upgrade.sh."
