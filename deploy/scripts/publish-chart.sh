@@ -4,7 +4,7 @@
 #   overlay        — env overlay name, e.g. "eks" (sources .env + .env.<overlay>)
 #   chart-version  — semver, e.g. "1.5.0"
 #
-# Required env vars (from overlay): CHART_REGISTRY, REGION.
+# Required env vars (from overlay): CHART_REGISTRY, CHART_REPO_URL, REGION.
 
 set -eo pipefail
 
@@ -24,6 +24,7 @@ set -a
 set +a
 
 : "${CHART_REGISTRY:?".env.$OVERLAY must set CHART_REGISTRY"}"
+: "${CHART_REPO_URL:?".env.$OVERLAY must set CHART_REPO_URL"}"
 : "${REGION:?".env.$OVERLAY must set REGION"}"
 
 CHART_PACKAGE="doc-router-${CHART_VERSION}.tgz"
@@ -38,10 +39,10 @@ aws ecr get-login-password --region "$REGION" \
   | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
 
 # --- Push OCI artifact ---
-echo "Pushing chart to oci://$CHART_REGISTRY/doc-router-chart..."
-helm push "$CHART_PACKAGE" "oci://$CHART_REGISTRY/doc-router-chart"
+echo "Pushing chart to oci://$CHART_REPO_URL..."
+helm push "$CHART_PACKAGE" "oci://$CHART_REPO_URL"
 
 rm -f "$CHART_PACKAGE"
 
 echo ""
-echo "Done. Chart $CHART_VERSION published to oci://$CHART_REGISTRY/doc-router-chart."
+echo "Done. Chart $CHART_VERSION published to oci://$CHART_REPO_URL."

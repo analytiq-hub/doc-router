@@ -5,9 +5,9 @@
 #   chart-version  — semver of the OCI chart to install, e.g. "1.0.0"
 #
 # IMAGE_TAG may be set in the environment; defaults to the current git SHA.
-# Required env vars (from overlay): CHART_REGISTRY, FRONTEND_IMAGE_REPO,
-#   BACKEND_IMAGE_REPO, REGION, APP_HOST, NEXTAUTH_URL, APP_BUCKET_NAME,
-#   STORAGE_CLASS, plus all secret vars (MONGODB_URI, AWS_ACCESS_KEY_ID, etc.).
+# Required env vars (from overlay): CHART_REGISTRY, CHART_REPO_URL,
+#   FRONTEND_IMAGE_REPO, BACKEND_IMAGE_REPO, REGION, APP_HOST, NEXTAUTH_URL,
+#   APP_BUCKET_NAME, STORAGE_CLASS, plus all secret vars (MONGODB_URI, etc.).
 
 set -eo pipefail
 
@@ -29,6 +29,7 @@ set -a
 set +a
 
 : "${CHART_REGISTRY:?".env.$OVERLAY must set CHART_REGISTRY"}"
+: "${CHART_REPO_URL:?".env.$OVERLAY must set CHART_REPO_URL"}"
 : "${FRONTEND_IMAGE_REPO:?".env.$OVERLAY must set FRONTEND_IMAGE_REPO"}"
 : "${BACKEND_IMAGE_REPO:?".env.$OVERLAY must set BACKEND_IMAGE_REPO"}"
 : "${REGION:?".env.$OVERLAY must set REGION"}"
@@ -80,7 +81,7 @@ aws ecr get-login-password --region "$REGION" \
 # --- Helm install ---
 echo "Running helm upgrade --install..."
 helm upgrade --install "$RELEASE" \
-  "oci://$CHART_REGISTRY/doc-router-chart" \
+  "oci://$CHART_REPO_URL" \
   --version "$CHART_VERSION" \
   --namespace "$NAMESPACE" \
   --set image.frontend.repository="$FRONTEND_IMAGE_REPO" \
