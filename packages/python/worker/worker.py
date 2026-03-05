@@ -16,6 +16,8 @@ ad.common.setup()
 logger = logging.getLogger(__name__)
 
 HEARTBEAT_INTERVAL_SECS = 600  # seconds
+POLL_MIN_SLEEP = 0.2   # seconds — first idle sleep
+POLL_MAX_SLEEP = 5.0   # seconds — cap for exponential backoff
 
 async def worker_ocr(worker_id: str) -> None:
     """
@@ -32,30 +34,32 @@ async def worker_ocr(worker_id: str) -> None:
     logger.info(f"Starting worker {worker_id}")
 
     last_heartbeat = datetime.now(UTC)
+    idle_sleep = POLL_MIN_SLEEP
 
     while True:
         try:
             # Log heartbeat every 10 minutes
             now = datetime.now(UTC)
-            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS: 
+            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
                 logger.info(f"Worker {worker_id} heartbeat")
                 last_heartbeat = now
 
             msg = await ad.queue.recv_msg(analytiq_client, "ocr")
             if msg:
+                idle_sleep = POLL_MIN_SLEEP
                 logger.info(f"Worker {worker_id} processing OCR msg: {msg}")
                 try:
                     await ad.msg_handlers.process_ocr_msg(analytiq_client, msg)
                 except Exception as e:
                     logger.error(f"Error processing OCR message {msg.get('_id')}: {str(e)}")
-                    # Mark message as failed
                     await ad.queue.delete_msg(analytiq_client, "ocr", str(msg["_id"]), status="failed")
             else:
-                await asyncio.sleep(0.2)  # Avoid tight loop when no messages
-                
+                await asyncio.sleep(idle_sleep)
+                idle_sleep = min(idle_sleep * 2, POLL_MAX_SLEEP)
+
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
-            await asyncio.sleep(1)  # Sleep longer on errors to prevent tight loop
+            await asyncio.sleep(1)
 
 async def worker_llm(worker_id: str) -> None:
     """
@@ -72,24 +76,27 @@ async def worker_llm(worker_id: str) -> None:
     logger.info(f"Starting worker {worker_id}")
 
     last_heartbeat = datetime.now(UTC)
+    idle_sleep = POLL_MIN_SLEEP
 
     while True:
         try:
             # Log heartbeat every 10 minutes
             now = datetime.now(UTC)
-            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS: 
+            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
                 logger.info(f"Worker {worker_id} heartbeat")
                 last_heartbeat = now
 
             msg = await ad.queue.recv_msg(analytiq_client, "llm")
             if msg:
+                idle_sleep = POLL_MIN_SLEEP
                 logger.info(f"Worker {worker_id} processing LLM msg: {msg}")
                 await ad.msg_handlers.process_llm_msg(analytiq_client, msg)
             else:
-                await asyncio.sleep(0.2)  # Avoid tight loop
+                await asyncio.sleep(idle_sleep)
+                idle_sleep = min(idle_sleep * 2, POLL_MAX_SLEEP)
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
-            await asyncio.sleep(1)  # Sleep longer on errors to prevent tight loop
+            await asyncio.sleep(1)
 
 async def worker_kb_index(worker_id: str) -> None:
     """
@@ -106,30 +113,32 @@ async def worker_kb_index(worker_id: str) -> None:
     logger.info(f"Starting worker {worker_id}")
 
     last_heartbeat = datetime.now(UTC)
+    idle_sleep = POLL_MIN_SLEEP
 
     while True:
         try:
             # Log heartbeat every 10 minutes
             now = datetime.now(UTC)
-            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS: 
+            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
                 logger.info(f"Worker {worker_id} heartbeat")
                 last_heartbeat = now
 
             msg = await ad.queue.recv_msg(analytiq_client, "kb_index")
             if msg:
+                idle_sleep = POLL_MIN_SLEEP
                 logger.info(f"Worker {worker_id} processing KB index msg: {msg}")
                 try:
                     await ad.msg_handlers.process_kb_index_msg(analytiq_client, msg)
                 except Exception as e:
                     logger.error(f"Error processing KB index message {msg.get('_id')}: {str(e)}")
-                    # Mark message as failed
                     await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg["_id"]), status="failed")
             else:
-                await asyncio.sleep(0.2)  # Avoid tight loop when no messages
-                
+                await asyncio.sleep(idle_sleep)
+                idle_sleep = min(idle_sleep * 2, POLL_MAX_SLEEP)
+
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
-            await asyncio.sleep(1)  # Sleep longer on errors to prevent tight loop
+            await asyncio.sleep(1)
 
 async def worker_kb_reconcile(worker_id: str) -> None:
     """
@@ -248,6 +257,7 @@ async def worker_webhook(worker_id: str) -> None:
     logger.info(f"Starting worker {worker_id}")
 
     last_heartbeat = datetime.now(UTC)
+    idle_sleep = POLL_MIN_SLEEP
 
     while True:
         try:
@@ -258,16 +268,19 @@ async def worker_webhook(worker_id: str) -> None:
 
             msg = await ad.queue.recv_msg(analytiq_client, "webhook")
             if msg:
+                idle_sleep = POLL_MIN_SLEEP
                 await ad.msg_handlers.process_webhook_msg(analytiq_client, msg)
                 continue
 
             # No queue message: try processing a due retry directly from webhook_deliveries
             delivery = await ad.webhooks.claim_next_due_delivery(analytiq_client)
             if delivery:
+                idle_sleep = POLL_MIN_SLEEP
                 await ad.webhooks.send_delivery(analytiq_client, delivery)
                 continue
 
-            await asyncio.sleep(0.2)
+            await asyncio.sleep(idle_sleep)
+            idle_sleep = min(idle_sleep * 2, POLL_MAX_SLEEP)
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
