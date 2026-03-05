@@ -11,16 +11,14 @@ This directory contains deployment configurations for doc-router across multiple
 deploy/
 ├── charts/doc-router/    # Helm chart
 ├── compose/              # Docker Compose configurations
-├── kubernetes/           # kind Kubernetes manifests (Kustomize)
-│   ├── base/
-│   └── overlays/
 ├── scripts/              # Deployment helper scripts
 │   ├── build-push.sh     # Build & push Docker images to ECR
 │   ├── publish-chart.sh  # Package & push Helm chart to ECR
-│   ├── k8s-install.sh    # First-time Helm install
-│   ├── k8s-upgrade.sh    # Helm upgrade (rolling deploy)
+│   ├── k8s-deploy.sh     # Install or upgrade on any Kubernetes cluster (idempotent)
 │   ├── k8s-rollback.sh   # Helm rollback to previous revision
-│   └── k8s-uninstall.sh  # Tear down the release
+│   ├── k8s-uninstall.sh  # Tear down the release
+│   ├── setup-kind.sh     # Create a local kind cluster
+│   └── deploy-kind.sh    # Build & deploy to local kind cluster
 └── shared/               # Shared resources (Dockerfiles, configs)
 ```
 
@@ -44,39 +42,41 @@ CHART_REGISTRY=<account>.dkr.ecr.us-east-1.amazonaws.com
 CHART_REPO_URL=<account>.dkr.ecr.us-east-1.amazonaws.com/doc-router-chart-test
 FRONTEND_IMAGE_REPO=<account>.dkr.ecr.us-east-1.amazonaws.com/doc-router-frontend-test
 BACKEND_IMAGE_REPO=<account>.dkr.ecr.us-east-1.amazonaws.com/doc-router-backend-test
-STORAGE_CLASS=gp3
 APP_HOST=test.docrouter.ai
-NEXTAUTH_URL=https://test.docrouter.ai
 AWS_S3_BUCKET_NAME=docrouter-test
 # ... secrets (MONGODB_URI, NEXTAUTH_SECRET, API keys, etc.)
 ```
 
-### First-time deployment
+`NEXTAUTH_URL` and `NEXT_PUBLIC_FASTAPI_FRONTEND_URL` are derived automatically from `APP_HOST`
+and do not need to be set in the overlay file.
+
+### Deploying (fresh install or rolling update)
+
+`k8s-deploy.sh` is idempotent — safe to run on both a fresh cluster and an existing deployment:
 
 ```bash
 # 1. Build and push Docker images (tag = current git SHA)
 ./deploy/scripts/build-push.sh eks-test
 
-# 2. Publish the Helm chart (version from deploy/charts/doc-router/Chart.yaml)
-./deploy/scripts/publish-chart.sh eks-test
-
-# 3. Install into the cluster
-./deploy/scripts/k8s-install.sh eks-test
+# 2. Install or upgrade into the cluster
+./deploy/scripts/k8s-deploy.sh eks-test
 ```
 
-### Rolling update (existing cluster)
-
-```bash
-./deploy/scripts/build-push.sh eks-test
-./deploy/scripts/k8s-upgrade.sh eks-test
-```
-
-Publish the chart first only when `deploy/charts/doc-router/` has changed:
+Publish the Helm chart first only when `deploy/charts/doc-router/` has changed:
 
 ```bash
 ./deploy/scripts/publish-chart.sh eks-test
-./deploy/scripts/k8s-upgrade.sh eks-test
+./deploy/scripts/k8s-deploy.sh eks-test
 ```
+
+The script:
+- Creates the `doc-router` namespace if it doesn't exist
+- Creates or updates the `doc-router-secrets` Kubernetes Secret from your overlay env file
+- Runs `helm upgrade --install` (installs on first run, upgrades on subsequent runs)
+- Runs `kubectl rollout restart` after helm to ensure pods pick up any Secret changes
+- Uses `--atomic` for automatic rollback if the upgrade fails
+
+Database migrations run automatically as a Helm pre-install/pre-upgrade hook before pods are updated.
 
 ### Rollback
 
@@ -104,24 +104,37 @@ helm history doc-router -n doc-router
 
 ## Kubernetes (kind) — Local Testing
 
-1. **Setup kind cluster:**
-   ```bash
-   ./deploy/kubernetes/scripts/setup-kind.sh
-   ```
+### Prerequisites
 
-2. **Deploy application:**
-   ```bash
-   ./deploy/kubernetes/scripts/deploy-kind.sh
-   ```
+- `docker`
+- `kind`
+- `helm` >= 3.8
+- `kubectl`
 
-3. **Access the application:**
-   - Frontend: http://localhost:3000
-   - Backend API: http://localhost:8000
+### Setup and deploy
 
-4. **Cleanup:**
-   ```bash
-   ./deploy/kubernetes/scripts/cleanup.sh
-   ```
+```bash
+# 1. Create the kind cluster (one-time)
+./deploy/scripts/setup-kind.sh
+
+# 2. Build images and deploy (re-run on every code change)
+./deploy/scripts/deploy-kind.sh
+```
+
+`deploy-kind.sh` builds Docker images locally, loads them into the kind cluster, deploys MongoDB
+in the `mongo` namespace (via Bitnami chart), creates the secrets from your `.env` and `.env.kind`
+files, and runs `helm upgrade --install`.
+
+### Access
+
+- Frontend: http://localhost
+- API docs:  http://localhost/fastapi/docs
+
+### Cleanup
+
+```bash
+kind delete cluster --name doc-router
+```
 
 ---
 
@@ -141,12 +154,27 @@ docker-compose -f docker-compose.embedded.yml up -d
 kubectl get pods -n doc-router
 kubectl describe pod <pod-name> -n doc-router
 kubectl logs <pod-name> -n doc-router
+kubectl logs -l app=backend -n doc-router --all-containers
 ```
 
-**kind — images not loading:**
+**Stream logs from all pods:**
 ```bash
-kind load docker-image analytiqhub/doc-router-frontend:latest --name doc-router
-kind load docker-image analytiqhub/doc-router-backend:latest --name doc-router
+kubectl logs -f -l app=frontend -n doc-router
+kubectl logs -f -l app=backend  -n doc-router
+```
+
+**kind — images not found in cluster:**
+```bash
+kind load docker-image analytiqhub/doc-router-frontend:<tag> --name doc-router
+kind load docker-image analytiqhub/doc-router-backend:<tag>  --name doc-router
+```
+
+**Pods not picking up Secret changes:**
+
+Kubernetes does not restart pods automatically when a Secret changes. `k8s-deploy.sh` handles
+this with `kubectl rollout restart`. To do it manually:
+```bash
+kubectl rollout restart deployment/frontend deployment/backend -n doc-router
 ```
 
 **Docker Compose — port conflicts:**
