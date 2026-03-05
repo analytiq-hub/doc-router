@@ -19,6 +19,10 @@ HEARTBEAT_INTERVAL_SECS = 600  # seconds
 POLL_MIN_SLEEP = 0.2   # seconds — first idle sleep
 POLL_MAX_SLEEP = 5.0   # seconds — cap for exponential backoff
 
+# Shared backoff state per queue type. Safe without locks: single asyncio event loop.
+# When any worker on a queue finds a message, all workers on that queue reset to fast polling.
+_queue_idle_sleep: dict[str, float] = {}
+
 async def worker_ocr(worker_id: str) -> None:
     """
     Worker for OCR jobs
@@ -34,7 +38,6 @@ async def worker_ocr(worker_id: str) -> None:
     logger.info(f"Starting worker {worker_id}")
 
     last_heartbeat = datetime.now(UTC)
-    idle_sleep = POLL_MIN_SLEEP
 
     while True:
         try:
@@ -46,7 +49,7 @@ async def worker_ocr(worker_id: str) -> None:
 
             msg = await ad.queue.recv_msg(analytiq_client, "ocr")
             if msg:
-                idle_sleep = POLL_MIN_SLEEP
+                _queue_idle_sleep["ocr"] = POLL_MIN_SLEEP
                 logger.info(f"Worker {worker_id} processing OCR msg: {msg}")
                 try:
                     await ad.msg_handlers.process_ocr_msg(analytiq_client, msg)
@@ -54,8 +57,9 @@ async def worker_ocr(worker_id: str) -> None:
                     logger.error(f"Error processing OCR message {msg.get('_id')}: {str(e)}")
                     await ad.queue.delete_msg(analytiq_client, "ocr", str(msg["_id"]), status="failed")
             else:
-                await asyncio.sleep(idle_sleep)
-                idle_sleep = min(idle_sleep * 2, POLL_MAX_SLEEP)
+                sleep = _queue_idle_sleep.get("ocr", POLL_MIN_SLEEP)
+                await asyncio.sleep(sleep)
+                _queue_idle_sleep["ocr"] = min(sleep * 2, POLL_MAX_SLEEP)
 
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
@@ -76,7 +80,6 @@ async def worker_llm(worker_id: str) -> None:
     logger.info(f"Starting worker {worker_id}")
 
     last_heartbeat = datetime.now(UTC)
-    idle_sleep = POLL_MIN_SLEEP
 
     while True:
         try:
@@ -88,12 +91,13 @@ async def worker_llm(worker_id: str) -> None:
 
             msg = await ad.queue.recv_msg(analytiq_client, "llm")
             if msg:
-                idle_sleep = POLL_MIN_SLEEP
+                _queue_idle_sleep["llm"] = POLL_MIN_SLEEP
                 logger.info(f"Worker {worker_id} processing LLM msg: {msg}")
                 await ad.msg_handlers.process_llm_msg(analytiq_client, msg)
             else:
-                await asyncio.sleep(idle_sleep)
-                idle_sleep = min(idle_sleep * 2, POLL_MAX_SLEEP)
+                sleep = _queue_idle_sleep.get("llm", POLL_MIN_SLEEP)
+                await asyncio.sleep(sleep)
+                _queue_idle_sleep["llm"] = min(sleep * 2, POLL_MAX_SLEEP)
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
@@ -113,7 +117,6 @@ async def worker_kb_index(worker_id: str) -> None:
     logger.info(f"Starting worker {worker_id}")
 
     last_heartbeat = datetime.now(UTC)
-    idle_sleep = POLL_MIN_SLEEP
 
     while True:
         try:
@@ -125,7 +128,7 @@ async def worker_kb_index(worker_id: str) -> None:
 
             msg = await ad.queue.recv_msg(analytiq_client, "kb_index")
             if msg:
-                idle_sleep = POLL_MIN_SLEEP
+                _queue_idle_sleep["kb_index"] = POLL_MIN_SLEEP
                 logger.info(f"Worker {worker_id} processing KB index msg: {msg}")
                 try:
                     await ad.msg_handlers.process_kb_index_msg(analytiq_client, msg)
@@ -133,8 +136,9 @@ async def worker_kb_index(worker_id: str) -> None:
                     logger.error(f"Error processing KB index message {msg.get('_id')}: {str(e)}")
                     await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg["_id"]), status="failed")
             else:
-                await asyncio.sleep(idle_sleep)
-                idle_sleep = min(idle_sleep * 2, POLL_MAX_SLEEP)
+                sleep = _queue_idle_sleep.get("kb_index", POLL_MIN_SLEEP)
+                await asyncio.sleep(sleep)
+                _queue_idle_sleep["kb_index"] = min(sleep * 2, POLL_MAX_SLEEP)
 
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
@@ -257,7 +261,6 @@ async def worker_webhook(worker_id: str) -> None:
     logger.info(f"Starting worker {worker_id}")
 
     last_heartbeat = datetime.now(UTC)
-    idle_sleep = POLL_MIN_SLEEP
 
     while True:
         try:
@@ -268,19 +271,19 @@ async def worker_webhook(worker_id: str) -> None:
 
             msg = await ad.queue.recv_msg(analytiq_client, "webhook")
             if msg:
-                idle_sleep = POLL_MIN_SLEEP
+                _queue_idle_sleep["webhook"] = POLL_MIN_SLEEP
                 await ad.msg_handlers.process_webhook_msg(analytiq_client, msg)
                 continue
 
-            # No queue message: try processing a due retry directly from webhook_deliveries
             delivery = await ad.webhooks.claim_next_due_delivery(analytiq_client)
             if delivery:
-                idle_sleep = POLL_MIN_SLEEP
+                _queue_idle_sleep["webhook"] = POLL_MIN_SLEEP
                 await ad.webhooks.send_delivery(analytiq_client, delivery)
                 continue
 
-            await asyncio.sleep(idle_sleep)
-            idle_sleep = min(idle_sleep * 2, POLL_MAX_SLEEP)
+            sleep = _queue_idle_sleep.get("webhook", POLL_MIN_SLEEP)
+            await asyncio.sleep(sleep)
+            _queue_idle_sleep["webhook"] = min(sleep * 2, POLL_MAX_SLEEP)
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
