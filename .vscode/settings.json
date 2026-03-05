@@ -1,5 +1,8 @@
 {
   "python.languageServer": "Jedi",
+  "files.associations": {
+    "**/charts/**/templates/**/*.yaml": "helm"
+  },
   "STARLIMS.servers": [
     {
       "name": "Frndev Server",
