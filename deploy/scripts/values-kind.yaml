@@ -1,5 +1,6 @@
-# Kind-specific Helm values — committed, no secrets.
+# Kind-specific Helm value overrides — committed, no secrets.
 # Secrets are created by deploy-kind.sh from .env + .env.kind at deploy time.
+# MongoDB is deployed separately in the 'mongo' namespace by deploy-kind.sh.
 
 image:
   frontend:
@@ -11,9 +12,6 @@ ingress:
   host: localhost
   tls: false            # no cert-manager on Kind
 
-mongodb:
-  storageClassName: ""  # use Kind's default storage class
-
 replicaCount:
   frontend: 1
   backend: 1
@@ -22,5 +20,3 @@ config:
   environment: dev
   nextauthUrl: "http://localhost"
   nextPublicFastapiUrl: "http://localhost/fastapi"
-  fastapiRootPath: "/fastapi"
-  nWorkers: "4"

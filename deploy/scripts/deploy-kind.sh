@@ -59,6 +59,17 @@ echo "Loading images into Kind cluster '$CLUSTER_NAME'..."
 kind load docker-image analytiqhub/doc-router-frontend:"$IMAGE_TAG" --name "$CLUSTER_NAME"
 kind load docker-image analytiqhub/doc-router-backend:"$IMAGE_TAG"  --name "$CLUSTER_NAME"
 
+# --- MongoDB (in its own namespace, no auth for local dev) ---
+echo "Deploying MongoDB in 'mongo' namespace..."
+helm repo add bitnami https://charts.bitnami.com/bitnami 2>/dev/null || true
+helm repo update bitnami
+helm upgrade --install mongodb bitnami/mongodb \
+  --namespace mongo --create-namespace \
+  --set auth.enabled=false \
+  --set persistence.size=1Gi \
+  --wait --timeout 3m
+MONGODB_URI="mongodb://mongodb.mongo.svc.cluster.local:27017/"
+
 # --- Namespace ---
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
