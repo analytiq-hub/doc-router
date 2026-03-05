@@ -96,6 +96,11 @@ helm upgrade "$RELEASE" \
   --atomic \
   --timeout 10m
 
+# Force pods to pick up the refreshed Secret (Kubernetes does not restart pods on Secret changes)
+echo "Restarting deployments to pick up refreshed secrets..."
+kubectl rollout restart deployment/frontend deployment/backend -n "$NAMESPACE"
+kubectl rollout status deployment/frontend deployment/backend -n "$NAMESPACE" --timeout=5m
+
 echo ""
 echo "Upgrade complete! Chart $CHART_VERSION, image $IMAGE_TAG."
 echo "  helm history $RELEASE -n $NAMESPACE"
