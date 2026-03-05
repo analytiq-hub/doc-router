@@ -47,7 +47,7 @@ BACKEND_IMAGE_REPO=<account>.dkr.ecr.us-east-1.amazonaws.com/doc-router-backend-
 STORAGE_CLASS=gp3
 APP_HOST=test.docrouter.ai
 NEXTAUTH_URL=https://test.docrouter.ai
-APP_BUCKET_NAME=docrouter-test
+AWS_S3_BUCKET_NAME=docrouter-test
 # ... secrets (MONGODB_URI, NEXTAUTH_SECRET, API keys, etc.)
 ```
 

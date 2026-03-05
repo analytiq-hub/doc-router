@@ -43,10 +43,12 @@ aws ecr get-login-password --region "$REGION" \
   | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
 
 # --- Push OCI artifact ---
-echo "Pushing chart to oci://$CHART_REPO_URL..."
-helm push "$CHART_PACKAGE" "oci://$CHART_REPO_URL"
+# helm push appends the chart name to the URL, so push to the registry root:
+#   oci://CHART_REGISTRY/<chart-name>:<version>  →  ECR repo = CHART_REPO_URL
+echo "Pushing chart to $CHART_REPO_URL..."
+helm push "$CHART_PACKAGE" "oci://$CHART_REGISTRY"
 
 rm -f "$CHART_PACKAGE"
 
 echo ""
-echo "Done. Chart $CHART_VERSION published to oci://$CHART_REPO_URL."
+echo "Done. Chart $CHART_VERSION published to $CHART_REPO_URL."

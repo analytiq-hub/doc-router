@@ -46,10 +46,10 @@ Goal: deploy the proven chart to AWS EKS using direct `helm upgrade --install` a
 
 Add five scripts to `deploy/scripts/`:
 
-- **`build-push.sh`** — ECR login, `docker build --target frontend/backend`, tag `<ECR_URL>:<git-sha>` + `:latest`, push both images.
-- **`publish-chart.sh`** — `helm package deploy/charts/doc-router --version <semver>`, ECR login, `helm push` OCI artifact to `doc-router-chart` ECR repo.
-- **`k8s-install.sh`** — first-time install. Sources env overlay, creates namespace, creates `doc-router-secrets` Secret, runs `helm upgrade --install oci://... --version <semver>` with non-secret values via `--set`, waits with `--wait --timeout 10m`.
-- **`k8s-upgrade.sh`** — upgrades a running release. Updates the `doc-router-secrets` Secret if any secret values changed, then runs `helm upgrade oci://... --version <semver> --reuse-values --set image.*.tag=<new-tag> --wait`.
+- **`build-push.sh`** — ECR login, `docker build --target frontend/backend`, tag `<ECR_URL>:<IMAGE_TAG>` + `:latest`, push both images. `IMAGE_TAG` defaults to current git SHA; set in env to override.
+- **`publish-chart.sh`** — reads chart version from `Chart.yaml`, `helm package`, ECR login, `helm push oci://CHART_REGISTRY` (helm appends chart name → ECR repo `CHART_REPO_URL`).
+- **`k8s-install.sh`** — first-time install. Sources env overlay, creates namespace, creates `doc-router-secrets` Secret, runs `helm upgrade --install oci://CHART_REPO_URL --version <from Chart.yaml>` with non-secret values via `--set`, `--atomic --timeout 10m`.
+- **`k8s-upgrade.sh`** — upgrades a running release. Updates the `doc-router-secrets` Secret if any secret values changed, then runs `helm upgrade oci://CHART_REPO_URL --version <from Chart.yaml> --reuse-values --set image.*.tag=<IMAGE_TAG>`.
 - **`k8s-rollback.sh`** — runs `helm rollback doc-router <revision> -n doc-router --wait`.
 
 All scripts source a gitignored `.env` + overlay (e.g. `.env.eks`) for secrets and cluster-specific values. They contain no hardcoded sensitive values and are safe to commit publicly.
@@ -312,8 +312,8 @@ All environment and secret values are maintained in **manually created, gitignor
 | File | Used for |
 |---|---|
 | `.env` | Shared defaults (e.g. `CLUSTER_NAME=doc-router`) |
-| `.env.eks` | EKS overlay: `APP_BUCKET_NAME`, `REGION`, ECR URLs, AWS credentials from `applications/docrouter` outputs |
-| `.env.customer-<name>` | Per-customer: their `APP_BUCKET_NAME`, `CLUSTER_NAME`, `REGION`, `AWS_PROFILE` |
+| `.env.eks` | EKS overlay: `AWS_S3_BUCKET_NAME`, `REGION`, ECR URLs, AWS credentials from `applications/docrouter` outputs |
+| `.env.customer-<name>` | Per-customer: their `AWS_S3_BUCKET_NAME`, `CLUSTER_NAME`, `REGION`, `AWS_PROFILE` |
 
 **Variables needed in `.env.eks`:**
 
@@ -324,7 +324,7 @@ All environment and secret values are maintained in **manually created, gitignor
 | `CHART_REGISTRY` | `<account-id>.dkr.ecr.us-east-1.amazonaws.com` | `chart_repo_url` output |
 | `FRONTEND_IMAGE_REPO` | `<account-id>.dkr.ecr.us-east-1.amazonaws.com/doc-router-frontend` | `frontend_repo_url` output |
 | `BACKEND_IMAGE_REPO` | `<account-id>.dkr.ecr.us-east-1.amazonaws.com/doc-router-backend` | `backend_repo_url` output |
-| `APP_BUCKET_NAME` | `docrouter-test` | Existing `applications/docrouter` output |
+| `AWS_S3_BUCKET_NAME` | `docrouter-test` | Existing `applications/docrouter` output |
 | `APP_HOST` | `app.example.com` | DNS record you create |
 | `STORAGE_CLASS` | `gp3` | EKS standard |
 | `AWS_ACCESS_KEY_ID` | — | Existing `applications/docrouter` output |
@@ -387,8 +387,9 @@ Rollback strategy: MongoDB migrations are forward-only. Rollback means restoring
 
 ```bash
 # Sources .env + overlay for ECR URLs
+# IMAGE_TAG defaults to current git SHA; set in env to override
 set -a; source .env; source ".env.${1:?overlay required}"; set +a
-IMAGE_TAG=${2:?image tag required}   # e.g. git sha or semver
+IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 
 aws ecr get-login-password --region "$REGION" \
   | docker login --username AWS --password-stdin "$CHART_REGISTRY"
@@ -408,21 +409,25 @@ docker push "$BACKEND_IMAGE_REPO:latest"
 
 ```bash
 # Sources .env + overlay for CHART_REGISTRY
+# Chart version is read from deploy/charts/doc-router/Chart.yaml
+# helm push appends the chart name: oci://CHART_REGISTRY/<chart-name>:<version>
 set -a; source .env; source ".env.${1:?overlay required}"; set +a
-CHART_VERSION=${2:?chart version required}   # semver
+CHART_VERSION="$(grep '^version:' deploy/charts/doc-router/Chart.yaml | awk '{print $2}')"
 
-helm package deploy/charts/doc-router --version "$CHART_VERSION"
+helm package deploy/charts/doc-router
 aws ecr get-login-password --region "$REGION" \
   | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
-helm push "doc-router-${CHART_VERSION}.tgz" "oci://${CHART_REGISTRY}/doc-router-chart"
+helm push "doc-router-${CHART_VERSION}.tgz" "oci://$CHART_REGISTRY"
 rm "doc-router-${CHART_VERSION}.tgz"
 ```
 
 ### `k8s-install.sh`
 
 ```bash
+# Chart version from Chart.yaml; IMAGE_TAG from git SHA or env
 set -a; source .env; source ".env.${1:?overlay required}"; set +a
-CHART_VERSION=${2:?chart version required}
+CHART_VERSION="$(grep '^version:' deploy/charts/doc-router/Chart.yaml | awk '{print $2}')"
+IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 
 kubectl create namespace doc-router --dry-run=client -o yaml | kubectl apply -f -
 
@@ -437,7 +442,7 @@ aws ecr get-login-password --region "$REGION" \
   | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
 
 helm upgrade --install doc-router \
-  "oci://${CHART_REGISTRY}/doc-router-chart" \
+  "oci://$CHART_REPO_URL" \
   --version "$CHART_VERSION" \
   --namespace doc-router \
   --set ingress.host="$APP_HOST" \
@@ -447,17 +452,19 @@ helm upgrade --install doc-router \
   --set image.backend.repository="$BACKEND_IMAGE_REPO" \
   --set image.frontend.tag="$IMAGE_TAG" \
   --set image.backend.tag="$IMAGE_TAG" \
-  --set config.appBucketName="$APP_BUCKET_NAME" \
+  --set config.appBucketName="$AWS_S3_BUCKET_NAME" \
   --set config.region="$REGION" \
   --set config.nextauthUrl="$NEXTAUTH_URL" \
-  --wait --timeout 10m
+  --atomic --timeout 10m
 ```
 
 ### `k8s-upgrade.sh`
 
 ```bash
+# Chart version from Chart.yaml; IMAGE_TAG from git SHA or env
 set -a; source .env; source ".env.${1:?overlay required}"; set +a
-CHART_VERSION=${2:?chart version required}
+CHART_VERSION="$(grep '^version:' deploy/charts/doc-router/Chart.yaml | awk '{print $2}')"
+IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 
 # Refresh secrets in case any values changed
 kubectl create secret generic doc-router-secrets \
@@ -471,13 +478,13 @@ aws ecr get-login-password --region "$REGION" \
   | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
 
 helm upgrade doc-router \
-  "oci://${CHART_REGISTRY}/doc-router-chart" \
+  "oci://$CHART_REPO_URL" \
   --version "$CHART_VERSION" \
   --namespace doc-router \
   --reuse-values \
   --set image.frontend.tag="$IMAGE_TAG" \
   --set image.backend.tag="$IMAGE_TAG" \
-  --wait --timeout 10m
+  --atomic --timeout 10m
 ```
 
 ### `k8s-rollback.sh`
@@ -496,33 +503,46 @@ helm rollback doc-router "$REVISION" --namespace doc-router --wait
 ### First-time EKS setup
 
 ```bash
-# In analytiq-terraform/applications/eks/
-# (backend "s3" commented out in providers.tf)
-terraform init && terraform apply
-
-# Migrate state to S3: uncomment backend "s3", then:
+# In analytiq-terraform/applications/eks/test/
+# Phase 1 — remote state backend (comment out backend "s3" first)
+terraform init
+terraform apply -target=module.tf_state
+# Uncomment backend "s3", then migrate:
 terraform init   # answer "yes"
-terraform apply
+
+# Phase 2 — VPC + EKS cluster
+terraform apply \
+  -target=module.eks_cluster.module.vpc \
+  -target=module.eks_cluster.module.eks
 
 # Update kubeconfig
-aws eks update-kubeconfig --name doc-router --region us-east-1
+aws eks update-kubeconfig --name analytiq-test --region us-east-1
 
-# Back in doc-router/ — fill in .env and .env.eks from terraform outputs
-# Build images + publish first chart version
-./deploy/scripts/build-push.sh eks <git-sha>
-./deploy/scripts/publish-chart.sh eks 1.0.0
+# Phase 3 — Helm add-ons
+terraform apply
 
-# Install app
-./deploy/scripts/k8s-install.sh eks 1.0.0
+# Back in doc-router/ — fill in .env.eks-test from terraform outputs
+# Build images, publish chart, install app
+./deploy/scripts/build-push.sh eks-test
+./deploy/scripts/publish-chart.sh eks-test
+./deploy/scripts/k8s-install.sh eks-test
 ```
 
-### Per-deployment
+### Per-deployment (image update only)
 
 ```bash
 # In doc-router/
-./deploy/scripts/build-push.sh eks <git-sha>
-./deploy/scripts/publish-chart.sh eks 1.5.0
-./deploy/scripts/k8s-upgrade.sh eks 1.5.0
+./deploy/scripts/build-push.sh eks-test
+./deploy/scripts/k8s-upgrade.sh eks-test
+```
+
+### Per-deployment (chart + image update)
+
+```bash
+# Bump version in deploy/charts/doc-router/Chart.yaml, then:
+./deploy/scripts/build-push.sh eks-test
+./deploy/scripts/publish-chart.sh eks-test
+./deploy/scripts/k8s-upgrade.sh eks-test
 ```
 
 ### Kind (local dev)
@@ -539,22 +559,23 @@ aws eks update-kubeconfig --name doc-router --region us-east-1
 # In doc-router/
 
 # 1. Create overlay
-cp .env.eks .env.customer-acme
-# Edit .env.customer-acme: APP_BUCKET_NAME, CLUSTER_NAME, REGION, AWS_PROFILE, APP_HOST, etc.
+cp .env.eks-test .env.customer-acme
+# Edit .env.customer-acme: AWS_S3_BUCKET_NAME, CLUSTER_NAME, REGION, AWS_PROFILE, APP_HOST, etc.
 
 # 2. Point kubectl at their cluster
 kubectl config use-context <their-cluster-context>
 
 # 3. Install
-./deploy/scripts/k8s-install.sh customer-acme 1.4.0
+./deploy/scripts/k8s-install.sh customer-acme
 
 # 4. Subsequent upgrades
-./deploy/scripts/k8s-upgrade.sh customer-acme 1.5.0
+./deploy/scripts/k8s-upgrade.sh customer-acme
 ```
 
 ### Teardown
 
 ```bash
-# In analytiq-terraform/applications/eks/
-terraform destroy
+# In analytiq-terraform/applications/eks/test/
+terraform destroy -target=module.eks_cluster   # preserves S3 state backend
+# or: terraform destroy                        # destroys everything including state backend
 ```

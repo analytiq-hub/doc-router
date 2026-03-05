@@ -7,7 +7,7 @@
 # IMAGE_TAG may be set in the environment; defaults to the current git SHA.
 # Required env vars (from overlay): CHART_REGISTRY, CHART_REPO_URL,
 #   FRONTEND_IMAGE_REPO, BACKEND_IMAGE_REPO, REGION, APP_HOST, NEXTAUTH_URL,
-#   APP_BUCKET_NAME, STORAGE_CLASS, plus all secret vars (MONGODB_URI, etc.).
+#   AWS_S3_BUCKET_NAME, STORAGE_CLASS, plus all secret vars (MONGODB_URI, etc.).
 
 set -eo pipefail
 
@@ -42,7 +42,7 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 : "${REGION:?".env.$OVERLAY must set REGION"}"
 : "${APP_HOST:?".env.$OVERLAY must set APP_HOST"}"
 : "${NEXTAUTH_URL:?".env.$OVERLAY must set NEXTAUTH_URL"}"
-: "${APP_BUCKET_NAME:?".env.$OVERLAY must set APP_BUCKET_NAME"}"
+: "${AWS_S3_BUCKET_NAME:?".env.$OVERLAY must set AWS_S3_BUCKET_NAME"}"
 : "${STORAGE_CLASS:?".env.$OVERLAY must set STORAGE_CLASS"}"
 
 IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
@@ -64,7 +64,7 @@ kubectl create secret generic doc-router-secrets \
   --from-literal=ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
   --from-literal=AWS_ACCESS_KEY_ID="${_APP_AWS_ACCESS_KEY_ID}" \
   --from-literal=AWS_SECRET_ACCESS_KEY="${_APP_AWS_SECRET_ACCESS_KEY}" \
-  --from-literal=AWS_S3_BUCKET_NAME="${APP_BUCKET_NAME}" \
+  --from-literal=AWS_S3_BUCKET_NAME="${AWS_S3_BUCKET_NAME}" \
   --from-literal=OPENAI_API_KEY="${OPENAI_API_KEY}" \
   --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
   --from-literal=GEMINI_API_KEY="${GEMINI_API_KEY}" \
@@ -98,7 +98,8 @@ helm upgrade --install "$RELEASE" \
   --set ingress.host="$APP_HOST" \
   --set ingress.className=nginx \
   --set mongodb.storageClassName="$STORAGE_CLASS" \
-  --set config.appBucketName="$APP_BUCKET_NAME" \
+  --set config.environment="${ENV:-prod}" \
+  --set config.appBucketName="$AWS_S3_BUCKET_NAME" \
   --set config.region="$REGION" \
   --set config.nextauthUrl="$NEXTAUTH_URL" \
   --set config.nextPublicFastapiUrl="https://$APP_HOST/fastapi" \

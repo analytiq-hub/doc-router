@@ -6,7 +6,7 @@
 # Chart version is read from deploy/charts/doc-router/Chart.yaml.
 # IMAGE_TAG may be set in the environment; defaults to the current git SHA.
 # Required env vars (from overlay): CHART_REGISTRY, CHART_REPO_URL,
-#   FRONTEND_IMAGE_REPO, BACKEND_IMAGE_REPO, REGION, APP_BUCKET_NAME, plus all secret vars.
+#   FRONTEND_IMAGE_REPO, BACKEND_IMAGE_REPO, REGION, AWS_S3_BUCKET_NAME, plus all secret vars.
 
 set -eo pipefail
 
@@ -39,7 +39,8 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 : "${FRONTEND_IMAGE_REPO:?".env.$OVERLAY must set FRONTEND_IMAGE_REPO"}"
 : "${BACKEND_IMAGE_REPO:?".env.$OVERLAY must set BACKEND_IMAGE_REPO"}"
 : "${REGION:?".env.$OVERLAY must set REGION"}"
-: "${APP_BUCKET_NAME:?".env.$OVERLAY must set APP_BUCKET_NAME"}"
+: "${APP_HOST:?".env.$OVERLAY must set APP_HOST"}"
+: "${AWS_S3_BUCKET_NAME:?".env.$OVERLAY must set AWS_S3_BUCKET_NAME"}"
 
 IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 echo "Chart version : $CHART_VERSION"
@@ -56,7 +57,7 @@ kubectl create secret generic doc-router-secrets \
   --from-literal=ADMIN_PASSWORD="${ADMIN_PASSWORD}" \
   --from-literal=AWS_ACCESS_KEY_ID="${_APP_AWS_ACCESS_KEY_ID}" \
   --from-literal=AWS_SECRET_ACCESS_KEY="${_APP_AWS_SECRET_ACCESS_KEY}" \
-  --from-literal=AWS_S3_BUCKET_NAME="${APP_BUCKET_NAME}" \
+  --from-literal=AWS_S3_BUCKET_NAME="${AWS_S3_BUCKET_NAME}" \
   --from-literal=OPENAI_API_KEY="${OPENAI_API_KEY}" \
   --from-literal=ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY}" \
   --from-literal=GEMINI_API_KEY="${GEMINI_API_KEY}" \
@@ -88,6 +89,8 @@ helm upgrade "$RELEASE" \
   --set image.backend.repository="$BACKEND_IMAGE_REPO" \
   --set image.frontend.tag="$IMAGE_TAG" \
   --set image.backend.tag="$IMAGE_TAG" \
+  --set config.environment="${ENV:-prod}" \
+  --set ingress.host="${APP_HOST}" \
   --atomic \
   --timeout 10m
 
