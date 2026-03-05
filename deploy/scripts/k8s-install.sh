@@ -6,8 +6,8 @@
 # Chart version is read from deploy/charts/doc-router/Chart.yaml.
 # IMAGE_TAG may be set in the environment; defaults to the current git SHA.
 # Required env vars (from overlay): CHART_REGISTRY, CHART_REPO_URL,
-#   FRONTEND_IMAGE_REPO, BACKEND_IMAGE_REPO, REGION, APP_HOST, NEXTAUTH_URL,
-#   AWS_S3_BUCKET_NAME, STORAGE_CLASS, plus all secret vars (MONGODB_URI, etc.).
+#   FRONTEND_IMAGE_REPO, BACKEND_IMAGE_REPO, REGION, APP_HOST,
+#   AWS_S3_BUCKET_NAME, plus all secret vars (MONGODB_URI, etc.).
 
 set -eo pipefail
 
@@ -41,7 +41,6 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 : "${BACKEND_IMAGE_REPO:?".env.$OVERLAY must set BACKEND_IMAGE_REPO"}"
 : "${REGION:?".env.$OVERLAY must set REGION"}"
 : "${APP_HOST:?".env.$OVERLAY must set APP_HOST"}"
-: "${NEXTAUTH_URL:?".env.$OVERLAY must set NEXTAUTH_URL"}"
 : "${AWS_S3_BUCKET_NAME:?".env.$OVERLAY must set AWS_S3_BUCKET_NAME"}"
 
 IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
@@ -99,7 +98,7 @@ helm upgrade --install "$RELEASE" \
   --set config.environment="${ENV:-prod}" \
   --set config.appBucketName="$AWS_S3_BUCKET_NAME" \
   --set config.region="$REGION" \
-  --set config.nextauthUrl="$NEXTAUTH_URL" \
+  --set config.nextauthUrl="https://$APP_HOST" \
   --set config.nextPublicFastapiUrl="https://$APP_HOST/fastapi" \
   --atomic \
   --timeout 10m

@@ -34,7 +34,7 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 echo "Image tag: $IMAGE_TAG"
 
-NEXT_PUBLIC_FASTAPI_FRONTEND_URL="${NEXT_PUBLIC_FASTAPI_FRONTEND_URL:-https://${APP_HOST}/fastapi}"
+NEXT_PUBLIC_FASTAPI_FRONTEND_URL="https://${APP_HOST}/fastapi"
 
 # --- ECR login ---
 echo "Logging in to ECR ($CHART_REGISTRY)..."

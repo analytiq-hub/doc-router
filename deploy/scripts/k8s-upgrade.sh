@@ -91,6 +91,8 @@ helm upgrade "$RELEASE" \
   --set image.backend.tag="$IMAGE_TAG" \
   --set config.environment="${ENV:-prod}" \
   --set ingress.host="${APP_HOST}" \
+  --set config.nextauthUrl="https://${APP_HOST}" \
+  --set config.nextPublicFastapiUrl="https://${APP_HOST}/fastapi" \
   --atomic \
   --timeout 10m
 
