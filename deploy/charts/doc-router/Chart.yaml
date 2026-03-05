@@ -2,5 +2,5 @@ apiVersion: v2
 name: doc-router
 description: Smart Document Router — AI-powered document processing platform
 type: application
-version: 0.3.2
+version: 0.3.3
 appVersion: "latest"
