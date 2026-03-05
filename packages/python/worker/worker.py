@@ -53,6 +53,10 @@ async def worker_ocr(worker_id: str) -> None:
                 logger.info(f"Worker {worker_id} processing OCR msg: {msg}")
                 try:
                     await ad.msg_handlers.process_ocr_msg(analytiq_client, msg)
+                except asyncio.CancelledError:
+                    logger.warning(f"Worker {worker_id} cancelled mid-flight on OCR msg {msg.get('_id')}, marking failed")
+                    await ad.queue.delete_msg(analytiq_client, "ocr", str(msg["_id"]), status="failed")
+                    raise
                 except Exception as e:
                     logger.error(f"Error processing OCR message {msg.get('_id')}: {str(e)}")
                     await ad.queue.delete_msg(analytiq_client, "ocr", str(msg["_id"]), status="failed")
@@ -93,7 +97,12 @@ async def worker_llm(worker_id: str) -> None:
             if msg:
                 _queue_idle_sleep["llm"] = POLL_MIN_SLEEP
                 logger.info(f"Worker {worker_id} processing LLM msg: {msg}")
-                await ad.msg_handlers.process_llm_msg(analytiq_client, msg)
+                try:
+                    await ad.msg_handlers.process_llm_msg(analytiq_client, msg)
+                except asyncio.CancelledError:
+                    logger.warning(f"Worker {worker_id} cancelled mid-flight on LLM msg {msg.get('_id')}, marking failed")
+                    await ad.queue.delete_msg(analytiq_client, "llm", str(msg["_id"]), status="failed")
+                    raise
             else:
                 sleep = _queue_idle_sleep.get("llm", POLL_MIN_SLEEP)
                 await asyncio.sleep(sleep)
@@ -132,6 +141,10 @@ async def worker_kb_index(worker_id: str) -> None:
                 logger.info(f"Worker {worker_id} processing KB index msg: {msg}")
                 try:
                     await ad.msg_handlers.process_kb_index_msg(analytiq_client, msg)
+                except asyncio.CancelledError:
+                    logger.warning(f"Worker {worker_id} cancelled mid-flight on KB index msg {msg.get('_id')}, marking failed")
+                    await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg["_id"]), status="failed")
+                    raise
                 except Exception as e:
                     logger.error(f"Error processing KB index message {msg.get('_id')}: {str(e)}")
                     await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg["_id"]), status="failed")
@@ -232,10 +245,13 @@ async def worker_kb_reconcile(worker_id: str) -> None:
                             kb_id=kb_id,
                             dry_run=False
                         )
+                    except asyncio.CancelledError:
+                        logger.warning(f"Worker {worker_id} cancelled mid-flight during KB {kb_id} reconciliation")
+                        raise
                     except Exception as e:
                         logger.error(f"Error reconciling KB {kb_id}: {e}")
                     finally:
-                        # Always release lock, even on error
+                        # Always release lock (runs even on CancelledError before re-raise)
                         await ad.kb.reconciliation.release_reconciliation_lock(
                             analytiq_client,
                             kb_id,
@@ -272,13 +288,22 @@ async def worker_webhook(worker_id: str) -> None:
             msg = await ad.queue.recv_msg(analytiq_client, "webhook")
             if msg:
                 _queue_idle_sleep["webhook"] = POLL_MIN_SLEEP
-                await ad.msg_handlers.process_webhook_msg(analytiq_client, msg)
+                try:
+                    await ad.msg_handlers.process_webhook_msg(analytiq_client, msg)
+                except asyncio.CancelledError:
+                    logger.warning(f"Worker {worker_id} cancelled mid-flight on webhook msg {msg.get('_id')}, marking failed")
+                    await ad.queue.delete_msg(analytiq_client, "webhook", str(msg["_id"]), status="failed")
+                    raise
                 continue
 
             delivery = await ad.webhooks.claim_next_due_delivery(analytiq_client)
             if delivery:
                 _queue_idle_sleep["webhook"] = POLL_MIN_SLEEP
-                await ad.webhooks.send_delivery(analytiq_client, delivery)
+                try:
+                    await ad.webhooks.send_delivery(analytiq_client, delivery)
+                except asyncio.CancelledError:
+                    logger.warning(f"Worker {worker_id} cancelled mid-flight on webhook delivery {delivery.get('_id')}")
+                    raise
                 continue
 
             sleep = _queue_idle_sleep.get("webhook", POLL_MIN_SLEEP)
@@ -288,20 +313,25 @@ async def worker_webhook(worker_id: str) -> None:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
 
+def start_workers(n_workers: int) -> list[asyncio.Task]:
+    """
+    Start all worker coroutines as asyncio Tasks within the running event loop.
+    Call from a FastAPI lifespan or any async context. Cancel returned tasks on shutdown.
+    """
+    tasks = []
+    for i in range(n_workers):
+        tasks.append(asyncio.create_task(worker_ocr(f"ocr_{i}"),            name=f"ocr_{i}"))
+        tasks.append(asyncio.create_task(worker_llm(f"llm_{i}"),            name=f"llm_{i}"))
+        tasks.append(asyncio.create_task(worker_kb_index(f"kb_index_{i}"),  name=f"kb_index_{i}"))
+        tasks.append(asyncio.create_task(worker_webhook(f"webhook_{i}"),    name=f"webhook_{i}"))
+    tasks.append(asyncio.create_task(worker_kb_reconcile("kb_reconcile_0"), name="kb_reconcile_0"))
+    logger.info(f"Started {len(tasks)} worker tasks (n_workers={n_workers})")
+    return tasks
+
 async def main():
-    # Re-read the environment variables, in case they were changed by unit tests
     N_WORKERS = int(os.getenv("N_WORKERS", "1"))
-
-    # Create N_WORKERS workers of worker_ocr, worker_llm, worker_kb_index, and worker_webhook
-    # Only one KB reconciliation worker needed (checks all KBs periodically)
-    ocr_workers = [worker_ocr(f"ocr_{i}") for i in range(N_WORKERS)]
-    llm_workers = [worker_llm(f"llm_{i}") for i in range(N_WORKERS)]
-    kb_index_workers = [worker_kb_index(f"kb_index_{i}") for i in range(N_WORKERS)]
-    webhook_workers = [worker_webhook(f"webhook_{i}") for i in range(N_WORKERS)]
-    kb_reconcile_worker = [worker_kb_reconcile("kb_reconcile_0")]
-
-    # Run all workers concurrently
-    await asyncio.gather(*ocr_workers, *llm_workers, *kb_index_workers, *webhook_workers, *kb_reconcile_worker)
+    tasks = start_workers(N_WORKERS)
+    await asyncio.gather(*tasks)
 
 if __name__ == "__main__":
     # Configure logging to ensure it's visible

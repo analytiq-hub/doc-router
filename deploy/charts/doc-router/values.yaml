@@ -7,7 +7,6 @@ image:
     repository: analytiqhub/doc-router-backend
     tag: latest
     pullPolicy: IfNotPresent
-  # worker.py runs embedded in the backend pod (same as docker-compose / start.sh)
 
 ingress:
   enabled: true
@@ -25,7 +24,7 @@ resources:
     requests: { cpu: "250m", memory: "512Mi" }
     limits:   { cpu: "500m", memory: "1Gi" }
   backend:
-    requests: { cpu: "500m", memory: "512Mi" }
+    requests: { cpu: "500m", memory: "768Mi" }
     limits:   { cpu: "1000m", memory: "1Gi" }
 
 # Non-secret config rendered into the doc-router-config ConfigMap.

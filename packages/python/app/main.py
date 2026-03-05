@@ -3,6 +3,7 @@
 # Standard library imports
 import os
 import sys
+import asyncio
 import logging
 import warnings
 from contextlib import asynccontextmanager
@@ -43,6 +44,7 @@ from app.routes.webhooks import webhooks_router
 from app.routes.knowledge_bases import knowledge_bases_router
 from app.routes.agent import agent_router
 import analytiq_data as ad
+from worker.worker import start_workers
 
 # Set up the environment variables. This reads the .env file.
 ad.common.setup()
@@ -85,26 +87,30 @@ UPLOAD_DIR = "data"
 
 @asynccontextmanager
 async def lifespan(app):
-    # Startup code (previously in @app.on_event("startup"))
-    
     # Check MongoDB connectivity first
     await check_mongodb_connection(MONGODB_URI)
-    
+
     analytiq_client = ad.common.get_analytiq_client()
     await startup.setup_admin(analytiq_client)
     await startup.setup_api_creds(analytiq_client)
-    
+
     # Initialize payments
     db = ad.common.get_async_db(analytiq_client)
     await init_payments(db)
-    
+
     # Initialize KB embedding cache index
     await ad.kb.embedding_cache.ensure_embedding_cache_index(analytiq_client)
-    
-    yield  # This is where the app runs
-    
-    # Shutdown code (if any) would go here
-    # For example: await some_client.close()
+
+    # Start background workers in the same event loop (replaces the worker subprocess)
+    n_workers = int(os.getenv("N_WORKERS", "1"))
+    worker_tasks = start_workers(n_workers)
+
+    yield
+
+    # Cancel workers on shutdown
+    for task in worker_tasks:
+        task.cancel()
+    await asyncio.gather(*worker_tasks, return_exceptions=True)
 
 # Create the FastAPI app with the lifespan
 app = FastAPI(

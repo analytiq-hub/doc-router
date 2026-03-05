@@ -71,7 +71,7 @@ services:
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - SES_FROM_EMAIL=${SES_FROM_EMAIL}
       - N_WORKERS=${N_WORKERS:-1}
-    command: sh -c "cd /app/packages/python/worker && python3 worker.py & cd /app/packages/python && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "cd /app/packages/python && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     restart: unless-stopped
     ports:
       - "8000:8000"
