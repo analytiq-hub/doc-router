@@ -16,11 +16,6 @@ ingress:
   tls: true             # set to false for Kind (no cert-manager on local dev)
   clusterIssuer: letsencrypt-prod   # ignored when tls=false
 
-mongodb:
-  enabled: true
-  storageClassName: standard   # "" for Kind (uses default storage class); gp3 for EKS
-  storage: 10Gi
-
 replicaCount:
   frontend: 2
   backend: 2
@@ -30,9 +25,6 @@ resources:
     requests: { cpu: "250m", memory: "512Mi" }
     limits:   { cpu: "500m", memory: "1Gi" }
   backend:
-    requests: { cpu: "250m", memory: "512Mi" }
-    limits:   { cpu: "500m", memory: "1Gi" }
-  mongodb:
     requests: { cpu: "250m", memory: "512Mi" }
     limits:   { cpu: "500m", memory: "1Gi" }
 

@@ -20,7 +20,6 @@ spec:
         imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
         command: ["sh", "-c", "cd /app/packages/python && python3 migrate.py"]
         # Only the Secret is available at pre-install time (ConfigMap is created by Helm later).
-        # migrate.py only needs MONGODB_URI and ENV from the Secret.
         envFrom:
         - secretRef:
             name: doc-router-secrets

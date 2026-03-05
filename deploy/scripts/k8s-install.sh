@@ -43,7 +43,6 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 : "${APP_HOST:?".env.$OVERLAY must set APP_HOST"}"
 : "${NEXTAUTH_URL:?".env.$OVERLAY must set NEXTAUTH_URL"}"
 : "${AWS_S3_BUCKET_NAME:?".env.$OVERLAY must set AWS_S3_BUCKET_NAME"}"
-: "${STORAGE_CLASS:?".env.$OVERLAY must set STORAGE_CLASS"}"
 
 IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 echo "Chart version : $CHART_VERSION"
@@ -97,7 +96,6 @@ helm upgrade --install "$RELEASE" \
   --set image.backend.tag="$IMAGE_TAG" \
   --set ingress.host="$APP_HOST" \
   --set ingress.className=nginx \
-  --set mongodb.storageClassName="$STORAGE_CLASS" \
   --set config.environment="${ENV:-prod}" \
   --set config.appBucketName="$AWS_S3_BUCKET_NAME" \
   --set config.region="$REGION" \
