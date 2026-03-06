@@ -320,8 +320,11 @@ All environment and secret values are maintained in **manually created, gitignor
 
 **Variables needed in `.env.eks`:**
 
+Scripts read `AWS_PROFILE` from the overlay and pass it to every `aws` call via `--profile "$AWS_PROFILE"`. The operator never needs to `export AWS_PROFILE`; run `aws sso login --profile <name>` once per session, then build/deploy using the overlay.
+
 | Var | Example | Source |
 |---|---|---|
+| `AWS_PROFILE` | `analytiq-eks-test` | Named profile used for `aws sso login`; scripts use it for ECR login, `eks update-kubeconfig`, etc. |
 | `CLUSTER_NAME` | `doc-router` | Terraform var |
 | `REGION` | `us-east-1` | Terraform var |
 | `CHART_REGISTRY` | `<account-id>.dkr.ecr.us-east-1.amazonaws.com` | ECR (dev) or `ghcr.io` (release) |
@@ -403,7 +406,7 @@ Rollback strategy: MongoDB migrations are forward-only. Rollback means restoring
 
 ### `build-push.sh`
 
-Builds and pushes both images. Supports AWS ECR (default) and DigitalOcean DOCR (`CLOUD_PROVIDER=do`).
+Builds and pushes both images. Supports AWS ECR (default) and DigitalOcean DOCR (`CLOUD_PROVIDER=do`). For ECR, uses `AWS_PROFILE` from the overlay and runs all `aws` commands with `--profile "$AWS_PROFILE"` (no need to export `AWS_PROFILE` in the shell).
 
 ```bash
 ./deploy/scripts/build-push.sh <overlay>
@@ -414,7 +417,7 @@ Reads `FRONTEND_IMAGE_REPO`, `BACKEND_IMAGE_REPO`, `CHART_REGISTRY`, `REGION` fr
 
 ### `publish-chart.sh`
 
-Packages the Helm chart and pushes it as an OCI artifact to the registry.
+Packages the Helm chart and pushes it as an OCI artifact to the registry. For ECR, uses `AWS_PROFILE` from the overlay for registry login (`--profile "$AWS_PROFILE"`).
 
 ```bash
 ./deploy/scripts/publish-chart.sh <overlay>
@@ -425,7 +428,7 @@ Reads chart version from `Chart.yaml`. Must be re-run any time `Chart.yaml` vers
 
 ### `k8s-deploy.sh`
 
-Idempotent install-or-upgrade (`helm upgrade --install`). Safe to run on a fresh cluster or an existing deployment. Creates the namespace and `doc-router-secrets` Secret, then deploys the chart from the OCI registry, then restarts pods to pick up any refreshed secrets.
+Idempotent install-or-upgrade (`helm upgrade --install`). Safe to run on a fresh cluster or an existing deployment. Creates the namespace and `doc-router-secrets` Secret, then deploys the chart from the OCI registry, then restarts pods to pick up any refreshed secrets. Uses `AWS_PROFILE` from the overlay for `aws eks update-kubeconfig` and any other `aws` calls (`--profile "$AWS_PROFILE"`), so the operator does not need to export `AWS_PROFILE`.
 
 ```bash
 ./deploy/scripts/k8s-deploy.sh <overlay>
