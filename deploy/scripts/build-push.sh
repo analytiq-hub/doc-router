@@ -42,8 +42,6 @@ fi
 IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
 echo "Image tag: $IMAGE_TAG"
 
-NEXT_PUBLIC_FASTAPI_FRONTEND_URL="https://${APP_HOST}/fastapi"
-
 # --- Registry login ---
 echo "Logging in to registry ($CHART_REGISTRY)..."
 if [ "$CLOUD_PROVIDER" = "do" ]; then
@@ -58,7 +56,6 @@ fi
 echo "Building frontend image..."
 docker build \
   --target runner \
-  --build-arg NEXT_PUBLIC_FASTAPI_FRONTEND_URL="$NEXT_PUBLIC_FASTAPI_FRONTEND_URL" \
   --build-arg NODE_ENV=production \
   -t "$FRONTEND_IMAGE_REPO:$IMAGE_TAG" \
   -t "$FRONTEND_IMAGE_REPO:latest" \

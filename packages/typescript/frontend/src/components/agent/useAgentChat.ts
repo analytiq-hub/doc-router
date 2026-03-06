@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { apiClient, getApiErrorMsg, getSessionToken } from '@/utils/api';
 
-const API_BASE = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || 'http://localhost:8000') : 'http://localhost:8000';
+const API_BASE = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi') : '/fastapi';
 
 export interface ExecutedRound {
   thinking?: string | null;

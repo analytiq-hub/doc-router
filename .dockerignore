@@ -4,6 +4,7 @@
 **/__pycache__
 **/.git
 **/.env
+**/.env.*
 **/venv
 **/tests
 **/*.test.*

@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { Button } from '@mui/material';
 
 const DeveloperPage: React.FC = () => {
-  const apiUrl = `${process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || 'http://localhost:8000'}/docs`;
+  const apiUrl = `${process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi'}/docs`;
   
   return (
     <SettingsLayout selectedMenu="user_developer">

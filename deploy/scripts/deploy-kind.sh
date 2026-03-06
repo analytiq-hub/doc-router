@@ -38,14 +38,10 @@ set +a
 IMAGE_TAG="${IMAGE_TAG:-$(date +%Y%m%d%H%M%S)}"
 echo "Using image tag: $IMAGE_TAG"
 
-# NEXT_PUBLIC_FASTAPI_FRONTEND_URL is baked into the Next.js build at build time.
-NEXT_PUBLIC_FASTAPI_FRONTEND_URL="${NEXT_PUBLIC_FASTAPI_FRONTEND_URL:-http://localhost/fastapi}"
-
 # --- Build images ---
 echo "Building frontend image..."
 docker build -t analytiqhub/doc-router-frontend:"$IMAGE_TAG" \
-  --target frontend \
-  --build-arg NEXT_PUBLIC_FASTAPI_FRONTEND_URL="$NEXT_PUBLIC_FASTAPI_FRONTEND_URL" \
+  --target runner \
   --build-arg NODE_ENV=production \
   -f deploy/shared/docker/Dockerfile .
 

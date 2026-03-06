@@ -7,7 +7,6 @@ services:
       target: runner
       args:
         # Build-time environment
-        - NEXT_PUBLIC_FASTAPI_FRONTEND_URL=${NEXT_PUBLIC_FASTAPI_FRONTEND_URL:-http://localhost:8000}
         - NODE_ENV=production
     environment:
       # Runtime environment
@@ -20,7 +19,6 @@ services:
       - AUTH_GITHUB_SECRET=${AUTH_GITHUB_SECRET}
       - AUTH_GOOGLE_ID=${AUTH_GOOGLE_ID}
       - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
-      - NEXT_PUBLIC_FASTAPI_FRONTEND_URL=${NEXT_PUBLIC_FASTAPI_FRONTEND_URL:-http://localhost:8000}
     command: node frontend/server.js
     restart: unless-stopped
     ports:

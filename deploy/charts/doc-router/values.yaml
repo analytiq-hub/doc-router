@@ -33,7 +33,6 @@ resources:
 config:
   environment: prod
   nextauthUrl: ""                       # e.g. https://app.example.com
-  nextPublicFastapiUrl: ""              # e.g. https://app.example.com/fastapi
   fastapiRootPath: "/fastapi"           # must match the ingress path prefix
   nWorkers: "4"
   appBucketName: ""                     # AWS S3 bucket for document storage

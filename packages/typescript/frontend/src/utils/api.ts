@@ -45,7 +45,7 @@ export function invalidateSessionCache(): void {
 import { toast } from 'react-toastify';
 
 // These APIs execute from the frontend
-const NEXT_PUBLIC_FASTAPI_FRONTEND_URL = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || "http://localhost:8000";
+const NEXT_PUBLIC_FASTAPI_FRONTEND_URL = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || "/fastapi";
 
 const api = axios.create({
   baseURL: NEXT_PUBLIC_FASTAPI_FRONTEND_URL, 

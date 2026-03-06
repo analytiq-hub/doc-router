@@ -8,7 +8,6 @@ metadata:
 data:
   ENV: {{ .Values.config.environment | quote }}
   NEXTAUTH_URL: {{ .Values.config.nextauthUrl | quote }}
-  NEXT_PUBLIC_FASTAPI_FRONTEND_URL: {{ .Values.config.nextPublicFastapiUrl | quote }}
   FASTAPI_ROOT_PATH: {{ .Values.config.fastapiRootPath | quote }}
   FASTAPI_BACKEND_URL: {{ printf "http://backend.%s.svc.cluster.local:8000" .Release.Namespace | quote }}
   N_WORKERS: {{ .Values.config.nWorkers | quote }}
