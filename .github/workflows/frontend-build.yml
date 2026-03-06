@@ -11,6 +11,7 @@ on:
     paths:
       - 'packages/typescript/frontend/**'
       - 'packages/typescript/sdk/**'
+  workflow_call:      # Allow calling from other workflows (e.g. release.yml)
 
 jobs:
   build:
