@@ -56,9 +56,6 @@ ENV STRIPE_PRODUCT_TAG=""
 # Set the working directory in the container
 WORKDIR /app
 
-# Copy the packages
-COPY packages/ ./packages/
-
 # Install system dependencies and uv
 RUN apt-get update && \
     apt-get install -y --no-install-recommends libreoffice curl && \
@@ -66,8 +63,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     pip install --no-cache-dir uv
 
-# Copy only packages requirements first
+# Install Python deps before copying source (better layer caching)
 COPY packages/python/requirements.txt ./packages/python/
 RUN uv pip install --system --no-cache-dir -r packages/python/requirements.txt
+
+# Copy the packages
+COPY packages/ ./packages/
 
 EXPOSE 8000
