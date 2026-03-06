@@ -30,6 +30,22 @@ RUN cd packages/typescript/frontend && npm run build
 
 EXPOSE 3000
 
+# --- Slim runtime stage ---
+FROM node:24-slim AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+
+# outputFileTracingRoot is packages/typescript/, so paths inside standalone are relative to that:
+#   server.js lives at frontend/server.js (i.e. packages/typescript/frontend stripped to frontend/)
+COPY --from=frontend /app/packages/typescript/frontend/.next/standalone ./
+COPY --from=frontend /app/packages/typescript/frontend/.next/static ./frontend/.next/static
+COPY --from=frontend /app/packages/typescript/frontend/public ./frontend/public
+
+EXPOSE 3000
+CMD ["node", "frontend/server.js"]
+
 # Use slim Python 3.12 as the base image
 FROM python:3.12-slim AS backend
 

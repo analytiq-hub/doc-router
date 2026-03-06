@@ -7,6 +7,7 @@ import TerserPlugin from 'terser-webpack-plugin';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig = {
+  output: 'standalone',
   transpilePackages: ['@tsed/react-formio', '@tsed/tailwind-formio', '@docrouter/sdk'],
   // Include files from monorepo parent for file: dependencies (production build)
   outputFileTracingRoot: path.join(__dirname, '..'),

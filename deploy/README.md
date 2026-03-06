@@ -17,6 +17,7 @@ deploy/
 │   ├── k8s-deploy.sh     # Install or upgrade on any Kubernetes cluster (idempotent)
 │   ├── k8s-rollback.sh   # Helm rollback to previous revision
 │   ├── k8s-uninstall.sh  # Tear down the release
+│   ├── setup-doks.sh     # One-time cluster add-ons for Digital Ocean DOKS
 │   ├── setup-kind.sh     # Create a local kind cluster
 │   └── deploy-kind.sh    # Build & deploy to local kind cluster
 └── shared/               # Shared resources (Dockerfiles, configs)
@@ -98,6 +99,75 @@ helm history doc-router -n doc-router
 
 ```bash
 ./deploy/scripts/k8s-uninstall.sh eks-test
+```
+
+---
+
+## Digital Ocean DOKS Deployment
+
+### Prerequisites
+
+- `doctl` CLI, authenticated (`doctl auth init`)
+- `docker`
+- `helm` >= 3.8 (OCI support)
+- `kubectl`, configured against the target cluster (`doctl kubernetes cluster kubeconfig save <cluster-name>`)
+
+### Environment overlay
+
+Create `.env.do-test` at the project root:
+
+```bash
+CLOUD_PROVIDER=do
+DOCR_TOKEN=dop_v1_...                          # DO personal access token with registry write access
+CHART_REGISTRY=registry.digitalocean.com
+CHART_REPO_URL=registry.digitalocean.com/<registry-name>
+FRONTEND_IMAGE_REPO=registry.digitalocean.com/<registry-name>/doc-router-frontend
+BACKEND_IMAGE_REPO=registry.digitalocean.com/<registry-name>/doc-router-backend
+APP_HOST=myapp.example.com
+LETSENCRYPT_EMAIL=admin@example.com
+REGION=us-east-1                               # AWS region for S3 document storage
+AWS_S3_BUCKET_NAME=my-docrouter-bucket
+# ... secrets (MONGODB_URI, NEXTAUTH_SECRET, AWS keys for S3, API keys, etc.)
+```
+
+The same scripts are used as for EKS — `CLOUD_PROVIDER=do` switches the registry login from
+`aws ecr get-login-password` to token-based DOCR authentication.
+
+### First-time cluster setup
+
+Run once after provisioning the DOKS cluster to install ingress-nginx, cert-manager, and
+metrics-server, and create the Let's Encrypt ClusterIssuer:
+
+```bash
+doctl kubernetes cluster kubeconfig save <cluster-name>
+./deploy/scripts/setup-doks.sh do-test
+```
+
+After it completes, point your DNS A record for `APP_HOST` to the LoadBalancer IP:
+
+```bash
+kubectl get svc -n ingress-nginx ingress-nginx-controller
+# Add an A record: APP_HOST → EXTERNAL-IP
+```
+
+### Deploying
+
+```bash
+# 1. Build and push Docker images
+./deploy/scripts/build-push.sh do-test
+
+# 2. Publish the Helm chart (only when chart files have changed)
+./deploy/scripts/publish-chart.sh do-test
+
+# 3. Install or upgrade into the cluster
+./deploy/scripts/k8s-deploy.sh do-test
+```
+
+### Rollback / Uninstall
+
+```bash
+./deploy/scripts/k8s-rollback.sh do-test
+./deploy/scripts/k8s-uninstall.sh do-test
 ```
 
 ---

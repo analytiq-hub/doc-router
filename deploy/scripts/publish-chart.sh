@@ -1,10 +1,12 @@
 #!/bin/bash
-# Package the Helm chart and push it as an OCI artifact to ECR.
+# Package the Helm chart and push it as an OCI artifact to a container registry.
 # Usage: ./deploy/scripts/publish-chart.sh <overlay>
-#   overlay  — env overlay name, e.g. "eks" (sources .env + .env.<overlay>)
+#   overlay  — env overlay name, e.g. "eks-test" or "do-test"
 #
 # Chart version is read from deploy/charts/doc-router/Chart.yaml.
-# Required env vars (from overlay): CHART_REGISTRY, CHART_REPO_URL, REGION.
+# Required env vars (from overlay): CHART_REGISTRY, CHART_REPO_URL.
+# For AWS ECR: also REGION.
+# For Digital Ocean DOCR: also CLOUD_PROVIDER=do, DOCR_TOKEN.
 
 set -eo pipefail
 
@@ -29,7 +31,13 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
 : "${CHART_REGISTRY:?".env.$OVERLAY must set CHART_REGISTRY"}"
 : "${CHART_REPO_URL:?".env.$OVERLAY must set CHART_REPO_URL"}"
-: "${REGION:?".env.$OVERLAY must set REGION"}"
+
+CLOUD_PROVIDER="${CLOUD_PROVIDER:-aws}"
+if [ "$CLOUD_PROVIDER" = "aws" ]; then
+    : "${REGION:?".env.$OVERLAY must set REGION for AWS ECR"}"
+elif [ "$CLOUD_PROVIDER" = "do" ]; then
+    : "${DOCR_TOKEN:?".env.$OVERLAY must set DOCR_TOKEN for Digital Ocean"}"
+fi
 
 CHART_PACKAGE="doc-router-${CHART_VERSION}.tgz"
 
@@ -37,10 +45,15 @@ CHART_PACKAGE="doc-router-${CHART_VERSION}.tgz"
 echo "Packaging chart version $CHART_VERSION..."
 helm package "$CHART_DIR"
 
-# --- ECR login for Helm ---
-echo "Logging in to ECR ($CHART_REGISTRY)..."
-aws ecr get-login-password --region "$REGION" \
-  | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
+# --- Registry login for Helm ---
+echo "Logging in to registry ($CHART_REGISTRY)..."
+if [ "$CLOUD_PROVIDER" = "do" ]; then
+    echo "$DOCR_TOKEN" | helm registry login registry.digitalocean.com \
+      --username "$DOCR_TOKEN" --password-stdin
+else
+    aws ecr get-login-password --region "$REGION" \
+      | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
+fi
 
 # --- Push OCI artifact ---
 # helm push appends the chart name to the URL, so push to the registry root:
