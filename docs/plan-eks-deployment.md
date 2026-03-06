@@ -4,13 +4,16 @@
 
 - Deploy doc-router to AWS EKS (our own cluster, one or more namespaces).
 - Deploy doc-router to a customer's existing Kubernetes cluster (any provider).
-- Docker images built from the existing multi-stage Dockerfile, stored in ECR.
+- Docker images and Helm chart published to **`ghcr.io/analytiqhub/`** on stable `vX.Y.Z` git tags — free, no rate limits, no registry credentials required to pull public packages.
+- Dev/test builds pushed to ECR with git SHA tags; never published publicly.
 - Terraform manages all AWS infrastructure; a **Helm chart** is the single source of truth for Kubernetes packaging.
-- The chart is published as an OCI artifact to ECR and installed with `helm upgrade --install` directly — no GitOps controller required.
+- The chart is published as an OCI artifact to `ghcr.io` alongside the images — one organization, one set of credentials.
+- Installed with `helm upgrade --install` directly — no GitOps controller required.
 
 ### Non-Goals
 - Customers do not need to adopt our Git workflow; they pin a chart version and run scripts.
-- No GitHub Actions, Argo CD, Flux, or proprietary deployment services required.
+- No Argo CD, Flux, or proprietary deployment services required.
+- GitHub Actions handles release builds only; dev deploys remain manual shell scripts.
 
 ---
 
@@ -144,12 +147,12 @@ doc-router/
 ```yaml
 image:
   frontend:
-    repository: analytiqhub/doc-router-frontend
-    tag: latest
+    repository: ghcr.io/analytiqhub/doc-router-frontend
+    tag: ""            # empty = use Chart.appVersion; override for dev/SHA builds
     pullPolicy: IfNotPresent
   backend:
-    repository: analytiqhub/doc-router-backend
-    tag: latest
+    repository: ghcr.io/analytiqhub/doc-router-backend
+    tag: ""            # empty = use Chart.appVersion; override for dev/SHA builds
     pullPolicy: IfNotPresent
   # worker uses the same image as backend; pullPolicy follows backend
 
@@ -321,9 +324,9 @@ All environment and secret values are maintained in **manually created, gitignor
 |---|---|---|
 | `CLUSTER_NAME` | `doc-router` | Terraform var |
 | `REGION` | `us-east-1` | Terraform var |
-| `CHART_REGISTRY` | `<account-id>.dkr.ecr.us-east-1.amazonaws.com` | `chart_repo_url` output |
-| `FRONTEND_IMAGE_REPO` | `<account-id>.dkr.ecr.us-east-1.amazonaws.com/doc-router-frontend` | `frontend_repo_url` output |
-| `BACKEND_IMAGE_REPO` | `<account-id>.dkr.ecr.us-east-1.amazonaws.com/doc-router-backend` | `backend_repo_url` output |
+| `CHART_REGISTRY` | `<account-id>.dkr.ecr.us-east-1.amazonaws.com` | ECR (dev) or `ghcr.io` (release) |
+| `FRONTEND_IMAGE_REPO` | `ghcr.io/analytiqhub/doc-router-frontend` (prod) or ECR URL (dev) | `ghcr.io` for releases; ECR for SHA builds |
+| `BACKEND_IMAGE_REPO` | `ghcr.io/analytiqhub/doc-router-backend` (prod) or ECR URL (dev) | `ghcr.io` for releases; ECR for SHA builds |
 | `AWS_S3_BUCKET_NAME` | `docrouter-test` | Existing `applications/docrouter` output |
 | `APP_HOST` | `app.example.com` | DNS record you create |
 | `STORAGE_CLASS` | `gp3` | EKS standard |
@@ -367,7 +370,22 @@ All upgrade and install commands use `--wait --timeout 10m`. Helm polls until al
 
 ### Versioning discipline
 
-One semver version ties together the chart version (`Chart.yaml`) and both container image tags. The upgrade script sets all three atomically. Rollback patches all three back via `helm rollback`.
+`Chart.yaml` carries two version fields:
+
+```yaml
+version: 0.3.7       # chart version — bump when chart templates/config change
+appVersion: v1.2.3   # application version = image tag
+```
+
+Deployment templates default the image tag to `appVersion`:
+
+```yaml
+image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+```
+
+This means `k8s-deploy.sh` needs **no `--set image.*.tag`** for a release deploy — the chart already knows the correct tag. For dev deploys using a git SHA, override with `IMAGE_TAG=abc1234`.
+
+On every stable release, both `version` and `appVersion` move together. Rollback via `helm rollback` restores the entire previous state atomically — chart config, image tag, and secrets version.
 
 ---
 
@@ -392,7 +410,7 @@ Builds and pushes both images. Supports AWS ECR (default) and DigitalOcean DOCR 
 # e.g. ./deploy/scripts/build-push.sh eks-test
 ```
 
-Reads `FRONTEND_IMAGE_REPO`, `BACKEND_IMAGE_REPO`, `CHART_REGISTRY`, `REGION` from `.env.$overlay`. Builds `--target runner` (frontend slim image) and `--target backend`. `IMAGE_TAG` defaults to the current git SHA.
+Reads `FRONTEND_IMAGE_REPO`, `BACKEND_IMAGE_REPO`, `CHART_REGISTRY`, `REGION` from `.env.$overlay`. Builds `--target runner` (frontend slim image) and `--target backend`. `IMAGE_TAG` defaults to the current git SHA — suitable for dev/test pushes to ECR. Stable releases are built by GitHub Actions when a `vX.Y.Z` tag is pushed, and published to Docker Hub automatically.
 
 ### `publish-chart.sh`
 
@@ -434,6 +452,40 @@ Removes the Helm release and the `doc-router` namespace from the cluster.
 
 ---
 
+## Image and chart distribution
+
+### Tag conventions
+
+| Tag | Meaning | Published where |
+|---|---|---|
+| `v1.2.3` | Stable release | `ghcr.io/analytiqhub/` (images + chart) |
+| `v1.2.3-rc.1` | Release candidate | `ghcr.io/analytiqhub/` (optional) |
+| `v1.2.3-beta.1` | Beta | `ghcr.io/analytiqhub/` (optional) |
+| `abc1234` (git SHA) | Dev/test build | ECR only — never published publicly |
+
+Only unqualified `vX.Y.Z` tags are treated as stable. Everything else stays in the private registry.
+
+### Release flow (GitHub Actions on `git tag vX.Y.Z`)
+
+```
+git tag v1.2.3 && git push --tags
+  → GitHub Actions (GITHUB_TOKEN — no extra secrets needed):
+      docker build → push ghcr.io/analytiqhub/doc-router-frontend:v1.2.3 + :latest
+      docker build → push ghcr.io/analytiqhub/doc-router-backend:v1.2.3  + :latest
+      helm package → push ghcr.io/analytiqhub/doc-router:0.3.7
+        (Chart.yaml appVersion: v1.2.3, version: 0.3.7)
+```
+
+### Dev/test flow (manual, SHA tag, ECR)
+
+```
+./deploy/scripts/build-push.sh eks-test
+  → pushes <ECR>/<repo>:<git-sha> to ECR
+IMAGE_TAG=<git-sha> ./deploy/scripts/k8s-deploy.sh eks-test
+```
+
+---
+
 ## Workflow summary
 
 ### First-time EKS setup
@@ -464,28 +516,36 @@ terraform apply
 ./deploy/scripts/k8s-deploy.sh eks-test
 ```
 
-### Per-deployment (image update only, same chart version)
+### Stable release deploy (from Docker Hub, `vX.Y.Z`)
 
 ```bash
-# In doc-router/
+# 1. Tag the release — GitHub Actions builds and publishes images + chart automatically
+git tag v1.2.3 && git push --tags
 
-# Ensure kubectl is pointing at the right cluster.
-# Run this if you've switched contexts or haven't configured kubeconfig yet:
+# 2. Ensure kubectl is pointing at the right cluster (if needed):
 aws eks update-kubeconfig --name analytiq-test --region us-east-1
 
-./deploy/scripts/build-push.sh eks-test
+# 3. Deploy — chart already knows the image tag via appVersion; no IMAGE_TAG needed
 ./deploy/scripts/k8s-deploy.sh eks-test
 ```
 
-### Per-deployment (chart + image update)
+### Dev/test deploy (SHA build, ECR)
 
 ```bash
-# Bump version in deploy/charts/doc-router/Chart.yaml, then:
-
 # Ensure kubectl is pointing at the right cluster (if needed):
 aws eks update-kubeconfig --name analytiq-test --region us-east-1
 
+# Build and push SHA-tagged images to ECR, then deploy
 ./deploy/scripts/build-push.sh eks-test
+IMAGE_TAG=$(git rev-parse --short HEAD) ./deploy/scripts/k8s-deploy.sh eks-test
+```
+
+### Chart-only update (config/template change, no image rebuild)
+
+```bash
+# Bump version and appVersion in deploy/charts/doc-router/Chart.yaml, then:
+aws eks update-kubeconfig --name analytiq-test --region us-east-1
+
 ./deploy/scripts/publish-chart.sh eks-test
 ./deploy/scripts/k8s-deploy.sh eks-test
 ```
