@@ -32,7 +32,7 @@ spec:
           name: http
           protocol: TCP
         command: ["sh", "-c"]
-        args: ["ulimit -n 65536 && cd /app/packages/typescript/frontend && npm run start"]
+        args: ["ulimit -n 65536 && node frontend/server.js"]
         envFrom:
         - configMapRef:
             name: doc-router-config
