@@ -44,13 +44,13 @@ Goal: deploy the proven chart to AWS EKS using direct `helm upgrade --install` a
 
 #### 3a — EKS scripts (in `doc-router/deploy/scripts/`, public)
 
-Add five scripts to `deploy/scripts/`:
+Add scripts to `deploy/scripts/`:
 
-- **`build-push.sh`** — ECR login, `docker build --target frontend/backend`, tag `<ECR_URL>:<IMAGE_TAG>` + `:latest`, push both images. `IMAGE_TAG` defaults to current git SHA; set in env to override.
-- **`publish-chart.sh`** — reads chart version from `Chart.yaml`, `helm package`, ECR login, `helm push oci://CHART_REGISTRY` (helm appends chart name → ECR repo `CHART_REPO_URL`).
-- **`k8s-install.sh`** — first-time install. Sources env overlay, creates namespace, creates `doc-router-secrets` Secret, runs `helm upgrade --install oci://CHART_REPO_URL --version <from Chart.yaml>` with non-secret values via `--set`, `--atomic --timeout 10m`.
-- **`k8s-upgrade.sh`** — upgrades a running release. Updates the `doc-router-secrets` Secret if any secret values changed, then runs `helm upgrade oci://CHART_REPO_URL --version <from Chart.yaml> --reuse-values --set image.*.tag=<IMAGE_TAG>`.
+- **`build-push.sh`** — registry login, `docker build --target runner` (frontend) and `--target backend`, tag `<REPO>:<IMAGE_TAG>` + `:latest`, push both images. `IMAGE_TAG` defaults to current git SHA; set in env to override.
+- **`publish-chart.sh`** — reads chart version from `Chart.yaml`, `helm package`, registry login, `helm push oci://CHART_REGISTRY` (helm appends chart name → ECR repo `CHART_REPO_URL`).
+- **`k8s-deploy.sh`** — idempotent install-or-upgrade. Sources env overlay, creates namespace, creates/updates `doc-router-secrets` Secret, registry login, runs `helm upgrade --install oci://CHART_REPO_URL --version <from Chart.yaml>` with non-secret values via `--set`, `--atomic --timeout 10m`, then restarts deployments to pick up refreshed secrets.
 - **`k8s-rollback.sh`** — runs `helm rollback doc-router <revision> -n doc-router --wait`.
+- **`k8s-uninstall.sh`** — removes the Helm release and namespace from the cluster.
 
 All scripts source a gitignored `.env` + overlay (e.g. `.env.eks`) for secrets and cluster-specific values. They contain no hardcoded sensitive values and are safe to commit publicly.
 
@@ -126,11 +126,11 @@ doc-router/
           configmap.yaml
           pdb.yaml
     scripts/
-      build-push.sh           # build + push images to ECR
-      publish-chart.sh        # package + push OCI chart to ECR
-      k8s-install.sh          # first-time install into any cluster
-      k8s-upgrade.sh          # upgrade to a new chart version
-      k8s-rollback.sh         # roll back to a previous chart version
+      build-push.sh           # build + push images to registry (ECR or DOCR)
+      publish-chart.sh        # package + push OCI chart to registry
+      k8s-deploy.sh           # idempotent install-or-upgrade on any cluster
+      k8s-rollback.sh         # roll back to a previous Helm revision
+      k8s-uninstall.sh        # remove the Helm release and namespace
       deploy-kind.sh          # local Kind deploy (helm upgrade --install)
       setup-kind.sh           # create local Kind cluster
       values-kind.yaml        # committed Kind-specific overrides (no secrets)
@@ -385,115 +385,51 @@ Rollback strategy: MongoDB migrations are forward-only. Rollback means restoring
 
 ### `build-push.sh`
 
+Builds and pushes both images. Supports AWS ECR (default) and DigitalOcean DOCR (`CLOUD_PROVIDER=do`).
+
 ```bash
-# Sources .env + overlay for ECR URLs
-# IMAGE_TAG defaults to current git SHA; set in env to override
-set -a; source .env; source ".env.${1:?overlay required}"; set +a
-IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
-
-aws ecr get-login-password --region "$REGION" \
-  | docker login --username AWS --password-stdin "$CHART_REGISTRY"
-
-docker build --target frontend -t "$FRONTEND_IMAGE_REPO:$IMAGE_TAG" \
-  -t "$FRONTEND_IMAGE_REPO:latest" -f deploy/shared/docker/Dockerfile .
-docker push "$FRONTEND_IMAGE_REPO:$IMAGE_TAG"
-docker push "$FRONTEND_IMAGE_REPO:latest"
-
-docker build --target backend -t "$BACKEND_IMAGE_REPO:$IMAGE_TAG" \
-  -t "$BACKEND_IMAGE_REPO:latest" -f deploy/shared/docker/Dockerfile .
-docker push "$BACKEND_IMAGE_REPO:$IMAGE_TAG"
-docker push "$BACKEND_IMAGE_REPO:latest"
+./deploy/scripts/build-push.sh <overlay>
+# e.g. ./deploy/scripts/build-push.sh eks-test
 ```
+
+Reads `FRONTEND_IMAGE_REPO`, `BACKEND_IMAGE_REPO`, `CHART_REGISTRY`, `REGION` from `.env.$overlay`. Builds `--target runner` (frontend slim image) and `--target backend`. `IMAGE_TAG` defaults to the current git SHA.
 
 ### `publish-chart.sh`
 
-```bash
-# Sources .env + overlay for CHART_REGISTRY
-# Chart version is read from deploy/charts/doc-router/Chart.yaml
-# helm push appends the chart name: oci://CHART_REGISTRY/<chart-name>:<version>
-set -a; source .env; source ".env.${1:?overlay required}"; set +a
-CHART_VERSION="$(grep '^version:' deploy/charts/doc-router/Chart.yaml | awk '{print $2}')"
-
-helm package deploy/charts/doc-router
-aws ecr get-login-password --region "$REGION" \
-  | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
-helm push "doc-router-${CHART_VERSION}.tgz" "oci://$CHART_REGISTRY"
-rm "doc-router-${CHART_VERSION}.tgz"
-```
-
-### `k8s-install.sh`
+Packages the Helm chart and pushes it as an OCI artifact to the registry.
 
 ```bash
-# Chart version from Chart.yaml; IMAGE_TAG from git SHA or env
-set -a; source .env; source ".env.${1:?overlay required}"; set +a
-CHART_VERSION="$(grep '^version:' deploy/charts/doc-router/Chart.yaml | awk '{print $2}')"
-IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
-
-kubectl create namespace doc-router --dry-run=client -o yaml | kubectl apply -f -
-
-kubectl create secret generic doc-router-secrets \
-  --from-literal=MONGODB_URI="$MONGODB_URI" \
-  --from-literal=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-  --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-  --from-literal=NEXTAUTH_SECRET="$NEXTAUTH_SECRET" \
-  --namespace doc-router --dry-run=client -o yaml | kubectl apply -f -
-
-aws ecr get-login-password --region "$REGION" \
-  | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
-
-helm upgrade --install doc-router \
-  "oci://$CHART_REPO_URL" \
-  --version "$CHART_VERSION" \
-  --namespace doc-router \
-  --set ingress.host="$APP_HOST" \
-  --set ingress.className=nginx \
-  --set mongodb.storageClassName="$STORAGE_CLASS" \
-  --set image.frontend.repository="$FRONTEND_IMAGE_REPO" \
-  --set image.backend.repository="$BACKEND_IMAGE_REPO" \
-  --set image.frontend.tag="$IMAGE_TAG" \
-  --set image.backend.tag="$IMAGE_TAG" \
-  --set config.appBucketName="$AWS_S3_BUCKET_NAME" \
-  --set config.region="$REGION" \
-  --set config.nextauthUrl="$NEXTAUTH_URL" \
-  --atomic --timeout 10m
+./deploy/scripts/publish-chart.sh <overlay>
+# e.g. ./deploy/scripts/publish-chart.sh eks-test
 ```
 
-### `k8s-upgrade.sh`
+Reads chart version from `Chart.yaml`. Must be re-run any time `Chart.yaml` version is bumped.
+
+### `k8s-deploy.sh`
+
+Idempotent install-or-upgrade (`helm upgrade --install`). Safe to run on a fresh cluster or an existing deployment. Creates the namespace and `doc-router-secrets` Secret, then deploys the chart from the OCI registry, then restarts pods to pick up any refreshed secrets.
 
 ```bash
-# Chart version from Chart.yaml; IMAGE_TAG from git SHA or env
-set -a; source .env; source ".env.${1:?overlay required}"; set +a
-CHART_VERSION="$(grep '^version:' deploy/charts/doc-router/Chart.yaml | awk '{print $2}')"
-IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
-
-# Refresh secrets in case any values changed
-kubectl create secret generic doc-router-secrets \
-  --from-literal=MONGODB_URI="$MONGODB_URI" \
-  --from-literal=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-  --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-  --from-literal=NEXTAUTH_SECRET="$NEXTAUTH_SECRET" \
-  --namespace doc-router --dry-run=client -o yaml | kubectl apply -f -
-
-aws ecr get-login-password --region "$REGION" \
-  | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
-
-helm upgrade doc-router \
-  "oci://$CHART_REPO_URL" \
-  --version "$CHART_VERSION" \
-  --namespace doc-router \
-  --reuse-values \
-  --set image.frontend.tag="$IMAGE_TAG" \
-  --set image.backend.tag="$IMAGE_TAG" \
-  --atomic --timeout 10m
+./deploy/scripts/k8s-deploy.sh <overlay>
+# e.g. ./deploy/scripts/k8s-deploy.sh eks-test
 ```
+
+Reads all values from `.env` + `.env.$overlay`. Non-secret config is passed via `--set`; secrets come from the `doc-router-secrets` Secret created by the script.
 
 ### `k8s-rollback.sh`
 
 ```bash
-set -a; source .env; source ".env.${1:?overlay required}"; set +a
-REVISION=${2:-0}   # 0 = previous revision; pass explicit number to target a specific one
+./deploy/scripts/k8s-rollback.sh <overlay> [revision]
+# revision defaults to 0 (= previous revision)
+# Run "helm history doc-router -n doc-router" to list available revisions
+```
 
-helm rollback doc-router "$REVISION" --namespace doc-router --wait
+### `k8s-uninstall.sh`
+
+Removes the Helm release and the `doc-router` namespace from the cluster.
+
+```bash
+./deploy/scripts/k8s-uninstall.sh <overlay>
 ```
 
 ---
@@ -522,27 +458,36 @@ aws eks update-kubeconfig --name analytiq-test --region us-east-1
 terraform apply
 
 # Back in doc-router/ — fill in .env.eks-test from terraform outputs
-# Build images, publish chart, install app
+# Build images, publish chart, deploy app
 ./deploy/scripts/build-push.sh eks-test
 ./deploy/scripts/publish-chart.sh eks-test
-./deploy/scripts/k8s-install.sh eks-test
+./deploy/scripts/k8s-deploy.sh eks-test
 ```
 
-### Per-deployment (image update only)
+### Per-deployment (image update only, same chart version)
 
 ```bash
 # In doc-router/
+
+# Ensure kubectl is pointing at the right cluster.
+# Run this if you've switched contexts or haven't configured kubeconfig yet:
+aws eks update-kubeconfig --name analytiq-test --region us-east-1
+
 ./deploy/scripts/build-push.sh eks-test
-./deploy/scripts/k8s-upgrade.sh eks-test
+./deploy/scripts/k8s-deploy.sh eks-test
 ```
 
 ### Per-deployment (chart + image update)
 
 ```bash
 # Bump version in deploy/charts/doc-router/Chart.yaml, then:
+
+# Ensure kubectl is pointing at the right cluster (if needed):
+aws eks update-kubeconfig --name analytiq-test --region us-east-1
+
 ./deploy/scripts/build-push.sh eks-test
 ./deploy/scripts/publish-chart.sh eks-test
-./deploy/scripts/k8s-upgrade.sh eks-test
+./deploy/scripts/k8s-deploy.sh eks-test
 ```
 
 ### Kind (local dev)
@@ -565,11 +510,11 @@ cp .env.eks-test .env.customer-acme
 # 2. Point kubectl at their cluster
 kubectl config use-context <their-cluster-context>
 
-# 3. Install
-./deploy/scripts/k8s-install.sh customer-acme
+# 3. Install (or upgrade — same script)
+./deploy/scripts/k8s-deploy.sh customer-acme
 
 # 4. Subsequent upgrades
-./deploy/scripts/k8s-upgrade.sh customer-acme
+./deploy/scripts/k8s-deploy.sh customer-acme
 ```
 
 ### Teardown
