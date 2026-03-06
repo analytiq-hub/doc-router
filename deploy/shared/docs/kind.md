@@ -72,12 +72,12 @@ If you prefer to deploy manually:
 
 ```bash
 # Build images
-docker build -t analytiqhub/doc-router-frontend:latest --target frontend -f deploy/shared/docker/Dockerfile .
-docker build -t analytiqhub/doc-router-backend:latest --target backend -f deploy/shared/docker/Dockerfile .
+docker build -t analytiq-hub/doc-router-frontend:latest --target frontend -f deploy/shared/docker/Dockerfile .
+docker build -t analytiq-hub/doc-router-backend:latest --target backend -f deploy/shared/docker/Dockerfile .
 
 # Load into kind
-kind load docker-image analytiqhub/doc-router-frontend:latest --name doc-router
-kind load docker-image analytiqhub/doc-router-backend:latest --name doc-router
+kind load docker-image analytiq-hub/doc-router-frontend:latest --name doc-router
+kind load docker-image analytiq-hub/doc-router-backend:latest --name doc-router
 
 # Deploy
 cd deploy/kubernetes/overlays/kind
@@ -138,8 +138,8 @@ If you see `ImagePullBackOff` errors:
 
 2. Reload images:
    ```bash
-   kind load docker-image analytiqhub/doc-router-frontend:latest --name doc-router
-   kind load docker-image analytiqhub/doc-router-backend:latest --name doc-router
+   kind load docker-image analytiq-hub/doc-router-frontend:latest --name doc-router
+   kind load docker-image analytiq-hub/doc-router-backend:latest --name doc-router
    ```
 
 ### MongoDB Connection Issues
@@ -170,12 +170,12 @@ After making changes:
 
 ```bash
 # Rebuild images
-docker build -t analytiqhub/doc-router-frontend:latest --target frontend -f deploy/shared/docker/Dockerfile .
-docker build -t analytiqhub/doc-router-backend:latest --target backend -f deploy/shared/docker/Dockerfile .
+docker build -t analytiq-hub/doc-router-frontend:latest --target frontend -f deploy/shared/docker/Dockerfile .
+docker build -t analytiq-hub/doc-router-backend:latest --target backend -f deploy/shared/docker/Dockerfile .
 
 # Reload into kind
-kind load docker-image analytiqhub/doc-router-frontend:latest --name doc-router
-kind load docker-image analytiqhub/doc-router-backend:latest --name doc-router
+kind load docker-image analytiq-hub/doc-router-frontend:latest --name doc-router
+kind load docker-image analytiq-hub/doc-router-backend:latest --name doc-router
 
 # Restart deployments
 kubectl rollout restart deployment/frontend -n doc-router

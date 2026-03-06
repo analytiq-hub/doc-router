@@ -1,6 +1,6 @@
 services:
   frontend:
-    image: analytiqhub/doc-router-frontend:latest
+    image: ghcr.io/analytiq-hub/doc-router-frontend:latest
     build:
       context: ../..
       dockerfile: deploy/shared/docker/Dockerfile
@@ -35,7 +35,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   migrate:
-    image: analytiqhub/doc-router-backend:latest
+    image: ghcr.io/analytiq-hub/doc-router-backend:latest
     build:
       context: ../..
       dockerfile: deploy/shared/docker/Dockerfile
@@ -53,7 +53,7 @@ services:
     restart: "no"
 
   backend:
-    image: analytiqhub/doc-router-backend:latest
+    image: ghcr.io/analytiq-hub/doc-router-backend:latest
     build:
       context: ../..
       dockerfile: deploy/shared/docker/Dockerfile

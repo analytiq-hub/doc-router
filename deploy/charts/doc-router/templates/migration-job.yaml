@@ -16,7 +16,7 @@ spec:
       restartPolicy: Never
       containers:
       - name: migrate
-        image: {{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}
+        image: {{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag | default .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
         command: ["sh", "-c", "cd /app/packages/python && python3 migrate.py"]
         # Only the Secret is available at pre-install time (ConfigMap is created by Helm later).

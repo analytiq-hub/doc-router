@@ -1,11 +1,11 @@
 image:
   frontend:
-    repository: analytiqhub/doc-router-frontend
-    tag: latest
+    repository: ghcr.io/analytiq-hub/doc-router-frontend
+    tag: ""            # empty = use Chart.appVersion; override for dev SHA builds
     pullPolicy: IfNotPresent
   backend:
-    repository: analytiqhub/doc-router-backend
-    tag: latest
+    repository: ghcr.io/analytiq-hub/doc-router-backend
+    tag: ""            # empty = use Chart.appVersion; override for dev SHA builds
     pullPolicy: IfNotPresent
 
 ingress:

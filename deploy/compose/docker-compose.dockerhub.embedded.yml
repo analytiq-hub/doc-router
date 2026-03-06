@@ -1,6 +1,6 @@
 services:
   frontend:
-    image: analytiqhub/doc-router-frontend:latest
+    image: ghcr.io/analytiq-hub/doc-router-frontend:latest
     # No build section - pulls from DockerHub
     environment:
       # Runtime environment
@@ -29,7 +29,7 @@ services:
           memory: 512M
 
   migrate:
-    image: analytiqhub/doc-router-backend:latest
+    image: ghcr.io/analytiq-hub/doc-router-backend:latest
     # No build section - pulls from DockerHub
     environment:
       - ENV=${ENV:-dev}
@@ -45,7 +45,7 @@ services:
     restart: "no"
 
   backend:
-    image: analytiqhub/doc-router-backend:latest
+    image: ghcr.io/analytiq-hub/doc-router-backend:latest
     # No build section - pulls from DockerHub
     depends_on:
       migrate:

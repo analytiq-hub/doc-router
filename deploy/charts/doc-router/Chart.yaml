@@ -3,4 +3,6 @@ name: doc-router
 description: Smart Document Router — AI-powered document processing platform
 type: application
 version: 0.3.7
-appVersion: "latest"
+appVersion: "v27.0.0"
+annotations:
+  org.opencontainers.image.source: https://github.com/analytiq-hub/doc-router

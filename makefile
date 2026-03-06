@@ -1,9 +1,9 @@
 SHELL := /bin/bash
 
-# DockerHub configuration
-DOCKERHUB_ORG ?= analytiqhub
-FRONTEND_IMAGE = $(DOCKERHUB_ORG)/doc-router-frontend
-BACKEND_IMAGE = $(DOCKERHUB_ORG)/doc-router-backend
+# Container registry configuration
+REGISTRY ?= ghcr.io/analytiq-hub
+FRONTEND_IMAGE = $(REGISTRY)/doc-router-frontend
+BACKEND_IMAGE = $(REGISTRY)/doc-router-backend
 IMAGE_TAG ?= latest
 DOCKERFILE = deploy/shared/docker/Dockerfile
 # Build args for frontend (NEXT_PUBLIC_ vars are baked into Next.js build at build time)

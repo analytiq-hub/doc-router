@@ -25,7 +25,7 @@ spec:
         fsGroup: 1000
       containers:
       - name: backend
-        image: {{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag }}
+        image: {{ .Values.image.backend.repository }}:{{ .Values.image.backend.tag | default .Chart.AppVersion }}
         imagePullPolicy: {{ .Values.image.backend.pullPolicy }}
         ports:
         - containerPort: 8000

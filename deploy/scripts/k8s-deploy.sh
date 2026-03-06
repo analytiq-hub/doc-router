@@ -5,12 +5,17 @@
 #   overlay  — env overlay name, e.g. "eks-test" or "do-test"
 #
 # Chart version is read from deploy/charts/doc-router/Chart.yaml.
-# IMAGE_TAG may be set in the environment; defaults to the current git SHA.
+# IMAGE_TAG is optional — if unset, the chart's appVersion is used (release flow).
+#   Set IMAGE_TAG=<sha> to deploy a dev build that bypasses appVersion.
 # Required env vars (from overlay): CHART_REGISTRY, CHART_REPO_URL,
 #   FRONTEND_IMAGE_REPO, BACKEND_IMAGE_REPO, APP_HOST,
 #   AWS_S3_BUCKET_NAME, plus all secret vars (MONGODB_URI, etc.).
-# For AWS ECR: also REGION.
-# For Digital Ocean DOCR: also CLOUD_PROVIDER=do, DOCR_TOKEN.
+# CLOUD_PROVIDER controls infrastructure decisions (default: unset).
+#   For AWS EKS: CLOUD_PROVIDER=aws — unsets static AWS key vars so AWS_PROFILE is used for tooling.
+# REGISTRY_PROVIDER controls registry auth (defaults to CLOUD_PROVIDER, then "github").
+# For ghcr.io (default): REGISTRY_PROVIDER=github, GITHUB_TOKEN, GITHUB_USERNAME.
+# For AWS ECR:           REGISTRY_PROVIDER=aws, REGION.
+# For Digital Ocean DOCR: REGISTRY_PROVIDER=do, DOCR_TOKEN.
 
 set -eo pipefail
 
@@ -32,11 +37,9 @@ set -a
 [ -f "$PROJECT_ROOT/.env.$OVERLAY" ] && source "$PROJECT_ROOT/.env.$OVERLAY"
 set +a
 
-# Save app runtime AWS credentials before unsetting CLI env vars.
-# The unset ensures AWS_PROFILE (SSO) is used for aws/helm/kubectl tooling.
+# Save app runtime AWS credentials before unsetting CLI env vars (AWS only).
 _APP_AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
 _APP_AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
-unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 
 : "${CHART_REGISTRY:?".env.$OVERLAY must set CHART_REGISTRY"}"
 : "${CHART_REPO_URL:?".env.$OVERLAY must set CHART_REPO_URL"}"
@@ -45,16 +48,27 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
 : "${APP_HOST:?".env.$OVERLAY must set APP_HOST"}"
 : "${AWS_S3_BUCKET_NAME:?".env.$OVERLAY must set AWS_S3_BUCKET_NAME"}"
 
-CLOUD_PROVIDER="${CLOUD_PROVIDER:-aws}"
-if [ "$CLOUD_PROVIDER" = "aws" ]; then
+REGISTRY_PROVIDER="${REGISTRY_PROVIDER:-${CLOUD_PROVIDER:-github}}"
+# Infrastructure-specific setup (independent of registry).
+if [ "${CLOUD_PROVIDER:-}" = "aws" ]; then
+    # Use AWS_PROFILE for tooling; drop any static key vars from .env
+    unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+fi
+# Registry credentials validation.
+if [ "$REGISTRY_PROVIDER" = "aws" ]; then
     : "${REGION:?".env.$OVERLAY must set REGION for AWS ECR"}"
-elif [ "$CLOUD_PROVIDER" = "do" ]; then
+elif [ "$REGISTRY_PROVIDER" = "do" ]; then
     : "${DOCR_TOKEN:?".env.$OVERLAY must set DOCR_TOKEN for Digital Ocean"}"
+elif [ "$REGISTRY_PROVIDER" = "github" ]; then
+    : "${GITHUB_TOKEN:?".env.$OVERLAY must set GITHUB_TOKEN for ghcr.io"}"
+    : "${GITHUB_USERNAME:?".env.$OVERLAY must set GITHUB_USERNAME for ghcr.io"}"
 fi
 
-IMAGE_TAG="${IMAGE_TAG:-$(git rev-parse --short HEAD)}"
+# IMAGE_TAG is optional. If unset, the chart uses its appVersion (release flow).
+# Set IMAGE_TAG=<sha> to deploy a dev build that overrides appVersion.
+IMAGE_TAG="${IMAGE_TAG:-}"
 echo "Chart version : $CHART_VERSION"
-echo "Image tag     : $IMAGE_TAG"
+echo "Image tag     : ${IMAGE_TAG:-"(from chart appVersion)"}"
 echo "Cluster host  : $APP_HOST"
 
 # --- Namespace (idempotent) ---
@@ -88,16 +102,31 @@ kubectl create secret generic doc-router-secrets \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # --- Registry login for Helm ---
-echo "Logging in to registry ($CHART_REGISTRY)..."
-if [ "$CLOUD_PROVIDER" = "do" ]; then
+if [ "$REGISTRY_PROVIDER" = "github" ]; then
+    echo "Logging in to ghcr.io..."
+    echo "$GITHUB_TOKEN" | helm registry login ghcr.io \
+      --username "$GITHUB_USERNAME" --password-stdin
+elif [ "$REGISTRY_PROVIDER" = "do" ]; then
+    echo "Logging in to registry.digitalocean.com..."
     echo "$DOCR_TOKEN" | helm registry login registry.digitalocean.com \
       --username "$DOCR_TOKEN" --password-stdin
 else
+    echo "Logging in to registry ($CHART_REGISTRY)..."
     aws ecr get-login-password --region "$REGION" \
       | helm registry login --username AWS --password-stdin "$CHART_REGISTRY"
 fi
 
 # --- Helm install/upgrade ---
+# Image tag args: only set if IMAGE_TAG is provided (dev/SHA override).
+# When unset, the chart falls back to Chart.appVersion (release flow).
+HELM_IMAGE_ARGS=()
+if [ -n "$IMAGE_TAG" ]; then
+    HELM_IMAGE_ARGS+=(
+        --set image.frontend.tag="$IMAGE_TAG"
+        --set image.backend.tag="$IMAGE_TAG"
+    )
+fi
+
 echo "Running helm upgrade --install..."
 helm upgrade --install "$RELEASE" \
   "oci://$CHART_REPO_URL" \
@@ -105,8 +134,7 @@ helm upgrade --install "$RELEASE" \
   --namespace "$NAMESPACE" \
   --set image.frontend.repository="$FRONTEND_IMAGE_REPO" \
   --set image.backend.repository="$BACKEND_IMAGE_REPO" \
-  --set image.frontend.tag="$IMAGE_TAG" \
-  --set image.backend.tag="$IMAGE_TAG" \
+  "${HELM_IMAGE_ARGS[@]}" \
   --set ingress.host="$APP_HOST" \
   --set ingress.className=nginx \
   --set config.environment="${ENV:-prod}" \
@@ -123,7 +151,7 @@ kubectl rollout restart deployment/frontend deployment/backend -n "$NAMESPACE"
 kubectl rollout status  deployment/frontend deployment/backend -n "$NAMESPACE" --timeout=5m
 
 echo ""
-echo "Deployment complete! Chart $CHART_VERSION, image $IMAGE_TAG."
+echo "Deployment complete! Chart $CHART_VERSION, image ${IMAGE_TAG:-"(chart appVersion)"}."
 echo "  Frontend: https://$APP_HOST"
 echo "  API docs: https://$APP_HOST/fastapi/docs"
 echo "  helm history $RELEASE -n $NAMESPACE"

@@ -235,8 +235,8 @@ kubectl logs -f -l app=backend  -n doc-router
 
 **kind — images not found in cluster:**
 ```bash
-kind load docker-image analytiqhub/doc-router-frontend:<tag> --name doc-router
-kind load docker-image analytiqhub/doc-router-backend:<tag>  --name doc-router
+kind load docker-image analytiq-hub/doc-router-frontend:<tag> --name doc-router
+kind load docker-image analytiq-hub/doc-router-backend:<tag>  --name doc-router
 ```
 
 **Pods not picking up Secret changes:**

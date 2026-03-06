@@ -40,20 +40,20 @@ echo "Using image tag: $IMAGE_TAG"
 
 # --- Build images ---
 echo "Building frontend image..."
-docker build -t analytiqhub/doc-router-frontend:"$IMAGE_TAG" \
+docker build -t analytiq-hub/doc-router-frontend:"$IMAGE_TAG" \
   --target runner \
   --build-arg NODE_ENV=production \
   -f deploy/shared/docker/Dockerfile .
 
 echo "Building backend image..."
-docker build -t analytiqhub/doc-router-backend:"$IMAGE_TAG" \
+docker build -t analytiq-hub/doc-router-backend:"$IMAGE_TAG" \
   --target backend \
   -f deploy/shared/docker/Dockerfile .
 
 # --- Load images into Kind ---
 echo "Loading images into Kind cluster '$CLUSTER_NAME'..."
-kind load docker-image analytiqhub/doc-router-frontend:"$IMAGE_TAG" --name "$CLUSTER_NAME"
-kind load docker-image analytiqhub/doc-router-backend:"$IMAGE_TAG"  --name "$CLUSTER_NAME"
+kind load docker-image analytiq-hub/doc-router-frontend:"$IMAGE_TAG" --name "$CLUSTER_NAME"
+kind load docker-image analytiq-hub/doc-router-backend:"$IMAGE_TAG"  --name "$CLUSTER_NAME"
 
 # --- MongoDB (in its own namespace, no auth for local dev) ---
 echo "Deploying MongoDB in 'mongo' namespace..."

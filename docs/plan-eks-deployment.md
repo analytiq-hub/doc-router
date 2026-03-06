@@ -4,7 +4,7 @@
 
 - Deploy doc-router to AWS EKS (our own cluster, one or more namespaces).
 - Deploy doc-router to a customer's existing Kubernetes cluster (any provider).
-- Docker images and Helm chart published to **`ghcr.io/analytiqhub/`** on stable `vX.Y.Z` git tags — free, no rate limits, no registry credentials required to pull public packages.
+- Docker images and Helm chart published to **`ghcr.io/analytiq-hub/`** on stable `vX.Y.Z` git tags — free, no rate limits, no registry credentials required to pull public packages.
 - Dev/test builds pushed to ECR with git SHA tags; never published publicly.
 - Terraform manages all AWS infrastructure; a **Helm chart** is the single source of truth for Kubernetes packaging.
 - The chart is published as an OCI artifact to `ghcr.io` alongside the images — one organization, one set of credentials.
@@ -147,11 +147,11 @@ doc-router/
 ```yaml
 image:
   frontend:
-    repository: ghcr.io/analytiqhub/doc-router-frontend
+    repository: ghcr.io/analytiq-hub/doc-router-frontend
     tag: ""            # empty = use Chart.appVersion; override for dev/SHA builds
     pullPolicy: IfNotPresent
   backend:
-    repository: ghcr.io/analytiqhub/doc-router-backend
+    repository: ghcr.io/analytiq-hub/doc-router-backend
     tag: ""            # empty = use Chart.appVersion; override for dev/SHA builds
     pullPolicy: IfNotPresent
   # worker uses the same image as backend; pullPolicy follows backend
@@ -328,8 +328,8 @@ Scripts read `AWS_PROFILE` from the overlay and pass it to every `aws` call via 
 | `CLUSTER_NAME` | `doc-router` | Terraform var |
 | `REGION` | `us-east-1` | Terraform var |
 | `CHART_REGISTRY` | `<account-id>.dkr.ecr.us-east-1.amazonaws.com` | ECR (dev) or `ghcr.io` (release) |
-| `FRONTEND_IMAGE_REPO` | `ghcr.io/analytiqhub/doc-router-frontend` (prod) or ECR URL (dev) | `ghcr.io` for releases; ECR for SHA builds |
-| `BACKEND_IMAGE_REPO` | `ghcr.io/analytiqhub/doc-router-backend` (prod) or ECR URL (dev) | `ghcr.io` for releases; ECR for SHA builds |
+| `FRONTEND_IMAGE_REPO` | `ghcr.io/analytiq-hub/doc-router-frontend` (prod) or ECR URL (dev) | `ghcr.io` for releases; ECR for SHA builds |
+| `BACKEND_IMAGE_REPO` | `ghcr.io/analytiq-hub/doc-router-backend` (prod) or ECR URL (dev) | `ghcr.io` for releases; ECR for SHA builds |
 | `AWS_S3_BUCKET_NAME` | `docrouter-test` | Existing `applications/docrouter` output |
 | `APP_HOST` | `app.example.com` | DNS record you create |
 | `STORAGE_CLASS` | `gp3` | EKS standard |
@@ -461,9 +461,9 @@ Removes the Helm release and the `doc-router` namespace from the cluster.
 
 | Tag | Meaning | Published where |
 |---|---|---|
-| `v1.2.3` | Stable release | `ghcr.io/analytiqhub/` (images + chart) |
-| `v1.2.3-rc.1` | Release candidate | `ghcr.io/analytiqhub/` (optional) |
-| `v1.2.3-beta.1` | Beta | `ghcr.io/analytiqhub/` (optional) |
+| `v1.2.3` | Stable release | `ghcr.io/analytiq-hub/` (images + chart) |
+| `v1.2.3-rc.1` | Release candidate | `ghcr.io/analytiq-hub/` (optional) |
+| `v1.2.3-beta.1` | Beta | `ghcr.io/analytiq-hub/` (optional) |
 | `abc1234` (git SHA) | Dev/test build | ECR only — never published publicly |
 
 Only unqualified `vX.Y.Z` tags are treated as stable. Everything else stays in the private registry.
@@ -473,9 +473,9 @@ Only unqualified `vX.Y.Z` tags are treated as stable. Everything else stays in t
 ```
 git tag v1.2.3 && git push --tags
   → GitHub Actions (GITHUB_TOKEN — no extra secrets needed):
-      docker build → push ghcr.io/analytiqhub/doc-router-frontend:v1.2.3 + :latest
-      docker build → push ghcr.io/analytiqhub/doc-router-backend:v1.2.3  + :latest
-      helm package → push ghcr.io/analytiqhub/doc-router:0.3.7
+      docker build → push ghcr.io/analytiq-hub/doc-router-frontend:v1.2.3 + :latest
+      docker build → push ghcr.io/analytiq-hub/doc-router-backend:v1.2.3  + :latest
+      helm package → push ghcr.io/analytiq-hub/doc-router:0.3.7
         (Chart.yaml appVersion: v1.2.3, version: 0.3.7)
 ```
 

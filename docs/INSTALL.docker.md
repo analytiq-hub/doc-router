@@ -26,7 +26,7 @@
 ### Build the container and push it to Docker Hub
 * At the root of the project, run
   ```bash
-  docker build -t analytiqhub/doc-router:latest .
+  docker build -t analytiq-hub/doc-router:latest .
   docker login
-  docker push analytiqhub/doc-router:latest
+  docker push analytiq-hub/doc-router:latest
   ```

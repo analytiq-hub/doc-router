@@ -7,7 +7,7 @@ Here are instructions on how to set up an AWS Lightsail instance and deploy the 
     * A smaller instance would work, but be certain that the `docker compose` build will not run out of RAM memory.
     * I was able to use a `2GB RAM, 1GB Swap` instance, and the `docker compose` build step maxed out at about `2.5GB` of RAM max utilization
 * Assign Lightsail instance a static IP
-* Point `<mydomain>` to it (in my case, I point `doc-router.analytiqhub.com` to it)
+* Point `<mydomain>` to it (in my case, I point `doc-router.analytiq-hub.com` to it)
 * Copy the SSH key to the instance.
 * Connect to the instance using SSH.
 * Clone the repository.
@@ -39,9 +39,9 @@ Here are instructions on how to set up an AWS Lightsail instance and deploy the 
   }
 
     listen 443 ssl; # managed by Certbot                                        
-    ssl_certificate /etc/letsencrypt/live/doc-router.analytiqhub.com/fullchain.\
+    ssl_certificate /etc/letsencrypt/live/doc-router.analytiq-hub.com/fullchain.\
 pem; # managed by Certbot                                                       
-    ssl_certificate_key /etc/letsencrypt/live/doc-router.analytiqhub.com/privke\
+    ssl_certificate_key /etc/letsencrypt/live/doc-router.analytiq-hub.com/privke\
 y.pem; # managed by Certbot                                                     
     include /etc/letsencrypt/options-ssl-nginx.conf; # managed by Certbot       
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem; # managed by Certbot         
@@ -57,7 +57,7 @@ server {
 
 
   listen 80;
-  server_name doc-router.analytiqhub.com app.docrouter.ai;
+  server_name doc-router.analytiq-hub.com app.docrouter.ai;
   return 404; # managed by Certbot                                            
 }
 
@@ -68,7 +68,7 @@ server {
     ```
   * Obtain SSL certificates for the doc-router and the API, in my case:
     ```bash
-    sudo certbot --nginx -d doc-router.analytiqhub.com
+    sudo certbot --nginx -d doc-router.analytiq-hub.com
     ```
   * Enable and start the `nginx` service:
     ```bash
