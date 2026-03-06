@@ -1,18 +1,8 @@
 name: Backend Tests
 
 on:
-  push:
-    branches: [ main, master, develop ]
-    paths:
-      - 'packages/**'
-      - '.github/**'
-  pull_request:
-    branches: [ main, master, develop ]
-    paths:
-      - 'packages/**'
-      - '.github/**'
   workflow_dispatch:  # Allow manual triggering
-  workflow_call:      # Allow calling from other workflows (e.g. release.yml)
+  workflow_call:      # Called from ci.yml (branch/PR) or other workflows
 
 jobs:
   test:

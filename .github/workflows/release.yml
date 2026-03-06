@@ -1,14 +1,14 @@
 name: Release
 
-# Triggered on any v* tag — covers stable releases (v1.2.3) and candidates (v1.2.3-rc.1).
-# Runs existing test workflows first, then builds and pushes images to ghcr.io.
+# Triggered on semver tags: vX.Y.Z (stable) and vX.Y.Z-* (pre-release, e.g. rc.1).
+# Runs tests first; build only proceeds if they pass.
 # :latest is only updated for stable releases (vX.Y.Z with no suffix).
 # Helm chart publishing is manual: ./deploy/scripts/publish-chart.sh <overlay>
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'v[0-9]*.[0-9]*.[0-9]*'
 
 jobs:
   test-backend:

@@ -1,0 +1,15 @@
+name: CI
+
+# Runs tests on pull requests to main.
+# Releases are gated by release.yml (triggered on semver tags), which re-runs tests.
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-backend:
+    uses: ./.github/workflows/backend-tests.yml
+
+  test-frontend:
+    uses: ./.github/workflows/frontend-build.yml

@@ -1,17 +1,8 @@
 name: Frontend Build
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'packages/typescript/frontend/**'
-      - 'packages/typescript/sdk/**'
-  pull_request:
-    branches: [ "main" ]
-    paths:
-      - 'packages/typescript/frontend/**'
-      - 'packages/typescript/sdk/**'
-  workflow_call:      # Allow calling from other workflows (e.g. release.yml)
+  workflow_dispatch:  # Allow manual triggering
+  workflow_call:      # Called from ci.yml (branch/PR) or other workflows
 
 jobs:
   build:
