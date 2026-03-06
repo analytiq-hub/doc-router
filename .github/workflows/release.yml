@@ -40,8 +40,8 @@ jobs:
         id: tags
         run: |
           TAG="${{ github.ref_name }}"
-          FRONTEND="ghcr.io/analytiqhub/doc-router-frontend"
-          BACKEND="ghcr.io/analytiqhub/doc-router-backend"
+          FRONTEND="ghcr.io/analytiq-hub/doc-router-frontend"
+          BACKEND="ghcr.io/analytiq-hub/doc-router-backend"
           FRONTEND_TAGS="${FRONTEND}:${TAG}"
           BACKEND_TAGS="${BACKEND}:${TAG}"
           # Only push :latest for stable releases (no pre-release suffix)
