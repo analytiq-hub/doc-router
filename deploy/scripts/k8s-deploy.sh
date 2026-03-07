@@ -59,10 +59,8 @@ if [ "$REGISTRY_PROVIDER" = "aws" ]; then
     : "${REGION:?".env.$OVERLAY must set REGION for AWS ECR"}"
 elif [ "$REGISTRY_PROVIDER" = "do" ]; then
     : "${DOCR_TOKEN:?".env.$OVERLAY must set DOCR_TOKEN for Digital Ocean"}"
-elif [ "$REGISTRY_PROVIDER" = "github" ]; then
-    : "${GITHUB_TOKEN:?".env.$OVERLAY must set GITHUB_TOKEN for ghcr.io"}"
-    : "${GITHUB_USERNAME:?".env.$OVERLAY must set GITHUB_USERNAME for ghcr.io"}"
 fi
+# github: GITHUB_TOKEN/GITHUB_USERNAME are optional — omit for public ghcr.io packages.
 
 # IMAGE_TAG is optional. If unset, the chart uses its appVersion (release flow).
 # Set IMAGE_TAG=<sha> to deploy a dev build that overrides appVersion.
@@ -102,10 +100,10 @@ kubectl create secret generic doc-router-secrets \
   --dry-run=client -o yaml | kubectl apply -f -
 
 # --- Registry login for Helm ---
+# ghcr.io packages are public — no login needed for helm pull/upgrade.
+# Login is only required for helm push (publish-chart.sh).
 if [ "$REGISTRY_PROVIDER" = "github" ]; then
-    echo "Logging in to ghcr.io..."
-    echo "$GITHUB_TOKEN" | helm registry login ghcr.io \
-      --username "$GITHUB_USERNAME" --password-stdin
+    echo "ghcr.io: public registry — skipping login."
 elif [ "$REGISTRY_PROVIDER" = "do" ]; then
     echo "Logging in to registry.digitalocean.com..."
     echo "$DOCR_TOKEN" | helm registry login registry.digitalocean.com \
