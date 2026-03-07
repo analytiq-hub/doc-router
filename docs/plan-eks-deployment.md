@@ -381,6 +381,118 @@ Rollback strategy: MongoDB migrations are forward-only. Rollback means restoring
 
 ---
 
+## MongoDB configuration options
+
+The app connects to MongoDB via the `MONGODB_URI` environment variable. There are two supported configurations:
+
+### Option A — MongoDB Atlas (cloud-managed)
+
+Use an Atlas connection string. This is the simplest option for managed hosting.
+
+Set in the overlay `.env` file:
+
+```bash
+MONGODB_URI="mongodb+srv://<user>:<password>@<cluster>.mongodb.net/"
+```
+
+No in-cluster MongoDB installation required.
+
+### Option B — Self-hosted MongoDB via `mongodb-atlas-local` chart
+
+Deploy MongoDB directly inside the Kubernetes cluster using the
+[`mongodb-atlas-local`](https://github.com/analytiq-hub/analytiq-charts/pkgs/container/mongodb-atlas-local)
+Helm chart from [analytiq-hub/charts](https://github.com/analytiq-hub/analytiq-charts).
+
+This chart uses the [MongoDB Kubernetes Operator](https://github.com/mongodb/mongodb-kubernetes-operator)
+to manage a `MongoDBCommunity` replica set with optional Atlas Search (vector search via the `mongot` sidecar, requires MongoDB 8.2+).
+
+#### Prerequisites
+
+```bash
+# Install the MongoDB Kubernetes Operator (run once per cluster)
+kubectl create namespace mongodb
+helm repo add mongodb https://mongodb.github.io/helm-charts
+helm install community-operator mongodb/community-operator --namespace mongodb
+```
+
+#### Install MongoDB
+
+```bash
+# Two-phase install: replica set first, then enable search
+helm upgrade --install mongodb oci://ghcr.io/analytiq-hub/mongodb-atlas-local \
+  --version 2.0.1 \
+  --namespace mongodb \
+  --set mongodb.adminPassword="<admin-password>" \
+  --set mongodb.appUser.password="<app-password>" \
+  --set mongodb.storage=20Gi \
+  --set mongodb.members=3 \
+  --set search.enabled=false   # enable after replica set is Ready
+
+# Wait for all pods Ready
+kubectl wait --for=condition=ready pod -l app=mongodb-mongodb-atlas-local \
+  -n mongodb --timeout=300s
+
+# Re-enable search
+helm upgrade mongodb oci://ghcr.io/analytiq-hub/mongodb-atlas-local \
+  --version 2.0.1 \
+  --namespace mongodb \
+  --reuse-values \
+  --set search.enabled=true
+```
+
+#### Point doc-router at the in-cluster MongoDB
+
+Set `MONGODB_URI` in the overlay `.env` to use the in-cluster service:
+
+```bash
+MONGODB_URI="mongodb://<appUser.username>:<appUser.password>@mongodb-mongodb-atlas-local-svc.mongodb.svc.cluster.local:27017/<database>?authSource=admin"
+```
+
+Replace `<appUser.username>`, `<appUser.password>`, and `<database>` with the values used during chart install (defaults: `appuser`, `appdb`).
+
+#### Key chart values
+
+| Value | Default | Notes |
+|---|---|---|
+| `mongodb.version` | `8.2.0` | MongoDB server version |
+| `mongodb.members` | `3` | Replica set size |
+| `mongodb.storage` | `20Gi` | PVC size per replica |
+| `mongodb.storageClassName` | `""` | Leave empty to use cluster default |
+| `mongodb.adminUsername` | `admin` | Admin user |
+| `mongodb.adminPassword` | — | Required |
+| `mongodb.appUser.username` | `appuser` | App database user |
+| `mongodb.appUser.password` | — | Required |
+| `mongodb.appUser.database` | `appdb` | App database name |
+| `search.enabled` | `true` | Enable Atlas Search (mongot sidecar) |
+| `search.resources.requests.cpu` | `250m` | CPU request for mongot container |
+| `search.resources.requests.memory` | `250m` | Memory request for mongot container |
+| `search.resources.limits.cpu` | `1000m` | CPU limit for mongot container |
+| `search.resources.limits.memory` | `1000m` | Memory limit for mongot container |
+| `tls.enabled` | `false` | TLS for in-cluster connections |
+
+#### Storage sizing and expansion
+
+Each replica gets its own PVC. At $0.08/GB-month (EBS gp3, `us-east-1`):
+
+| Storage per replica | 1 replica | 3 replicas |
+|---|---|---|
+| 20 Gi | $1.60/mo | **$4.80/mo** |
+
+PVCs can be expanded online without restarting pods — EBS gp3 supports live resize and the EKS default StorageClass has `allowVolumeExpansion: true`. To expand:
+
+```bash
+kubectl patch pvc <pvc-name> -n mongodb \
+  -p '{"spec":{"resources":{"requests":{"storage":"60Gi"}}}}'
+```
+
+Note: Kubernetes StatefulSet `volumeClaimTemplates` are immutable, so changing `mongodb.storage` via `helm upgrade` will not resize existing PVCs. Patch them directly as above; the operator picks up the new size on the next pod restart.
+
+PVCs cannot be shrunk — only expanded.
+
+Full documentation: [analytiq-hub/analytiq-charts README](https://github.com/analytiq-hub/analytiq-charts)
+
+---
+
 ## AWS-specific notes
 
 ### Manual steps in the AWS console
