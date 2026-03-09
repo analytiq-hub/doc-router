@@ -5,6 +5,7 @@ REGISTRY ?= ghcr.io/analytiq-hub
 FRONTEND_IMAGE = $(REGISTRY)/doc-router-frontend
 BACKEND_IMAGE = $(REGISTRY)/doc-router-backend
 IMAGE_TAG ?= latest
+export IMAGE_TAG
 DOCKERFILE = deploy/shared/docker/Dockerfile
 # Build args for frontend (NEXT_PUBLIC_ vars are baked into Next.js build at build time)
 NEXT_PUBLIC_FASTAPI_FRONTEND_URL ?= http://localhost:8000

@@ -1,6 +1,6 @@
 services:
   frontend:
-    image: ghcr.io/analytiq-hub/doc-router-frontend:latest
+    image: ghcr.io/analytiq-hub/doc-router-frontend:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: deploy/shared/docker/Dockerfile
@@ -32,7 +32,7 @@ services:
       - "host.docker.internal:host-gateway"
 
   migrate:
-    image: ghcr.io/analytiq-hub/doc-router-backend:latest
+    image: ghcr.io/analytiq-hub/doc-router-backend:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: deploy/shared/docker/Dockerfile
@@ -50,7 +50,7 @@ services:
     restart: "no"
 
   backend:
-    image: ghcr.io/analytiq-hub/doc-router-backend:latest
+    image: ghcr.io/analytiq-hub/doc-router-backend:${IMAGE_TAG:-latest}
     build:
       context: ../..
       dockerfile: deploy/shared/docker/Dockerfile
