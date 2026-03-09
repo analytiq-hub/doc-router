@@ -6,7 +6,6 @@ services:
       # Runtime environment
       - ENV=${ENV:-dev}
       - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
-      - FASTAPI_BACKEND_URL=${FASTAPI_BACKEND_URL:-http://localhost:8000}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
       - AUTH_GITHUB_ID=${AUTH_GITHUB_ID}
@@ -15,8 +14,6 @@ services:
       - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
     command: sh -c "cd /app/packages/typescript/frontend && npm run start"
     restart: unless-stopped
-    ports:
-      - "3000:3000"
     networks:
       - doc-router-local-network
     depends_on:
@@ -86,6 +83,8 @@ services:
   mongodb:
     # MongoDB Atlas Local image with full vector search support
     # Includes mongot (vector search) process - no additional configuration needed
+    # hostname is pinned so the replica set member address stays consistent across restarts
+    hostname: mongodb
     image: mongodb/mongodb-atlas-local:latest
     environment:
       # Optional: Set mongot log output (useful for debugging)
@@ -97,13 +96,14 @@ services:
       - doc-router-local-network
     volumes:
       - doc-router-local-mongodb:/data/db
+      - doc-router-local-mongodb-configdb:/data/configdb
     # No custom command - mongodb-atlas-local has its own startup process
     restart: always
     healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "quit(db.adminCommand('hello').isWritablePrimary ? 0 : 1)"]
       interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 30
     deploy:
       resources:
         limits:
@@ -111,9 +111,29 @@ services:
         reservations:
           memory: 512M
 
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - doc-router-local-network
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
+
 networks:
   doc-router-local-network:
     driver: bridge
 
 volumes:
   doc-router-local-mongodb:
+  doc-router-local-mongodb-configdb:

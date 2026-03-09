@@ -107,7 +107,7 @@ export const authOptions: NextAuthOptions = {
             try {
                 if (account?.provider === 'google' || account?.provider === 'github') {
                     // Call FastAPI to handle user/account/org creation and Stripe sync
-                    const apiUrl = process.env.FASTAPI_BACKEND_URL || 'http://127.0.0.1:8000';
+                    const apiUrl = process.env.FASTAPI_BACKEND_URL || 'http://backend:8000';
                     const payload = {
                         email: user.email,
                         name: user.name,
@@ -149,7 +149,7 @@ export const authOptions: NextAuthOptions = {
                 
                 // Only get new FastAPI token on initial sign-in
                 try {
-                    const apiUrl = process.env.FASTAPI_BACKEND_URL || 'http://127.0.0.1:8000';
+                    const apiUrl = process.env.FASTAPI_BACKEND_URL || 'http://backend:8000';
                     const payload = {
                         id: user.id,
                         name: user.name,

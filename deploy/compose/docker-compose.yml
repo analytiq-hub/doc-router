@@ -12,7 +12,6 @@ services:
       # Runtime environment
       - ENV=${ENV:-dev}
       - MONGODB_URI=${MONGODB_URI:-mongodb://YOUR_HOST_IP:27017}
-      - FASTAPI_BACKEND_URL=${FASTAPI_BACKEND_URL:-http://localhost:8000}
       - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
       - AUTH_GITHUB_ID=${AUTH_GITHUB_ID}
@@ -21,8 +20,6 @@ services:
       - AUTH_GOOGLE_SECRET=${AUTH_GOOGLE_SECRET}
     command: node frontend/server.js
     restart: unless-stopped
-    ports:
-      - "3000:3000"
     networks:
       - doc-router-network
     deploy:
@@ -98,6 +95,25 @@ services:
           memory: 512M
     extra_hosts:
       - "host.docker.internal:host-gateway"
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    networks:
+      - doc-router-network
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+        reservations:
+          memory: 64M
 
 networks:
   doc-router-network:

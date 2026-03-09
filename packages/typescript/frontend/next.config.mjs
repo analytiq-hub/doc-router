@@ -11,12 +11,13 @@ const nextConfig = {
   transpilePackages: ['@tsed/react-formio', '@tsed/tailwind-formio', '@docrouter/sdk'],
   // Include files from monorepo parent for file: dependencies (production build)
   outputFileTracingRoot: path.join(__dirname, '..'),
-  // Proxy /fastapi/* to the backend — used in local dev and docker compose so the
-  // browser can use a relative /fastapi URL regardless of environment.
+  // Proxy /fastapi/* to the backend — only active in local dev (npm run dev).
+  // In Docker Compose and Kubernetes, nginx/ingress intercepts /fastapi/ before
+  // Next.js sees it, so this rewrite never fires in deployed environments.
   async rewrites() {
     return [{
       source: '/fastapi/:path*',
-      destination: `${process.env.FASTAPI_BACKEND_URL || 'http://localhost:8000'}/fastapi/:path*`,
+      destination: 'http://localhost:8000/fastapi/:path*',
     }];
   },
   // Cache for hashed static assets (chunks, CSS); 8h max so post-midnight release is picked up next day

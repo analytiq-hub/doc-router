@@ -164,29 +164,33 @@ deploy:
 			exit 1;; \
 	esac
 
+define merge_env
+	awk -F= '!/^[[:space:]]*#/ && /=/ { vals[$$1] = $$0 } END { for (k in vals) print vals[k] }' $(1) $(2) > deploy/compose/.env
+endef
+
 deploy-compose:
-	cat .env .env.compose > deploy/compose/.env; \
+	$(call merge_env,.env,.env.compose)
 	cd deploy/compose; \
 	docker compose down; \
 	docker compose -f docker-compose.yml --env-file .env up -d --build
 
 deploy-compose-embedded:
-	cat .env .env.compose.embedded > deploy/compose/.env; \
+	$(call merge_env,.env,.env.compose.embedded)
 	cd deploy/compose; \
 	docker compose down; \
 	docker compose -f docker-compose.embedded.yml --env-file .env up -d --build
 
 deploy-compose-dockerhub:
-	cat .env .env.compose > deploy/compose/.env; \
+	$(call merge_env,.env,.env.compose)
 	cd deploy/compose; \
 	docker compose -f docker-compose.dockerhub.yml --env-file .env pull; \
 	docker compose -f docker-compose.dockerhub.yml --env-file .env up -d
 
 deploy-compose-dockerhub-embedded:
-	cat .env .env.compose.embedded > deploy/compose/.env; \
+	$(call merge_env,.env,.env.compose.embedded)
 	cd deploy/compose; \
 	docker compose -f docker-compose.dockerhub.embedded.yml --env-file .env pull; \
-	docker compose -f docker-compose.dockerhub.embedded.yml --env-file .env up -d	
+	docker compose -f docker-compose.dockerhub.embedded.yml --env-file .env up -d
 
 down:
 	@if ! command -v gum &> /dev/null; then \
