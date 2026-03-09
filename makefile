@@ -33,8 +33,6 @@ help:
 	@echo "Deployment (Direct):"
 	@echo "  make deploy-compose          - Deploy to Docker Compose (builds images)"
 	@echo "  make deploy-compose-embedded - Deploy to Docker Compose with embedded MongoDB (builds images)"
-	@echo "  make deploy-compose-dockerhub - Deploy using DockerHub images (no build)"
-	@echo "  make deploy-compose-dockerhub-embedded - Deploy with MongoDB using DockerHub images (no build)"
 	@echo "  make deploy-kind             - Deploy to Kubernetes kind cluster"
 	@echo ""
 	@echo "Shutdown (Interactive):"
@@ -144,8 +142,6 @@ deploy:
 		"Local Development" \
 		"Docker Compose (build images)" \
 		"Docker Compose (Embedded MongoDB, build images)" \
-		"Docker Compose (DockerHub images, no build)" \
-		"Docker Compose (DockerHub + MongoDB, no build)" \
 		"Kubernetes (kind)"); \
 	case "$$choice" in \
 		"Local Development") \
@@ -154,10 +150,6 @@ deploy:
 			$(MAKE) deploy-compose;; \
 		"Docker Compose (Embedded MongoDB, build images)") \
 			$(MAKE) deploy-compose-embedded;; \
-		"Docker Compose (DockerHub images, no build)") \
-			$(MAKE) deploy-compose-dockerhub;; \
-		"Docker Compose (DockerHub + MongoDB, no build)") \
-			$(MAKE) deploy-compose-dockerhub-embedded;; \
 		"Kubernetes (kind)") \
 			$(MAKE) deploy-kind;; \
 		*) \
@@ -181,17 +173,6 @@ deploy-compose-embedded:
 	docker compose down; \
 	docker compose -f docker-compose.embedded.yml --env-file .env up -d --build
 
-deploy-compose-dockerhub:
-	$(call merge_env,.env,.env.compose)
-	cd deploy/compose; \
-	docker compose -f docker-compose.dockerhub.yml --env-file .env pull; \
-	docker compose -f docker-compose.dockerhub.yml --env-file .env up -d
-
-deploy-compose-dockerhub-embedded:
-	$(call merge_env,.env,.env.compose.embedded)
-	cd deploy/compose; \
-	docker compose -f docker-compose.dockerhub.embedded.yml --env-file .env pull; \
-	docker compose -f docker-compose.dockerhub.embedded.yml --env-file .env up -d
 
 down:
 	@if ! command -v gum &> /dev/null; then \
@@ -222,16 +203,12 @@ down:
 down-compose:
 	cd deploy/compose; \
 	docker compose -f docker-compose.yml down 2>/dev/null || true; \
-	docker compose -f docker-compose.embedded.yml down 2>/dev/null || true; \
-	docker compose -f docker-compose.dockerhub.yml down 2>/dev/null || true; \
-	docker compose -f docker-compose.dockerhub.embedded.yml down 2>/dev/null || true
+	docker compose -f docker-compose.embedded.yml down 2>/dev/null || true
 
 down-compose-clean:
 	cd deploy/compose; \
 	docker compose -f docker-compose.embedded.yml down -v 2>/dev/null || true; \
 	docker compose -f docker-compose.yml down -v 2>/dev/null || true; \
-	docker compose -f docker-compose.dockerhub.yml down -v 2>/dev/null || true; \
-	docker compose -f docker-compose.dockerhub.embedded.yml down -v 2>/dev/null || true; \
 	docker volume rm compose_doc-router-local-mongodb 2>/dev/null || true; \
 	echo "Removed containers and volumes"
 
@@ -305,4 +282,4 @@ dockerhub-push: dockerhub-push-frontend dockerhub-push-backend
 dockerhub-build-push: dockerhub-build dockerhub-push
 	@echo "✅ Build and push complete!"
 
-.PHONY: help deploy-dev tests setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-compose-dockerhub deploy-compose-dockerhub-embedded deploy-kind down down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean
+.PHONY: help deploy-dev tests setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-kind down down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean
