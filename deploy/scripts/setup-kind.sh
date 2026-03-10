@@ -9,13 +9,49 @@ KIND_VERSION=${KIND_VERSION:-"latest"}
 
 echo "🚀 Setting up kind cluster: $CLUSTER_NAME"
 
-# Check if kind is installed
+# Check if kind is installed, auto-install if not
 if ! command -v kind &> /dev/null; then
-    echo "❌ kind is not installed. Please install it first:"
-    echo "   curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-amd64"
-    echo "   chmod +x ./kind"
-    echo "   sudo mv ./kind /usr/local/bin/kind"
-    exit 1
+    echo "📦 kind is not installed. Installing..."
+
+    OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+    ARCH=$(uname -m)
+
+    # Map architecture names
+    case "$ARCH" in
+        x86_64)  ARCH="amd64" ;;
+        aarch64) ARCH="arm64" ;;
+        arm64)   ARCH="arm64" ;;
+    esac
+
+    if [[ "$OS" == "darwin" ]]; then
+        # macOS - prefer Homebrew if available
+        if command -v brew &> /dev/null; then
+            echo "   Using Homebrew to install kind..."
+            brew install kind
+        else
+            echo "   Downloading kind for macOS ($ARCH)..."
+            curl -Lo ./kind "https://kind.sigs.k8s.io/dl/v0.20.0/kind-darwin-$ARCH"
+            chmod +x ./kind
+            sudo mv ./kind /usr/local/bin/kind
+        fi
+    elif [[ "$OS" == "linux" ]]; then
+        echo "   Downloading kind for Linux ($ARCH)..."
+        curl -Lo ./kind "https://kind.sigs.k8s.io/dl/v0.20.0/kind-linux-$ARCH"
+        chmod +x ./kind
+        sudo mv ./kind /usr/local/bin/kind
+    else
+        echo "❌ Unsupported OS: $OS"
+        echo "   Please install kind manually: https://kind.sigs.k8s.io/docs/user/quick-start/#installation"
+        exit 1
+    fi
+
+    # Verify installation
+    if ! command -v kind &> /dev/null; then
+        echo "❌ Failed to install kind. Please install it manually:"
+        echo "   https://kind.sigs.k8s.io/docs/user/quick-start/#installation"
+        exit 1
+    fi
+    echo "✅ kind installed successfully"
 fi
 
 # Check if cluster already exists
