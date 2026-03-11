@@ -25,6 +25,14 @@ litellm.modify_params = True
 # Cache control directive for Anthropic/Bedrock prompt caching (ephemeral cache)
 _PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
 
+def _is_valid_json(s: str) -> bool:
+    """Return True if s is a non-empty, parseable JSON string."""
+    try:
+        json.loads(s)
+        return True
+    except (ValueError, TypeError):
+        return False
+
 
 def _apply_prompt_caching(model: str, messages: list, *, tools: Optional[List[Dict]] = None) -> list:
     """
@@ -291,6 +299,17 @@ async def _litellm_acompletion_with_retry(
         "aws_secret_access_key": aws_secret_access_key,
         "aws_region_name": aws_region_name,
     }
+    # Vertex AI uses vertex_credentials (service account JSON or file path) instead of api_key.
+    # Falls back to GOOGLE_APPLICATION_CREDENTIALS / ADC if token is neither.
+    if model.startswith("vertex_ai/"):
+        params.pop("api_key", None)
+        if api_key and (os.path.exists(api_key) or _is_valid_json(api_key)):
+            params["vertex_credentials"] = api_key
+            if _is_valid_json(api_key):
+                creds = json.loads(api_key)
+                if creds.get("project_id"):
+                    params["vertex_project"] = creds["project_id"]
+        params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "us-central1")
     if tools:
         params["tools"] = tools
         params["tool_choice"] = tool_choice if tool_choice is not None else "auto"
@@ -364,6 +383,17 @@ async def agent_completion_stream(
         "stream": True,
         "stream_options": {"include_usage": True},
     }
+    # Vertex AI uses vertex_credentials (service account JSON or file path) instead of api_key.
+    # Falls back to GOOGLE_APPLICATION_CREDENTIALS / ADC if token is neither.
+    if model.startswith("vertex_ai/"):
+        params.pop("api_key", None)
+        if api_key and (os.path.exists(api_key) or _is_valid_json(api_key)):
+            params["vertex_credentials"] = api_key
+            if _is_valid_json(api_key):
+                creds = json.loads(api_key)
+                if creds.get("project_id"):
+                    params["vertex_project"] = creds["project_id"]
+        params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "us-central1")
     if tools:
         params["tools"] = tools
         params["tool_choice"] = tool_choice if tool_choice is not None else "auto"
@@ -1294,7 +1324,19 @@ async def run_llm_chat(
             params["aws_secret_access_key"] = aws_client.aws_secret_access_key
             params["aws_region_name"] = aws_client.region_name
             logger.info(f"Bedrock config: region={aws_client.region_name}")
-        
+
+        # Vertex AI uses vertex_credentials (service account JSON or file path) instead of api_key.
+        # Falls back to GOOGLE_APPLICATION_CREDENTIALS / ADC if token is neither.
+        if llm_provider == "vertex_ai":
+            params.pop("api_key", None)
+            if api_key and (os.path.exists(api_key) or _is_valid_json(api_key)):
+                params["vertex_credentials"] = api_key
+                if _is_valid_json(api_key):
+                    creds = json.loads(api_key)
+                    if creds.get("project_id"):
+                        params["vertex_project"] = creds["project_id"]
+            params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "us-central1")
+
         if request.stream:
             # Streaming response
             async def generate_stream():

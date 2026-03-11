@@ -19,7 +19,14 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
   const [embeddingModels, setEmbeddingModels] = useState<LLMEmbeddingModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
+  // Vertex AI service account credentials state
+  const [credentialJson, setCredentialJson] = useState('');
+  const [credentialFileName, setCredentialFileName] = useState('');
+  const [credentialSaving, setCredentialSaving] = useState(false);
+  const [credentialError, setCredentialError] = useState<string | null>(null);
+  const [credentialSuccess, setCredentialSuccess] = useState(false);
+
   // Test modal state
   const [testModalOpen, setTestModalOpen] = useState(false);
   const [selectedModel, setSelectedModel] = useState<string>('');
@@ -136,6 +143,57 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
     setSelectedEmbeddingModel('');
   };
 
+  const handleCredentialFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setCredentialFileName(file.name);
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const text = evt.target?.result as string;
+      try {
+        JSON.parse(text); // validate it's JSON
+        setCredentialJson(text);
+        setCredentialError(null);
+      } catch {
+        setCredentialError('Invalid JSON file. Please upload a valid service account key file.');
+        setCredentialJson('');
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleSaveCredential = async () => {
+    if (!provider || !credentialJson) return;
+    setCredentialError(null);
+    setCredentialSuccess(false);
+    try {
+      JSON.parse(credentialJson);
+    } catch {
+      setCredentialError('Invalid JSON. Please provide a valid service account key.');
+      return;
+    }
+    setCredentialSaving(true);
+    try {
+      await docRouterAccountApi.setLLMProviderConfig(providerName, {
+        enabled: true,
+        token: credentialJson,
+        litellm_models_enabled: provider.litellm_models_enabled,
+        litellm_models_chat_agent: provider.litellm_models_chat_agent ?? provider.litellm_models_enabled,
+      });
+      const response = await docRouterAccountApi.listLLMProviders();
+      const updated = response.providers.find(p => p.name === providerName);
+      if (updated) setProvider(updated);
+      setCredentialJson('');
+      setCredentialFileName('');
+      setCredentialSuccess(true);
+    } catch (err) {
+      console.error('Error saving credentials:', err);
+      setCredentialError('Failed to save credentials. Please try again.');
+    } finally {
+      setCredentialSaving(false);
+    }
+  };
+
   // Chat models columns (with test button and chat agent toggle)
   const chatModelColumns: GridColDef[] = [
     { field: 'litellm_model', headerName: 'Model Name', flex: 1, minWidth: 150 },
@@ -243,9 +301,58 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
     <div className="bg-white p-6 rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-4">Provider: {provider.display_name}{!provider.enabled && <span className="text-gray-500 italic"> (disabled)</span>}</h2>      
       <div className="mb-4">
-      <p><b>Enabled:</b> {provider.enabled ? 'Yes' : 'No'}</p>
-      <p><b>Token:</b> {provider.token ? `${provider.token.slice(0, 16)}••••••••` : 'Not set'}</p>
+        <p><b>Enabled:</b> {provider.enabled ? 'Yes' : 'No'}</p>
+        {providerName !== 'vertex_ai' && (
+          <p><b>Token:</b> {provider.token ? `${provider.token.slice(0, 16)}••••••••` : 'Not set'}</p>
+        )}
       </div>
+
+      {/* Vertex AI service account credentials */}
+      {providerName === 'vertex_ai' && (
+        <div className="mb-6 p-4 border border-gray-200 rounded-lg">
+          <h3 className="text-lg font-semibold mb-1">Service Account Credentials</h3>
+          <p className="text-sm text-gray-600 mb-3">
+            Upload a Google Cloud service account JSON key file. The credentials are encrypted and stored securely.
+          </p>
+          <p className="mb-3">
+            <b>Status:</b>{' '}
+            {provider.token
+              ? <span className="text-green-600">Credentials set{provider.token_created_at ? ` (updated ${new Date(provider.token_created_at).toLocaleDateString()})` : ''}</span>
+              : <span className="text-yellow-600">Not configured</span>
+            }
+          </p>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-3">
+              <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded border border-gray-300 text-sm">
+                Choose JSON File
+                <input type="file" accept=".json,application/json" className="hidden" onChange={handleCredentialFileUpload} />
+              </label>
+              {credentialFileName && <span className="text-sm text-gray-600">{credentialFileName}</span>}
+            </div>
+            <textarea
+              className="w-full h-32 p-2 text-xs font-mono border border-gray-300 rounded resize-y"
+              placeholder="Or paste service account JSON here..."
+              value={credentialJson}
+              onChange={(e) => {
+                setCredentialJson(e.target.value);
+                setCredentialError(null);
+                setCredentialSuccess(false);
+              }}
+            />
+            {credentialError && <p className="text-red-500 text-sm">{credentialError}</p>}
+            {credentialSuccess && <p className="text-green-600 text-sm">Credentials saved successfully.</p>}
+            <Button
+              variant="contained"
+              size="small"
+              onClick={handleSaveCredential}
+              disabled={!credentialJson || credentialSaving}
+              sx={{ alignSelf: 'flex-start' }}
+            >
+              {credentialSaving ? 'Saving...' : 'Save Credentials'}
+            </Button>
+          </div>
+        </div>
+      )}
       
       {/* Chat Models Section */}
       {chatModelRows.length > 0 && (
