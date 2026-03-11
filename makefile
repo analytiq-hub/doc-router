@@ -24,13 +24,11 @@ help:
 	@echo "  make setup-kind              - Set up Kubernetes kind cluster"
 	@echo "  make setup-ui                - Set up UI test environment"
 	@echo ""
-	@echo "Development:"
-	@echo "  make deploy-dev              - Start local development environment"
-	@echo ""
 	@echo "Deployment (Interactive):"
 	@echo "  make deploy                  - Interactive menu: Local, Docker Compose, or Kubernetes"
 	@echo ""
 	@echo "Deployment (Direct):"
+	@echo "  make deploy-local-dev        - Deploy to local development environment"
 	@echo "  make deploy-compose          - Deploy to Docker Compose (builds images)"
 	@echo "  make deploy-compose-embedded - Deploy to Docker Compose with embedded MongoDB (builds images)"
 	@echo "  make deploy-kind             - Deploy to Kubernetes kind cluster"
@@ -136,7 +134,7 @@ deploy:
 		"Kubernetes (kind)"); \
 	case "$$choice" in \
 		"Local Development") \
-			$(MAKE) deploy-dev;; \
+			$(MAKE) deploy-local-dev;; \
 		"Docker Compose (build images)") \
 			$(MAKE) deploy-compose;; \
 		"Docker Compose (Embedded MongoDB, build images)") \
@@ -151,6 +149,10 @@ deploy:
 define merge_env
 	awk -F= '!/^[[:space:]]*#/ && /=/ { vals[$$1] = $$0 } END { for (k in vals) print vals[k] }' $(1) $(2) > deploy/compose/.env
 endef
+
+deploy-local-dev:
+	cp .env packages/typescript/frontend/.env.local
+	./start-all.sh
 
 deploy-compose:
 	$(call merge_env,.env,.env.compose)
