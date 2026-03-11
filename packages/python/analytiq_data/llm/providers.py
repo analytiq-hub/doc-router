@@ -11,6 +11,77 @@ warnings.filterwarnings("ignore", category=DeprecationWarning, module="pydantic"
 
 logger = logging.getLogger(__name__)
 
+# Models not yet in litellm's built-in registry.
+# Add entries here when a model is available but litellm hasn't added it yet.
+# The "litellm_provider" key must match the models_by_provider key used in get_llm_providers().
+LITELLM_MODEL_PATCHES: dict = {
+    "vertex_ai/gemini-3.1-flash-lite-preview": {
+        "cache_read_input_token_cost": 2.5e-08,
+        "cache_read_input_token_cost_per_audio_token": 5e-08,
+        "input_cost_per_audio_token": 5e-07,
+        "input_cost_per_token": 2.5e-07,
+        "litellm_provider": "vertex_ai",
+        "max_audio_length_hours": 8.4,
+        "max_audio_per_prompt": 1,
+        "max_images_per_prompt": 3000,
+        "max_input_tokens": 1048576,
+        "max_output_tokens": 65536,
+        "max_pdf_size_mb": 30,
+        "max_tokens": 65536,
+        "max_video_length": 1,
+        "max_videos_per_prompt": 10,
+        "mode": "chat",
+        "output_cost_per_reasoning_token": 1.5e-06,
+        "output_cost_per_token": 1.5e-06,
+        "supported_endpoints": ["/v1/chat/completions", "/v1/completions", "/v1/batch"],
+        "supported_modalities": ["text", "image", "audio", "video"],
+        "supported_output_modalities": ["text"],
+        "supports_audio_input": True,
+        "supports_audio_output": False,
+        "supports_code_execution": True,
+        "supports_file_search": True,
+        "supports_function_calling": True,
+        "supports_parallel_function_calling": True,
+        "supports_pdf_input": True,
+        "supports_prompt_caching": True,
+        "supports_reasoning": True,
+        "supports_response_schema": True,
+        "supports_system_messages": True,
+        "supports_tool_choice": True,
+        "supports_url_context": True,
+        "supports_video_input": True,
+        "supports_vision": True,
+        "supports_web_search": True,
+        "supports_native_streaming": True,
+    },
+}
+
+
+def patch_litellm_models() -> None:
+    """Patch litellm's model registry with models not yet in its built-in list."""
+    for model_name, model_data in LITELLM_MODEL_PATCHES.items():
+        # Add to model_cost for token/cost lookups
+        if model_name not in litellm.model_cost:
+            logger.info(f"Patching litellm model_cost with {model_name}")
+            litellm.model_cost[model_name] = model_data
+
+        # Add to models_by_provider for provider validation
+        provider = model_data.get("litellm_provider", "vertex_ai")
+        if provider not in litellm.models_by_provider:
+            logger.info(f"Creating litellm models_by_provider[{provider}] with {model_name}")
+            litellm.models_by_provider[provider] = [model_name]
+        else:
+            provider_models = litellm.models_by_provider[provider]
+            if model_name not in provider_models:
+                logger.info(f"Patching litellm models_by_provider[{provider}] with {model_name}")
+                if isinstance(provider_models, set):
+                    provider_models.add(model_name)
+                else:
+                    provider_models.append(model_name)
+
+# Apply patches at module load time
+patch_litellm_models()
+
 async def list_llm_providers(analytiq_client) -> dict:
     """
     List the LLM providers
@@ -148,7 +219,11 @@ async def setup_llm_providers(analytiq_client):
                 update = True
 
             # litellm_models_chat_agent: subset of litellm_models_available for agent chat
-            models_chat_agent = provider_config.get("litellm_models_chat_agent", [])
+            # Ensure the key exists in provider_config (may be missing in older DB documents)
+            if "litellm_models_chat_agent" not in provider_config:
+                provider_config["litellm_models_chat_agent"] = config.get("litellm_models_chat_agent", [])
+                update = True
+            models_chat_agent = provider_config["litellm_models_chat_agent"]
             if not models_chat_agent and config.get("litellm_models_chat_agent"):
                 provider_config["litellm_models_chat_agent"] = config["litellm_models_chat_agent"]
                 models_chat_agent = config["litellm_models_chat_agent"]
@@ -356,9 +431,9 @@ def get_llm_providers() -> dict:
         "vertex_ai": {
             "display_name": "Google Vertex AI",
             "litellm_provider": "vertex_ai",
-            "litellm_models_available": ["gemini-1.5-flash"],
-            "litellm_models_enabled": ["gemini-1.5-flash"],
-            "litellm_models_chat_agent": ["gemini-1.5-flash"],
+            "litellm_models_available": ["vertex_ai/gemini-3.1-flash-lite-preview"],
+            "litellm_models_enabled": ["vertex_ai/gemini-3.1-flash-lite-preview"],
+            "litellm_models_chat_agent": ["vertex_ai/gemini-3.1-flash-lite-preview"],
             "enabled": False,
             "token" : "",
             "token_created_at": None,
