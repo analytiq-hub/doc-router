@@ -76,7 +76,6 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
 
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled: provider.enabled,
-        token: provider.token,
         litellm_models_enabled: updatedModels,
         litellm_models_chat_agent: chatAgentModels.filter(m => updatedModels.includes(m))
       });
@@ -107,7 +106,6 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
 
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled: provider.enabled,
-        token: provider.token,
         litellm_models_enabled: provider.litellm_models_enabled,
         litellm_models_chat_agent: updatedChatAgent
       });
