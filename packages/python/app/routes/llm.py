@@ -681,6 +681,8 @@ async def set_llm_provider_config(
 
     db = ad.common.get_async_db()
 
+    logger.info(f"set_llm_provider_config {provider_name}: token={repr(request.token)} enabled={request.enabled}")
+
     if provider_name is None:
         raise HTTPException(status_code=400, detail="Provider name is required")
 
@@ -721,6 +723,7 @@ async def set_llm_provider_config(
             elem["token"] = ad.crypto.encrypt_token(request.token)
             elem["token_created_at"] = datetime.now(UTC)
         else:
+            elem["token"] = ""
             elem["token_created_at"] = None
 
     # Save the updated provider

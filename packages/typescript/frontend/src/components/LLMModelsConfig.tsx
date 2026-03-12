@@ -58,7 +58,7 @@ const LLMModelsConfig: React.FC = () => {
 
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled: provider.enabled,
-        token: provider.token,
+        token: null,
         litellm_models_enabled: updatedModels,
         litellm_models_chat_agent: updatedChatAgent
       });

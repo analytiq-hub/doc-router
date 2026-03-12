@@ -70,7 +70,7 @@ const LLMManager: React.FC = () => {
     const provider = llmProviders.find(p => p.name === providerName);
     try {
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
-        token: null,
+        token: "",
         enabled: false,
         litellm_models_enabled: provider?.litellm_models_enabled ?? null,
         litellm_models_chat_agent: provider?.litellm_models_chat_agent ?? null
@@ -103,7 +103,7 @@ const LLMManager: React.FC = () => {
     try {
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled,
-        token: provider?.token ?? null,
+        token: null,
         litellm_models_enabled: provider?.litellm_models_enabled ?? null,
         litellm_models_chat_agent: provider?.litellm_models_chat_agent ?? null
       });
@@ -129,7 +129,7 @@ const LLMManager: React.FC = () => {
 
       await docRouterAccountApi.setLLMProviderConfig(providerName, {
         enabled: provider.enabled,
-        token: provider.token,
+        token: null,
         litellm_models_enabled: updatedModels,
         litellm_models_chat_agent: updatedChatAgent
       });
