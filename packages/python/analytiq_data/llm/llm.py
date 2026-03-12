@@ -187,7 +187,7 @@ def get_temperature(model: str) -> float:
         return 1.0
     
     # Gemini models use temperature=1
-    if model_lower.startswith("gemini/"):
+    if model_lower.startswith("gemini/") or "gemini" in model_lower:
         return 1.0
     
     # Default temperature for other models
