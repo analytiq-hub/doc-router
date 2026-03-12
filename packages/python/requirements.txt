@@ -21,7 +21,7 @@ fastapi==0.128.0
 filelock==3.20.3
 frozenlist==1.8.0
 fsspec==2026.1.0
-google-cloud-aiplatform==1.141.0
+google-auth==2.49.0
 h11==0.16.0
 hatchling==1.28.0
 hf-xet==1.2.0

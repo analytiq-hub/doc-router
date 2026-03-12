@@ -22,14 +22,14 @@ async def get_vertex_ai_config(analytiq_client) -> tuple[str, str]:
     Get the Vertex AI project and location.
 
     Extracts ``project_id`` from the stored service account JSON credentials.
-    Location falls back to env var VERTEX_AI_LOCATION (default: ``us-central1``).
+    Location falls back to env var VERTEX_AI_LOCATION (default: ``global``).
 
     Returns:
         (vertex_project, vertex_location) — either may be empty string if not configured.
     """
     db = analytiq_client.mongodb_async[analytiq_client.env]
     provider_config = await db.llm_providers.find_one({"litellm_provider": "vertex_ai"})
-    vertex_location = os.getenv("VERTEX_AI_LOCATION", "us-central1")
+    vertex_location = os.getenv("VERTEX_AI_LOCATION", "global")
     if provider_config is None or not provider_config.get("token"):
         return "", vertex_location
     try:

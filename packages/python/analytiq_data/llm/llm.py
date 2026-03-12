@@ -309,7 +309,7 @@ async def _litellm_acompletion_with_retry(
                 creds = json.loads(api_key)
                 if creds.get("project_id"):
                     params["vertex_project"] = creds["project_id"]
-        params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "us-central1")
+        params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
     if tools:
         params["tools"] = tools
         params["tool_choice"] = tool_choice if tool_choice is not None else "auto"
@@ -393,7 +393,7 @@ async def agent_completion_stream(
                 creds = json.loads(api_key)
                 if creds.get("project_id"):
                     params["vertex_project"] = creds["project_id"]
-        params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "us-central1")
+        params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
     if tools:
         params["tools"] = tools
         params["tool_choice"] = tool_choice if tool_choice is not None else "auto"
@@ -1335,7 +1335,7 @@ async def run_llm_chat(
                     creds = json.loads(api_key)
                     if creds.get("project_id"):
                         params["vertex_project"] = creds["project_id"]
-            params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "us-central1")
+            params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
 
         if request.stream:
             # Streaming response
