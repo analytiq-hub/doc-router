@@ -431,9 +431,18 @@ def get_llm_providers() -> dict:
         "vertex_ai": {
             "display_name": "Google Vertex AI",
             "litellm_provider": "vertex_ai",
-            "litellm_models_available": ["vertex_ai/gemini-3.1-flash-lite-preview"],
-            "litellm_models_enabled": ["vertex_ai/gemini-3.1-flash-lite-preview"],
-            "litellm_models_chat_agent": ["vertex_ai/gemini-3.1-flash-lite-preview"],
+            "litellm_models_available": [
+                "vertex_ai/gemini-3.1-flash-lite-preview",
+                "vertex_ai/gemini-3.1-pro-preview",
+            ],
+            "litellm_models_enabled": [
+                "vertex_ai/gemini-3.1-flash-lite-preview",
+                "vertex_ai/gemini-3.1-pro-preview",
+            ],
+            "litellm_models_chat_agent": [
+                "vertex_ai/gemini-3.1-flash-lite-preview",
+                "vertex_ai/gemini-3.1-pro-preview",
+            ],
             "enabled": False,
             "token" : "",
             "token_created_at": None,
