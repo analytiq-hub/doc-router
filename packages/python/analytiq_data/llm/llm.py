@@ -300,15 +300,15 @@ async def _litellm_acompletion_with_retry(
         "aws_region_name": aws_region_name,
     }
     # Vertex AI uses vertex_credentials (service account JSON or file path) instead of api_key.
-    # Falls back to GOOGLE_APPLICATION_CREDENTIALS / ADC if token is neither.
     if model.startswith("vertex_ai/"):
         params.pop("api_key", None)
-        if api_key and (os.path.exists(api_key) or _is_valid_json(api_key)):
+        if api_key:
+            if not _is_valid_json(api_key):
+                raise Exception(f"Vertex AI API key is not valid: {api_key}")
             params["vertex_credentials"] = api_key
-            if _is_valid_json(api_key):
-                creds = json.loads(api_key)
-                if creds.get("project_id"):
-                    params["vertex_project"] = creds["project_id"]
+            creds = json.loads(api_key)
+            if creds.get("project_id"):
+                params["vertex_project"] = creds["project_id"]
         params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
     if tools:
         params["tools"] = tools
@@ -384,15 +384,15 @@ async def agent_completion_stream(
         "stream_options": {"include_usage": True},
     }
     # Vertex AI uses vertex_credentials (service account JSON or file path) instead of api_key.
-    # Falls back to GOOGLE_APPLICATION_CREDENTIALS / ADC if token is neither.
     if model.startswith("vertex_ai/"):
         params.pop("api_key", None)
-        if api_key and (os.path.exists(api_key) or _is_valid_json(api_key)):
+        if api_key:
+            if not _is_valid_json(api_key):
+                raise Exception(f"Vertex AI API key is not valid: {api_key}")
             params["vertex_credentials"] = api_key
-            if _is_valid_json(api_key):
-                creds = json.loads(api_key)
-                if creds.get("project_id"):
-                    params["vertex_project"] = creds["project_id"]
+            creds = json.loads(api_key)
+            if creds.get("project_id"):
+                params["vertex_project"] = creds["project_id"]
         params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
     if tools:
         params["tools"] = tools
@@ -1326,15 +1326,15 @@ async def run_llm_chat(
             logger.info(f"Bedrock config: region={aws_client.region_name}")
 
         # Vertex AI uses vertex_credentials (service account JSON or file path) instead of api_key.
-        # Falls back to GOOGLE_APPLICATION_CREDENTIALS / ADC if token is neither.
         if llm_provider == "vertex_ai":
             params.pop("api_key", None)
-            if api_key and (os.path.exists(api_key) or _is_valid_json(api_key)):
+            if api_key:
+                if not _is_valid_json(api_key):
+                    raise Exception(f"Vertex AI API key is not valid: {api_key}")
                 params["vertex_credentials"] = api_key
-                if _is_valid_json(api_key):
-                    creds = json.loads(api_key)
-                    if creds.get("project_id"):
-                        params["vertex_project"] = creds["project_id"]
+                creds = json.loads(api_key)
+                if creds.get("project_id"):
+                    params["vertex_project"] = creds["project_id"]
             params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
 
         if request.stream:
