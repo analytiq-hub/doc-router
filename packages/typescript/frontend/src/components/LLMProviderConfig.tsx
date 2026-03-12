@@ -162,6 +162,24 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
     reader.readAsText(file);
   };
 
+  const handleClearCredential = async () => {
+    if (!provider) return;
+    try {
+      await docRouterAccountApi.setLLMProviderConfig(providerName, {
+        enabled: provider.enabled,
+        token: "",
+        litellm_models_enabled: provider.litellm_models_enabled,
+        litellm_models_chat_agent: provider.litellm_models_chat_agent ?? provider.litellm_models_enabled,
+      });
+      const response = await docRouterAccountApi.listLLMProviders();
+      const updated = response.providers.find(p => p.name === providerName);
+      if (updated) setProvider(updated);
+    } catch (err) {
+      console.error('Error clearing credentials:', err);
+      setCredentialError('Failed to clear credentials. Please try again.');
+    }
+  };
+
   const handleSaveCredential = async () => {
     if (!provider || !credentialJson) return;
     setCredentialError(null);
@@ -341,15 +359,26 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
             />
             {credentialError && <p className="text-red-500 text-sm">{credentialError}</p>}
             {credentialSuccess && <p className="text-green-600 text-sm">Credentials saved successfully.</p>}
-            <Button
-              variant="contained"
-              size="small"
-              onClick={handleSaveCredential}
-              disabled={!credentialJson || credentialSaving}
-              sx={{ alignSelf: 'flex-start' }}
-            >
-              {credentialSaving ? 'Saving...' : 'Save Credentials'}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="contained"
+                size="small"
+                onClick={handleSaveCredential}
+                disabled={!credentialJson || credentialSaving}
+              >
+                {credentialSaving ? 'Saving...' : 'Save Credentials'}
+              </Button>
+              {provider.token && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  color="error"
+                  onClick={handleClearCredential}
+                >
+                  Clear Credentials
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}
