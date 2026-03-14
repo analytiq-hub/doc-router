@@ -4,8 +4,10 @@
 
 image:
   frontend:
+    repository: analytiq-hub/doc-router-frontend
     pullPolicy: Never   # images are kind load-ed, not pulled from a registry
   backend:
+    repository: analytiq-hub/doc-router-backend
     pullPolicy: Never
 
 ingress:
