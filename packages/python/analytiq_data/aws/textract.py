@@ -28,7 +28,8 @@ async def run_textract(analytiq_client,
                        blob: bytes,
                        feature_types: list = [],
                        query_list: Optional[list] = None,
-                       document_id: Optional[str] = None) -> dict:
+                       document_id: Optional[str] = None,
+                       org_id: Optional[str] = None) -> dict:
     """
     Run textract on a blob and return the blocks formatted as a dict.
 
@@ -92,6 +93,14 @@ async def run_textract(analytiq_client,
 
             job_id = response['JobId']
 
+            # Log prefix: org_id/document_id when both present, else document_id, else empty
+            if org_id and document_id:
+                log_prefix = f"{org_id}/{document_id}"
+            elif document_id:
+                log_prefix = document_id
+            else:
+                log_prefix = ""
+
             # Check completion status with async polling and exponential backoff
             idx = 0
             # Use event loop time for robust elapsed timing even if system clock changes
@@ -106,8 +115,8 @@ async def run_textract(analytiq_client,
 
                 status_response = await get_completion_func(JobId=job_id)
                 status = status_response['JobStatus']
-                doc_id_part = f" document_id={document_id}" if document_id else ""
-                logger.info(f"{analytiq_client.name}: ocr step {idx}: {status}{doc_id_part}")
+                prefix_part = f"{log_prefix}: " if log_prefix else ""
+                logger.info(f"{analytiq_client.name}: {prefix_part}step {idx}: {status}")
                 idx += 1
 
                 if status in ["SUCCEEDED", "FAILED"]:
@@ -134,8 +143,8 @@ async def run_textract(analytiq_client,
                     # Check for more results
                     next_token = response.get('NextToken', None)
                     
-                    doc_id_part = f" document_id={document_id}" if document_id else ""
-                    logger.info(f"{analytiq_client.name}: ocr step {idx}: blocks len: {len(blocks)} next_token: {next_token}{doc_id_part}")
+                    prefix_part = f"{log_prefix}: " if log_prefix else ""
+                    logger.info(f"{analytiq_client.name}: {prefix_part}step {idx}: blocks len: {len(blocks)} next_token: {next_token}")
                     idx += 1
                     if not next_token:
                         break

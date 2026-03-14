@@ -33,9 +33,6 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
             Whether to force the processing
     """
     # Implement your job processing logic here
-    logger.info(f"Processing OCR msg: {msg}")
-    logger.info(f"Force: {force}")
-
     msg_id = msg["_id"]
     msg_id_str = str(msg_id)
     attempts = msg.get("attempts", 0)
@@ -51,6 +48,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
             logger.error(f"Document {document_id} not found. Skipping OCR.")
             return
         org_id = doc.get("organization_id")
+        logger.info(f"Processing OCR msg: document_id={document_id}, org_id={org_id}, force={force}")
 
         # Check if OCR is supported for this file
         if not ad.common.doc.ocr_supported(doc.get("user_file_name", "")):
@@ -144,7 +142,9 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
                 return
 
             # Run OCR
-            ocr_json = await ad.aws.textract.run_textract(analytiq_client, file["blob"], document_id=document_id)
+            ocr_json = await ad.aws.textract.run_textract(
+                analytiq_client, file["blob"], document_id=document_id, org_id=org_id
+            )
             logger.info(f"OCR completed for {document_id}")
 
             # Save the OCR dictionary
@@ -169,7 +169,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
         await ad.queue.delete_msg(analytiq_client, "ocr", msg_id_str)
 
     except Exception as e:
-        logger.error(f"Error processing OCR msg: {e}")
+        logger.error(f"Error processing OCR msg: document_id={document_id}, org_id={org_id}, error={e}")
         
         # Update state to OCR failed
         if document_id:
@@ -196,8 +196,5 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
             )
         else:
             logger.info(
-                "Leaving OCR message %s in processing for retry after handler error (attempt %d of %d)",
-                msg_id_str,
-                attempts,
-                MAX_QUEUE_ATTEMPTS,
+                f"Leaving OCR message {msg_id_str} in processing for retry after handler error (document_id={document_id}, org_id={org_id}, attempt {attempts} of {MAX_QUEUE_ATTEMPTS})"
             )
