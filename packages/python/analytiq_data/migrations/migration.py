@@ -2188,6 +2188,58 @@ class AddPromptsListIndexes(Migration):
             return False
 
 
+class AddQueueVisibilityTimeoutIndexes(Migration):
+    """Add indexes for queue visibility timeout pattern (reclaiming stale processing messages)."""
+
+    def __init__(self):
+        super().__init__(
+            description="Add indexes for queue visibility timeout and stale message recovery"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            # Queue collections: compound index on {status, processing_started_at, attempts}
+            # Used by recv_msg() $or query to reclaim stale processing messages:
+            #   {status: "processing", processing_started_at: {$lte: cutoff}, attempts: {$lt: max}}
+            queue_collections = ["queues.ocr", "queues.llm", "queues.webhook", "queues.kb_index"]
+            all_collections = await db.list_collection_names()
+            for coll_name in all_collections:
+                if coll_name.startswith("queues.kb_index_") and coll_name not in queue_collections:
+                    queue_collections.append(coll_name)
+
+            for coll_name in queue_collections:
+                await db[coll_name].create_index(
+                    [("status", 1), ("processing_started_at", 1), ("attempts", 1)],
+                    name="status_processing_attempts_idx",
+                    background=True,
+                )
+            logger.info("Created queue visibility timeout indexes for %s", queue_collections)
+
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create queue visibility timeout indexes: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            queue_collections = ["queues.ocr", "queues.llm", "queues.webhook", "queues.kb_index"]
+            all_collections = await db.list_collection_names()
+            for coll_name in all_collections:
+                if coll_name.startswith("queues.kb_index_") and coll_name not in queue_collections:
+                    queue_collections.append(coll_name)
+
+            for coll_name in queue_collections:
+                try:
+                    await db[coll_name].drop_index("status_processing_attempts_idx")
+                except Exception:
+                    pass  # Index may not exist
+            logger.info("Dropped queue visibility timeout indexes")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to drop queue visibility timeout indexes: {e}")
+            return False
+
+
 # List of all migrations in order
 MIGRATIONS = [
     OcrKeyMigration(),
@@ -2218,6 +2270,7 @@ MIGRATIONS = [
     AddQueueAndCollectionIndexes(),
     AddPromptsListIndexes(),
     AddOrganizationDefaultPromptEnabled(),
+    AddQueueVisibilityTimeoutIndexes(),
     # Add more migrations here
 ]
 
