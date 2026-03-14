@@ -378,3 +378,149 @@ def test_apply_prompt_caching_applied_for_claude_when_tools_passed():
     assert out[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
 
 
+@pytest.mark.asyncio
+async def test_default_prompt_runs_when_enabled(test_db, mock_auth, setup_test_models):
+    """
+    Verify that when an organization has default prompts enabled (the default),
+    uploading a document and running the LLM pipeline produces a default prompt result.
+    """
+    # Organization created by fixtures; ensure flag is effectively enabled
+    org = await test_db.organizations.find_one({"_id": ObjectId(TEST_ORG_ID)})
+    assert org is not None
+    assert org.get("default_prompt_enabled", True) is True
+
+    pdf_content = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
+    test_pdf = {
+        "name": "test_default_enabled.pdf",
+        "content": f"data:application/pdf;base64,{base64.b64encode(pdf_content).decode()}",
+    }
+    upload_data = {
+        "documents": [
+            {
+                "name": test_pdf["name"],
+                "content": test_pdf["content"],
+                "metadata": {"test_source": "default_prompt_enabled_test"},
+                "tag_ids": [],
+            }
+        ]
+    }
+
+    with (
+        patch("analytiq_data.aws.textract.run_textract", new=mock_run_textract),
+        patch(
+            "analytiq_data.llm.llm._litellm_acompletion_with_retry",
+            new=mock_litellm_acompletion_with_retry,
+        ),
+        patch(
+            "analytiq_data.llm.llm._litellm_acreate_file_with_retry",
+            new=mock_litellm_acreate_file_with_retry,
+        ),
+        patch("litellm.completion_cost", return_value=0.001),
+        patch("litellm.supports_response_schema", return_value=True),
+        patch("litellm.utils.supports_pdf_input", return_value=True),
+    ):
+        # Upload the document into the test organization
+        upload_resp = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/documents",
+            json=upload_data,
+            headers=get_auth_headers(),
+        )
+        assert upload_resp.status_code == 200, f"Failed to upload document: {upload_resp.text}"
+        document_id = upload_resp.json()["documents"][0]["document_id"]
+
+        # Run OCR + LLM inline via handlers
+        analytiq_client = ad.common.get_analytiq_client()
+        await ad.msg_handlers.process_ocr_msg(
+            analytiq_client,
+            {"_id": str(ObjectId()), "msg": {"document_id": document_id}},
+        )
+        await ad.msg_handlers.process_llm_msg(
+            analytiq_client,
+            {"_id": str(ObjectId()), "msg": {"document_id": document_id}},
+        )
+
+        # Default prompt result should exist
+        llm_result_resp = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/llm/result/{document_id}",
+            params={"prompt_revid": "default"},
+            headers=get_auth_headers(),
+        )
+        assert llm_result_resp.status_code == 200, llm_result_resp.text
+        data = llm_result_resp.json()
+        assert "llm_result" in data
+        assert data.get("prompt_display_name") == "Document Summary"
+
+
+@pytest.mark.asyncio
+async def test_default_prompt_does_not_run_when_disabled(test_db, mock_auth, setup_test_models):
+    """
+    Verify that when default_prompt_enabled is False for an organization,
+    the LLM pipeline does not create a default prompt result.
+    """
+    # Explicitly disable default prompts for the test organization
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(TEST_ORG_ID)},
+        {"$set": {"default_prompt_enabled": False}},
+    )
+    org = await test_db.organizations.find_one({"_id": ObjectId(TEST_ORG_ID)})
+    assert org is not None
+    assert org.get("default_prompt_enabled") is False
+
+    pdf_content = b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF\n"
+    test_pdf = {
+        "name": "test_default_disabled.pdf",
+        "content": f"data:application/pdf;base64,{base64.b64encode(pdf_content).decode()}",
+    }
+    upload_data = {
+        "documents": [
+            {
+                "name": test_pdf["name"],
+                "content": test_pdf["content"],
+                "metadata": {"test_source": "default_prompt_disabled_test"},
+                "tag_ids": [],
+            }
+        ]
+    }
+
+    with (
+        patch("analytiq_data.aws.textract.run_textract", new=mock_run_textract),
+        patch(
+            "analytiq_data.llm.llm._litellm_acompletion_with_retry",
+            new=mock_litellm_acompletion_with_retry,
+        ),
+        patch(
+            "analytiq_data.llm.llm._litellm_acreate_file_with_retry",
+            new=mock_litellm_acreate_file_with_retry,
+        ),
+        patch("litellm.completion_cost", return_value=0.001),
+        patch("litellm.supports_response_schema", return_value=True),
+        patch("litellm.utils.supports_pdf_input", return_value=True),
+    ):
+        # Upload the document into the test organization
+        upload_resp = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/documents",
+            json=upload_data,
+            headers=get_auth_headers(),
+        )
+        assert upload_resp.status_code == 200, f"Failed to upload document: {upload_resp.text}"
+        document_id = upload_resp.json()["documents"][0]["document_id"]
+
+        # Run OCR + LLM inline via handlers
+        analytiq_client = ad.common.get_analytiq_client()
+        await ad.msg_handlers.process_ocr_msg(
+            analytiq_client,
+            {"_id": str(ObjectId()), "msg": {"document_id": document_id}},
+        )
+        await ad.msg_handlers.process_llm_msg(
+            analytiq_client,
+            {"_id": str(ObjectId()), "msg": {"document_id": document_id}},
+        )
+
+        # Default prompt result should NOT exist
+        llm_result_resp = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/llm/result/{document_id}",
+            params={"prompt_revid": "default"},
+            headers=get_auth_headers(),
+        )
+        assert llm_result_resp.status_code == 404
+

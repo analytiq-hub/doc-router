@@ -320,8 +320,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
               className={`text-white hover:text-gray-200 transition-colors p-1 rounded-full hover:bg-white hover:bg-opacity-20 disabled:opacity-50 flex-shrink-0 ${hasActiveFilters ? 'bg-white bg-opacity-30' : ''}`}
               title="Toggle filters"
             >
-              <FilterListIcon fontSize="small" className="sm:hidden" />
-              <FilterListIcon className="hidden sm:block" />
+              <FilterListIcon fontSize="small" />
             </button>
             <button
               onClick={handleClear}
@@ -329,8 +328,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
               className="text-white hover:text-gray-200 transition-colors p-1 rounded-full hover:bg-white hover:bg-opacity-20 disabled:opacity-50 flex-shrink-0"
               title="Clear conversation"
             >
-              <ClearIcon fontSize="small" className="sm:hidden" />
-              <ClearIcon className="hidden sm:block" />
+              <ClearIcon fontSize="small" />
             </button>
           </div>
         </div>
