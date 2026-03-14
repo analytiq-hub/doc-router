@@ -2297,6 +2297,14 @@ class FixLegacyProcessingQueueMessages(Migration):
             if total_deleted > 0:
                 logger.info("Total completed messages deleted: %d", total_deleted)
 
+            # Drop legacy error queue collections (ocr_err, llm_err) that are no longer used.
+            # These were replaced by the dead letter pattern (move_to_dlq).
+            legacy_err_queues = ["queues.ocr_err", "queues.llm_err"]
+            for coll_name in legacy_err_queues:
+                if coll_name in all_collections:
+                    await db[coll_name].drop()
+                    logger.info("Dropped legacy error queue collection: %s", coll_name)
+
             return True
         except Exception as e:
             logger.error(f"Failed to fix legacy processing queue messages: {e}")

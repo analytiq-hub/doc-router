@@ -186,9 +186,6 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
         except Exception:
             pass
 
-        # Save the message to the ocr_err queue
-        await ad.queue.send_msg(analytiq_client, "ocr_err", msg=msg)
-
         # Decide between retry and DLQ based on attempts
         if attempts >= MAX_QUEUE_ATTEMPTS:
             await ad.queue.move_to_dlq(
