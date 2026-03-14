@@ -8,10 +8,21 @@ import asyncio
 from datetime import datetime
 import uuid
 import logging
+import os
 import analytiq_data as ad
 from typing import Optional
 
 logger = logging.getLogger(__name__)
+
+
+def _get_int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except Exception:
+        return default
+
+
+OCR_TIMEOUT_SECS = _get_int_env("OCR_TIMEOUT_SECS", 600)  # 10 min
 
 async def run_textract(analytiq_client,
                        blob: bytes,
@@ -82,7 +93,16 @@ async def run_textract(analytiq_client,
 
             # Check completion status with async polling and exponential backoff
             idx = 0
+            # Use event loop time for robust elapsed timing even if system clock changes
+            loop = asyncio.get_event_loop()
+            start_time = loop.time()
             while True:
+                elapsed = loop.time() - start_time
+                if elapsed > OCR_TIMEOUT_SECS:
+                    raise asyncio.TimeoutError(
+                        f"Textract job {job_id} timed out after {OCR_TIMEOUT_SECS}s"
+                    )
+
                 status_response = await get_completion_func(JobId=job_id)
                 status = status_response['JobStatus']
                 logger.info(f"{analytiq_client.name}: ocr step {idx}: {status}")

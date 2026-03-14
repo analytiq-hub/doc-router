@@ -25,6 +25,16 @@ litellm.modify_params = True
 # Cache control directive for Anthropic/Bedrock prompt caching (ephemeral cache)
 _PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
 
+
+def _get_int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except Exception:
+        return default
+
+
+LLM_REQUEST_TIMEOUT_SECS = _get_int_env("LLM_REQUEST_TIMEOUT_SECS", 300)  # 5 min
+
 def _is_valid_json(s: str) -> bool:
     """Return True if s is a non-empty, parseable JSON string."""
     try:
@@ -206,7 +216,12 @@ def is_retryable_error(exception) -> bool:
     # First check if it's an exception
     if not isinstance(exception, Exception):
         return False
-    
+
+    # Explicitly treat asyncio.TimeoutError as retryable
+    import asyncio as _asyncio  # local import to avoid circulars in some environments
+    if isinstance(exception, _asyncio.TimeoutError):
+        return True
+
     error_message = str(exception).lower()
     
     # Check for specific retryable error patterns
@@ -298,6 +313,8 @@ async def _litellm_acompletion_with_retry(
         "aws_access_key_id": aws_access_key_id,
         "aws_secret_access_key": aws_secret_access_key,
         "aws_region_name": aws_region_name,
+        # litellm's timeout kwarg (overall request timeout in seconds)
+        "timeout": LLM_REQUEST_TIMEOUT_SECS,
     }
     # Vertex AI uses vertex_credentials (service account JSON or file path) instead of api_key.
     if model.startswith("vertex_ai/"):
@@ -1180,13 +1197,33 @@ async def run_llm_for_prompt_revids(analytiq_client, document_id: str, prompt_re
 
     n_prompts = len(prompt_revids)
 
-    # Create n_prompts concurrent tasks
-    tasks = [run_llm(analytiq_client, document_id, prompt_revid, llm_model) for prompt_revid in prompt_revids]
+    if n_prompts == 0:
+        logger.info(f"No prompts to run for document {document_id}")
+        return []
 
-    # Run the tasks
-    results = await asyncio.gather(*tasks)
+    # Create n_prompts concurrent tasks, each with its own timeout to avoid one hung
+    # prompt blocking all others. We still rely on litellm's own timeout, but this
+    # is an extra safeguard at the task level.
+    tasks: List[asyncio.Task] = []
+    for prompt_revid in prompt_revids:
+        task = asyncio.create_task(
+            asyncio.wait_for(
+                run_llm(analytiq_client, document_id, prompt_revid, llm_model),
+                timeout=LLM_REQUEST_TIMEOUT_SECS,
+            )
+        )
+        tasks.append(task)
 
-    logger.info(f"LLM run completed for {document_id} with {n_prompts} prompts: {results}")
+    # Run the tasks, returning exceptions instead of raising immediately
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    logger.info(
+        "LLM run completed for %s with %d prompts (successes=%d, failures=%d)",
+        document_id,
+        n_prompts,
+        sum(1 for r in results if not isinstance(r, Exception)),
+        sum(1 for r in results if isinstance(r, Exception)),
+    )
 
     return results
 

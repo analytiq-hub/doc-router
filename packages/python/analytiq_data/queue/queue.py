@@ -1,11 +1,26 @@
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
 from typing import Optional, Dict, Any
 from bson import ObjectId
 import logging
+import os
+
+from pymongo import ReturnDocument
 
 import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
+
+
+def _get_int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except Exception:
+        return default
+
+
+QUEUE_VISIBILITY_TIMEOUT_SECS = _get_int_env("QUEUE_VISIBILITY_TIMEOUT_SECS", 900)  # 15 min
+MAX_QUEUE_ATTEMPTS = _get_int_env("MAX_QUEUE_ATTEMPTS", 3)
+
 
 def get_queue_collection_name(queue_name: str) -> str:
     """
@@ -57,7 +72,8 @@ async def send_msg(
     msg_data = {
         "status": "pending",
         "created_at": datetime.now(UTC),
-        "msg": msg
+        "attempts": 0,
+        "msg": msg,
     }
 
     result = await queue_collection.insert_one(msg_data)
@@ -81,12 +97,44 @@ async def recv_msg(analytiq_client, queue_name: str) -> Optional[Dict[str, Any]]
     queue_collection_name = get_queue_collection_name(queue_name)
     queue_collection = db[queue_collection_name]
 
+    now = datetime.now(UTC)
+    lease_cutoff = now - timedelta(seconds=QUEUE_VISIBILITY_TIMEOUT_SECS)
+
+    query = {
+        "$or": [
+            {"status": "pending", "attempts": {"$lt": MAX_QUEUE_ATTEMPTS}},
+            {
+                "status": "processing",
+                "processing_started_at": {"$lte": lease_cutoff},
+                "attempts": {"$lt": MAX_QUEUE_ATTEMPTS},
+            },
+        ]
+    }
+
+    update = {
+        "$set": {
+            "status": "processing",
+            "processing_started_at": now,
+        },
+        "$inc": {"attempts": 1},
+    }
+
     msg_data = await queue_collection.find_one_and_update(
-        {"status": "pending"},
-        {"$set": {"status": "processing"}},
-        sort=[("created_at", 1)]
+        query,
+        update,
+        sort=[("created_at", 1)],
+        return_document=ReturnDocument.AFTER,
     )
-    
+
+    if msg_data:
+        logger.info(
+            "Claimed message %s from %s (attempt %s, status=%s)",
+            msg_data.get("_id"),
+            queue_name,
+            msg_data.get("attempts"),
+            msg_data.get("status"),
+        )
+
     return msg_data
 
 async def delete_msg(analytiq_client, queue_name: str, msg_id: str, status: str = "completed"):
@@ -109,3 +157,66 @@ async def delete_msg(analytiq_client, queue_name: str, msg_id: str, status: str 
         {"$set": {"status": status}}
     )
     logger.info(f"Deleted message {msg_id} from {queue_name} with status: {status}") 
+
+
+async def recover_stale_messages(analytiq_client, queue_name: str) -> int:
+    """
+    Recover stale processing messages for a queue by resetting them to pending.
+
+    This function is idempotent and safe to call repeatedly. It only touches
+    messages that:
+    - Are in "processing" status
+    - Have processing_started_at older than the visibility timeout
+    - Have attempts < MAX_QUEUE_ATTEMPTS
+    """
+    db_name = analytiq_client.env
+    db = analytiq_client.mongodb_async[db_name]
+    queue_collection_name = get_queue_collection_name(queue_name)
+    queue_collection = db[queue_collection_name]
+
+    now = datetime.now(UTC)
+    lease_cutoff = now - timedelta(seconds=QUEUE_VISIBILITY_TIMEOUT_SECS)
+
+    result = await queue_collection.update_many(
+        {
+            "status": "processing",
+            "processing_started_at": {"$lte": lease_cutoff},
+            "attempts": {"$lt": MAX_QUEUE_ATTEMPTS},
+        },
+        {
+            "$set": {"status": "pending"},
+            "$unset": {"processing_started_at": ""},
+        },
+    )
+
+    recovered = getattr(result, "modified_count", 0)
+    if recovered:
+        logger.info(
+            "Recovered %s stale messages in %s (visibility_timeout=%ss)",
+            recovered,
+            queue_name,
+            QUEUE_VISIBILITY_TIMEOUT_SECS,
+        )
+    return recovered
+
+
+async def move_to_dlq(analytiq_client, queue_name: str, msg_id: str, error: str) -> None:
+    """
+    Move a failed message to dead letter state after max attempts.
+
+    Dead letter messages should be inspected before reprocessing.
+    """
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    collection = db[get_queue_collection_name(queue_name)]
+
+    await collection.update_one(
+        {"_id": ObjectId(msg_id)},
+        {
+            "$set": {
+                "status": "dead_letter",
+                "failed_at": datetime.now(UTC),
+                "last_error": error,
+            }
+        },
+    )
+    logger.warning("Message %s moved to dead letter in %s: %s", msg_id, queue_name, error)

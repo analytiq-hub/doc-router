@@ -4,6 +4,7 @@ import logging
 import os
 import analytiq_data as ad
 import stamina
+from analytiq_data.queue.queue import MAX_QUEUE_ATTEMPTS
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +37,8 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
     logger.info(f"Force: {force}")
 
     msg_id = msg["_id"]
+    msg_id_str = str(msg_id)
+    attempts = msg.get("attempts", 0)
     document_id = None
     org_id = None
 
@@ -55,11 +58,12 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
             # Update state to OCR completed without doing OCR
             await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_COMPLETED)
             # Post a message to the llm job queue
-            msg = {"document_id": document_id}
-            await ad.queue.send_msg(analytiq_client, "llm", msg=msg)
+            msg_llm = {"document_id": document_id}
+            await ad.queue.send_msg(analytiq_client, "llm", msg=msg_llm)
             # Post a message to the KB indexing queue (for .txt/.md files that can be indexed)
             kb_msg = {"document_id": document_id}
             await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
+            await ad.queue.delete_msg(analytiq_client, "ocr", msg_id_str, status="completed")
             return
 
         # Update state to OCR processing
@@ -86,6 +90,14 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
                         document_id=document_id,
                         error={"stage": "ocr", "message": "missing mongo_file_name"},
                     )
+                # For this hard failure, decide between retry and DLQ based on attempts
+                if attempts >= MAX_QUEUE_ATTEMPTS:
+                    await ad.queue.move_to_dlq(
+                        analytiq_client,
+                        "ocr",
+                        msg_id_str,
+                        f"missing mongo_file_name after {attempts} attempts",
+                    )
                 return
 
             # Use the PDF file if available, otherwise fallback to original
@@ -101,6 +113,13 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
                         document_id=document_id,
                         error={"stage": "ocr", "message": "missing pdf_file_name"},
                     )
+                if attempts >= MAX_QUEUE_ATTEMPTS:
+                    await ad.queue.move_to_dlq(
+                        analytiq_client,
+                        "ocr",
+                        msg_id_str,
+                        f"missing pdf_file_name after {attempts} attempts",
+                    )
                 return
 
             file = await _ocr_get_file(analytiq_client, pdf_file_name)
@@ -114,6 +133,13 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
                         event_type="document.error",
                         document_id=document_id,
                         error={"stage": "ocr", "message": "file not found"},
+                    )
+                if attempts >= MAX_QUEUE_ATTEMPTS:
+                    await ad.queue.move_to_dlq(
+                        analytiq_client,
+                        "ocr",
+                        msg_id_str,
+                        f"file not found after {attempts} attempts",
                     )
                 return
 
@@ -132,13 +158,16 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
         await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_COMPLETED)
 
         # Post a message to the llm job queue
-        msg = {"document_id": document_id}
-        await ad.queue.send_msg(analytiq_client, "llm", msg=msg)
+        msg_llm = {"document_id": document_id}
+        await ad.queue.send_msg(analytiq_client, "llm", msg=msg_llm)
         
         # Post a message to the KB indexing queue (OCR-gated indexing)
         kb_msg = {"document_id": document_id}
         await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
-    
+
+        # Successful completion: remove message from queue
+        await ad.queue.delete_msg(analytiq_client, "ocr", msg_id_str, status="completed")
+
     except Exception as e:
         logger.error(f"Error processing OCR msg: {e}")
         
@@ -160,5 +189,18 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
         # Save the message to the ocr_err queue
         await ad.queue.send_msg(analytiq_client, "ocr_err", msg=msg)
 
-    # Delete the message from the ocr queue
-    await ad.queue.delete_msg(analytiq_client, "ocr", msg_id)
+        # Decide between retry and DLQ based on attempts
+        if attempts >= MAX_QUEUE_ATTEMPTS:
+            await ad.queue.move_to_dlq(
+                analytiq_client,
+                "ocr",
+                msg_id_str,
+                f"OCR handler error after {attempts} attempts: {e}",
+            )
+        else:
+            logger.info(
+                "Leaving OCR message %s in processing for retry after handler error (attempt %d of %d)",
+                msg_id_str,
+                attempts,
+                MAX_QUEUE_ATTEMPTS,
+            )

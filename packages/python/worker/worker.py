@@ -54,12 +54,15 @@ async def worker_ocr(worker_id: str) -> None:
                 try:
                     await ad.msg_handlers.process_ocr_msg(analytiq_client, msg)
                 except asyncio.CancelledError:
-                    logger.warning(f"Worker {worker_id} cancelled mid-flight on OCR msg {msg.get('_id')}, marking failed")
-                    await ad.queue.delete_msg(analytiq_client, "ocr", str(msg["_id"]), status="failed")
+                    logger.warning(
+                        "Worker %s cancelled mid-flight on OCR msg %s; message will be recovered via visibility timeout",
+                        worker_id,
+                        msg.get("_id"),
+                    )
                     raise
                 except Exception as e:
+                    # The OCR handler is responsible for queue state (retry vs DLQ).
                     logger.error(f"Error processing OCR message {msg.get('_id')}: {str(e)}")
-                    await ad.queue.delete_msg(analytiq_client, "ocr", str(msg["_id"]), status="failed")
             else:
                 sleep = _queue_idle_sleep.get("ocr", POLL_MIN_SLEEP)
                 await asyncio.sleep(sleep)
@@ -100,8 +103,11 @@ async def worker_llm(worker_id: str) -> None:
                 try:
                     await ad.msg_handlers.process_llm_msg(analytiq_client, msg)
                 except asyncio.CancelledError:
-                    logger.warning(f"Worker {worker_id} cancelled mid-flight on LLM msg {msg.get('_id')}, marking failed")
-                    await ad.queue.delete_msg(analytiq_client, "llm", str(msg["_id"]), status="failed")
+                    logger.warning(
+                        "Worker %s cancelled mid-flight on LLM msg %s; message will be recovered via visibility timeout",
+                        worker_id,
+                        msg.get("_id"),
+                    )
                     raise
             else:
                 sleep = _queue_idle_sleep.get("llm", POLL_MIN_SLEEP)
@@ -142,12 +148,14 @@ async def worker_kb_index(worker_id: str) -> None:
                 try:
                     await ad.msg_handlers.process_kb_index_msg(analytiq_client, msg)
                 except asyncio.CancelledError:
-                    logger.warning(f"Worker {worker_id} cancelled mid-flight on KB index msg {msg.get('_id')}, marking failed")
-                    await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg["_id"]), status="failed")
+                    logger.warning(
+                        "Worker %s cancelled mid-flight on KB index msg %s; message will be recovered via visibility timeout",
+                        worker_id,
+                        msg.get("_id"),
+                    )
                     raise
                 except Exception as e:
                     logger.error(f"Error processing KB index message {msg.get('_id')}: {str(e)}")
-                    await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg["_id"]), status="failed")
             else:
                 sleep = _queue_idle_sleep.get("kb_index", POLL_MIN_SLEEP)
                 await asyncio.sleep(sleep)
@@ -313,6 +321,29 @@ async def worker_webhook(worker_id: str) -> None:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
 
+async def recover_all_queues(analytiq_client) -> None:
+    """
+    Recover stale messages across all queues at worker startup.
+
+    This function is idempotent and safe to call repeatedly. It only touches
+    messages that:
+    - Are in "processing" status
+    - Have processing_started_at older than visibility timeout
+    - Have attempts < MAX_QUEUE_ATTEMPTS
+    """
+    queues = ["ocr", "llm", "kb_index", "webhook"]
+    for queue_name in queues:
+        try:
+            recovered = await ad.queue.recover_stale_messages(analytiq_client, queue_name)
+            logger.info(
+                "Startup recovery: queue=%s recovered=%s",
+                queue_name,
+                recovered,
+            )
+        except Exception as e:
+            logger.error(f"Error recovering queue {queue_name} at startup: {e}")
+
+
 def start_workers(n_workers: int) -> list[asyncio.Task]:
     """
     Start all worker coroutines as asyncio Tasks within the running event loop.
@@ -330,6 +361,12 @@ def start_workers(n_workers: int) -> list[asyncio.Task]:
 
 async def main():
     N_WORKERS = int(os.getenv("N_WORKERS", "1"))
+
+    # Run startup recovery once with a dedicated client before starting workers
+    ENV = os.getenv("ENV", "dev")
+    recovery_client = ad.common.get_analytiq_client(env=ENV, name="startup_recovery")
+    await recover_all_queues(recovery_client)
+
     tasks = start_workers(N_WORKERS)
     await asyncio.gather(*tasks)
 

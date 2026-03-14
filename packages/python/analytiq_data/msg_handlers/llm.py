@@ -3,11 +3,15 @@ import openai
 import logging
 from bson import ObjectId
 import analytiq_data as ad
+from analytiq_data.queue.queue import MAX_QUEUE_ATTEMPTS
 
 logger = logging.getLogger(__name__)
 
 async def process_llm_msg(analytiq_client, msg):
     logger.info(f"Processing LLM msg: {msg}")
+
+    msg_id = str(msg["_id"])
+    attempts = msg.get("attempts", 0)
 
     document_id = msg["msg"]["document_id"]
     org_id = None
@@ -33,7 +37,11 @@ async def process_llm_msg(analytiq_client, msg):
                 )
 
         # Update state to LLM processing
-        await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_LLM_PROCESSING)
+        await ad.common.doc.update_doc_state(
+            analytiq_client,
+            document_id,
+            ad.common.doc.DOCUMENT_STATE_LLM_PROCESSING,
+        )
 
         # Get all the document tags
         tags = await ad.common.doc.get_doc_tag_ids(analytiq_client, document_id)
@@ -45,20 +53,109 @@ async def process_llm_msg(analytiq_client, msg):
         if default_prompt_enabled:
             prompt_revids.insert(0, "default")
 
-        logger.info(f"Running LLM for document {document_id} with prompt id list: {prompt_revids}")
+        logger.info(
+            "Running LLM for document %s with prompt id list: %s",
+            document_id,
+            prompt_revids,
+        )
 
-        # Run the LLM for the document for the default prompt
-        await ad.llm.run_llm_for_prompt_revids(analytiq_client, document_id, prompt_revids)
+        # Run the LLM for the document for all prompts concurrently
+        results = await ad.llm.run_llm_for_prompt_revids(analytiq_client, document_id, prompt_revids)
 
-        # Update state to LLM completed
-        await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_LLM_COMPLETED)
-        
-        logger.info(f"LLM run completed for {document_id}")
+        if not results:
+            logger.info("No LLM prompts executed for document %s; marking as completed", document_id)
+            await ad.common.doc.update_doc_state(
+                analytiq_client,
+                document_id,
+                ad.common.doc.DOCUMENT_STATE_LLM_COMPLETED,
+            )
+            await ad.queue.delete_msg(analytiq_client, "llm", msg_id, status="completed")
+            return
+
+        errors = [r for r in results if isinstance(r, Exception)]
+        n_errors = len(errors)
+        n_total = len(results)
+
+        if n_errors == 0:
+            # All prompts succeeded
+            await ad.common.doc.update_doc_state(
+                analytiq_client,
+                document_id,
+                ad.common.doc.DOCUMENT_STATE_LLM_COMPLETED,
+            )
+            logger.info("LLM run completed for %s (all %d prompts succeeded)", document_id, n_total)
+            await ad.queue.delete_msg(analytiq_client, "llm", msg_id, status="completed")
+        elif n_errors == n_total:
+            # All prompts failed
+            error_summary = "; ".join(str(e) for e in errors)
+            logger.error(
+                "All LLM prompts failed for %s (attempts=%d/%d): %s",
+                document_id,
+                attempts,
+                MAX_QUEUE_ATTEMPTS,
+                error_summary,
+            )
+            await ad.common.doc.update_doc_state(
+                analytiq_client,
+                document_id,
+                ad.common.doc.DOCUMENT_STATE_LLM_FAILED,
+            )
+
+            # Optional per-org webhook: error
+            try:
+                if org_id:
+                    await ad.webhooks.enqueue_event(
+                        analytiq_client,
+                        organization_id=org_id,
+                        event_type="llm.error",
+                        document_id=document_id,
+                        error={"stage": "llm", "message": error_summary},
+                    )
+            except Exception:
+                pass
+
+            # Decide between retry and DLQ based on attempts
+            if attempts >= MAX_QUEUE_ATTEMPTS:
+                await ad.queue.move_to_dlq(
+                    analytiq_client,
+                    "llm",
+                    msg_id,
+                    f"All LLM prompts failed after {attempts} attempts: {error_summary}",
+                )
+            else:
+                logger.info(
+                    "Leaving LLM message %s in processing for retry (attempt %d of %d)",
+                    msg_id,
+                    attempts,
+                    MAX_QUEUE_ATTEMPTS,
+                )
+        else:
+            # Partial failure: some prompts succeeded, some failed
+            error_summary = "; ".join(str(e) for e in errors)
+            logger.warning(
+                "Partial LLM failure for %s: %d/%d prompts failed: %s",
+                document_id,
+                n_errors,
+                n_total,
+                error_summary,
+            )
+            await ad.common.doc.update_doc_state(
+                analytiq_client,
+                document_id,
+                ad.common.doc.DOCUMENT_STATE_LLM_COMPLETED,
+            )
+            # We intentionally do NOT send an error webhook for partial failures.
+            await ad.queue.delete_msg(analytiq_client, "llm", msg_id, status="completed")
+
     except Exception as e:
         logger.error(f"Error processing LLM msg: {e}")
         
         # Update state to LLM failed
-        await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_LLM_FAILED)
+        await ad.common.doc.update_doc_state(
+            analytiq_client,
+            document_id,
+            ad.common.doc.DOCUMENT_STATE_LLM_FAILED,
+        )
 
         # Optional per-org webhook: error
         try:
@@ -73,6 +170,18 @@ async def process_llm_msg(analytiq_client, msg):
         except Exception:
             pass
         
-        # Could add LLM error queue handling here if needed
-        
-    await ad.queue.delete_msg(analytiq_client, "llm", msg["_id"])
+        # Decide between retry and DLQ based on attempts
+        if attempts >= MAX_QUEUE_ATTEMPTS:
+            await ad.queue.move_to_dlq(
+                analytiq_client,
+                "llm",
+                msg_id,
+                f"Unhandled LLM handler error after {attempts} attempts: {e}",
+            )
+        else:
+            logger.info(
+                "Leaving LLM message %s in processing for retry after handler error (attempt %d of %d)",
+                msg_id,
+                attempts,
+                MAX_QUEUE_ATTEMPTS,
+            )
