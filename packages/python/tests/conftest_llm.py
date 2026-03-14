@@ -75,7 +75,7 @@ class MockTextractResponse:
         ]
 
 
-async def mock_run_textract(analytiq_client, blob, feature_types=[], query_list=None):
+async def mock_run_textract(analytiq_client, blob, feature_types=[], query_list=None, document_id=None, **kwargs):
     """Mock implementation of ad.aws.textract.run_textract that matches the real function signature"""
     # Return the blocks directly (not wrapped in MockTextractResponse)
     return [

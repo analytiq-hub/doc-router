@@ -144,7 +144,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
                 return
 
             # Run OCR
-            ocr_json = await ad.aws.textract.run_textract(analytiq_client, file["blob"])
+            ocr_json = await ad.aws.textract.run_textract(analytiq_client, file["blob"], document_id=document_id)
             logger.info(f"OCR completed for {document_id}")
 
             # Save the OCR dictionary

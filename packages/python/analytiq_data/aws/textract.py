@@ -27,7 +27,8 @@ OCR_TIMEOUT_SECS = _get_int_env("OCR_TIMEOUT_SECS", 600)  # 10 min
 async def run_textract(analytiq_client,
                        blob: bytes,
                        feature_types: list = [],
-                       query_list: Optional[list] = None) -> dict:
+                       query_list: Optional[list] = None,
+                       document_id: Optional[str] = None) -> dict:
     """
     Run textract on a blob and return the blocks formatted as a dict.
 
@@ -105,7 +106,8 @@ async def run_textract(analytiq_client,
 
                 status_response = await get_completion_func(JobId=job_id)
                 status = status_response['JobStatus']
-                logger.info(f"{analytiq_client.name}: ocr step {idx}: {status}")
+                doc_id_part = f" document_id={document_id}" if document_id else ""
+                logger.info(f"{analytiq_client.name}: ocr step {idx}: {status}{doc_id_part}")
                 idx += 1
 
                 if status in ["SUCCEEDED", "FAILED"]:
@@ -132,7 +134,8 @@ async def run_textract(analytiq_client,
                     # Check for more results
                     next_token = response.get('NextToken', None)
                     
-                    logger.info(f"{analytiq_client.name}: ocr step {idx}: blocks len: {len(blocks)} next_token: {next_token}")
+                    doc_id_part = f" document_id={document_id}" if document_id else ""
+                    logger.info(f"{analytiq_client.name}: ocr step {idx}: blocks len: {len(blocks)} next_token: {next_token}{doc_id_part}")
                     idx += 1
                     if not next_token:
                         break

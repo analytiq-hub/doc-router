@@ -25,8 +25,10 @@ function isChatDisabled(state: string | null): boolean {
 export default function AgentTab({ organizationId, documentId }: AgentTabProps) {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [documentState, setDocumentState] = useState<string | null>(null);
+  const [documentNotFound, setDocumentNotFound] = useState(false);
 
   useEffect(() => {
+    setDocumentNotFound(false);
     const fetchState = async () => {
       try {
         try {
@@ -39,7 +41,8 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
         const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original', includeContent: false });
         setDocumentState(doc.state);
       } catch (error) {
-        console.error('Error fetching document state:', error);
+        // 404 or other error: document may not exist or not be accessible — stop polling
+        setDocumentNotFound(true);
         setDocumentState(null);
       }
     };
@@ -47,7 +50,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
   }, [documentId, docRouterOrgApi]);
 
   useEffect(() => {
-    if (!isChatDisabled(documentState)) return;
+    if (documentNotFound || !isChatDisabled(documentState)) return;
     const poll = setInterval(async () => {
       try {
         try {
@@ -60,11 +63,12 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
         const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original', includeContent: false });
         setDocumentState(doc.state);
       } catch (error) {
-        console.error('Error polling document state:', error);
+        // 404 or other error: stop polling to avoid repeated failed requests
+        setDocumentNotFound(true);
       }
     }, 2000);
     return () => clearInterval(poll);
-  }, [documentState, documentId, docRouterOrgApi]);
+  }, [documentState, documentNotFound, documentId, docRouterOrgApi]);
 
   const chatDisabled = isChatDisabled(documentState);
 
@@ -191,7 +195,12 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
 
   const inputBlock = (
     <div className="shrink-0 border-t border-gray-200 bg-white min-w-0">
-      {chatDisabled && documentState !== null && (
+      {documentNotFound && (
+        <div className="px-3 pt-2 pb-1 text-sm text-gray-600 bg-gray-50 border-b border-gray-200">
+          Document not found. Chat is not available.
+        </div>
+      )}
+      {chatDisabled && documentState !== null && !documentNotFound && (
         <div className="px-3 pt-2 pb-1 text-sm text-amber-700 bg-amber-50 border-b border-amber-200">
           {documentState === 'ocr_failed' || documentState === 'llm_failed'
             ? 'Document processing did not complete. Chat is not available.'
