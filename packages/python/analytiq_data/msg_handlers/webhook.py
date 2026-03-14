@@ -29,7 +29,7 @@ async def process_webhook_msg(analytiq_client, msg):
     finally:
         # Always complete the queue message; delivery retries are driven by webhook_deliveries.
         try:
-            await ad.queue.delete_msg(analytiq_client, "webhook", str(msg["_id"]), status="completed")
+            await ad.queue.delete_msg(analytiq_client, "webhook", str(msg["_id"]))
         except Exception:
             pass
 

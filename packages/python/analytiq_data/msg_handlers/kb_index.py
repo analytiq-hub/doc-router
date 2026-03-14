@@ -152,12 +152,12 @@ async def process_kb_index_msg(analytiq_client, msg, force: bool = False):
         
     except Exception as e:
         logger.error(f"Error processing KB index message {msg_id}: {e}")
-        # Mark message as failed
+        # Move message to dead letter queue
         try:
-            await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg_id), status="failed")
+            await ad.queue.move_to_dlq(analytiq_client, "kb_index", str(msg_id), str(e))
         except Exception:
             pass
         raise
-    
+
     # Delete the message from the queue
-    await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg_id), status="completed")
+    await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg_id))

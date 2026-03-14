@@ -300,7 +300,7 @@ async def worker_webhook(worker_id: str) -> None:
                     await ad.msg_handlers.process_webhook_msg(analytiq_client, msg)
                 except asyncio.CancelledError:
                     logger.warning(f"Worker {worker_id} cancelled mid-flight on webhook msg {msg.get('_id')}, marking failed")
-                    await ad.queue.delete_msg(analytiq_client, "webhook", str(msg["_id"]), status="failed")
+                    await ad.queue.move_to_dlq(analytiq_client, "webhook", str(msg["_id"]), "cancelled mid-flight")
                     raise
                 continue
 

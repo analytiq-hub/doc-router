@@ -2240,6 +2240,75 @@ class AddQueueVisibilityTimeoutIndexes(Migration):
             return False
 
 
+class FixLegacyProcessingQueueMessages(Migration):
+    """Fix legacy 'processing' queue messages and clean up completed messages."""
+
+    def __init__(self):
+        super().__init__(
+            description="Fix legacy processing queue messages and delete completed messages"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            # Get all queue collections
+            queue_collections = ["queues.ocr", "queues.llm", "queues.webhook", "queues.kb_index"]
+            all_collections = await db.list_collection_names()
+            for coll_name in all_collections:
+                if coll_name.startswith("queues.kb_index_") and coll_name not in queue_collections:
+                    queue_collections.append(coll_name)
+
+            # Fix legacy "processing" messages missing required fields.
+            # Set processing_started_at to epoch so they get reclaimed immediately,
+            # and set attempts to 0 if missing so they can be retried.
+            epoch = datetime(1970, 1, 1, tzinfo=UTC)
+            total_fixed = 0
+            for coll_name in queue_collections:
+                result = await db[coll_name].update_many(
+                    {
+                        "status": "processing",
+                        "processing_started_at": {"$exists": False},
+                    },
+                    {"$set": {"processing_started_at": epoch}},
+                )
+                # Also ensure attempts field exists on all processing messages
+                result2 = await db[coll_name].update_many(
+                    {
+                        "status": "processing",
+                        "attempts": {"$exists": False},
+                    },
+                    {"$set": {"attempts": 0}},
+                )
+                fixed = result.modified_count + result2.modified_count
+                if fixed > 0:
+                    logger.info("Fixed %d legacy processing messages in %s", fixed, coll_name)
+                    total_fixed += fixed
+            if total_fixed > 0:
+                logger.info("Total legacy processing messages fixed: %d", total_fixed)
+
+            # Delete completed messages that accumulated before delete_msg was changed
+            # to actually delete messages instead of marking them as completed.
+            total_deleted = 0
+            for coll_name in queue_collections:
+                result = await db[coll_name].delete_many({"status": "completed"})
+                deleted = result.deleted_count
+                if deleted > 0:
+                    logger.info("Deleted %d completed messages from %s", deleted, coll_name)
+                    total_deleted += deleted
+            if total_deleted > 0:
+                logger.info("Total completed messages deleted: %d", total_deleted)
+
+            return True
+        except Exception as e:
+            logger.error(f"Failed to fix legacy processing queue messages: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        # Cannot meaningfully revert - we don't know which messages were legacy
+        # and removing the fields would break the visibility timeout system
+        logger.warning("Cannot revert FixLegacyProcessingQueueMessages - fields are now required")
+        return True
+
+
 # List of all migrations in order
 MIGRATIONS = [
     OcrKeyMigration(),
@@ -2271,6 +2340,7 @@ MIGRATIONS = [
     AddPromptsListIndexes(),
     AddOrganizationDefaultPromptEnabled(),
     AddQueueVisibilityTimeoutIndexes(),
+    FixLegacyProcessingQueueMessages(),
     # Add more migrations here
 ]
 

@@ -69,7 +69,7 @@ async def process_llm_msg(analytiq_client, msg):
                 document_id,
                 ad.common.doc.DOCUMENT_STATE_LLM_COMPLETED,
             )
-            await ad.queue.delete_msg(analytiq_client, "llm", msg_id, status="completed")
+            await ad.queue.delete_msg(analytiq_client, "llm", msg_id)
             return
 
         errors = [r for r in results if isinstance(r, Exception)]
@@ -84,7 +84,7 @@ async def process_llm_msg(analytiq_client, msg):
                 ad.common.doc.DOCUMENT_STATE_LLM_COMPLETED,
             )
             logger.info("LLM run completed for %s (all %d prompts succeeded)", document_id, n_total)
-            await ad.queue.delete_msg(analytiq_client, "llm", msg_id, status="completed")
+            await ad.queue.delete_msg(analytiq_client, "llm", msg_id)
         elif n_errors == n_total:
             # All prompts failed
             error_summary = "; ".join(str(e) for e in errors)
@@ -145,7 +145,7 @@ async def process_llm_msg(analytiq_client, msg):
                 ad.common.doc.DOCUMENT_STATE_LLM_COMPLETED,
             )
             # We intentionally do NOT send an error webhook for partial failures.
-            await ad.queue.delete_msg(analytiq_client, "llm", msg_id, status="completed")
+            await ad.queue.delete_msg(analytiq_client, "llm", msg_id)
 
     except Exception as e:
         logger.error(f"Error processing LLM msg: {e}")

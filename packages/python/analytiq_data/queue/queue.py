@@ -137,26 +137,22 @@ async def recv_msg(analytiq_client, queue_name: str) -> Optional[Dict[str, Any]]
 
     return msg_data
 
-async def delete_msg(analytiq_client, queue_name: str, msg_id: str, status: str = "completed"):
+async def delete_msg(analytiq_client, queue_name: str, msg_id: str):
     """
-    Delete/complete a message by updating its status.
-    
+    Delete a completed message from the queue.
+
     Args:
         analytiq_client: The AnalytiqClient instance
         queue_name: Name of the queue collection
         msg_id: The ID of the message to delete
-        status: The final status to set (default: "completed")
     """
     db_name = analytiq_client.env
     db = analytiq_client.mongodb_async[db_name]
     queue_collection_name = get_queue_collection_name(queue_name)
     queue_collection = db[queue_collection_name]
 
-    await queue_collection.update_one(
-        {"_id": ObjectId(msg_id)},
-        {"$set": {"status": status}}
-    )
-    logger.info(f"Deleted message {msg_id} from {queue_name} with status: {status}") 
+    await queue_collection.delete_one({"_id": ObjectId(msg_id)})
+    logger.info(f"Deleted message {msg_id} from {queue_name}") 
 
 
 async def recover_stale_messages(analytiq_client, queue_name: str) -> int:
