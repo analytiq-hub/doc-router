@@ -39,17 +39,20 @@ OrganizationType = Literal["individual", "team", "enterprise"]
 class OrganizationCreate(BaseModel):
     name: str
     type: OrganizationType = "individual"
+    default_prompt_enabled: bool = True
 
 class OrganizationUpdate(BaseModel):
     name: str | None = None
     type: OrganizationType = "individual"
     members: List[OrganizationMember] | None = None
+    default_prompt_enabled: Optional[bool] = None
 
 class Organization(BaseModel):
     id: str
     name: str
     members: List[OrganizationMember]
     type: OrganizationType = "individual"
+    default_prompt_enabled: bool = True
     created_at: datetime
     updated_at: datetime
 
@@ -122,7 +125,8 @@ async def list_organizations(
             Organization(**{
                 **organization,
                 "id": str(organization["_id"]),
-                "type": organization["type"]
+                "type": organization.get("type", "individual"),
+                "default_prompt_enabled": organization.get("default_prompt_enabled", True),
             })
         ], total_count=1, skip=0)
 
@@ -173,7 +177,8 @@ async def list_organizations(
         Organization(**{
             **org,
             "id": str(org["_id"]),
-            "type": org["type"]
+            "type": org.get("type", "individual"),
+            "default_prompt_enabled": org.get("default_prompt_enabled", True),
         }) for org in organizations
     ], total_count=total_count, skip=skip)
     return ret
@@ -230,6 +235,7 @@ async def create_organization(
             "role": "admin"
         }],
         "type": organization.type or "team",  # Default to team if not specified
+        "default_prompt_enabled": organization.default_prompt_enabled,
         "created_at": datetime.now(UTC),
         "updated_at": datetime.now(UTC)
     }
@@ -299,6 +305,9 @@ async def update_organization(
             )
         update_data["members"] = [m.dict() for m in organization_update.members]
 
+    if organization_update.default_prompt_enabled is not None:
+        update_data["default_prompt_enabled"] = organization_update.default_prompt_enabled
+
     if update_data:
         update_data["updated_at"] = datetime.now(UTC)
         # Use find_one_and_update instead of update_one to get the updated document atomically
@@ -322,7 +331,8 @@ async def update_organization(
         "id": str(updated_organization["_id"]),
         "name": updated_organization["name"],
         "members": updated_organization["members"],
-        "type": updated_organization["type"],
+        "type": updated_organization.get("type", "individual"),
+        "default_prompt_enabled": updated_organization.get("default_prompt_enabled", True),
         "created_at": updated_organization["created_at"],
         "updated_at": updated_organization["updated_at"]
     })

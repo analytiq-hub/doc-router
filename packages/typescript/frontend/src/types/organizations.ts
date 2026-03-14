@@ -10,6 +10,8 @@ export interface Organization {
   name: string;
   type: OrganizationType;
   members: OrganizationMember[];
+  /** When true or undefined, the default prompt is enabled for this organization. */
+  default_prompt_enabled?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -23,6 +25,7 @@ export interface UpdateOrganizationRequest {
   name?: string;
   type?: OrganizationType;
   members?: OrganizationMember[];
+  default_prompt_enabled?: boolean;
 }
 
 export interface ListOrganizationsResponse {

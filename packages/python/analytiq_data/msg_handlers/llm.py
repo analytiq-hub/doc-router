@@ -1,6 +1,7 @@
 import asyncio
 import openai
 import logging
+from bson import ObjectId
 import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
@@ -16,6 +17,21 @@ async def process_llm_msg(analytiq_client, msg):
         if doc:
             org_id = doc.get("organization_id")
 
+        # Determine whether the organization has default prompts enabled
+        default_prompt_enabled = True
+        if org_id:
+            try:
+                db = ad.common.get_async_db()
+                org = await db.organizations.find_one({"_id": ObjectId(org_id)})
+                if org is not None:
+                    default_prompt_enabled = org.get("default_prompt_enabled", True)
+            except Exception as e:
+                # If we cannot load the organization, fall back to enabled behavior
+                logger.warning(
+                    f"Could not load organization {org_id} for default_prompt_enabled; "
+                    f"falling back to enabled. Error: {e}"
+                )
+
         # Update state to LLM processing
         await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_LLM_PROCESSING)
 
@@ -25,8 +41,9 @@ async def process_llm_msg(analytiq_client, msg):
         # Get all the prompt ids for the tags
         prompt_revids = await ad.common.get_prompt_revision_ids_by_tag_ids(analytiq_client, tags)
 
-        # Add the default prompt id as first prompt
-        prompt_revids.insert(0, "default")
+        # Add the default prompt id as first prompt if enabled for this organization
+        if default_prompt_enabled:
+            prompt_revids.insert(0, "default")
 
         logger.info(f"Running LLM for document {document_id} with prompt id list: {prompt_revids}")
 

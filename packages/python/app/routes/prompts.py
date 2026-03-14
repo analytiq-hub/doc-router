@@ -297,16 +297,30 @@ async def list_prompts(
         })
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
-        
+
+        # Load organization to determine whether default prompts are enabled
+        default_prompt_enabled = True
+        try:
+            org = await db.organizations.find_one({"_id": ObjectId(organization_id)})
+            if org is not None:
+                default_prompt_enabled = org.get("default_prompt_enabled", True)
+        except Exception as e:
+            # If we cannot load the organization, fall back to enabled behavior
+            logger.warning(
+                f"Could not load organization {organization_id} for default_prompt_enabled "
+                f"while listing prompts; falling back to enabled. Error: {e}"
+            )
+
         document_tag_ids = document.get("tag_ids", [])
         if document_tag_ids:
             pipeline.append({
                 "$match": {"tag_ids": {"$in": document_tag_ids}}
             })
         else:
-            # Only return the default prompt if no tags
+            # Only return the default prompt if no tags and default prompts are enabled;
+            # if disabled, match nothing (return empty result)
             pipeline.append({
-                "$match": {"name": "Default Prompt"}
+                "$match": {"name": "Default Prompt"} if default_prompt_enabled else {"_id": {"$exists": False}}
             })
     # Add direct tag filtering if tag_ids are provided
     if tag_ids:

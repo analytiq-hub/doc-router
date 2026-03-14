@@ -56,11 +56,13 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const [name, setName] = useState('')
   const [type, setType] = useState<OrganizationType>('individual')
   const [members, setMembers] = useState<OrganizationMember[]>([])
+  const [defaultPromptEnabled, setDefaultPromptEnabled] = useState<boolean>(true)
   const [allUsers, setAllUsers] = useState<User[]>([])
   const [memberSearch, setMemberSearch] = useState('');
   const [originalName, setOriginalName] = useState('')
   const [originalType, setOriginalType] = useState<OrganizationType>('individual')
   const [originalMembers, setOriginalMembers] = useState<OrganizationMember[]>([])
+  const [originalDefaultPromptEnabled, setOriginalDefaultPromptEnabled] = useState<boolean>(true)
   const { session } = useAppSession();
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -82,11 +84,21 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       setName(organization.name);
       setType(organization.type);
       setMembers(organization.members);
+      setDefaultPromptEnabled(
+        organization.default_prompt_enabled !== undefined
+          ? organization.default_prompt_enabled
+          : true
+      );
 
       // Store original values
       setOriginalName(organization.name);
       setOriginalType(organization.type);
       setOriginalMembers(organization.members);
+      setOriginalDefaultPromptEnabled(
+        organization.default_prompt_enabled !== undefined
+          ? organization.default_prompt_enabled
+          : true
+      );
     }
   }, [organization]);
 
@@ -140,7 +152,8 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       await docRouterAccountApi.updateOrganization(organizationId, { 
         name,
         type,
-        members 
+        members,
+        default_prompt_enabled: defaultPromptEnabled,
       });
       await refreshData();
       
@@ -148,6 +161,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       setOriginalName(name);
       setOriginalType(type);
       setOriginalMembers(members);
+      setOriginalDefaultPromptEnabled(defaultPromptEnabled);
     } catch (err) {
       if (isAxiosError(err)) {
         toast.error(err.response?.data?.detail || 'Failed to update organization');
@@ -271,6 +285,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     if (name !== originalName) return true;
     if (type !== originalType) return true;
     if (members.length !== originalMembers.length) return true;
+    if (defaultPromptEnabled !== originalDefaultPromptEnabled) return true;
     
     // Compare each member and their roles
     const memberChanges = members.some(member => {
@@ -403,6 +418,24 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                     </option>
                   )}
                 </select>
+              </div>
+
+              <div className="flex items-start space-x-2">
+                <input
+                  id="default-prompt-enabled"
+                  type="checkbox"
+                  checked={defaultPromptEnabled}
+                  onChange={(e) => setDefaultPromptEnabled(e.target.checked)}
+                  className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <div>
+                  <label htmlFor="default-prompt-enabled" className="block text-sm font-medium text-gray-700">
+                    Enable default prompt
+                  </label>
+                  <p className="text-sm text-gray-500">
+                    When enabled, the default prompt will run automatically for documents in this organization.
+                  </p>
+                </div>
               </div>
             </div>
           </div>

@@ -1807,6 +1807,48 @@ class RenameUserFields(Migration):
             logger.error(f"Migration revert failed: {e}")
             return False
 
+
+class AddOrganizationDefaultPromptEnabled(Migration):
+    def __init__(self):
+        super().__init__(description="Add default_prompt_enabled flag to organizations")
+
+    async def up(self, db) -> bool:
+        """
+        Ensure all existing organizations have default_prompt_enabled set to True.
+        This is safe to run multiple times.
+        """
+        try:
+            result = await db.organizations.update_many(
+                {"default_prompt_enabled": {"$exists": False}},
+                {"$set": {"default_prompt_enabled": True}},
+            )
+            logger.info(
+                f"Set default_prompt_enabled=True on {result.modified_count} organizations "
+                f"that did not previously have the field."
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Migration failed: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        """
+        Remove default_prompt_enabled from all organizations.
+        """
+        try:
+            result = await db.organizations.update_many(
+                {"default_prompt_enabled": {"$exists": True}},
+                {"$unset": {"default_prompt_enabled": ""}},
+            )
+            logger.info(
+                f"Unset default_prompt_enabled on {result.modified_count} organizations."
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Migration revert failed: {e}")
+            return False
+
+
 class UpgradeTokens(Migration):
     def __init__(self):
         super().__init__(description="Upgrade specific encrypted fields: aws_config.access_key_id, aws_config.secret_access_key, and llm_providers.token")
@@ -2175,6 +2217,7 @@ MIGRATIONS = [
     AddWebhookDeliveriesIndexes(),
     AddQueueAndCollectionIndexes(),
     AddPromptsListIndexes(),
+    AddOrganizationDefaultPromptEnabled(),
     # Add more migrations here
 ]
 

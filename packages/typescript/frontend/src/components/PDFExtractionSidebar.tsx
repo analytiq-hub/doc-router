@@ -8,7 +8,8 @@ import {
   XMarkIcon,
   ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
-import { DocRouterOrgApi } from '@/utils/api';
+import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api';
+import type { Organization } from '@docrouter/sdk';
 import type { Prompt } from '@docrouter/sdk';
 import { useOCRBlocks } from '@/hooks/useOCRBlocks';
 import type { GetLLMResultResponse } from '@docrouter/sdk';
@@ -32,6 +33,7 @@ type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string
 
 const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
+  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   const { loadOCRBlocks, findBlocksWithContext } = useOCRBlocks();
   const [llmResults, setLlmResults] = useState<Record<string, GetLLMResultResponse>>({});
   const [matchingPrompts, setMatchingPrompts] = useState<Prompt[]>([]);
@@ -45,6 +47,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   const defaultLlmFetchStartedRef = React.useRef(false);
 
   const [documentName, setDocumentName] = useState<string | null>(null);
+  const [organization, setOrganization] = useState<Organization | null>(null);
 
   // Refs mirror state so the fetch effect can read current values without being in the dependency array
   const llmResultsRef = React.useRef(llmResults);
@@ -63,8 +66,19 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     const fetchData = async () => {
       let fetchedState: string | null = null;
       let fetchedName: string | null = null;
+      let defaultPromptEnabled = true;
 
       try {
+        try {
+          const orgResponse = await docRouterAccountApi.getOrganization(organizationId);
+          setOrganization(orgResponse);
+          defaultPromptEnabled = orgResponse.default_prompt_enabled !== false;
+        } catch (error) {
+          console.error('Error fetching organization metadata:', error);
+          // If we cannot load the organization, fall back to enabled behavior
+          defaultPromptEnabled = true;
+        }
+
         try {
           const docResponse = await docRouterOrgApi.getDocument({
             documentId: id,
@@ -85,7 +99,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
           loadingPromptsRef.current.has('default') ||
           failedPromptsRef.current.has('default') ||
           defaultLlmFetchStartedRef.current;
-        const needDefault = !isProcessing && !alreadyHaveDefault;
+        const needDefault = defaultPromptEnabled && !isProcessing && !alreadyHaveDefault;
 
         if (needDefault) {
           defaultLlmFetchStartedRef.current = true;
@@ -130,18 +144,20 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     };
 
     fetchData();
-  }, [organizationId, id, docRouterOrgApi]);
+  }, [organizationId, id, docRouterOrgApi, docRouterAccountApi]);
 
   // Poll document state when processing
   useEffect(() => {
-    if (!documentState || (documentState !== 'ocr_processing' && documentState !== 'llm_processing')) {
+    const defaultPromptEnabled = organization ? organization.default_prompt_enabled !== false : true;
+    if (!defaultPromptEnabled || !documentState || (documentState !== 'ocr_processing' && documentState !== 'llm_processing')) {
       return;
     }
     const pollInterval = setInterval(async () => {
       try {
         const docResponse = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf', includeContent: false });
         setDocumentState(docResponse.state);
-        if ((docResponse.state === 'llm_completed' || docResponse.state === 'ocr_completed') &&
+        if (defaultPromptEnabled &&
+            (docResponse.state === 'llm_completed' || docResponse.state === 'ocr_completed') &&
             !llmResults['default'] && !loadingPrompts.has('default') && !failedPrompts.has('default')) {
           setLoadingPrompts(prev => new Set(prev).add('default'));
           try {
@@ -159,7 +175,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
       }
     }, 2000);
     return () => clearInterval(pollInterval);
-  }, [documentState, id, docRouterOrgApi, llmResults, loadingPrompts, failedPrompts]);
+  }, [documentState, id, docRouterOrgApi, llmResults, loadingPrompts, failedPrompts, organization]);
 
   useEffect(() => {
     if (documentName) {
@@ -977,6 +993,8 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     }
   };
 
+  const defaultPromptEnabledForRender = organization?.default_prompt_enabled !== false;
+
   return (
     <div className="w-full h-full flex flex-col border-r border-black/10">
       <div className="h-12 min-h-[48px] flex items-center justify-between px-4 bg-gray-100 text-black font-bold border-b border-black/10">
@@ -999,56 +1017,63 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
       
       <div className="overflow-auto flex-grow">
         {/* Default prompt (title from API: e.g. Document Summary) */}
-        <div className="border-b border-black/10">
-          <div
-            onClick={() => handlePromptChange('default')}
-            className="w-full min-h-[48px] flex items-center justify-between px-4 bg-gray-100/[0.6] hover:bg-gray-100/[0.8] transition-colors cursor-pointer"
-          >
-            <span className="text-sm text-gray-900">
-              {llmResults['default']?.prompt_display_name ?? 'Document Summary'}
-            </span>
-            <div className="flex items-center gap-2">
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleRunPrompt('default');
-                }}
-                className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
-              >
-                {runningPrompts.has('default') ? (
-                  <div className="w-4 h-4 border-2 border-[#2B4479]/60 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <ArrowPathIcon className="w-4 h-4 text-gray-600" />
-                )}
+        {defaultPromptEnabledForRender && (
+          <div className="border-b border-black/10">
+            <div
+              onClick={() => handlePromptChange('default')}
+              className="w-full min-h-[48px] flex items-center justify-between px-4 bg-gray-100/[0.6] hover:bg-gray-100/[0.8] transition-colors cursor-pointer"
+            >
+              <span className="text-sm text-gray-900">
+                {llmResults['default']?.prompt_display_name ?? 'Document Summary'}
+              </span>
+              <div className="flex items-center gap-2">
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRunPrompt('default');
+                  }}
+                  className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
+                >
+                  {runningPrompts.has('default') ? (
+                    <div className="w-4 h-4 border-2 border-[#2B4479]/60 border-t-transparent rounded-full animate-spin" />
+                  ) : (
+                    <ArrowPathIcon className="w-4 h-4 text-gray-600" />
+                  )}
+                </div>
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownloadResult('default');
+                  }}
+                  className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
+                  title="Download extraction result"
+                >
+                  <ArrowDownTrayIcon className="w-4 h-4 text-gray-600" />
+                </div>
+                <ChevronDownIcon 
+                  className={`w-5 h-5 text-gray-600 transition-transform ${
+                    expandedPrompt === 'default' ? 'rotate-180' : ''
+                  }`}
+                />
               </div>
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDownloadResult('default');
-                }}
-                className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
-                title="Download extraction result"
-              >
-                <ArrowDownTrayIcon className="w-4 h-4 text-gray-600" />
-              </div>
-              <ChevronDownIcon 
-                className={`w-5 h-5 text-gray-600 transition-transform ${
-                  expandedPrompt === 'default' ? 'rotate-180' : ''
-                }`}
-              />
+            </div>
+            <div 
+              className={`transition-all duration-200 ease-in-out bg-white ${
+                expandedPrompt === 'default' ? '' : 'hidden'
+              }`}
+            >
+              {renderPromptResults('default')}
             </div>
           </div>
-          <div 
-            className={`transition-all duration-200 ease-in-out bg-white ${
-              expandedPrompt === 'default' ? '' : 'hidden'
-            }`}
-          >
-            {renderPromptResults('default')}
-          </div>
-        </div>
+        )}
 
         {/* Other Prompts */}
-        {matchingPrompts.map((prompt) => {
+        {matchingPrompts.length === 0 ? (
+          <div className="px-4 py-3 text-sm text-gray-500">
+            No tagged prompts are available for this document. Create prompts with tags matching this document&apos;s tags in the Prompts section to see them here.
+          </div>
+        ) : (
+        matchingPrompts.map((prompt) => {
           const isExpanded = expandedPrompt === prompt.prompt_revid;
           const llmResult = llmResults[prompt.prompt_revid];
           const retrievedVersion = llmResult?.prompt_version;
@@ -1107,7 +1132,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
               </div>
             </div>
           );
-        })}
+        }))}
       </div>
     </div>
   );

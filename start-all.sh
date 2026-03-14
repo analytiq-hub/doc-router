@@ -52,7 +52,6 @@ cleanup() {
     # Cleanup specific servers as fallback
     cleanup_next_server
     cleanup_uvicorn
-    cleanup_worker
     cleanup_stripe_listen
     
     echo "Shutdown complete"
