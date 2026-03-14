@@ -460,62 +460,60 @@ async def index_document_in_kb(
             "indexed_at": now
         })
     
-    # Atomic swap: Use MongoDB transaction for blue-green pattern
+    # Atomic swap: Use MongoDB transaction for blue-green pattern.
+    # Use with_transaction() so the driver auto-retries on WriteConflict (TransientTransactionError)
+    # when multiple workers index different docs into the same KB concurrently.
+    async def _run_index_txn(session):
+        # Delete old vectors for this document
+        await vectors_collection.delete_many(
+            {"document_id": document_id},
+            session=session
+        )
+        # Insert new vectors
+        if new_vectors:
+            await vectors_collection.insert_many(new_vectors, session=session)
+        # Update or insert document_index entry
+        await db.document_index.update_one(
+            {
+                "kb_id": kb_id,
+                "document_id": document_id
+            },
+            {
+                "$set": {
+                    "organization_id": organization_id,
+                    "kb_id": kb_id,
+                    "document_id": document_id,
+                    "chunk_count": len(new_vectors),
+                    "indexed_at": now
+                }
+            },
+            upsert=True,
+            session=session
+        )
+        # Update KB stats (same KB doc updated by concurrent jobs causes WriteConflict; with_transaction retries)
+        total_docs = await db.document_index.count_documents({"kb_id": kb_id}, session=session)
+        total_chunks_cursor = db.document_index.aggregate([
+            {"$match": {"kb_id": kb_id}},
+            {"$group": {"_id": None, "total": {"$sum": "$chunk_count"}}}
+        ], session=session)
+        total_chunks = await total_chunks_cursor.to_list(length=1)
+        total_chunks_count = total_chunks[0]["total"] if total_chunks else 0
+        await db.knowledge_bases.update_one(
+            {"_id": ObjectId(kb_id)},
+            {
+                "$set": {
+                    "document_count": total_docs,
+                    "chunk_count": total_chunks_count,
+                    "updated_at": now
+                }
+            },
+            session=session
+        )
+
     try:
         client = analytiq_client.mongodb_async
         async with await client.start_session() as session:
-            async with session.start_transaction():
-                # Delete old vectors for this document
-                await vectors_collection.delete_many(
-                    {"document_id": document_id},
-                    session=session
-                )
-                
-                # Insert new vectors
-                if new_vectors:
-                    await vectors_collection.insert_many(new_vectors, session=session)
-                
-                # Update or insert document_index entry
-                await db.document_index.update_one(
-                    {
-                        "kb_id": kb_id,
-                        "document_id": document_id
-                    },
-                    {
-                        "$set": {
-                            "organization_id": organization_id,
-                            "kb_id": kb_id,
-                            "document_id": document_id,
-                            "chunk_count": len(new_vectors),
-                            "indexed_at": now
-                        }
-                    },
-                    upsert=True,
-                    session=session
-                )
-                
-                # Update KB stats
-                # Count total documents and chunks for this KB
-                total_docs = await db.document_index.count_documents({"kb_id": kb_id}, session=session)
-                total_chunks_cursor = db.document_index.aggregate([
-                    {"$match": {"kb_id": kb_id}},
-                    {"$group": {"_id": None, "total": {"$sum": "$chunk_count"}}}
-                ], session=session)
-                total_chunks = await total_chunks_cursor.to_list(length=1)
-                total_chunks_count = total_chunks[0]["total"] if total_chunks else 0
-                
-                await db.knowledge_bases.update_one(
-                    {"_id": ObjectId(kb_id)},
-                    {
-                        "$set": {
-                            "document_count": total_docs,
-                            "chunk_count": total_chunks_count,
-                            "updated_at": now
-                        }
-                    },
-                    session=session
-                )
-        
+            await session.with_transaction(_run_index_txn)
         logger.info(f"Successfully indexed document {document_id} into KB {kb_id}: {len(new_vectors)} chunks")
         
         return {
@@ -559,43 +557,38 @@ async def remove_document_from_kb(
     collection_name = f"kb_vectors_{kb_id}"
     vectors_collection = db[collection_name]
     
+    async def _run_remove_txn(session):
+        await vectors_collection.delete_many(
+            {"document_id": document_id},
+            session=session
+        )
+        await db.document_index.delete_one(
+            {"kb_id": kb_id, "document_id": document_id},
+            session=session
+        )
+        total_docs = await db.document_index.count_documents({"kb_id": kb_id}, session=session)
+        total_chunks_cursor = db.document_index.aggregate([
+            {"$match": {"kb_id": kb_id}},
+            {"$group": {"_id": None, "total": {"$sum": "$chunk_count"}}}
+        ], session=session)
+        total_chunks = await total_chunks_cursor.to_list(length=1)
+        total_chunks_count = total_chunks[0]["total"] if total_chunks else 0
+        await db.knowledge_bases.update_one(
+            {"_id": ObjectId(kb_id)},
+            {
+                "$set": {
+                    "document_count": total_docs,
+                    "chunk_count": total_chunks_count,
+                    "updated_at": datetime.now(UTC)
+                }
+            },
+            session=session
+        )
+
     try:
         client = analytiq_client.mongodb_async
         async with await client.start_session() as session:
-            async with session.start_transaction():
-                # Delete vectors
-                await vectors_collection.delete_many(
-                    {"document_id": document_id},
-                    session=session
-                )
-                
-                # Delete document_index entry
-                await db.document_index.delete_one(
-                    {"kb_id": kb_id, "document_id": document_id},
-                    session=session
-                )
-                
-                # Update KB stats
-                total_docs = await db.document_index.count_documents({"kb_id": kb_id}, session=session)
-                total_chunks_cursor = db.document_index.aggregate([
-                    {"$match": {"kb_id": kb_id}},
-                    {"$group": {"_id": None, "total": {"$sum": "$chunk_count"}}}
-                ], session=session)
-                total_chunks = await total_chunks_cursor.to_list(length=1)
-                total_chunks_count = total_chunks[0]["total"] if total_chunks else 0
-                
-                await db.knowledge_bases.update_one(
-                    {"_id": ObjectId(kb_id)},
-                    {
-                        "$set": {
-                            "document_count": total_docs,
-                            "chunk_count": total_chunks_count,
-                            "updated_at": datetime.now(UTC)
-                        }
-                    },
-                    session=session
-                )
-        
+            await session.with_transaction(_run_remove_txn)
         logger.info(f"Removed document {document_id} from KB {kb_id}")
         
     except Exception as e:
