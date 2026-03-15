@@ -43,19 +43,22 @@ async def process_kb_index_msg(analytiq_client, msg, force: bool = False):
         
         if not document_id:
             logger.error("KB index message missing document_id")
+            await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg_id))
             return
-        
+
         # Get document to find organization_id
         doc = await ad.common.doc.get_doc(analytiq_client, document_id)
         if not doc:
             logger.error(f"Document {document_id} not found. Skipping KB indexing.")
+            await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg_id))
             return
-        
+
         organization_id = doc.get("organization_id")
         if not organization_id:
             logger.error(f"Document {document_id} missing organization_id. Skipping KB indexing.")
+            await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg_id))
             return
-        
+
         if action == "remove":
             # Remove document from specific KB or all KBs
             if kb_id:
@@ -99,8 +102,9 @@ async def process_kb_index_msg(analytiq_client, msg, force: bool = False):
                             await remove_document_from_kb(analytiq_client, kb_id, document_id, organization_id)
                         except Exception as e:
                             logger.error(f"Error removing document {document_id} from KB {kb_id}: {e}")
+                    await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg_id))
                     return
-                
+
                 # Find KBs that match any of the document's tags
                 matching_kbs = await db.knowledge_bases.find({
                     "organization_id": organization_id,
@@ -121,8 +125,9 @@ async def process_kb_index_msg(analytiq_client, msg, force: bool = False):
                 
                 if not matching_kbs:
                     logger.info(f"No matching KBs found for document {document_id} with tags {doc_tag_ids}")
+                    await ad.queue.delete_msg(analytiq_client, "kb_index", str(msg_id))
                     return
-                
+
                 # Index into all matching KBs (will re-index if already indexed, which is fine)
                 for kb in matching_kbs:
                     try:
