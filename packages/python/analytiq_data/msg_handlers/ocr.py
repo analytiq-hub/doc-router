@@ -46,6 +46,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
         doc = await ad.common.doc.get_doc(analytiq_client, document_id)
         if not doc:
             logger.error(f"Document {document_id} not found. Skipping OCR.")
+            await ad.queue.delete_msg(analytiq_client, "ocr", msg_id_str)
             return
         org_id = doc.get("organization_id")
         logger.info(f"Processing OCR msg: document_id={document_id}, org_id={org_id}, force={force}")
