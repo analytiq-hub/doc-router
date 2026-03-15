@@ -64,8 +64,8 @@ Modify in `docker-compose.yml` if needed.
 # Start services
 docker-compose up -d
 
-# View logs
-docker-compose logs -f
+# View logs (follow with timestamps)
+docker compose logs -f --timestamps
 
 # Stop services
 docker-compose down

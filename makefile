@@ -37,6 +37,7 @@ help:
 	@echo "  make down                    - Interactive menu: Stop containers or remove volumes"
 	@echo ""
 	@echo "Shutdown (Direct):"
+	@echo "  make logs                    - Follow Docker Compose logs with timestamps"
 	@echo "  make down-compose            - Stop Docker Compose containers"
 	@echo "  make down-compose-clean      - Stop Docker Compose and remove volumes"
 	@echo "  make down-kind               - Uninstall doc-router from Kind cluster (keeps cluster running)"
@@ -193,6 +194,9 @@ down:
 			exit 1;; \
 	esac
 
+logs:
+	cd deploy/compose && docker compose logs -f --timestamps
+
 down-compose:
 	cd deploy/compose; \
 	docker compose -f docker-compose.yml down 2>/dev/null || true; \
@@ -275,4 +279,4 @@ dockerhub-push: dockerhub-push-frontend dockerhub-push-backend
 dockerhub-build-push: dockerhub-build dockerhub-push
 	@echo "✅ Build and push complete!"
 
-.PHONY: help deploy-dev tests setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-kind down down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean
+.PHONY: help deploy-dev tests setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean
