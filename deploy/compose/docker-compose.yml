@@ -90,9 +90,9 @@ services:
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: ${BACKEND_MEMORY_LIMIT:-1G}
         reservations:
-          memory: 512M
+          memory: ${BACKEND_MEMORY_RESERVATION:-512M}
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
