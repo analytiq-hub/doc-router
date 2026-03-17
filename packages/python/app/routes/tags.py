@@ -21,6 +21,8 @@ logger = logging.getLogger(__name__)
 # Initialize FastAPI router
 tags_router = APIRouter(tags=["tags"])
 
+DEFAULT_TAG_COLOR = "#3B82F6"  # Default blue color for tags
+
 # Tag models
 class TagConfig(BaseModel):
     name: str
@@ -58,9 +60,12 @@ async def create_tag(
             detail=f"Tag with name '{tag.name}' already exists"
         )
 
+    # Apply default color if not provided (including explicit null)
+    color = tag.color or DEFAULT_TAG_COLOR
+
     new_tag = {
         "name": tag.name,
-        "color": tag.color,
+        "color": color,
         "description": tag.description,
         "created_at": datetime.now(UTC),
         "created_by": current_user.user_id,
