@@ -645,6 +645,14 @@ export interface Prompt {
   tag_ids?: string[];
   model?: string;
   kb_id?: string;
+  // Grouped prompt fields (see docs/plan-prompt-group-by.md)
+  metadata_group_by?: string[];
+  document_inputs?: Record<string, { metadata_match?: Record<string, string> }>;
+  include?: {
+    ocr_text?: boolean;
+    metadata?: boolean;
+    pdf?: boolean;
+  };
   created_at: string;
   created_by: string;
 }

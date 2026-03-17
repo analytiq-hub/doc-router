@@ -597,8 +597,9 @@ async def _build_grouped_prompt_context(
             created_at = d["_id"].generation_time
         return (created_at, d.get("_id"))
 
-    # Precompute OCR text and metadata strings only when needed
-    rendered_docs: Dict[str, Dict[str, Any]] = {}
+    # Rendered prompt blocks keyed by (alias, doc_id) — same doc can appear under multiple aliases
+    rendered_docs: Dict[Tuple[str, str], str] = {}
+    ocr_cache: Dict[str, str] = {}
 
     for alias, spec in document_inputs.items():
         match_rule: Dict[str, Any] = spec.get("metadata_match") or {}
@@ -622,11 +623,10 @@ async def _build_grouped_prompt_context(
 
         resolved_inputs[alias] = [str(d["_id"]) for d in matched]
 
-        # Render each matched doc once for later prompt body generation
+        # Render each (alias, doc) pair for later prompt body generation.
+        # Keyed by (alias, doc_id) so the same document can appear under different aliases.
         for idx, d in enumerate(matched, start=1):
             doc_id_str = str(d["_id"])
-            if doc_id_str in rendered_docs:
-                continue
 
             parts: List[str] = []
             parts.append(f"[{alias} #{idx}]")
@@ -641,19 +641,17 @@ async def _build_grouped_prompt_context(
                 parts.append(json.dumps(meta, indent=2, default=str))
 
             if include_ocr:
-                text = await get_extracted_text(analytiq_client, doc_id_str)
-                if text is None:
-                    raise Exception(
-                        f"Grouped LLM run failed: missing OCR/text for document {doc_id_str}"
-                    )
+                if doc_id_str not in ocr_cache:
+                    text = await get_extracted_text(analytiq_client, doc_id_str)
+                    if text is None:
+                        raise Exception(
+                            f"Grouped LLM run failed: missing OCR/text for document {doc_id_str}"
+                        )
+                    ocr_cache[doc_id_str] = text
                 parts.append("ocr_text:")
-                parts.append(text)
+                parts.append(ocr_cache[doc_id_str])
 
-            rendered_docs[doc_id_str] = {
-                "alias": alias,
-                "index": idx,
-                "text": "\n".join(parts),
-            }
+            rendered_docs[(alias, doc_id_str)] = "\n".join(parts)
 
     # Step 5 — Build prompt text in code (text-only v1; attachments handled by single-doc flow)
     instruction = await ad.common.get_prompt_content(analytiq_client, prompt_revid)
@@ -676,10 +674,10 @@ async def _build_grouped_prompt_context(
     for alias in document_inputs.keys():
         ids = resolved_inputs.get(alias, [])
         for doc_id_str in ids:
-            rendered = rendered_docs.get(doc_id_str)
+            rendered = rendered_docs.get((alias, doc_id_str))
             if not rendered:
                 continue
-            lines.append(rendered["text"])
+            lines.append(rendered)
             lines.append("")  # blank line between docs
 
     user_prompt = "\n".join(lines)
@@ -807,6 +805,8 @@ async def run_llm(
     if grouped_messages:
         messages = grouped_messages
         logger.info(f"{document_id}/{prompt_revid}: Using grouped prompt flow with group_run={group_run}")
+        # PDF attachment in grouped flow is not yet supported (v1 is OCR-text only).
+        # include.pdf is acknowledged in the prompt context block header but files are not attached.
         extracted_text = None
         file_attachment_blob = None
         file_attachment_name = None
