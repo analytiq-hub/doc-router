@@ -415,6 +415,11 @@ export interface GetLLMResultResponse {
   updated_at: string;
   /** Display name for the prompt (e.g. "Document Summary" for default prompt). From API. */
   prompt_display_name?: string;
+  /** Grouped prompt metadata when the run was executed as a grouped run. */
+  group_run?: {
+    metadata_group_key?: Record<string, string>;
+    resolved_inputs?: Record<string, string[]>;
+  };
 }
 
 export interface DeleteLLMResultParams {
