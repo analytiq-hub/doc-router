@@ -28,6 +28,58 @@ async def test_create_tag(org_and_users, test_db):
     assert "created_at" in result
     assert "created_by" in result
 
+
+@pytest.mark.asyncio
+async def test_create_tag_with_empty_color_uses_default(org_and_users, test_db):
+    """Tag created with empty color should use backend default color."""
+    org_id = org_and_users["org_id"]
+    admin = org_and_users["admin"]
+
+    tag_data = {
+        "name": "empty-color-tag",
+        "color": "",
+        "description": "Tag with empty color",
+    }
+
+    resp = client.post(
+        f"/v0/orgs/{org_id}/tags",
+        json=tag_data,
+        headers=get_token_headers(admin["token"]),
+    )
+    assert resp.status_code == 200, f"Failed to create tag: {resp.text}"
+
+    result = resp.json()
+    assert result["name"] == tag_data["name"]
+    # Backend should replace empty string with a non-empty default color
+    assert result["color"]
+    assert result["color"].startswith("#")
+
+
+@pytest.mark.asyncio
+async def test_create_tag_with_null_color_uses_default(org_and_users, test_db):
+    """Tag created with null color should use backend default color."""
+    org_id = org_and_users["org_id"]
+    admin = org_and_users["admin"]
+
+    tag_data = {
+        "name": "null-color-tag",
+        "color": None,
+        "description": "Tag with null color",
+    }
+
+    resp = client.post(
+        f"/v0/orgs/{org_id}/tags",
+        json=tag_data,
+        headers=get_token_headers(admin["token"]),
+    )
+    assert resp.status_code == 200, f"Failed to create tag: {resp.text}"
+
+    result = resp.json()
+    assert result["name"] == tag_data["name"]
+    # Backend should replace null with a non-empty default color
+    assert result["color"]
+    assert result["color"].startswith("#")
+
 @pytest.mark.asyncio
 async def test_create_duplicate_tag(org_and_users, test_db):
     """Test creating a tag with duplicate name"""
@@ -145,6 +197,95 @@ async def test_update_tag(org_and_users, test_db):
     assert result["color"] == update_data["color"]
     assert result["description"] == update_data["description"]
     assert result["id"] == tag_id
+
+
+@pytest.mark.asyncio
+async def test_update_tag_with_empty_color_uses_default(org_and_users, test_db):
+    """Updating a tag with empty color should set default color."""
+    org_id = org_and_users["org_id"]
+    admin = org_and_users["admin"]
+
+    # Create a tag with an explicit non-default color
+    tag_data = {
+        "name": "update-empty-color-tag",
+        "color": "#FF0000",
+        "description": "Original description",
+    }
+
+    resp = client.post(
+        f"/v0/orgs/{org_id}/tags",
+        json=tag_data,
+        headers=get_token_headers(admin["token"]),
+    )
+    assert resp.status_code == 200
+    tag = resp.json()
+    tag_id = tag["id"]
+    assert tag["color"] == "#FF0000"
+
+    # Update with empty color string - should be normalized to default color
+    update_data = {
+        "name": "updated-empty-color-tag",
+        "color": "",
+        "description": "Updated description",
+    }
+
+    resp = client.put(
+        f"/v0/orgs/{org_id}/tags/{tag_id}",
+        json=update_data,
+        headers=get_token_headers(admin["token"]),
+    )
+    assert resp.status_code == 200, f"Failed to update tag: {resp.text}"
+
+    result = resp.json()
+    assert result["name"] == update_data["name"]
+    assert result["description"] == update_data["description"]
+    # Color should now be a non-empty hex string (the backend default)
+    assert result["color"]
+    assert result["color"].startswith("#")
+
+
+@pytest.mark.asyncio
+async def test_update_tag_with_null_color_preserves_existing(org_and_users, test_db):
+    """Updating a tag with null color should keep existing color."""
+    org_id = org_and_users["org_id"]
+    admin = org_and_users["admin"]
+
+    # Create a tag with an explicit color
+    tag_data = {
+        "name": "update-null-color-tag",
+        "color": "#FF0000",
+        "description": "Original description",
+    }
+
+    resp = client.post(
+        f"/v0/orgs/{org_id}/tags",
+        json=tag_data,
+        headers=get_token_headers(admin["token"]),
+    )
+    assert resp.status_code == 200
+    tag = resp.json()
+    tag_id = tag["id"]
+    assert tag["color"] == "#FF0000"
+
+    # Update with null color - backend should not touch color field
+    update_data = {
+        "name": "updated-null-color-tag",
+        "color": None,
+        "description": "Updated description",
+    }
+
+    resp = client.put(
+        f"/v0/orgs/{org_id}/tags/{tag_id}",
+        json=update_data,
+        headers=get_token_headers(admin["token"]),
+    )
+    assert resp.status_code == 200, f"Failed to update tag: {resp.text}"
+
+    result = resp.json()
+    assert result["name"] == update_data["name"]
+    assert result["description"] == update_data["description"]
+    # Color should be unchanged from original
+    assert result["color"] == "#FF0000"
 
 @pytest.mark.asyncio
 async def test_update_nonexistent_tag(org_and_users, test_db):

@@ -61,7 +61,9 @@ async def create_tag(
         )
 
     # Apply default color if not provided (including explicit null)
-    color = tag.color or DEFAULT_TAG_COLOR
+    color = tag.color
+    if not color:
+        color = DEFAULT_TAG_COLOR
 
     new_tag = {
         "name": tag.name,
@@ -184,12 +186,13 @@ async def update_tag(
     if not existing_tag:
         raise HTTPException(status_code=404, detail="Tag not found")
     
-    # Update all fields including name
+    # Update all fields including name; only touch color if explicitly provided
     update_data = {
         "name": tag.name,
-        "color": tag.color,
-        "description": tag.description
+        "description": tag.description,
     }
+    if tag.color:
+        update_data["color"] = tag.color
     
     updated_tag = await db.tags.find_one_and_update(
         {"_id": ObjectId(tag_id)},
