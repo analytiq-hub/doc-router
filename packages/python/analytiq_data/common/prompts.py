@@ -1,7 +1,7 @@
 from datetime import datetime, UTC
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
-from typing import Optional
+from typing import Optional, Dict, Any
 
 import analytiq_data as ad
 
@@ -238,3 +238,52 @@ async def get_prompt_revision_ids_by_tag_ids(analytiq_client, tag_ids: list[str]
         prompt_revision_ids = [str(elem["_id"]) for elem in elems2]
     
     return prompt_revision_ids
+
+
+async def get_prompt_group_config(analytiq_client, prompt_id: str) -> Dict[str, Any]:
+    """
+    Get grouped prompt configuration fields for a prompt revision.
+
+    Returns:
+        {
+            "metadata_group_by": List[str],
+            "document_inputs": Dict[str, dict],
+            "include": Dict[str, bool],
+        }
+
+    Defaults maintain legacy single-document behavior when fields are absent.
+    """
+    # Default prompt uses legacy single-document flow with standard defaults
+    if prompt_id == "default":
+        return {
+            "metadata_group_by": [],
+            "document_inputs": {},
+            "include": {"ocr_text": True, "metadata": False, "pdf": True},
+        }
+
+    db_name = analytiq_client.env
+    db = analytiq_client.mongodb_async[db_name]
+    collection = db["prompt_revisions"]
+    elem = await collection.find_one({"_id": ObjectId(prompt_id)})
+    if elem is None:
+        raise ValueError(f"Prompt {prompt_id} not found")
+
+    metadata_group_by = elem.get("metadata_group_by") or []
+    document_inputs = elem.get("document_inputs") or {}
+    include = elem.get("include") or {"ocr_text": True, "metadata": False, "pdf": True}
+
+    # Ensure include has all expected keys with sensible defaults
+    if not isinstance(include, dict):
+        include = {"ocr_text": True, "metadata": False, "pdf": True}
+    else:
+        include = {
+            "ocr_text": bool(include.get("ocr_text", True)),
+            "metadata": bool(include.get("metadata", False)),
+            "pdf": bool(include.get("pdf", True)),
+        }
+
+    return {
+        "metadata_group_by": metadata_group_by,
+        "document_inputs": document_inputs,
+        "include": include,
+    }

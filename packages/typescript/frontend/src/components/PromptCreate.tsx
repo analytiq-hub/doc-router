@@ -2,11 +2,33 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, DocRouterAccountApi } from '@/utils/api';
-import { LLMChatModel } from '@docrouter/sdk';
-import { Tag, Prompt, Schema, SchemaResponseFormat, KnowledgeBase } from '@docrouter/sdk';
+import type {
+  LLMChatModel,
+  Tag,
+  Prompt,
+  Schema,
+  SchemaResponseFormat,
+  KnowledgeBase,
+} from '@docrouter/sdk';
+
+// Local extension for grouped prompt fields that may not yet exist in the SDK typings
+type GroupedPromptFields = {
+  metadata_group_by?: string[];
+  document_inputs?: Record<string, { metadata_match?: Record<string, string> }>;
+  include?: {
+    ocr_text?: boolean;
+    metadata?: boolean;
+    pdf?: boolean;
+  };
+};
+
+type PromptWithGrouping = Prompt & GroupedPromptFields;
 
 // Type alias for prompt creation/update (without id and timestamps)
-type PromptConfig = Omit<Prompt, 'prompt_revid' | 'prompt_id' | 'prompt_version' | 'created_at' | 'created_by'>;
+type PromptConfig = Omit<
+  PromptWithGrouping,
+  'prompt_revid' | 'prompt_id' | 'prompt_version' | 'created_at' | 'created_by'
+>;
 import { getApiErrorMsg } from '@/utils/api';
 import InfoTooltip from '@/components/InfoTooltip';
 import TagSelector from './TagSelector';
@@ -28,7 +50,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   const [currentPromptId, setCurrentPromptId] = useState<string | null>(null);
-  const [currentPromptFull, setCurrentPromptFull] = useState<Prompt | null>(null);
+  const [currentPromptFull, setCurrentPromptFull] = useState<PromptWithGrouping | null>(null);
   const [viewingVersion, setViewingVersion] = useState<number | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [currentPrompt, setCurrentPrompt] = useState<PromptConfig>({
@@ -37,7 +59,15 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
     schema_id: undefined,
     schema_version: undefined,
     tag_ids: [],
-    model: undefined
+    model: undefined,
+    kb_id: undefined,
+    metadata_group_by: [],
+    document_inputs: {},
+    include: {
+      ocr_text: true,
+      metadata: false,
+      pdf: true,
+    },
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isCompareModalOpen, setIsCompareModalOpen] = useState(false);
@@ -52,6 +82,9 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const [llmModels, setLLMModels] = useState<LLMChatModel[]>([]);
   const [availableKnowledgeBases, setAvailableKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [selectedKbId, setSelectedKbId] = useState<string>('');
+  const [metadataGroupByInput, setMetadataGroupByInput] = useState<string>('');
+  const [documentInputsJson, setDocumentInputsJson] = useState<string>('{}');
+  const [includeMetadata, setIncludeMetadata] = useState<boolean>(false);
 
   const handleSchemaSelect = useCallback(async (schemaId: string) => {
     setSelectedSchema(schemaId);
@@ -105,7 +138,9 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
           setViewingVersion(prompt.prompt_version);
           // Check if this is the latest version
           const versionsResponse = await docRouterOrgApi.listPromptVersions({ promptId: prompt.prompt_id });
-          const latestVersion = versionsResponse.prompts.sort((a, b) => b.prompt_version - a.prompt_version)[0];
+          const latestVersion = versionsResponse.prompts.sort(
+            (a: Prompt, b: Prompt) => b.prompt_version - a.prompt_version,
+          )[0];
           setIsReadOnly(prompt.prompt_version !== latestVersion.prompt_version);
           setCurrentPrompt({
             name: prompt.name,
@@ -114,11 +149,21 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
             schema_version: prompt.schema_version,
             tag_ids: prompt.tag_ids || [],
             model: prompt.model,
-            kb_id: prompt.kb_id
+            kb_id: prompt.kb_id,
+            metadata_group_by: prompt.metadata_group_by || [],
+            document_inputs: prompt.document_inputs || {},
+            include: prompt.include || {
+              ocr_text: true,
+              metadata: false,
+              pdf: true,
+            },
           });
           setSelectedTagIds(prompt.tag_ids || []);
           setSelectedSchema(prompt.schema_id || '');
           setSelectedKbId(prompt.kb_id || '');
+          setMetadataGroupByInput((prompt.metadata_group_by || []).join(', '));
+          setDocumentInputsJson(JSON.stringify(prompt.document_inputs || {}, null, 2));
+          setIncludeMetadata(!!prompt.include?.metadata);
           // Optionally, load schema details if needed
           if (prompt.schema_id) {
             await handleSchemaSelect(prompt.schema_id);
@@ -141,11 +186,11 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
     const initSchema = async () => {
       if (currentPrompt.schema_id && schemas.length > 0) {
         // Find schema with matching schema_id and highest schema_version
-        const matchingSchemas = schemas.filter(s => s.schema_id === currentPrompt.schema_id);
+        const matchingSchemas = schemas.filter((s: Schema) => s.schema_id === currentPrompt.schema_id);
         if (matchingSchemas.length > 0) {
           // Sort by schema_version in descending order and take the first one
-          const schemaDoc = matchingSchemas.sort((a, b) => 
-            (b.schema_version || 0) - (a.schema_version || 0)
+          const schemaDoc = matchingSchemas.sort(
+            (a: Schema, b: Schema) => (b.schema_version || 0) - (a.schema_version || 0),
           )[0];
           
           try {
@@ -171,12 +216,36 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const savePrompt = async () => {
     try {
       setIsLoading(true);
-      
-      // Create the prompt object with tag_ids and kb_id
+      // Parse grouped prompt fields
+      const metadataGroupBy = metadataGroupByInput
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+
+      let documentInputs: PromptConfig['document_inputs'] = {};
+      try {
+        const parsed = documentInputsJson.trim() ? JSON.parse(documentInputsJson) : {};
+        if (parsed && typeof parsed === 'object') {
+          documentInputs = parsed;
+        }
+      } catch {
+        toast.error('Document inputs JSON is invalid');
+        setIsLoading(false);
+        return;
+      }
+
+      // Create the prompt object with tag_ids, kb_id, and grouping fields
       const promptToSave = {
         ...currentPrompt,
         tag_ids: selectedTagIds,
-        kb_id: selectedKbId || undefined
+        kb_id: selectedKbId || undefined,
+        metadata_group_by: metadataGroupBy,
+        document_inputs: documentInputs,
+        include: {
+          ocr_text: true,
+          metadata: includeMetadata,
+          pdf: true,
+        },
       };
 
       if (currentPromptId) {
@@ -195,13 +264,23 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
         schema_version: undefined,
         tag_ids: [],
         model: undefined,
-        kb_id: undefined
+        kb_id: undefined,
+        metadata_group_by: [],
+        document_inputs: {},
+        include: {
+          ocr_text: true,
+          metadata: false,
+          pdf: true,
+        },
       });
       setCurrentPromptId(null);
       setSelectedSchema('');
       setSelectedSchemaDetails(null);
       setSelectedTagIds([]);
       setSelectedKbId('');
+      setMetadataGroupByInput('');
+      setDocumentInputsJson('{}');
+      setIncludeMetadata(false);
 
       router.push(`/orgs/${organizationId}/prompts`);
       
@@ -250,7 +329,9 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
     try {
       const response = await docRouterOrgApi.listKnowledgeBases({ limit: 100 });
       // Only show active knowledge bases
-      const activeKBs = response.knowledge_bases.filter(kb => kb.status === 'active');
+      const activeKBs = response.knowledge_bases.filter(
+        (kb: KnowledgeBase) => kb.status === 'active',
+      );
       setAvailableKnowledgeBases(activeKBs);
     } catch (error) {
       const errorMsg = getApiErrorMsg(error) || 'Error loading knowledge bases';
@@ -287,14 +368,22 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
 
   // Helper function
   const jsonSchemaToFields = (responseFormat: SchemaResponseFormat) => {
-    const fields = [];
-    const properties = responseFormat.json_schema.schema.properties;
+    const fields: { name: string; type: string }[] = [];
+    const properties = responseFormat.json_schema.schema
+      .properties as Record<string, { type?: string }>;
     
     for (const [name, prop] of Object.entries(properties)) {
-      const type = prop.type === 'string' ? 'str' :
-                 prop.type === 'integer' ? 'int' :
-                 prop.type === 'number' ? 'float' :
-                 prop.type === 'boolean' ? 'bool' : 'str';
+      const jsonType = prop.type;
+      const type =
+        jsonType === 'string'
+          ? 'str'
+          : jsonType === 'integer'
+          ? 'int'
+          : jsonType === 'number'
+          ? 'float'
+          : jsonType === 'boolean'
+          ? 'bool'
+          : 'str';
                  
       fields.push({ name, type });
     }
@@ -323,7 +412,9 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     setViewingVersion(version);
                     // Check if this is the latest version
                     const versionsResponse = await docRouterOrgApi.listPromptVersions({ promptId: currentPromptId });
-                    const latestVersion = versionsResponse.prompts.sort((a, b) => b.prompt_version - a.prompt_version)[0];
+                    const latestVersion = versionsResponse.prompts.sort(
+                      (a: Prompt, b: Prompt) => b.prompt_version - a.prompt_version,
+                    )[0];
                     setIsReadOnly(version !== latestVersion.prompt_version);
                     setCurrentPrompt({
                       name: prompt.name,
@@ -332,11 +423,21 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                       schema_version: prompt.schema_version,
                       tag_ids: prompt.tag_ids || [],
                       model: prompt.model,
-                      kb_id: prompt.kb_id
+                      kb_id: prompt.kb_id,
+                      metadata_group_by: prompt.metadata_group_by || [],
+                      document_inputs: prompt.document_inputs || {},
+                      include: prompt.include || {
+                        ocr_text: true,
+                        metadata: false,
+                        pdf: true,
+                      },
                     });
                     setSelectedTagIds(prompt.tag_ids || []);
                     setSelectedSchema(prompt.schema_id || '');
                     setSelectedKbId(prompt.kb_id || '');
+                    setMetadataGroupByInput((prompt.metadata_group_by || []).join(', '));
+                    setDocumentInputsJson(JSON.stringify(prompt.document_inputs || {}, null, 2));
+                    setIncludeMetadata(!!prompt.include?.metadata);
                     if (prompt.schema_id) {
                       await handleSchemaSelect(prompt.schema_id);
                     }
@@ -401,7 +502,9 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                   try {
                     setIsLoading(true);
                     const versionsResponse = await docRouterOrgApi.listPromptVersions({ promptId: currentPromptId });
-                    const latestVersion = versionsResponse.prompts.sort((a, b) => b.prompt_version - a.prompt_version)[0];
+                    const latestVersion = versionsResponse.prompts.sort(
+                      (a: Prompt, b: Prompt) => b.prompt_version - a.prompt_version,
+                    )[0];
                     const prompt = await docRouterOrgApi.getPrompt({ promptRevId: latestVersion.prompt_revid });
                     setCurrentPromptFull(prompt);
                     setViewingVersion(prompt.prompt_version);
@@ -413,11 +516,21 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                       schema_version: prompt.schema_version,
                       tag_ids: prompt.tag_ids || [],
                       model: prompt.model,
-                      kb_id: prompt.kb_id
+                      kb_id: prompt.kb_id,
+                      metadata_group_by: prompt.metadata_group_by || [],
+                      document_inputs: prompt.document_inputs || {},
+                      include: prompt.include || {
+                        ocr_text: true,
+                        metadata: false,
+                        pdf: true,
+                      },
                     });
                     setSelectedTagIds(prompt.tag_ids || []);
                     setSelectedSchema(prompt.schema_id || '');
                     setSelectedKbId(prompt.kb_id || '');
+                    setMetadataGroupByInput((prompt.metadata_group_by || []).join(', '));
+                    setDocumentInputsJson(JSON.stringify(prompt.document_inputs || {}, null, 2));
+                    setIncludeMetadata(!!prompt.include?.metadata);
                     if (prompt.schema_id) {
                       await handleSchemaSelect(prompt.schema_id);
                     }
@@ -461,12 +574,22 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     schema_version: undefined,
                     tag_ids: [],
                     model: undefined,
-                    kb_id: undefined
+                    kb_id: undefined,
+                    metadata_group_by: [],
+                    document_inputs: {},
+                    include: {
+                      ocr_text: true,
+                      metadata: false,
+                      pdf: true,
+                    },
                   });
                   setSelectedSchema('');
                   setSelectedSchemaDetails(null);
                   setSelectedTagIds([]);
                   setSelectedKbId('');
+                  setMetadataGroupByInput('');
+                  setDocumentInputsJson('{}');
+                  setIncludeMetadata(false);
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
                 disabled={isLoading || isReadOnly}
@@ -580,20 +703,69 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
               </div>
             </div>
 
-            {selectedSchemaDetails && (
-              <div className="w-1/2 p-4 bg-gray-50 rounded-md">
-                <h3 className="text-sm font-medium text-gray-700 mb-2">
-                  Schema: {selectedSchemaDetails.name} (v{selectedSchemaDetails.schema_version})
+            <div className="w-1/2 space-y-4">
+              {selectedSchemaDetails && (
+                <div className="p-4 bg-gray-50 rounded-md">
+                  <h3 className="text-sm font-medium text-gray-700 mb-2">
+                    Schema: {selectedSchemaDetails.name} (v{selectedSchemaDetails.schema_version})
+                  </h3>
+                  <div className="space-y-1">
+                    {jsonSchemaToFields(selectedSchemaDetails.response_format).map((field, index) => (
+                      <div key={index} className="text-sm text-gray-600">
+                        • {field.name}: <span className="text-gray-500">{field.type}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div className="p-4 bg-gray-50 rounded-md space-y-3">
+                <h3 className="text-sm font-medium text-gray-700">
+                  Grouped Inputs (Optional)
                 </h3>
-                <div className="space-y-1">
-                  {jsonSchemaToFields(selectedSchemaDetails.response_format).map((field, index) => (
-                    <div key={index} className="text-sm text-gray-600">
-                      • {field.name}: <span className="text-gray-500">{field.type}</span>
-                    </div>
-                  ))}
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Metadata group-by keys (comma-separated)
+                  </label>
+                  <input
+                    type="text"
+                    value={metadataGroupByInput}
+                    onChange={(e) => setMetadataGroupByInput(e.target.value)}
+                    disabled={isLoading || isReadOnly}
+                    className="w-full p-2 border border-gray-300 rounded-md text-xs"
+                    placeholder="e.g. case_id, vendor"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    Document inputs JSON (alias → metadata_match)
+                  </label>
+                  <textarea
+                    value={documentInputsJson}
+                    onChange={(e) => setDocumentInputsJson(e.target.value)}
+                    disabled={isLoading || isReadOnly}
+                    className="w-full p-2 border border-gray-300 rounded-md text-xs font-mono h-32"
+                    spellCheck={false}
+                  />
+                  <p className="mt-1 text-[11px] text-gray-500">
+                    Example: {'{ "contract": { "metadata_match": { "document_type": "contract" } }, "invoice": { "metadata_match": { "document_type": "invoice" } } }'}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="include-metadata"
+                    type="checkbox"
+                    checked={includeMetadata}
+                    onChange={(e) => setIncludeMetadata(e.target.checked)}
+                    disabled={isLoading || isReadOnly}
+                    className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                  />
+                  <label htmlFor="include-metadata" className="text-xs text-gray-700">
+                    Include document metadata in grouped prompt context
+                  </label>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         </form>
       </div>

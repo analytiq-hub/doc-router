@@ -89,6 +89,16 @@ class LLMRunResponse(BaseModel):
     status: str
     result: dict
 
+class GroupRunMetadata(BaseModel):
+    """
+    Metadata about a grouped LLM run (peer grouping).
+
+    Present only for grouped runs; omitted for legacy single-document runs.
+    """
+    metadata_group_key: Optional[dict] = None
+    resolved_inputs: Optional[dict] = None
+
+
 class LLMResult(BaseModel):
     prompt_revid: str
     prompt_id: str
@@ -101,6 +111,7 @@ class LLMResult(BaseModel):
     created_at: datetime
     updated_at: datetime
     prompt_display_name: Optional[str] = None
+    group_run: Optional[GroupRunMetadata] = None
 
 class UpdateLLMResultRequest(BaseModel):
     updated_llm_result: dict

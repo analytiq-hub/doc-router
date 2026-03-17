@@ -5,7 +5,7 @@ from litellm.utils import supports_pdf_input, supports_prompt_caching
 import json
 from datetime import datetime, UTC
 from pydantic import BaseModel, create_model
-from typing import Optional, Dict, Any, Union, List
+from typing import Optional, Dict, Any, Union, List, Tuple
 from collections import OrderedDict
 import logging
 from bson import ObjectId
@@ -545,11 +545,164 @@ async def _litellm_acreate_file_with_retry(
         api_key=api_key
     )
 
-async def run_llm(analytiq_client, 
-                  document_id: str,
-                  prompt_revid: str = "default",
-                  llm_model: str = None,
-                  force: bool = False) -> dict:
+async def _build_grouped_prompt_context(
+    analytiq_client,
+    doc: dict,
+    prompt_revid: str,
+    org_id: str,
+    system_prompt: str,
+) -> Tuple[list, dict | None]:
+    """
+    Build messages and group_run metadata for grouped prompts.
+
+    When grouping is not configured for this prompt, returns ([], None).
+    """
+    group_cfg = await ad.common.get_prompt_group_config(analytiq_client, prompt_revid)
+    metadata_group_by: List[str] = group_cfg.get("metadata_group_by") or []
+    document_inputs: Dict[str, dict] = group_cfg.get("document_inputs") or {}
+    include: Dict[str, bool] = group_cfg.get("include") or {}
+
+    # No grouping configured – caller should fall back to single-document flow
+    if not metadata_group_by and not document_inputs:
+        return [], None
+
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+
+    # Step 1 — Build metadata_group_key from source document metadata
+    doc_metadata: Dict[str, Any] = doc.get("metadata", {}) or {}
+    metadata_group_key: Dict[str, Any] = {}
+    for key in metadata_group_by:
+        if key not in doc_metadata:
+            raise Exception(f"Grouped LLM run failed: source document missing metadata key '{key}'")
+        metadata_group_key[key] = doc_metadata[key]
+
+    # Step 2 — Find peer pool (same org, matching all group-by keys)
+    peer_query: Dict[str, Any] = {"organization_id": org_id}
+    for key, value in metadata_group_key.items():
+        peer_query[f"metadata.{key}"] = value
+
+    peer_docs = await db.docs.find(peer_query).to_list(length=None)
+
+    # Step 3 — Resolve each alias against peer pool
+    resolved_inputs: Dict[str, List[str]] = {}
+    include_ocr = bool(include.get("ocr_text", True))
+    include_metadata = bool(include.get("metadata", False))
+
+    # Deterministic ordering helper
+    from bson import ObjectId as _ObjectId
+
+    def _sort_key(d: dict):
+        created_at = d.get("created_at") or d.get("upload_date")
+        if not created_at and isinstance(d.get("_id"), _ObjectId):
+            created_at = d["_id"].generation_time
+        return (created_at, d.get("_id"))
+
+    # Precompute OCR text and metadata strings only when needed
+    rendered_docs: Dict[str, Dict[str, Any]] = {}
+
+    for alias, spec in document_inputs.items():
+        match_rule: Dict[str, Any] = spec.get("metadata_match") or {}
+
+        def _matches(doc_meta: Dict[str, Any]) -> bool:
+            for mk, mv in match_rule.items():
+                if doc_meta.get(mk) != mv:
+                    return False
+            return True
+
+        matched = [
+            d for d in peer_docs
+            if _matches((d.get("metadata") or {}))
+        ]
+        matched.sort(key=_sort_key)
+
+        if not matched:
+            raise Exception(
+                f"No documents matched alias '{alias}' in group {metadata_group_key}"
+            )
+
+        resolved_inputs[alias] = [str(d["_id"]) for d in matched]
+
+        # Render each matched doc once for later prompt body generation
+        for idx, d in enumerate(matched, start=1):
+            doc_id_str = str(d["_id"])
+            if doc_id_str in rendered_docs:
+                continue
+
+            parts: List[str] = []
+            parts.append(f"[{alias} #{idx}]")
+            parts.append(f"document_id: {doc_id_str}")
+            name = d.get("user_file_name") or d.get("name") or ""
+            if name:
+                parts.append(f"name: {name}")
+
+            if include_metadata:
+                meta = d.get("metadata") or {}
+                parts.append("metadata:")
+                parts.append(json.dumps(meta, indent=2, default=str))
+
+            if include_ocr:
+                text = await get_extracted_text(analytiq_client, doc_id_str)
+                if text is None:
+                    raise Exception(
+                        f"Grouped LLM run failed: missing OCR/text for document {doc_id_str}"
+                    )
+                parts.append("ocr_text:")
+                parts.append(text)
+
+            rendered_docs[doc_id_str] = {
+                "alias": alias,
+                "index": idx,
+                "text": "\n".join(parts),
+            }
+
+    # Step 5 — Build prompt text in code (text-only v1; attachments handled by single-doc flow)
+    instruction = await ad.common.get_prompt_content(analytiq_client, prompt_revid)
+
+    lines: List[str] = []
+    lines.append("You are analyzing a group of related documents.")
+    lines.append("")
+    lines.append("Instruction:")
+    lines.append(instruction)
+    lines.append("")
+    if metadata_group_key:
+        lines.append("Group key:")
+        for k, v in metadata_group_key.items():
+            lines.append(f"- {k}: {v}")
+        lines.append("")
+    lines.append("Documents:")
+    lines.append("")
+
+    # Preserve alias ordering from document_inputs and document ordering within each alias
+    for alias in document_inputs.keys():
+        ids = resolved_inputs.get(alias, [])
+        for doc_id_str in ids:
+            rendered = rendered_docs.get(doc_id_str)
+            if not rendered:
+                continue
+            lines.append(rendered["text"])
+            lines.append("")  # blank line between docs
+
+    user_prompt = "\n".join(lines)
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt},
+    ]
+
+    group_run = {
+        "metadata_group_key": metadata_group_key,
+        "resolved_inputs": resolved_inputs,
+    }
+    return messages, group_run
+
+
+async def run_llm(
+    analytiq_client,
+    document_id: str,
+    prompt_revid: str = "default",
+    llm_model: str = None,
+    force: bool = False,
+) -> dict:
     """
     Run the LLM for the given document and prompt.
     
@@ -618,14 +771,6 @@ async def run_llm(analytiq_client,
         
     api_key = await ad.llm.get_llm_key(analytiq_client, llm_provider)
     logger.info(f"{document_id}/{prompt_revid}: LLM model: {llm_model}, provider: {llm_provider}, api_key: {api_key[:16]}********")
-
-    extracted_text = await get_extracted_text(analytiq_client, document_id)
-    file_attachment_blob, file_attachment_name = await get_file_attachment(analytiq_client, doc, llm_provider, llm_model)
-
-    if not extracted_text and not file_attachment_blob:
-        raise Exception(f"{document_id}/{prompt_revid}: Document has no extracted text and no file attachment, so cannot use vision")
-
-    prompt1 = await ad.common.get_prompt_content(analytiq_client, prompt_revid)
     
     # Check if prompt has KB ID for RAG (do this early to modify system prompt if needed)
     kb_id = await ad.common.get_prompt_kb_id(analytiq_client, prompt_revid)
@@ -646,40 +791,92 @@ async def run_llm(analytiq_client,
             "Format your entire response as a JSON object."
         )
     
-    # Determine how to handle the document content
-    # XAI doesn't support complex file attachment formats, so use text-only for XAI
-    if file_attachment_blob and llm_provider != "xai":
-        # For vision models, we can pass both the PDF and OCR text
-        # The PDF provides visual context, OCR text provides structured text
-        prompt = f"""{prompt1}
+    # Determine how to handle the document content.
+    # First, attempt grouped prompt flow; if not configured, fall back to legacy single-document behavior.
+    group_run: dict | None = None
+    messages: list
 
-        Please analyze this document. You have access to both the visual PDF and the extracted text.
+    grouped_messages, group_run = await _build_grouped_prompt_context(
+        analytiq_client,
+        doc,
+        prompt_revid,
+        org_id,
+        system_prompt,
+    )
+
+    if grouped_messages:
+        messages = grouped_messages
+        logger.info(f"{document_id}/{prompt_revid}: Using grouped prompt flow with group_run={group_run}")
+        extracted_text = None
+        file_attachment_blob = None
+        file_attachment_name = None
+    else:
+        extracted_text = await get_extracted_text(analytiq_client, document_id)
+        file_attachment_blob, file_attachment_name = await get_file_attachment(analytiq_client, doc, llm_provider, llm_model)
+
+        if not extracted_text and not file_attachment_blob:
+            raise Exception(f"{document_id}/{prompt_revid}: Document has no extracted text and no file attachment, so cannot use vision")
         
-        Extracted text from the document:
-        {extracted_text}
-        
-        Please provide your analysis based on both the visual content and the text."""
-        
-        # Different approaches for different providers
-        if llm_provider == "openai":
-            # For OpenAI, we need to upload the file first
-            try:
-                # Upload file to OpenAI
-                file_response = await _litellm_acreate_file_with_retry(
-                    file=(file_attachment_name, file_attachment_blob),
-                    purpose="assistants",
-                    custom_llm_provider="openai",
-                    api_key=api_key
-                )
-                file_id = file_response.id
+        prompt1 = await ad.common.get_prompt_content(analytiq_client, prompt_revid)
+
+        # XAI doesn't support complex file attachment formats, so use text-only for XAI
+        if file_attachment_blob and llm_provider != "xai":
+            # For vision models, we can pass both the PDF and OCR text
+            # The PDF provides visual context, OCR text provides structured text
+            prompt = f"""{prompt1}
+
+            Please analyze this document. You have access to both the visual PDF and the extracted text.
+            
+            Extracted text from the document:
+            {extracted_text}
+            
+            Please provide your analysis based on both the visual content and the text."""
+            
+            # Different approaches for different providers
+            if llm_provider == "openai":
+                # For OpenAI, we need to upload the file first
+                try:
+                    # Upload file to OpenAI
+                    file_response = await _litellm_acreate_file_with_retry(
+                        file=(file_attachment_name, file_attachment_blob),
+                        purpose="assistants",
+                        custom_llm_provider="openai",
+                        api_key=api_key
+                    )
+                    file_id = file_response.id
+                    
+                    # Create messages with file reference
+                    file_content = [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "file",
+                            "file": {
+                                "file_id": file_id,
+                            }
+                        },
+                    ]
+                    
+                    messages = [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": file_content}
+                    ]
+                    logger.info(f"{document_id}/{prompt_revid}: Attaching OCR and PDF to prompt using OpenAI file_id: {file_id}")
+                    
+                except Exception as e:
+                    logger.error(f"{document_id}/{prompt_revid}: Failed to upload file to OpenAI: {e}")
+                    raise e
+                    
+            else:
+                # For other providers (Anthropic, Gemini), use base64 approach
+                encoded_file = base64.b64encode(file_attachment_blob).decode("utf-8")
+                base64_url = f"data:application/pdf;base64,{encoded_file}"
                 
-                # Create messages with file reference
                 file_content = [
                     {"type": "text", "text": prompt},
                     {
                         "type": "file",
                         "file": {
-                            "file_id": file_id,
+                            "file_data": base64_url,
                         }
                     },
                 ]
@@ -688,48 +885,23 @@ async def run_llm(analytiq_client,
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": file_content}
                 ]
-                logger.info(f"{document_id}/{prompt_revid}: Attaching OCR and PDF to prompt using OpenAI file_id: {file_id}")
-                
-            except Exception as e:
-                logger.error(f"{document_id}/{prompt_revid}: Failed to upload file to OpenAI: {e}")
-                raise e
-                
-        else:
-            # For other providers (Anthropic, Gemini), use base64 approach
-            encoded_file = base64.b64encode(file_attachment_blob).decode("utf-8")
-            base64_url = f"data:application/pdf;base64,{encoded_file}"
+                logger.info(f"{document_id}/{prompt_revid}: Attaching OCR and PDF to prompt using base64 for {llm_provider}")
+        
+        # Use OCR-only approach if no file attachment or if provider is XAI (which doesn't support file attachments)
+        if not file_attachment_blob or llm_provider == "xai":
+            # Original OCR-only approach
+            prompt = f"""{prompt1}
+
+            Now extract from this text: 
             
-            file_content = [
-                {"type": "text", "text": prompt},
-                {
-                    "type": "file",
-                    "file": {
-                        "file_data": base64_url,
-                    }
-                },
-            ]
+            {extracted_text}"""
             
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": file_content}
+                {"role": "user", "content": prompt}
             ]
-            logger.info(f"{document_id}/{prompt_revid}: Attaching OCR and PDF to prompt using base64 for {llm_provider}")
-    
-    # Use OCR-only approach if no file attachment or if provider is XAI (which doesn't support file attachments)
-    if not file_attachment_blob or llm_provider == "xai":
-        # Original OCR-only approach
-        prompt = f"""{prompt1}
 
-        Now extract from this text: 
-        
-        {extracted_text}"""
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": prompt}
-        ]
-
-        logger.info(f"{document_id}/{prompt_revid}: Attaching OCR-only to prompt")
+            logger.info(f"{document_id}/{prompt_revid}: Attaching OCR-only to prompt")
 
     response_format = None
     
@@ -1026,7 +1198,7 @@ async def run_llm(analytiq_client,
             #logger.info(f"Reordered response: {resp_dict}")
 
     # 10. Save the new result
-    await save_llm_result(analytiq_client, document_id, prompt_revid, resp_dict)
+    await save_llm_result(analytiq_client, document_id, prompt_revid, resp_dict, group_run=group_run)
 
     # Optional per-org webhook: per-prompt completion (non-default prompts only)
     if prompt_revid != "default":
@@ -1115,10 +1287,13 @@ async def get_prompt_info_from_rev_id(analytiq_client, prompt_revid: str) -> tup
     
     return str(elem["prompt_id"]), elem["prompt_version"]
 
-async def save_llm_result(analytiq_client, 
-                          document_id: str,
-                          prompt_revid: str, 
-                          llm_result: dict) -> str:
+async def save_llm_result(
+    analytiq_client,
+    document_id: str,
+    prompt_revid: str,
+    llm_result: dict,
+    group_run: dict | None = None,
+) -> str:
     """
     Save the LLM result to MongoDB.
     
@@ -1137,7 +1312,7 @@ async def save_llm_result(analytiq_client,
     # Get prompt_id and prompt_version from prompt_revid
     prompt_id, prompt_version = await get_prompt_info_from_rev_id(analytiq_client, prompt_revid)
 
-    element = {
+    element: dict[str, object] = {
         "prompt_revid": prompt_revid,
         "prompt_id": prompt_id,
         "prompt_version": prompt_version,
@@ -1147,8 +1322,12 @@ async def save_llm_result(analytiq_client,
         "is_edited": False,
         "is_verified": False,
         "created_at": current_time_utc,
-        "updated_at": current_time_utc
+        "updated_at": current_time_utc,
     }
+
+    # Optional grouped-run metadata (peer grouping + resolved inputs per alias)
+    if group_run is not None:
+        element["group_run"] = group_run
 
     logger.info(f"Saving LLM result: {element}")
 

@@ -3,7 +3,7 @@
 # Standard library imports
 import logging
 from datetime import datetime, UTC
-from typing import Optional, List, Literal
+from typing import Optional, List, Literal, Dict
 from pydantic import BaseModel, Field, ConfigDict, field_validator, model_validator
 
 # Third-party imports
@@ -22,6 +22,26 @@ logger = logging.getLogger(__name__)
 prompts_router = APIRouter(tags=["prompts"])
 
 # Prompt models
+class DocumentInputSpec(BaseModel):
+    """
+    Document input matching rule for a single alias.
+
+    V1 supports exact metadata key/value equality via metadata_match.
+    """
+    metadata_match: Dict[str, str] = {}
+
+
+class IncludeConfig(BaseModel):
+    """
+    Controls which parts of each document are included in the generated LLM context.
+
+    Defaults preserve existing single-document behavior.
+    """
+    ocr_text: bool = True
+    metadata: bool = False
+    pdf: bool = True
+
+
 class PromptConfig(BaseModel):
     name: str
     content: str
@@ -30,6 +50,11 @@ class PromptConfig(BaseModel):
     tag_ids: List[str] = []
     model: str = "gpt-4o-mini"
     kb_id: Optional[str] = None  # Optional knowledge base ID for RAG
+    # Grouped peer prompt fields (see docs/plan-prompt-group-by.md)
+    metadata_group_by: List[str] = []
+    document_inputs: Dict[str, DocumentInputSpec] = {}
+    include: IncludeConfig = IncludeConfig()
+
 
 class Prompt(PromptConfig):
     prompt_revid: str           # MongoDB's _id
@@ -224,7 +249,14 @@ async def create_prompt(
         "tag_ids": prompt.tag_ids,
         "model": prompt.model,
         "organization_id": organization_id,
-        "kb_id": prompt.kb_id  # Store KB ID for RAG
+        "kb_id": prompt.kb_id,  # Store KB ID for RAG
+        # Grouped peer fields
+        "metadata_group_by": prompt.metadata_group_by or [],
+        "document_inputs": {
+            alias: spec.model_dump()
+            for alias, spec in (prompt.document_inputs or {}).items()
+        },
+        "include": prompt.include.model_dump() if prompt.include else IncludeConfig().model_dump(),
     }
     
     # Insert into MongoDB
@@ -455,7 +487,13 @@ async def update_prompt(
         prompt.schema_id == latest_prompt_revision.get("schema_id") and
         prompt.schema_version == latest_prompt_revision.get("schema_version") and
         prompt.model == latest_prompt_revision["model"] and
-        set(prompt.tag_ids or []) == set(latest_prompt_revision.get("tag_ids") or [])
+        set(prompt.tag_ids or []) == set(latest_prompt_revision.get("tag_ids") or []) and
+        (prompt.metadata_group_by or []) == latest_prompt_revision.get("metadata_group_by", []) and
+        # document_inputs / include are considered part of the prompt config;
+        # any change to them should create a new revision, not a rename-only update.
+        not prompt.document_inputs and not latest_prompt_revision.get("document_inputs") and
+        (prompt.include.model_dump() if prompt.include else IncludeConfig().model_dump())
+        == latest_prompt_revision.get("include", IncludeConfig().model_dump())
     )
     
     if prompt.name != existing_prompt["name"]:
@@ -491,7 +529,14 @@ async def update_prompt(
         "tag_ids": prompt.tag_ids,
         "model": prompt.model,
         "organization_id": organization_id,
-        "kb_id": prompt.kb_id  # Store KB ID for RAG
+        "kb_id": prompt.kb_id,  # Store KB ID for RAG
+        # Grouped peer fields
+        "metadata_group_by": prompt.metadata_group_by or [],
+        "document_inputs": {
+            alias: spec.model_dump()
+            for alias, spec in (prompt.document_inputs or {}).items()
+        },
+        "include": prompt.include.model_dump() if prompt.include else IncludeConfig().model_dump(),
     }
     
     # Insert new version

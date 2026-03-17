@@ -27,7 +27,10 @@ class LLMRunResponse(BaseModel):
     result: dict
 
 class LLMResult(BaseModel):
+    # Matches app.routes.llm.LLMResult (SDK-visible shape)
+    prompt_revid: str
     prompt_id: str
+    prompt_version: int
     document_id: str
     llm_result: dict
     updated_llm_result: dict
@@ -36,6 +39,8 @@ class LLMResult(BaseModel):
     created_at: datetime
     updated_at: datetime
     prompt_display_name: Optional[str] = None
+    # Optional grouped-run metadata; present only for grouped runs
+    group_run: Optional[dict] = None
 
 class UpdateLLMResultRequest(BaseModel):
     updated_llm_result: dict
