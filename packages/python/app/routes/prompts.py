@@ -489,9 +489,8 @@ async def update_prompt(
         prompt.model == latest_prompt_revision["model"] and
         set(prompt.tag_ids or []) == set(latest_prompt_revision.get("tag_ids") or []) and
         (prompt.metadata_group_by or []) == latest_prompt_revision.get("metadata_group_by", []) and
-        # document_inputs / include are considered part of the prompt config;
-        # any change to them should create a new revision, not a rename-only update.
-        not prompt.document_inputs and not latest_prompt_revision.get("document_inputs") and
+        {alias: spec.model_dump() for alias, spec in (prompt.document_inputs or {}).items()}
+        == latest_prompt_revision.get("document_inputs", {}) and
         (prompt.include.model_dump() if prompt.include else IncludeConfig().model_dump())
         == latest_prompt_revision.get("include", IncludeConfig().model_dump())
     )
