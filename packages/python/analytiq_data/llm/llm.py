@@ -553,40 +553,35 @@ async def _build_grouped_prompt_context(
     system_prompt: str,
 ) -> Tuple[list, dict | None]:
     """
-    Build messages and group_run metadata for grouped prompts.
+    Build messages and peer_run metadata for grouped prompts.
 
-    When grouping is not configured for this prompt, returns ([], None).
+    When peer matching is not configured for this prompt, returns ([], None).
     """
     group_cfg = await ad.common.get_prompt_group_config(analytiq_client, prompt_revid)
-    metadata_group_by: List[str] = group_cfg.get("metadata_group_by") or []
-    document_inputs: Dict[str, dict] = group_cfg.get("document_inputs") or {}
-    include: Dict[str, bool] = group_cfg.get("include") or {}
+    peer_match_keys: List[str] = group_cfg.get("peer_match_keys") or []
+    include: Dict[str, Any] = group_cfg.get("include") or {}
 
     # No grouping configured – caller should fall back to single-document flow
-    if not metadata_group_by and not document_inputs:
+    if not peer_match_keys:
         return [], None
 
     db = analytiq_client.mongodb_async[analytiq_client.env]
 
-    # Step 1 — Build metadata_group_key from source document metadata
     doc_metadata: Dict[str, Any] = doc.get("metadata", {}) or {}
-    metadata_group_key: Dict[str, Any] = {}
-    for key in metadata_group_by:
+
+    # Step 1 — Build peer_run.match_values from source document metadata
+    match_values: Dict[str, Any] = {}
+    for key in peer_match_keys:
         if key not in doc_metadata:
             raise Exception(f"Grouped LLM run failed: source document missing metadata key '{key}'")
-        metadata_group_key[key] = doc_metadata[key]
+        match_values[key] = doc_metadata[key]
 
-    # Step 2 — Find peer pool (same org, matching all group-by keys)
+    # Step 2 — Find peer pool (same org, matching all peer_match_keys)
     peer_query: Dict[str, Any] = {"organization_id": org_id}
-    for key, value in metadata_group_key.items():
+    for key, value in match_values.items():
         peer_query[f"metadata.{key}"] = value
 
     peer_docs = await db.docs.find(peer_query).to_list(length=None)
-
-    # Step 3 — Resolve each alias against peer pool
-    resolved_inputs: Dict[str, List[str]] = {}
-    include_ocr = bool(include.get("ocr_text", True))
-    include_metadata = bool(include.get("metadata", False))
 
     # Deterministic ordering helper
     from bson import ObjectId as _ObjectId
@@ -597,64 +592,28 @@ async def _build_grouped_prompt_context(
             created_at = d["_id"].generation_time
         return (created_at, d.get("_id"))
 
-    # Rendered prompt blocks keyed by (alias, doc_id) — same doc can appear under multiple aliases
-    rendered_docs: Dict[Tuple[str, str], str] = {}
-    ocr_cache: Dict[str, str] = {}
+    peer_docs.sort(key=_sort_key)
 
-    for alias, spec in document_inputs.items():
-        match_rule: Dict[str, Any] = spec.get("metadata_match") or {}
+    source_doc_id = str(doc.get("_id"))
+    match_document_ids = [str(d["_id"]) for d in peer_docs if d.get("_id") is not None]
 
-        def _matches(doc_meta: Dict[str, Any]) -> bool:
-            for mk, mv in match_rule.items():
-                if doc_meta.get(mk) != mv:
-                    return False
-            return True
+    # Step 4 — Validate internal consistency (source doc must be in match results)
+    if source_doc_id not in match_document_ids:
+        raise Exception(
+            "Grouped LLM run failed: source document not found by computed peer query "
+            f"{match_values}"
+        )
 
-        matched = [
-            d for d in peer_docs
-            if _matches((d.get("metadata") or {}))
-        ]
-        matched.sort(key=_sort_key)
-
-        if not matched:
-            raise Exception(
-                f"No documents matched alias '{alias}' in group {metadata_group_key}"
-            )
-
-        resolved_inputs[alias] = [str(d["_id"]) for d in matched]
-
-        # Render each (alias, doc) pair for later prompt body generation.
-        # Keyed by (alias, doc_id) so the same document can appear under different aliases.
-        for idx, d in enumerate(matched, start=1):
-            doc_id_str = str(d["_id"])
-
-            parts: List[str] = []
-            parts.append(f"[{alias} #{idx}]")
-            parts.append(f"document_id: {doc_id_str}")
-            name = d.get("user_file_name") or d.get("name") or ""
-            if name:
-                parts.append(f"name: {name}")
-
-            if include_metadata:
-                meta = d.get("metadata") or {}
-                parts.append("metadata:")
-                parts.append(json.dumps(meta, indent=2, default=str))
-
-            if include_ocr:
-                if doc_id_str not in ocr_cache:
-                    text = await get_extracted_text(analytiq_client, doc_id_str)
-                    if text is None:
-                        raise Exception(
-                            f"Grouped LLM run failed: missing OCR/text for document {doc_id_str}"
-                        )
-                    ocr_cache[doc_id_str] = text
-                parts.append("ocr_text:")
-                parts.append(ocr_cache[doc_id_str])
-
-            rendered_docs[(alias, doc_id_str)] = "\n".join(parts)
-
-    # Step 5 — Build prompt text in code (text-only v1; attachments handled by single-doc flow)
+    # Step 3 — Build prompt text in code (text-only v1; attachments handled by single-doc flow)
     instruction = await ad.common.get_prompt_content(analytiq_client, prompt_revid)
+
+    include_ocr = bool(include.get("ocr_text", True))
+    include_pdf = bool(include.get("pdf", True))
+    metadata_keys: List[str] = list(include.get("metadata_keys") or [])
+    include_all_metadata = metadata_keys == ["*"]
+
+    ocr_cache: Dict[str, str] = {}
+    pdf_cache: Dict[str, str] = {}
 
     lines: List[str] = []
     lines.append("You are analyzing a group of related documents.")
@@ -662,36 +621,78 @@ async def _build_grouped_prompt_context(
     lines.append("Instruction:")
     lines.append(instruction)
     lines.append("")
-    if metadata_group_key:
-        lines.append("Group key:")
-        for k, v in metadata_group_key.items():
-            lines.append(f"- {k}: {v}")
-        lines.append("")
+    lines.append("Peer match values:")
+    for k, v in match_values.items():
+        lines.append(f"- {k}: {v}")
+    lines.append("")
     lines.append("Documents:")
     lines.append("")
 
-    # Preserve alias ordering from document_inputs and document ordering within each alias
-    for alias in document_inputs.keys():
-        ids = resolved_inputs.get(alias, [])
-        for doc_id_str in ids:
-            rendered = rendered_docs.get((alias, doc_id_str))
-            if not rendered:
-                continue
-            lines.append(rendered)
-            lines.append("")  # blank line between docs
+    for idx, d in enumerate(peer_docs, start=1):
+        doc_id_str = str(d.get("_id"))
+        parts: List[str] = []
+        parts.append(f"[Document #{idx}]")
+        parts.append(f"document_id: {doc_id_str}")
 
-    user_prompt = "\n".join(lines)
+        name = d.get("user_file_name") or d.get("name") or ""
+        if name:
+            parts.append(f"name: {name}")
+
+        meta = d.get("metadata") or {}
+        if include_all_metadata:
+            filtered_meta = meta
+        else:
+            filtered_meta = {k: meta[k] for k in metadata_keys if k in meta}
+
+        # Multi-document (grouped-peer) flow: embed PDF *contents* (base64) when enabled.
+        # We intentionally still build the prompt as text-only; we do not attach binary files.
+        if include_pdf:
+            if doc_id_str not in pdf_cache:
+                pdf_file_name = d.get("pdf_file_name")
+                if not pdf_file_name:
+                    raise Exception(f"Grouped LLM run failed: missing pdf_file_name for document {doc_id_str}")
+
+                pdf_file = await ad.common.get_file_async(analytiq_client, pdf_file_name)
+                blob = pdf_file.get("blob") if pdf_file else None
+                if not blob:
+                    raise Exception(f"Grouped LLM run failed: missing pdf blob for document {doc_id_str}")
+
+                # Keep it self-contained in the prompt context as text.
+                pdf_cache[doc_id_str] = base64.b64encode(blob).decode("utf-8")
+
+            parts.append("pdf:")
+            parts.append(pdf_cache[doc_id_str])
+
+        if filtered_meta:
+            parts.append("metadata (filtered):")
+            parts.append(json.dumps(filtered_meta, indent=2, default=str))
+
+        if include_ocr:
+            if doc_id_str not in ocr_cache:
+                text = await get_extracted_text(analytiq_client, doc_id_str)
+                if text is None:
+                    raise Exception(
+                        f"Grouped LLM run failed: missing OCR/text for document {doc_id_str}"
+                    )
+                ocr_cache[doc_id_str] = text
+            parts.append("ocr_text:")
+            parts.append(ocr_cache[doc_id_str])
+
+        lines.append("\n".join(parts))
+        lines.append("")
+
+    user_prompt = "\n".join(lines).rstrip()
 
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": user_prompt},
     ]
 
-    group_run = {
-        "metadata_group_key": metadata_group_key,
-        "resolved_inputs": resolved_inputs,
+    peer_run = {
+        "match_values": match_values,
+        "match_document_ids": match_document_ids,
     }
-    return messages, group_run
+    return messages, peer_run
 
 
 async def run_llm(
@@ -791,10 +792,10 @@ async def run_llm(
     
     # Determine how to handle the document content.
     # First, attempt grouped prompt flow; if not configured, fall back to legacy single-document behavior.
-    group_run: dict | None = None
+    peer_run: dict | None = None
     messages: list
 
-    grouped_messages, group_run = await _build_grouped_prompt_context(
+    grouped_messages, peer_run = await _build_grouped_prompt_context(
         analytiq_client,
         doc,
         prompt_revid,
@@ -804,7 +805,7 @@ async def run_llm(
 
     if grouped_messages:
         messages = grouped_messages
-        logger.info(f"{document_id}/{prompt_revid}: Using grouped prompt flow with group_run={group_run}")
+        logger.info(f"{document_id}/{prompt_revid}: Using grouped prompt flow with peer_run={peer_run}")
         # PDF attachment in grouped flow is not yet supported (v1 is OCR-text only).
         # include.pdf is acknowledged in the prompt context block header but files are not attached.
         extracted_text = None
@@ -1198,7 +1199,7 @@ async def run_llm(
             #logger.info(f"Reordered response: {resp_dict}")
 
     # 10. Save the new result
-    await save_llm_result(analytiq_client, document_id, prompt_revid, resp_dict, group_run=group_run)
+    await save_llm_result(analytiq_client, document_id, prompt_revid, resp_dict, peer_run=peer_run)
 
     # Optional per-org webhook: per-prompt completion (non-default prompts only)
     if prompt_revid != "default":
@@ -1292,7 +1293,7 @@ async def save_llm_result(
     document_id: str,
     prompt_revid: str,
     llm_result: dict,
-    group_run: dict | None = None,
+    peer_run: dict | None = None,
 ) -> str:
     """
     Save the LLM result to MongoDB.
@@ -1325,9 +1326,9 @@ async def save_llm_result(
         "updated_at": current_time_utc,
     }
 
-    # Optional grouped-run metadata (peer grouping + resolved inputs per alias)
-    if group_run is not None:
-        element["group_run"] = group_run
+    # Optional peer-run metadata (match values + matched document ids)
+    if peer_run is not None:
+        element["peer_run"] = peer_run
 
     logger.info(f"Saving LLM result: {element}")
 

@@ -13,11 +13,10 @@ import type {
 
 // Local extension for grouped prompt fields that may not yet exist in the SDK typings
 type GroupedPromptFields = {
-  metadata_group_by?: string[];
-  document_inputs?: Record<string, { metadata_match?: Record<string, string> }>;
+  peer_match_keys?: string[];
   include?: {
     ocr_text?: boolean;
-    metadata?: boolean;
+    metadata_keys?: string[];
     pdf?: boolean;
   };
 };
@@ -61,11 +60,10 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
     tag_ids: [],
     model: undefined,
     kb_id: undefined,
-    metadata_group_by: [],
-    document_inputs: {},
+    peer_match_keys: [],
     include: {
       ocr_text: true,
-      metadata: false,
+      metadata_keys: [],
       pdf: true,
     },
   });
@@ -83,8 +81,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const [availableKnowledgeBases, setAvailableKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [selectedKbId, setSelectedKbId] = useState<string>('');
   const [metadataGroupByInput, setMetadataGroupByInput] = useState<string>('');
-  const [documentInputsJson, setDocumentInputsJson] = useState<string>('{}');
-  const [includeMetadata, setIncludeMetadata] = useState<boolean>(false);
+  const [metadataKeysInput, setMetadataKeysInput] = useState<string>('');
   const [includeOcrText, setIncludeOcrText] = useState<boolean>(true);
   const [includePdf, setIncludePdf] = useState<boolean>(true);
 
@@ -152,20 +149,18 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
             tag_ids: prompt.tag_ids || [],
             model: prompt.model,
             kb_id: prompt.kb_id,
-            metadata_group_by: prompt.metadata_group_by || [],
-            document_inputs: prompt.document_inputs || {},
+            peer_match_keys: prompt.peer_match_keys || [],
             include: prompt.include || {
               ocr_text: true,
-              metadata: false,
+              metadata_keys: [],
               pdf: true,
             },
           });
           setSelectedTagIds(prompt.tag_ids || []);
           setSelectedSchema(prompt.schema_id || '');
           setSelectedKbId(prompt.kb_id || '');
-          setMetadataGroupByInput((prompt.metadata_group_by || []).join(', '));
-          setDocumentInputsJson(JSON.stringify(prompt.document_inputs || {}, null, 2));
-          setIncludeMetadata(!!prompt.include?.metadata);
+          setMetadataGroupByInput((prompt.peer_match_keys || []).join(', '));
+          setMetadataKeysInput((prompt.include?.metadata_keys || []).join(', '));
           setIncludeOcrText(prompt.include?.ocr_text ?? true);
           setIncludePdf(prompt.include?.pdf ?? true);
           // Optionally, load schema details if needed
@@ -225,29 +220,26 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
+      const metadataKeys = metadataKeysInput
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
 
-      let documentInputs: PromptConfig['document_inputs'] = {};
-      try {
-        const parsed = documentInputsJson.trim() ? JSON.parse(documentInputsJson) : {};
-        if (parsed && typeof parsed === 'object') {
-          documentInputs = parsed;
-        }
-      } catch {
-        toast.error('Document inputs JSON is invalid');
-        setIsLoading(false);
-        return;
-      }
+      const metadataKeysResolved = metadataKeys.includes('*') ? ['*'] : metadataKeys;
 
       // Create the prompt object with tag_ids, kb_id, and grouping fields
       const promptToSave = {
-        ...currentPrompt,
+        name: currentPrompt.name,
+        content: currentPrompt.content,
+        schema_id: currentPrompt.schema_id,
+        schema_version: currentPrompt.schema_version,
         tag_ids: selectedTagIds,
+        model: currentPrompt.model,
         kb_id: selectedKbId || undefined,
-        metadata_group_by: metadataGroupBy,
-        document_inputs: documentInputs,
+        peer_match_keys: metadataGroupBy,
         include: {
           ocr_text: includeOcrText,
-          metadata: includeMetadata,
+          metadata_keys: metadataKeysResolved,
           pdf: includePdf,
         },
       };
@@ -269,11 +261,10 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
         tag_ids: [],
         model: undefined,
         kb_id: undefined,
-        metadata_group_by: [],
-        document_inputs: {},
+        peer_match_keys: [],
         include: {
           ocr_text: true,
-          metadata: false,
+          metadata_keys: [],
           pdf: true,
         },
       });
@@ -283,8 +274,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
       setSelectedTagIds([]);
       setSelectedKbId('');
       setMetadataGroupByInput('');
-      setDocumentInputsJson('{}');
-      setIncludeMetadata(false);
+      setMetadataKeysInput('');
       setIncludeOcrText(true);
       setIncludePdf(true);
 
@@ -430,20 +420,18 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                       tag_ids: prompt.tag_ids || [],
                       model: prompt.model,
                       kb_id: prompt.kb_id,
-                      metadata_group_by: prompt.metadata_group_by || [],
-                      document_inputs: prompt.document_inputs || {},
+                      peer_match_keys: prompt.peer_match_keys || [],
                       include: prompt.include || {
                         ocr_text: true,
-                        metadata: false,
+                        metadata_keys: [],
                         pdf: true,
                       },
                     });
                     setSelectedTagIds(prompt.tag_ids || []);
                     setSelectedSchema(prompt.schema_id || '');
                     setSelectedKbId(prompt.kb_id || '');
-                    setMetadataGroupByInput((prompt.metadata_group_by || []).join(', '));
-                    setDocumentInputsJson(JSON.stringify(prompt.document_inputs || {}, null, 2));
-                    setIncludeMetadata(!!prompt.include?.metadata);
+                    setMetadataGroupByInput((prompt.peer_match_keys || []).join(', '));
+                    setMetadataKeysInput((prompt.include?.metadata_keys || []).join(', '));
                     setIncludeOcrText(prompt.include?.ocr_text ?? true);
                     setIncludePdf(prompt.include?.pdf ?? true);
                     if (prompt.schema_id) {
@@ -525,20 +513,18 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                       tag_ids: prompt.tag_ids || [],
                       model: prompt.model,
                       kb_id: prompt.kb_id,
-                      metadata_group_by: prompt.metadata_group_by || [],
-                      document_inputs: prompt.document_inputs || {},
+                      peer_match_keys: prompt.peer_match_keys || [],
                       include: prompt.include || {
                         ocr_text: true,
-                        metadata: false,
+                        metadata_keys: [],
                         pdf: true,
                       },
                     });
                     setSelectedTagIds(prompt.tag_ids || []);
                     setSelectedSchema(prompt.schema_id || '');
                     setSelectedKbId(prompt.kb_id || '');
-                    setMetadataGroupByInput((prompt.metadata_group_by || []).join(', '));
-                    setDocumentInputsJson(JSON.stringify(prompt.document_inputs || {}, null, 2));
-                    setIncludeMetadata(!!prompt.include?.metadata);
+                    setMetadataGroupByInput((prompt.peer_match_keys || []).join(', '));
+                    setMetadataKeysInput((prompt.include?.metadata_keys || []).join(', '));
                     setIncludeOcrText(prompt.include?.ocr_text ?? true);
                     setIncludePdf(prompt.include?.pdf ?? true);
                     if (prompt.schema_id) {
@@ -585,11 +571,10 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     tag_ids: [],
                     model: undefined,
                     kb_id: undefined,
-                    metadata_group_by: [],
-                    document_inputs: {},
+                    peer_match_keys: [],
                     include: {
                       ocr_text: true,
-                      metadata: false,
+                      metadata_keys: [],
                       pdf: true,
                     },
                   });
@@ -598,8 +583,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                   setSelectedTagIds([]);
                   setSelectedKbId('');
                   setMetadataGroupByInput('');
-                  setDocumentInputsJson('{}');
-                  setIncludeMetadata(false);
+                  setMetadataKeysInput('');
                   setIncludeOcrText(true);
                   setIncludePdf(true);
                 }}
@@ -748,21 +732,6 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     placeholder="e.g. case_id, vendor"
                   />
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Document inputs JSON (alias → metadata_match)
-                  </label>
-                  <textarea
-                    value={documentInputsJson}
-                    onChange={(e) => setDocumentInputsJson(e.target.value)}
-                    disabled={isLoading || isReadOnly}
-                    className="w-full p-2 border border-gray-300 rounded-md text-xs font-mono h-32"
-                    spellCheck={false}
-                  />
-                  <p className="mt-1 text-[11px] text-gray-500">
-                    Example: {'{ "contract": { "metadata_match": { "document_type": "contract" } }, "invoice": { "metadata_match": { "document_type": "invoice" } } }'}
-                  </p>
-                </div>
                 <div className="space-y-2">
                   <div className="flex items-center gap-2">
                     <input
@@ -778,18 +747,18 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     </label>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="include-metadata"
-                      type="checkbox"
-                      checked={includeMetadata}
-                      onChange={(e) => setIncludeMetadata(e.target.checked)}
-                      disabled={isLoading || isReadOnly}
-                      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                    />
-                    <label htmlFor="include-metadata" className="text-xs text-gray-700">
-                      Include document metadata in grouped prompt context
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Metadata keys to include (comma-separated; use * for all)
                     </label>
+                    <input
+                      type="text"
+                      value={metadataKeysInput}
+                      onChange={(e) => setMetadataKeysInput(e.target.value)}
+                      disabled={isLoading || isReadOnly}
+                      className="w-full p-2 border border-gray-300 rounded-md text-xs"
+                      placeholder="* or document_type, invoice_number"
+                    />
                   </div>
 
                   <div className="flex items-center gap-2">

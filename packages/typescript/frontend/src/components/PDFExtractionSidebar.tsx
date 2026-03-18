@@ -685,50 +685,43 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
       return <div className="p-4 text-sm text-gray-500">No results available</div>;
     }
 
-    // Optional grouped run metadata for grouped prompts
-    type GroupRunMeta = {
-      metadata_group_key?: Record<string, string>;
-      resolved_inputs?: Record<string, string[]>;
-    };
-    const groupRun: GroupRunMeta | undefined = (result as unknown as {
-      group_run?: GroupRunMeta;
-    }).group_run;
+    // Optional grouped peer-run metadata for grouped-peer prompts.
+    // Backend returns `peer_run` and omits it for legacy single-document runs.
+    const peerRun: {
+      match_values?: Record<string, unknown>;
+      match_document_ids?: string[];
+    } | undefined = (result as unknown as {
+      peer_run?: {
+        match_values?: Record<string, unknown>;
+        match_document_ids?: string[];
+      };
+    }).peer_run;
 
     return (
       <div className="p-4 space-y-3">
-        {groupRun && (groupRun.metadata_group_key || groupRun.resolved_inputs) && (
+        {peerRun && (peerRun.match_values || peerRun.match_document_ids) && (
           <div className="mb-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-gray-900">
-            <div className="mb-1 font-semibold text-blue-900">Grouped inputs</div>
-            {groupRun.metadata_group_key && (
+            <div className="mb-1 font-semibold text-blue-900">Peer match</div>
+            {peerRun.match_values && (
               <div className="mb-1">
-                <div className="font-medium text-blue-900">Group key</div>
+                <div className="font-medium text-blue-900">Match values</div>
                 <ul className="ml-3 list-disc space-y-0.5">
-                  {Object.entries(groupRun.metadata_group_key).map(([key, value]) => (
+                  {Object.entries(peerRun.match_values).map(([key, value]) => (
                     <li key={key}>
                       <span className="font-medium">{key}</span>
                       <span className="mx-1 text-gray-500">=</span>
-                      <span className="break-all">{value}</span>
+                      <span className="break-all">{String(value)}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            {groupRun.resolved_inputs && Object.keys(groupRun.resolved_inputs).length > 0 && (
+            {peerRun.match_document_ids && peerRun.match_document_ids.length > 0 && (
               <div className="mt-1">
-                <div className="font-medium text-blue-900">Resolved inputs</div>
-                <ul className="ml-3 list-disc space-y-0.5">
-                  {Object.entries(groupRun.resolved_inputs).map(([alias, docIds]) => (
-                    <li key={alias}>
-                      <span className="font-medium">{alias}</span>
-                      <span className="mx-1 text-gray-500">→</span>
-                      {docIds.length === 0 ? (
-                        <span className="italic text-gray-500">no documents</span>
-                      ) : (
-                        <span className="break-all">{docIds.join(', ')}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
+                <div className="font-medium text-blue-900">Matched peer documents</div>
+                <div className="break-all">
+                  {peerRun.match_document_ids.join(', ')}
+                </div>
               </div>
             )}
           </div>

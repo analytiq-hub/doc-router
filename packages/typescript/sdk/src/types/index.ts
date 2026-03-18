@@ -415,10 +415,10 @@ export interface GetLLMResultResponse {
   updated_at: string;
   /** Display name for the prompt (e.g. "Document Summary" for default prompt). From API. */
   prompt_display_name?: string;
-  /** Grouped prompt metadata when the run was executed as a grouped run. */
-  group_run?: {
-    metadata_group_key?: Record<string, string>;
-    resolved_inputs?: Record<string, string[]>;
+  /** Present only for grouped-peer runs. */
+  peer_run?: {
+    match_values?: Record<string, unknown>;
+    match_document_ids?: string[];
   };
 }
 
@@ -645,12 +645,11 @@ export interface Prompt {
   tag_ids?: string[];
   model?: string;
   kb_id?: string;
-  // Grouped prompt fields (see docs/plan-prompt-group-by.md)
-  metadata_group_by?: string[];
-  document_inputs?: Record<string, { metadata_match?: Record<string, string> }>;
+  // Grouped peer prompt fields (see docs/plan-prompt-group-by.md)
+  peer_match_keys?: string[];
   include?: {
     ocr_text?: boolean;
-    metadata?: boolean;
+    metadata_keys?: string[];
     pdf?: boolean;
   };
   created_at: string;

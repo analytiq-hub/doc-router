@@ -246,19 +246,21 @@ async def get_prompt_group_config(analytiq_client, prompt_id: str) -> Dict[str, 
 
     Returns:
         {
-            "metadata_group_by": List[str],
-            "document_inputs": Dict[str, dict],
-            "include": Dict[str, bool],
+            "peer_match_keys": List[str],
+            "include": {
+                "ocr_text": bool,
+                "pdf": bool,
+                "metadata_keys": List[str]
+            }
         }
 
-    Defaults maintain legacy single-document behavior when fields are absent.
+    If `peer_match_keys` is empty, the worker falls back to single-document flow.
     """
     # Default prompt uses legacy single-document flow with standard defaults
     if prompt_id == "default":
         return {
-            "metadata_group_by": [],
-            "document_inputs": {},
-            "include": {"ocr_text": True, "metadata": False, "pdf": True},
+            "peer_match_keys": [],
+            "include": {"ocr_text": True, "metadata_keys": [], "pdf": True},
         }
 
     db_name = analytiq_client.env
@@ -268,22 +270,20 @@ async def get_prompt_group_config(analytiq_client, prompt_id: str) -> Dict[str, 
     if elem is None:
         raise ValueError(f"Prompt {prompt_id} not found")
 
-    metadata_group_by = elem.get("metadata_group_by") or []
-    document_inputs = elem.get("document_inputs") or {}
-    include = elem.get("include") or {"ocr_text": True, "metadata": False, "pdf": True}
+    peer_match_keys = elem.get("peer_match_keys") or []
+    include = elem.get("include") or {"ocr_text": True, "metadata_keys": [], "pdf": True}
 
     # Ensure include has all expected keys with sensible defaults
     if not isinstance(include, dict):
-        include = {"ocr_text": True, "metadata": False, "pdf": True}
+        include = {"ocr_text": True, "metadata_keys": [], "pdf": True}
     else:
         include = {
             "ocr_text": bool(include.get("ocr_text", True)),
-            "metadata": bool(include.get("metadata", False)),
+            "metadata_keys": list(include.get("metadata_keys") or []),
             "pdf": bool(include.get("pdf", True)),
         }
 
     return {
-        "metadata_group_by": metadata_group_by,
-        "document_inputs": document_inputs,
+        "peer_match_keys": peer_match_keys,
         "include": include,
     }

@@ -1,13 +1,6 @@
 from datetime import datetime
-from typing import List, Optional, Dict
+from typing import List, Optional
 from pydantic import BaseModel
-
-
-class DocumentInputSpec(BaseModel):
-    """
-    Document input matching rule for a single alias.
-    """
-    metadata_match: Dict[str, str] = {}
 
 
 class IncludeConfig(BaseModel):
@@ -15,7 +8,9 @@ class IncludeConfig(BaseModel):
     Controls which parts of each document are included in the generated LLM context.
     """
     ocr_text: bool = True
-    metadata: bool = False
+    # New-style metadata inclusion: only these keys are exposed to the model.
+    # Use ["*"] to mean "include all metadata".
+    metadata_keys: List[str] = []
     pdf: bool = True
 
 
@@ -28,8 +23,7 @@ class PromptConfig(BaseModel):
     model: str = "gpt-4o-mini"
     kb_id: Optional[str] = None  # Optional knowledge base ID for RAG
     # Grouped peer prompt fields (see docs/plan-prompt-group-by.md)
-    metadata_group_by: List[str] = []
-    document_inputs: Dict[str, DocumentInputSpec] = {}
+    peer_match_keys: List[str] = []
     include: IncludeConfig = IncludeConfig()
 
 

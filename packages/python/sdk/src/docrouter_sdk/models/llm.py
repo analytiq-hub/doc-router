@@ -39,8 +39,8 @@ class LLMResult(BaseModel):
     created_at: datetime
     updated_at: datetime
     prompt_display_name: Optional[str] = None
-    # Optional grouped-run metadata; present only for grouped runs
-    group_run: Optional[dict] = None
+    # Optional peer-run metadata; present only for grouped runs
+    peer_run: Optional[dict] = None
 
 class UpdateLLMResultRequest(BaseModel):
     updated_llm_result: dict
