@@ -57,6 +57,25 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   loadingPromptsRef.current = loadingPrompts;
   failedPromptsRef.current = failedPrompts;
 
+  const getStatusFromError = (err: unknown): number | undefined => {
+    if (!err || typeof err !== 'object') return undefined;
+    const maybe = err as { status?: unknown; response?: { status?: unknown } };
+    const rawStatus = maybe.status ?? maybe.response?.status;
+    if (typeof rawStatus === 'number') return rawStatus;
+    if (typeof rawStatus === 'string') {
+      const parsed = Number(rawStatus);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    return undefined;
+  };
+
+  const getMessageFromError = (err: unknown): string => {
+    if (err instanceof Error) return err.message;
+    if (!err || typeof err !== 'object') return '';
+    const maybe = err as { message?: unknown };
+    return typeof maybe.message === 'string' ? maybe.message : '';
+  };
+
   useEffect(() => {
     defaultLlmFetchStartedRef.current = false;
   }, [id]);
@@ -129,8 +148,10 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
           } else {
             const errorMessage = defaultResult.error instanceof Error ? defaultResult.error.message : String(defaultResult.error);
             const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404');
-            if (!isNotFound) console.error('Error fetching default results:', defaultResult.error);
-            setFailedPrompts(prev => new Set(prev).add('default'));
+              if (!isNotFound) {
+                console.error('Error fetching default results:', defaultResult.error);
+                setFailedPrompts(prev => new Set(prev).add('default'));
+              }
           }
           setLoadingPrompts(prev => {
             const next = new Set(prev);
@@ -165,8 +186,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
               documentId: id, promptRevId: 'default', fallback: false,
             });
             setLlmResults(prev => ({ ...prev, 'default': defaultResults }));
-          } catch {
-            setFailedPrompts(prev => new Set(prev).add('default'));
+                  } catch (error) {
+                    // If the backend doesn't have a result yet, show "No results available"
+                    // instead of treating it as a permanent failure.
+                    const status = getStatusFromError(error);
+                    if (status !== 404) {
+                      setFailedPrompts(prev => new Set(prev).add('default'));
+                    }
           }
           setLoadingPrompts(prev => { const next = new Set(prev); next.delete('default'); return next; });
         }
@@ -209,11 +235,17 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
           return newSet;
         });
       } catch (error) {
-        console.error('Error fetching LLM results:', error);
-        // Check if document is still processing - if so, don't mark as failed
-        const isProcessing = documentState === 'ocr_processing' || documentState === 'llm_processing';
-        if (!isProcessing) {
-          setFailedPrompts(prev => new Set(prev).add(promptId));
+        const status = getStatusFromError(error);
+        const message = getMessageFromError(error).toLowerCase();
+        const isNotFound = status === 404 || message.includes('not found');
+
+        if (!isNotFound) {
+          console.error('Error fetching LLM results:', error);
+          // Check if document is still processing - if so, don't mark as failed
+          const isProcessing = documentState === 'ocr_processing' || documentState === 'llm_processing';
+          if (!isProcessing) {
+            setFailedPrompts(prev => new Set(prev).add(promptId));
+          }
         }
       } finally {
         setLoadingPrompts(prev => {
