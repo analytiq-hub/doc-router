@@ -15,6 +15,8 @@ import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_TAG_COLOR = "#3B82F6"  # Default blue color for tags
+
 
 def _db(context: dict):
     return ad.common.get_async_db(context["analytiq_client"])
@@ -30,6 +32,9 @@ async def create_tag(context: dict, params: dict) -> dict[str, Any]:
     if not name:
         return {"error": "name is required"}
     color = params.get("color")
+    # Treat missing/None/empty as "use the default" to keep DB consistent.
+    if not color:
+        color = DEFAULT_TAG_COLOR
     description = params.get("description")
     db = _db(context)
     existing = await db.tags.find_one(
@@ -126,7 +131,11 @@ async def update_tag(context: dict, params: dict) -> dict[str, Any]:
     update = {}
     if name is not None:
         update["name"] = name
-    if color is not None:
+    # If the agent explicitly provides a color (even null), apply the same
+    # defaulting rule as creation.
+    if "color" in params:
+        if not color:
+            color = DEFAULT_TAG_COLOR
         update["color"] = color
     if description is not None:
         update["description"] = description
