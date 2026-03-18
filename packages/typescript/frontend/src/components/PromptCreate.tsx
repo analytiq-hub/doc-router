@@ -85,6 +85,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const [metadataGroupByInput, setMetadataGroupByInput] = useState<string>('');
   const [documentInputsJson, setDocumentInputsJson] = useState<string>('{}');
   const [includeMetadata, setIncludeMetadata] = useState<boolean>(false);
+  const [includeOcrText, setIncludeOcrText] = useState<boolean>(true);
+  const [includePdf, setIncludePdf] = useState<boolean>(true);
 
   const handleSchemaSelect = useCallback(async (schemaId: string) => {
     setSelectedSchema(schemaId);
@@ -164,6 +166,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
           setMetadataGroupByInput((prompt.metadata_group_by || []).join(', '));
           setDocumentInputsJson(JSON.stringify(prompt.document_inputs || {}, null, 2));
           setIncludeMetadata(!!prompt.include?.metadata);
+          setIncludeOcrText(prompt.include?.ocr_text ?? true);
+          setIncludePdf(prompt.include?.pdf ?? true);
           // Optionally, load schema details if needed
           if (prompt.schema_id) {
             await handleSchemaSelect(prompt.schema_id);
@@ -242,9 +246,9 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
         metadata_group_by: metadataGroupBy,
         document_inputs: documentInputs,
         include: {
-          ocr_text: true,
+          ocr_text: includeOcrText,
           metadata: includeMetadata,
-          pdf: true,
+          pdf: includePdf,
         },
       };
 
@@ -281,6 +285,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
       setMetadataGroupByInput('');
       setDocumentInputsJson('{}');
       setIncludeMetadata(false);
+      setIncludeOcrText(true);
+      setIncludePdf(true);
 
       router.push(`/orgs/${organizationId}/prompts`);
       
@@ -438,6 +444,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     setMetadataGroupByInput((prompt.metadata_group_by || []).join(', '));
                     setDocumentInputsJson(JSON.stringify(prompt.document_inputs || {}, null, 2));
                     setIncludeMetadata(!!prompt.include?.metadata);
+                    setIncludeOcrText(prompt.include?.ocr_text ?? true);
+                    setIncludePdf(prompt.include?.pdf ?? true);
                     if (prompt.schema_id) {
                       await handleSchemaSelect(prompt.schema_id);
                     }
@@ -531,6 +539,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     setMetadataGroupByInput((prompt.metadata_group_by || []).join(', '));
                     setDocumentInputsJson(JSON.stringify(prompt.document_inputs || {}, null, 2));
                     setIncludeMetadata(!!prompt.include?.metadata);
+                    setIncludeOcrText(prompt.include?.ocr_text ?? true);
+                    setIncludePdf(prompt.include?.pdf ?? true);
                     if (prompt.schema_id) {
                       await handleSchemaSelect(prompt.schema_id);
                     }
@@ -590,6 +600,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                   setMetadataGroupByInput('');
                   setDocumentInputsJson('{}');
                   setIncludeMetadata(false);
+                  setIncludeOcrText(true);
+                  setIncludePdf(true);
                 }}
                 className="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 disabled:opacity-50"
                 disabled={isLoading || isReadOnly}
@@ -751,18 +763,48 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     Example: {'{ "contract": { "metadata_match": { "document_type": "contract" } }, "invoice": { "metadata_match": { "document_type": "invoice" } } }'}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <input
-                    id="include-metadata"
-                    type="checkbox"
-                    checked={includeMetadata}
-                    onChange={(e) => setIncludeMetadata(e.target.checked)}
-                    disabled={isLoading || isReadOnly}
-                    className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                  />
-                  <label htmlFor="include-metadata" className="text-xs text-gray-700">
-                    Include document metadata in grouped prompt context
-                  </label>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="include-ocr-text"
+                      type="checkbox"
+                      checked={includeOcrText}
+                      onChange={(e) => setIncludeOcrText(e.target.checked)}
+                      disabled={isLoading || isReadOnly}
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                    />
+                    <label htmlFor="include-ocr-text" className="text-xs text-gray-700">
+                      Include OCR text in grouped prompt context
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="include-metadata"
+                      type="checkbox"
+                      checked={includeMetadata}
+                      onChange={(e) => setIncludeMetadata(e.target.checked)}
+                      disabled={isLoading || isReadOnly}
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                    />
+                    <label htmlFor="include-metadata" className="text-xs text-gray-700">
+                      Include document metadata in grouped prompt context
+                    </label>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <input
+                      id="include-pdf"
+                      type="checkbox"
+                      checked={includePdf}
+                      onChange={(e) => setIncludePdf(e.target.checked)}
+                      disabled={isLoading || isReadOnly}
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded"
+                    />
+                    <label htmlFor="include-pdf" className="text-xs text-gray-700">
+                      Include PDF in grouped prompt context
+                    </label>
+                  </div>
                 </div>
               </div>
             </div>
