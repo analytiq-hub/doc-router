@@ -10,7 +10,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Link, Menu, MenuItem, Typography } from '@mui/material';
+import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Link, Menu, MenuItem, Typography } from '@mui/material';
 import { styled, alpha } from '@mui/material/styles';
 import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api';
 import type { Organization } from '@docrouter/sdk';
@@ -1222,6 +1222,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
         onClose={handleCloseKebabMenu}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        MenuListProps={{ dense: true }}
       >
         <StyledMenuItem
           onClick={() => {
@@ -1237,12 +1238,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
           onClick={() => {
             if (!kebabPromptId) return;
             handleCloseKebabMenu();
-            handleRunPrompt(kebabPromptId);
+            void handleRunPrompt(kebabPromptId);
           }}
         >
           <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
           Reload
         </StyledMenuItem>
+        <Divider />
         <StyledMenuItem
           onClick={() => {
             if (!kebabPromptId) return;
