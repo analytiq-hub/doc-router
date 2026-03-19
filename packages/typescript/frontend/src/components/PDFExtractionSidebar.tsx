@@ -1256,7 +1256,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
         </StyledMenuItem>
       </Menu>
 
-      {/* Run info modal — Option A: sidebar-native (gray chrome + #2B4479 accents) */}
+      {/* Run info modal — alternating panels (white / gray), no peer accent bar */}
       <Dialog
         open={runInfoOpen}
         onClose={() => setRunInfoOpen(false)}
@@ -1277,9 +1277,17 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
               <span className="text-sm text-gray-600">Loading run info…</span>
             </div>
           ) : runInfoResult ? (
+            (() => {
+              const hasPeerBlock =
+                !!runInfoResult.peer_run &&
+                ((runInfoResult.peer_run.match_values &&
+                  Object.keys(runInfoResult.peer_run.match_values).length > 0) ||
+                  (!!runInfoResult.peer_run.match_document_ids &&
+                    runInfoResult.peer_run.match_document_ids.length > 0));
+              return (
             <div className="flex flex-col gap-4">
-              {/* Summary + metadata — same card language as extraction sidebar */}
-              <div className="rounded-md border border-black/10 bg-gray-50/90 px-3 py-3 space-y-3">
+              {/* Panel 1 — white */}
+              <div className="rounded-md border border-black/10 bg-white px-3 py-3 space-y-3 shadow-sm">
                 <div>
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1">
                     Prompt
@@ -1316,11 +1324,8 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                 </div>
               </div>
 
-              {runInfoResult.peer_run &&
-                (runInfoResult.peer_run.match_values ||
-                  (runInfoResult.peer_run.match_document_ids &&
-                    runInfoResult.peer_run.match_document_ids.length > 0)) && (
-                  <div className="rounded-md border border-black/10 border-l-[3px] border-l-[#2B4479] bg-gray-50 px-3 py-3">
+              {hasPeerBlock && runInfoResult.peer_run && (
+                  <div className="rounded-md border border-black/10 bg-gray-100 px-3 py-3 shadow-sm">
                     <p className="text-[11px] font-semibold uppercase tracking-wide text-[#2B4479] mb-2">
                       Peer match
                     </p>
@@ -1363,12 +1368,19 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                   </div>
                 )}
 
-              <div>
+              {/* Panel 3 — alternates: white if peer block exists, else gray (paired with white metadata) */}
+              <div
+                className={`rounded-md border border-black/10 px-3 py-3 shadow-sm ${
+                  hasPeerBlock ? 'bg-white' : 'bg-gray-100'
+                }`}
+              >
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">
                   Prompt used (reported)
                 </p>
                 <div
-                  className="rounded-md border border-black/10 bg-stone-50 px-3 py-3 text-[13px] leading-relaxed text-gray-800 font-mono whitespace-pre-wrap max-h-80 overflow-auto shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]"
+                  className={`rounded-md border border-black/10 px-2.5 py-2 text-[10px] leading-[1.45] text-gray-800 font-mono whitespace-pre-wrap max-h-80 overflow-auto shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] ${
+                    hasPeerBlock ? 'bg-stone-50' : 'bg-white'
+                  }`}
                 >
                   {(runInfoResult as unknown as { prompt_used?: string }).prompt_used?.trim()
                     ? (runInfoResult as unknown as { prompt_used?: string }).prompt_used as string
@@ -1376,6 +1388,8 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                 </div>
               </div>
             </div>
+              );
+            })()
           ) : (
             <p className="text-sm text-gray-600">No run info available.</p>
           )}
