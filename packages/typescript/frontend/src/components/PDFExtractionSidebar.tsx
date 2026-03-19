@@ -1361,7 +1361,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                       {hasPeerBlock && runInfoResult.peer_run && (
                         <div>
                           <label className="text-sm font-semibold text-gray-700 block mb-1">Peer Match</label>
-                          <div className="bg-gray-50 p-3 rounded border flex flex-col gap-3">
+                          <div className="grid grid-cols-2 gap-3">
                             {runInfoResult.peer_run.match_values &&
                               Object.keys(runInfoResult.peer_run.match_values).length > 0 && (
                                 <div>
@@ -1370,7 +1370,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                                     {Object.entries(runInfoResult.peer_run.match_values).map(([key, value]) => (
                                       <li
                                         key={key}
-                                        className="break-all border-l-2 border-gray-300 pl-3 text-sm text-gray-900"
+                                        className="bg-gray-50 rounded border px-2 py-1.5 text-sm text-gray-900 break-all"
                                       >
                                         <span className="font-medium text-gray-800">{key}</span>
                                         <span className="mx-1.5 text-gray-400">=</span>
@@ -1384,9 +1384,9 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                               runInfoResult.peer_run.match_document_ids.length > 0 && (
                                 <div>
                                   <label className="text-xs font-medium text-gray-500 block mb-1">Matched peer documents</label>
-                                  <ul className="m-0 list-none space-y-1.5 pl-0">
+                                  <ul className="m-0 list-none space-y-1 pl-0">
                                     {runInfoResult.peer_run.match_document_ids.map((docId) => (
-                                      <li key={docId} className="break-all">
+                                      <li key={docId} className="bg-gray-50 rounded border px-2 py-1.5 break-all">
                                         <a
                                           href={`/orgs/${organizationId}/docs/${docId}`}
                                           target="_blank"
