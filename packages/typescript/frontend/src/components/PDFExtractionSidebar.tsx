@@ -10,7 +10,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Menu, MenuItem, Typography } from '@mui/material';
+import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Link, Menu, MenuItem, Typography } from '@mui/material';
 import { styled, alpha } from '@mui/material/styles';
 import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api';
 import type { Organization } from '@docrouter/sdk';
@@ -769,58 +769,8 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
       return <div className="p-4 text-sm text-gray-500">No results available</div>;
     }
 
-    // Optional grouped peer-run metadata for grouped-peer prompts.
-    // Backend returns `peer_run` and omits it for legacy single-document runs.
-    const peerRun: {
-      match_values?: Record<string, unknown>;
-      match_document_ids?: string[];
-    } | undefined = (result as unknown as {
-      peer_run?: {
-        match_values?: Record<string, unknown>;
-        match_document_ids?: string[];
-      };
-    }).peer_run;
-
     return (
       <div className="p-4 space-y-3">
-        {peerRun && (peerRun.match_values || peerRun.match_document_ids) && (
-          <div className="mb-3 rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-gray-900">
-            <div className="mb-1 font-semibold text-blue-900">Peer match</div>
-            {peerRun.match_values && (
-              <div className="mb-1">
-                <div className="font-medium text-blue-900">Match values</div>
-                <ul className="ml-3 list-disc space-y-0.5">
-                  {Object.entries(peerRun.match_values).map(([key, value]) => (
-                    <li key={key}>
-                      <span className="font-medium">{key}</span>
-                      <span className="mx-1 text-gray-500">=</span>
-                      <span className="break-all">{String(value)}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {peerRun.match_document_ids && peerRun.match_document_ids.length > 0 && (
-              <div className="mt-1">
-                <div className="font-medium text-blue-900">Matched peer documents</div>
-                <ul className="ml-3 list-disc space-y-0.5">
-                  {peerRun.match_document_ids.map((docId) => (
-                    <li key={docId}>
-                      <a
-                        href={`/orgs/${organizationId}/docs/${docId}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-blue-700 hover:underline break-all"
-                      >
-                        {docId}
-                      </a>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
         {renderNestedValue(
           promptId, 
           '', 
@@ -1328,6 +1278,65 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                   <strong>Verified:</strong> {String(runInfoResult.is_verified)}
                 </Typography>
               </Box>
+
+              {runInfoResult.peer_run &&
+                (runInfoResult.peer_run.match_values ||
+                  (runInfoResult.peer_run.match_document_ids &&
+                    runInfoResult.peer_run.match_document_ids.length > 0)) && (
+                  <Box
+                    sx={{
+                      borderRadius: 1,
+                      border: '1px solid',
+                      borderColor: 'primary.light',
+                      bgcolor: 'action.hover',
+                      p: 1.5,
+                    }}
+                  >
+                    <Typography variant="subtitle2" color="primary" sx={{ mb: 1 }}>
+                      Peer match
+                    </Typography>
+                    {runInfoResult.peer_run.match_values &&
+                      Object.keys(runInfoResult.peer_run.match_values).length > 0 && (
+                        <Box sx={{ mb: 1 }}>
+                          <Typography variant="body2" fontWeight={600} color="primary" sx={{ mb: 0.5 }}>
+                            Match values
+                          </Typography>
+                          <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                            {Object.entries(runInfoResult.peer_run.match_values).map(([key, value]) => (
+                              <Typography key={key} component="li" variant="body2" sx={{ wordBreak: 'break-all' }}>
+                                <strong>{key}</strong>
+                                <span style={{ margin: '0 4px', color: '#666' }}>=</span>
+                                {String(value)}
+                              </Typography>
+                            ))}
+                          </Box>
+                        </Box>
+                      )}
+                    {runInfoResult.peer_run.match_document_ids &&
+                      runInfoResult.peer_run.match_document_ids.length > 0 && (
+                        <Box>
+                          <Typography variant="body2" fontWeight={600} color="primary" sx={{ mb: 0.5 }}>
+                            Matched peer documents
+                          </Typography>
+                          <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                            {runInfoResult.peer_run.match_document_ids.map((docId) => (
+                              <Typography key={docId} component="li" variant="body2">
+                                <Link
+                                  href={`/orgs/${organizationId}/docs/${docId}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  underline="hover"
+                                  sx={{ wordBreak: 'break-all' }}
+                                >
+                                  {docId}
+                                </Link>
+                              </Typography>
+                            ))}
+                          </Box>
+                        </Box>
+                      )}
+                  </Box>
+                )}
 
               <Box>
                 <Typography variant="subtitle2">Prompt used (reported)</Typography>
