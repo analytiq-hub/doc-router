@@ -111,6 +111,8 @@ class LLMResult(BaseModel):
     created_at: datetime
     updated_at: datetime
     prompt_display_name: Optional[str] = None
+    # Sanitized prompt used for generating this result (OCR/PDF replaced with placeholders).
+    prompt_used: Optional[str] = None
     peer_run: Optional[PeerRunMetadata] = None
 
 class UpdateLLMResultRequest(BaseModel):

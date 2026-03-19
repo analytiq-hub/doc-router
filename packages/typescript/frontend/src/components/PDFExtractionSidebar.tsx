@@ -8,6 +8,8 @@ import {
   XMarkIcon,
   ArrowDownTrayIcon
 } from '@heroicons/react/24/outline';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Menu, MenuItem, Typography } from '@mui/material';
 import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api';
 import type { Organization } from '@docrouter/sdk';
 import type { Prompt } from '@docrouter/sdk';
@@ -48,6 +50,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
 
   const [documentName, setDocumentName] = useState<string | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
+
+  // Per-prompt kebab menu + "Run Info" modal
+  const [kebabAnchorEl, setKebabAnchorEl] = useState<HTMLElement | null>(null);
+  const [kebabPromptId, setKebabPromptId] = useState<string | null>(null);
+  const [runInfoOpen, setRunInfoOpen] = useState(false);
+  const [runInfoLoading, setRunInfoLoading] = useState(false);
+  const [runInfoResult, setRunInfoResult] = useState<GetLLMResultResponse | null>(null);
 
   // Refs mirror state so the fetch effect can read current values without being in the dependency array
   const llmResultsRef = React.useRef(llmResults);
@@ -284,6 +293,36 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
         next.delete(promptId);
         return next;
       });
+    }
+  };
+
+  const handleOpenKebabMenu = (e: React.MouseEvent<HTMLElement>, promptId: string) => {
+    e.stopPropagation();
+    setKebabAnchorEl(e.currentTarget);
+    setKebabPromptId(promptId);
+  };
+
+  const handleCloseKebabMenu = () => {
+    setKebabAnchorEl(null);
+    setKebabPromptId(null);
+  };
+
+  const handleOpenRunInfo = async (promptId: string) => {
+    handleCloseKebabMenu();
+    setRunInfoLoading(true);
+    setRunInfoOpen(true);
+    try {
+      const result = await docRouterOrgApi.getLLMResult({
+        documentId: id,
+        promptRevId: promptId,
+        fallback: true
+      });
+      setRunInfoResult(result);
+    } catch (err) {
+      console.error('Error loading run info:', err);
+      setRunInfoResult(null);
+    } finally {
+      setRunInfoLoading(false);
     }
   };
 
@@ -1132,6 +1171,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                 >
                   <ArrowDownTrayIcon className="w-4 h-4 text-gray-600" />
                 </div>
+                <div
+                  onClick={(e) => handleOpenKebabMenu(e, 'default')}
+                  className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
+                  title="More actions"
+                >
+                  <MoreVertIcon fontSize="small" className="text-gray-600" />
+                </div>
                 <ChevronDownIcon 
                   className={`w-5 h-5 text-gray-600 transition-transform ${
                     expandedPrompt === 'default' ? 'rotate-180' : ''
@@ -1198,6 +1244,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                   >
                     <ArrowDownTrayIcon className="w-4 h-4 text-gray-600" />
                   </div>
+                  <div
+                    onClick={(e) => handleOpenKebabMenu(e, prompt.prompt_revid)}
+                    className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
+                    title="More actions"
+                  >
+                    <MoreVertIcon fontSize="small" className="text-gray-600" />
+                  </div>
                   <ChevronDownIcon 
                     className={`w-5 h-5 text-gray-600 transition-transform ${
                       isExpanded ? 'rotate-180' : ''
@@ -1216,6 +1269,111 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
           );
         }))}
       </div>
+
+      {/* Kebab menu (per prompt) */}
+      <Menu
+        anchorEl={kebabAnchorEl}
+        open={Boolean(kebabAnchorEl)}
+        onClose={handleCloseKebabMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem
+          onClick={() => {
+            if (!kebabPromptId) return;
+            handleCloseKebabMenu();
+            handleDownloadResult(kebabPromptId);
+          }}
+        >
+          Download
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (!kebabPromptId) return;
+            handleCloseKebabMenu();
+            handleRunPrompt(kebabPromptId);
+          }}
+        >
+          Reload
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            if (!kebabPromptId) return;
+            handleOpenRunInfo(kebabPromptId);
+          }}
+        >
+          Run Info
+        </MenuItem>
+      </Menu>
+
+      {/* Run info modal */}
+      <Dialog open={runInfoOpen} onClose={() => setRunInfoOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Run Info</DialogTitle>
+        <DialogContent dividers>
+          {runInfoLoading ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
+              <CircularProgress size={18} />
+              <Typography variant="body2" color="text.secondary">
+                Loading run info...
+              </Typography>
+            </Box>
+          ) : runInfoResult ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box>
+                <Typography variant="subtitle2">Prompt</Typography>
+                <Typography variant="body2" color="text.secondary">
+                  {runInfoResult.prompt_display_name ?? (runInfoResult.prompt_revid === 'default' ? 'Document Summary' : runInfoResult.prompt_revid)} (v{runInfoResult.prompt_version})
+                </Typography>
+              </Box>
+
+              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
+                <Typography variant="body2">
+                  <strong>Created:</strong> {runInfoResult.created_at}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Updated:</strong> {runInfoResult.updated_at}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Edited:</strong> {String(runInfoResult.is_edited)}
+                </Typography>
+                <Typography variant="body2">
+                  <strong>Verified:</strong> {String(runInfoResult.is_verified)}
+                </Typography>
+              </Box>
+
+              <Box>
+                <Typography variant="subtitle2">Prompt used (reported)</Typography>
+                <Box
+                  sx={{
+                    mt: 1,
+                    border: '1px solid rgba(0,0,0,0.12)',
+                    borderRadius: 1,
+                    bgcolor: 'rgba(0,0,0,0.02)',
+                    p: 1.5,
+                    whiteSpace: 'pre-wrap',
+                    fontFamily: 'monospace',
+                    maxHeight: 320,
+                    overflow: 'auto'
+                  }}
+                >
+                  {(runInfoResult as unknown as { prompt_used?: string }).prompt_used?.trim()
+                    ? (runInfoResult as unknown as { prompt_used?: string }).prompt_used as string
+                    : 'No prompt_used reported by the backend for this run.'}
+                </Box>
+              </Box>
+            </Box>
+          ) : (
+            <Typography variant="body2" color="text.secondary">
+              No run info available.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRunInfoOpen(false)} variant="outlined">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };

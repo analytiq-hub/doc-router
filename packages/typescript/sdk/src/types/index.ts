@@ -415,6 +415,8 @@ export interface GetLLMResultResponse {
   updated_at: string;
   /** Display name for the prompt (e.g. "Document Summary" for default prompt). From API. */
   prompt_display_name?: string;
+  /** Sanitized prompt used for generating this result (OCR/PDF replaced with placeholders). */
+  prompt_used?: string;
   /** Present only for grouped-peer runs. */
   peer_run?: {
     match_values?: Record<string, unknown>;

@@ -554,7 +554,7 @@ async def _build_grouped_prompt_context(
     llm_provider: str,
     llm_model: str,
     api_key: str,
-) -> Tuple[list, dict | None]:
+) -> Tuple[list, dict | None, str]:
     """
     Build messages and peer_run metadata for grouped prompts.
 
@@ -725,7 +725,48 @@ async def _build_grouped_prompt_context(
         "match_values": match_values,
         "match_document_ids": match_document_ids,
     }
-    return messages, peer_run
+    # Create a sanitized prompt text blob for metadata/debugging.
+    # Requirements:
+    # - Replace attached PDFs with <{document_id}_uuencoded>
+    # - Replace OCR text with <{document_id}_ocr_text>
+    prompt_used_lines: List[str] = []
+    prompt_used_lines.append(system_prompt)
+    prompt_used_lines.append("")
+    prompt_used_lines.extend(header_lines)
+
+    for idx, d in enumerate(ordered_peer_docs, start=1):
+        doc_id_str = str(d.get("_id"))
+
+        doc_header_parts: List[str] = []
+        doc_header_parts.append(f"[Document #{idx}]")
+        doc_header_parts.append(f"document_id: {doc_id_str}")
+
+        name = d.get("user_file_name") or d.get("name") or ""
+        if name:
+            doc_header_parts.append(f"name: {name}")
+
+        meta = d.get("metadata") or {}
+        if include_all_metadata:
+            filtered_meta = meta
+        else:
+            filtered_meta = {k: meta[k] for k in metadata_keys if k in meta}
+
+        if filtered_meta:
+            doc_header_parts.append("metadata (filtered):")
+            doc_header_parts.append(json.dumps(filtered_meta, indent=2, default=str))
+
+        prompt_used_lines.append("")
+        prompt_used_lines.append("\n".join(doc_header_parts))
+
+        if include_ocr:
+            prompt_used_lines.append(f"ocr_text:\n<{doc_id_str}_ocr_text>")
+
+        if include_pdf:
+            prompt_used_lines.append(f"pdf:\n<{doc_id_str}_uuencoded>")
+
+    prompt_used_text = "\n".join(prompt_used_lines).rstrip()
+
+    return messages, peer_run, prompt_used_text
 
 
 async def run_llm(
@@ -827,8 +868,9 @@ async def run_llm(
     # First, attempt grouped prompt flow; if not configured, fall back to legacy single-document behavior.
     peer_run: dict | None = None
     messages: list
+    prompt_used_text: str | None = None
 
-    grouped_messages, peer_run = await _build_grouped_prompt_context(
+    grouped_messages, peer_run, prompt_used_text = await _build_grouped_prompt_context(
         analytiq_client,
         doc,
         prompt_revid,
@@ -867,6 +909,20 @@ async def run_llm(
             {extracted_text}
             
             Please provide your analysis based on both the visual content and the text."""
+
+            # Sanitized prompt blob for metadata (no raw OCR text, no raw PDF/base64).
+            prompt_used_user = f"""{prompt1}
+
+Please analyze this document. You have access to both the visual PDF and the extracted text.
+
+Extracted text from the document:
+<{document_id}_ocr_text>
+
+Please provide your analysis based on both the visual content and the text.
+
+Attached PDF:
+<{document_id}_uuencoded>"""
+            prompt_used_text = f"{system_prompt}\n\n{prompt_used_user}"
             
             # Different approaches for different providers
             if llm_provider == "openai":
@@ -931,6 +987,14 @@ async def run_llm(
             Now extract from this text: 
             
             {extracted_text}"""
+
+            # Sanitized prompt blob for metadata (no raw OCR text).
+            prompt_used_user = f"""{prompt1}
+
+Now extract from this text:
+
+<{document_id}_ocr_text>"""
+            prompt_used_text = f"{system_prompt}\n\n{prompt_used_user}"
             
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -1234,7 +1298,14 @@ async def run_llm(
             #logger.info(f"Reordered response: {resp_dict}")
 
     # 10. Save the new result
-    await save_llm_result(analytiq_client, document_id, prompt_revid, resp_dict, peer_run=peer_run)
+    await save_llm_result(
+        analytiq_client,
+        document_id,
+        prompt_revid,
+        resp_dict,
+        peer_run=peer_run,
+        prompt_used=prompt_used_text,
+    )
 
     # Optional per-org webhook: per-prompt completion (non-default prompts only)
     if prompt_revid != "default":
@@ -1329,6 +1400,7 @@ async def save_llm_result(
     prompt_revid: str,
     llm_result: dict,
     peer_run: dict | None = None,
+    prompt_used: str | None = None,
 ) -> str:
     """
     Save the LLM result to MongoDB.
@@ -1364,6 +1436,9 @@ async def save_llm_result(
     # Optional peer-run metadata (match values + matched document ids)
     if peer_run is not None:
         element["peer_run"] = peer_run
+
+    if prompt_used is not None:
+        element["prompt_used"] = prompt_used
 
     logger.info(f"Saving LLM result: {element}")
 
