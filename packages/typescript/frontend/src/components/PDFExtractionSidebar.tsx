@@ -1236,6 +1236,16 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
         <StyledMenuItem
           onClick={() => {
             if (!kebabPromptId) return;
+            handleCloseKebabMenu();
+            handleRunPrompt(kebabPromptId);
+          }}
+        >
+          <RefreshIcon fontSize="small" sx={{ mr: 1 }} />
+          Reload
+        </StyledMenuItem>
+        <StyledMenuItem
+          onClick={() => {
+            if (!kebabPromptId) return;
             handleOpenRunInfo(kebabPromptId);
           }}
         >
