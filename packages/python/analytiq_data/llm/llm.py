@@ -551,6 +551,9 @@ async def _build_grouped_prompt_context(
     prompt_revid: str,
     org_id: str,
     system_prompt: str,
+    llm_provider: str,
+    llm_model: str,
+    api_key: str,
 ) -> Tuple[list, dict | None]:
     """
     Build messages and peer_run metadata for grouped prompts.
@@ -612,34 +615,50 @@ async def _build_grouped_prompt_context(
 
     include_ocr = bool(include.get("ocr_text", True))
     include_pdf = bool(include.get("pdf", True))
+    model_supports_pdf = supports_pdf_input(llm_model, None)
+    # Providers like XAI don't support file blocks, so we fall back to embedding base64 in prompt text.
+    can_attach_pdf_as_file_block = bool(include_pdf) and bool(model_supports_pdf) and llm_provider != "xai"
+    embed_pdf_as_text = bool(include_pdf) and not can_attach_pdf_as_file_block
     metadata_keys: List[str] = list(include.get("metadata_keys") or [])
     include_all_metadata = metadata_keys == ["*"]
 
     ocr_cache: Dict[str, str] = {}
-    pdf_cache: Dict[str, str] = {}
+    # Cache base64-encoded PDFs (used for file_data and/or text fallback).
+    pdf_base64_cache: Dict[str, str] = {}
+    # Cache uploaded OpenAI file_ids for this run.
+    openai_file_id_cache: Dict[str, str] = {}
 
-    lines: List[str] = []
-    lines.append("You are analyzing a group of related documents.")
-    lines.append("")
-    lines.append("Instruction:")
-    lines.append(instruction)
-    lines.append("")
-    lines.append("Peer match values:")
+    # Build the user content as structured blocks so we can interleave text + file blocks.
+    user_blocks: List[Dict[str, Any]] = []
+    header_lines: List[str] = []
+    header_lines.append("You are analyzing a group of related documents.")
+    header_lines.append("")
+    header_lines.append("Instruction:")
+    header_lines.append(instruction)
+    header_lines.append("")
+    header_lines.append("Peer match values:")
     for k, v in match_values.items():
-        lines.append(f"- {k}: {v}")
-    lines.append("")
-    lines.append("Documents:")
-    lines.append("")
+        header_lines.append(f"- {k}: {v}")
+    header_lines.append("")
+    header_lines.append("Documents:")
+    header_lines.append("")
+    user_blocks.append({"type": "text", "text": "\n".join(header_lines)})
 
-    for idx, d in enumerate(peer_docs, start=1):
+    # Ensure the source/current document is emitted first in the attached list order.
+    # (peer_docs is sorted deterministically, but the source doc might not be first.)
+    ordered_peer_docs = [d for d in peer_docs if str(d.get("_id")) == source_doc_id] + [
+        d for d in peer_docs if str(d.get("_id")) != source_doc_id
+    ]
+
+    for idx, d in enumerate(ordered_peer_docs, start=1):
         doc_id_str = str(d.get("_id"))
-        parts: List[str] = []
-        parts.append(f"[Document #{idx}]")
-        parts.append(f"document_id: {doc_id_str}")
+        doc_header_parts: List[str] = []
+        doc_header_parts.append(f"[Document #{idx}]")
+        doc_header_parts.append(f"document_id: {doc_id_str}")
 
         name = d.get("user_file_name") or d.get("name") or ""
         if name:
-            parts.append(f"name: {name}")
+            doc_header_parts.append(f"name: {name}")
 
         meta = d.get("metadata") or {}
         if include_all_metadata:
@@ -647,29 +666,14 @@ async def _build_grouped_prompt_context(
         else:
             filtered_meta = {k: meta[k] for k in metadata_keys if k in meta}
 
-        # Multi-document (grouped-peer) flow: embed PDF *contents* (base64) when enabled.
-        # We intentionally still build the prompt as text-only; we do not attach binary files.
-        if include_pdf:
-            if doc_id_str not in pdf_cache:
-                pdf_file_name = d.get("pdf_file_name")
-                if not pdf_file_name:
-                    raise Exception(f"Grouped LLM run failed: missing pdf_file_name for document {doc_id_str}")
-
-                pdf_file = await ad.common.get_file_async(analytiq_client, pdf_file_name)
-                blob = pdf_file.get("blob") if pdf_file else None
-                if not blob:
-                    raise Exception(f"Grouped LLM run failed: missing pdf blob for document {doc_id_str}")
-
-                # Keep it self-contained in the prompt context as text.
-                pdf_cache[doc_id_str] = base64.b64encode(blob).decode("utf-8")
-
-            parts.append("pdf:")
-            parts.append(pdf_cache[doc_id_str])
-
         if filtered_meta:
-            parts.append("metadata (filtered):")
-            parts.append(json.dumps(filtered_meta, indent=2, default=str))
+            doc_header_parts.append("metadata (filtered):")
+            doc_header_parts.append(json.dumps(filtered_meta, indent=2, default=str))
 
+        # Add the header for this document.
+        user_blocks.append({"type": "text", "text": "\n".join(doc_header_parts)})
+
+        # OCR text (provider-agnostic): always embed as text blocks.
         if include_ocr:
             if doc_id_str not in ocr_cache:
                 text = await get_extracted_text(analytiq_client, doc_id_str)
@@ -678,17 +682,43 @@ async def _build_grouped_prompt_context(
                         f"Grouped LLM run failed: missing OCR/text for document {doc_id_str}"
                     )
                 ocr_cache[doc_id_str] = text
-            parts.append("ocr_text:")
-            parts.append(ocr_cache[doc_id_str])
+            user_blocks.append({"type": "text", "text": f"ocr_text:\n{ocr_cache[doc_id_str]}"})
 
-        lines.append("\n".join(parts))
-        lines.append("")
+        if include_pdf:
+            pdf_file_name = d.get("pdf_file_name")
+            if not pdf_file_name:
+                raise Exception(f"Grouped LLM run failed: missing pdf_file_name for document {doc_id_str}")
 
-    user_prompt = "\n".join(lines).rstrip()
+            if doc_id_str not in pdf_base64_cache:
+                pdf_file = await ad.common.get_file_async(analytiq_client, pdf_file_name)
+                blob = pdf_file.get("blob") if pdf_file else None
+                if not blob:
+                    raise Exception(f"Grouped LLM run failed: missing pdf blob for document {doc_id_str}")
+                pdf_base64_cache[doc_id_str] = base64.b64encode(blob).decode("utf-8")
+
+            if can_attach_pdf_as_file_block:
+                # Use structured file blocks where supported by the provider.
+                if llm_provider == "openai":
+                    if doc_id_str not in openai_file_id_cache:
+                        blob_bytes = base64.b64decode(pdf_base64_cache[doc_id_str].encode("utf-8"))
+                        file_response = await _litellm_acreate_file_with_retry(
+                            file=(pdf_file_name, blob_bytes),
+                            purpose="assistants",
+                            custom_llm_provider="openai",
+                            api_key=api_key,
+                        )
+                        openai_file_id_cache[doc_id_str] = file_response.id
+                    user_blocks.append({"type": "file", "file": {"file_id": openai_file_id_cache[doc_id_str]}})
+                else:
+                    base64_url = f"data:application/pdf;base64,{pdf_base64_cache[doc_id_str]}"
+                    user_blocks.append({"type": "file", "file": {"file_data": base64_url}})
+            elif embed_pdf_as_text:
+                # Fallback: embed base64 pdf bytes into the prompt text.
+                user_blocks.append({"type": "text", "text": f"pdf:\n{pdf_base64_cache[doc_id_str]}"})
 
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": user_prompt},
+        {"role": "user", "content": user_blocks},
     ]
 
     peer_run = {
@@ -804,13 +834,15 @@ async def run_llm(
         prompt_revid,
         org_id,
         system_prompt,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        api_key=api_key,
     )
 
     if grouped_messages:
         messages = grouped_messages
         logger.info(f"{document_id}/{prompt_revid}: Using grouped prompt flow with peer_run={peer_run}")
-        # PDF attachment in grouped flow is not yet supported (v1 is OCR-text only).
-        # include.pdf is acknowledged in the prompt context block header but files are not attached.
+        # PDF/OCR embedding is provider-dependent inside _build_grouped_prompt_context().
         extracted_text = None
         file_attachment_blob = None
         file_attachment_name = None
