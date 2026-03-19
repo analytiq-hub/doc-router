@@ -1268,9 +1268,18 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
             className="mx-4 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl"
             onClick={e => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-center gap-2">
-              <DescriptionOutlinedIcon className="text-blue-600" fontSize="small" />
-              <h3 className="text-lg font-medium">Run Info</h3>
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-2">
+                <DescriptionOutlinedIcon className="shrink-0 text-blue-600" fontSize="small" />
+                <h3 className="text-lg font-medium">Run Info</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRunInfoOpen(false)}
+                className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+              >
+                Close
+              </button>
             </div>
 
             {runInfoLoading ? (
@@ -1401,16 +1410,6 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
             ) : (
               <p className="py-4 text-sm text-gray-500">No run info available.</p>
             )}
-
-            <div className="mt-6 flex justify-end border-t pt-4">
-              <button
-                type="button"
-                onClick={() => setRunInfoOpen(false)}
-                className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
-              >
-                Close
-              </button>
-            </div>
           </div>
         </div>
       )}
