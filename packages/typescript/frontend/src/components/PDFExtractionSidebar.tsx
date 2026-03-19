@@ -1,15 +1,17 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { 
   ChevronDownIcon, 
-  ArrowPathIcon,
   MagnifyingGlassIcon,
   PencilIcon,
   CheckIcon,
-  XMarkIcon,
-  ArrowDownTrayIcon
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import DownloadIcon from '@mui/icons-material/Download';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Menu, MenuItem, Typography } from '@mui/material';
+import { styled, alpha } from '@mui/material/styles';
 import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api';
 import type { Organization } from '@docrouter/sdk';
 import type { Prompt } from '@docrouter/sdk';
@@ -32,6 +34,17 @@ interface EditingState {
 
 // Update the type definition to handle nested structures
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
+const StyledMenuItem = styled(MenuItem)(({ theme }) => ({
+  fontSize: '0.875rem',
+  padding: '4px 16px',
+  '& .MuiListItemIcon-root': {
+    minWidth: '32px',
+  },
+  '& .MuiSvgIcon-root': {
+    color: alpha(theme.palette.text.primary, 0.6),
+  },
+}));
 
 const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
@@ -1154,22 +1167,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                     handleRunPrompt('default');
                   }}
                   className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
+                  title="Reload extraction"
                 >
                   {runningPrompts.has('default') ? (
                     <div className="w-4 h-4 border-2 border-[#2B4479]/60 border-t-transparent rounded-full animate-spin" />
                   ) : (
-                    <ArrowPathIcon className="w-4 h-4 text-gray-600" />
+                    <RefreshIcon fontSize="small" className="text-gray-600" />
                   )}
-                </div>
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleDownloadResult('default');
-                  }}
-                  className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
-                  title="Download extraction result"
-                >
-                  <ArrowDownTrayIcon className="w-4 h-4 text-gray-600" />
                 </div>
                 <div
                   onClick={(e) => handleOpenKebabMenu(e, 'default')}
@@ -1227,22 +1231,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                       handleRunPrompt(prompt.prompt_revid);
                     }}
                     className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
+                    title="Reload extraction"
                   >
                     {runningPrompts.has(prompt.prompt_revid) ? (
                       <div className="w-4 h-4 border-2 border-[#2B4479]/60 border-t-transparent rounded-full animate-spin" />
                     ) : (
-                      <ArrowPathIcon className="w-4 h-4 text-gray-600" />
+                      <RefreshIcon fontSize="small" className="text-gray-600" />
                     )}
-                  </div>
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleDownloadResult(prompt.prompt_revid);
-                    }}
-                    className="p-1 rounded-full hover:bg-black/5 transition-colors cursor-pointer"
-                    title="Download extraction result"
-                  >
-                    <ArrowDownTrayIcon className="w-4 h-4 text-gray-600" />
                   </div>
                   <div
                     onClick={(e) => handleOpenKebabMenu(e, prompt.prompt_revid)}
@@ -1278,32 +1273,25 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         transformOrigin={{ vertical: 'top', horizontal: 'right' }}
       >
-        <MenuItem
+        <StyledMenuItem
           onClick={() => {
             if (!kebabPromptId) return;
             handleCloseKebabMenu();
             handleDownloadResult(kebabPromptId);
           }}
         >
+          <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
           Download
-        </MenuItem>
-        <MenuItem
-          onClick={() => {
-            if (!kebabPromptId) return;
-            handleCloseKebabMenu();
-            handleRunPrompt(kebabPromptId);
-          }}
-        >
-          Reload
-        </MenuItem>
-        <MenuItem
+        </StyledMenuItem>
+        <StyledMenuItem
           onClick={() => {
             if (!kebabPromptId) return;
             handleOpenRunInfo(kebabPromptId);
           }}
         >
+          <DescriptionOutlinedIcon fontSize="small" sx={{ mr: 1 }} />
           Run Info
-        </MenuItem>
+        </StyledMenuItem>
       </Menu>
 
       {/* Run info modal */}
