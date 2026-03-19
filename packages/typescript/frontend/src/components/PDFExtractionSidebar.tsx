@@ -10,7 +10,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
-import { Box, Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Link, Menu, MenuItem, Typography } from '@mui/material';
+import { Button, CircularProgress, Dialog, DialogActions, DialogContent, DialogTitle, Divider, Link, Menu, MenuItem } from '@mui/material';
 import { styled, alpha } from '@mui/material/styles';
 import { DocRouterAccountApi, DocRouterOrgApi } from '@/utils/api';
 import type { Organization } from '@docrouter/sdk';
@@ -1256,129 +1256,146 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
         </StyledMenuItem>
       </Menu>
 
-      {/* Run info modal */}
-      <Dialog open={runInfoOpen} onClose={() => setRunInfoOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Run Info</DialogTitle>
-        <DialogContent dividers>
+      {/* Run info modal — Option A: sidebar-native (gray chrome + #2B4479 accents) */}
+      <Dialog
+        open={runInfoOpen}
+        onClose={() => setRunInfoOpen(false)}
+        maxWidth="md"
+        fullWidth
+        PaperProps={{
+          className:
+            'rounded-lg border border-black/10 shadow-xl overflow-hidden max-h-[min(90vh,720px)] flex flex-col',
+        }}
+      >
+        <DialogTitle className="!m-0 !text-sm !font-bold !tracking-tight !text-gray-900 !bg-gray-100 !border-b !border-black/10 !px-4 !py-3">
+          Run Info
+        </DialogTitle>
+        <DialogContent className="!px-4 !py-4 !flex-1 !min-h-0 overflow-y-auto bg-white" dividers={false}>
           {runInfoLoading ? (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, py: 2 }}>
-              <CircularProgress size={18} />
-              <Typography variant="body2" color="text.secondary">
-                Loading run info...
-              </Typography>
-            </Box>
+            <div className="flex items-center gap-3 py-2">
+              <CircularProgress size={18} sx={{ color: '#2B4479' }} />
+              <span className="text-sm text-gray-600">Loading run info…</span>
+            </div>
           ) : runInfoResult ? (
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <Box>
-                <Typography variant="subtitle2">Prompt</Typography>
-                <Typography variant="body2" color="text.secondary">
-                  {runInfoResult.prompt_display_name ?? (runInfoResult.prompt_revid === 'default' ? 'Document Summary' : runInfoResult.prompt_revid)} (v{runInfoResult.prompt_version})
-                </Typography>
-              </Box>
-
-              <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 1 }}>
-                <Typography variant="body2">
-                  <strong>Created:</strong> {runInfoResult.created_at}
-                </Typography>
-                <Typography variant="body2">
-                  <strong>Updated:</strong> {runInfoResult.updated_at}
-                </Typography>
-                <Typography variant="body2">
-                  <strong>Edited:</strong> {String(runInfoResult.is_edited)}
-                </Typography>
-                <Typography variant="body2">
-                  <strong>Verified:</strong> {String(runInfoResult.is_verified)}
-                </Typography>
-              </Box>
+            <div className="flex flex-col gap-4">
+              {/* Summary + metadata — same card language as extraction sidebar */}
+              <div className="rounded-md border border-black/10 bg-gray-50/90 px-3 py-3 space-y-3">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-1">
+                    Prompt
+                  </p>
+                  <p className="text-sm text-gray-900 leading-snug">
+                    {runInfoResult.prompt_display_name ??
+                      (runInfoResult.prompt_revid === 'default'
+                        ? 'Document Summary'
+                        : runInfoResult.prompt_revid)}{' '}
+                    <span className="text-gray-500 font-normal">(v{runInfoResult.prompt_version})</span>
+                  </p>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2 text-sm text-gray-800">
+                  <div>
+                    <span className="text-gray-500 font-medium">Created</span>
+                    <p className="text-gray-900 break-all tabular-nums text-[13px] leading-snug mt-0.5">
+                      {runInfoResult.created_at}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 font-medium">Updated</span>
+                    <p className="text-gray-900 break-all tabular-nums text-[13px] leading-snug mt-0.5">
+                      {runInfoResult.updated_at}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 font-medium">Edited</span>
+                    <p className="text-gray-900 mt-0.5">{String(runInfoResult.is_edited)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 font-medium">Verified</span>
+                    <p className="text-gray-900 mt-0.5">{String(runInfoResult.is_verified)}</p>
+                  </div>
+                </div>
+              </div>
 
               {runInfoResult.peer_run &&
                 (runInfoResult.peer_run.match_values ||
                   (runInfoResult.peer_run.match_document_ids &&
                     runInfoResult.peer_run.match_document_ids.length > 0)) && (
-                  <Box
-                    sx={{
-                      borderRadius: 1,
-                      border: '1px solid',
-                      borderColor: 'primary.light',
-                      bgcolor: 'action.hover',
-                      p: 1.5,
-                    }}
-                  >
-                    <Typography variant="subtitle2" color="primary" sx={{ mb: 1 }}>
+                  <div className="rounded-md border border-black/10 border-l-[3px] border-l-[#2B4479] bg-gray-50 px-3 py-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-[#2B4479] mb-2">
                       Peer match
-                    </Typography>
+                    </p>
                     {runInfoResult.peer_run.match_values &&
                       Object.keys(runInfoResult.peer_run.match_values).length > 0 && (
-                        <Box sx={{ mb: 1 }}>
-                          <Typography variant="body2" fontWeight={600} color="primary" sx={{ mb: 0.5 }}>
-                            Match values
-                          </Typography>
-                          <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                        <div className="mb-3 last:mb-0">
+                          <p className="text-xs font-semibold text-gray-800 mb-1">Match values</p>
+                          <ul className="m-0 pl-4 list-disc text-sm text-gray-800 space-y-1">
                             {Object.entries(runInfoResult.peer_run.match_values).map(([key, value]) => (
-                              <Typography key={key} component="li" variant="body2" sx={{ wordBreak: 'break-all' }}>
-                                <strong>{key}</strong>
-                                <span style={{ margin: '0 4px', color: '#666' }}>=</span>
+                              <li key={key} className="break-all pl-0.5">
+                                <span className="font-medium text-gray-900">{key}</span>
+                                <span className="text-gray-400 mx-1">=</span>
                                 {String(value)}
-                              </Typography>
+                              </li>
                             ))}
-                          </Box>
-                        </Box>
+                          </ul>
+                        </div>
                       )}
                     {runInfoResult.peer_run.match_document_ids &&
                       runInfoResult.peer_run.match_document_ids.length > 0 && (
-                        <Box>
-                          <Typography variant="body2" fontWeight={600} color="primary" sx={{ mb: 0.5 }}>
-                            Matched peer documents
-                          </Typography>
-                          <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                        <div>
+                          <p className="text-xs font-semibold text-gray-800 mb-1">Matched peer documents</p>
+                          <ul className="m-0 pl-4 list-disc text-sm space-y-1">
                             {runInfoResult.peer_run.match_document_ids.map((docId) => (
-                              <Typography key={docId} component="li" variant="body2">
+                              <li key={docId} className="break-all pl-0.5">
                                 <Link
                                   href={`/orgs/${organizationId}/docs/${docId}`}
                                   target="_blank"
                                   rel="noreferrer"
                                   underline="hover"
-                                  sx={{ wordBreak: 'break-all' }}
+                                  className="text-[#2B4479] hover:text-[#1f345c]"
                                 >
                                   {docId}
                                 </Link>
-                              </Typography>
+                              </li>
                             ))}
-                          </Box>
-                        </Box>
+                          </ul>
+                        </div>
                       )}
-                  </Box>
+                  </div>
                 )}
 
-              <Box>
-                <Typography variant="subtitle2">Prompt used (reported)</Typography>
-                <Box
-                  sx={{
-                    mt: 1,
-                    border: '1px solid rgba(0,0,0,0.12)',
-                    borderRadius: 1,
-                    bgcolor: 'rgba(0,0,0,0.02)',
-                    p: 1.5,
-                    whiteSpace: 'pre-wrap',
-                    fontFamily: 'monospace',
-                    maxHeight: 320,
-                    overflow: 'auto'
-                  }}
+              <div>
+                <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 mb-2">
+                  Prompt used (reported)
+                </p>
+                <div
+                  className="rounded-md border border-black/10 bg-stone-50 px-3 py-3 text-[13px] leading-relaxed text-gray-800 font-mono whitespace-pre-wrap max-h-80 overflow-auto shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]"
                 >
                   {(runInfoResult as unknown as { prompt_used?: string }).prompt_used?.trim()
                     ? (runInfoResult as unknown as { prompt_used?: string }).prompt_used as string
                     : 'No prompt_used reported by the backend for this run.'}
-                </Box>
-              </Box>
-            </Box>
+                </div>
+              </div>
+            </div>
           ) : (
-            <Typography variant="body2" color="text.secondary">
-              No run info available.
-            </Typography>
+            <p className="text-sm text-gray-600">No run info available.</p>
           )}
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setRunInfoOpen(false)} variant="outlined">
+        <DialogActions className="!px-4 !py-3 !m-0 border-t border-black/10 bg-gray-100/80">
+          <Button
+            onClick={() => setRunInfoOpen(false)}
+            variant="outlined"
+            size="small"
+            className="!normal-case !text-sm !font-medium !rounded-md"
+            sx={{
+              borderColor: '#2B4479',
+              color: '#2B4479',
+              '&:hover': {
+                borderColor: '#1f345c',
+                color: '#1f345c',
+                backgroundColor: 'rgba(43, 68, 121, 0.06)',
+              },
+            }}
+          >
             Close
           </Button>
         </DialogActions>
