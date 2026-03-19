@@ -231,25 +231,6 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     }
   }, [id, organizationId, documentName, loadOCRBlocks]);
 
-  useEffect(() => {
-    if (!runInfoOpen) return;
-
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setRunInfoOpen(false);
-      }
-    };
-
-    window.addEventListener('keydown', handleEscape);
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener('keydown', handleEscape);
-    };
-  }, [runInfoOpen]);
-
   const handlePromptChange = async (promptId: string) => {
     if (expandedPrompt === promptId) {
       setExpandedPrompt('');
@@ -1277,152 +1258,158 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
 
       {runInfoOpen && (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black bg-opacity-50 px-4 py-6"
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black bg-opacity-50"
           onClick={() => setRunInfoOpen(false)}
           role="dialog"
           aria-modal="true"
           aria-label="Run info modal"
         >
           <div
-            className="w-full max-w-2xl max-h-[88vh] overflow-hidden rounded-lg bg-white shadow-xl"
-            onClick={(e) => e.stopPropagation()}
+            className="mx-4 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl"
+            onClick={e => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between gap-4 px-6 py-4 border-b border-gray-200">
-              <div className="flex items-center gap-2">
-                <DescriptionOutlinedIcon className="text-blue-600" fontSize="small" />
-                <h3 className="text-lg font-medium text-gray-900">Run Info</h3>
+            <div className="mb-4 flex items-center gap-2">
+              <DescriptionOutlinedIcon className="text-blue-600" fontSize="small" />
+              <h3 className="text-lg font-medium">Run Info</h3>
+            </div>
+
+            {runInfoLoading ? (
+              <div className="flex items-center gap-3 py-6">
+                <div
+                  className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"
+                  aria-hidden
+                />
+                <span className="text-sm italic text-gray-500">Loading run info...</span>
               </div>
+            ) : runInfoResult ? (
+              (() => {
+                const hasPeerBlock =
+                  !!runInfoResult.peer_run &&
+                  ((runInfoResult.peer_run.match_values &&
+                    Object.keys(runInfoResult.peer_run.match_values).length > 0) ||
+                    (!!runInfoResult.peer_run.match_document_ids &&
+                      runInfoResult.peer_run.match_document_ids.length > 0));
+                const promptUsedText = runInfoResult.prompt_used?.trim();
+                const promptLabel =
+                  runInfoResult.prompt_display_name ??
+                  (runInfoResult.prompt_revid === 'default'
+                    ? 'Document Summary'
+                    : runInfoResult.prompt_revid);
+                return (
+                  <div className="space-y-4">
+                    <div>
+                      <label className="mb-1 block text-sm font-semibold text-gray-700">Prompt</label>
+                      <div className="break-all rounded border bg-gray-50 p-2 font-mono text-sm text-gray-900">
+                        {promptLabel} <span className="text-gray-600">(v{runInfoResult.prompt_version})</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="mb-2 block text-sm font-semibold text-gray-700">Run metadata</label>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold text-gray-700">Created</label>
+                          <div className="break-all rounded border bg-gray-50 p-2 font-mono text-xs text-gray-900">
+                            {runInfoResult.created_at}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold text-gray-700">Updated</label>
+                          <div className="break-all rounded border bg-gray-50 p-2 font-mono text-xs text-gray-900">
+                            {runInfoResult.updated_at}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold text-gray-700">Edited</label>
+                          <div className="rounded border bg-gray-50 p-2 text-gray-900">
+                            {String(runInfoResult.is_edited)}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="mb-1 block text-xs font-semibold text-gray-700">Verified</label>
+                          <div className="rounded border bg-gray-50 p-2 text-gray-900">
+                            {String(runInfoResult.is_verified)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {hasPeerBlock && runInfoResult.peer_run && (
+                      <div>
+                        <label className="mb-2 block text-sm font-semibold text-gray-700">Peer match</label>
+                        <div className="grid grid-cols-2 gap-4">
+                          {runInfoResult.peer_run.match_values &&
+                            Object.keys(runInfoResult.peer_run.match_values).length > 0 && (
+                              <div>
+                                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                                  Match values
+                                </label>
+                                <div className="rounded border bg-gray-50 p-2 text-sm text-gray-900">
+                                  <ul className="list-disc space-y-1 pl-4">
+                                    {Object.entries(runInfoResult.peer_run.match_values).map(([key, value]) => (
+                                      <li key={key} className="break-all">
+                                        <span className="font-semibold">{key}</span>
+                                        <span className="mx-1 text-gray-400">=</span>
+                                        <span className="font-mono text-xs">{String(value)}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            )}
+                          {runInfoResult.peer_run.match_document_ids &&
+                            runInfoResult.peer_run.match_document_ids.length > 0 && (
+                              <div>
+                                <label className="mb-1 block text-xs font-semibold text-gray-700">
+                                  Matched peer documents
+                                </label>
+                                <div className="rounded border bg-gray-50 p-2 text-sm">
+                                  <ul className="list-disc space-y-1 pl-4">
+                                    {runInfoResult.peer_run.match_document_ids.map(docId => (
+                                      <li key={docId} className="break-all">
+                                        <a
+                                          href={`/orgs/${organizationId}/docs/${docId}`}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="font-mono text-sm text-blue-600 hover:underline"
+                                        >
+                                          {docId}
+                                        </a>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              </div>
+                            )}
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="mb-1 block text-sm font-semibold text-gray-700">
+                        Prompt used (reported)
+                      </label>
+                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border bg-gray-50 p-2 font-mono text-xs leading-relaxed text-gray-800">
+                        {promptUsedText
+                          ? promptUsedText
+                          : 'No prompt_used reported by the backend for this run.'}
+                      </pre>
+                    </div>
+                  </div>
+                );
+              })()
+            ) : (
+              <p className="py-4 text-sm text-gray-500">No run info available.</p>
+            )}
+
+            <div className="mt-6 flex justify-end border-t pt-4">
               <button
                 type="button"
                 onClick={() => setRunInfoOpen(false)}
-                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm font-medium"
+                className="rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700"
               >
                 Close
               </button>
-            </div>
-
-            <div className="max-h-[calc(88vh-73px)] overflow-y-auto px-6 py-4">
-              {runInfoLoading ? (
-                <div className="flex items-center gap-3 py-4">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
-                  <span className="text-sm text-gray-600">Loading run info...</span>
-                </div>
-              ) : runInfoResult ? (
-                (() => {
-                  const hasPeerBlock =
-                    !!runInfoResult.peer_run &&
-                    ((runInfoResult.peer_run.match_values &&
-                      Object.keys(runInfoResult.peer_run.match_values).length > 0) ||
-                      (!!runInfoResult.peer_run.match_document_ids &&
-                        runInfoResult.peer_run.match_document_ids.length > 0));
-                  const promptUsedText = runInfoResult.prompt_used?.trim();
-                  return (
-                    <div className="flex flex-col gap-5">
-                      {/* Prompt */}
-                      <div>
-                        <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Prompt</div>
-                        <div className="rounded border border-gray-200 overflow-hidden">
-                          <div className="flex items-baseline gap-2 px-3 py-2 bg-gray-50">
-                            <span className="font-bold text-gray-700 text-sm shrink-0">Prompt:</span>
-                            <span className="font-mono text-sm text-gray-900 break-all">
-                              {runInfoResult.prompt_display_name ??
-                                (runInfoResult.prompt_revid === 'default'
-                                  ? 'Document Summary'
-                                  : runInfoResult.prompt_revid)}{' '}
-                              <span className="text-gray-500">(v{runInfoResult.prompt_version})</span>
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Run Metadata */}
-                      <div>
-                        <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Run Metadata</div>
-                        <div className="rounded border border-gray-200 overflow-hidden divide-y divide-gray-200">
-                          <div className="grid grid-cols-2 divide-x divide-gray-200 bg-gray-50">
-                            <div className="flex items-baseline gap-2 px-3 py-2">
-                              <span className="font-bold text-gray-700 text-sm shrink-0">Created:</span>
-                              <span className="font-mono text-xs text-gray-900 break-all">{runInfoResult.created_at}</span>
-                            </div>
-                            <div className="flex items-baseline gap-2 px-3 py-2">
-                              <span className="font-bold text-gray-700 text-sm shrink-0">Updated:</span>
-                              <span className="font-mono text-xs text-gray-900 break-all">{runInfoResult.updated_at}</span>
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 divide-x divide-gray-200 bg-white">
-                            <div className="flex items-baseline gap-2 px-3 py-2">
-                              <span className="font-bold text-gray-700 text-sm shrink-0">Edited:</span>
-                              <span className="text-sm text-gray-900">{String(runInfoResult.is_edited)}</span>
-                            </div>
-                            <div className="flex items-baseline gap-2 px-3 py-2">
-                              <span className="font-bold text-gray-700 text-sm shrink-0">Verified:</span>
-                              <span className="text-sm text-gray-900">{String(runInfoResult.is_verified)}</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Peer Match */}
-                      {hasPeerBlock && runInfoResult.peer_run && (
-                        <div>
-                          <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Peer Match</div>
-                          <div className="rounded border border-gray-200 overflow-hidden">
-                            <div className="grid grid-cols-2 divide-x divide-gray-200 bg-gray-50">
-                              {runInfoResult.peer_run.match_values &&
-                                Object.keys(runInfoResult.peer_run.match_values).length > 0 && (
-                                  <div className="px-3 py-2">
-                                    <div className="font-bold text-gray-700 text-sm mb-1.5">Match values:</div>
-                                    <ul className="list-disc pl-4 space-y-0.5">
-                                      {Object.entries(runInfoResult.peer_run.match_values).map(([key, value]) => (
-                                        <li key={key} className="text-sm text-gray-900 break-all">
-                                          <span className="font-bold text-gray-800">{key}</span>
-                                          <span className="mx-1 text-gray-400">=</span>
-                                          <span className="font-mono text-xs text-gray-900">{String(value)}</span>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              {runInfoResult.peer_run.match_document_ids &&
-                                runInfoResult.peer_run.match_document_ids.length > 0 && (
-                                  <div className="px-3 py-2">
-                                    <div className="font-bold text-gray-700 text-sm mb-1.5">Matched peer documents:</div>
-                                    <ul className="list-disc pl-4 space-y-0.5">
-                                      {runInfoResult.peer_run.match_document_ids.map(docId => (
-                                        <li key={docId} className="break-all">
-                                          <a
-                                            href={`/orgs/${organizationId}/docs/${docId}`}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="font-mono text-sm text-gray-900 hover:text-blue-600 hover:underline"
-                                          >
-                                            {docId}
-                                          </a>
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Prompt Used */}
-                      <div>
-                        <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">Prompt Used (Reported)</div>
-                        <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border border-gray-200 bg-gray-50 px-3 py-2 font-mono text-xs leading-relaxed text-gray-800">
-                          {promptUsedText
-                            ? promptUsedText
-                            : 'No prompt_used reported by the backend for this run.'}
-                        </pre>
-                      </div>
-                    </div>
-                  );
-                })()
-              ) : (
-                <p className="text-sm text-gray-600">No run info available.</p>
-              )}
             </div>
           </div>
         </div>
