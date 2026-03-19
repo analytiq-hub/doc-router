@@ -545,6 +545,104 @@ async def _litellm_acreate_file_with_retry(
         api_key=api_key
     )
 
+def _prompt_used_from_grouped_user_blocks(
+    system_prompt: str,
+    user_blocks: List[Dict[str, Any]],
+    ordered_peer_docs: List[dict],
+    include_ocr: bool,
+    include_pdf: bool,
+) -> str:
+    """
+    Build prompt_used text from the same user content blocks sent to the model.
+    Text blocks are copied verbatim; OCR bodies and PDF payloads are replaced with placeholders.
+    """
+    if not user_blocks:
+        return system_prompt.rstrip()
+
+    parts: List[str] = [system_prompt.rstrip(), ""]
+    bi = 0
+    first = user_blocks[bi]
+    if first.get("type") != "text":
+        raise Exception("Grouped LLM: expected first user block to be text (group header)")
+    parts.append(first["text"])
+    bi += 1
+
+    for d in ordered_peer_docs:
+        doc_id_str = str(d.get("_id"))
+        if bi >= len(user_blocks):
+            raise Exception(
+                f"Grouped LLM: user_blocks ended early while building prompt_used (doc {doc_id_str})"
+            )
+        hdr = user_blocks[bi]
+        if hdr.get("type") != "text":
+            raise Exception(f"Grouped LLM: expected document header text block for doc {doc_id_str}")
+        parts.append("")
+        parts.append(hdr["text"])
+        bi += 1
+
+        if include_ocr:
+            if bi >= len(user_blocks):
+                raise Exception(f"Grouped LLM: missing OCR text block for doc {doc_id_str}")
+            ocr_b = user_blocks[bi]
+            if ocr_b.get("type") != "text":
+                raise Exception(f"Grouped LLM: expected OCR as text block for doc {doc_id_str}")
+            ocr_text = ocr_b.get("text") or ""
+            if not ocr_text.startswith("ocr_text:\n"):
+                raise Exception(f"Grouped LLM: OCR block has unexpected shape for doc {doc_id_str}")
+            parts.append(f"ocr_text:\n<{doc_id_str}_ocr_text>")
+            bi += 1
+
+        if include_pdf:
+            if bi >= len(user_blocks):
+                raise Exception(f"Grouped LLM: missing PDF block for doc {doc_id_str}")
+            pdf_b = user_blocks[bi]
+            if pdf_b.get("type") == "file":
+                pass  # placeholder only
+            elif pdf_b.get("type") == "text":
+                pdf_text = pdf_b.get("text") or ""
+                if not pdf_text.startswith("pdf:\n"):
+                    raise Exception(f"Grouped LLM: PDF text block has unexpected shape for doc {doc_id_str}")
+            else:
+                raise Exception(f"Grouped LLM: expected file or text PDF block for doc {doc_id_str}")
+            parts.append(f"pdf:\n<{doc_id_str}_uuencoded>")
+            bi += 1
+
+    if bi != len(user_blocks):
+        raise Exception(
+            f"Grouped LLM: extra user blocks after prompt_used walk ({bi} != {len(user_blocks)})"
+        )
+
+    return "\n".join(parts).rstrip()
+
+
+def _prompt_used_from_vision_user_blocks(
+    system_prompt: str,
+    user_blocks: List[Dict[str, Any]],
+    document_id: str,
+    extracted_text: Optional[str],
+) -> str:
+    """
+    Build prompt_used from the same user message blocks (text + file) sent to the model.
+    OCR in the text block is replaced with a placeholder; file blocks become pdf placeholders.
+    """
+    parts: List[str] = []
+    for block in user_blocks:
+        btype = block.get("type")
+        if btype == "text":
+            t = block.get("text") or ""
+            if extracted_text:
+                t = t.replace(extracted_text, f"<{document_id}_ocr_text>", 1)
+            parts.append(t)
+        elif btype == "file":
+            parts.append(f"pdf:\n<{document_id}_uuencoded>")
+        else:
+            raise Exception(
+                f"Unexpected user content block type {btype!r} while building prompt_used"
+            )
+    body = "\n\n".join(parts)
+    return f"{system_prompt}\n\n{body}".rstrip()
+
+
 async def _build_grouped_prompt_context(
     analytiq_client,
     doc: dict,
@@ -558,7 +656,7 @@ async def _build_grouped_prompt_context(
     """
     Build messages and peer_run metadata for grouped prompts.
 
-    When peer matching is not configured for this prompt, returns ([], None).
+    When peer matching is not configured for this prompt, returns ([], None, "").
     """
     group_cfg = await ad.common.get_prompt_group_config(analytiq_client, prompt_revid)
     peer_match_keys: List[str] = group_cfg.get("peer_match_keys") or []
@@ -566,7 +664,7 @@ async def _build_grouped_prompt_context(
 
     # No grouping configured – caller should fall back to single-document flow
     if not peer_match_keys:
-        return [], None
+        return [], None, ""
 
     db = analytiq_client.mongodb_async[analytiq_client.env]
 
@@ -636,10 +734,6 @@ async def _build_grouped_prompt_context(
     header_lines.append("Instruction:")
     header_lines.append(instruction)
     header_lines.append("")
-    header_lines.append("Peer match values:")
-    for k, v in match_values.items():
-        header_lines.append(f"- {k}: {v}")
-    header_lines.append("")
     header_lines.append("Documents:")
     header_lines.append("")
     user_blocks.append({"type": "text", "text": "\n".join(header_lines)})
@@ -654,11 +748,6 @@ async def _build_grouped_prompt_context(
         doc_id_str = str(d.get("_id"))
         doc_header_parts: List[str] = []
         doc_header_parts.append(f"[Document #{idx}]")
-        doc_header_parts.append(f"document_id: {doc_id_str}")
-
-        name = d.get("user_file_name") or d.get("name") or ""
-        if name:
-            doc_header_parts.append(f"name: {name}")
 
         meta = d.get("metadata") or {}
         if include_all_metadata:
@@ -667,7 +756,7 @@ async def _build_grouped_prompt_context(
             filtered_meta = {k: meta[k] for k in metadata_keys if k in meta}
 
         if filtered_meta:
-            doc_header_parts.append("metadata (filtered):")
+            doc_header_parts.append("metadata:")
             doc_header_parts.append(json.dumps(filtered_meta, indent=2, default=str))
 
         # Add the header for this document.
@@ -725,46 +814,13 @@ async def _build_grouped_prompt_context(
         "match_values": match_values,
         "match_document_ids": match_document_ids,
     }
-    # Create a sanitized prompt text blob for metadata/debugging.
-    # Requirements:
-    # - Replace attached PDFs with <{document_id}_uuencoded>
-    # - Replace OCR text with <{document_id}_ocr_text>
-    prompt_used_lines: List[str] = []
-    prompt_used_lines.append(system_prompt)
-    prompt_used_lines.append("")
-    prompt_used_lines.extend(header_lines)
-
-    for idx, d in enumerate(ordered_peer_docs, start=1):
-        doc_id_str = str(d.get("_id"))
-
-        doc_header_parts: List[str] = []
-        doc_header_parts.append(f"[Document #{idx}]")
-        doc_header_parts.append(f"document_id: {doc_id_str}")
-
-        name = d.get("user_file_name") or d.get("name") or ""
-        if name:
-            doc_header_parts.append(f"name: {name}")
-
-        meta = d.get("metadata") or {}
-        if include_all_metadata:
-            filtered_meta = meta
-        else:
-            filtered_meta = {k: meta[k] for k in metadata_keys if k in meta}
-
-        if filtered_meta:
-            doc_header_parts.append("metadata (filtered):")
-            doc_header_parts.append(json.dumps(filtered_meta, indent=2, default=str))
-
-        prompt_used_lines.append("")
-        prompt_used_lines.append("\n".join(doc_header_parts))
-
-        if include_ocr:
-            prompt_used_lines.append(f"ocr_text:\n<{doc_id_str}_ocr_text>")
-
-        if include_pdf:
-            prompt_used_lines.append(f"pdf:\n<{doc_id_str}_uuencoded>")
-
-    prompt_used_text = "\n".join(prompt_used_lines).rstrip()
+    prompt_used_text = _prompt_used_from_grouped_user_blocks(
+        system_prompt,
+        user_blocks,
+        ordered_peer_docs,
+        include_ocr,
+        include_pdf,
+    )
 
     return messages, peer_run, prompt_used_text
 
@@ -910,20 +966,6 @@ async def run_llm(
             
             Please provide your analysis based on both the visual content and the text."""
 
-            # Sanitized prompt blob for metadata (no raw OCR text, no raw PDF/base64).
-            prompt_used_user = f"""{prompt1}
-
-Please analyze this document. You have access to both the visual PDF and the extracted text.
-
-Extracted text from the document:
-<{document_id}_ocr_text>
-
-Please provide your analysis based on both the visual content and the text.
-
-Attached PDF:
-<{document_id}_uuencoded>"""
-            prompt_used_text = f"{system_prompt}\n\n{prompt_used_user}"
-            
             # Different approaches for different providers
             if llm_provider == "openai":
                 # For OpenAI, we need to upload the file first
@@ -978,7 +1020,14 @@ Attached PDF:
                     {"role": "user", "content": file_content}
                 ]
                 logger.info(f"{document_id}/{prompt_revid}: Attaching OCR and PDF to prompt using base64 for {llm_provider}")
-        
+
+            prompt_used_text = _prompt_used_from_vision_user_blocks(
+                system_prompt,
+                messages[1]["content"],
+                document_id,
+                extracted_text,
+            )
+
         # Use OCR-only approach if no file attachment or if provider is XAI (which doesn't support file attachments)
         if not file_attachment_blob or llm_provider == "xai":
             # Original OCR-only approach
@@ -988,18 +1037,18 @@ Attached PDF:
             
             {extracted_text}"""
 
-            # Sanitized prompt blob for metadata (no raw OCR text).
-            prompt_used_user = f"""{prompt1}
-
-Now extract from this text:
-
-<{document_id}_ocr_text>"""
-            prompt_used_text = f"{system_prompt}\n\n{prompt_used_user}"
-            
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": prompt}
             ]
+
+            if extracted_text:
+                prompt_used_user = prompt.replace(
+                    extracted_text, f"<{document_id}_ocr_text>", 1
+                )
+            else:
+                prompt_used_user = prompt
+            prompt_used_text = f"{system_prompt}\n\n{prompt_used_user}".rstrip()
 
             logger.info(f"{document_id}/{prompt_revid}: Attaching OCR-only to prompt")
 
