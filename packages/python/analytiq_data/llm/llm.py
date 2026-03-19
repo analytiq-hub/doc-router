@@ -595,14 +595,17 @@ async def _build_grouped_prompt_context(
     peer_docs.sort(key=_sort_key)
 
     source_doc_id = str(doc.get("_id"))
-    match_document_ids = [str(d["_id"]) for d in peer_docs if d.get("_id") is not None]
+    match_document_ids_all = [str(d["_id"]) for d in peer_docs if d.get("_id") is not None]
 
     # Step 4 — Validate internal consistency (source doc must be in match results)
-    if source_doc_id not in match_document_ids:
+    if source_doc_id not in match_document_ids_all:
         raise Exception(
             "Grouped LLM run failed: source document not found by computed peer query "
             f"{match_values}"
         )
+
+    # UI requirement: show *other* documents only (exclude the current/source document).
+    match_document_ids = [doc_id for doc_id in match_document_ids_all if doc_id != source_doc_id]
 
     # Step 3 — Build prompt text in code (text-only v1; attachments handled by single-doc flow)
     instruction = await ad.common.get_prompt_content(analytiq_client, prompt_revid)

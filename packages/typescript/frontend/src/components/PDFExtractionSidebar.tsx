@@ -751,9 +751,20 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
             {peerRun.match_document_ids && peerRun.match_document_ids.length > 0 && (
               <div className="mt-1">
                 <div className="font-medium text-blue-900">Matched peer documents</div>
-                <div className="break-all">
-                  {peerRun.match_document_ids.join(', ')}
-                </div>
+                <ul className="ml-3 list-disc space-y-0.5">
+                  {peerRun.match_document_ids.map((docId) => (
+                    <li key={docId}>
+                      <a
+                        href={`/orgs/${organizationId}/docs/${docId}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-blue-700 hover:underline break-all"
+                      >
+                        {docId}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
               </div>
             )}
           </div>
