@@ -1327,7 +1327,6 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                     </div>
 
                     <div>
-                      <label className="mb-2 block text-sm font-semibold text-gray-700">Run metadata</label>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="mb-1 block text-xs font-semibold text-gray-700">Created</label>
@@ -1358,7 +1357,6 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
 
                     {hasPeerBlock && runInfoResult.peer_run && (
                       <div>
-                        <label className="mb-2 block text-sm font-semibold text-gray-700">Peer match</label>
                         <div className="grid grid-cols-2 gap-4">
                           {runInfoResult.peer_run.match_values &&
                             Object.keys(runInfoResult.peer_run.match_values).length > 0 && (
@@ -1409,7 +1407,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
 
                     <div>
                       <label className="mb-1 block text-sm font-semibold text-gray-700">
-                        Prompt used (reported)
+                        Prompt
                       </label>
                       <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border bg-gray-50 p-2 font-mono text-xs leading-relaxed text-gray-800">
                         {promptUsedText
