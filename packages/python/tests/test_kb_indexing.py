@@ -586,7 +586,8 @@ async def test_kb_search_with_data(mock_embedding, mock_get_model_info, test_db,
         
         # Wait for vector index to be ready (it may be in INITIAL_SYNC or NOT_STARTED state after creation)
         from app.routes.knowledge_bases import wait_for_vector_index_ready
-        await wait_for_vector_index_ready(analytiq_client, kb_id, max_wait_seconds=30)
+        # Vector index build time can vary in CI/local environments; 60s matches other search tests.
+        await wait_for_vector_index_ready(analytiq_client, kb_id, max_wait_seconds=60)
         
         # Perform search
         search_data = {
