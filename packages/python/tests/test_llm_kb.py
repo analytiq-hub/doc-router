@@ -1,6 +1,8 @@
 """
 Unit tests for Knowledge Base RAG agentic loop in llm.py.
 
+Documents use seed_mock_ocr_for_unit_test() (save_ocr_text) — not process_ocr_msg / AWS.
+
 Tests cover:
 - KB-enabled prompt execution with agentic loop
 - Tool call handling and KB search integration
@@ -17,11 +19,7 @@ from bson import ObjectId
 from datetime import datetime, UTC
 
 from tests.conftest_utils import client, get_token_headers, TEST_ORG_ID, get_auth_headers
-from tests.conftest_llm import (
-    MockLLMResponse,
-    mock_run_textract,
-    mock_litellm_acreate_file_with_retry,
-)
+from tests.conftest_llm import mock_litellm_acreate_file_with_retry
 
 import analytiq_data as ad
 import logging
@@ -30,6 +28,19 @@ logger = logging.getLogger(__name__)
 
 # Check that ENV is set to pytest
 assert os.environ["ENV"] == "pytest"
+
+# Text aligned with conftest_llm.mock_run_textract LINE blocks — persisted without running OCR/AWS.
+MOCK_OCR_TEXT_FOR_TESTS = (
+    "INVOICE #12345\n"
+    "Total: $1,234.56\n"
+    "Vendor: Acme Corp"
+)
+
+
+async def seed_mock_ocr_for_unit_test(analytiq_client, document_id: str) -> None:
+    """Simulate completed OCR for unit tests (no process_ocr_msg / no AWS)."""
+    await ad.common.ocr.save_ocr_text(analytiq_client, document_id, MOCK_OCR_TEXT_FOR_TESTS)
+
 
 # Mock embedding response for dimension detection
 MOCK_EMBEDDING_DIMENSIONS = 1536
@@ -189,8 +200,7 @@ async def test_llm_with_kb_agentic_loop_single_tool_call(mock_embedding, mock_ge
     upload_resp = client.post(f"/v0/orgs/{org_id}/documents", json=upload_data, headers=get_auth_headers())
     document_id = upload_resp.json()["documents"][0]["document_id"]
     
-    # Process OCR (analytiq_client already created above)
-    await ad.msg_handlers.process_ocr_msg(analytiq_client, {"_id": str(ObjectId()), "msg": {"document_id": document_id}})
+    await seed_mock_ocr_for_unit_test(analytiq_client, document_id)
     
     # Mock KB search results
     mock_kb_results = await create_mock_kb_search_results(3)
@@ -214,7 +224,6 @@ async def test_llm_with_kb_agentic_loop_single_tool_call(mock_embedding, mock_ge
     mock_acompletion = AsyncMock(side_effect=[first_response, final_response])
     
     with (
-        patch('analytiq_data.aws.textract.run_textract', new=mock_run_textract),
         patch('analytiq_data.llm.llm._litellm_acompletion_with_retry', new=mock_acompletion),
         patch('analytiq_data.llm.llm._litellm_acreate_file_with_retry', new=mock_litellm_acreate_file_with_retry),
         patch('analytiq_data.kb.search.search_knowledge_base', new=mock_kb_search),
@@ -329,8 +338,7 @@ async def test_llm_with_kb_multiple_tool_calls(mock_embedding, mock_get_model_in
     upload_resp = client.post(f"/v0/orgs/{org_id}/documents", json=upload_data, headers=get_auth_headers())
     document_id = upload_resp.json()["documents"][0]["document_id"]
     
-    # Process OCR (analytiq_client already created above)
-    await ad.msg_handlers.process_ocr_msg(analytiq_client, {"_id": str(ObjectId()), "msg": {"document_id": document_id}})
+    await seed_mock_ocr_for_unit_test(analytiq_client, document_id)
     
     # Mock KB search results
     mock_kb_results = await create_mock_kb_search_results(3)
@@ -361,7 +369,6 @@ async def test_llm_with_kb_multiple_tool_calls(mock_embedding, mock_get_model_in
     mock_acompletion = AsyncMock(side_effect=[first_response, second_response, final_response])
     
     with (
-        patch('analytiq_data.aws.textract.run_textract', new=mock_run_textract),
         patch('analytiq_data.llm.llm._litellm_acompletion_with_retry', new=mock_acompletion),
         patch('analytiq_data.llm.llm._litellm_acreate_file_with_retry', new=mock_litellm_acreate_file_with_retry),
         patch('analytiq_data.kb.search.search_knowledge_base', new=mock_kb_search),
@@ -458,8 +465,7 @@ async def test_llm_with_kb_model_no_function_calling(mock_embedding, mock_get_mo
     upload_resp = client.post(f"/v0/orgs/{org_id}/documents", json=upload_data, headers=get_auth_headers())
     document_id = upload_resp.json()["documents"][0]["document_id"]
     
-    # Process OCR (analytiq_client already created above)
-    await ad.msg_handlers.process_ocr_msg(analytiq_client, {"_id": str(ObjectId()), "msg": {"document_id": document_id}})
+    await seed_mock_ocr_for_unit_test(analytiq_client, document_id)
     
     # Mock LLM response (no tool calls, just regular response)
     final_response = MockLLMResponseWithToolCalls(
@@ -472,7 +478,6 @@ async def test_llm_with_kb_model_no_function_calling(mock_embedding, mock_get_mo
     mock_kb_search = AsyncMock()
     
     with (
-        patch('analytiq_data.aws.textract.run_textract', new=mock_run_textract),
         patch('analytiq_data.llm.llm._litellm_acompletion_with_retry', new=mock_acompletion),
         patch('analytiq_data.llm.llm._litellm_acreate_file_with_retry', new=mock_litellm_acreate_file_with_retry),
         patch('analytiq_data.kb.search.search_knowledge_base', new=mock_kb_search),
@@ -570,8 +575,7 @@ async def test_llm_with_kb_search_error_handling(mock_embedding, mock_get_model_
     upload_resp = client.post(f"/v0/orgs/{org_id}/documents", json=upload_data, headers=get_auth_headers())
     document_id = upload_resp.json()["documents"][0]["document_id"]
     
-    # Process OCR (analytiq_client already created above)
-    await ad.msg_handlers.process_ocr_msg(analytiq_client, {"_id": str(ObjectId()), "msg": {"document_id": document_id}})
+    await seed_mock_ocr_for_unit_test(analytiq_client, document_id)
     
     # Mock KB search to raise an error
     mock_kb_search = AsyncMock(side_effect=Exception("KB search failed"))
@@ -593,7 +597,6 @@ async def test_llm_with_kb_search_error_handling(mock_embedding, mock_get_model_
     mock_acompletion = AsyncMock(side_effect=[first_response, final_response])
     
     with (
-        patch('analytiq_data.aws.textract.run_textract', new=mock_run_textract),
         patch('analytiq_data.llm.llm._litellm_acompletion_with_retry', new=mock_acompletion),
         patch('analytiq_data.llm.llm._litellm_acreate_file_with_retry', new=mock_litellm_acreate_file_with_retry),
         patch('analytiq_data.kb.search.search_knowledge_base', new=mock_kb_search),
@@ -696,8 +699,7 @@ async def test_llm_with_kb_max_iterations(mock_embedding, mock_get_model_info, t
     upload_resp = client.post(f"/v0/orgs/{org_id}/documents", json=upload_data, headers=get_auth_headers())
     document_id = upload_resp.json()["documents"][0]["document_id"]
     
-    # Process OCR (analytiq_client already created above)
-    await ad.msg_handlers.process_ocr_msg(analytiq_client, {"_id": str(ObjectId()), "msg": {"document_id": document_id}})
+    await seed_mock_ocr_for_unit_test(analytiq_client, document_id)
     
     # Mock KB search results
     mock_kb_results = await create_mock_kb_search_results(3)
@@ -715,7 +717,6 @@ async def test_llm_with_kb_max_iterations(mock_embedding, mock_get_model_info, t
     mock_acompletion = AsyncMock(return_value=tool_call_response)
     
     with (
-        patch('analytiq_data.aws.textract.run_textract', new=mock_run_textract),
         patch('analytiq_data.llm.llm._litellm_acompletion_with_retry', new=mock_acompletion),
         patch('analytiq_data.llm.llm._litellm_acreate_file_with_retry', new=mock_litellm_acreate_file_with_retry),
         patch('analytiq_data.kb.search.search_knowledge_base', new=mock_kb_search),
@@ -726,7 +727,10 @@ async def test_llm_with_kb_max_iterations(mock_embedding, mock_get_model_info, t
     ):
         # Run LLM - should hit max iterations
         # This should raise an exception because we never get a final response
-        with pytest.raises(Exception, match="No response received from LLM|LLM response incomplete"):
+        with pytest.raises(
+            Exception,
+            match=r"No response received from LLM|LLM response incomplete",
+        ):
             await ad.llm.run_llm(analytiq_client, document_id, prompt_revid)
         
         # Verify LLM was called max_iterations times (5)
@@ -807,8 +811,7 @@ async def test_llm_with_kb_token_accumulation(mock_embedding, mock_get_model_inf
     upload_resp = client.post(f"/v0/orgs/{org_id}/documents", json=upload_data, headers=get_auth_headers())
     document_id = upload_resp.json()["documents"][0]["document_id"]
     
-    # Process OCR (analytiq_client already created above)
-    await ad.msg_handlers.process_ocr_msg(analytiq_client, {"_id": str(ObjectId()), "msg": {"document_id": document_id}})
+    await seed_mock_ocr_for_unit_test(analytiq_client, document_id)
     
     # Mock KB search results
     mock_kb_results = await create_mock_kb_search_results(3)
@@ -832,7 +835,6 @@ async def test_llm_with_kb_token_accumulation(mock_embedding, mock_get_model_inf
     mock_record_spu = AsyncMock()
     
     with (
-        patch('analytiq_data.aws.textract.run_textract', new=mock_run_textract),
         patch('analytiq_data.llm.llm._litellm_acompletion_with_retry', new=mock_acompletion),
         patch('analytiq_data.llm.llm._litellm_acreate_file_with_retry', new=mock_litellm_acreate_file_with_retry),
         patch('analytiq_data.kb.search.search_knowledge_base', new=mock_kb_search),
@@ -900,9 +902,8 @@ async def test_llm_with_kb_no_kb_id(test_db, mock_auth, setup_test_models):
     upload_resp = client.post(f"/v0/orgs/{org_id}/documents", json=upload_data, headers=get_auth_headers())
     document_id = upload_resp.json()["documents"][0]["document_id"]
     
-    # Process OCR
     analytiq_client = ad.common.get_analytiq_client()
-    await ad.msg_handlers.process_ocr_msg(analytiq_client, {"_id": str(ObjectId()), "msg": {"document_id": document_id}})
+    await seed_mock_ocr_for_unit_test(analytiq_client, document_id)
     
     # Mock LLM response (no tool calls)
     final_response = MockLLMResponseWithToolCalls(
@@ -915,7 +916,6 @@ async def test_llm_with_kb_no_kb_id(test_db, mock_auth, setup_test_models):
     mock_kb_search = AsyncMock()
     
     with (
-        patch('analytiq_data.aws.textract.run_textract', new=mock_run_textract),
         patch('analytiq_data.llm.llm._litellm_acompletion_with_retry', new=mock_acompletion),
         patch('analytiq_data.llm.llm._litellm_acreate_file_with_retry', new=mock_litellm_acreate_file_with_retry),
         patch('analytiq_data.kb.search.search_knowledge_base', new=mock_kb_search),
