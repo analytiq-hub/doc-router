@@ -170,10 +170,10 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
           } else {
             const errorMessage = defaultResult.error instanceof Error ? defaultResult.error.message : String(defaultResult.error);
             const isNotFound = errorMessage.includes('not found') || errorMessage.includes('404');
-              if (!isNotFound) {
-                console.error('Error fetching default results:', defaultResult.error);
-                setFailedPrompts(prev => new Set(prev).add('default'));
-              }
+            if (!isNotFound) {
+              console.error('Error fetching default results:', defaultResult.error);
+              setFailedPrompts(prev => new Set(prev).add('default'));
+            }
           }
           setLoadingPrompts(prev => {
             const next = new Set(prev);
@@ -208,13 +208,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
               documentId: id, promptRevId: 'default', fallback: false,
             });
             setLlmResults(prev => ({ ...prev, 'default': defaultResults }));
-                  } catch (error) {
-                    // If the backend doesn't have a result yet, show "No results available"
-                    // instead of treating it as a permanent failure.
-                    const status = getStatusFromError(error);
-                    if (status !== 404) {
-                      setFailedPrompts(prev => new Set(prev).add('default'));
-                    }
+          } catch (error) {
+            // If the backend doesn't have a result yet, show "No results available"
+            // instead of treating it as a permanent failure.
+            const status = getStatusFromError(error);
+            if (status !== 404) {
+              setFailedPrompts(prev => new Set(prev).add('default'));
+            }
           }
           setLoadingPrompts(prev => { const next = new Set(prev); next.delete('default'); return next; });
         }
@@ -322,8 +322,16 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
 
   const handleOpenRunInfo = async (promptId: string) => {
     handleCloseKebabMenu();
-    setRunInfoLoading(true);
     setRunInfoOpen(true);
+    const cachedResult = llmResults[promptId];
+    if (cachedResult) {
+      setRunInfoResult(cachedResult);
+      setRunInfoLoading(false);
+      return;
+    }
+
+    setRunInfoLoading(true);
+    setRunInfoResult(null);
     try {
       const result = await docRouterOrgApi.getLLMResult({
         documentId: id,
@@ -1404,7 +1412,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
 
                     <div>
                       <label className="mb-1 block text-sm font-semibold text-gray-700">
-                        Prompt
+                        Context sent to model
                       </label>
                       <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border bg-gray-50 p-2 font-mono text-xs leading-relaxed text-gray-800">
                         {promptUsedText

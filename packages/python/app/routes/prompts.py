@@ -46,6 +46,13 @@ class PromptConfig(BaseModel):
     include: IncludeConfig = IncludeConfig()
 
 
+# Cache the expected default include config.
+# We use a constant here to avoid "default divergence" if IncludeConfig defaults
+# change later (old DB documents without `include` should not suddenly compare
+# unequal and trigger spurious new revisions).
+DEFAULT_INCLUDE_DUMP: Dict[str, object] = IncludeConfig().model_dump()
+
+
 class Prompt(PromptConfig):
     prompt_revid: str           # MongoDB's _id
     prompt_id: str    # Stable identifier
@@ -242,7 +249,7 @@ async def create_prompt(
         "kb_id": prompt.kb_id,  # Store KB ID for RAG
         # Grouped peer fields
         "peer_match_keys": prompt.peer_match_keys or [],
-        "include": prompt.include.model_dump() if prompt.include else IncludeConfig().model_dump(),
+        "include": prompt.include.model_dump() if prompt.include else DEFAULT_INCLUDE_DUMP,
     }
     
     # Insert into MongoDB
@@ -475,8 +482,8 @@ async def update_prompt(
         prompt.model == latest_prompt_revision["model"] and
         set(prompt.tag_ids or []) == set(latest_prompt_revision.get("tag_ids") or []) and
         (prompt.peer_match_keys or []) == latest_prompt_revision.get("peer_match_keys", []) and
-        (prompt.include.model_dump() if prompt.include else IncludeConfig().model_dump())
-        == latest_prompt_revision.get("include", IncludeConfig().model_dump())
+        (prompt.include.model_dump() if prompt.include else DEFAULT_INCLUDE_DUMP)
+        == latest_prompt_revision.get("include", DEFAULT_INCLUDE_DUMP)
     )
     
     if prompt.name != existing_prompt["name"]:
@@ -515,7 +522,7 @@ async def update_prompt(
         "kb_id": prompt.kb_id,  # Store KB ID for RAG
         # Grouped peer fields
         "peer_match_keys": prompt.peer_match_keys or [],
-        "include": prompt.include.model_dump() if prompt.include else IncludeConfig().model_dump(),
+        "include": prompt.include.model_dump() if prompt.include else DEFAULT_INCLUDE_DUMP,
     }
     
     # Insert new version

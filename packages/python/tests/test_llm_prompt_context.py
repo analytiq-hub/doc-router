@@ -406,3 +406,78 @@ def test_prompt_used_from_grouped_user_blocks_placeholders():
     assert f"pdf:\n<{d1}_pdf>" in out
     assert "OCR-A" not in out
     assert "BASE64BLOB" not in out
+
+
+def test_prompt_used_from_grouped_user_blocks_missing_ocr_raises():
+    """When include_ocr=True, OCR placeholder is required for each document."""
+    system = "SYS"
+    ordered = [{"_id": ObjectId()}, {"_id": ObjectId()}]
+    d0, d1 = str(ordered[0]["_id"]), str(ordered[1]["_id"])
+
+    # Missing OCR for doc #1 (Document #1 header followed by Document #2 header).
+    user_blocks = [
+        {"type": "text", "text": "HEADER"},
+        {"type": "text", "text": f"[Document #1]\nmetadata:\n{{}}"},
+        {"type": "text", "text": f"[Document #2]\nmetadata:\n{{}}"},
+        {"type": "text", "text": f"ocr_text:\nOCR-B"},
+    ]
+    with pytest.raises(Exception, match=f"missing OCR.*{d0}"):
+        _prompt_used_from_grouped_user_blocks(system, user_blocks, ordered, True, False)
+
+
+def test_prompt_used_from_grouped_user_blocks_missing_pdf_raises():
+    """When include_pdf=True, PDF placeholder is required for each document."""
+    system = "SYS"
+    ordered = [{"_id": ObjectId()}, {"_id": ObjectId()}]
+    d0 = str(ordered[0]["_id"])
+
+    # Missing PDF for doc #1.
+    user_blocks = [
+        {"type": "text", "text": "HEADER"},
+        {"type": "text", "text": f"[Document #1]\nmetadata:\n{{}}"},
+        {"type": "text", "text": f"[Document #2]\nmetadata:\n{{}}"},
+        {"type": "text", "text": f"pdf:\nBASE64-2"},
+    ]
+    with pytest.raises(Exception, match=f"missing PDF.*{d0}"):
+        _prompt_used_from_grouped_user_blocks(system, user_blocks, ordered, False, True)
+
+
+def test_prompt_used_from_grouped_user_blocks_pdf_file_and_text_forms():
+    """Supports both PDF representations in user_blocks."""
+    system = "SYS"
+    ordered = [{"_id": ObjectId()}, {"_id": ObjectId()}]
+    d0, d1 = str(ordered[0]["_id"]), str(ordered[1]["_id"])
+
+    user_blocks = [
+        {"type": "text", "text": "HEADER"},
+        {"type": "text", "text": f"[Document #1]\nmetadata:\n{{}}"},
+        {"type": "file", "file": {"file_id": "openai-file-id-or-sim"}},
+        {"type": "text", "text": f"[Document #2]\nmetadata:\n{{}}"},
+        {"type": "text", "text": f"pdf:\nBASE64-BLOB"},
+    ]
+    out = _prompt_used_from_grouped_user_blocks(system, user_blocks, ordered, False, True)
+    assert f"pdf:\n<{d0}_pdf>" in out
+    assert f"pdf:\n<{d1}_pdf>" in out
+    assert "BASE64-BLOB" not in out
+
+
+def test_prompt_used_from_grouped_user_blocks_extra_text_is_preserved():
+    """Order-robust dispatch should preserve unrelated text blocks verbatim."""
+    system = "SYS"
+    ordered = [{"_id": ObjectId()}, {"_id": ObjectId()}]
+    d0, d1 = str(ordered[0]["_id"]), str(ordered[1]["_id"])
+
+    user_blocks = [
+        {"type": "text", "text": "HEADER"},
+        {"type": "text", "text": f"[Document #1]\nmetadata:\n{{}}"},
+        {"type": "text", "text": "SOME EXTRA LABEL"},
+        {"type": "text", "text": f"ocr_text:\nOCR-A"},
+        {"type": "text", "text": f"[Document #2]\nmetadata:\n{{}}"},
+        {"type": "text", "text": f"ocr_text:\nOCR-B"},
+    ]
+    out = _prompt_used_from_grouped_user_blocks(system, user_blocks, ordered, True, False)
+    assert "SOME EXTRA LABEL" in out
+    assert f"ocr_text:\n<{d0}_ocr_text>" in out
+    assert f"ocr_text:\n<{d1}_ocr_text>" in out
+    assert "OCR-A" not in out
+    assert "OCR-B" not in out

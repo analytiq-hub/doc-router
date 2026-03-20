@@ -240,7 +240,7 @@ async def get_prompt_revision_ids_by_tag_ids(analytiq_client, tag_ids: list[str]
     return prompt_revision_ids
 
 
-async def get_prompt_group_config(analytiq_client, prompt_id: str) -> Dict[str, Any]:
+async def get_prompt_group_config(analytiq_client, prompt_revid: str) -> Dict[str, Any]:
     """
     Get grouped prompt configuration fields for a prompt revision.
 
@@ -258,7 +258,7 @@ async def get_prompt_group_config(analytiq_client, prompt_id: str) -> Dict[str, 
     the single-document LLM context.
     """
     # Default prompt uses standard include defaults (single-document, no peer grouping)
-    if prompt_id == "default":
+    if prompt_revid == "default":
         return {
             "peer_match_keys": [],
             "include": {"ocr_text": True, "metadata_keys": [], "pdf": True},
@@ -267,9 +267,9 @@ async def get_prompt_group_config(analytiq_client, prompt_id: str) -> Dict[str, 
     db_name = analytiq_client.env
     db = analytiq_client.mongodb_async[db_name]
     collection = db["prompt_revisions"]
-    elem = await collection.find_one({"_id": ObjectId(prompt_id)})
+    elem = await collection.find_one({"_id": ObjectId(prompt_revid)})
     if elem is None:
-        raise ValueError(f"Prompt {prompt_id} not found")
+        raise ValueError(f"Prompt revision {prompt_revid} not found")
 
     peer_match_keys = elem.get("peer_match_keys") or []
     include = elem.get("include") or {}

@@ -169,6 +169,40 @@ async def get_file_attachment(analytiq_client, doc: dict, llm_provider: str, llm
 
     return None, None
 
+async def _load_pdf_blob(
+    analytiq_client,
+    doc: dict,
+    doc_id_str: str,
+    llm_provider: str,
+    llm_model: str,
+) -> Tuple[bytes, str]:
+    """
+    Load the best-available PDF bytes for LLM consumption.
+
+    Prefers an explicit `pdf_file_name` blob, then falls back to the same
+    file-attachment logic used for non-PDF models.
+    """
+    pdf_file_name = doc.get("pdf_file_name")
+    upload_name = pdf_file_name or (doc.get("user_file_name") or "attachment")
+
+    blob = None
+    if pdf_file_name:
+        pdf_file = await ad.common.get_file_async(analytiq_client, pdf_file_name)
+        blob = pdf_file.get("blob") if pdf_file else None
+
+    # If the explicit PDF blob isn't available, fall back to attachment logic.
+    if not blob:
+        blob, fname = await get_file_attachment(analytiq_client, doc, llm_provider, llm_model)
+        if fname:
+            upload_name = fname
+
+    if not blob:
+        raise Exception(
+            f"LLM run failed: missing file blob for document {doc_id_str} "
+            "(include.pdf is true)"
+        )
+    return blob, upload_name
+
 def is_o_series_model(model_name: str) -> bool:
     """Return True for OpenAI O-series models (e.g., o1, o1-mini, o3, o4-mini)."""
     if not model_name:
@@ -559,58 +593,108 @@ def _prompt_used_from_grouped_user_blocks(
     if not user_blocks:
         return system_prompt.rstrip()
 
+    # Build prompt_used by dispatching based on block content (OCR/PDF prefixes),
+    # instead of walking by index position. This makes the placeholder build
+    # resilient to future include toggles / inserted blocks.
     parts: List[str] = [system_prompt.rstrip(), ""]
-    bi = 0
-    first = user_blocks[bi]
-    if first.get("type") != "text":
-        raise Exception("Grouped LLM: expected first user block to be text (group header)")
-    parts.append(first["text"])
-    bi += 1
 
-    for d in ordered_peer_docs:
-        doc_id_str = str(d.get("_id"))
-        if bi >= len(user_blocks):
-            raise Exception(
-                f"Grouped LLM: user_blocks ended early while building prompt_used (doc {doc_id_str})"
-            )
-        hdr = user_blocks[bi]
-        if hdr.get("type") != "text":
-            raise Exception(f"Grouped LLM: expected document header text block for doc {doc_id_str}")
-        parts.append("")
-        parts.append(hdr["text"])
-        bi += 1
+    doc_ptr = -1
+    current_doc_id_str: str | None = None
+    n_docs = len(ordered_peer_docs)
+    # Track which required blocks we replaced for each document.
+    # This keeps the new order-robust dispatch while still failing fast
+    # when OCR/PDF placeholders are missing.
+    seen_ocr = [False] * n_docs
+    seen_pdf = [False] * n_docs
 
-        if include_ocr:
-            if bi >= len(user_blocks):
-                raise Exception(f"Grouped LLM: missing OCR text block for doc {doc_id_str}")
-            ocr_b = user_blocks[bi]
-            if ocr_b.get("type") != "text":
-                raise Exception(f"Grouped LLM: expected OCR as text block for doc {doc_id_str}")
-            ocr_text = ocr_b.get("text") or ""
-            if not ocr_text.startswith("ocr_text:\n"):
-                raise Exception(f"Grouped LLM: OCR block has unexpected shape for doc {doc_id_str}")
-            parts.append(f"ocr_text:\n<{doc_id_str}_ocr_text>")
-            bi += 1
+    for blk in user_blocks:
+        blk_type = blk.get("type")
+        if blk_type == "text":
+            text = blk.get("text") or ""
+            stripped = text.lstrip()
 
-        if include_pdf:
-            if bi >= len(user_blocks):
-                raise Exception(f"Grouped LLM: missing PDF block for doc {doc_id_str}")
-            pdf_b = user_blocks[bi]
-            if pdf_b.get("type") == "file":
-                pass  # placeholder only
-            elif pdf_b.get("type") == "text":
-                pdf_text = pdf_b.get("text") or ""
-                if not pdf_text.startswith("pdf:\n"):
-                    raise Exception(f"Grouped LLM: PDF text block has unexpected shape for doc {doc_id_str}")
+            # Document boundary marker; map it to the corresponding doc id.
+            if stripped.startswith("[Document #"):
+                # Validate the previous doc before moving to the next.
+                prev_idx = doc_ptr
+                if prev_idx >= 0:
+                    prev_doc_id_str = str(ordered_peer_docs[prev_idx].get("_id"))
+                    if include_ocr and not seen_ocr[prev_idx]:
+                        raise Exception(
+                            f"Grouped LLM: missing OCR text block for document {prev_doc_id_str} "
+                            f"(doc {prev_idx + 1} of {n_docs}) while building prompt_used"
+                        )
+                    if include_pdf and not seen_pdf[prev_idx]:
+                        raise Exception(
+                            f"Grouped LLM: missing PDF block for document {prev_doc_id_str} "
+                            f"(doc {prev_idx + 1} of {n_docs}) while building prompt_used"
+                        )
+                doc_ptr += 1
+                if doc_ptr >= len(ordered_peer_docs):
+                    raise Exception("Grouped LLM: extra document header while building prompt_used")
+                current_doc_id_str = str(ordered_peer_docs[doc_ptr].get("_id"))
+                parts.append("")
+                parts.append(text)
+                continue
+
+            # OCR placeholder
+            if include_ocr and stripped.startswith("ocr_text:\n"):
+                if not current_doc_id_str:
+                    raise Exception("Grouped LLM: OCR block before any document header while building prompt_used")
+                parts.append(f"ocr_text:\n<{current_doc_id_str}_ocr_text>")
+                # Mark OCR seen for the current document.
+                if 0 <= doc_ptr < n_docs:
+                    seen_ocr[doc_ptr] = True
+                continue
+
+            # PDF placeholder (embedded form)
+            if include_pdf and stripped.startswith("pdf:\n"):
+                if not current_doc_id_str:
+                    raise Exception("Grouped LLM: PDF text block before any document header while building prompt_used")
+                parts.append(f"pdf:\n<{current_doc_id_str}_pdf>")
+                # Mark PDF seen for the current document.
+                if 0 <= doc_ptr < n_docs:
+                    seen_pdf[doc_ptr] = True
+                continue
+
+            # Any other text block (e.g. group header, extra labels) is copied verbatim.
+            parts.append(text)
+
+        elif blk_type == "file":
+            # PDF placeholder (file attachment form)
+            if include_pdf:
+                if not current_doc_id_str:
+                    raise Exception("Grouped LLM: PDF file block before any document header while building prompt_used")
+                parts.append(f"pdf:\n<{current_doc_id_str}_pdf>")
+                if 0 <= doc_ptr < n_docs:
+                    seen_pdf[doc_ptr] = True
             else:
-                raise Exception(f"Grouped LLM: expected file or text PDF block for doc {doc_id_str}")
-            parts.append(f"pdf:\n<{doc_id_str}_pdf>")
-            bi += 1
+                parts.append("pdf:\n<omitted_pdf>")
 
-    if bi != len(user_blocks):
+        else:
+            # Unknown block type: preserve something stable rather than failing.
+            parts.append(str(blk))
+
+    if doc_ptr + 1 != len(ordered_peer_docs):
         raise Exception(
-            f"Grouped LLM: extra user blocks after prompt_used walk ({bi} != {len(user_blocks)})"
+            f"Grouped LLM: document header count mismatch while building prompt_used "
+            f"({doc_ptr + 1} != {len(ordered_peer_docs)})"
         )
+
+    # Validate the last doc we've entered.
+    if doc_ptr >= 0:
+        last_idx = doc_ptr
+        last_doc_id_str = str(ordered_peer_docs[last_idx].get("_id"))
+        if include_ocr and not seen_ocr[last_idx]:
+            raise Exception(
+                f"Grouped LLM: missing OCR text block for document {last_doc_id_str} "
+                f"(doc {last_idx + 1} of {n_docs}) while building prompt_used"
+            )
+        if include_pdf and not seen_pdf[last_idx]:
+            raise Exception(
+                f"Grouped LLM: missing PDF block for document {last_doc_id_str} "
+                f"(doc {last_idx + 1} of {n_docs}) while building prompt_used"
+            )
 
     return "\n".join(parts).rstrip()
 
@@ -665,11 +749,9 @@ async def _build_prompt_context(
 
         peer_docs = await db.docs.find(peer_query).to_list(length=None)
 
-        from bson import ObjectId as _ObjectId
-
         def _sort_key(d: dict):
             created_at = d.get("created_at") or d.get("upload_date")
-            if not created_at and isinstance(d.get("_id"), _ObjectId):
+            if not created_at and isinstance(d.get("_id"), ObjectId):
                 created_at = d["_id"].generation_time
             return (created_at, d.get("_id"))
 
@@ -683,6 +765,9 @@ async def _build_prompt_context(
                 f"{match_values}"
             )
 
+        # `ordered_peer_docs` includes the source as the first block (so the prompt can
+        # describe the full analysis set). `match_document_ids`, however, is used for
+        # UI/debugging to show "matched peer documents" *excluding* the source doc.
         match_document_ids = [doc_id for doc_id in match_document_ids_all if doc_id != source_doc_id]
         peer_run = {
             "match_values": match_values,
@@ -739,28 +824,20 @@ async def _build_prompt_context(
                 if text is None:
                     raise Exception(
                         f"LLM run failed: missing OCR/text for document {doc_id_str} "
-                        "(include.ocr_text is true)"
+                        f"(doc {idx} of {len(ordered_peer_docs)}; include.ocr_text is true)"
                     )
                 ocr_cache[doc_id_str] = text
             user_blocks.append({"type": "text", "text": f"ocr_text:\n{ocr_cache[doc_id_str]}"})
 
         if include_pdf:
             if doc_id_str not in pdf_base64_cache:
-                pdf_file_name = d.get("pdf_file_name")
-                blob = None
-                upload_name = pdf_file_name or (d.get("user_file_name") or "attachment")
-                if pdf_file_name:
-                    pdf_file = await ad.common.get_file_async(analytiq_client, pdf_file_name)
-                    blob = pdf_file.get("blob") if pdf_file else None
-                if not blob:
-                    blob, fname = await get_file_attachment(analytiq_client, d, llm_provider, llm_model)
-                    if fname:
-                        upload_name = fname
-                if not blob:
-                    raise Exception(
-                        f"LLM run failed: missing file blob for document {doc_id_str} "
-                        "(include.pdf is true)"
-                    )
+                blob, upload_name = await _load_pdf_blob(
+                    analytiq_client,
+                    d,
+                    doc_id_str,
+                    llm_provider,
+                    llm_model,
+                )
                 pdf_base64_cache[doc_id_str] = base64.b64encode(blob).decode("utf-8")
                 pdf_upload_name_cache[doc_id_str] = upload_name
 

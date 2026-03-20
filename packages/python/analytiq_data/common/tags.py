@@ -7,6 +7,10 @@ import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
+# Shared UI/defaults constant.
+# Keep this in one place so both API routes and agent tools remain consistent.
+DEFAULT_TAG_COLOR = "#3B82F6"
+
 async def get_tag_id(analytiq_client, tag_name: str) -> str:
     """
     Get a tag by its ID

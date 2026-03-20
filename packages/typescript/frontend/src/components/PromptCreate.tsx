@@ -11,21 +11,9 @@ import type {
   KnowledgeBase,
 } from '@docrouter/sdk';
 
-// Local extension for grouped prompt fields that may not yet exist in the SDK typings
-type GroupedPromptFields = {
-  peer_match_keys?: string[];
-  include?: {
-    ocr_text?: boolean;
-    metadata_keys?: string[];
-    pdf?: boolean;
-  };
-};
-
-type PromptWithGrouping = Prompt & GroupedPromptFields;
-
 // Type alias for prompt creation/update (without id and timestamps)
 type PromptConfig = Omit<
-  PromptWithGrouping,
+  Prompt,
   'prompt_revid' | 'prompt_id' | 'prompt_version' | 'created_at' | 'created_by'
 >;
 import { getApiErrorMsg } from '@/utils/api';
@@ -49,7 +37,7 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   const [currentPromptId, setCurrentPromptId] = useState<string | null>(null);
-  const [currentPromptFull, setCurrentPromptFull] = useState<PromptWithGrouping | null>(null);
+  const [currentPromptFull, setCurrentPromptFull] = useState<Prompt | null>(null);
   const [viewingVersion, setViewingVersion] = useState<number | null>(null);
   const [isReadOnly, setIsReadOnly] = useState(false);
   const [currentPrompt, setCurrentPrompt] = useState<PromptConfig>({
