@@ -1299,17 +1299,30 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                     (!!runInfoResult.peer_run.match_document_ids &&
                       runInfoResult.peer_run.match_document_ids.length > 0));
                 const promptUsedText = runInfoResult.prompt_used?.trim();
-                const promptLabel =
-                  runInfoResult.prompt_display_name ??
-                  (runInfoResult.prompt_revid === 'default'
+                const promptEditHref = `/orgs/${organizationId}/prompts/${encodeURIComponent(runInfoResult.prompt_revid)}`;
+                const promptLinkLabel =
+                  runInfoResult.prompt_revid === 'default'
                     ? 'Document Summary'
-                    : runInfoResult.prompt_revid);
+                    : runInfoResult.prompt_revid;
+                const showDisplayNamePrefix =
+                  !!runInfoResult.prompt_display_name && runInfoResult.prompt_revid !== 'default';
                 return (
                   <div className="space-y-4">
                     <div>
                       <label className="mb-1 block text-sm font-semibold text-gray-700">Prompt</label>
-                      <div className="break-all rounded border bg-gray-50 p-2 font-mono text-sm text-gray-900">
-                        {promptLabel} <span className="text-gray-600">(v{runInfoResult.prompt_version})</span>
+                      <div className="break-words rounded border bg-gray-50 p-2 text-sm text-gray-900">
+                        {showDisplayNamePrefix ? (
+                          <span className="text-gray-800">{runInfoResult.prompt_display_name} · </span>
+                        ) : null}
+                        <a
+                          href={promptEditHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="break-all font-mono text-blue-600 hover:underline"
+                        >
+                          {promptLinkLabel}
+                        </a>
+                        <span className="text-gray-600"> (v{runInfoResult.prompt_version})</span>
                       </div>
                     </div>
 
