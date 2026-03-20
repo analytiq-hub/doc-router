@@ -643,7 +643,7 @@ def _prompt_used_from_vision_user_blocks(
     return f"{system_prompt}\n\n{body}".rstrip()
 
 
-async def _build_grouped_prompt_context(
+async def _build_prompt_context(
     analytiq_client,
     doc: dict,
     prompt_revid: str,
@@ -926,7 +926,7 @@ async def run_llm(
     messages: list
     prompt_used_text: str | None = None
 
-    grouped_messages, peer_run, prompt_used_text = await _build_grouped_prompt_context(
+    grouped_messages, peer_run, prompt_used_text = await _build_prompt_context(
         analytiq_client,
         doc,
         prompt_revid,
@@ -940,7 +940,7 @@ async def run_llm(
     if grouped_messages:
         messages = grouped_messages
         logger.info(f"{document_id}/{prompt_revid}: Using grouped prompt flow with peer_run={peer_run}")
-        # PDF/OCR embedding is provider-dependent inside _build_grouped_prompt_context().
+        # PDF/OCR embedding is provider-dependent inside _build_prompt_context().
         extracted_text = None
         file_attachment_blob = None
         file_attachment_name = None
