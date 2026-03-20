@@ -1306,7 +1306,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                   ((runMeta.match_values && Object.keys(runMeta.match_values).length > 0) ||
                     (!!runMeta.match_document_ids && runMeta.match_document_ids.length > 0));
                 const promptUsedText = runMeta?.prompt?.trim();
-                const promptEditHref = `/orgs/${organizationId}/prompts/${encodeURIComponent(runInfoResult.prompt_revid)}`;
+                // The backend prompt editor route expects `promptRevId` to be a Mongo ObjectId.
+                // Our "default" prompt is synthetic and uses `prompt_revid="default"`, so
+                // linking to `/prompts/default` would fail. Route to the prompts list instead.
+                const promptEditHref =
+                  runInfoResult.prompt_revid === 'default'
+                    ? `/orgs/${organizationId}/prompts`
+                    : `/orgs/${organizationId}/prompts/${encodeURIComponent(runInfoResult.prompt_revid)}`;
                 const promptLinkLabel =
                   runInfoResult.prompt_revid === 'default'
                     ? 'Document Summary'
