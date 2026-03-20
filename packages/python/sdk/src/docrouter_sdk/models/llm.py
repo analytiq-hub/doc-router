@@ -39,10 +39,7 @@ class LLMResult(BaseModel):
     created_at: datetime
     updated_at: datetime
     prompt_display_name: Optional[str] = None
-    # Sanitized prompt used for generating this result (OCR/PDF replaced with placeholders).
-    prompt_used: Optional[str] = None
-    # Optional peer-run metadata; present only for grouped runs
-    peer_run: Optional[dict] = None
+    run: Optional[dict] = None
 
 class UpdateLLMResultRequest(BaseModel):
     updated_llm_result: dict

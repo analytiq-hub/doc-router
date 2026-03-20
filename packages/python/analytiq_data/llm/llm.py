@@ -1205,13 +1205,16 @@ async def run_llm(
             #logger.info(f"Reordered response: {resp_dict}")
 
     # 10. Save the new result
+    run_payload: dict[str, object] = {"prompt": prompt_used_text}
+    if peer_run is not None:
+        run_payload["match_values"] = peer_run["match_values"]
+        run_payload["match_document_ids"] = peer_run["match_document_ids"]
     await save_llm_result(
         analytiq_client,
         document_id,
         prompt_revid,
         resp_dict,
-        peer_run=peer_run,
-        prompt_used=prompt_used_text,
+        run=run_payload,
     )
 
     # Optional per-org webhook: per-prompt completion (non-default prompts only)
@@ -1303,12 +1306,16 @@ async def get_prompt_info_from_rev_id(analytiq_client, prompt_revid: str) -> tup
 
 
 def _llm_run_element_for_log(element: dict[str, object]) -> dict[str, object]:
-    """Shallow copy of an llm_runs document for logging; drops huge prompt_used text."""
+    """Shallow copy of an llm_runs document for logging; truncates huge run.prompt text."""
     out = dict(element)
-    pu = out.get("prompt_used")
-    if pu is not None:
-        n = len(pu) if isinstance(pu, str) else len(str(pu))
-        out["prompt_used"] = f"<omitted {n} chars>"
+    run = out.get("run")
+    if isinstance(run, dict):
+        run_copy = dict(run)
+        p = run_copy.get("prompt")
+        if p is not None:
+            n = len(p) if isinstance(p, str) else len(str(p))
+            run_copy["prompt"] = f"<omitted {n} chars>"
+        out["run"] = run_copy
     return out
 
 
@@ -1317,8 +1324,7 @@ async def save_llm_result(
     document_id: str,
     prompt_revid: str,
     llm_result: dict,
-    peer_run: dict | None = None,
-    prompt_used: str | None = None,
+    run: dict | None = None,
 ) -> str:
     """
     Save the LLM result to MongoDB.
@@ -1328,6 +1334,7 @@ async def save_llm_result(
         document_id: The document ID
         prompt_revid: The prompt revision ID
         llm_result: The LLM result
+        run: Optional execution metadata (prompt, match_values, match_document_ids).
     """
 
     db_name = analytiq_client.env
@@ -1351,12 +1358,8 @@ async def save_llm_result(
         "updated_at": current_time_utc,
     }
 
-    # Optional peer-run metadata (match values + matched document ids)
-    if peer_run is not None:
-        element["peer_run"] = peer_run
-
-    if prompt_used is not None:
-        element["prompt_used"] = prompt_used
+    if run is not None:
+        element["run"] = run
 
     logger.info(f"Saving LLM result: {_llm_run_element_for_log(element)}")
 

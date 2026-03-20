@@ -89,12 +89,12 @@ class LLMRunResponse(BaseModel):
     status: str
     result: dict
 
-class PeerRunMetadata(BaseModel):
+class LLMResultRun(BaseModel):
     """
-    Metadata about a peer-matched LLM run.
+    Execution metadata for this LLM run: sanitized prompt text and optional grouped-peer match info.
+    """
 
-    Present only for grouped runs; omitted for legacy single-document runs.
-    """
+    prompt: Optional[str] = None
     match_values: Optional[dict] = None
     match_document_ids: Optional[list[str]] = None
 
@@ -111,9 +111,7 @@ class LLMResult(BaseModel):
     created_at: datetime
     updated_at: datetime
     prompt_display_name: Optional[str] = None
-    # Sanitized prompt used for generating this result (OCR/PDF replaced with placeholders).
-    prompt_used: Optional[str] = None
-    peer_run: Optional[PeerRunMetadata] = None
+    run: Optional[LLMResultRun] = None
 
 class UpdateLLMResultRequest(BaseModel):
     updated_llm_result: dict

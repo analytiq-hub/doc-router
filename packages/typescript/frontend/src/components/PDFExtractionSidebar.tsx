@@ -1292,13 +1292,12 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
               </div>
             ) : runInfoResult ? (
               (() => {
+                const runMeta = runInfoResult.run;
                 const hasPeerBlock =
-                  !!runInfoResult.peer_run &&
-                  ((runInfoResult.peer_run.match_values &&
-                    Object.keys(runInfoResult.peer_run.match_values).length > 0) ||
-                    (!!runInfoResult.peer_run.match_document_ids &&
-                      runInfoResult.peer_run.match_document_ids.length > 0));
-                const promptUsedText = runInfoResult.prompt_used?.trim();
+                  !!runMeta &&
+                  ((runMeta.match_values && Object.keys(runMeta.match_values).length > 0) ||
+                    (!!runMeta.match_document_ids && runMeta.match_document_ids.length > 0));
+                const promptUsedText = runMeta?.prompt?.trim();
                 const promptEditHref = `/orgs/${organizationId}/prompts/${encodeURIComponent(runInfoResult.prompt_revid)}`;
                 const promptLinkLabel =
                   runInfoResult.prompt_revid === 'default'
@@ -1355,18 +1354,17 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                       </div>
                     </div>
 
-                    {hasPeerBlock && runInfoResult.peer_run && (
+                    {hasPeerBlock && runMeta && (
                       <div>
                         <div className="grid grid-cols-2 gap-4">
-                          {runInfoResult.peer_run.match_values &&
-                            Object.keys(runInfoResult.peer_run.match_values).length > 0 && (
+                          {runMeta.match_values && Object.keys(runMeta.match_values).length > 0 && (
                               <div>
                                 <label className="mb-1 block text-xs font-semibold text-gray-700">
                                   Match values
                                 </label>
                                 <div className="rounded border bg-gray-50 p-2 text-sm text-gray-900">
                                   <ul className="list-disc space-y-1 pl-4">
-                                    {Object.entries(runInfoResult.peer_run.match_values).map(([key, value]) => (
+                                    {Object.entries(runMeta.match_values).map(([key, value]) => (
                                       <li key={key} className="break-all">
                                         <span className="font-semibold">{key}</span>
                                         <span className="mx-1 text-gray-400">=</span>
@@ -1377,15 +1375,14 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                                 </div>
                               </div>
                             )}
-                          {runInfoResult.peer_run.match_document_ids &&
-                            runInfoResult.peer_run.match_document_ids.length > 0 && (
+                          {runMeta.match_document_ids && runMeta.match_document_ids.length > 0 && (
                               <div>
                                 <label className="mb-1 block text-xs font-semibold text-gray-700">
                                   Matched peer documents
                                 </label>
                                 <div className="rounded border bg-gray-50 p-2 text-sm">
                                   <ul className="list-disc space-y-1 pl-4">
-                                    {runInfoResult.peer_run.match_document_ids.map(docId => (
+                                    {runMeta.match_document_ids.map(docId => (
                                       <li key={docId} className="break-all">
                                         <a
                                           href={`/orgs/${organizationId}/docs/${docId}`}
@@ -1412,7 +1409,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                       <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border bg-gray-50 p-2 font-mono text-xs leading-relaxed text-gray-800">
                         {promptUsedText
                           ? promptUsedText
-                          : 'No prompt_used reported by the backend for this run.'}
+                          : 'No prompt text reported by the backend for this run.'}
                       </pre>
                     </div>
                   </div>
