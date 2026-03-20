@@ -604,7 +604,7 @@ def _prompt_used_from_grouped_user_blocks(
                     raise Exception(f"Grouped LLM: PDF text block has unexpected shape for doc {doc_id_str}")
             else:
                 raise Exception(f"Grouped LLM: expected file or text PDF block for doc {doc_id_str}")
-            parts.append(f"pdf:\n<{doc_id_str}_uuencoded>")
+            parts.append(f"pdf:\n<{doc_id_str}_pdf>")
             bi += 1
 
     if bi != len(user_blocks):
@@ -634,7 +634,7 @@ def _prompt_used_from_vision_user_blocks(
                 t = t.replace(extracted_text, f"<{document_id}_ocr_text>", 1)
             parts.append(t)
         elif btype == "file":
-            parts.append(f"pdf:\n<{document_id}_uuencoded>")
+            parts.append(f"pdf:\n<{document_id}_pdf>")
         else:
             raise Exception(
                 f"Unexpected user content block type {btype!r} while building prompt_used"
