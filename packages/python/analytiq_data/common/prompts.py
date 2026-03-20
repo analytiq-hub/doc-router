@@ -250,13 +250,14 @@ async def get_prompt_group_config(analytiq_client, prompt_id: str) -> Dict[str, 
             "include": {
                 "ocr_text": bool,
                 "pdf": bool,
-                "metadata_keys": List[str]
+                "metadata_keys": List[str],
             }
         }
 
-    If `peer_match_keys` is empty, the worker falls back to single-document flow.
+    If `peer_match_keys` is empty, the worker still applies `include` when building
+    the single-document LLM context.
     """
-    # Default prompt uses legacy single-document flow with standard defaults
+    # Default prompt uses standard include defaults (single-document, no peer grouping)
     if prompt_id == "default":
         return {
             "peer_match_keys": [],
@@ -271,17 +272,16 @@ async def get_prompt_group_config(analytiq_client, prompt_id: str) -> Dict[str, 
         raise ValueError(f"Prompt {prompt_id} not found")
 
     peer_match_keys = elem.get("peer_match_keys") or []
-    include = elem.get("include") or {"ocr_text": True, "metadata_keys": [], "pdf": True}
+    include = elem.get("include") or {}
 
     # Ensure include has all expected keys with sensible defaults
     if not isinstance(include, dict):
-        include = {"ocr_text": True, "metadata_keys": [], "pdf": True}
-    else:
-        include = {
-            "ocr_text": bool(include.get("ocr_text", True)),
-            "metadata_keys": list(include.get("metadata_keys") or []),
-            "pdf": bool(include.get("pdf", True)),
-        }
+        include = {}
+    include = {
+        "ocr_text": bool(include.get("ocr_text", True)),
+        "metadata_keys": list(include.get("metadata_keys") or []),
+        "pdf": bool(include.get("pdf", True)),
+    }
 
     return {
         "peer_match_keys": peer_match_keys,

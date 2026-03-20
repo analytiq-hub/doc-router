@@ -615,34 +615,6 @@ def _prompt_used_from_grouped_user_blocks(
     return "\n".join(parts).rstrip()
 
 
-def _prompt_used_from_vision_user_blocks(
-    system_prompt: str,
-    user_blocks: List[Dict[str, Any]],
-    document_id: str,
-    extracted_text: Optional[str],
-) -> str:
-    """
-    Build prompt_used from the same user message blocks (text + file) sent to the model.
-    OCR in the text block is replaced with a placeholder; file blocks become pdf placeholders.
-    """
-    parts: List[str] = []
-    for block in user_blocks:
-        btype = block.get("type")
-        if btype == "text":
-            t = block.get("text") or ""
-            if extracted_text:
-                t = t.replace(extracted_text, f"<{document_id}_ocr_text>", 1)
-            parts.append(t)
-        elif btype == "file":
-            parts.append(f"pdf:\n<{document_id}_pdf>")
-        else:
-            raise Exception(
-                f"Unexpected user content block type {btype!r} while building prompt_used"
-            )
-    body = "\n\n".join(parts)
-    return f"{system_prompt}\n\n{body}".rstrip()
-
-
 async def _build_prompt_context(
     analytiq_client,
     doc: dict,
@@ -654,62 +626,14 @@ async def _build_prompt_context(
     api_key: str,
 ) -> Tuple[list, dict | None, str]:
     """
-    Build messages and peer_run metadata for grouped prompts.
+    Build chat messages (and optional peer_run) from prompt revision include settings.
 
-    When peer matching is not configured for this prompt, returns ([], None, "").
+    Used for grouped prompts (peer_match_keys) and for single-document runs with the same
+    block layout and include toggles (ocr_text, pdf, metadata_keys). Prompt content is always included.
     """
     group_cfg = await ad.common.get_prompt_group_config(analytiq_client, prompt_revid)
     peer_match_keys: List[str] = group_cfg.get("peer_match_keys") or []
     include: Dict[str, Any] = group_cfg.get("include") or {}
-
-    # No grouping configured – caller should fall back to single-document flow
-    if not peer_match_keys:
-        return [], None, ""
-
-    db = analytiq_client.mongodb_async[analytiq_client.env]
-
-    doc_metadata: Dict[str, Any] = doc.get("metadata", {}) or {}
-
-    # Step 1 — Build peer_run.match_values from source document metadata
-    match_values: Dict[str, Any] = {}
-    for key in peer_match_keys:
-        if key not in doc_metadata:
-            raise Exception(f"Grouped LLM run failed: source document missing metadata key '{key}'")
-        match_values[key] = doc_metadata[key]
-
-    # Step 2 — Find peer pool (same org, matching all peer_match_keys)
-    peer_query: Dict[str, Any] = {"organization_id": org_id}
-    for key, value in match_values.items():
-        peer_query[f"metadata.{key}"] = value
-
-    peer_docs = await db.docs.find(peer_query).to_list(length=None)
-
-    # Deterministic ordering helper
-    from bson import ObjectId as _ObjectId
-
-    def _sort_key(d: dict):
-        created_at = d.get("created_at") or d.get("upload_date")
-        if not created_at and isinstance(d.get("_id"), _ObjectId):
-            created_at = d["_id"].generation_time
-        return (created_at, d.get("_id"))
-
-    peer_docs.sort(key=_sort_key)
-
-    source_doc_id = str(doc.get("_id"))
-    match_document_ids_all = [str(d["_id"]) for d in peer_docs if d.get("_id") is not None]
-
-    # Step 4 — Validate internal consistency (source doc must be in match results)
-    if source_doc_id not in match_document_ids_all:
-        raise Exception(
-            "Grouped LLM run failed: source document not found by computed peer query "
-            f"{match_values}"
-        )
-
-    # UI requirement: show *other* documents only (exclude the current/source document).
-    match_document_ids = [doc_id for doc_id in match_document_ids_all if doc_id != source_doc_id]
-
-    # Step 3 — Build prompt text in code (text-only v1; attachments handled by single-doc flow)
-    instruction = await ad.common.get_prompt_content(analytiq_client, prompt_revid)
 
     include_ocr = bool(include.get("ocr_text", True))
     include_pdf = bool(include.get("pdf", True))
@@ -720,16 +644,70 @@ async def _build_prompt_context(
     metadata_keys: List[str] = list(include.get("metadata_keys") or [])
     include_all_metadata = metadata_keys == ["*"]
 
-    ocr_cache: Dict[str, str] = {}
-    # Cache base64-encoded PDFs (used for file_data and/or text fallback).
-    pdf_base64_cache: Dict[str, str] = {}
-    # Cache uploaded OpenAI file_ids for this run.
-    openai_file_id_cache: Dict[str, str] = {}
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    source_doc_id = str(doc.get("_id"))
 
-    # Build the user content as structured blocks so we can interleave text + file blocks.
+    peer_run: dict | None = None
+    ordered_peer_docs: List[dict]
+
+    if peer_match_keys:
+        doc_metadata: Dict[str, Any] = doc.get("metadata", {}) or {}
+
+        match_values: Dict[str, Any] = {}
+        for key in peer_match_keys:
+            if key not in doc_metadata:
+                raise Exception(f"Grouped LLM run failed: source document missing metadata key '{key}'")
+            match_values[key] = doc_metadata[key]
+
+        peer_query: Dict[str, Any] = {"organization_id": org_id}
+        for key, value in match_values.items():
+            peer_query[f"metadata.{key}"] = value
+
+        peer_docs = await db.docs.find(peer_query).to_list(length=None)
+
+        from bson import ObjectId as _ObjectId
+
+        def _sort_key(d: dict):
+            created_at = d.get("created_at") or d.get("upload_date")
+            if not created_at and isinstance(d.get("_id"), _ObjectId):
+                created_at = d["_id"].generation_time
+            return (created_at, d.get("_id"))
+
+        peer_docs.sort(key=_sort_key)
+
+        match_document_ids_all = [str(d["_id"]) for d in peer_docs if d.get("_id") is not None]
+
+        if source_doc_id not in match_document_ids_all:
+            raise Exception(
+                "Grouped LLM run failed: source document not found by computed peer query "
+                f"{match_values}"
+            )
+
+        match_document_ids = [doc_id for doc_id in match_document_ids_all if doc_id != source_doc_id]
+        peer_run = {
+            "match_values": match_values,
+            "match_document_ids": match_document_ids,
+        }
+
+        ordered_peer_docs = [d for d in peer_docs if str(d.get("_id")) == source_doc_id] + [
+            d for d in peer_docs if str(d.get("_id")) != source_doc_id
+        ]
+    else:
+        ordered_peer_docs = [doc]
+
+    instruction = await ad.common.get_prompt_content(analytiq_client, prompt_revid)
+
+    ocr_cache: Dict[str, str] = {}
+    pdf_base64_cache: Dict[str, str] = {}
+    openai_file_id_cache: Dict[str, str] = {}
+    pdf_upload_name_cache: Dict[str, str] = {}
+
     user_blocks: List[Dict[str, Any]] = []
     header_lines: List[str] = []
-    header_lines.append("You are analyzing a group of related documents.")
+    if peer_match_keys:
+        header_lines.append("You are analyzing a group of related documents.")
+    else:
+        header_lines.append("You are analyzing a document.")
     header_lines.append("")
     header_lines.append("Instruction:")
     header_lines.append(instruction)
@@ -737,12 +715,6 @@ async def _build_prompt_context(
     header_lines.append("Documents:")
     header_lines.append("")
     user_blocks.append({"type": "text", "text": "\n".join(header_lines)})
-
-    # Ensure the source/current document is emitted first in the attached list order.
-    # (peer_docs is sorted deterministically, but the source doc might not be first.)
-    ordered_peer_docs = [d for d in peer_docs if str(d.get("_id")) == source_doc_id] + [
-        d for d in peer_docs if str(d.get("_id")) != source_doc_id
-    ]
 
     for idx, d in enumerate(ordered_peer_docs, start=1):
         doc_id_str = str(d.get("_id"))
@@ -759,39 +731,47 @@ async def _build_prompt_context(
             doc_header_parts.append("metadata:")
             doc_header_parts.append(json.dumps(filtered_meta, indent=2, default=str))
 
-        # Add the header for this document.
         user_blocks.append({"type": "text", "text": "\n".join(doc_header_parts)})
 
-        # OCR text (provider-agnostic): always embed as text blocks.
         if include_ocr:
             if doc_id_str not in ocr_cache:
                 text = await get_extracted_text(analytiq_client, doc_id_str)
                 if text is None:
                     raise Exception(
-                        f"Grouped LLM run failed: missing OCR/text for document {doc_id_str}"
+                        f"LLM run failed: missing OCR/text for document {doc_id_str} "
+                        "(include.ocr_text is true)"
                     )
                 ocr_cache[doc_id_str] = text
             user_blocks.append({"type": "text", "text": f"ocr_text:\n{ocr_cache[doc_id_str]}"})
 
         if include_pdf:
-            pdf_file_name = d.get("pdf_file_name")
-            if not pdf_file_name:
-                raise Exception(f"Grouped LLM run failed: missing pdf_file_name for document {doc_id_str}")
-
             if doc_id_str not in pdf_base64_cache:
-                pdf_file = await ad.common.get_file_async(analytiq_client, pdf_file_name)
-                blob = pdf_file.get("blob") if pdf_file else None
+                pdf_file_name = d.get("pdf_file_name")
+                blob = None
+                upload_name = pdf_file_name or (d.get("user_file_name") or "attachment")
+                if pdf_file_name:
+                    pdf_file = await ad.common.get_file_async(analytiq_client, pdf_file_name)
+                    blob = pdf_file.get("blob") if pdf_file else None
                 if not blob:
-                    raise Exception(f"Grouped LLM run failed: missing pdf blob for document {doc_id_str}")
+                    blob, fname = await get_file_attachment(analytiq_client, d, llm_provider, llm_model)
+                    if fname:
+                        upload_name = fname
+                if not blob:
+                    raise Exception(
+                        f"LLM run failed: missing file blob for document {doc_id_str} "
+                        "(include.pdf is true)"
+                    )
                 pdf_base64_cache[doc_id_str] = base64.b64encode(blob).decode("utf-8")
+                pdf_upload_name_cache[doc_id_str] = upload_name
+
+            upload_name = pdf_upload_name_cache.get(doc_id_str) or (d.get("pdf_file_name") or "attachment")
 
             if can_attach_pdf_as_file_block:
-                # Use structured file blocks where supported by the provider.
                 if llm_provider == "openai":
                     if doc_id_str not in openai_file_id_cache:
                         blob_bytes = base64.b64decode(pdf_base64_cache[doc_id_str].encode("utf-8"))
                         file_response = await _litellm_acreate_file_with_retry(
-                            file=(pdf_file_name, blob_bytes),
+                            file=(upload_name, blob_bytes),
                             purpose="assistants",
                             custom_llm_provider="openai",
                             api_key=api_key,
@@ -802,7 +782,6 @@ async def _build_prompt_context(
                     base64_url = f"data:application/pdf;base64,{pdf_base64_cache[doc_id_str]}"
                     user_blocks.append({"type": "file", "file": {"file_data": base64_url}})
             elif embed_pdf_as_text:
-                # Fallback: embed base64 pdf bytes into the prompt text.
                 user_blocks.append({"type": "text", "text": f"pdf:\n{pdf_base64_cache[doc_id_str]}"})
 
     messages = [
@@ -810,10 +789,6 @@ async def _build_prompt_context(
         {"role": "user", "content": user_blocks},
     ]
 
-    peer_run = {
-        "match_values": match_values,
-        "match_document_ids": match_document_ids,
-    }
     prompt_used_text = _prompt_used_from_grouped_user_blocks(
         system_prompt,
         user_blocks,
@@ -920,13 +895,7 @@ async def run_llm(
             "Format your entire response as a JSON object."
         )
     
-    # Determine how to handle the document content.
-    # First, attempt grouped prompt flow; if not configured, fall back to legacy single-document behavior.
-    peer_run: dict | None = None
-    messages: list
-    prompt_used_text: str | None = None
-
-    grouped_messages, peer_run, prompt_used_text = await _build_prompt_context(
+    messages, peer_run, prompt_used_text = await _build_prompt_context(
         analytiq_client,
         doc,
         prompt_revid,
@@ -936,121 +905,10 @@ async def run_llm(
         llm_model=llm_model,
         api_key=api_key,
     )
-
-    if grouped_messages:
-        messages = grouped_messages
-        logger.info(f"{document_id}/{prompt_revid}: Using grouped prompt flow with peer_run={peer_run}")
-        # PDF/OCR embedding is provider-dependent inside _build_prompt_context().
-        extracted_text = None
-        file_attachment_blob = None
-        file_attachment_name = None
+    if peer_run is not None:
+        logger.info(f"{document_id}/{prompt_revid}: Grouped prompt context peer_run={peer_run}")
     else:
-        extracted_text = await get_extracted_text(analytiq_client, document_id)
-        file_attachment_blob, file_attachment_name = await get_file_attachment(analytiq_client, doc, llm_provider, llm_model)
-
-        if not extracted_text and not file_attachment_blob:
-            raise Exception(f"{document_id}/{prompt_revid}: Document has no extracted text and no file attachment, so cannot use vision")
-        
-        prompt1 = await ad.common.get_prompt_content(analytiq_client, prompt_revid)
-
-        # XAI doesn't support complex file attachment formats, so use text-only for XAI
-        if file_attachment_blob and llm_provider != "xai":
-            # For vision models, we can pass both the PDF and OCR text
-            # The PDF provides visual context, OCR text provides structured text
-            prompt = f"""{prompt1}
-
-            Please analyze this document. You have access to both the visual PDF and the extracted text.
-            
-            Extracted text from the document:
-            {extracted_text}
-            
-            Please provide your analysis based on both the visual content and the text."""
-
-            # Different approaches for different providers
-            if llm_provider == "openai":
-                # For OpenAI, we need to upload the file first
-                try:
-                    # Upload file to OpenAI
-                    file_response = await _litellm_acreate_file_with_retry(
-                        file=(file_attachment_name, file_attachment_blob),
-                        purpose="assistants",
-                        custom_llm_provider="openai",
-                        api_key=api_key
-                    )
-                    file_id = file_response.id
-                    
-                    # Create messages with file reference
-                    file_content = [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "file",
-                            "file": {
-                                "file_id": file_id,
-                            }
-                        },
-                    ]
-                    
-                    messages = [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": file_content}
-                    ]
-                    logger.info(f"{document_id}/{prompt_revid}: Attaching OCR and PDF to prompt using OpenAI file_id: {file_id}")
-                    
-                except Exception as e:
-                    logger.error(f"{document_id}/{prompt_revid}: Failed to upload file to OpenAI: {e}")
-                    raise e
-                    
-            else:
-                # For other providers (Anthropic, Gemini), use base64 approach
-                encoded_file = base64.b64encode(file_attachment_blob).decode("utf-8")
-                base64_url = f"data:application/pdf;base64,{encoded_file}"
-                
-                file_content = [
-                    {"type": "text", "text": prompt},
-                    {
-                        "type": "file",
-                        "file": {
-                            "file_data": base64_url,
-                        }
-                    },
-                ]
-                
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": file_content}
-                ]
-                logger.info(f"{document_id}/{prompt_revid}: Attaching OCR and PDF to prompt using base64 for {llm_provider}")
-
-            prompt_used_text = _prompt_used_from_vision_user_blocks(
-                system_prompt,
-                messages[1]["content"],
-                document_id,
-                extracted_text,
-            )
-
-        # Use OCR-only approach if no file attachment or if provider is XAI (which doesn't support file attachments)
-        if not file_attachment_blob or llm_provider == "xai":
-            # Original OCR-only approach
-            prompt = f"""{prompt1}
-
-            Now extract from this text: 
-            
-            {extracted_text}"""
-
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ]
-
-            if extracted_text:
-                prompt_used_user = prompt.replace(
-                    extracted_text, f"<{document_id}_ocr_text>", 1
-                )
-            else:
-                prompt_used_user = prompt
-            prompt_used_text = f"{system_prompt}\n\n{prompt_used_user}".rstrip()
-
-            logger.info(f"{document_id}/{prompt_revid}: Attaching OCR-only to prompt")
+        logger.info(f"{document_id}/{prompt_revid}: Single-document prompt context from include settings")
 
     response_format = None
     
