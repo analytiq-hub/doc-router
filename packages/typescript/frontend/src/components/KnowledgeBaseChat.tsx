@@ -619,8 +619,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
                 disabled={!currentInput.trim() || !selectedModel || isStreaming}
                 className="px-4 sm:px-6 py-2 sm:py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-1 sm:gap-2 disabled:bg-gray-300 disabled:cursor-not-allowed"
               >
-                <SendIcon fontSize="small" className="sm:hidden" />
-                <SendIcon className="hidden sm:block" />
+                <SendIcon sx={{ fontSize: { xs: '1.125rem', sm: '1.25rem' } }} />
                 <span className="hidden sm:inline">Send</span>
               </button>
             )}
