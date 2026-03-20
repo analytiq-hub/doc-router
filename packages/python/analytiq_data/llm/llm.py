@@ -112,8 +112,37 @@ async def get_extracted_text(analytiq_client, document_id: str) -> str | None:
 
     # Check if OCR is supported
     if ad.common.doc.ocr_supported(file_name):
-        # Use OCR text
-        return await ad.common.get_ocr_text(analytiq_client, document_id)
+        # OCR may be produced asynchronously; if it's not ready yet (or retrieval
+        # temporarily fails), poll briefly before giving up.
+        poll_every_s = 5
+        max_steps = 6
+        last_err: Exception | None = None
+        for step in range(max_steps):
+            try:
+                text = await ad.common.get_ocr_text(analytiq_client, document_id)
+                if isinstance(text, str) and text.strip():
+                    return text
+                last_err = None
+            except Exception as e:
+                last_err = e
+                logger.debug(
+                    "get_ocr_text failed (step %s/%s) for document_id=%s; will retry",
+                    step + 1,
+                    max_steps,
+                    document_id,
+                    exc_info=True,
+                )
+
+            if step < max_steps - 1:
+                await asyncio.sleep(poll_every_s)
+
+        if last_err is not None:
+            logger.info(
+                "OCR/text not available after polling for document_id=%s (last error: %s)",
+                document_id,
+                last_err,
+            )
+        return None
 
     # For non-OCR files, check if it's a text file we can read
     if file_name:
