@@ -202,7 +202,9 @@ async def create_prompt(
     })
 
     if existing_prompt:
-        prompt_id, new_prompt_version = await get_prompt_id_and_version(existing_prompt["prompt_id"])
+        # `db.prompts` documents are keyed by their Mongo `_id` (stable prompt id).
+        # On name collisions we must increment the existing prompt_version for that same stable id.
+        prompt_id, new_prompt_version = await get_prompt_id_and_version(str(existing_prompt["_id"]))
     else:
         prompt_id, new_prompt_version = await get_prompt_id_and_version(None)
     
