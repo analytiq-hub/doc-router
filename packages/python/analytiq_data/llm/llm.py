@@ -1301,6 +1301,17 @@ async def get_prompt_info_from_rev_id(analytiq_client, prompt_revid: str) -> tup
     
     return str(elem["prompt_id"]), elem["prompt_version"]
 
+
+def _llm_run_element_for_log(element: dict[str, object]) -> dict[str, object]:
+    """Shallow copy of an llm_runs document for logging; drops huge prompt_used text."""
+    out = dict(element)
+    pu = out.get("prompt_used")
+    if pu is not None:
+        n = len(pu) if isinstance(pu, str) else len(str(pu))
+        out["prompt_used"] = f"<omitted {n} chars>"
+    return out
+
+
 async def save_llm_result(
     analytiq_client,
     document_id: str,
@@ -1347,7 +1358,7 @@ async def save_llm_result(
     if prompt_used is not None:
         element["prompt_used"] = prompt_used
 
-    logger.info(f"Saving LLM result: {element}")
+    logger.info(f"Saving LLM result: {_llm_run_element_for_log(element)}")
 
     # Save the result, return the ID
     result = await db.llm_runs.insert_one(element)
