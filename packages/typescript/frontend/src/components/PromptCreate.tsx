@@ -29,6 +29,10 @@ import PromptVersionSelector from './PromptVersionSelector';
 import PromptVersionCompareModal from './PromptVersionCompareModal';
 import PromptDiffView from './PromptDiffView';
 
+import Autocomplete from '@mui/material/Autocomplete';
+import Chip from '@mui/material/Chip';
+import TextField from '@mui/material/TextField';
+
 // Define default model constant
 const DEFAULT_LLM_MODEL = 'gemini-2.0-flash';
 
@@ -68,8 +72,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
   const [llmModels, setLLMModels] = useState<LLMChatModel[]>([]);
   const [availableKnowledgeBases, setAvailableKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [selectedKbId, setSelectedKbId] = useState<string>('');
-  const [metadataGroupByInput, setMetadataGroupByInput] = useState<string>('');
-  const [metadataKeysInput, setMetadataKeysInput] = useState<string>('');
+  const [metadataGroupByKeys, setMetadataGroupByKeys] = useState<string[]>([]);
+  const [metadataKeys, setMetadataKeys] = useState<string[]>([]);
   const [includeOcrText, setIncludeOcrText] = useState<boolean>(true);
   const [includePdf, setIncludePdf] = useState<boolean>(true);
 
@@ -147,8 +151,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
           setSelectedTagIds(prompt.tag_ids || []);
           setSelectedSchema(prompt.schema_id || '');
           setSelectedKbId(prompt.kb_id || '');
-          setMetadataGroupByInput((prompt.peer_match_keys || []).join(', '));
-          setMetadataKeysInput((prompt.include?.metadata_keys || []).join(', '));
+          setMetadataGroupByKeys(prompt.peer_match_keys || []);
+          setMetadataKeys(prompt.include?.metadata_keys || []);
           setIncludeOcrText(prompt.include?.ocr_text ?? true);
           setIncludePdf(prompt.include?.pdf ?? true);
           // Optionally, load schema details if needed
@@ -204,16 +208,16 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
     try {
       setIsLoading(true);
       // Parse grouped prompt fields
-      const metadataGroupBy = metadataGroupByInput
-        .split(',')
+      // Support both chip entry (preferred) and pasting comma-separated text (legacy UX).
+      const metadataGroupBy = metadataGroupByKeys
+        .flatMap((s) => s.split(','))
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
-      const metadataKeys = metadataKeysInput
-        .split(',')
+      const metadataKeysResolvedRaw = metadataKeys
+        .flatMap((s) => s.split(','))
         .map((s) => s.trim())
         .filter((s) => s.length > 0);
-
-      const metadataKeysResolved = metadataKeys.includes('*') ? ['*'] : metadataKeys;
+      const metadataKeysResolved = metadataKeysResolvedRaw.includes('*') ? ['*'] : metadataKeysResolvedRaw;
 
       // Create the prompt object with tag_ids, kb_id, and grouping fields
       const promptToSave = {
@@ -261,8 +265,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
       setSelectedSchemaDetails(null);
       setSelectedTagIds([]);
       setSelectedKbId('');
-      setMetadataGroupByInput('');
-      setMetadataKeysInput('');
+      setMetadataGroupByKeys([]);
+      setMetadataKeys([]);
       setIncludeOcrText(true);
       setIncludePdf(true);
 
@@ -418,8 +422,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     setSelectedTagIds(prompt.tag_ids || []);
                     setSelectedSchema(prompt.schema_id || '');
                     setSelectedKbId(prompt.kb_id || '');
-                    setMetadataGroupByInput((prompt.peer_match_keys || []).join(', '));
-                    setMetadataKeysInput((prompt.include?.metadata_keys || []).join(', '));
+                    setMetadataGroupByKeys(prompt.peer_match_keys || []);
+                    setMetadataKeys(prompt.include?.metadata_keys || []);
                     setIncludeOcrText(prompt.include?.ocr_text ?? true);
                     setIncludePdf(prompt.include?.pdf ?? true);
                     if (prompt.schema_id) {
@@ -511,8 +515,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                     setSelectedTagIds(prompt.tag_ids || []);
                     setSelectedSchema(prompt.schema_id || '');
                     setSelectedKbId(prompt.kb_id || '');
-                    setMetadataGroupByInput((prompt.peer_match_keys || []).join(', '));
-                    setMetadataKeysInput((prompt.include?.metadata_keys || []).join(', '));
+                    setMetadataGroupByKeys(prompt.peer_match_keys || []);
+                    setMetadataKeys(prompt.include?.metadata_keys || []);
                     setIncludeOcrText(prompt.include?.ocr_text ?? true);
                     setIncludePdf(prompt.include?.pdf ?? true);
                     if (prompt.schema_id) {
@@ -570,8 +574,8 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                   setSelectedSchemaDetails(null);
                   setSelectedTagIds([]);
                   setSelectedKbId('');
-                  setMetadataGroupByInput('');
-                  setMetadataKeysInput('');
+                  setMetadataGroupByKeys([]);
+                  setMetadataKeys([]);
                   setIncludeOcrText(true);
                   setIncludePdf(true);
                 }}
@@ -709,15 +713,40 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
                 </h3>
                 <div>
                   <label className="block text-xs font-medium text-gray-600 mb-1">
-                    Metadata group-by keys (comma-separated)
+                    Metadata group-by keys
                   </label>
-                  <input
-                    type="text"
-                    value={metadataGroupByInput}
-                    onChange={(e) => setMetadataGroupByInput(e.target.value)}
+                  <Autocomplete
+                    multiple
+                    freeSolo
+                    options={[]}
+                    value={metadataGroupByKeys}
+                    onChange={(_, next) => setMetadataGroupByKeys(next as string[])}
                     disabled={isLoading || isReadOnly}
-                    className="w-full p-2 border border-gray-300 rounded-md text-xs"
-                    placeholder="e.g. case_id, vendor"
+                    renderTags={(value, getTagProps) =>
+                      value.map((option, index) => (
+                        (() => {
+                          const tagProps = getTagProps({ index });
+                          // `getTagProps` returns a `key` prop; React doesn't like it being spread.
+                          const { key, ...rest } = tagProps as { key?: React.Key };
+                          return (
+                            <Chip
+                              key={key}
+                              variant="outlined"
+                              label={option}
+                              {...rest}
+                            />
+                          );
+                        })()
+                      ))
+                    }
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        variant="outlined"
+                        size="small"
+                        placeholder="Type key and press Enter"
+                      />
+                    )}
                   />
                 </div>
                 <div className="space-y-2">
@@ -737,15 +766,40 @@ const PromptCreate: React.FC<{ organizationId: string, promptRevId?: string }> =
 
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-1">
-                      Metadata keys to include (comma-separated; use * for all)
+                      Metadata keys to include (use * for all)
                     </label>
-                    <input
-                      type="text"
-                      value={metadataKeysInput}
-                      onChange={(e) => setMetadataKeysInput(e.target.value)}
+                    <Autocomplete
+                      multiple
+                      freeSolo
+                      options={[]}
+                      value={metadataKeys}
+                      onChange={(_, next) => setMetadataKeys(next as string[])}
                       disabled={isLoading || isReadOnly}
-                      className="w-full p-2 border border-gray-300 rounded-md text-xs"
-                      placeholder="* or document_type, invoice_number"
+                      renderTags={(value, getTagProps) =>
+                        value.map((option, index) => (
+                          (() => {
+                            const tagProps = getTagProps({ index });
+                            // `getTagProps` returns a `key` prop; React doesn't like it being spread.
+                            const { key, ...rest } = tagProps as { key?: React.Key };
+                            return (
+                              <Chip
+                                key={key}
+                                variant="outlined"
+                                label={option}
+                                {...rest}
+                              />
+                            );
+                          })()
+                        ))
+                      }
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          variant="outlined"
+                          size="small"
+                          placeholder="* or document_type, invoice_number"
+                        />
+                      )}
                     />
                   </div>
 
