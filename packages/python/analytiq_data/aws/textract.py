@@ -10,7 +10,7 @@ import uuid
 import logging
 import os
 import analytiq_data as ad
-from typing import Optional
+from typing import List, Optional, Union
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +24,17 @@ def _get_int_env(name: str, default: int) -> int:
 
 OCR_TIMEOUT_SECS = _get_int_env("OCR_TIMEOUT_SECS", 600)  # 10 min
 
+
+def ocr_result_blocks(ocr_json: Union[list, dict]) -> List[dict]:
+    """
+    Normalize OCR payload from :func:`run_textract` or persisted :func:`analytiq_data.common.ocr.get_ocr_json`:
+    either a legacy flat list of blocks or a dict shaped like ``GetDocumentAnalysis`` / ``GetDocumentTextDetection``.
+    """
+    if isinstance(ocr_json, dict) and "Blocks" in ocr_json:
+        return ocr_json["Blocks"]
+    return ocr_json
+
+
 async def run_textract(analytiq_client,
                        blob: bytes,
                        feature_types: list = [],
@@ -31,7 +42,7 @@ async def run_textract(analytiq_client,
                        document_id: Optional[str] = None,
                        org_id: Optional[str] = None) -> dict:
     """
-    Run textract on a blob and return the blocks formatted as a dict.
+    Run textract on a blob and return merged API-shaped results.
 
     Args:
         analytiq_client: Analytiq client
@@ -40,7 +51,10 @@ async def run_textract(analytiq_client,
         query_list: List of queries
 
     Returns:
-        Textract blocks formatted as a dict
+        Dict with ``Blocks`` (merged across pagination), ``DocumentMetadata``, and model version fields
+        from Textract (``AnalyzeDocumentModelVersion`` for analysis jobs,
+        ``DetectDocumentTextModelVersion`` for text-detection-only jobs). Use :func:`ocr_result_blocks`
+        if you only need the block list (also accepts legacy stored lists).
     """
     # Get the async AWS client
     aws_client = await ad.aws.get_aws_client_async(analytiq_client)
@@ -129,6 +143,10 @@ async def run_textract(analytiq_client,
             idx = 0
             if status == "SUCCEEDED":
                 blocks = []
+                document_metadata: Optional[dict] = None
+                analyze_document_model_version: Optional[str] = None
+                detect_document_text_model_version: Optional[str] = None
+                first_result_page = True
 
                 next_token = None
                 while True:
@@ -137,6 +155,14 @@ async def run_textract(analytiq_client,
                         response = await get_completion_func(JobId=job_id, NextToken=next_token)
                     else:
                         response = await get_completion_func(JobId=job_id)
+
+                    if first_result_page:
+                        document_metadata = response.get("DocumentMetadata")
+                        analyze_document_model_version = response.get("AnalyzeDocumentModelVersion")
+                        detect_document_text_model_version = response.get(
+                            "DetectDocumentTextModelVersion"
+                        )
+                        first_result_page = False
 
                     blocks.extend(response['Blocks'])
 
@@ -149,7 +175,18 @@ async def run_textract(analytiq_client,
                     if not next_token:
                         break
 
-                return blocks
+                if not document_metadata:
+                    page_blocks = [b for b in blocks if b.get("BlockType") == "PAGE"]
+                    document_metadata = {
+                        "Pages": len(page_blocks) if page_blocks else 1,
+                    }
+
+                return {
+                    "Blocks": blocks,
+                    "DocumentMetadata": document_metadata,
+                    "AnalyzeDocumentModelVersion": analyze_document_model_version,
+                    "DetectDocumentTextModelVersion": detect_document_text_model_version,
+                }
             else:
                 raise Exception(f"Textract document analysis failed: {status} for s3://{s3_bucket_name}/{s3_key}")
                 

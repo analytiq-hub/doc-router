@@ -1,10 +1,12 @@
 import asyncio
+import pickle
 import socket
 from datetime import datetime, UTC, timedelta
 import os
 import logging
 
 from pymongo.errors import DuplicateKeyError
+from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 
 import analytiq_data as ad
 
@@ -2317,6 +2319,199 @@ class FixLegacyProcessingQueueMessages(Migration):
         return True
 
 
+class OcrPayloadTextractEnvelopeMigration(Migration):
+    """
+    GridFS OCR blobs (`ocr` bucket) historically stored a pickled flat list of Textract blocks.
+    New code stores a dict with ``Blocks``, ``DocumentMetadata``, and model version fields
+    (see ``run_textract``). This migration upgrades legacy list payloads in place.
+    """
+
+    def __init__(self):
+        super().__init__(
+            description="Wrap legacy OCR GridFS pickle lists in Textract-style dict (Blocks, DocumentMetadata)"
+        )
+
+    @staticmethod
+    def _page_count_from_blocks(blocks: list) -> int:
+        page_blocks = [
+            b for b in blocks if isinstance(b, dict) and b.get("BlockType") == "PAGE"
+        ]
+        if page_blocks:
+            return len(page_blocks)
+        pages = [
+            b.get("Page", 1)
+            for b in blocks
+            if isinstance(b, dict) and "Page" in b
+        ]
+        return max(pages) if pages else 1
+
+    @classmethod
+    def _wrap_list_blocks(cls, blocks: list) -> dict:
+        return {
+            "Blocks": blocks,
+            "DocumentMetadata": {"Pages": cls._page_count_from_blocks(blocks)},
+            "AnalyzeDocumentModelVersion": None,
+            "DetectDocumentTextModelVersion": None,
+        }
+
+    @staticmethod
+    def _is_reversible_envelope(obj: object) -> bool:
+        """True only for payloads this migration produced (all version fields None)."""
+        if not isinstance(obj, dict) or "Blocks" not in obj:
+            return False
+        if obj.get("AnalyzeDocumentModelVersion") is not None:
+            return False
+        if obj.get("DetectDocumentTextModelVersion") is not None:
+            return False
+        dm = obj.get("DocumentMetadata")
+        if not isinstance(dm, dict) or "Pages" not in dm:
+            return False
+        if set(obj.keys()) - {
+            "Blocks",
+            "DocumentMetadata",
+            "AnalyzeDocumentModelVersion",
+            "DetectDocumentTextModelVersion",
+        }:
+            return False
+        return True
+
+    async def up(self, db) -> bool:
+        try:
+            fs = AsyncIOMotorGridFSBucket(db, bucket_name="ocr")
+            files_coll = db["ocr.files"]
+
+            if "ocr.files" not in await db.list_collection_names():
+                logger.info("OCR migration: ocr.files bucket missing, nothing to do")
+                return True
+
+            upgraded_json = 0
+            skipped_json = 0
+
+            file_docs = await files_coll.find({"filename": {"$regex": r"_json$"}}).to_list(
+                length=None
+            )
+            for file_doc in file_docs:
+                filename = file_doc["filename"]
+                try:
+                    stream = await fs.open_download_stream(file_doc["_id"])
+                    raw = await stream.read()
+                    obj = pickle.loads(raw)
+                except Exception as e:
+                    logger.warning("OCR migration: skip unreadable %s: %s", filename, e)
+                    skipped_json += 1
+                    continue
+
+                if isinstance(obj, dict) and "Blocks" in obj:
+                    skipped_json += 1
+                    continue
+                if not isinstance(obj, list):
+                    logger.warning(
+                        "OCR migration: skip %s: expected list or dict-with-Blocks, got %s",
+                        filename,
+                        type(obj),
+                    )
+                    skipped_json += 1
+                    continue
+
+                new_obj = self._wrap_list_blocks(obj)
+                new_bytes = pickle.dumps(new_obj)
+                meta = file_doc.get("metadata") or {}
+                await fs.delete(file_doc["_id"])
+                await fs.upload_from_stream(filename=filename, source=new_bytes, metadata=meta)
+                upgraded_json += 1
+                logger.info("OCR migration: upgraded %s to Textract envelope", filename)
+
+            legacy_list_docs = await files_coll.find({"filename": {"$regex": r"_list$"}}).to_list(
+                length=None
+            )
+            upgraded_list = 0
+            for file_doc in legacy_list_docs:
+                filename = file_doc["filename"]
+                if not filename.endswith("_list"):
+                    continue
+                base = filename[: -len("_list")]
+                json_filename = f"{base}_json"
+                has_json = await files_coll.find_one({"filename": json_filename})
+                if has_json:
+                    await fs.delete(file_doc["_id"])
+                    logger.info("OCR migration: removed orphan %s ( %s exists)", filename, json_filename)
+                    continue
+                try:
+                    stream = await fs.open_download_stream(file_doc["_id"])
+                    raw = await stream.read()
+                    obj = pickle.loads(raw)
+                except Exception as e:
+                    logger.warning("OCR migration: skip unreadable %s: %s", filename, e)
+                    continue
+                if not isinstance(obj, list):
+                    logger.warning(
+                        "OCR migration: skip %s: expected list in legacy _list file, got %s",
+                        filename,
+                        type(obj),
+                    )
+                    continue
+                new_obj = self._wrap_list_blocks(obj)
+                new_bytes = pickle.dumps(new_obj)
+                meta = file_doc.get("metadata") or {}
+                await fs.delete(file_doc["_id"])
+                await fs.upload_from_stream(filename=json_filename, source=new_bytes, metadata=meta)
+                upgraded_list += 1
+                logger.info(
+                    "OCR migration: migrated %s -> %s (Textract envelope)", filename, json_filename
+                )
+
+            logger.info(
+                "OCR migration: _json upgraded=%d skipped=%d; _list migrated=%d",
+                upgraded_json,
+                skipped_json,
+                upgraded_list,
+            )
+            return True
+        except Exception as e:
+            logger.error("OCR payload migration failed: %s", e)
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            fs = AsyncIOMotorGridFSBucket(db, bucket_name="ocr")
+            files_coll = db["ocr.files"]
+
+            if "ocr.files" not in await db.list_collection_names():
+                return True
+
+            reverted = 0
+            skipped = 0
+            file_docs = await files_coll.find({"filename": {"$regex": r"_json$"}}).to_list(
+                length=None
+            )
+            for file_doc in file_docs:
+                filename = file_doc["filename"]
+                try:
+                    stream = await fs.open_download_stream(file_doc["_id"])
+                    raw = await stream.read()
+                    obj = pickle.loads(raw)
+                except Exception as e:
+                    logger.warning("OCR migration down: skip unreadable %s: %s", filename, e)
+                    skipped += 1
+                    continue
+                if not self._is_reversible_envelope(obj):
+                    skipped += 1
+                    continue
+                blocks = obj["Blocks"]
+                new_bytes = pickle.dumps(blocks)
+                meta = file_doc.get("metadata") or {}
+                await fs.delete(file_doc["_id"])
+                await fs.upload_from_stream(filename=filename, source=new_bytes, metadata=meta)
+                reverted += 1
+                logger.info("OCR migration down: reverted %s to flat block list", filename)
+
+            logger.info("OCR migration down: reverted=%d skipped=%d", reverted, skipped)
+            return True
+        except Exception as e:
+            logger.error("OCR payload migration revert failed: %s", e)
+            return False
+
+
 # List of all migrations in order
 MIGRATIONS = [
     OcrKeyMigration(),
@@ -2349,6 +2544,7 @@ MIGRATIONS = [
     AddOrganizationDefaultPromptEnabled(),
     AddQueueVisibilityTimeoutIndexes(),
     FixLegacyProcessingQueueMessages(),
+    OcrPayloadTextractEnvelopeMigration(),
     # Add more migrations here
 ]
 

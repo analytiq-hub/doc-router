@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 OCR_BUCKET = "ocr"
 
 async def get_ocr_json(analytiq_client, document_id: str) -> list:
-    """Get OCR blocks supporting both old and new key formats"""
+    """Get OCR data: legacy flat list of blocks or dict with ``Blocks`` and Textract metadata."""
     # Try new format first
     key = f"{document_id}_json"
     ocr_blob = await ad.mongodb.get_blob_async(analytiq_client, bucket=OCR_BUCKET, key=key)
@@ -25,8 +25,8 @@ async def get_ocr_json(analytiq_client, document_id: str) -> list:
     return pickle.loads(ocr_blob["blob"])
    
 
-async def save_ocr_json(analytiq_client, document_id:str, ocr_json:list, metadata:dict=None):
-    """Save OCR JSON using new format"""
+async def save_ocr_json(analytiq_client, document_id:str, ocr_json, metadata:dict=None):
+    """Save OCR JSON (flat block list or full Textract-shaped dict from :func:`run_textract`)."""
     key = f"{document_id}_json"
     ocr_bytes = pickle.dumps(ocr_json)
     size_mb = len(ocr_bytes) / 1024 / 1024
@@ -138,7 +138,7 @@ async def delete_ocr_all(analytiq_client, document_id:str):
     await delete_ocr_text(analytiq_client, document_id)
     await delete_ocr_json(analytiq_client, document_id)
 
-async def save_ocr_text_from_list(analytiq_client, document_id:str, ocr_json:list, metadata:dict=None, force:bool=False):
+async def save_ocr_text_from_list(analytiq_client, document_id:str, ocr_json, metadata:dict=None, force:bool=False):
     """
     Save the OCR text from the OCR list
     
@@ -147,14 +147,15 @@ async def save_ocr_text_from_list(analytiq_client, document_id:str, ocr_json:lis
             The analytiq client
         document_id : str
             document id
-        ocr_json : list
-            OCR list
+        ocr_json : list or dict
+            Flat block list or dict with ``Blocks`` (from :func:`run_textract`)
         metadata : dict
             OCR metadata
         force : bool
             Whether to force the processing
     """
-    block_map = ad.aws.textract.get_block_map(ocr_json)
+    blocks = ad.aws.textract.ocr_result_blocks(ocr_json)
+    block_map = ad.aws.textract.get_block_map(blocks)
     page_text_map = ad.aws.textract.get_page_text_map(block_map)
 
     if not force:
