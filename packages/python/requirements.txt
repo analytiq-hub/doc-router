@@ -2,6 +2,7 @@ aioboto3==15.5.0
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.3
 aiosignal==1.4.0
+amazon-textract-textractor[pdfium]==1.9.2
 annotated-types==0.7.0
 anyio==4.12.1
 attrs==25.4.0
@@ -47,6 +48,7 @@ motor==3.7.1
 multidict==6.7.0
 openai==2.15.0
 packaging==26.0
+pandas==3.0.1
 passlib==1.7.4
 pathspec==1.0.3
 pluggy==1.6.0
