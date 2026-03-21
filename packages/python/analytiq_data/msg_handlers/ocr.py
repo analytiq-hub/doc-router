@@ -175,6 +175,37 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
         await ad.queue.delete_msg(analytiq_client, "ocr", msg_id_str)
 
     except Exception as e:
+        from app.routes.payments import SPUCreditException
+
+        if isinstance(e, SPUCreditException):
+            logger.warning(
+                "OCR skipped: insufficient SPU credits document_id=%s org_id=%s required=%s available=%s",
+                document_id,
+                org_id,
+                getattr(e, "required_spus", None),
+                getattr(e, "available_spus", None),
+            )
+            if document_id:
+                await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_FAILED)
+            try:
+                if org_id and document_id:
+                    await ad.webhooks.enqueue_event(
+                        analytiq_client,
+                        organization_id=org_id,
+                        event_type="document.error",
+                        document_id=document_id,
+                        error={
+                            "stage": "ocr",
+                            "message": "insufficient_spu_credits",
+                            "required_spus": getattr(e, "required_spus", None),
+                            "available_spus": getattr(e, "available_spus", None),
+                        },
+                    )
+            except Exception:
+                pass
+            await ad.queue.delete_msg(analytiq_client, "ocr", msg_id_str)
+            return
+
         logger.error(f"Error processing OCR msg: document_id={document_id}, org_id={org_id}, error={e}")
         
         # Update state to OCR failed

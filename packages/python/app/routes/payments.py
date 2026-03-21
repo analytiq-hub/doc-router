@@ -2886,7 +2886,8 @@ async def record_payment_usage(org_id: str, spus: int,
                               prompt_tokens: int = None, 
                               completion_tokens: int = None, 
                               total_tokens: int = None, 
-                              actual_cost: float = None) -> Dict[str, int]:
+                              actual_cost: float = None,
+                              operation: str = "document_processing") -> Dict[str, int]:
     """Record payment usage with proper SPU consumption order and atomic updates"""
     if spus <= 0:
         logger.warning(f"Invalid SPU amount: {spus} for org_id: {org_id}")
@@ -2920,7 +2921,7 @@ async def record_payment_usage(org_id: str, spus: int,
         
         # 7. Record complete usage record with breakdown and LLM metrics
         await save_complete_usage_record(db, org_id, spus, consumption, 
-                                       operation="document_processing",
+                                       operation=operation,
                                        llm_provider=llm_provider,
                                        llm_model=llm_model,
                                        prompt_tokens=prompt_tokens,
