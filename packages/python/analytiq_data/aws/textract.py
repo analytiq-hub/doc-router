@@ -47,7 +47,7 @@ async def run_textract(analytiq_client,
     Args:
         analytiq_client: Analytiq client
         doc_blob: Bytes to be textracted
-        feature_types: List of feature types, e.g. ["TABLES", "FORMS", "QUERIES"]
+        feature_types: List of feature types, e.g. ["LAYOUT", "TABLES", "FORMS", "SIGNATURES"]
         query_list: List of queries
 
     Returns:
