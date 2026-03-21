@@ -8,6 +8,7 @@ services:
       args:
         # Build-time environment
         - NODE_ENV=production
+        - NEXT_PUBLIC_FASTAPI_FRONTEND_URL=${NEXT_PUBLIC_FASTAPI_FRONTEND_URL:-/fastapi}
     environment:
       # Runtime environment
       - ENV=${ENV:-dev}
