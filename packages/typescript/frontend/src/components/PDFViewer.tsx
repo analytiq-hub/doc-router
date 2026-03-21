@@ -1072,11 +1072,6 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
             {fitMode === 'page' && <CheckIcon fontSize="small" sx={{ ml: 1, mb: 1 }} />}
           </StyledMenuItem>
           <Divider />
-          <StyledMenuItem onClick={handleOcrToggle}>
-            <TextSnippetIcon fontSize="small" sx={{ mr: 1 }} />
-            Show OCR Text
-            {showOcr && <CheckIcon fontSize="small" sx={{ ml: 1 }} />}
-          </StyledMenuItem>
           <StyledMenuItem
             onClick={handleBoundingBoxesToggle}
             disabled={!isOCRSupported(fileName)}
@@ -1084,6 +1079,11 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
             <CropFreeIcon fontSize="small" sx={{ mr: 1 }} />
             Bounding Boxes
             {showBoundingBoxes && <CheckIcon fontSize="small" sx={{ ml: 1 }} />}
+          </StyledMenuItem>
+          <StyledMenuItem onClick={handleOcrToggle}>
+            <TextSnippetIcon fontSize="small" sx={{ mr: 1 }} />
+            Show OCR Text
+            {showOcr && <CheckIcon fontSize="small" sx={{ ml: 1 }} />}
           </StyledMenuItem>
           <StyledMenuItem onClick={handleDownloadOcrText}>
             <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
