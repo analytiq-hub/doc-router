@@ -35,6 +35,18 @@ def ocr_result_blocks(ocr_json: Union[list, dict]) -> List[dict]:
     return ocr_json
 
 
+def configure_textractor_logging(level: int = logging.WARNING) -> None:
+    """
+    Set the log level for ``textractor.parsers.response_parser``.
+
+    Textract often returns ``KEY_VALUE_SET`` blocks whose relationships omit CHILD; textractor
+    then emits one INFO line per block. That is normal and does not mean parsing failed.
+    Call this before ``textractor`` parsing (e.g. ``parse_document_api_response``) when
+    ``logging`` is configured at INFO and those lines are unwanted noise.
+    """
+    logging.getLogger("textractor.parsers.response_parser").setLevel(level)
+
+
 async def run_textract(analytiq_client,
                        blob: bytes,
                        feature_types: list = [],
