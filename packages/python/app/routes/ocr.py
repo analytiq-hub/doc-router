@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.aws.textract import ocr_result_blocks
 from app.auth import get_org_user
 from app.models import User
 
@@ -56,6 +57,10 @@ async def download_ocr_blocks(
     if ocr_json is None:
         raise HTTPException(status_code=404, detail="OCR data not found")
 
+    # Flat list expected by clients (SDK / PDF viewer). Stored payload may be a legacy list or
+    # a Textract-shaped dict with ``Blocks`` (see :func:`ocr_result_blocks`).
+    blocks = ocr_result_blocks(ocr_json)
+
     headers = {"Cache-Control": "private, max-age=3600"}
 
     if format == "gzip":
@@ -63,14 +68,14 @@ async def download_ocr_blocks(
         def _serialize_and_compress(data: list) -> bytes:
             return gzip.compress(json.dumps(data).encode("utf-8"))
 
-        body = await asyncio.to_thread(_serialize_and_compress, ocr_json)
+        body = await asyncio.to_thread(_serialize_and_compress, blocks)
         return Response(
             content=body,
             media_type="application/json",
             headers={**headers, "Content-Encoding": "gzip"},
         )
 
-    return JSONResponse(content=ocr_json, headers=headers)
+    return JSONResponse(content=blocks, headers=headers)
 
 @ocr_router.get("/v0/orgs/{organization_id}/ocr/download/text/{document_id}", response_model=str)
 async def download_ocr_text(

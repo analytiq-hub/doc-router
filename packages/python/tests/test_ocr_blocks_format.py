@@ -11,6 +11,10 @@ from tests.conftest_utils import client, get_token_headers
 SAMPLE_OCR_JSON = [
     {"BlockType": "LINE", "Text": "Sample line", "Geometry": {"BoundingBox": {"Width": 0.1, "Height": 0.02}}},
 ]
+SAMPLE_OCR_TEXTRACT_ENVELOPE = {
+    "Blocks": SAMPLE_OCR_JSON,
+    "DocumentMetadata": {"Pages": 1},
+}
 SAMPLE_DOC = {"user_file_name": "test.pdf", "organization_id": "org-123"}
 
 
@@ -88,6 +92,30 @@ async def test_ocr_blocks_format_default_is_plain(org_and_users, test_db):
         )
     assert resp.status_code == 200
     assert "content-encoding" not in resp.headers or resp.headers.get("content-encoding") != "gzip"
+    assert resp.json() == SAMPLE_OCR_JSON
+
+
+@pytest.mark.asyncio
+async def test_ocr_blocks_textract_envelope_returns_flat_list(org_and_users, test_db):
+    """Stored Textract-shaped dict is normalized to a block list for the API."""
+    org_id = org_and_users["org_id"]
+    admin = org_and_users["admin"]
+    doc_id = "507f1f77bcf86cd799439011"
+
+    with (
+        patch("analytiq_data.common.get_doc", new_callable=AsyncMock, return_value=SAMPLE_DOC),
+        patch(
+            "analytiq_data.common.get_ocr_json",
+            new_callable=AsyncMock,
+            return_value=SAMPLE_OCR_TEXTRACT_ENVELOPE,
+        ),
+    ):
+        resp = client.get(
+            f"/v0/orgs/{org_id}/ocr/download/blocks/{doc_id}",
+            params={"format": "plain"},
+            headers=get_token_headers(admin["token"]),
+        )
+    assert resp.status_code == 200
     assert resp.json() == SAMPLE_OCR_JSON
 
 

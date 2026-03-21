@@ -5,7 +5,12 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
 import { pdfjs, Document, Page } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { DocRouterOrgApi } from '@/utils/api';
-import { isOCRSupported, isOcrNotReadyError } from '@/utils/ocr-utils';
+import {
+  getTextractNormalizedBox,
+  isOCRSupported,
+  isOcrNotReadyError,
+  ocrBlockPageNum,
+} from '@/utils/ocr-utils';
 
 /** Document states that indicate an error; stop polling for OCR/bounding boxes when these are set. */
 const DOCUMENT_ERROR_STATES = ['ocr_failed', 'llm_failed'] as const;
@@ -749,10 +754,11 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
         pointerEvents: 'none',
       }}>
         {highlightInfo?.blocks.map((block: OCRBlock, index: number) => {
-          if (block.Page !== page) return null;
+          if (ocrBlockPageNum(block) !== page) return null;
 
-          const { Geometry } = block;
-          const { Width, Height, Left, Top } = Geometry.BoundingBox;
+          const box = getTextractNormalizedBox(block);
+          if (!box) return null;
+          const { Width, Height, Left, Top } = box;
           
           return (
             <div
@@ -796,24 +802,34 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   // Render OCR word bounding boxes overlay (when "Bounding Boxes" is on and OCR has completed)
   const renderBoundingBoxes = useCallback((page: number) => {
     if (!showBoundingBoxes || !ocrBlocksForBoxes?.length) return null;
-    const wordBlocks = ocrBlocksForBoxes.filter(
-      (b) => b.BlockType === 'WORD' && b.Page === page
-    );
-    if (!wordBlocks.length) return null;
+    const onPage = (b: OCRBlock) => ocrBlockPageNum(b) === page;
+    let drawBlocks = ocrBlocksForBoxes.filter((b) => b.BlockType === 'WORD' && onPage(b));
+    if (drawBlocks.length === 0) {
+      drawBlocks = ocrBlocksForBoxes.filter((b) => b.BlockType === 'LINE' && onPage(b));
+    }
+    const withBoxes = drawBlocks
+      .map((block) => {
+        const box = getTextractNormalizedBox(block);
+        return box ? { block, box } : null;
+      })
+      .filter((x): x is { block: OCRBlock; box: NonNullable<ReturnType<typeof getTextractNormalizedBox>> } => x !== null);
+    if (!withBoxes.length) return null;
     return (
       <div
         style={{
           position: 'absolute',
+          left: 0,
+          top: 0,
+          right: 0,
+          bottom: 0,
           width: '100%',
           height: '100%',
-          top: 0,
-          left: 0,
           pointerEvents: 'none',
-          zIndex: 2,
+          zIndex: 10,
         }}
       >
-        {wordBlocks.map((block, index) => {
-          const { Width, Height, Left, Top } = block.Geometry.BoundingBox;
+        {withBoxes.map(({ block, box }, index) => {
+          const { Width, Height, Left, Top } = box;
           const wordText = block.Text ?? '';
           return (
             <Tooltip key={`${block.Id}-${index}`} title={wordText} arrow placement="top">
@@ -899,17 +915,20 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
     // First look for highlights after the start page
     const nextHighlightedPage = highlightInfo.blocks
-      .filter(block => block.Page >= startPage)
-      .sort((a, b) => a.Page - b.Page)[0]?.Page;
+      .filter((block) => ocrBlockPageNum(block) >= startPage)
+      .sort((a, b) => ocrBlockPageNum(a) - ocrBlockPageNum(b))[0];
 
     if (nextHighlightedPage) {
-      console.log('nextHighlightedPage', nextHighlightedPage);
-      return nextHighlightedPage;
+      const p = ocrBlockPageNum(nextHighlightedPage);
+      console.log('nextHighlightedPage', p);
+      return p;
     }
 
     // Look for highlights from the first page
-    const firstHighlightedPage = highlightInfo.blocks
-      .sort((a, b) => a.Page - b.Page)[0]?.Page;
+    const firstBlock = [...highlightInfo.blocks].sort(
+      (a, b) => ocrBlockPageNum(a) - ocrBlockPageNum(b),
+    )[0];
+    const firstHighlightedPage = firstBlock ? ocrBlockPageNum(firstBlock) : null;
 
     // Only return first page if it's different from current page
     if (firstHighlightedPage) {

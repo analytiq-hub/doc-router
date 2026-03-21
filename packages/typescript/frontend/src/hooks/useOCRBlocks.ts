@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import type { OCRBlock } from '@docrouter/sdk';
-import { isOCRSupported, isOcrNotReadyError } from '@/utils/ocr-utils';
+import { isOCRSupported, isOcrNotReadyError, normalizeOcrBlocksPayload } from '@/utils/ocr-utils';
 
 export interface HighlightInfo {
   blocks: OCRBlock[];
@@ -29,7 +29,9 @@ export function useOCRBlocks(): UseOCRBlocksReturn {
     const cache = blockCache.current;
 
     if (cache.has(cacheKey)) {
-      setOCRBlocks(cache.get(cacheKey)!);
+      const normalized = normalizeOcrBlocksPayload(cache.get(cacheKey));
+      cache.set(cacheKey, normalized);
+      setOCRBlocks(normalized);
       return;
     }
 
@@ -42,7 +44,7 @@ export function useOCRBlocks(): UseOCRBlocksReturn {
       setIsLoading(true);
       setError(null);
       const docRouterOrgApi = new DocRouterOrgApi(organizationId);
-      const blocks = await docRouterOrgApi.getOCRBlocks({ documentId });
+      const blocks = normalizeOcrBlocksPayload(await docRouterOrgApi.getOCRBlocks({ documentId }));
       cache.set(cacheKey, blocks);
       setOCRBlocks(blocks);
     } catch (err) {
@@ -60,8 +62,11 @@ export function useOCRBlocks(): UseOCRBlocksReturn {
   }, []);
 
   const findBlocksWithContext = useCallback((searchText: string, promptId: string, key?: string): HighlightInfo => {
-    if (!ocrBlocks) return { blocks: [], promptId, key, value: searchText };
-    
+    if (ocrBlocks == null) return { blocks: [], promptId, key, value: searchText };
+
+    const blockList = normalizeOcrBlocksPayload(ocrBlocks as unknown);
+    if (blockList.length === 0) return { blocks: [], promptId, key, value: searchText };
+
     // DEBUG: Log the search request
     console.log(`Searching for: "${searchText}"`);
     
@@ -73,7 +78,7 @@ export function useOCRBlocks(): UseOCRBlocksReturn {
       console.log("Long phrase search detected, checking if content exists in OCR data:");
       
       // Log a sample of line blocks to see what's in the OCR data
-      const lineTexts = ocrBlocks
+      const lineTexts = blockList
         .filter(block => block.BlockType === 'LINE' && block.Text)
         .map(block => block.Text?.toLowerCase());
       
@@ -101,7 +106,7 @@ export function useOCRBlocks(): UseOCRBlocksReturn {
     }> = {};
     
     // Organize blocks by page
-    for (const block of ocrBlocks) {
+    for (const block of blockList) {
       if (!block.Text) continue;
       
       const page = block.Page;

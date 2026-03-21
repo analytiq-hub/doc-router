@@ -1,4 +1,5 @@
 import { HttpClient } from './http-client';
+import { normalizeOcrBlocksPayload } from './ocr-blocks';
 import {
   DocRouterOrgConfig,
   UploadDocumentsResponse,
@@ -222,10 +223,11 @@ export class DocRouterOrg {
    */
   async getOCRBlocks(params: { documentId: string; format?: 'plain' | 'gzip' }): Promise<OCRBlock[]> {
     const { documentId, format = 'gzip' } = params;
-    return this.http.get<OCRBlock[]>(
+    const raw = await this.http.get<unknown>(
       `/v0/orgs/${this.organizationId}/ocr/download/blocks/${documentId}`,
       { params: { format } }
     );
+    return normalizeOcrBlocksPayload(raw);
   }
 
   async getOCRText(params: { documentId: string; pageNum?: number; }): Promise<string> {

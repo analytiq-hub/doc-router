@@ -125,6 +125,32 @@ describe('SDK Client Unit Tests', () => {
       );
     });
 
+    test('getOCRBlocks unwraps Textract { Blocks } envelope to a flat array', async () => {
+      const inner = [
+        {
+          Id: 'a',
+          BlockType: 'WORD' as const,
+          Confidence: 99,
+          Page: 1,
+          Text: 'hi',
+          Geometry: {
+            BoundingBox: { Left: 0.1, Top: 0.2, Width: 0.05, Height: 0.02 },
+            Polygon: [],
+          },
+        },
+      ];
+      const mockGet = jest.fn().mockResolvedValue({ Blocks: inner });
+      const client = new DocRouterOrg({
+        baseURL: 'https://api.example.com',
+        orgToken: 'org-token',
+        organizationId: 'org-123',
+      });
+      (client as unknown as { http: { get: jest.Mock } }).http.get = mockGet;
+
+      const out = await client.getOCRBlocks({ documentId: 'doc-env' });
+      expect(out).toEqual(inner);
+    });
+
     test('should update org token', () => {
       const client = new DocRouterOrg({
         baseURL: 'https://api.example.com',
