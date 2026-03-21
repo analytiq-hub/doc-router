@@ -31,6 +31,7 @@ interface NestedFieldsEditorProps {
 
 const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChange, isLoading, isReadOnly = false }) => {
   const [expandedFields, setExpandedFields] = useState<Record<number, boolean>>({});
+  const [expandedArrayFields, setExpandedArrayFields] = useState<Record<number, boolean>>({});
   
   const toggleExpansion = (index: number) => {
     setExpandedFields(prev => ({
@@ -110,6 +111,7 @@ const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChang
               <option value="float">Float</option>
               <option value="bool">Boolean</option>
               <option value="object">Object</option>
+              <option value="array">Array</option>
             </select>
             <button
               type="button"
@@ -142,25 +144,74 @@ const NestedFieldsEditor: React.FC<NestedFieldsEditorProps> = ({ fields, onChang
           {/* Recursive rendering for nested objects */}
           {field.type === 'object' && (
             <div className="mt-2 pl-4 border-l-2 border-blue-200">
-              <div 
+              <div
                 className="flex items-center text-sm font-medium text-blue-600 mb-2 cursor-pointer"
                 onClick={() => toggleExpansion(index)}
               >
                 <span className="mr-1 inline-flex items-center justify-center w-4">
-                  {expandedFields[index] ? 
-                    <ExpandMoreIcon fontSize="small" /> : 
+                  {expandedFields[index] ?
+                    <ExpandMoreIcon fontSize="small" /> :
                     <ChevronRightIcon fontSize="small" />
                   }
                 </span>
                 <span>Nested Fields</span>
               </div>
-              
+
               {expandedFields[index] && (
-                <NestedFieldsEditor 
+                <NestedFieldsEditor
                   fields={field.nestedFields || [{ name: '', type: 'str' }]}
                   onChange={(nestedFields) => handleNestedFieldsChange(index, nestedFields)}
                   isLoading={isLoading}
                 />
+              )}
+            </div>
+          )}
+
+          {/* Array item type configuration */}
+          {field.type === 'array' && (
+            <div className="mt-2 pl-4 border-l-2 border-green-200">
+              <div
+                className="flex items-center text-sm font-medium text-green-600 mb-2 cursor-pointer"
+                onClick={() => setExpandedArrayFields(prev => ({ ...prev, [index]: !prev[index] }))}
+              >
+                <span className="mr-1 inline-flex items-center justify-center w-4">
+                  {expandedArrayFields[index] ?
+                    <ExpandMoreIcon fontSize="small" /> :
+                    <ChevronRightIcon fontSize="small" />
+                  }
+                </span>
+                <span>Array Item Type</span>
+              </div>
+
+              {expandedArrayFields[index] && (
+                <>
+                  <div className="flex items-center gap-2 mb-2">
+                    <select
+                      className="p-1.5 border rounded text-sm"
+                      value={field.arrayItemType || 'str'}
+                      onChange={e => updateNestedField(index, { arrayItemType: e.target.value as SchemaField['arrayItemType'] })}
+                      disabled={isLoading || isReadOnly}
+                    >
+                      <option value="str">String</option>
+                      <option value="int">Integer</option>
+                      <option value="float">Float</option>
+                      <option value="bool">Boolean</option>
+                      <option value="object">Object</option>
+                    </select>
+                  </div>
+
+                  {field.arrayItemType === 'object' && (
+                    <div className="mt-2">
+                      <div className="text-sm font-medium text-blue-600 mb-2">Array Object Fields</div>
+                      <NestedFieldsEditor
+                        fields={field.arrayObjectFields || [{ name: '', type: 'str' }]}
+                        onChange={(objectFields) => updateNestedField(index, { arrayObjectFields: objectFields })}
+                        isLoading={isLoading}
+                        isReadOnly={isReadOnly}
+                      />
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
