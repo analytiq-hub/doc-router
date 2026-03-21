@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
+import type { OrgOcrConfig } from '@docrouter/sdk'
 import { OrganizationMember, OrganizationType } from '@/types/index'
 import { DocRouterAccountApi } from '@/utils/api'
 import { isAxiosError } from 'axios'
@@ -11,7 +12,7 @@ import {
   GridColDef, 
   GridRenderCellParams 
 } from '@mui/x-data-grid'
-import { Switch, IconButton } from '@mui/material'
+import { Switch, IconButton, Alert } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import UserAddToOrgModal from './UserAddToOrgModal'
@@ -25,6 +26,10 @@ import { isSysAdmin, isOrgAdmin } from '@/utils/roles'
 interface OrganizationEditProps {
   organizationId: string
 }
+
+const cloneOcrConfig = (c: OrgOcrConfig): OrgOcrConfig => JSON.parse(JSON.stringify(c)) as OrgOcrConfig
+
+const FALLBACK_TEXTRACT_FEATURES = ['LAYOUT', 'TABLES', 'FORMS', 'SIGNATURES'] as const
 
 const getAvailableOrganizationTypes = (currentType: OrganizationType, isSystemAdmin: boolean): OrganizationType[] => {
   switch (currentType) {
@@ -63,6 +68,8 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const [originalType, setOriginalType] = useState<OrganizationType>('individual')
   const [originalMembers, setOriginalMembers] = useState<OrganizationMember[]>([])
   const [originalDefaultPromptEnabled, setOriginalDefaultPromptEnabled] = useState<boolean>(true)
+  const [ocrConfig, setOcrConfig] = useState<OrgOcrConfig | null>(null)
+  const [originalOcrConfig, setOriginalOcrConfig] = useState<OrgOcrConfig | null>(null)
   const { session } = useAppSession();
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -99,6 +106,10 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
           ? organization.default_prompt_enabled
           : true
       );
+
+      const oc = cloneOcrConfig(organization.ocr_config)
+      setOcrConfig(oc)
+      setOriginalOcrConfig(cloneOcrConfig(organization.ocr_config))
     }
   }, [organization]);
 
@@ -136,6 +147,18 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       return;
     }
 
+    if (ocrConfig && countEnabledOcrEngines(ocrConfig) === 0) {
+      toast.error('Enable at least one OCR provider.');
+      return;
+    }
+    if (
+      ocrConfig?.textract.enabled &&
+      ocrConfig.textract.feature_types.length === 0
+    ) {
+      toast.error('When Textract is enabled, select at least one feature type (e.g. LAYOUT).');
+      return;
+    }
+
     // Validate individual organization member count
     if (type === 'individual' && members.length > 1) {
       toast.error('Individual organizations cannot have multiple members');
@@ -154,6 +177,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
         type,
         members,
         default_prompt_enabled: defaultPromptEnabled,
+        ...(ocrConfig ? { ocr_config: ocrConfig as unknown as Record<string, unknown> } : {}),
       });
       await refreshData();
       
@@ -162,6 +186,9 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       setOriginalType(type);
       setOriginalMembers(members);
       setOriginalDefaultPromptEnabled(defaultPromptEnabled);
+      if (ocrConfig) {
+        setOriginalOcrConfig(cloneOcrConfig(ocrConfig))
+      }
     } catch (err) {
       if (isAxiosError(err)) {
         toast.error(err.response?.data?.detail || 'Failed to update organization');
@@ -280,13 +307,40 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     }
   ]
 
+  const textractFeatureOptions =
+    organization?.ocr_catalog?.textract_feature_types?.length
+      ? organization.ocr_catalog.textract_feature_types
+      : [...FALLBACK_TEXTRACT_FEATURES]
+
+  const countEnabledOcrEngines = (c: OrgOcrConfig): number =>
+    [c.textract.enabled, c.gemini.enabled, c.vertex_ai.enabled].filter(Boolean).length
+
+  const toggleTextractFeature = (ft: string) => {
+    setOcrConfig((prev) => {
+      if (!prev) return prev
+      const types = new Set(prev.textract.feature_types)
+      if (types.has(ft)) {
+        types.delete(ft)
+      } else {
+        types.add(ft)
+      }
+      return {
+        ...prev,
+        textract: { ...prev.textract, feature_types: Array.from(types) },
+      }
+    })
+  }
+
   // Check if form has changes
   const hasChanges = () => {
     if (name !== originalName) return true;
     if (type !== originalType) return true;
     if (members.length !== originalMembers.length) return true;
     if (defaultPromptEnabled !== originalDefaultPromptEnabled) return true;
-    
+    if (ocrConfig && originalOcrConfig && JSON.stringify(ocrConfig) !== JSON.stringify(originalOcrConfig)) {
+      return true;
+    }
+
     // Compare each member and their roles
     const memberChanges = members.some(member => {
       const originalMember = originalMembers.find(m => m.user_id === member.user_id);
@@ -439,6 +493,150 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
               </div>
             </div>
           </div>
+
+          {/* OCR settings */}
+          {ocrConfig && organization?.ocr_catalog && (
+            <div className="bg-gray-50 p-4 rounded-lg mb-6 border border-gray-200">
+              <h3 className="text-lg font-medium text-gray-900 mb-2">OCR</h3>
+              <Alert severity="info" sx={{ mb: 2 }}>
+                Enable one or more OCR engines. Enabled backends run in order (Textract → Gemini → Vertex);
+                only AWS Textract is implemented here—others are skipped until wired. The last successful run is stored.
+              </Alert>
+
+              <div className="space-y-4">
+                <div className="border-t border-gray-200 pt-4 first:border-t-0 first:pt-0">
+                  <p className="text-sm font-medium text-gray-800 mb-2">AWS Textract</p>
+                  <div className="flex items-start space-x-2 mb-3">
+                    <input
+                      id="textract-enabled"
+                      type="checkbox"
+                      checked={ocrConfig.textract.enabled}
+                      onChange={(e) =>
+                        setOcrConfig((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                textract: { ...prev.textract, enabled: e.target.checked },
+                              }
+                            : prev
+                        )
+                      }
+                      className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="textract-enabled" className="text-sm text-gray-700">
+                      Enable Textract
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-2">Feature types (AnalyzeDocument)</p>
+                  <div className="flex flex-wrap gap-3">
+                    {textractFeatureOptions.map((ft) => (
+                      <label key={ft} className="inline-flex items-center gap-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={ocrConfig.textract.feature_types.includes(ft)}
+                          onChange={() => toggleTextractFeature(ft)}
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                        />
+                        {ft}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="border-t border-gray-200 pt-4">
+                  <p className="text-sm font-medium text-gray-800 mb-2">Gemini</p>
+                  <div className="flex items-start space-x-2 mb-2">
+                    <input
+                      id="gemini-enabled"
+                      type="checkbox"
+                      checked={ocrConfig.gemini.enabled}
+                      onChange={(e) =>
+                        setOcrConfig((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                gemini: { ...prev.gemini, enabled: e.target.checked },
+                              }
+                            : prev
+                        )
+                      }
+                      className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="gemini-enabled" className="text-sm text-gray-700">
+                      Enable Gemini OCR
+                    </label>
+                  </div>
+                  <label className="block text-xs text-gray-500 mb-1">Model</label>
+                  <select
+                    value={ocrConfig.gemini.model}
+                    onChange={(e) =>
+                      setOcrConfig((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              gemini: { ...prev.gemini, model: e.target.value },
+                            }
+                          : prev
+                      )
+                    }
+                    className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
+                  >
+                    {(organization.ocr_catalog.gemini_models_available || []).map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="border-t border-gray-200 pt-4">
+                  <p className="text-sm font-medium text-gray-800 mb-2">Vertex AI</p>
+                  <div className="flex items-start space-x-2 mb-2">
+                    <input
+                      id="vertex-enabled"
+                      type="checkbox"
+                      checked={ocrConfig.vertex_ai.enabled}
+                      onChange={(e) =>
+                        setOcrConfig((prev) =>
+                          prev
+                            ? {
+                                ...prev,
+                                vertex_ai: { ...prev.vertex_ai, enabled: e.target.checked },
+                              }
+                            : prev
+                        )
+                      }
+                      className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    />
+                    <label htmlFor="vertex-enabled" className="text-sm text-gray-700">
+                      Enable Vertex AI OCR
+                    </label>
+                  </div>
+                  <label className="block text-xs text-gray-500 mb-1">Model</label>
+                  <select
+                    value={ocrConfig.vertex_ai.model}
+                    onChange={(e) =>
+                      setOcrConfig((prev) =>
+                        prev
+                          ? {
+                              ...prev,
+                              vertex_ai: { ...prev.vertex_ai, model: e.target.value },
+                            }
+                          : prev
+                      )
+                    }
+                    className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
+                  >
+                    {(organization.ocr_catalog.vertex_models_available || []).map((m) => (
+                      <option key={m} value={m}>
+                        {m}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Members Section - adjust the height calculation */}
           <div className="flex-1 bg-gray-50 p-4 rounded-lg flex flex-col">

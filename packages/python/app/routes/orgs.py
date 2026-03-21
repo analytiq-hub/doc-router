@@ -3,7 +3,7 @@
 # Standard library imports
 import logging
 from datetime import datetime, UTC
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 from enum import Enum
 
 # Third-party imports
@@ -13,6 +13,12 @@ from pydantic import BaseModel
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.common.org_ocr_config import (
+    OrgOcrConfig,
+    apply_ocr_config_update,
+    merge_org_ocr_config,
+    ocr_settings_catalog,
+)
 from app import limits
 from app.auth import (
     get_current_user,
@@ -40,12 +46,22 @@ class OrganizationCreate(BaseModel):
     name: str
     type: OrganizationType = "individual"
     default_prompt_enabled: bool = True
+    ocr_config: Optional[dict[str, Any]] = None
 
 class OrganizationUpdate(BaseModel):
     name: str | None = None
     type: OrganizationType = "individual"
     members: List[OrganizationMember] | None = None
     default_prompt_enabled: Optional[bool] = None
+    ocr_config: Optional[dict[str, Any]] = None
+
+class OrganizationOcrCatalog(BaseModel):
+    """Allowed Textract features and OCR-capable model ids for UI (same for all orgs)."""
+
+    gemini_models_available: list[str]
+    vertex_models_available: list[str]
+    textract_feature_types: list[str]
+
 
 class Organization(BaseModel):
     id: str
@@ -53,8 +69,20 @@ class Organization(BaseModel):
     members: List[OrganizationMember]
     type: OrganizationType = "individual"
     default_prompt_enabled: bool = True
+    ocr_config: OrgOcrConfig
+    ocr_catalog: OrganizationOcrCatalog
     created_at: datetime
     updated_at: datetime
+
+
+def _organization_ocr_catalog() -> OrganizationOcrCatalog:
+    cat = ocr_settings_catalog()
+    return OrganizationOcrCatalog(
+        gemini_models_available=cat["gemini_models_available"],
+        vertex_models_available=cat["vertex_models_available"],
+        textract_feature_types=cat["textract_feature_types"],
+    )
+
 
 class ListOrganizationsResponse(BaseModel):
     organizations: List[Organization]
@@ -127,6 +155,8 @@ async def list_organizations(
                 "id": str(organization["_id"]),
                 "type": organization.get("type", "individual"),
                 "default_prompt_enabled": organization.get("default_prompt_enabled", True),
+                "ocr_config": merge_org_ocr_config(organization.get("ocr_config")),
+                "ocr_catalog": _organization_ocr_catalog(),
             })
         ], total_count=1, skip=0)
 
@@ -179,9 +209,12 @@ async def list_organizations(
             "id": str(org["_id"]),
             "type": org.get("type", "individual"),
             "default_prompt_enabled": org.get("default_prompt_enabled", True),
+            "ocr_config": merge_org_ocr_config(org.get("ocr_config")),
+            "ocr_catalog": _organization_ocr_catalog(),
         }) for org in organizations
     ], total_count=total_count, skip=skip)
     return ret
+
 
 @orgs_router.post("/v0/account/organizations", response_model=Organization, tags=["account/organizations"])
 async def create_organization(
@@ -239,6 +272,11 @@ async def create_organization(
         "created_at": datetime.now(UTC),
         "updated_at": datetime.now(UTC)
     }
+    if organization.ocr_config is not None:
+        try:
+            organization_doc["ocr_config"] = apply_ocr_config_update(None, organization.ocr_config)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid ocr_config: {e}")
     
     result = await db.organizations.insert_one(organization_doc)
     org_id = str(result.inserted_id)
@@ -248,7 +286,9 @@ async def create_organization(
 
     return Organization(**{
         **organization_doc,
-        "id": org_id
+        "id": org_id,
+        "ocr_config": merge_org_ocr_config(organization_doc.get("ocr_config")),
+        "ocr_catalog": _organization_ocr_catalog(),
     })
 
 @orgs_router.put("/v0/account/organizations/{organization_id}", response_model=Organization, tags=["account/organizations"])
@@ -308,6 +348,14 @@ async def update_organization(
     if organization_update.default_prompt_enabled is not None:
         update_data["default_prompt_enabled"] = organization_update.default_prompt_enabled
 
+    if organization_update.ocr_config is not None:
+        try:
+            update_data["ocr_config"] = apply_ocr_config_update(
+                organization.get("ocr_config"), organization_update.ocr_config
+            )
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid ocr_config: {e}")
+
     if update_data:
         update_data["updated_at"] = datetime.now(UTC)
         # Use find_one_and_update instead of update_one to get the updated document atomically
@@ -333,6 +381,8 @@ async def update_organization(
         "members": updated_organization["members"],
         "type": updated_organization.get("type", "individual"),
         "default_prompt_enabled": updated_organization.get("default_prompt_enabled", True),
+        "ocr_config": merge_org_ocr_config(updated_organization.get("ocr_config")),
+        "ocr_catalog": _organization_ocr_catalog(),
         "created_at": updated_organization["created_at"],
         "updated_at": updated_organization["updated_at"]
     })

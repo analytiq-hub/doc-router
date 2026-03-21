@@ -142,9 +142,14 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
                     )
                 return
 
-            # Run OCR
-            ocr_json = await ad.aws.textract.run_textract(
-                analytiq_client, file["blob"], document_id=document_id, org_id=org_id
+            # Run OCR (Textract and/or Gemini / Vertex vision — per org settings)
+            ocr_cfg = await ad.common.org_ocr_config.fetch_org_ocr_config(analytiq_client, org_id)
+            ocr_json = await ad.common.ocr_runners.run_document_ocr(
+                analytiq_client,
+                file["blob"],
+                org_id=org_id,
+                document_id=document_id,
+                cfg=ocr_cfg,
             )
             logger.info(f"OCR completed for {document_id}")
 

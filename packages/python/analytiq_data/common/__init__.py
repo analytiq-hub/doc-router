@@ -1,4 +1,6 @@
 from .client import *
+from .org_ocr_config import *
+from .ocr_runners import *
 from .doc import *
 from .file import *
 from .forms import *

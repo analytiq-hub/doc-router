@@ -90,23 +90,7 @@ export class DocRouterAccount {
   }
 
   async createOrganization(organization: CreateOrganizationRequest): Promise<Organization> {
-    const response = await this.http.post<{
-      _id?: string;
-      id: string;
-      name: string;
-      members: Organization['members'];
-      type: Organization['type'];
-      created_at: string;
-      updated_at: string;
-    }>(`/v0/account/organizations`, organization);
-    return {
-      id: response._id || response.id,
-      name: response.name,
-      members: response.members,
-      type: response.type,
-      created_at: response.created_at,
-      updated_at: response.updated_at,
-    };
+    return this.http.post<Organization>(`/v0/account/organizations`, organization);
   }
 
   async updateOrganization(organizationId: string, update: UpdateOrganizationRequest): Promise<Organization> {
