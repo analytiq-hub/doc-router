@@ -59,4 +59,15 @@ async def test_ocr_permissions(org_and_users, test_db):
     assert resp.status_code in (200, 404), f"Member should be able to access OCR metadata, got {resp.status_code}: {resp.text}"
 
     resp = client.get(url_metadata, headers=get_token_headers(outsider["token"]))
-    assert resp.status_code in (401, 403), f"Outsider should NOT be able to access OCR metadata, got {resp.status_code}: {resp.text}" 
+    assert resp.status_code in (401, 403), f"Outsider should NOT be able to access OCR metadata, got {resp.status_code}: {resp.text}"
+
+    # --- OCR RUN ---
+    url_run = f"/v0/orgs/{org_id}/ocr/run/{doc_id}"
+    resp = client.post(url_run, headers=get_token_headers(admin["token"]))
+    assert resp.status_code == 200, f"Admin should be able to run OCR, got {resp.status_code}: {resp.text}"
+
+    resp = client.post(url_run, headers=get_token_headers(member["token"]))
+    assert resp.status_code == 200, f"Member should be able to run OCR, got {resp.status_code}: {resp.text}"
+
+    resp = client.post(url_run, headers=get_token_headers(outsider["token"]))
+    assert resp.status_code in (401, 403), f"Outsider should NOT be able to run OCR, got {resp.status_code}: {resp.text}"
