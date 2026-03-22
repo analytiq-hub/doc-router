@@ -103,7 +103,8 @@ async def worker_llm(worker_id: str) -> None:
                 _queue_idle_sleep["llm"] = POLL_MIN_SLEEP
                 logger.info(f"Worker {worker_id} processing LLM msg: {msg}")
                 try:
-                    await ad.msg_handlers.process_llm_msg(analytiq_client, msg)
+                    force = msg.get("msg", {}).get("force", False)
+                    await ad.msg_handlers.process_llm_msg(analytiq_client, msg, force=force)
                 except asyncio.CancelledError:
                     logger.warning(
                         "Worker %s cancelled mid-flight on LLM msg %s; message will be recovered via visibility timeout",

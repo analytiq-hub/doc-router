@@ -1502,7 +1502,7 @@ async def delete_llm_result(analytiq_client,
     return result.deleted_count > 0
 
 
-async def run_llm_for_prompt_revids(analytiq_client, document_id: str, prompt_revids: list[str], llm_model: str = None) -> None:
+async def run_llm_for_prompt_revids(analytiq_client, document_id: str, prompt_revids: list[str], llm_model: str = None, force: bool = False) -> None:
     """
     Run the LLM for the given prompt IDs.
 
@@ -1510,6 +1510,7 @@ async def run_llm_for_prompt_revids(analytiq_client, document_id: str, prompt_re
         analytiq_client: The AnalytiqClient instance
         document_id: The document ID
         prompt_revids: The prompt revision IDs to run the LLM for
+        force: If True, run the LLM even if the result is already cached
     """
 
     n_prompts = len(prompt_revids)
@@ -1525,7 +1526,7 @@ async def run_llm_for_prompt_revids(analytiq_client, document_id: str, prompt_re
     for prompt_revid in prompt_revids:
         task = asyncio.create_task(
             asyncio.wait_for(
-                run_llm(analytiq_client, document_id, prompt_revid, llm_model),
+                run_llm(analytiq_client, document_id, prompt_revid, llm_model, force=force),
                 timeout=LLM_REQUEST_TIMEOUT_SECS,
             )
         )

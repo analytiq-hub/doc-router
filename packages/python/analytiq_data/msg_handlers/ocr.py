@@ -168,7 +168,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
 
         if not ocr_only:
             # Post a message to the llm job queue
-            msg_llm = {"document_id": document_id}
+            msg_llm = {"document_id": document_id, "force": force}
             await ad.queue.send_msg(analytiq_client, "llm", msg=msg_llm)
 
             # Post a message to the KB indexing queue (OCR-gated indexing)

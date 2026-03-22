@@ -7,7 +7,7 @@ from analytiq_data.queue.queue import MAX_QUEUE_ATTEMPTS
 
 logger = logging.getLogger(__name__)
 
-async def process_llm_msg(analytiq_client, msg):
+async def process_llm_msg(analytiq_client, msg, force: bool = False):
     logger.info(f"Processing LLM msg: {msg}")
 
     msg_id = str(msg["_id"])
@@ -60,7 +60,7 @@ async def process_llm_msg(analytiq_client, msg):
         )
 
         # Run the LLM for the document for all prompts concurrently
-        results = await ad.llm.run_llm_for_prompt_revids(analytiq_client, document_id, prompt_revids)
+        results = await ad.llm.run_llm_for_prompt_revids(analytiq_client, document_id, prompt_revids, force=force)
 
         if not results:
             logger.info("No LLM prompts executed for document %s; marking as completed", document_id)
