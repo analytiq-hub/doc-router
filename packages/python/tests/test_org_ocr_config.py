@@ -1,5 +1,6 @@
 """Tests for organization OCR configuration merge and validation."""
 import pytest
+from unittest.mock import patch
 
 from analytiq_data.common.org_ocr_config import (
     GEMINI_OCR_SPU_PER_RUN,
@@ -95,7 +96,10 @@ async def test_only_non_textract_enabled_fails():
             "gemini": {"enabled": True, "model": "gemini/gemini-2.5-flash"},
         }
     )
-    with pytest.raises(RuntimeError, match="No OCR engine produced"):
+    with (
+        patch("analytiq_data.common.ocr_runners.ad.payments.check_spu_limits"),
+        pytest.raises(RuntimeError, match="No OCR engine produced"),
+    ):
         await run_document_ocr(
             None, b"%PDF-1.4", org_id="o", document_id="d", cfg=cfg
         )
