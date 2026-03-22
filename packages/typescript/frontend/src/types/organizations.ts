@@ -5,34 +5,17 @@ export interface OrganizationMember {
 
 export type OrganizationType = 'individual' | 'team' | 'enterprise';
 
+/** Textract is always used; only feature types are configurable. */
 export interface OrgOcrTextractSettings {
-  enabled: boolean;
   feature_types: string[];
 }
 
-export interface OrgOcrGeminiSettings {
-  enabled: boolean;
-  model: string;
-}
-
-export interface OrgOcrVertexSettings {
-  enabled: boolean;
-  model: string;
-}
-
-/**
- * Multiple engines may be enabled; the worker runs implemented backends in order
- * and persists the last successful result.
- */
+/** AWS Textract only. */
 export interface OrgOcrConfig {
   textract: OrgOcrTextractSettings;
-  gemini: OrgOcrGeminiSettings;
-  vertex_ai: OrgOcrVertexSettings;
 }
 
 export interface OrganizationOcrCatalog {
-  gemini_models_available: string[];
-  vertex_models_available: string[];
   textract_feature_types: string[];
 }
 

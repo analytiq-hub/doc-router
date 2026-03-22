@@ -61,36 +61,17 @@ export interface OrganizationMember {
 
 export type OrganizationType = 'individual' | 'team' | 'enterprise';
 
-/** Organization-level OCR: Textract, Gemini, Vertex vision OCR. */
+/** Textract is always used; only feature types are configurable. */
 export interface OrgOcrTextractSettings {
-  enabled: boolean;
   feature_types: string[];
 }
 
-export interface OrgOcrGeminiSettings {
-  enabled: boolean;
-  model: string;
-}
-
-export interface OrgOcrVertexSettings {
-  enabled: boolean;
-  model: string;
-}
-
-/**
- * Multiple engines may be enabled; the worker runs implemented backends in order
- * (Textract → Gemini → Vertex) and persists the last successful result.
- */
 export interface OrgOcrConfig {
   textract: OrgOcrTextractSettings;
-  gemini: OrgOcrGeminiSettings;
-  vertex_ai: OrgOcrVertexSettings;
 }
 
-/** Allowed Textract features and model ids for OCR UI (returned with each organization). */
+/** Allowed Textract features for OCR UI (returned with each organization). */
 export interface OrganizationOcrCatalog {
-  gemini_models_available: string[];
-  vertex_models_available: string[];
   textract_feature_types: string[];
 }
 

@@ -147,15 +147,8 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       return;
     }
 
-    if (ocrConfig && countEnabledOcrEngines(ocrConfig) === 0) {
-      toast.error('Enable at least one OCR provider.');
-      return;
-    }
-    if (
-      ocrConfig?.textract.enabled &&
-      ocrConfig.textract.feature_types.length === 0
-    ) {
-      toast.error('When Textract is enabled, select at least one feature type (e.g. LAYOUT).');
+    if (ocrConfig && ocrConfig.textract.feature_types.length === 0) {
+      toast.error('Select at least one Textract feature type (e.g. LAYOUT).');
       return;
     }
 
@@ -311,9 +304,6 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     organization?.ocr_catalog?.textract_feature_types?.length
       ? organization.ocr_catalog.textract_feature_types
       : [...FALLBACK_TEXTRACT_FEATURES]
-
-  const countEnabledOcrEngines = (c: OrgOcrConfig): number =>
-    [c.textract.enabled, c.gemini.enabled, c.vertex_ai.enabled].filter(Boolean).length
 
   const toggleTextractFeature = (ft: string) => {
     setOcrConfig((prev) => {
@@ -499,34 +489,12 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
             <div className="bg-gray-50 p-4 rounded-lg mb-6 border border-gray-200">
               <h3 className="text-lg font-medium text-gray-900 mb-2">OCR</h3>
               <Alert severity="info" sx={{ mb: 2 }}>
-                Enable one or more OCR engines. Enabled backends run in order (Textract → Gemini → Vertex);
-                only AWS Textract is implemented here—others are skipped until wired. The last successful run is stored.
+                Document OCR always uses AWS Textract (AnalyzeDocument). Choose feature types below.
               </Alert>
 
               <div className="space-y-4">
                 <div className="border-t border-gray-200 pt-4 first:border-t-0 first:pt-0">
                   <p className="text-sm font-medium text-gray-800 mb-2">AWS Textract</p>
-                  <div className="flex items-start space-x-2 mb-3">
-                    <input
-                      id="textract-enabled"
-                      type="checkbox"
-                      checked={ocrConfig.textract.enabled}
-                      onChange={(e) =>
-                        setOcrConfig((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                textract: { ...prev.textract, enabled: e.target.checked },
-                              }
-                            : prev
-                        )
-                      }
-                      className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <label htmlFor="textract-enabled" className="text-sm text-gray-700">
-                      Enable Textract
-                    </label>
-                  </div>
                   <p className="text-xs text-gray-500 mb-2">Feature types (AnalyzeDocument)</p>
                   <div className="flex flex-wrap gap-3">
                     {textractFeatureOptions.map((ft) => (
@@ -541,98 +509,6 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                       </label>
                     ))}
                   </div>
-                </div>
-
-                <div className="border-t border-gray-200 pt-4">
-                  <p className="text-sm font-medium text-gray-800 mb-2">Gemini</p>
-                  <div className="flex items-start space-x-2 mb-2">
-                    <input
-                      id="gemini-enabled"
-                      type="checkbox"
-                      checked={ocrConfig.gemini.enabled}
-                      onChange={(e) =>
-                        setOcrConfig((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                gemini: { ...prev.gemini, enabled: e.target.checked },
-                              }
-                            : prev
-                        )
-                      }
-                      className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <label htmlFor="gemini-enabled" className="text-sm text-gray-700">
-                      Enable Gemini OCR
-                    </label>
-                  </div>
-                  <label className="block text-xs text-gray-500 mb-1">Model</label>
-                  <select
-                    value={ocrConfig.gemini.model}
-                    onChange={(e) =>
-                      setOcrConfig((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              gemini: { ...prev.gemini, model: e.target.value },
-                            }
-                          : prev
-                      )
-                    }
-                    className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
-                  >
-                    {(organization.ocr_catalog.gemini_models_available || []).map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="border-t border-gray-200 pt-4">
-                  <p className="text-sm font-medium text-gray-800 mb-2">Vertex AI</p>
-                  <div className="flex items-start space-x-2 mb-2">
-                    <input
-                      id="vertex-enabled"
-                      type="checkbox"
-                      checked={ocrConfig.vertex_ai.enabled}
-                      onChange={(e) =>
-                        setOcrConfig((prev) =>
-                          prev
-                            ? {
-                                ...prev,
-                                vertex_ai: { ...prev.vertex_ai, enabled: e.target.checked },
-                              }
-                            : prev
-                        )
-                      }
-                      className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                    />
-                    <label htmlFor="vertex-enabled" className="text-sm text-gray-700">
-                      Enable Vertex AI OCR
-                    </label>
-                  </div>
-                  <label className="block text-xs text-gray-500 mb-1">Model</label>
-                  <select
-                    value={ocrConfig.vertex_ai.model}
-                    onChange={(e) =>
-                      setOcrConfig((prev) =>
-                        prev
-                          ? {
-                              ...prev,
-                              vertex_ai: { ...prev.vertex_ai, model: e.target.value },
-                            }
-                          : prev
-                      )
-                    }
-                    className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md bg-white text-sm"
-                  >
-                    {(organization.ocr_catalog.vertex_models_available || []).map((m) => (
-                      <option key={m} value={m}>
-                        {m}
-                      </option>
-                    ))}
-                  </select>
                 </div>
               </div>
             </div>

@@ -56,10 +56,8 @@ class OrganizationUpdate(BaseModel):
     ocr_config: Optional[dict[str, Any]] = None
 
 class OrganizationOcrCatalog(BaseModel):
-    """Allowed Textract features and OCR-capable model ids for UI (same for all orgs)."""
+    """Allowed Textract features for OCR UI (same for all orgs)."""
 
-    gemini_models_available: list[str]
-    vertex_models_available: list[str]
     textract_feature_types: list[str]
 
 
@@ -78,8 +76,6 @@ class Organization(BaseModel):
 def _organization_ocr_catalog() -> OrganizationOcrCatalog:
     cat = ocr_settings_catalog()
     return OrganizationOcrCatalog(
-        gemini_models_available=cat["gemini_models_available"],
-        vertex_models_available=cat["vertex_models_available"],
         textract_feature_types=cat["textract_feature_types"],
     )
 

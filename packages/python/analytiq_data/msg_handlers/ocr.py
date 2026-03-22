@@ -145,7 +145,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
                     )
                 return
 
-            # Run OCR (Textract and/or Gemini / Vertex vision — per org settings)
+            # Run OCR (Textract — per org settings)
             ocr_cfg = await ad.common.org_ocr_config.fetch_org_ocr_config(analytiq_client, org_id)
             ocr_json = await ad.common.ocr_runners.run_document_ocr(
                 analytiq_client,
