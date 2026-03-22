@@ -32,6 +32,9 @@ export interface PDFViewerControlsType {
   showChatPanel: boolean;
   setShowChatPanel: React.Dispatch<React.SetStateAction<boolean>>;
   isSmallScreen?: boolean;
+  /** When true, extraction and chat render as draggable floating panels over the PDF. */
+  useFloatingPanels?: boolean;
+  setUseFloatingPanels?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 declare global {

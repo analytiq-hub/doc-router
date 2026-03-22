@@ -18,6 +18,7 @@ const AgentTab = dynamic(() => import('@/components/agent/AgentTab'), {
 });
 import type { HighlightInfo } from '@/types/index';
 import type { PDFViewerControlsType } from '@/components/Layout';
+import DraggablePanel from '@/components/DraggablePanel';
 
 const PDFViewer = dynamic(() => import('@/components/PDFViewer'), {
   ssr: false,
@@ -39,6 +40,16 @@ const PDFViewerPage = ({ params }: PageProps) => {
   const [showChatPanel, setShowChatPanel] = useState(true);
   const [highlightInfo, setHighlightInfo] = useState<HighlightInfo | undefined>();
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+  const [useFloatingPanels, setUseFloatingPanels] = useState(true);
+
+  useEffect(() => {
+    const v = localStorage.getItem('docViewerFloatingPanels');
+    if (v !== null) setUseFloatingPanels(v === 'true');
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('docViewerFloatingPanels', String(useFloatingPanels));
+  }, [useFloatingPanels]);
 
   useEffect(() => {
     const check = () => setIsSmallScreen(window.innerWidth <= AGENT_PANEL_BREAKPOINT);
@@ -59,7 +70,9 @@ const PDFViewerPage = ({ params }: PageProps) => {
       setShowPdfPanel,
       showChatPanel,
       setShowChatPanel,
-      isSmallScreen
+      isSmallScreen,
+      useFloatingPanels,
+      setUseFloatingPanels,
     };
     window.pdfViewerControls = controls;
 
@@ -69,7 +82,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
     return () => {
       delete window.pdfViewerControls;
     };
-  }, [showLeftPanel, showPdfPanel, showChatPanel, isSmallScreen]);
+  }, [showLeftPanel, showPdfPanel, showChatPanel, isSmallScreen, useFloatingPanels]);
 
   // Three panels: extraction (left) | PDF (center) | agent (right, optional)
   const getDefaultSizes = () => {
@@ -86,11 +99,41 @@ const PDFViewerPage = ({ params }: PageProps) => {
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          <PanelGroup id={`doc-page-panels-${pdfId}`} direction="horizontal" style={{ width: '100%', height: '100%' }}>
-            {showLeftPanel && (
-              <>
-                <Panel defaultSize={defaultSizes.left} minSize={15} order={1}>
+        <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden', position: 'relative' }}>
+          {useFloatingPanels ? (
+            <>
+              <Box sx={{ flex: 1, minWidth: 0, height: '100%', overflow: 'hidden', zIndex: 0 }}>
+                {showPdfPanel ? (
+                  <PDFViewer 
+                    organizationId={organizationId} 
+                    id={pdfId}
+                    highlightInfo={highlightInfo}
+                    initialShowBoundingBoxes={showBoundingBoxesFromUrl}
+                  />
+                ) : (
+                  <Box
+                    sx={{
+                      height: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'text.secondary',
+                      bgcolor: 'grey.100',
+                    }}
+                  >
+                    PDF panel hidden
+                  </Box>
+                )}
+              </Box>
+
+              {showLeftPanel && (
+                <DraggablePanel
+                  open
+                  resetToken={pdfId}
+                  anchorPercent={{ x: 22, y: 46 }}
+                  width={420}
+                  zIndex={1250}
+                >
                   <Box sx={{ height: '100%', overflow: 'auto' }}>
                     <PDFSidebar 
                       organizationId={organizationId} 
@@ -99,35 +142,66 @@ const PDFViewerPage = ({ params }: PageProps) => {
                       onClearHighlight={() => setHighlightInfo(undefined)}
                     />
                   </Box>
-                </Panel>
-                <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
-              </>
-            )}
+                </DraggablePanel>
+              )}
 
-            {showPdfPanel && (
-              <Panel defaultSize={defaultSizes.main} minSize={20} order={2}>
-                <Box sx={{ height: '100%', overflow: 'hidden' }}>
-                  <PDFViewer 
-                    organizationId={organizationId} 
-                    id={pdfId}
-                    highlightInfo={highlightInfo}
-                    initialShowBoundingBoxes={showBoundingBoxesFromUrl}
-                  />
-                </Box>
-              </Panel>
-            )}
-
-            {showChatPanel && (
-              <>
-                <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
-                <Panel defaultSize={defaultSizes.right} minSize={20} order={3}>
+              {showChatPanel && !isSmallScreen && (
+                <DraggablePanel
+                  open
+                  resetToken={pdfId}
+                  anchorPercent={{ x: 78, y: 46 }}
+                  width={400}
+                  zIndex={1260}
+                >
                   <Box sx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                     <AgentTab organizationId={organizationId} documentId={pdfId} />
                   </Box>
+                </DraggablePanel>
+              )}
+            </>
+          ) : (
+            <PanelGroup id={`doc-page-panels-${pdfId}`} direction="horizontal" style={{ width: '100%', height: '100%' }}>
+              {showLeftPanel && (
+                <>
+                  <Panel defaultSize={defaultSizes.left} minSize={15} order={1}>
+                    <Box sx={{ height: '100%', overflow: 'auto' }}>
+                      <PDFSidebar 
+                        organizationId={organizationId} 
+                        id={pdfId}
+                        onHighlight={setHighlightInfo}
+                        onClearHighlight={() => setHighlightInfo(undefined)}
+                      />
+                    </Box>
+                  </Panel>
+                  <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
+                </>
+              )}
+
+              {showPdfPanel && (
+                <Panel defaultSize={defaultSizes.main} minSize={20} order={2}>
+                  <Box sx={{ height: '100%', overflow: 'hidden' }}>
+                    <PDFViewer 
+                      organizationId={organizationId} 
+                      id={pdfId}
+                      highlightInfo={highlightInfo}
+                      initialShowBoundingBoxes={showBoundingBoxesFromUrl}
+                    />
+                  </Box>
                 </Panel>
-              </>
-            )}
-          </PanelGroup>
+              )}
+
+              {showChatPanel && (
+                <>
+                  <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
+                  <Panel defaultSize={defaultSizes.right} minSize={20} order={3}>
+                    <Box sx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                      <AgentTab organizationId={organizationId} documentId={pdfId} />
+                    </Box>
+                  </Panel>
+                </>
+              )}
+            </PanelGroup>
+          )}
         </Box>
       </Box>
   );

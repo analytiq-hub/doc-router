@@ -4,7 +4,9 @@ import {
   ViewSidebarOutlined,
   PictureAsPdfOutlined,
   Chat as ChatIcon,
-  ChatOutlined as ChatOutlinedIcon
+  ChatOutlined as ChatOutlinedIcon,
+  PictureInPictureAlt,
+  ViewColumn,
 } from '@mui/icons-material';
 
 interface PDFViewerControlsProps {
@@ -16,6 +18,8 @@ interface PDFViewerControlsProps {
   setShowChatPanel?: React.Dispatch<React.SetStateAction<boolean>>;
   isSmallScreen?: boolean;
   sidebarMode?: 'extraction' | 'forms';
+  useFloatingPanels?: boolean;
+  setUseFloatingPanels?: React.Dispatch<React.SetStateAction<boolean>>;
 }
 
 const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
@@ -27,9 +31,38 @@ const PDFViewerControls: React.FC<PDFViewerControlsProps> = ({
   setShowChatPanel = () => {},
   isSmallScreen = false,
   sidebarMode = 'extraction',
+  useFloatingPanels = false,
+  setUseFloatingPanels,
 }) => {
   return (
     <div className="flex items-center gap-1">
+      {setUseFloatingPanels && (
+        <button
+          type="button"
+          onClick={() => setUseFloatingPanels((prev) => !prev)}
+          className={`
+          flex items-center justify-center
+          w-8 h-[31px]
+          rounded
+          transition-colors duration-150
+          ${useFloatingPanels
+            ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+            : 'text-blue-200 hover:bg-blue-500 hover:text-white'
+          }
+        `}
+          title={
+            useFloatingPanels
+              ? 'Dock panels (side-by-side layout)'
+              : 'Float panels (draggable over the document)'
+          }
+        >
+          {useFloatingPanels ? (
+            <ViewColumn className="w-4 h-4" />
+          ) : (
+            <PictureInPictureAlt className="w-4 h-4" />
+          )}
+        </button>
+      )}
       <button
         onClick={() => setShowLeftPanel((prev: boolean) => !prev)}
         className={`
