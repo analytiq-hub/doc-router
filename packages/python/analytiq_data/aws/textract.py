@@ -12,6 +12,8 @@ import os
 import analytiq_data as ad
 from typing import List, Optional, Union
 
+from textractor.entities.document import Document
+
 logger = logging.getLogger(__name__)
 
 
@@ -50,6 +52,37 @@ def configure_textractor_logging(level: int = logging.WARNING) -> None:
     """
     logging.getLogger("textractor.parsers.response_parser").setLevel(level)
     logging.getLogger("textractor.entities.table").setLevel(level)
+
+
+def open_textract_document_from_ocr_json(
+    ocr_json: Union[list, dict],
+    *,
+    document_id: str = "",
+    org_id: Optional[str] = None,
+) -> Document:
+    """
+    Parse stored OCR JSON into a textractor ``Document`` for linearization or export.
+
+    Uses :func:`configure_textractor_logging` and :func:`textract_payload_for_document_open`.
+    May mutate ``ocr_json`` in place (see ``textract_payload_for_document_open``).
+    """
+    configure_textractor_logging()
+    payload = textract_payload_for_document_open(ocr_json)
+    if payload is None:
+        raise ValueError(
+            f"{org_id}/{document_id}: unsupported OCR payload for textractor"
+        )
+    try:
+        doc = Document.open(payload)
+    except Exception as e:
+        raise RuntimeError(
+            f"{org_id}/{document_id}: Textractor Document.open failed: {e}"
+        ) from e
+    if not doc.pages:
+        raise ValueError(
+            f"{org_id}/{document_id}: no pages in textractor document"
+        )
+    return doc
 
 
 async def run_textract(analytiq_client,

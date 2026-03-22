@@ -71,3 +71,25 @@ async def test_ocr_permissions(org_and_users, test_db):
 
     resp = client.post(url_run, headers=get_token_headers(outsider["token"]))
     assert resp.status_code in (401, 403), f"Outsider should NOT be able to run OCR, got {resp.status_code}: {resp.text}"
+
+    # --- OCR EXPORT (markdown / html / tables xlsx) ---
+    for path in (
+        f"/v0/orgs/{org_id}/ocr/export/markdown/{doc_id}",
+        f"/v0/orgs/{org_id}/ocr/export/html/{doc_id}",
+        f"/v0/orgs/{org_id}/ocr/export/tables.xlsx/{doc_id}",
+    ):
+        resp = client.get(path, headers=get_token_headers(admin["token"]))
+        assert resp.status_code in (
+            200,
+            404,
+        ), f"Admin should access OCR export {path}, got {resp.status_code}: {resp.text}"
+        resp = client.get(path, headers=get_token_headers(member["token"]))
+        assert resp.status_code in (
+            200,
+            404,
+        ), f"Member should access OCR export {path}, got {resp.status_code}: {resp.text}"
+        resp = client.get(path, headers=get_token_headers(outsider["token"]))
+        assert resp.status_code in (
+            401,
+            403,
+        ), f"Outsider should NOT access OCR export {path}, got {resp.status_code}: {resp.text}"

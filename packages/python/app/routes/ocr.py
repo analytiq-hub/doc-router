@@ -9,6 +9,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel
 
 # Third-party imports
+from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
 
@@ -164,4 +165,145 @@ async def get_ocr_metadata(
     return GetOCRMetadataResponse(
         n_pages=metadata["n_pages"],
         ocr_date=metadata["ocr_date"].isoformat()
+    )
+
+
+def _ocr_export_http_errors(exc: Exception) -> HTTPException:
+    msg = str(exc)
+    if isinstance(exc, ValueError):
+        if "OCR data not found" in msg or "no tables in OCR" in msg:
+            return HTTPException(status_code=404, detail=msg)
+        return HTTPException(status_code=400, detail=msg)
+    if isinstance(exc, RuntimeError):
+        return HTTPException(status_code=502, detail=msg)
+    return HTTPException(status_code=500, detail=msg)
+
+
+@ocr_router.get("/v0/orgs/{organization_id}/ocr/export/markdown/{document_id}")
+async def get_ocr_export_markdown(
+    organization_id: str,
+    document_id: str,
+    current_user: User = Depends(get_org_user),
+):
+    """Return OCR linearized as Markdown (textractor), computed from stored OCR JSON."""
+    logger.debug(
+        f"get_ocr_export_markdown() document_id={document_id} org={organization_id}"
+    )
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    document = await db.docs.find_one(
+        {"_id": ObjectId(document_id), "organization_id": organization_id}
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_name = document.get("user_file_name", "")
+    if not ad.common.doc.ocr_supported(file_name):
+        raise HTTPException(
+            status_code=404, detail="OCR not supported for this document extension"
+        )
+
+    try:
+        body = await ad.common.export_ocr_markdown(
+            analytiq_client, document_id, org_id=organization_id
+        )
+    except (ValueError, RuntimeError) as e:
+        raise _ocr_export_http_errors(e) from e
+
+    return Response(
+        content=body,
+        media_type="text/markdown; charset=utf-8",
+        headers={"Cache-Control": "private, max-age=60"},
+    )
+
+
+@ocr_router.get("/v0/orgs/{organization_id}/ocr/export/html/{document_id}")
+async def get_ocr_export_html(
+    organization_id: str,
+    document_id: str,
+    current_user: User = Depends(get_org_user),
+):
+    """Return OCR linearized as HTML (textractor), computed from stored OCR JSON."""
+    logger.debug(f"get_ocr_export_html() document_id={document_id} org={organization_id}")
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    document = await db.docs.find_one(
+        {"_id": ObjectId(document_id), "organization_id": organization_id}
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_name = document.get("user_file_name", "")
+    if not ad.common.doc.ocr_supported(file_name):
+        raise HTTPException(
+            status_code=404, detail="OCR not supported for this document extension"
+        )
+
+    try:
+        body = await ad.common.export_ocr_html(
+            analytiq_client, document_id, org_id=organization_id
+        )
+    except (ValueError, RuntimeError) as e:
+        raise _ocr_export_http_errors(e) from e
+
+    return Response(
+        content=body,
+        media_type="text/html; charset=utf-8",
+        headers={"Cache-Control": "private, max-age=60"},
+    )
+
+
+@ocr_router.get("/v0/orgs/{organization_id}/ocr/export/tables.xlsx/{document_id}")
+async def get_ocr_export_tables_xlsx(
+    organization_id: str,
+    document_id: str,
+    table_index: Optional[int] = Query(
+        None,
+        description="0-based table index; omit to export all tables (one sheet per table)",
+    ),
+    current_user: User = Depends(get_org_user),
+):
+    """Export detected table(s) to Excel (.xlsx) via textractor, from stored OCR JSON."""
+    logger.debug(
+        f"get_ocr_export_tables_xlsx() document_id={document_id} org={organization_id} "
+        f"table_index={table_index}"
+    )
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    document = await db.docs.find_one(
+        {"_id": ObjectId(document_id), "organization_id": organization_id}
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_name = document.get("user_file_name", "")
+    if not ad.common.doc.ocr_supported(file_name):
+        raise HTTPException(
+            status_code=404, detail="OCR not supported for this document extension"
+        )
+
+    try:
+        body = await ad.common.export_ocr_tables_excel(
+            analytiq_client,
+            document_id,
+            org_id=organization_id,
+            table_index=table_index,
+        )
+    except (ValueError, RuntimeError) as e:
+        raise _ocr_export_http_errors(e) from e
+
+    safe_name = "".join(c for c in file_name if c.isalnum() or c in "._- ")[:80] or "document"
+    if not safe_name.lower().endswith(".xlsx"):
+        base = safe_name.rsplit(".", 1)[0] if "." in safe_name else safe_name
+        filename = f"{base}-tables.xlsx"
+    else:
+        filename = safe_name
+
+    return Response(
+        content=body,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Cache-Control": "private, max-age=60",
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
     )

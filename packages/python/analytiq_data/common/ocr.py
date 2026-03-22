@@ -1,11 +1,12 @@
 from datetime import datetime, UTC
+import asyncio
 import os
 import pickle
 import logging
+import tempfile
 from typing import Optional
 
 import analytiq_data as ad
-from textractor.entities.document import Document
 
 logger = logging.getLogger(__name__)
 
@@ -166,24 +167,9 @@ async def save_ocr_text_from_json(
         org_id : str, optional
             Organization id for error messages (recommended when known)
     """
-    ad.aws.textract.configure_textractor_logging()
-    payload = ad.aws.textract.textract_payload_for_document_open(ocr_json)
-    if payload is None:
-        raise ValueError(
-            f"{org_id}/{document_id}: unsupported OCR payload for textractor"
-        )
-
-    try:
-        doc = Document.open(payload)
-    except Exception as e:
-        raise RuntimeError(
-            f"{org_id}/{document_id}: Textractor Document.open failed: {e}"
-        ) from e
-
-    if not doc.pages:
-        raise ValueError(
-            f"{org_id}/{document_id}: no pages in textractor document"
-        )
+    doc = ad.aws.textract.open_textract_document_from_ocr_json(
+        ocr_json, document_id=document_id, org_id=org_id
+    )
 
     page_text_map = ad.aws.textract.page_text_map_from_ocr_document(doc)
     if not page_text_map:
@@ -259,3 +245,113 @@ async def get_ocr_n_pages(analytiq_client, document_id:str) -> int:
     if blob.get("metadata") is None:
         return 0
     return blob["metadata"].get("n_pages", 0)
+
+
+def _export_ocr_markdown_sync(ocr_json, *, document_id: str, org_id: Optional[str]) -> str:
+    doc = ad.aws.textract.open_textract_document_from_ocr_json(
+        ocr_json, document_id=document_id, org_id=org_id
+    )
+    return doc.to_markdown()
+
+
+def _export_ocr_html_sync(ocr_json, *, document_id: str, org_id: Optional[str]) -> str:
+    doc = ad.aws.textract.open_textract_document_from_ocr_json(
+        ocr_json, document_id=document_id, org_id=org_id
+    )
+    return doc.to_html()
+
+
+def _export_ocr_tables_excel_sync(
+    ocr_json,
+    *,
+    document_id: str,
+    org_id: Optional[str],
+    table_index: Optional[int],
+) -> bytes:
+    doc = ad.aws.textract.open_textract_document_from_ocr_json(
+        ocr_json, document_id=document_id, org_id=org_id
+    )
+    if not doc.tables:
+        raise ValueError(
+            f"{org_id}/{document_id}: no tables in OCR for Excel export"
+        )
+    fd, path = tempfile.mkstemp(suffix=".xlsx")
+    os.close(fd)
+    try:
+        if table_index is not None:
+            if table_index < 0 or table_index >= len(doc.tables):
+                raise ValueError(
+                    f"{org_id}/{document_id}: table_index out of range "
+                    f"(have {len(doc.tables)} tables)"
+                )
+            doc.tables[table_index].to_excel(filepath=path)
+        else:
+            doc.export_tables_to_excel(path)
+        with open(path, "rb") as f:
+            return f.read()
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+
+
+async def export_ocr_markdown(
+    analytiq_client,
+    document_id: str,
+    *,
+    org_id: Optional[str] = None,
+) -> str:
+    """Linearize OCR to Markdown via textractor (on the fly from stored OCR JSON)."""
+    ocr_json = await get_ocr_json(analytiq_client, document_id)
+    if ocr_json is None:
+        raise ValueError(f"{org_id}/{document_id}: OCR data not found")
+    return await asyncio.to_thread(
+        _export_ocr_markdown_sync,
+        ocr_json,
+        document_id=document_id,
+        org_id=org_id,
+    )
+
+
+async def export_ocr_html(
+    analytiq_client,
+    document_id: str,
+    *,
+    org_id: Optional[str] = None,
+) -> str:
+    """Linearize OCR to HTML via textractor (on the fly from stored OCR JSON)."""
+    ocr_json = await get_ocr_json(analytiq_client, document_id)
+    if ocr_json is None:
+        raise ValueError(f"{org_id}/{document_id}: OCR data not found")
+    return await asyncio.to_thread(
+        _export_ocr_html_sync,
+        ocr_json,
+        document_id=document_id,
+        org_id=org_id,
+    )
+
+
+async def export_ocr_tables_excel(
+    analytiq_client,
+    document_id: str,
+    *,
+    org_id: Optional[str] = None,
+    table_index: Optional[int] = None,
+) -> bytes:
+    """
+    Export table(s) to ``.xlsx`` via textractor (on the fly from stored OCR JSON).
+
+    If ``table_index`` is ``None``, all tables share one workbook (one sheet per table).
+    If set, export that single table (0-based index).
+    """
+    ocr_json = await get_ocr_json(analytiq_client, document_id)
+    if ocr_json is None:
+        raise ValueError(f"{org_id}/{document_id}: OCR data not found")
+    return await asyncio.to_thread(
+        _export_ocr_tables_excel_sync,
+        ocr_json,
+        document_id=document_id,
+        org_id=org_id,
+        table_index=table_index,
+    )
