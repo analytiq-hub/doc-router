@@ -1304,8 +1304,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
               </button>
             }
           >
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="overflow-y-auto px-6 pb-6 pt-2 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-2">
             {runInfoLoading ? (
               <div className="flex items-center gap-3 py-6">
                 <div
@@ -1336,7 +1335,9 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                 const showDisplayNamePrefix =
                   !!runInfoResult.prompt_display_name && runInfoResult.prompt_revid !== 'default';
                 return (
-                  <div className="space-y-4">
+                  <div className="flex min-h-0 flex-1 flex-col gap-4">
+                    <div className="min-h-0 shrink overflow-y-auto [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
+                      <div className="space-y-4">
                     <div>
                       <label className="mb-1 block text-sm font-semibold text-gray-700">Prompt</label>
                       <div className="break-words rounded border bg-gray-50 p-2 text-sm text-gray-900">
@@ -1431,12 +1432,14 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
                         </div>
                       </div>
                     )}
+                      </div>
+                    </div>
 
-                    <div>
-                      <label className="mb-1 block text-sm font-semibold text-gray-700">
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      <label className="mb-1 shrink-0 block text-sm font-semibold text-gray-700">
                         Context sent to model
                       </label>
-                      <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded border bg-gray-50 p-2 font-mono text-xs leading-relaxed text-gray-800">
+                      <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded border bg-gray-50 p-2 font-mono text-xs leading-relaxed text-gray-800 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
                         {promptUsedText
                           ? promptUsedText
                           : 'No prompt text reported by the backend for this run.'}
@@ -1448,7 +1451,6 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
             ) : (
               <p className="py-4 text-sm text-gray-500">No run info available.</p>
             )}
-              </div>
             </div>
           </DraggablePanel>
         </>
