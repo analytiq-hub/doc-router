@@ -14,7 +14,7 @@ from typing import List, Dict, Any, Optional
 from bson import ObjectId
 
 import analytiq_data as ad
-from .indexing import remove_document_from_kb
+from .indexing import get_extracted_indexing_text, remove_document_from_kb
 from .embedding_cache import get_embedding_from_cache
 
 logger = logging.getLogger(__name__)
@@ -260,7 +260,7 @@ async def _reconcile_document(
             kb_result["missing_documents"].append(doc_id)
             if not dry_run:
                 # Check if document has extractable text (OCR text for OCR files, original content for .txt/.md files)
-                extracted_text = await ad.llm.get_extracted_text(analytiq_client, doc_id)
+                extracted_text = await get_extracted_indexing_text(analytiq_client, doc_id)
                 if extracted_text and extracted_text.strip():
                     kb_msg = {"document_id": doc_id, "kb_id": kb_id_str}
                     await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
@@ -376,7 +376,7 @@ async def _reconcile_kb_full(
             # Check if document has at least one tag matching KB
             if doc_tag_ids & kb_tag_ids and doc_id not in existing_doc_ids:
                 # Check if document has extractable text (OCR text for OCR files, original content for .txt/.md files)
-                extracted_text = await ad.llm.get_extracted_text(analytiq_client, doc_id)
+                extracted_text = await get_extracted_indexing_text(analytiq_client, doc_id)
                 if extracted_text and extracted_text.strip():
                     results["missing_documents"].append(doc_id)
                     if not dry_run:

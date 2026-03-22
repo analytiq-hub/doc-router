@@ -157,7 +157,7 @@ async def test_build_prompt_context_ocr_toggle(test_db, mock_auth, setup_test_mo
                 side_effect=_group_on,
             ),
             patch(
-                "analytiq_data.llm.llm.get_extracted_text",
+                "analytiq_data.llm.llm.get_extracted_llm_text",
                 new_callable=AsyncMock,
                 return_value="LINE 1\nLINE 2",
             ),

@@ -160,6 +160,7 @@ async def get_extracted_llm_text(analytiq_client, document_id: str) -> str | Non
     # For other files (csv, xls, xlsx), return None to indicate file attachment needed
     return None
 
+
 async def get_file_attachment(analytiq_client, doc: dict, llm_provider: str, llm_model: str):
     """
     Get file attachment for LLM processing.

@@ -375,26 +375,43 @@ async def get_extracted_indexing_text(analytiq_client, document_id: str) -> str 
 
     # Check if OCR is supported
     if ad.common.doc.ocr_supported(file_name):
-        # Get the OCR json
         ocr_json = await ad.common.get_ocr_json(analytiq_client, document_id)
         if ocr_json is None:
+            # Tests and legacy flows often only persist plain OCR text (no Textract JSON blob).
+            text = await ad.common.get_ocr_text(analytiq_client, document_id)
+            if isinstance(text, str) and text.strip():
+                return text
             return None
 
-        # Convert to document
-        doc = ad.aws.textract.open_textract_document_from_ocr_json(ocr_json, document_id=document_id)
+        blocks = ad.aws.textract.ocr_result_blocks(ocr_json)
+        table_blocks = [b for b in blocks if b.get("BlockType") == "TABLE"]
+
+        try:
+            doc = ad.aws.textract.open_textract_document_from_ocr_json(
+                ocr_json, document_id=document_id
+            )
+        except (ValueError, RuntimeError) as e:
+            logger.warning(
+                "%s: textractor open failed for indexing: %s; falling back to plain OCR text",
+                document_id,
+                e,
+            )
+            text = await ad.common.get_ocr_text(analytiq_client, document_id)
+            if isinstance(text, str) and text.strip():
+                return text
+            return None
+
         if not doc.pages:
+            text = await ad.common.get_ocr_text(analytiq_client, document_id)
+            if isinstance(text, str) and text.strip():
+                return text
             return None
 
-        # Find all the TABLE blocks
-        table_blocks = [block for block in ocr_json["Blocks"] if block.get("BlockType") == "TABLE"]
         if table_blocks:
-            # Return the markdown representation
             logger.info(f"{document_id}: Exporting OCR markdown for indexing")
             return doc.to_markdown()
-        else:
-            # Return the text representation
-            logger.info(f"{document_id}: Exporting OCR text for indexing")
-            return doc.get_text()
+        logger.info(f"{document_id}: Exporting OCR text for indexing")
+        return doc.get_text()
 
     # For non-OCR files, check if it's a text file we can read
     if file_name:

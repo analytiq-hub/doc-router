@@ -55,7 +55,7 @@ async def build_system_message(
 
     # OCR excerpt
     try:
-        text = await ad.llm.get_extracted_text(analytiq_client, document_id)
+        text = await ad.llm.get_extracted_llm_text(analytiq_client, document_id)
         if text:
             parts.append("## Document text (OCR/content excerpt)")
             parts.append(_truncate(text, OCR_EXCERPT_MAX_CHARS))
