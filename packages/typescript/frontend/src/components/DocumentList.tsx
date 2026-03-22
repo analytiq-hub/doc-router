@@ -177,6 +177,18 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
     setSelectedDocument(null);
   };
 
+  const handleRerunOCR = async (docId: string) => {
+    try {
+      await docRouterOrgApi.runOCR({ documentId: docId });
+      toast.info('OCR requeued');
+      fetchFiles();
+      handleMenuClose();
+    } catch (error) {
+      console.error('Error rerunning OCR:', error);
+      toast.error('Failed to rerun OCR');
+    }
+  };
+
   const handleDeleteFile = async (fileId: string) => {
     try {
       await docRouterOrgApi.deleteDocument({ documentId: fileId });
@@ -636,7 +648,16 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
           <DownloadIcon fontSize="small" className="text-green-600" />
           <span>Download</span>
         </MenuItem>
-        <MenuItem 
+        <MenuItem
+          onClick={() => {
+            if (selectedDocument) handleRerunOCR(selectedDocument.id);
+          }}
+          className="flex items-center gap-2"
+        >
+          <BoltIcon style={{ width: '1.25rem', height: '1.25rem' }} className="text-orange-500" />
+          <span>Rerun OCR</span>
+        </MenuItem>
+        <MenuItem
           onClick={() => {
             if (selectedDocument) handleDeleteFile(selectedDocument.id);
           }}

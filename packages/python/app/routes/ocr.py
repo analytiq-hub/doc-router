@@ -29,6 +29,35 @@ class GetOCRMetadataResponse(BaseModel):
     n_pages: int
     ocr_date: str
 
+@ocr_router.post("/v0/orgs/{organization_id}/ocr/run/{document_id}")
+async def run_ocr(
+    organization_id: str,
+    document_id: str,
+    force: bool = Query(default=True, description="Force re-run even if OCR result exists"),
+    ocr_only: bool = Query(default=False, description="Skip LLM and KB indexing after OCR completes"),
+    current_user: User = Depends(get_org_user),
+):
+    """Re-run OCR on a document."""
+    logger.info(f"run_ocr(): document_id={document_id}, force={force}, ocr_only={ocr_only}")
+    analytiq_client = ad.common.get_analytiq_client()
+
+    document = await ad.common.get_doc(analytiq_client, document_id)
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_name = document.get("user_file_name", "")
+    if not ad.common.doc.ocr_supported(file_name):
+        raise HTTPException(status_code=400, detail="Document type does not support OCR")
+
+    if not ocr_only:
+        await ad.common.doc.update_doc_state(
+            analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_UPLOADED
+        )
+    await ad.queue.send_msg(
+        analytiq_client, "ocr", msg={"document_id": document_id, "force": force, "ocr_only": ocr_only}
+    )
+    return {"status": "queued", "document_id": document_id}
+
 @ocr_router.get("/v0/orgs/{organization_id}/ocr/download/blocks/{document_id}")
 async def download_ocr_blocks(
     organization_id: str,

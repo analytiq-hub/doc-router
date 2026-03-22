@@ -20,7 +20,7 @@ async def _ocr_get_file(analytiq_client, file_name: str):
         raise FileNotFoundError(f"File {file_name} not found")
     return file
 
-async def process_ocr_msg(analytiq_client, msg, force:bool=False):
+async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=False):
     """
     Process an OCR message
 
@@ -31,6 +31,8 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
             The OCR message
         force : bool
             Whether to force the processing
+        ocr_only : bool
+            When True, skip enqueueing LLM and KB indexing after OCR completes
     """
     # Implement your job processing logic here
     msg_id = msg["_id"]
@@ -49,19 +51,20 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
             await ad.queue.delete_msg(analytiq_client, "ocr", msg_id_str)
             return
         org_id = doc.get("organization_id")
-        logger.info(f"Processing OCR msg: document_id={document_id}, org_id={org_id}, force={force}")
+        logger.info(f"Processing OCR msg: document_id={document_id}, org_id={org_id}, force={force}, ocr_only={ocr_only}")
 
         # Check if OCR is supported for this file
         if not ad.common.doc.ocr_supported(doc.get("user_file_name", "")):
             logger.info(f"Skipping OCR processing for structured data file: {document_id} ({doc.get('user_file_name')})")
             # Update state to OCR completed without doing OCR
             await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_COMPLETED)
-            # Post a message to the llm job queue
-            msg_llm = {"document_id": document_id}
-            await ad.queue.send_msg(analytiq_client, "llm", msg=msg_llm)
-            # Post a message to the KB indexing queue (for .txt/.md files that can be indexed)
-            kb_msg = {"document_id": document_id}
-            await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
+            if not ocr_only:
+                # Post a message to the llm job queue
+                msg_llm = {"document_id": document_id}
+                await ad.queue.send_msg(analytiq_client, "llm", msg=msg_llm)
+                # Post a message to the KB indexing queue (for .txt/.md files that can be indexed)
+                kb_msg = {"document_id": document_id}
+                await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
             await ad.queue.delete_msg(analytiq_client, "ocr", msg_id_str)
             return
 
@@ -163,13 +166,14 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False):
         # Update state to OCR completed
         await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_COMPLETED)
 
-        # Post a message to the llm job queue
-        msg_llm = {"document_id": document_id}
-        await ad.queue.send_msg(analytiq_client, "llm", msg=msg_llm)
-        
-        # Post a message to the KB indexing queue (OCR-gated indexing)
-        kb_msg = {"document_id": document_id}
-        await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
+        if not ocr_only:
+            # Post a message to the llm job queue
+            msg_llm = {"document_id": document_id}
+            await ad.queue.send_msg(analytiq_client, "llm", msg=msg_llm)
+
+            # Post a message to the KB indexing queue (OCR-gated indexing)
+            kb_msg = {"document_id": document_id}
+            await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
 
         # Successful completion: remove message from queue
         await ad.queue.delete_msg(analytiq_client, "ocr", msg_id_str)

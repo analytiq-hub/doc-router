@@ -52,7 +52,9 @@ async def worker_ocr(worker_id: str) -> None:
                 _queue_idle_sleep["ocr"] = POLL_MIN_SLEEP
                 logger.info(f"Worker {worker_id} processing OCR msg: {msg}")
                 try:
-                    await ad.msg_handlers.process_ocr_msg(analytiq_client, msg)
+                    force = msg.get("msg", {}).get("force", False)
+                    ocr_only = msg.get("msg", {}).get("ocr_only", False)
+                    await ad.msg_handlers.process_ocr_msg(analytiq_client, msg, force=force, ocr_only=ocr_only)
                 except asyncio.CancelledError:
                     logger.warning(
                         "Worker %s cancelled mid-flight on OCR msg %s; message will be recovered via visibility timeout",

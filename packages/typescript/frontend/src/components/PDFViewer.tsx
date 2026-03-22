@@ -18,6 +18,7 @@ function isDocumentErrorState(state: string | null): boolean {
   return state != null && (DOCUMENT_ERROR_STATES as readonly string[]).includes(state);
 }
 import { toast } from 'react-toastify';
+import { BoltIcon } from '@heroicons/react/24/outline';
 import { Toolbar, Typography, IconButton, TextField, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, List, Tooltip } from '@mui/material';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
@@ -565,6 +566,20 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     handleMenuClose();
   }, [handleMenuClose]);
 
+  const handleRerunOCR = useCallback(async () => {
+    handleMenuClose();
+    try {
+      await docRouterOrgApi.runOCR({ documentId: id });
+      setOcrBlocksForBoxes(null);
+      completionFetchStartedRef.current = false;
+      setDocumentState('ocr_processing');
+      toast.info('OCR requeued');
+    } catch (err) {
+      console.error('Error rerunning OCR:', err);
+      toast.error('Failed to rerun OCR');
+    }
+  }, [handleMenuClose, docRouterOrgApi, id]);
+
   const handleBoundingBoxesToggle = useCallback(async () => {
     const next = !showBoundingBoxes;
     setShowBoundingBoxes(next);
@@ -1108,6 +1123,13 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
           <StyledMenuItem onClick={handleDownloadOcrJson}>
             <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
             Download OCR JSON
+          </StyledMenuItem>
+          <StyledMenuItem
+            onClick={handleRerunOCR}
+            disabled={!isOCRSupported(fileName)}
+          >
+            <BoltIcon style={{ width: '1.25rem', height: '1.25rem', marginRight: '0.5rem' }} />
+            Rerun OCR
           </StyledMenuItem>
           <Divider />
           <StyledMenuItem onClick={handleDocumentProperties}>

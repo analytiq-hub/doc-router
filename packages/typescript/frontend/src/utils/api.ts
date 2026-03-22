@@ -171,25 +171,34 @@ api.interceptors.response.use(
 );
 
 export class DocRouterOrgApi extends DocRouterOrg {
+  private readonly _orgId: string;
+
  constructor(organizationId: string) {
     super({
       baseURL: NEXT_PUBLIC_FASTAPI_FRONTEND_URL,
       orgToken: '', // Empty token so tokenProvider will be used
       organizationId: organizationId,
     });
-    
+    this._orgId = organizationId;
+
     // Set up token provider that gets called on every request
     this.getHttpClient().updateTokenProvider(async () => {
       // First try to use global session (pre-fetched from context)
       let session = getGlobalSession();
-      
+
       // Fallback to cached session if global session is not available
       if (!session) {
         session = await getCachedSession();
       }
-      
+
       return session?.apiAccessToken || '';
     });
+  }
+
+  async runOCR({ documentId, ocrOnly }: { documentId: string; ocrOnly?: boolean }): Promise<void> {
+    const params: Record<string, unknown> = {};
+    if (ocrOnly !== undefined) params.ocr_only = ocrOnly;
+    await api.post(`/v0/orgs/${this._orgId}/ocr/run/${documentId}`, null, { params });
   }
 }
 
