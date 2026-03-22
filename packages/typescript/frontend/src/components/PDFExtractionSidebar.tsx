@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { 
   ChevronDownIcon, 
   MagnifyingGlassIcon,
@@ -70,6 +70,43 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   const [runInfoOpen, setRunInfoOpen] = useState(false);
   const [runInfoLoading, setRunInfoLoading] = useState(false);
   const [runInfoResult, setRunInfoResult] = useState<GetLLMResultResponse | null>(null);
+  const runInfoModalRef = useRef<HTMLDivElement>(null);
+  const runInfoDragOffset = useRef({ x: 0, y: 0 });
+
+  // Reset drag position each time the modal opens
+  useEffect(() => {
+    if (runInfoOpen) {
+      runInfoDragOffset.current = { x: 0, y: 0 };
+      if (runInfoModalRef.current) {
+        runInfoModalRef.current.style.transform = 'translate(-50%, -50%)';
+      }
+    }
+  }, [runInfoOpen]);
+
+  const handleRunInfoDragStart = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origX = runInfoDragOffset.current.x;
+    const origY = runInfoDragOffset.current.y;
+    const onMove = (ev: PointerEvent) => {
+      const x = origX + ev.clientX - startX;
+      const y = origY + ev.clientY - startY;
+      runInfoDragOffset.current = { x, y };
+      if (runInfoModalRef.current) {
+        runInfoModalRef.current.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+      }
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+  };
 
   // Refs mirror state so the fetch effect can read current values without being in the dependency array
   const llmResultsRef = React.useRef(llmResults);
@@ -1266,17 +1303,31 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
 
       {runInfoOpen && (
         <div
-          className="fixed inset-0 z-[70] flex items-center justify-center bg-black bg-opacity-50"
+          className="fixed inset-0 z-[70] bg-black bg-opacity-50"
           onClick={() => setRunInfoOpen(false)}
           role="dialog"
           aria-modal="true"
           aria-label="Run info modal"
         >
           <div
-            className="mx-4 max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-lg bg-white p-6 shadow-xl"
+            ref={runInfoModalRef}
+            className="absolute w-full max-w-2xl rounded-lg bg-white shadow-xl"
+            style={{
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
             onClick={e => e.stopPropagation()}
           >
-            <div className="mb-4 flex items-center justify-between gap-4">
+            {/* Drag handle / header — no overflow so pointer events work */}
+            <div
+              className="flex shrink-0 cursor-grab select-none items-center justify-between gap-4 rounded-t-lg p-6 pb-4 active:cursor-grabbing"
+              style={{ touchAction: 'none' }}
+              onPointerDown={handleRunInfoDragStart}
+            >
               <div className="flex min-w-0 items-center gap-2">
                 <DescriptionOutlinedIcon className="shrink-0 text-blue-600" fontSize="small" />
                 <h3 className="text-lg font-medium">Run Info</h3>
@@ -1284,11 +1335,13 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
               <button
                 type="button"
                 onClick={() => setRunInfoOpen(false)}
+                onPointerDown={e => e.stopPropagation()}
                 className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
               >
                 Close
               </button>
             </div>
+            <div className="overflow-y-auto px-6 pb-6">
 
             {runInfoLoading ? (
               <div className="flex items-center gap-3 py-6">
@@ -1432,6 +1485,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
             ) : (
               <p className="py-4 text-sm text-gray-500">No run info available.</p>
             )}
+            </div>{/* end scroll area */}
           </div>
         </div>
       )}
