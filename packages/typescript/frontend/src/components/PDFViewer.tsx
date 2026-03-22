@@ -18,7 +18,7 @@ function isDocumentErrorState(state: string | null): boolean {
   return state != null && (DOCUMENT_ERROR_STATES as readonly string[]).includes(state);
 }
 import { toast } from 'react-toastify';
-import { Toolbar, Typography, IconButton, TextField, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, List, Tooltip, Box, CircularProgress } from '@mui/material';
+import { Toolbar, Typography, IconButton, TextField, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, List, Tooltip } from '@mui/material';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import RotateLeftIcon from '@mui/icons-material/RotateLeft';
@@ -559,6 +559,43 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     handleMenuClose();
   };
 
+  const ocrModalRef = useRef<HTMLDivElement>(null);
+  const ocrDragOffset = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    if (showOcr) {
+      ocrDragOffset.current = { x: 0, y: 0 };
+      if (ocrModalRef.current) {
+        ocrModalRef.current.style.transform = 'translate(-50%, -50%)';
+      }
+    }
+  }, [showOcr]);
+
+  const handleOcrDragStart = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const startX = e.clientX;
+    const startY = e.clientY;
+    const origX = ocrDragOffset.current.x;
+    const origY = ocrDragOffset.current.y;
+    const onMove = (ev: PointerEvent) => {
+      const x = origX + ev.clientX - startX;
+      const y = origY + ev.clientY - startY;
+      ocrDragOffset.current = { x, y };
+      if (ocrModalRef.current) {
+        ocrModalRef.current.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+      }
+    };
+    const onUp = () => {
+      document.removeEventListener('pointermove', onMove);
+      document.removeEventListener('pointerup', onUp);
+      document.removeEventListener('pointercancel', onUp);
+    };
+    document.addEventListener('pointermove', onMove);
+    document.addEventListener('pointerup', onUp);
+    document.addEventListener('pointercancel', onUp);
+  };
+
   const handleOcrToggle = useCallback(() => {
     setShowOcr(prev => !prev);
     handleMenuClose();
@@ -706,21 +743,17 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   useEffect(() => {
     const fetchOcrText = async () => {
       if (!showOcr) return;
-      
-      // Check if OCR is supported before making the API call
+
       if (!isOCRSupported(fileName)) {
         setOcrError('OCR is not supported for this file type');
         setOcrLoading(false);
         return;
       }
-      
+
       try {
         setOcrLoading(true);
         setOcrError(null);
-        const text = await docRouterOrgApi.getOCRText({
-          documentId: id,
-          pageNum: pageNumber
-        });
+        const text = await docRouterOrgApi.getOCRText({ documentId: id });
         setOcrText(text);
       } catch (err) {
         if (isOcrNotReadyError(err)) {
@@ -735,7 +768,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     };
 
     fetchOcrText();
-  }, [id, pageNumber, showOcr, organizationId, docRouterOrgApi, fileName]);
+  }, [id, showOcr, docRouterOrgApi, fileName]);
 
   // This is called once for each page
   const renderHighlights = useCallback((page: number) => {
@@ -1183,30 +1216,60 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
           </Panel>
 
           {showOcr && (
-            <Panel defaultSize={30}>
-              <Box sx={{ height: '100%', overflow: 'auto', p: 2, borderLeft: 1, borderColor: 'divider' }}>
-                <Typography variant="h6" gutterBottom>
-                  OCR Text - Page {pageNumber}
-                </Typography>
-                {ocrLoading ? (
-                  <CircularProgress size={24} />
-                ) : ocrError ? (
-                  <Typography color="error">{ocrError}</Typography>
-                ) : (
-                  <Typography
-                    variant="body2"
-                    component="pre"
-                    sx={{
-                      whiteSpace: 'pre-wrap',
-                      wordBreak: 'break-word',
-                      fontFamily: 'monospace'
-                    }}
+            <div
+              className="fixed inset-0 z-[70] bg-black bg-opacity-50"
+              onClick={() => setShowOcr(false)}
+              role="dialog"
+              aria-modal="true"
+              aria-label="OCR text modal"
+            >
+              <div
+                ref={ocrModalRef}
+                className="absolute w-full max-w-2xl rounded-lg bg-white shadow-xl"
+                style={{
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  maxHeight: '90vh',
+                  display: 'flex',
+                  flexDirection: 'column',
+                }}
+                onClick={e => e.stopPropagation()}
+              >
+                <div
+                  className="flex shrink-0 cursor-grab select-none items-center justify-between gap-4 rounded-t-lg p-6 pb-4 active:cursor-grabbing"
+                  style={{ touchAction: 'none' }}
+                  onPointerDown={handleOcrDragStart}
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <TextSnippetIcon className="shrink-0 text-blue-600" fontSize="small" />
+                    <h3 className="text-lg font-medium">OCR Text</h3>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowOcr(false)}
+                    onPointerDown={e => e.stopPropagation()}
+                    className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
                   >
-                    {ocrText}
-                  </Typography>
-                )}
-              </Box>
-            </Panel>
+                    Close
+                  </button>
+                </div>
+                <div className="overflow-y-auto px-6 pb-6">
+                  {ocrLoading ? (
+                    <div className="flex items-center gap-3 py-6">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
+                      <span className="text-sm italic text-gray-500">Loading OCR text...</span>
+                    </div>
+                  ) : ocrError ? (
+                    <p className="py-4 text-sm text-red-600">{ocrError}</p>
+                  ) : (
+                    <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-gray-800">
+                      {ocrText || 'No OCR text available.'}
+                    </pre>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
         </PanelGroup>
 
