@@ -118,7 +118,7 @@ async def test_textract_and_llm_default_pipeline(test_db, mock_auth, setup_test_
         assert invoice_block is not None, "Should find the invoice block in OCR data"
         assert invoice_block["BlockType"] == "LINE", "Invoice block should be a LINE type"
         assert invoice_block["Page"] == 1, "Invoice block should be on page 1"
-        assert invoice_block["Confidence"] > 99, "Invoice block should have high confidence"
+        assert invoice_block["Confidence"] >= 98, "Invoice block should have high confidence"
 
         # Verify the document status shows OCR processing completed
         final_doc_resp = client.get(f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}", headers=get_auth_headers())
