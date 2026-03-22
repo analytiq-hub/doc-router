@@ -749,6 +749,13 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     } catch (err) {
       if (isOcrNotReadyError(err)) {
         toast.info('OCR data not yet available');
+      } else if (
+        ocrPanelKind === 'excel' &&
+        (err as Error & { status?: number })?.status === 404
+      ) {
+        toast.warning(
+          'Excel tables are not available for this document. Make sure the Textract TABLES feature is enabled, then re-run OCR.',
+        );
       } else {
         console.error('OCR export download failed:', err);
         toast.error(
