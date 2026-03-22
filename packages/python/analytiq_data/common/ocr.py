@@ -166,6 +166,7 @@ async def save_ocr_text_from_json(
         org_id : str, optional
             Organization id for error messages (recommended when known)
     """
+    ad.aws.textract.configure_textractor_logging()
     payload = ad.aws.textract.textract_payload_for_document_open(ocr_json)
     if payload is None:
         raise ValueError(
