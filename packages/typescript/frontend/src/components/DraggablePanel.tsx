@@ -64,7 +64,7 @@ export default function DraggablePanel({
       }}
     >
       <div
-        className="flex h-9 shrink-0 cursor-grab items-center gap-2 border-b border-gray-200 bg-slate-50 px-2 active:cursor-grabbing"
+        className="flex h-10 shrink-0 cursor-grab items-center gap-2 border-b border-gray-200 bg-slate-50 px-3 active:cursor-grabbing"
         onPointerDown={handlePointerDown}
         role="presentation"
       >
