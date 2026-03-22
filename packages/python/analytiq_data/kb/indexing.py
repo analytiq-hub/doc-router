@@ -5,6 +5,7 @@ Handles chunking, embedding generation, caching, and atomic vector storage.
 """
 
 import logging
+import os
 import warnings
 from datetime import datetime, UTC
 from typing import List, Dict, Any, Optional, Tuple
@@ -357,6 +358,61 @@ async def get_or_generate_embeddings(
     
     return embeddings, cache_miss_count
 
+async def get_extracted_indexing_text(analytiq_client, document_id: str) -> str | None:
+    """
+    Get extracted text from a document.
+
+    For OCR-supported files, returns OCR markdown representation or text representation if no TABLE blocks.
+    For txt/md files, returns the original file content as text.
+    For other non-OCR files, returns None.
+    """
+    # Get document info
+    doc = await ad.common.doc.get_doc(analytiq_client, document_id)
+    if not doc:
+        return None
+
+    file_name = doc.get("user_file_name", "")
+
+    # Check if OCR is supported
+    if ad.common.doc.ocr_supported(file_name):
+        # Get the OCR json
+        ocr_json = await ad.common.get_ocr_json(analytiq_client, document_id)
+        if ocr_json is None:
+            return None
+
+        # Convert to document
+        doc = ad.aws.textract.open_textract_document_from_ocr_json(ocr_json, document_id=document_id)
+        if not doc.pages:
+            return None
+
+        # Find all the TABLE blocks
+        table_blocks = [block for block in ocr_json["Blocks"] if block.get("BlockType") == "TABLE"]
+        if table_blocks:
+            # Return the markdown representation
+            logger.info(f"{document_id}: Exporting OCR markdown for indexing")
+            return doc.to_markdown()
+        else:
+            # Return the text representation
+            logger.info(f"{document_id}: Exporting OCR text for indexing")
+            return doc.get_text()
+
+    # For non-OCR files, check if it's a text file we can read
+    if file_name:
+        ext = os.path.splitext(file_name)[1].lower()
+        if ext in {'.txt', '.md'}:
+            # Get the original file and decode as text
+            original_file = await ad.common.get_file_async(analytiq_client, doc["mongo_file_name"])
+            if original_file and original_file["blob"]:
+                logger.info(f"{document_id}: Exporting original file content for indexing")
+                try:
+                    return original_file["blob"].decode("utf-8")
+                except UnicodeDecodeError:
+                    # Fallback to latin-1 if UTF-8 fails
+                    return original_file["blob"].decode("latin-1")
+
+    # For other files (csv, xls, xlsx), return None to indicate file attachment needed
+    logger.info(f"{document_id}: No extractable text. Skipping indexing.")
+    return None
 
 async def index_document_in_kb(
     analytiq_client,
@@ -398,7 +454,7 @@ async def index_document_in_kb(
         raise ValueError(f"Document {document_id} not found")
     
     # Get text to chunk (OCR text for OCR-supported files, original content for .txt/.md files)
-    text_to_chunk = await ad.llm.get_extracted_text(analytiq_client, document_id)
+    text_to_chunk = await get_extracted_indexing_text(analytiq_client, document_id)
     if not text_to_chunk or not text_to_chunk.strip():
         logger.warning(f"Document {document_id} has no extractable text. Skipping indexing.")
         return {

@@ -88,7 +88,7 @@ def _apply_prompt_caching(model: str, messages: list, *, tools: Optional[List[Di
     return messages
 
 
-async def get_extracted_text(analytiq_client, document_id: str) -> str | None:
+async def get_extracted_llm_text(analytiq_client, document_id: str) -> str | None:
     """
     Get extracted text from a document.
 
@@ -849,7 +849,7 @@ async def _build_prompt_context(
 
         if include_ocr:
             if doc_id_str not in ocr_cache:
-                text = await get_extracted_text(analytiq_client, doc_id_str)
+                text = await get_extracted_llm_text(analytiq_client, doc_id_str)
                 if text is None:
                     raise Exception(
                         f"LLM run failed: missing OCR/text for document {doc_id_str} "
