@@ -1210,21 +1210,22 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                   </button>
                 }
               >
-                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                  <div className="overflow-y-auto px-6 pb-6 pt-2 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
-                    {ocrLoading ? (
-                      <div className="flex items-center gap-3 py-6">
-                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
-                        <span className="text-sm italic text-gray-500">Loading OCR text...</span>
-                      </div>
-                    ) : ocrError ? (
-                      <p className="py-4 text-sm text-red-600">{ocrError}</p>
-                    ) : (
-                      <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-gray-800">
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-2">
+                  {ocrLoading ? (
+                    <div className="flex items-center gap-3 py-6">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
+                      <span className="text-sm italic text-gray-500">Loading OCR text...</span>
+                    </div>
+                  ) : ocrError ? (
+                    <p className="py-4 text-sm text-red-600">{ocrError}</p>
+                  ) : (
+                    <div className="flex min-h-0 flex-1 flex-col">
+                      <label className="mb-1 block text-sm font-semibold text-gray-700">Extracted text</label>
+                      <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded border bg-gray-50 p-2 font-mono text-xs leading-relaxed text-gray-800 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
                         {ocrText || 'No OCR text available.'}
                       </pre>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               </DraggablePanel>
             </>
