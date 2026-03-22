@@ -72,6 +72,9 @@ describe('SDK Client Unit Tests', () => {
       expect(typeof client.getOCRBlocks).toBe('function');
       expect(typeof client.getOCRText).toBe('function');
       expect(typeof client.getOCRMetadata).toBe('function');
+      expect(typeof client.getOCRExportMarkdown).toBe('function');
+      expect(typeof client.getOCRExportHtml).toBe('function');
+      expect(typeof client.getOCRExportTablesXlsx).toBe('function');
       expect(typeof client.runLLM).toBe('function');
       expect(typeof client.getLLMResult).toBe('function');
       expect(typeof client.updateLLMResult).toBe('function');

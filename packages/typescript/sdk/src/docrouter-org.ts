@@ -241,6 +241,57 @@ export class DocRouterOrg {
     return this.http.get<GetOCRMetadataResponse>(`/v0/orgs/${this.organizationId}/ocr/download/metadata/${documentId}`);
   }
 
+  async runOCR(params: { documentId: string; force?: boolean; ocrOnly?: boolean }): Promise<void> {
+    const { documentId, force, ocrOnly } = params;
+    const queryParams: Record<string, unknown> = {};
+    if (force !== undefined) queryParams.force = force;
+    if (ocrOnly !== undefined) queryParams.ocr_only = ocrOnly;
+    await this.http.post<void>(
+      `/v0/orgs/${this.organizationId}/ocr/run/${documentId}`,
+      null,
+      { params: queryParams },
+    );
+  }
+
+  /**
+   * On-the-fly Markdown linearization from stored OCR (textractor).
+   */
+  async getOCRExportMarkdown(params: { documentId: string }): Promise<string> {
+    const { documentId } = params;
+    return this.http.get<string>(
+      `/v0/orgs/${this.organizationId}/ocr/export/markdown/${documentId}`,
+      { responseType: 'text' },
+    );
+  }
+
+  /**
+   * On-the-fly HTML linearization from stored OCR (textractor).
+   */
+  async getOCRExportHtml(params: { documentId: string }): Promise<string> {
+    const { documentId } = params;
+    return this.http.get<string>(
+      `/v0/orgs/${this.organizationId}/ocr/export/html/${documentId}`,
+      { responseType: 'text' },
+    );
+  }
+
+  /**
+   * Excel export of detected OCR tables (one sheet per table unless tableIndex is set).
+   */
+  async getOCRExportTablesXlsx(params: {
+    documentId: string;
+    tableIndex?: number;
+  }): Promise<Blob> {
+    const { documentId, tableIndex } = params;
+    return this.http.get<Blob>(
+      `/v0/orgs/${this.organizationId}/ocr/export/tables.xlsx/${documentId}`,
+      {
+        responseType: 'blob',
+        params: tableIndex !== undefined ? { table_index: tableIndex } : undefined,
+      },
+    );
+  }
+
   // ---------------- LLM ----------------
 
   async runLLM(params: { documentId: string; promptRevId: string; force?: boolean; }): Promise<RunLLMResponse> {

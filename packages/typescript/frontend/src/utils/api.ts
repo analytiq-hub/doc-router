@@ -195,11 +195,6 @@ export class DocRouterOrgApi extends DocRouterOrg {
     });
   }
 
-  async runOCR({ documentId, ocrOnly }: { documentId: string; ocrOnly?: boolean }): Promise<void> {
-    const params: Record<string, unknown> = {};
-    if (ocrOnly !== undefined) params.ocr_only = ocrOnly;
-    await api.post(`/v0/orgs/${this._orgId}/ocr/run/${documentId}`, null, { params });
-  }
 }
 
 // In-flight promise cache for listOrganizations to avoid duplicate concurrent requests

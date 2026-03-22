@@ -36,6 +36,13 @@ const nextConfig = {
   },
   // Webpack config for compatibility (Turbopack will use this as fallback)
   webpack: (config) => {
+    // Use SDK TypeScript source so new APIs (e.g. OCR export) are always current; `file:../sdk`
+    // otherwise resolves to package `exports` → stale `dist/` until `npm run build` in sdk/.
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@docrouter/sdk': path.resolve(__dirname, '../sdk/src/index.ts'),
+    };
+
     if (config.optimization) {
       config.optimization.minimizer = [
         new TerserPlugin({

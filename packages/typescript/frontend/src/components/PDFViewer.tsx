@@ -36,7 +36,12 @@ import { alpha } from '@mui/material/styles';
 import PrintIcon from '@mui/icons-material/Print';
 import DescriptionOutlinedIcon from '@mui/icons-material/DescriptionOutlined';
 import DownloadIcon from '@mui/icons-material/Download';
+import ArticleIcon from '@mui/icons-material/Article';
+import LanguageIcon from '@mui/icons-material/Language';
+import TableChartIcon from '@mui/icons-material/TableChart';
 import { saveAs } from 'file-saver';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { PanelGroup, Panel } from 'react-resizable-panels';
 import CheckIcon from '@mui/icons-material/Check';
 import TextSnippetIcon from '@mui/icons-material/TextSnippet';
@@ -93,6 +98,8 @@ interface PDFMetadata {
   Producer?: string;
   PDFFormatVersion?: string;
 }
+
+type OcrPanelKind = 'text' | 'markdown' | 'html' | 'excel';
 
 // Update the props interface
 interface PDFViewerProps {
@@ -263,13 +270,29 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const [showProperties, setShowProperties] = useState(false);
   const [documentProperties, setDocumentProperties] = useState<Record<string, string> | null>(null);
 
-  const [showOcr, setShowOcr] = useState(false);
+  const [ocrPanelKind, setOcrPanelKind] = useState<OcrPanelKind | null>(null);
   const [ocrText, setOcrText] = useState<string>('');
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
+  const [ocrMarkdown, setOcrMarkdown] = useState<string>('');
+  const [ocrMarkdownLoading, setOcrMarkdownLoading] = useState(false);
+  const [ocrMarkdownError, setOcrMarkdownError] = useState<string | null>(null);
+  const [ocrHtml, setOcrHtml] = useState<string>('');
+  const [ocrHtmlLoading, setOcrHtmlLoading] = useState(false);
+  const [ocrHtmlError, setOcrHtmlError] = useState<string | null>(null);
   const [showBoundingBoxes, setShowBoundingBoxes] = useState(!!initialShowBoundingBoxes);
   const [ocrBlocksForBoxes, setOcrBlocksForBoxes] = useState<OCRBlock[] | null>(null);
   const [fitMode, setFitMode] = useState<'width' | 'page' | 'manual'>('width');
+
+  useEffect(() => {
+    setOcrPanelKind(null);
+    setOcrText('');
+    setOcrError(null);
+    setOcrMarkdown('');
+    setOcrMarkdownError(null);
+    setOcrHtml('');
+    setOcrHtmlError(null);
+  }, [id]);
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
@@ -562,7 +585,22 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   };
 
   const handleOcrToggle = useCallback(() => {
-    setShowOcr(prev => !prev);
+    setOcrPanelKind((prev) => (prev === 'text' ? null : 'text'));
+    handleMenuClose();
+  }, [handleMenuClose]);
+
+  const openOcrMarkdown = useCallback(() => {
+    setOcrPanelKind('markdown');
+    handleMenuClose();
+  }, [handleMenuClose]);
+
+  const openOcrHtml = useCallback(() => {
+    setOcrPanelKind('html');
+    handleMenuClose();
+  }, [handleMenuClose]);
+
+  const openOcrExcel = useCallback(() => {
+    setOcrPanelKind('excel');
     handleMenuClose();
   }, [handleMenuClose]);
 
@@ -671,29 +709,63 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     };
   }, [showBoundingBoxes, ocrBlocksForBoxes, fileName, id, docRouterOrgApi, documentState]);
 
-  const handleDownloadOcrText = async () => {
+  const ocrDownloadBaseName = useMemo(
+    () => (fileName || `Document_${id}`).replace(/\.[^/.]+$/, '') || `Document_${id}`,
+    [fileName, id],
+  );
+
+  const handleOcrPanelDownload = useCallback(async () => {
+    if (!ocrPanelKind) return;
     if (!isOCRSupported(fileName)) {
       toast.error('OCR is not supported for this file type');
-      handleMenuClose();
       return;
     }
     try {
-      const text = await docRouterOrgApi.getOCRText({
-        documentId: id
-      });
-      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-      const defaultFileName = (fileName || `Document_${id}`) + `_ocr.txt`;
-      saveAs(blob, defaultFileName);
+      if (ocrPanelKind === 'text') {
+        const text =
+          ocrText || (await docRouterOrgApi.getOCRText({ documentId: id }));
+        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+        saveAs(blob, `${ocrDownloadBaseName}_ocr.txt`);
+      } else if (ocrPanelKind === 'markdown') {
+        const md =
+          ocrMarkdown ||
+          (await docRouterOrgApi.getOCRExportMarkdown({ documentId: id }));
+        const blob = new Blob([md], {
+          type: 'text/markdown;charset=utf-8',
+        });
+        saveAs(blob, `${ocrDownloadBaseName}_ocr.md`);
+      } else if (ocrPanelKind === 'html') {
+        const html =
+          ocrHtml ||
+          (await docRouterOrgApi.getOCRExportHtml({ documentId: id }));
+        const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+        saveAs(blob, `${ocrDownloadBaseName}_ocr.html`);
+      } else {
+        const blob = await docRouterOrgApi.getOCRExportTablesXlsx({
+          documentId: id,
+        });
+        saveAs(blob, `${ocrDownloadBaseName}_ocr_tables.xlsx`);
+      }
     } catch (err) {
       if (isOcrNotReadyError(err)) {
         toast.info('OCR data not yet available');
       } else {
-        console.error('Error downloading OCR text:', err);
-        toast.error('Failed to download OCR text');
+        console.error('OCR export download failed:', err);
+        toast.error(
+          err instanceof Error ? err.message : 'Failed to download OCR export',
+        );
       }
     }
-    handleMenuClose();
-  };
+  }, [
+    ocrPanelKind,
+    fileName,
+    ocrText,
+    ocrMarkdown,
+    ocrHtml,
+    docRouterOrgApi,
+    id,
+    ocrDownloadBaseName,
+  ]);
 
   const handleDownloadOcrJson = async () => {
     if (!isOCRSupported(fileName)) {
@@ -720,34 +792,107 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   };
 
   useEffect(() => {
-    const fetchOcrText = async () => {
-      if (!showOcr) return;
+    if (!ocrPanelKind) return;
 
-      if (!isOCRSupported(fileName)) {
-        setOcrError('OCR is not supported for this file type');
+    if (!isOCRSupported(fileName)) {
+      const msg = 'OCR is not supported for this file type';
+      if (ocrPanelKind === 'text') {
+        setOcrError(msg);
         setOcrLoading(false);
-        return;
       }
+      if (ocrPanelKind === 'markdown') {
+        setOcrMarkdownError(msg);
+        setOcrMarkdownLoading(false);
+      }
+      if (ocrPanelKind === 'html') {
+        setOcrHtmlError(msg);
+        setOcrHtmlLoading(false);
+      }
+      return;
+    }
 
-      try {
-        setOcrLoading(true);
-        setOcrError(null);
-        const text = await docRouterOrgApi.getOCRText({ documentId: id });
-        setOcrText(text);
-      } catch (err) {
-        if (isOcrNotReadyError(err)) {
-          setOcrError('OCR data not yet available');
-        } else {
-          console.error('Error fetching OCR text:', err);
-          setOcrError('Failed to load OCR text');
+    if (ocrPanelKind === 'text') {
+      let cancelled = false;
+      (async () => {
+        try {
+          setOcrLoading(true);
+          setOcrError(null);
+          const text = await docRouterOrgApi.getOCRText({ documentId: id });
+          if (!cancelled) setOcrText(text);
+        } catch (err) {
+          if (!cancelled) {
+            if (isOcrNotReadyError(err)) {
+              setOcrError('OCR data not yet available');
+            } else {
+              console.error('Error fetching OCR text:', err);
+              setOcrError('Failed to load OCR text');
+            }
+          }
+        } finally {
+          if (!cancelled) setOcrLoading(false);
         }
-      } finally {
-        setOcrLoading(false);
-      }
-    };
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
 
-    fetchOcrText();
-  }, [id, showOcr, docRouterOrgApi, fileName]);
+    if (ocrPanelKind === 'markdown') {
+      let cancelled = false;
+      (async () => {
+        try {
+          setOcrMarkdownLoading(true);
+          setOcrMarkdownError(null);
+          const md = await docRouterOrgApi.getOCRExportMarkdown({
+            documentId: id,
+          });
+          if (!cancelled) setOcrMarkdown(md);
+        } catch (err) {
+          if (!cancelled) {
+            if (isOcrNotReadyError(err)) {
+              setOcrMarkdownError('OCR data not yet available');
+            } else {
+              console.error('Error fetching OCR markdown:', err);
+              setOcrMarkdownError('Failed to load OCR markdown');
+            }
+          }
+        } finally {
+          if (!cancelled) setOcrMarkdownLoading(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (ocrPanelKind === 'html') {
+      let cancelled = false;
+      (async () => {
+        try {
+          setOcrHtmlLoading(true);
+          setOcrHtmlError(null);
+          const html = await docRouterOrgApi.getOCRExportHtml({ documentId: id });
+          if (!cancelled) setOcrHtml(html);
+        } catch (err) {
+          if (!cancelled) {
+            if (isOcrNotReadyError(err)) {
+              setOcrHtmlError('OCR data not yet available');
+            } else {
+              console.error('Error fetching OCR HTML:', err);
+              setOcrHtmlError('Failed to load OCR HTML');
+            }
+          }
+        } finally {
+          if (!cancelled) setOcrHtmlLoading(false);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    return undefined;
+  }, [ocrPanelKind, id, docRouterOrgApi, fileName]);
 
   // This is called once for each page
   const renderHighlights = useCallback((page: number) => {
@@ -1114,11 +1259,22 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
           <StyledMenuItem onClick={handleOcrToggle}>
             <TextSnippetIcon fontSize="small" sx={{ mr: 1 }} />
             Show OCR Text
-            {showOcr && <CheckIcon fontSize="small" sx={{ ml: 1 }} />}
+            {ocrPanelKind === 'text' && <CheckIcon fontSize="small" sx={{ ml: 1 }} />}
           </StyledMenuItem>
-          <StyledMenuItem onClick={handleDownloadOcrText}>
-            <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
-            Download OCR Text
+          <StyledMenuItem onClick={openOcrMarkdown} disabled={!isOCRSupported(fileName)}>
+            <ArticleIcon fontSize="small" sx={{ mr: 1 }} />
+            Show OCR Markdown
+            {ocrPanelKind === 'markdown' && <CheckIcon fontSize="small" sx={{ ml: 1 }} />}
+          </StyledMenuItem>
+          <StyledMenuItem onClick={openOcrHtml} disabled={!isOCRSupported(fileName)}>
+            <LanguageIcon fontSize="small" sx={{ mr: 1 }} />
+            Show OCR Webpage
+            {ocrPanelKind === 'html' && <CheckIcon fontSize="small" sx={{ ml: 1 }} />}
+          </StyledMenuItem>
+          <StyledMenuItem onClick={openOcrExcel} disabled={!isOCRSupported(fileName)}>
+            <TableChartIcon fontSize="small" sx={{ mr: 1 }} />
+            Show OCR Tables (Excel)
+            {ocrPanelKind === 'excel' && <CheckIcon fontSize="small" sx={{ ml: 1 }} />}
           </StyledMenuItem>
           <StyledMenuItem onClick={handleDownloadOcrJson}>
             <DownloadIcon fontSize="small" sx={{ mr: 1 }} />
@@ -1201,51 +1357,137 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
             </div>
           </Panel>
 
-          {showOcr && (
+          {ocrPanelKind && (
             <>
               <div
                 className="fixed inset-0 z-[70] bg-black bg-opacity-50"
-                onClick={() => setShowOcr(false)}
+                onClick={() => setOcrPanelKind(null)}
                 role="presentation"
               />
               <DraggablePanel
-                open={showOcr}
+                open={!!ocrPanelKind}
                 resetToken={id}
                 anchorPercent={{ x: 50, y: 45 }}
                 width="min(100vw - 32px, 42rem)"
                 height="min(90vh, 820px)"
                 zIndex={71}
-                ariaLabel="OCR text"
+                ariaLabel={
+                  ocrPanelKind === 'text'
+                    ? 'OCR text'
+                    : ocrPanelKind === 'markdown'
+                      ? 'OCR Markdown'
+                      : ocrPanelKind === 'html'
+                        ? 'OCR webpage'
+                        : 'OCR tables Excel export'
+                }
                 title={
-                  <>
-                    <TextSnippetIcon className="shrink-0 text-blue-600" fontSize="small" />
-                    <span className="truncate">OCR Text</span>
-                  </>
+                  ocrPanelKind === 'text' ? (
+                    <>
+                      <TextSnippetIcon className="shrink-0 text-blue-600" fontSize="small" />
+                      <span className="truncate">OCR Text</span>
+                    </>
+                  ) : ocrPanelKind === 'markdown' ? (
+                    <>
+                      <ArticleIcon className="shrink-0 text-blue-600" fontSize="small" />
+                      <span className="truncate">OCR Markdown</span>
+                    </>
+                  ) : ocrPanelKind === 'html' ? (
+                    <>
+                      <LanguageIcon className="shrink-0 text-blue-600" fontSize="small" />
+                      <span className="truncate">OCR Webpage</span>
+                    </>
+                  ) : (
+                    <>
+                      <TableChartIcon className="shrink-0 text-blue-600" fontSize="small" />
+                      <span className="truncate">OCR Tables (Excel)</span>
+                    </>
+                  )
                 }
                 headerActions={
-                  <button
-                    type="button"
-                    onClick={() => setShowOcr(false)}
-                    className="rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
-                  >
-                    Close
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void handleOcrPanelDownload()}
+                      className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-medium text-gray-800 shadow-sm hover:bg-gray-50"
+                    >
+                      <DownloadIcon fontSize="small" sx={{ mr: 0.5 }} />
+                      Download
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setOcrPanelKind(null)}
+                      className="rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+                    >
+                      Close
+                    </button>
+                  </div>
                 }
               >
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6 pt-2">
-                  {ocrLoading ? (
-                    <div className="flex items-center gap-3 py-6">
-                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
-                      <span className="text-sm italic text-gray-500">Loading OCR text...</span>
-                    </div>
-                  ) : ocrError ? (
-                    <p className="py-4 text-sm text-red-600">{ocrError}</p>
-                  ) : (
-                    <div className="flex min-h-0 flex-1 flex-col">
-                      <label className="mb-1 block text-sm font-semibold text-gray-700">Extracted text</label>
-                      <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded border bg-gray-50 p-2 font-mono text-xs leading-relaxed text-gray-800 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
-                        {ocrText || 'No OCR text available.'}
-                      </pre>
+                  {ocrPanelKind === 'text' && (
+                    <>
+                      {ocrLoading ? (
+                        <div className="flex items-center gap-3 py-6">
+                          <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
+                          <span className="text-sm italic text-gray-500">Loading OCR text...</span>
+                        </div>
+                      ) : ocrError ? (
+                        <p className="py-4 text-sm text-red-600">{ocrError}</p>
+                      ) : (
+                        <div className="flex min-h-0 flex-1 flex-col">
+                          <label className="mb-1 block text-sm font-semibold text-gray-700">Extracted text</label>
+                          <pre className="min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded border bg-gray-50 p-2 font-mono text-xs leading-relaxed text-gray-800 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
+                            {ocrText || 'No OCR text available.'}
+                          </pre>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {ocrPanelKind === 'markdown' && (
+                    <>
+                      {ocrMarkdownLoading ? (
+                        <div className="flex items-center gap-3 py-6">
+                          <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
+                          <span className="text-sm italic text-gray-500">Loading OCR markdown...</span>
+                        </div>
+                      ) : ocrMarkdownError ? (
+                        <p className="py-4 text-sm text-red-600">{ocrMarkdownError}</p>
+                      ) : (
+                        <div className="prose prose-sm max-w-none min-h-0 flex-1 overflow-auto rounded border bg-gray-50 p-3 text-gray-800 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {ocrMarkdown || '*No content.*'}
+                          </ReactMarkdown>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  {ocrPanelKind === 'html' && (
+                    <>
+                      {ocrHtmlLoading ? (
+                        <div className="flex items-center gap-3 py-6">
+                          <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
+                          <span className="text-sm italic text-gray-500">Loading OCR HTML...</span>
+                        </div>
+                      ) : ocrHtmlError ? (
+                        <p className="py-4 text-sm text-red-600">{ocrHtmlError}</p>
+                      ) : (
+                        <iframe
+                          title="OCR HTML preview"
+                          sandbox="allow-same-origin"
+                          className="min-h-[min(70vh,600px)] w-full flex-1 rounded border border-gray-200 bg-white"
+                          srcDoc={ocrHtml || '<p></p>'}
+                        />
+                      )}
+                    </>
+                  )}
+                  {ocrPanelKind === 'excel' && (
+                    <div className="flex flex-col gap-3 py-2">
+                      <p className="text-sm text-gray-700">
+                        Download an Excel workbook built from tables detected in the OCR result (one worksheet per table).
+                      </p>
+                      <p className="text-xs text-gray-500">
+                        If the document has no tables, the download may fail. Use Download above.
+                      </p>
                     </div>
                   )}
                 </div>
