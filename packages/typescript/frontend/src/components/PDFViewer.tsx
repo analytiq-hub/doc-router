@@ -1254,7 +1254,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                     Close
                   </button>
                 </div>
-                <div className="overflow-y-auto px-6 pb-6">
+                <div className="overflow-y-auto px-6 pb-6 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
                   {ocrLoading ? (
                     <div className="flex items-center gap-3 py-6">
                       <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
