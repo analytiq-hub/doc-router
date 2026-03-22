@@ -5,6 +5,7 @@ Handles chunking, embedding generation, caching, and atomic vector storage.
 """
 
 import logging
+import math
 import os
 import warnings
 from datetime import datetime, UTC
@@ -97,6 +98,17 @@ DISABLED_CHUNKER_TYPES = ["semantic", "late", "sdpm"]
 
 # Embedding batch size for LiteLLM API calls
 EMBEDDING_BATCH_SIZE = 100
+
+# SPU metering: one SPU covers up to this many embedding API calls (cache misses), then another SPU per block of N.
+# Example: 1000 misses -> ceil(1000 / 250) = 4 SPUs (at least ~2x raw API cost vs $0.05/SPU retail).
+EMBEDDINGS_PER_SPU = 250
+
+
+def spus_for_kb_indexing_embedding_misses(cache_miss_count: int) -> int:
+    """Return billable SPUs for KB indexing given the number of embedding cache misses."""
+    if cache_miss_count <= 0:
+        return 0
+    return math.ceil(cache_miss_count / EMBEDDINGS_PER_SPU)
 
 
 class Chunk:
@@ -304,11 +316,15 @@ async def get_or_generate_embeddings(
     # Generate embeddings for cache misses in batches
     if cache_misses:
         cache_miss_count = len(cache_misses)
-        logger.info(f"Generating {cache_miss_count} embeddings (cache misses)")
+        spus_to_charge = spus_for_kb_indexing_embedding_misses(cache_miss_count)
+        logger.info(
+            f"Generating {cache_miss_count} embeddings (cache misses), bill as {spus_to_charge} SPU(s) "
+            f"(up to {EMBEDDINGS_PER_SPU} embeddings per SPU)"
+        )
         
-        # Check SPU credits before generating embeddings (1 SPU per embedding)
+        # Check SPU credits before generating embeddings (bundled: ceil(misses / EMBEDDINGS_PER_SPU) SPUs)
         # This will raise SPUCreditException if insufficient credits
-        await ad.payments.check_spu_limits(organization_id, cache_miss_count)
+        await ad.payments.check_spu_limits(organization_id, spus_to_charge)
         
         generated_embeddings = []
         
@@ -338,17 +354,20 @@ async def get_or_generate_embeddings(
             )
             embeddings[cache_miss_idx] = embedding
         
-        # Record SPU usage: 1 SPU per embedding generated (cache miss)
+        # Record SPU usage: ceil(cache_misses / EMBEDDINGS_PER_SPU) SPUs
         if cache_miss_count > 0:
             try:
                 await ad.payments.record_spu_usage(
                     org_id=organization_id,
-                    spus=cache_miss_count,  # 1 SPU per embedding
+                    spus=spus_to_charge,
                     llm_provider=provider,
                     llm_model=embedding_model,
                     actual_cost=total_cost
                 )
-                logger.info(f"Recorded {cache_miss_count} SPU usage for {cache_miss_count} embedding(s) generated, actual cost: ${total_cost:.6f}")
+                logger.info(
+                    f"Recorded {spus_to_charge} SPU for {cache_miss_count} embedding(s) generated, "
+                    f"actual cost: ${total_cost:.6f}"
+                )
             except Exception as e:
                 logger.error(f"Error recording SPU usage for embeddings: {e}")
                 # Don't fail indexing if SPU recording fails

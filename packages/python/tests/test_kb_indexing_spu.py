@@ -2,12 +2,15 @@
 Unit tests for SPU usage in Knowledge Base indexing and search.
 """
 
-import pytest
-from bson import ObjectId
+import logging
 import os
 from datetime import datetime, UTC
-import logging
 from unittest.mock import patch, AsyncMock, Mock
+
+import pytest
+from bson import ObjectId
+
+from analytiq_data.kb.indexing import spus_for_kb_indexing_embedding_misses
 
 # Import shared test utilities
 from .conftest_utils import (
@@ -37,6 +40,15 @@ def create_mock_embedding_response(num_embeddings=1):
         embeddings.append({"embedding": embedding})
     mock_response.data = embeddings
     return mock_response
+
+
+def test_spus_for_kb_indexing_embedding_misses_formula():
+    assert spus_for_kb_indexing_embedding_misses(0) == 0
+    assert spus_for_kb_indexing_embedding_misses(1) == 1
+    assert spus_for_kb_indexing_embedding_misses(250) == 1
+    assert spus_for_kb_indexing_embedding_misses(251) == 2
+    assert spus_for_kb_indexing_embedding_misses(1000) == 4
+
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -126,12 +138,14 @@ async def test_kb_indexing_spu_recording(
         assert record_call[1]["llm_model"] == "text-embedding-3-small", "Should record correct embedding model"
         assert record_call[1]["llm_provider"] == "openai", "Should record correct provider"
         
-        # Verify the number of SPUs recorded matches the number of cache misses
-        # (which should equal the number of chunks generated)
-        num_chunks = check_call[0][1]
-        assert record_call[1]["spus"] == num_chunks, "SPUs recorded should match number of embeddings generated"
+        idx = await test_db.document_index.find_one({"kb_id": kb_id, "document_id": document_id})
+        assert idx is not None
+        num_chunks = idx["chunk_count"]
+        expected_spus = spus_for_kb_indexing_embedding_misses(num_chunks)
+        assert check_call[0][1] == expected_spus, "SPU credit check should match ceil(chunks / 250)"
+        assert record_call[1]["spus"] == expected_spus, "SPUs recorded should match ceil(chunks / 250)"
         
-        logger.info(f"SPU test passed: {num_chunks} SPUs checked and recorded")
+        logger.info(f"SPU test passed: {num_chunks} chunks -> {expected_spus} SPUs")
         
         # Cleanup
         client.delete(f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}", headers=get_auth_headers())
@@ -323,15 +337,16 @@ async def test_kb_indexing_spu_cache_hits_free(
         # - If there are cache misses, SPU check should happen only for the number of cache misses
         # - Cache hits should never charge SPU
         if mock_check_spu_limits.called:
-            # SPU check was called - verify it was only for cache misses
+            # SPU check was called - verify recorded SPUs match the check (bundled rate)
             check_call = mock_check_spu_limits.call_args
-            cache_miss_count = check_call[0][1] if check_call else 0
-            # Verify that SPU was checked and recorded only for cache misses
-            assert cache_miss_count > 0, "SPU check should only be called if there are cache misses"
-            assert mock_record_spu_usage.called, "SPU should be recorded for cache misses"
+            spus_requested = check_call[0][1] if check_call else 0
+            assert spus_requested > 0, "SPU check should only be called if SPUs are required"
+            assert mock_record_spu_usage.called, "SPU should be recorded when check runs"
             record_call = mock_record_spu_usage.call_args
-            assert record_call[1]["spus"] == cache_miss_count, f"SPU recorded ({record_call[1]['spus']}) should match cache misses ({cache_miss_count})"
-            logger.info(f"Second indexing had {cache_miss_count} cache misses - SPU correctly charged only for misses")
+            assert record_call[1]["spus"] == spus_requested, (
+                f"SPU recorded ({record_call[1]['spus']}) should match check ({spus_requested})"
+            )
+            logger.info(f"Second indexing: SPU check/record aligned at {spus_requested} SPUs")
         else:
             # No SPU check was called - all chunks must be cache hits
             assert not mock_record_spu_usage.called, "SPU should not be recorded if all chunks are cache hits"
