@@ -138,7 +138,7 @@ async def delete_ocr_all(analytiq_client, document_id:str):
     await delete_ocr_text(analytiq_client, document_id)
     await delete_ocr_json(analytiq_client, document_id)
 
-async def save_ocr_text_from_list(analytiq_client, document_id:str, ocr_json, metadata:dict=None, force:bool=False):
+async def save_ocr_text_from_json(analytiq_client, document_id:str, ocr_json, metadata:dict=None, force:bool=False):
     """
     Save the OCR text from the OCR list
     

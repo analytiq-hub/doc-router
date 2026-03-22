@@ -42,7 +42,7 @@ async def run_document_ocr(
     """
     Run all enabled OCR backends concurrently; wait for every task to complete.
 
-    Returns one Textract-shaped dict for :func:`analytiq_data.common.ocr.save_ocr_text_from_list`,
+    Returns one Textract-shaped dict for :func:`analytiq_data.common.ocr.save_ocr_text_from_json`,
     using the first successful result in :data:`_OCR_PERSIST_PREFERENCE` order.
     """
     tasks: list[asyncio.Task] = []

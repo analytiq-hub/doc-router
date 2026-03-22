@@ -161,7 +161,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
             logger.info(f"OCR list for {document_id} has been saved.")
         
         # Extract the text
-        await ad.common.save_ocr_text_from_list(analytiq_client, document_id, ocr_json, force=force)
+        await ad.common.save_ocr_text_from_json(analytiq_client, document_id, ocr_json, force=force)
         logger.info(f"OCR text for {document_id} has been saved.")
         # Update state to OCR completed
         await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_COMPLETED)
