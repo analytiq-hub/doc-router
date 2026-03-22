@@ -406,7 +406,7 @@ async def get_extracted_indexing_text(analytiq_client, document_id: str) -> str 
         table_blocks = [b for b in blocks if b.get("BlockType") == "TABLE"]
 
         try:
-            doc = ad.aws.textract.open_textract_document_from_ocr_json(
+            textract_doc = ad.aws.textract.open_textract_document_from_ocr_json(
                 ocr_json, document_id=document_id
             )
         except (ValueError, RuntimeError) as e:
@@ -420,7 +420,7 @@ async def get_extracted_indexing_text(analytiq_client, document_id: str) -> str 
                 return text
             return None
 
-        if not doc.pages:
+        if not textract_doc.pages:
             text = await ad.common.get_ocr_text(analytiq_client, document_id)
             if isinstance(text, str) and text.strip():
                 return text
@@ -428,9 +428,9 @@ async def get_extracted_indexing_text(analytiq_client, document_id: str) -> str 
 
         if table_blocks:
             logger.info(f"{document_id}: Exporting OCR markdown for indexing")
-            return doc.to_markdown()
+            return textract_doc.to_markdown()
         logger.info(f"{document_id}: Exporting OCR text for indexing")
-        return doc.get_text()
+        return textract_doc.get_text()
 
     # For non-OCR files, check if it's a text file we can read
     if file_name:

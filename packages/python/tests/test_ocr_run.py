@@ -110,14 +110,13 @@ async def test_run_ocr_force_false(test_db, mock_auth):
 
 
 # ---------------------------------------------------------------------------
-# ocr_only=True — document state is NOT reset; LLM not queued after processing
+# ocr_only=True — not reset to uploaded (LLM path); set ocr_processing for polling
 # ---------------------------------------------------------------------------
 
 @pytest.mark.asyncio
-async def test_run_ocr_ocr_only_does_not_reset_state(test_db, mock_auth):
+async def test_run_ocr_ocr_only_sets_ocr_processing_not_uploaded(test_db, mock_auth):
     doc_id = _upload_pdf()
 
-    # Manually advance doc state to ocr_completed to verify it is preserved
     db = ad.common.get_async_db()
     await db.docs.update_one(
         {"_id": ObjectId(doc_id)},
@@ -128,12 +127,27 @@ async def test_run_ocr_ocr_only_does_not_reset_state(test_db, mock_auth):
     assert resp.status_code == 200
 
     doc = await db.docs.find_one({"_id": ObjectId(doc_id)})
-    assert doc["state"] == ad.common.doc.DOCUMENT_STATE_OCR_COMPLETED, (
-        "State should not be reset when ocr_only=True"
-    )
+    assert doc["state"] == ad.common.doc.DOCUMENT_STATE_OCR_PROCESSING
 
     msgs = await db["queues.ocr"].find({"msg.document_id": doc_id}).to_list(None)
     assert msgs[-1]["msg"].get("ocr_only") is True
+
+
+@pytest.mark.asyncio
+async def test_run_ocr_ocr_only_from_failed_sets_ocr_processing(test_db, mock_auth):
+    doc_id = _upload_pdf()
+
+    db = ad.common.get_async_db()
+    await db.docs.update_one(
+        {"_id": ObjectId(doc_id)},
+        {"$set": {"state": ad.common.doc.DOCUMENT_STATE_OCR_FAILED}},
+    )
+
+    resp = client.post(_run_url(doc_id), params={"ocr_only": "true"}, headers=get_auth_headers())
+    assert resp.status_code == 200
+
+    doc = await db.docs.find_one({"_id": ObjectId(doc_id)})
+    assert doc["state"] == ad.common.doc.DOCUMENT_STATE_OCR_PROCESSING
 
 
 # ---------------------------------------------------------------------------

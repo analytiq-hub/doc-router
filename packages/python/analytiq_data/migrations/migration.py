@@ -2420,6 +2420,18 @@ class OcrPayloadTextractEnvelopeMigration(Migration):
                 await fs.upload_from_stream(filename=filename, source=new_bytes, metadata=meta)
                 upgraded_json += 1
                 logger.info("OCR migration: upgraded %s to Textract envelope", filename)
+                # Same document may still have a legacy *_list blob (e.g. duplicate row); remove it
+                # so GridFS does not keep an orphan that confuses rollback / storage accounting.
+                if filename.endswith("_json"):
+                    base = filename[: -len("_json")]
+                    list_doc = await files_coll.find_one({"filename": f"{base}_list"})
+                    if list_doc:
+                        await fs.delete(list_doc["_id"])
+                        logger.info(
+                            "OCR migration: removed legacy %s after upgrading %s",
+                            f"{base}_list",
+                            filename,
+                        )
 
             legacy_list_docs = await files_coll.find({"filename": {"$regex": r"_list$"}}).to_list(
                 length=None
@@ -2453,11 +2465,15 @@ class OcrPayloadTextractEnvelopeMigration(Migration):
                 new_obj = self._wrap_list_blocks(obj)
                 new_bytes = pickle.dumps(new_obj)
                 meta = file_doc.get("metadata") or {}
-                await fs.delete(file_doc["_id"])
+                list_gridfs_id = file_doc["_id"]
+                # Store _json first, then remove _list so we never leave only a deleted source if upload fails
                 await fs.upload_from_stream(filename=json_filename, source=new_bytes, metadata=meta)
+                await fs.delete(list_gridfs_id)
                 upgraded_list += 1
                 logger.info(
-                    "OCR migration: migrated %s -> %s (Textract envelope)", filename, json_filename
+                    "OCR migration: migrated %s -> %s (Textract envelope); removed legacy _list",
+                    filename,
+                    json_filename,
                 )
 
             logger.info(

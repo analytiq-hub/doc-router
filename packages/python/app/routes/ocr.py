@@ -42,7 +42,9 @@ async def run_ocr(
     logger.info(f"run_ocr(): document_id={document_id}, force={force}, ocr_only={ocr_only}")
     analytiq_client = ad.common.get_analytiq_client()
 
-    document = await ad.common.get_doc(analytiq_client, document_id)
+    document = await ad.common.get_doc(
+        analytiq_client, document_id, organization_id
+    )
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
 
@@ -53,6 +55,12 @@ async def run_ocr(
     if not ocr_only:
         await ad.common.doc.update_doc_state(
             analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_UPLOADED
+        )
+    else:
+        # Skip full pipeline reset (uploaded) but leave a non-terminal state for polling
+        # (e.g. after ocr_failed) before the worker picks up the job.
+        await ad.common.doc.update_doc_state(
+            analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_PROCESSING
         )
     await ad.queue.send_msg(
         analytiq_client, "ocr", msg={"document_id": document_id, "force": force, "ocr_only": ocr_only}
@@ -73,7 +81,9 @@ async def download_ocr_blocks(
     logger.debug(f"download_ocr_blocks() start: document_id: {document_id}, format: {format}")
     analytiq_client = ad.common.get_analytiq_client()
 
-    document = await ad.common.get_doc(analytiq_client, document_id)
+    document = await ad.common.get_doc(
+        analytiq_client, document_id, organization_id
+    )
 
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -118,11 +128,13 @@ async def download_ocr_text(
     logger.debug(f"download_ocr_text() start: document_id: {document_id}, page_num: {page_num}")
     
     analytiq_client = ad.common.get_analytiq_client()
-    document = await ad.common.get_doc(analytiq_client, document_id)
-    
+    document = await ad.common.get_doc(
+        analytiq_client, document_id, organization_id
+    )
+
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    
+
     file_name = document.get("user_file_name", "")
     if not ad.common.doc.ocr_supported(file_name):
         raise HTTPException(status_code=404, detail="OCR not supported for this document extension")
@@ -149,10 +161,12 @@ async def get_ocr_metadata(
     logger.debug(f"get_ocr_metadata() start: document_id: {document_id}")
     
     analytiq_client = ad.common.get_analytiq_client()
-    document = await ad.common.get_doc(analytiq_client, document_id)
+    document = await ad.common.get_doc(
+        analytiq_client, document_id, organization_id
+    )
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    
+
     file_name = document.get("user_file_name", "")
     if not ad.common.doc.ocr_supported(file_name):
         raise HTTPException(status_code=404, detail="OCR not supported for this document extension")

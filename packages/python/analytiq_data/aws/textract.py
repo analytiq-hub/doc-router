@@ -1,9 +1,4 @@
-import boto3, botocore
 import aioboto3
-from collections import defaultdict
-import json
-import re
-import time
 import asyncio
 from datetime import datetime
 import uuid
@@ -25,6 +20,19 @@ def _get_int_env(name: str, default: int) -> int:
 
 
 OCR_TIMEOUT_SECS = _get_int_env("OCR_TIMEOUT_SECS", 600)  # 10 min
+
+
+def _safe_block_page_int(block: object) -> Optional[int]:
+    """Textract ``Page`` is typically int; tolerate missing or non-castable values."""
+    if not isinstance(block, dict):
+        return None
+    p = block.get("Page")
+    if p is None:
+        return None
+    try:
+        return int(p)
+    except (TypeError, ValueError):
+        return None
 
 
 def ocr_result_blocks(ocr_json: Union[list, dict]) -> List[dict]:
@@ -288,7 +296,11 @@ def textract_payload_for_document_open(ocr_json: Union[list, dict]) -> Optional[
         blocks = ocr_json
         n = sum(1 for b in blocks if b.get("BlockType") == "PAGE")
         if not n:
-            pnums = {int(b["Page"]) for b in blocks if b.get("Page") is not None}
+            pnums = set()
+            for b in blocks:
+                pn = _safe_block_page_int(b)
+                if pn is not None:
+                    pnums.add(pn)
             n = max(pnums) if pnums else 1
         return {"Blocks": blocks, "DocumentMetadata": {"Pages": n}}
     return None
@@ -298,6 +310,9 @@ def page_text_map_from_ocr_document(doc) -> dict:
     """
     Map **0-based** page index to plain text from a **textractor** ``Document`` (``Page.get_text``
     linearization). Textractor uses 1-based ``page_num``; keys here are ``page_num - 1``.
+
+    When no page has a valid ``page_num`` (e.g. some image-only scans) but ``doc.pages`` is
+    non-empty, falls back to one entry per page in order, using each page's text (often empty).
     """
     if not doc.pages:
         return {}
@@ -309,7 +324,8 @@ def page_text_map_from_ocr_document(doc) -> dict:
             idx = int(p.page_num) - 1
             page_text_map[idx] = p.text
     if not page_text_map:
-        return {}
+        for i, p in enumerate(ordered):
+            page_text_map[i] = getattr(p, "text", None) or ""
     max_idx = max(page_text_map.keys())
     for idx in range(0, max_idx + 1):
         page_text_map.setdefault(idx, "")

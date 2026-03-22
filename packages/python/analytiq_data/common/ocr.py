@@ -12,7 +12,9 @@ logger = logging.getLogger(__name__)
 
 OCR_BUCKET = "ocr"
 
-async def get_ocr_json(analytiq_client, document_id: str) -> list:
+async def get_ocr_json(
+    analytiq_client, document_id: str
+) -> list | dict | None:
     """Get OCR data: legacy flat list of blocks or dict with ``Blocks`` and Textract metadata."""
     # Try new format first
     key = f"{document_id}_json"
@@ -172,10 +174,6 @@ async def save_ocr_text_from_json(
     )
 
     page_text_map = ad.aws.textract.page_text_map_from_ocr_document(doc)
-    if not page_text_map:
-        raise ValueError(
-            f"{org_id}/{document_id}: no page text from textractor document"
-        )
 
     if not force:
         ocr_text = await get_ocr_text(analytiq_client, document_id)
