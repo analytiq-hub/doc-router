@@ -213,205 +213,66 @@ async def run_textract(analytiq_client,
         except Exception as cleanup_error:
             logger.warning(f"Failed to cleanup S3 object {s3_key}: {cleanup_error}")    
 
-def get_block_map(blocks: list) -> dict:
-    """
-    Construct a map of blocks
-
-    Args:
-        blocks : dict
-            Textract blocks
-
-    Returns:
-        dict
-            Block map
-    """
-    block_map = {}
-    for block in blocks:
-        block_id = block['Id']
-        block_map[block_id] = block
-    return block_map
-    
-
-def get_kv_map(blocks: list) -> dict:
-    """
-    Construct a map of keys and values parsed by textract
-
-    Args:
-        blocks: Textract blocks
-
-    Returns:
-        Key and value map
-    """
-    key_map = {}
-    value_map = {}
-    for block in blocks:
-        block_id = block['Id']
-        if block['BlockType'] == "KEY_VALUE_SET":
-            if 'KEY' in block['EntityTypes']:
-                key_map[block_id] = block
-            else:
-                value_map[block_id] = block
-
-    return key_map, value_map
-
-
-def get_kv_relationship(key_map: dict, value_map: dict, block_map: dict) -> dict:
-    """
-    Get the key and value relationships
-
-    Args:
-        key_map: Key map
-        value_map: Value map
-        block_map: Block map
-
-    Returns:
-        Key and value relationships
-    """
-    kvs = defaultdict(list)
-    for _, key_block in key_map.items():
-        value_block = find_value_block(key_block, value_map)
-        key = get_text(key_block, block_map)
-        val = get_text(value_block, block_map)
-        kvs[key].append(val)
-    return kvs
-
-def find_value_block(key_block: dict, value_map: dict) -> dict:
-    for relationship in key_block['Relationships']:
-        if relationship['Type'] == 'VALUE':
-            for value_id in relationship['Ids']:
-                value_block = value_map[value_id]
-    return value_block
-
-
-def get_text(block: dict, blocks_map: dict) -> str:
-    text = ''
-    if 'Relationships' in block:
-        for relationship in block['Relationships']:
-            if relationship['Type'] == 'CHILD':
-                for child_id in relationship['Ids']:
-                    word = blocks_map[child_id]
-                    if word['BlockType'] == 'WORD':
-                        text += word['Text'] + ' '
-                    if word['BlockType'] == 'SELECTION_ELEMENT':
-                        if word['SelectionStatus'] == 'SELECTED':
-                            text += 'X '
-
-    return text
-
-def get_query_map(block_map: dict) -> dict:
-    """
-    Get the query map
-
-    Args:
-        block_map: Block map
-
-    Returns:
-        Query map
-    """
-    query_map = {}
-
-    for _, block in block_map.items():
-        if block["BlockType"] == "QUERY":
-            query_text = block["Query"]["Text"]
-            query_map[query_text] = None
-            for relationship in block.get("Relationships", []):
-                if relationship["Type"] == "ANSWER":
-                    for value_id in relationship["Ids"]:
-                        value_block = block_map[value_id]
-                        answer_text = value_block["Text"]
-                        query_map[query_text] = answer_text
-    return query_map
-
-def search_value(kvs: dict, search_key: str) -> list:
-    """
-    Search for a key in the key and value map
-
-    Args:
-        kvs: Key and value map
-        search_key: Search key
-
-    Returns:
-        List of values
-    """
-    for key, value in kvs.items():
-        if re.search(search_key, key, re.IGNORECASE):
-            return value
-        
-
-def get_tables(block_map: dict) -> list:
-    """
-    Get the tables
-
-    Args:
-        block_map: Block map
-
-    Returns:
-        List of tables
-    """
-    tables = []
-    for _, block in block_map.items():
-        if block['BlockType'] == 'TABLE':
-            table = {}
-            for relationship in block.get('Relationships', []):
-                if relationship['Type'] == 'CHILD':
-                    for child_id in relationship['Ids']:
-                        cell = next(b for _, b in block_map.items() if b['Id'] == child_id)
-                        row_index = cell['RowIndex']
-                        col_index = cell['ColumnIndex']
-                        text = ''
-
-                        for relationship2 in cell.get('Relationships', []):
-                            if relationship2['Type'] == 'CHILD':
-                                for child_id2 in relationship2['Ids']:
-                                    child_block2 = block_map.get(child_id2, None)
-                                    if child_block2 and 'Text' in child_block2:
-                                        if text == "":
-                                            text = child_block2['Text']
-                                        else:
-                                            text += " "
-                                            text += child_block2['Text']
-
-                        # print(json.dumps(cell))
-                        # print(text)
-
-                        # Save the cell text to the table
-                        table.setdefault(row_index, {})[col_index] = text
-            
-            # Save the table to the list of tables
-            tables += [table]
-
-            #for row in sorted(table.keys()):
-            #    print([table[row].get(col, '') for col in sorted(table[row].keys())])
-
-    return tables
-
 def get_page_text_map(block_map: dict) -> dict:
     """
-    Get the page text map
-
-    Args:
-        block_map: Block map
-
-    Returns:
-        Page text map
+    Get the page text map keyed by **0-based** page index (AWS ``Page`` on blocks is 1-based).
     """
     page_text_map = {}
     for _, block in block_map.items():
         if block['BlockType'] == 'LINE':
-            page = block['Page']
-            if page not in page_text_map:
-                page_text_map[page] = ""
-            page_text_map[page] += block['Text'] + "\n"
-    
+            idx = int(block['Page']) - 1
+            if idx not in page_text_map:
+                page_text_map[idx] = ""
+            page_text_map[idx] += block['Text'] + "\n"
+
     if len(page_text_map) == 0:
         return page_text_map
 
-    max_page = max(page_text_map.keys())
+    max_idx = max(page_text_map.keys())
+    for idx in range(0, max_idx + 1):
+        page_text_map.setdefault(idx, "")
 
-    for page in range(1, max_page+1):
-        if page not in page_text_map:
-            page_text_map[page] = ""
+    return dict(sorted(page_text_map.items()))
 
-    page_text_map = dict(sorted(page_text_map.items()))
 
-    return page_text_map
+def textract_payload_for_document_open(ocr_json: Union[list, dict]) -> Optional[dict]:
+    """
+    Build the API-shaped dict passed to ``textractor.entities.document.Document.open``.
+
+    Returns ``None`` if ``ocr_json`` cannot be wrapped (caller should use LINE-based text).
+
+    **Mutates** list/dict contents in place when passed to ``Document.open``: the ``textractor``
+    response converter may rewrite block types and elide some layout blocks.
+    """
+    if isinstance(ocr_json, dict) and "Blocks" in ocr_json:
+        return ocr_json
+    if isinstance(ocr_json, list):
+        blocks = ocr_json
+        n = sum(1 for b in blocks if b.get("BlockType") == "PAGE")
+        if not n:
+            pnums = {int(b["Page"]) for b in blocks if b.get("Page") is not None}
+            n = max(pnums) if pnums else 1
+        return {"Blocks": blocks, "DocumentMetadata": {"Pages": n}}
+    return None
+
+
+def page_text_map_from_ocr_document(doc) -> dict:
+    """
+    Map **0-based** page index to plain text from a **textractor** ``Document`` (``Page.get_text``
+    linearization). Textractor uses 1-based ``page_num``; keys here are ``page_num - 1``.
+    """
+    if not doc.pages:
+        return {}
+
+    ordered = sorted(doc.pages, key=lambda p: (p.page_num, p.id))
+    page_text_map = {}
+    for p in ordered:
+        if getattr(p, "page_num", None) and p.page_num > 0:
+            idx = int(p.page_num) - 1
+            page_text_map[idx] = p.text
+    if not page_text_map:
+        return {}
+    max_idx = max(page_text_map.keys())
+    for idx in range(0, max_idx + 1):
+        page_text_map.setdefault(idx, "")
+    return dict(sorted(page_text_map.items()))

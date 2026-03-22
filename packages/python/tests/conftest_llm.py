@@ -54,52 +54,80 @@ class MockUsage:
         self.total_tokens = 30
 
 
+def _mock_textract_geometry(left: float, top: float, width: float = 0.9, height: float = 0.06):
+    """Normalized Geometry like Textract API (BoundingBox + Polygon)."""
+    return {
+        "BoundingBox": {
+            "Width": width,
+            "Height": height,
+            "Left": left,
+            "Top": top,
+        },
+        "Polygon": [
+            {"X": left, "Y": top},
+            {"X": left + width, "Y": top},
+            {"X": left + width, "Y": top + height},
+            {"X": left, "Y": top + height},
+        ],
+    }
+
+
+def mock_textract_blocks_invoice_sample():
+    """
+    Minimal valid Textract ``Blocks`` list: PAGE with CHILD lines, each LINE with WORD children
+    and Geometry. Required for amazon-textract-textractor / :func:`Document.open`.
+    """
+    lines_spec = [
+        ("mock-line-1", "mock-word-1", "INVOICE #12345", 0.10),
+        ("mock-line-2", "mock-word-2", "Total: $1,234.56", 0.18),
+        ("mock-line-3", "mock-word-3", "Vendor: Acme Corp", 0.26),
+    ]
+    line_ids = [s[0] for s in lines_spec]
+    blocks = [
+        {
+            "BlockType": "PAGE",
+            "Id": "mock-page-1",
+            "Page": 1,
+            "Geometry": _mock_textract_geometry(0.0, 0.0, width=1.0, height=1.0),
+            "Relationships": [{"Type": "CHILD", "Ids": line_ids}],
+        },
+    ]
+    for line_id, word_id, text, top in lines_spec:
+        geo = _mock_textract_geometry(0.05, top)
+        blocks.append(
+            {
+                "BlockType": "LINE",
+                "Id": line_id,
+                "Page": 1,
+                "Text": text,
+                "Confidence": 98.0,
+                "Geometry": geo,
+                "Relationships": [{"Type": "CHILD", "Ids": [word_id]}],
+            }
+        )
+        blocks.append(
+            {
+                "BlockType": "WORD",
+                "Id": word_id,
+                "Page": 1,
+                "Text": text,
+                "TextType": "PRINTED",
+                "Confidence": 98.0,
+                "Geometry": geo,
+            }
+        )
+    return blocks
+
+
 class MockTextractResponse:
     """Mock response for Textract run_textract function"""
     def __init__(self, blocks=None):
-        self.blocks = blocks or [
-            {
-                'Id': 'block-1',
-                'BlockType': 'LINE',
-                'Text': 'Sample extracted text',
-                'Page': 1,
-                'Confidence': 99.5
-            },
-            {
-                'Id': 'block-2',
-                'BlockType': 'WORD',
-                'Text': 'Sample',
-                'Page': 1,
-                'Confidence': 99.8
-            }
-        ]
+        self.blocks = blocks or mock_textract_blocks_invoice_sample()
 
 
 async def mock_run_textract(analytiq_client, blob, feature_types=[], query_list=None, document_id=None, **kwargs):
     """Mock implementation of ad.aws.textract.run_textract that matches the real function signature"""
-    blocks = [
-        {
-            'Id': 'block-1',
-            'BlockType': 'LINE',
-            'Text': 'INVOICE #12345',
-            'Page': 1,
-            'Confidence': 99.5
-        },
-        {
-            'Id': 'block-2',
-            'BlockType': 'LINE',
-            'Text': 'Total: $1,234.56',
-            'Page': 1,
-            'Confidence': 98.2
-        },
-        {
-            'Id': 'block-3',
-            'BlockType': 'LINE',
-            'Text': 'Vendor: Acme Corp',
-            'Page': 1,
-            'Confidence': 97.8
-        }
-    ]
+    blocks = mock_textract_blocks_invoice_sample()
     return {
         "Blocks": blocks,
         "DocumentMetadata": {"Pages": 1},

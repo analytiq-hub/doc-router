@@ -1,8 +1,11 @@
 from datetime import datetime, UTC
 import os
 import pickle
-import analytiq_data as ad
 import logging
+from typing import Optional
+
+import analytiq_data as ad
+from textractor.entities.document import Document
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +141,14 @@ async def delete_ocr_all(analytiq_client, document_id:str):
     await delete_ocr_text(analytiq_client, document_id)
     await delete_ocr_json(analytiq_client, document_id)
 
-async def save_ocr_text_from_json(analytiq_client, document_id:str, ocr_json, metadata:dict=None, force:bool=False):
+async def save_ocr_text_from_json(
+    analytiq_client,
+    document_id: str,
+    ocr_json,
+    metadata: dict = None,
+    force: bool = False,
+    org_id: str = None,
+):
     """
     Save the OCR text from the OCR list
     
@@ -153,15 +163,39 @@ async def save_ocr_text_from_json(analytiq_client, document_id:str, ocr_json, me
             OCR metadata
         force : bool
             Whether to force the processing
+        org_id : str, optional
+            Organization id for error messages (recommended when known)
     """
-    blocks = ad.aws.textract.ocr_result_blocks(ocr_json)
-    block_map = ad.aws.textract.get_block_map(blocks)
-    page_text_map = ad.aws.textract.get_page_text_map(block_map)
+    payload = ad.aws.textract.textract_payload_for_document_open(ocr_json)
+    if payload is None:
+        raise ValueError(
+            f"{org_id}/{document_id}: unsupported OCR payload for textractor"
+        )
+
+    try:
+        doc = Document.open(payload)
+    except Exception as e:
+        raise RuntimeError(
+            f"{org_id}/{document_id}: Textractor Document.open failed: {e}"
+        ) from e
+
+    if not doc.pages:
+        raise ValueError(
+            f"{org_id}/{document_id}: no pages in textractor document"
+        )
+
+    page_text_map = ad.aws.textract.page_text_map_from_ocr_document(doc)
+    if not page_text_map:
+        raise ValueError(
+            f"{org_id}/{document_id}: no page text from textractor document"
+        )
 
     if not force:
         ocr_text = await get_ocr_text(analytiq_client, document_id)
         if ocr_text is not None:
-            logger.info(f"OCR text for {document_id} already exists. Returning.")
+            logger.info(
+                f"{org_id}/{document_id} OCR text already exists, returning"
+            )
             return
     else:
         # Remove the old OCR text, if any
@@ -174,17 +208,20 @@ async def save_ocr_text_from_json(analytiq_client, document_id:str, ocr_json, me
         metadata = {}
     metadata["n_pages"] = len(page_text_map)
     
-    # Save the new OCR text
-    for page_num, page_text in page_text_map.items():
-        page_idx = int(page_num) - 1
+    # Save the new OCR text (page_text_map keys are 0-based page indices)
+    for page_idx, page_text in sorted(page_text_map.items()):
         await save_ocr_text(analytiq_client, document_id, page_text, page_idx, metadata)
-        logger.info(f"OCR text for {document_id} page {page_idx} has been saved.")
+        logger.info(
+            f"{org_id}/{document_id}: OCR text saved for page page_idx={page_idx}"
+        )
 
-    text = "\n".join(page_text_map.values())
-    logger.info(f"Saving OCR text for {document_id} with metadata: {metadata} length: {len(text)}")
+    text = "\n".join(page_text_map[k] for k in sorted(page_text_map))
+    logger.info(
+        f"{org_id}/{document_id}: Saving full OCR text metadata={metadata} length={len(text)}"
+    )
     await save_ocr_text(analytiq_client, document_id, text, metadata=metadata)
 
-    logger.info(f"OCR text for {document_id} has been saved.")
+    logger.info(f"{org_id}/{document_id}: OCR text save complete")
 
 async def get_ocr_metadata(analytiq_client, document_id:str) -> dict:
     """
