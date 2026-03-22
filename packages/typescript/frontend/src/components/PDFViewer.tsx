@@ -42,6 +42,7 @@ import TextSnippetIcon from '@mui/icons-material/TextSnippet';
 import CropFreeIcon from '@mui/icons-material/CropFree';
 import type { OCRBlock } from '@docrouter/sdk';
 import type { HighlightInfo } from '@/types/index';
+import DraggablePanel from '@/components/DraggablePanel';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   'pdfjs-dist/build/pdf.worker.min.mjs',
@@ -557,43 +558,6 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const handleGoToLastPage = () => {
     if (numPages) setPageNumber(numPages);
     handleMenuClose();
-  };
-
-  const ocrModalRef = useRef<HTMLDivElement>(null);
-  const ocrDragOffset = useRef({ x: 0, y: 0 });
-
-  useEffect(() => {
-    if (showOcr) {
-      ocrDragOffset.current = { x: 0, y: 0 };
-      if (ocrModalRef.current) {
-        ocrModalRef.current.style.transform = 'translate(-50%, -50%)';
-      }
-    }
-  }, [showOcr]);
-
-  const handleOcrDragStart = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const origX = ocrDragOffset.current.x;
-    const origY = ocrDragOffset.current.y;
-    const onMove = (ev: PointerEvent) => {
-      const x = origX + ev.clientX - startX;
-      const y = origY + ev.clientY - startY;
-      ocrDragOffset.current = { x, y };
-      if (ocrModalRef.current) {
-        ocrModalRef.current.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-      }
-    };
-    const onUp = () => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      document.removeEventListener('pointercancel', onUp);
-    };
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-    document.addEventListener('pointercancel', onUp);
   };
 
   const handleOcrToggle = useCallback(() => {
@@ -1216,60 +1180,54 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
           </Panel>
 
           {showOcr && (
-            <div
-              className="fixed inset-0 z-[70] bg-black bg-opacity-50"
-              onClick={() => setShowOcr(false)}
-              role="dialog"
-              aria-modal="true"
-              aria-label="OCR text modal"
-            >
+            <>
               <div
-                ref={ocrModalRef}
-                className="absolute w-full max-w-2xl rounded-lg bg-white shadow-xl"
-                style={{
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  maxHeight: '90vh',
-                  display: 'flex',
-                  flexDirection: 'column',
-                }}
-                onClick={e => e.stopPropagation()}
-              >
-                <div
-                  className="flex shrink-0 cursor-grab select-none items-center justify-between gap-4 rounded-t-lg p-6 pb-4 active:cursor-grabbing"
-                  style={{ touchAction: 'none' }}
-                  onPointerDown={handleOcrDragStart}
-                >
-                  <div className="flex min-w-0 items-center gap-2">
+                className="fixed inset-0 z-[70] bg-black bg-opacity-50"
+                onClick={() => setShowOcr(false)}
+                role="presentation"
+              />
+              <DraggablePanel
+                open={showOcr}
+                resetToken={id}
+                anchorPercent={{ x: 50, y: 45 }}
+                width="min(100vw - 32px, 42rem)"
+                height="min(90vh, 820px)"
+                zIndex={71}
+                ariaLabel="OCR text"
+                title={
+                  <>
                     <TextSnippetIcon className="shrink-0 text-blue-600" fontSize="small" />
-                    <h3 className="text-lg font-medium">OCR Text</h3>
-                  </div>
+                    <span className="truncate">OCR Text</span>
+                  </>
+                }
+                headerActions={
                   <button
                     type="button"
                     onClick={() => setShowOcr(false)}
-                    onPointerDown={e => e.stopPropagation()}
-                    className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+                    className="rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
                   >
                     Close
                   </button>
+                }
+              >
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <div className="overflow-y-auto px-6 pb-6 pt-2 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
+                    {ocrLoading ? (
+                      <div className="flex items-center gap-3 py-6">
+                        <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
+                        <span className="text-sm italic text-gray-500">Loading OCR text...</span>
+                      </div>
+                    ) : ocrError ? (
+                      <p className="py-4 text-sm text-red-600">{ocrError}</p>
+                    ) : (
+                      <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-gray-800">
+                        {ocrText || 'No OCR text available.'}
+                      </pre>
+                    )}
+                  </div>
                 </div>
-                <div className="overflow-y-auto px-6 pb-6 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
-                  {ocrLoading ? (
-                    <div className="flex items-center gap-3 py-6">
-                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600" aria-hidden />
-                      <span className="text-sm italic text-gray-500">Loading OCR text...</span>
-                    </div>
-                  ) : ocrError ? (
-                    <p className="py-4 text-sm text-red-600">{ocrError}</p>
-                  ) : (
-                    <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-relaxed text-gray-800">
-                      {ocrText || 'No OCR text available.'}
-                    </pre>
-                  )}
-                </div>
-              </div>
-            </div>
+              </DraggablePanel>
+            </>
           )}
         </PanelGroup>
 

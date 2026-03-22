@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { 
   ChevronDownIcon, 
   MagnifyingGlassIcon,
@@ -18,6 +18,7 @@ import type { Prompt } from '@docrouter/sdk';
 import { useOCRBlocks } from '@/hooks/useOCRBlocks';
 import type { GetLLMResultResponse } from '@docrouter/sdk';
 import type { HighlightInfo } from '@/hooks/useOCRBlocks';
+import DraggablePanel from '@/components/DraggablePanel';
 
 interface Props {
   organizationId: string;
@@ -68,45 +69,9 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   const [kebabAnchorEl, setKebabAnchorEl] = useState<HTMLElement | null>(null);
   const [kebabPromptId, setKebabPromptId] = useState<string | null>(null);
   const [runInfoOpen, setRunInfoOpen] = useState(false);
+  const [runInfoPromptId, setRunInfoPromptId] = useState<string | null>(null);
   const [runInfoLoading, setRunInfoLoading] = useState(false);
   const [runInfoResult, setRunInfoResult] = useState<GetLLMResultResponse | null>(null);
-  const runInfoModalRef = useRef<HTMLDivElement>(null);
-  const runInfoDragOffset = useRef({ x: 0, y: 0 });
-
-  // Reset drag position each time the modal opens
-  useEffect(() => {
-    if (runInfoOpen) {
-      runInfoDragOffset.current = { x: 0, y: 0 };
-      if (runInfoModalRef.current) {
-        runInfoModalRef.current.style.transform = 'translate(-50%, -50%)';
-      }
-    }
-  }, [runInfoOpen]);
-
-  const handleRunInfoDragStart = (e: React.PointerEvent) => {
-    if (e.button !== 0) return;
-    e.preventDefault();
-    const startX = e.clientX;
-    const startY = e.clientY;
-    const origX = runInfoDragOffset.current.x;
-    const origY = runInfoDragOffset.current.y;
-    const onMove = (ev: PointerEvent) => {
-      const x = origX + ev.clientX - startX;
-      const y = origY + ev.clientY - startY;
-      runInfoDragOffset.current = { x, y };
-      if (runInfoModalRef.current) {
-        runInfoModalRef.current.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
-      }
-    };
-    const onUp = () => {
-      document.removeEventListener('pointermove', onMove);
-      document.removeEventListener('pointerup', onUp);
-      document.removeEventListener('pointercancel', onUp);
-    };
-    document.addEventListener('pointermove', onMove);
-    document.addEventListener('pointerup', onUp);
-    document.addEventListener('pointercancel', onUp);
-  };
 
   // Refs mirror state so the fetch effect can read current values without being in the dependency array
   const llmResultsRef = React.useRef(llmResults);
@@ -359,6 +324,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
 
   const handleOpenRunInfo = async (promptId: string) => {
     handleCloseKebabMenu();
+    setRunInfoPromptId(promptId);
     setRunInfoOpen(true);
     const cachedResult = llmResults[promptId];
     if (cachedResult) {
@@ -1302,47 +1268,44 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
       </Menu>
 
       {runInfoOpen && (
-        <div
-          className="fixed inset-0 z-[70] bg-black bg-opacity-50"
-          onClick={() => setRunInfoOpen(false)}
-          role="dialog"
-          aria-modal="true"
-          aria-label="Run info modal"
-        >
+        <>
           <div
-            ref={runInfoModalRef}
-            className="absolute w-full max-w-2xl rounded-lg bg-white shadow-xl"
-            style={{
-              top: '50%',
-              left: '50%',
-              transform: 'translate(-50%, -50%)',
-              maxHeight: '90vh',
-              display: 'flex',
-              flexDirection: 'column',
+            className="fixed inset-0 z-[70] bg-black bg-opacity-50"
+            onClick={() => {
+              setRunInfoOpen(false);
+              setRunInfoPromptId(null);
             }}
-            onClick={e => e.stopPropagation()}
-          >
-            {/* Drag handle / header — no overflow so pointer events work */}
-            <div
-              className="flex shrink-0 cursor-grab select-none items-center justify-between gap-4 rounded-t-lg p-6 pb-4 active:cursor-grabbing"
-              style={{ touchAction: 'none' }}
-              onPointerDown={handleRunInfoDragStart}
-            >
-              <div className="flex min-w-0 items-center gap-2">
+            role="presentation"
+          />
+          <DraggablePanel
+            open={runInfoOpen}
+            resetToken={`${id}-${runInfoPromptId ?? ''}`}
+            anchorPercent={{ x: 50, y: 45 }}
+            width="min(100vw - 32px, 42rem)"
+            height="min(90vh, 820px)"
+            zIndex={71}
+            ariaLabel="Run info"
+            title={
+              <>
                 <DescriptionOutlinedIcon className="shrink-0 text-blue-600" fontSize="small" />
-                <h3 className="text-lg font-medium">Run Info</h3>
-              </div>
+                <span className="truncate">Run Info</span>
+              </>
+            }
+            headerActions={
               <button
                 type="button"
-                onClick={() => setRunInfoOpen(false)}
-                onPointerDown={e => e.stopPropagation()}
-                className="shrink-0 rounded-md bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700"
+                onClick={() => {
+                  setRunInfoOpen(false);
+                  setRunInfoPromptId(null);
+                }}
+                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
               >
                 Close
               </button>
-            </div>
-            <div className="overflow-y-auto px-6 pb-6 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
-
+            }
+          >
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="overflow-y-auto px-6 pb-6 pt-2 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-track]:bg-transparent">
             {runInfoLoading ? (
               <div className="flex items-center gap-3 py-6">
                 <div
@@ -1485,9 +1448,10 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
             ) : (
               <p className="py-4 text-sm text-gray-500">No run info available.</p>
             )}
-            </div>{/* end scroll area */}
-          </div>
-        </div>
+              </div>
+            </div>
+          </DraggablePanel>
+        </>
       )}
     </div>
   );
