@@ -24,8 +24,10 @@ litellm.drop_params = True
 # When thinking_blocks missing in assistant msg, drop thinking param (Anthropic + tools workaround)
 litellm.modify_params = True
 
-# Cache control directive for Anthropic/Bedrock prompt caching (ephemeral cache)
-_PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
+# Cache control directive for Anthropic/Bedrock prompt caching (ephemeral cache).
+# Explicit 1h TTL requested for system prompt caching.
+_PROMPT_CACHE_CONTROL = {"type": "ephemeral", "ttl": "1h"}
+_DEFAULT_CACHE_BREAKPOINT_TTL = "5m"
 
 
 def _get_int_env(name: str, default: int) -> int:
@@ -44,6 +46,24 @@ def _is_valid_json(s: str) -> bool:
         return True
     except (ValueError, TypeError):
         return False
+
+
+def _cache_breakpoint_ttl(cache_control: Optional[Dict[str, Any]]) -> str:
+    """Return cache breakpoint TTL; default to 5m when not explicitly set."""
+    if isinstance(cache_control, dict):
+        ttl = cache_control.get("ttl")
+        if isinstance(ttl, str) and ttl.strip():
+            return ttl.strip()
+    return _DEFAULT_CACHE_BREAKPOINT_TTL
+
+
+def _append_cache_breakpoint(text: str, cache_control: Optional[Dict[str, Any]]) -> str:
+    """
+    Annotate a printed prompt component with a cache breakpoint marker.
+    This affects only prompt logging/debug output, not model payload content.
+    """
+    ttl = _cache_breakpoint_ttl(cache_control)
+    return f"{text.rstrip()}\n[cache_breakpoint ttl={ttl}]"
 
 
 def _apply_prompt_caching(model: str, messages: list, *, tools: Optional[List[Dict]] = None) -> list:
@@ -628,7 +648,7 @@ def _prompt_used_from_grouped_user_blocks(
     # Build prompt_used by dispatching based on block content (OCR/PDF prefixes),
     # instead of walking by index position. This makes the placeholder build
     # resilient to future include toggles / inserted blocks.
-    parts: List[str] = [system_prompt.rstrip(), ""]
+    parts: List[str] = [_append_cache_breakpoint(system_prompt, _PROMPT_CACHE_CONTROL), ""]
 
     doc_ptr = -1
     current_doc_id_str: str | None = None

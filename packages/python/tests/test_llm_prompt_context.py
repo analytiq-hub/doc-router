@@ -401,6 +401,7 @@ def test_prompt_used_from_grouped_user_blocks_placeholders():
     ]
     out = _prompt_used_from_grouped_user_blocks(system, user_blocks, ordered, True, True)
     assert out.startswith("SYS")
+    assert "[cache_breakpoint ttl=1h]" in out
     assert f"ocr_text:\n<{d0}_ocr_text>" in out
     assert f"ocr_text:\n<{d1}_ocr_text>" in out
     assert f"pdf:\n<{d1}_pdf>" in out
