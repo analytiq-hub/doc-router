@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Form } from '@docrouter/sdk';
 import BadgeIcon from '@mui/icons-material/Badge';
 import { DocRouterAccountApi } from '@/utils/api';
+import DraggablePanel from '@/components/DraggablePanel';
 
 interface FormInfoModalProps {
   isOpen: boolean;
@@ -55,13 +56,38 @@ const FormInfoModal: React.FC<FormInfoModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" onClick={onClose}>
-      <div className="bg-white p-6 rounded-lg shadow-xl max-w-lg w-full mx-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 mb-4">
-          <BadgeIcon className="text-blue-600" />
-          <h3 className="text-lg font-medium">Form Properties</h3>
-        </div>
-        
+    <>
+      <div
+        className="fixed inset-0 z-[70] bg-black bg-opacity-50"
+        onClick={onClose}
+        role="presentation"
+      />
+      <DraggablePanel
+        open
+        resetToken={form.form_revid}
+        anchorPercent={{ x: 50, y: 45 }}
+        width="min(100vw - 32px, 42rem)"
+        height="min(90vh, 820px)"
+        zIndex={71}
+        ariaLabel="Form properties"
+        title={
+          <>
+            <BadgeIcon className="shrink-0 text-blue-600" fontSize="small" />
+            <span className="truncate">Form Properties</span>
+          </>
+        }
+        headerActions={
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md bg-blue-600 px-3 py-1.5 text-xs text-white hover:bg-blue-700"
+          >
+            Close
+          </button>
+        }
+      >
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-2">
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1">Form Name</label>
@@ -118,18 +144,10 @@ const FormInfoModal: React.FC<FormInfoModalProps> = ({
             </div>
           </div>
         </div>
-
-        <div className="flex justify-end mt-6 pt-4 border-t">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-          >
-            Close
-          </button>
+          </div>
         </div>
-      </div>
-    </div>
+      </DraggablePanel>
+    </>
   );
 };
 
