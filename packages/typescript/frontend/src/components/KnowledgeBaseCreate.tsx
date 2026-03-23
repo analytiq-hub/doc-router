@@ -25,6 +25,7 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
   const [currentKB, setCurrentKB] = useState<KnowledgeBaseConfig>({
     name: '',
     description: '',
+    system_prompt: '',
     tag_ids: [],
     chunker_type: 'recursive',
     chunk_size: DEFAULT_CHUNK_SIZE,
@@ -75,6 +76,7 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
           setCurrentKB({
             name: kb.name,
             description: kb.description || '',
+            system_prompt: kb.system_prompt || '',
             tag_ids: kb.tag_ids || [],
             chunker_type: kb.chunker_type,
             chunk_size: kb.chunk_size,
@@ -123,6 +125,7 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
           update: {
             name: currentKB.name,
             description: currentKB.description,
+            system_prompt: currentKB.system_prompt,
             tag_ids: currentKB.tag_ids,
             coalesce_neighbors: currentKB.coalesce_neighbors,
             reconcile_enabled: currentKB.reconcile_enabled,
@@ -206,6 +209,27 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
               disabled={isLoading}
               rows={3}
             />
+          </div>
+
+          {/* System Prompt */}
+          <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+            <label htmlFor="kb-system-prompt" className="w-full sm:w-40 text-sm font-medium text-gray-700">
+              System Prompt
+            </label>
+            <div className="flex-1">
+              <textarea
+                id="kb-system-prompt"
+                className="flex-1 w-full p-2 border rounded disabled:bg-gray-100 font-mono text-sm"
+                value={currentKB.system_prompt || ''}
+                onChange={e => setCurrentKB({ ...currentKB, system_prompt: e.target.value })}
+                placeholder="Optional instructions prepended to every prompt that uses this knowledge base..."
+                disabled={isLoading}
+                rows={6}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                This text is prepended to the prompt content whenever a prompt references this knowledge base.
+              </p>
+            </div>
           </div>
 
           {/* Tags */}

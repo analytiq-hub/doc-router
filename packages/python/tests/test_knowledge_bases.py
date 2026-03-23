@@ -54,6 +54,7 @@ async def test_kb_lifecycle(mock_embedding, mock_get_model_info, test_db, mock_a
         kb_data = {
             "name": "Test Invoice KB",
             "description": "Knowledge base for invoice processing",
+            "system_prompt": "Always prefer vendor names from the header.",
             "tag_ids": [],
             "chunker_type": "recursive",
             "chunk_size": 512,
@@ -77,6 +78,7 @@ async def test_kb_lifecycle(mock_embedding, mock_get_model_info, test_db, mock_a
         assert kb_result["status"] in ["indexing", "active"]
         assert kb_result["document_count"] == 0
         assert kb_result["chunk_count"] == 0
+        assert kb_result.get("system_prompt") == "Always prefer vendor names from the header."
         
         kb_id = kb_result["kb_id"]
         
@@ -114,6 +116,7 @@ async def test_kb_lifecycle(mock_embedding, mock_get_model_info, test_db, mock_a
         update_data = {
             "name": "Updated Invoice KB",
             "description": "Updated description",
+            "system_prompt": "Updated KB instructions.",
             "coalesce_neighbors": 3
         }
         
@@ -127,6 +130,7 @@ async def test_kb_lifecycle(mock_embedding, mock_get_model_info, test_db, mock_a
         updated_kb = update_response.json()
         assert updated_kb["name"] == "Updated Invoice KB"
         assert updated_kb["description"] == "Updated description"
+        assert updated_kb["system_prompt"] == "Updated KB instructions."
         assert updated_kb["coalesce_neighbors"] == 3
         # Immutable fields should remain unchanged
         assert updated_kb["chunk_size"] == 512

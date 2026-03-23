@@ -122,6 +122,13 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
               {kb.description || <span className="text-gray-500 italic">No description</span>}
             </div>
           </div>
+
+          <div className="col-span-2">
+            <label className="text-sm font-semibold text-gray-700 block mb-1">System Prompt</label>
+            <div className="text-gray-900 bg-gray-50 p-2 rounded border font-mono text-sm whitespace-pre-wrap">
+              {kb.system_prompt || <span className="text-gray-500 italic">No system prompt</span>}
+            </div>
+          </div>
           
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1">KB ID</label>

@@ -40,6 +40,10 @@ MAX_COALESCE_NEIGHBORS = 5
 class KnowledgeBaseConfig(BaseModel):
     name: str = Field(..., description="Human-readable name for the KB")
     description: str = Field(default="", description="Optional description")
+    system_prompt: str = Field(
+        default="",
+        description="Optional system prompt prepended to prompts that use this KB",
+    )
     tag_ids: List[str] = Field(default_factory=list, description="Tag IDs for auto-indexing")
     chunker_type: str = Field(default=DEFAULT_CHUNKER_TYPE, description="Chonkie chunker type")
     chunk_size: int = Field(default=DEFAULT_CHUNK_SIZE, description="Target tokens per chunk")
@@ -96,6 +100,7 @@ class KnowledgeBaseConfig(BaseModel):
 class KnowledgeBaseUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
+    system_prompt: Optional[str] = None
     tag_ids: Optional[List[str]] = None
     coalesce_neighbors: Optional[int] = None
     reconcile_enabled: Optional[bool] = None
@@ -468,6 +473,7 @@ async def create_knowledge_base(
         "organization_id": organization_id,
         "name": config.name,
         "description": config.description,
+        "system_prompt": config.system_prompt,
         "tag_ids": config.tag_ids,
         "chunker_type": config.chunker_type,
         "chunk_size": config.chunk_size,
@@ -611,7 +617,8 @@ async def list_knowledge_bases(
             coalesce_neighbors=kb.get("coalesce_neighbors", 0),
             reconcile_enabled=kb.get("reconcile_enabled", False),
             reconcile_interval_seconds=kb.get("reconcile_interval_seconds"),
-            last_reconciled_at=last_reconciled_at
+            last_reconciled_at=last_reconciled_at,
+            system_prompt=kb.get("system_prompt", ""),
         ))
     
     return ListKnowledgeBasesResponse(
@@ -668,7 +675,8 @@ async def get_knowledge_base(
         coalesce_neighbors=kb.get("coalesce_neighbors", 0),
         reconcile_enabled=kb.get("reconcile_enabled", False),
         reconcile_interval_seconds=kb.get("reconcile_interval_seconds"),
-        last_reconciled_at=last_reconciled_at
+        last_reconciled_at=last_reconciled_at,
+        system_prompt=kb.get("system_prompt", ""),
     )
 
 @knowledge_bases_router.put("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}", response_model=KnowledgeBase)
@@ -708,6 +716,8 @@ async def update_knowledge_base(
         update_dict["name"] = update.name
     if update.description is not None:
         update_dict["description"] = update.description
+    if update.system_prompt is not None:
+        update_dict["system_prompt"] = update.system_prompt
     if update.tag_ids is not None:
         update_dict["tag_ids"] = update.tag_ids
     if update.coalesce_neighbors is not None:
@@ -774,7 +784,8 @@ async def update_knowledge_base(
         coalesce_neighbors=updated_kb.get("coalesce_neighbors", 0),
         reconcile_enabled=updated_kb.get("reconcile_enabled", False),
         reconcile_interval_seconds=updated_kb.get("reconcile_interval_seconds"),
-        last_reconciled_at=last_reconciled_at
+        last_reconciled_at=last_reconciled_at,
+        system_prompt=updated_kb.get("system_prompt", ""),
     )
 
 @knowledge_bases_router.delete("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}")

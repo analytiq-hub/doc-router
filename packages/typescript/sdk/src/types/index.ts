@@ -903,6 +903,8 @@ export type KBStatus = "indexing" | "active" | "error";
 export interface KnowledgeBaseConfig {
   name: string;
   description?: string;
+  /** Optional system prompt prepended to prompts that use this KB */
+  system_prompt?: string;
   tag_ids?: string[];
   chunker_type?: ChunkerType;
   chunk_size?: number;
@@ -916,6 +918,7 @@ export interface KnowledgeBaseConfig {
 export interface KnowledgeBaseUpdate {
   name?: string;
   description?: string;
+  system_prompt?: string;
   tag_ids?: string[];
   coalesce_neighbors?: number;
   reconcile_enabled?: boolean;

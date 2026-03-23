@@ -132,7 +132,15 @@ async def get_prompt_content(analytiq_client, prompt_id: str) -> str:
     elem = await collection.find_one({"_id": ObjectId(prompt_id)})
     if elem is None:
         raise ValueError(f"Prompt {prompt_id} not found")
-    return elem["content"]
+    content = elem["content"]
+    kb_id = elem.get("kb_id")
+    if kb_id:
+        kb = await db["knowledge_bases"].find_one({"_id": ObjectId(kb_id)})
+        if kb:
+            kb_system_prompt = kb.get("system_prompt", "").strip()
+            if kb_system_prompt:
+                content = kb_system_prompt + "\n\n" + content
+    return content
 
 async def get_prompt_response_format(analytiq_client, prompt_id: str) -> dict:
     """
