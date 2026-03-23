@@ -83,8 +83,15 @@ async def run_kb_chat(
     await ad.payments.check_spu_limits(organization_id, total_spu_needed)
     
     try:
+        # Use KB-level system prompt (if configured) so LLM "prompt caching"
+        # can kick in for providers that support it (e.g. Anthropic/Bedrock).
+        system_prompt = (kb.get("system_prompt") or "").strip()
+
         # Prepare messages for litellm
         messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+        if system_prompt and (not messages or messages[0].get("role") != "system"):
+            # Ensure the cached prompt is at index 0 and has role="system".
+            messages.insert(0, {"role": "system", "content": system_prompt})
         
         # Get the provider and API key for this model
         llm_provider = ad.llm.get_llm_model_provider(request.model)
@@ -187,7 +194,8 @@ async def run_kb_chat(
                         aws_secret_access_key=aws_secret_access_key,
                         aws_region_name=aws_region_name,
                         tools=tools,
-                        tool_choice="auto"
+                        tool_choice="auto",
+                        use_prompt_caching=True,
                     )
                     
                     # Accumulate token usage and cost
@@ -376,7 +384,8 @@ async def run_kb_chat(
                         aws_secret_access_key=aws_secret_access_key,
                         aws_region_name=aws_region_name,
                         tools=tools,
-                        tool_choice="auto"
+                        tool_choice="auto",
+                        use_prompt_caching=True,
                     )
                     if hasattr(response, 'usage') and response.usage:
                         total_prompt_tokens += response.usage.prompt_tokens if hasattr(response.usage, 'prompt_tokens') else 0
