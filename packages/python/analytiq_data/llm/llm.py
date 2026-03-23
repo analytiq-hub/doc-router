@@ -13,6 +13,9 @@ import base64
 import os
 import re
 import stamina
+from fastapi.responses import StreamingResponse
+from fastapi import HTTPException
+from analytiq_data.payments.exceptions import SPUCreditException
 from .llm_output_utils import process_llm_resp_content
 
 logger = logging.getLogger(__name__)
@@ -1774,11 +1777,6 @@ async def run_kb_chat(
     Returns:
         StreamingResponse if request.stream else dict with text, tool_calls, tool_results
     """
-    import json
-    from fastapi.responses import StreamingResponse
-    from fastapi import HTTPException
-    from app.routes.payments import SPUCreditException
-    
     logger.info(f"run_kb_chat() start: kb_id={kb_id}, model={request.model}, stream={request.stream}")
     
     # Verify KB exists and is active

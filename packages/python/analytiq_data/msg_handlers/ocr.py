@@ -4,6 +4,7 @@ import logging
 import os
 import analytiq_data as ad
 import stamina
+from analytiq_data.payments.exceptions import SPUCreditException
 from analytiq_data.queue.queue import MAX_QUEUE_ATTEMPTS
 
 logger = logging.getLogger(__name__)
@@ -185,8 +186,6 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
         await ad.queue.delete_msg(analytiq_client, "ocr", msg_id_str)
 
     except Exception as e:
-        from app.routes.payments import SPUCreditException
-
         if isinstance(e, SPUCreditException):
             logger.warning(
                 "OCR skipped: insufficient SPU credits document_id=%s org_id=%s required=%s available=%s",

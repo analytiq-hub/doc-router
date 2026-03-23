@@ -15,7 +15,7 @@ from bson import ObjectId
 import analytiq_data as ad
 from app.auth import get_org_user, get_current_user, get_admin_user
 from app.models import User
-from app.routes.payments import SPUCreditException
+from analytiq_data.payments.exceptions import SPUCreditException
 
 # Configure logger
 logger = logging.getLogger(__name__)
