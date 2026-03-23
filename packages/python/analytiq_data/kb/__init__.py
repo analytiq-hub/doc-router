@@ -8,3 +8,4 @@ from .errors import (
     is_permanent_embedding_error,
     set_kb_status_to_error
 )
+from .kb_chat import *

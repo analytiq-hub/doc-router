@@ -1107,7 +1107,7 @@ async def chat_knowledge_base(
     analytiq_client = ad.common.get_analytiq_client()
     
     try:
-        return await ad.llm.run_kb_chat(
+        return await ad.kb.run_kb_chat(
             analytiq_client=analytiq_client,
             kb_id=kb_id,
             organization_id=organization_id,
