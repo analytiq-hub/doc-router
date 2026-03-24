@@ -21,8 +21,6 @@ const CHUNKER_TYPES: ChunkerType[] = ['token', 'word', 'sentence', 'recursive', 
 const CHUNKING_PRESET_OPTIONS: { value: ChunkingPreset; label: string }[] = [
   { value: 'plain', label: 'Plain' },
   { value: 'structured_doc', label: 'Structured document' },
-  { value: 'annual_report', label: 'Annual report' },
-  { value: 'contract', label: 'Contract' },
 ];
 const DEFAULT_CHUNKING_PRESET: ChunkingPreset = 'structured_doc';
 const DEFAULT_CHUNK_SIZE = 512;

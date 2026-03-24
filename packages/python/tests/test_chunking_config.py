@@ -11,13 +11,6 @@ from analytiq_data.kb.chunking_config import (
 )
 
 
-def test_preset_contract_skips_page_numbers():
-    cfg = chunking_preprocess_for_preset("contract")
-    assert cfg.prefer_markdown is True
-    assert cfg.strip_page_numbers is False
-    assert cfg.prepend_heading_path is True
-
-
 def test_preprocess_markdown_strip_breaks():
     cfg = ChunkingPreprocessConfig(strip_page_breaks=True)
     assert preprocess_markdown("a\n---\nb", cfg) == "a\n\nb"
@@ -42,6 +35,12 @@ def test_kb_dict_explicit_preprocess():
     assert cfg.heading_split_depth == 2
 
 
-def test_kb_dict_preset_fallback():
+def test_kb_dict_preset_plain():
     cfg = chunking_preprocess_from_kb_dict({"chunking_preset": "plain"})
     assert cfg.prefer_markdown is False
+
+
+def test_unknown_preset_falls_back_to_empty_defaults():
+    cfg = chunking_preprocess_from_kb_dict({"chunking_preset": "annual_report"})
+    assert cfg.prefer_markdown is False
+    assert cfg.strip_patterns == []

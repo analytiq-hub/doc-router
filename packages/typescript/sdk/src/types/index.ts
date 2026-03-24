@@ -900,7 +900,7 @@ export interface AWSConfig {
 export type ChunkerType = "token" | "word" | "sentence" | "recursive" | "markdown";
 export type KBStatus = "indexing" | "active" | "error";
 
-export type ChunkingPreset = "plain" | "structured_doc" | "annual_report" | "contract";
+export type ChunkingPreset = "plain" | "structured_doc";
 
 export interface ChunkingPreprocessConfig {
   prefer_markdown: boolean;
@@ -913,7 +913,17 @@ export interface ChunkingPreprocessConfig {
 
 /** Baseline preprocessing for a named preset (matches server `chunking_preprocess_for_preset`). */
 export function chunkingPreprocessForPreset(preset: ChunkingPreset): ChunkingPreprocessConfig {
-  const structured: ChunkingPreprocessConfig = {
+  if (preset === "plain") {
+    return {
+      prefer_markdown: false,
+      strip_page_numbers: false,
+      strip_page_breaks: false,
+      strip_patterns: [],
+      heading_split_depth: 3,
+      prepend_heading_path: false,
+    };
+  }
+  return {
     prefer_markdown: true,
     strip_page_numbers: true,
     strip_page_breaks: true,
@@ -921,26 +931,6 @@ export function chunkingPreprocessForPreset(preset: ChunkingPreset): ChunkingPre
     heading_split_depth: 3,
     prepend_heading_path: true,
   };
-  switch (preset) {
-    case "plain":
-      return {
-        prefer_markdown: false,
-        strip_page_numbers: false,
-        strip_page_breaks: false,
-        strip_patterns: [],
-        heading_split_depth: 3,
-        prepend_heading_path: false,
-      };
-    case "contract":
-      return {
-        ...structured,
-        strip_page_numbers: false,
-      };
-    case "structured_doc":
-    case "annual_report":
-    default:
-      return { ...structured };
-  }
 }
 
 export interface KnowledgeBaseConfig {

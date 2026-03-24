@@ -12,7 +12,7 @@ from typing import Any, Dict, List, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
-ChunkingPresetName = Literal["plain", "structured_doc", "annual_report", "contract"]
+ChunkingPresetName = Literal["plain", "structured_doc"]
 
 
 class ChunkingPreprocessConfig(BaseModel):
@@ -76,24 +76,6 @@ def chunking_preprocess_for_preset(name: ChunkingPresetName) -> ChunkingPreproce
             heading_split_depth=3,
             prepend_heading_path=True,
         )
-    if name == "annual_report":
-        return ChunkingPreprocessConfig(
-            prefer_markdown=True,
-            strip_page_numbers=True,
-            strip_page_breaks=True,
-            strip_patterns=[],
-            heading_split_depth=3,
-            prepend_heading_path=True,
-        )
-    if name == "contract":
-        return ChunkingPreprocessConfig(
-            prefer_markdown=True,
-            strip_page_numbers=False,
-            strip_page_breaks=True,
-            strip_patterns=[],
-            heading_split_depth=3,
-            prepend_heading_path=True,
-        )
     raise ValueError(f"Unknown chunking preset: {name}")
 
 
@@ -107,8 +89,10 @@ def chunking_preprocess_from_kb_dict(kb: Dict[str, Any]) -> ChunkingPreprocessCo
     if isinstance(raw, dict) and raw:
         return ChunkingPreprocessConfig.model_validate(raw)
     preset = kb.get("chunking_preset")
-    if preset in ("plain", "structured_doc", "annual_report", "contract"):
-        return chunking_preprocess_for_preset(preset)  # type: ignore[arg-type]
+    if preset == "plain":
+        return chunking_preprocess_for_preset("plain")
+    if preset == "structured_doc":
+        return chunking_preprocess_for_preset("structured_doc")
     return ChunkingPreprocessConfig()
 
 

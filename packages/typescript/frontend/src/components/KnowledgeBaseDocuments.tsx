@@ -25,10 +25,11 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
   const [pageSize, setPageSize] = useState(10);
   const [total, setTotal] = useState(0);
   const [selectedDocument, setSelectedDocument] = useState<KnowledgeBaseDocument | null>(null);
-  const [chunks, setChunks] = useState<KBChunk[]>([]);
-  const [isLoadingChunks, setIsLoadingChunks] = useState(false);
   const [chunksDialogOpen, setChunksDialogOpen] = useState(false);
+  const [chunkTotalCount, setChunkTotalCount] = useState(0);
   const [currentChunkIndex, setCurrentChunkIndex] = useState(0);
+  const [displayChunk, setDisplayChunk] = useState<KBChunk | null>(null);
+  const [isLoadingChunk, setIsLoadingChunk] = useState(false);
 
   const loadDocuments = useCallback(async () => {
     try {
@@ -52,43 +53,60 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
     loadDocuments();
   }, [loadDocuments]);
 
-  const loadChunks = useCallback(async (documentId: string) => {
-    try {
-      setIsLoadingChunks(true);
-      const response = await docRouterOrgApi.getKBDocumentChunks({
-        kbId,
-        documentId,
-        skip: 0,
-        limit: 1000 // Load all chunks for now
-      });
-      setChunks(response.chunks);
-    } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading chunks';
-      toast.error('Error: ' + errorMsg);
-    } finally {
-      setIsLoadingChunks(false);
-    }
-  }, [docRouterOrgApi, kbId]);
-
-  const handleChunksClick = useCallback(async (e: React.MouseEvent, document: KnowledgeBaseDocument) => {
+  const handleChunksClick = useCallback((e: React.MouseEvent, document: KnowledgeBaseDocument) => {
     e.stopPropagation(); // Prevent row click
     setSelectedDocument(document);
-    setCurrentChunkIndex(0); // Start at first chunk
+    setCurrentChunkIndex(0);
+    setChunkTotalCount(0);
+    setDisplayChunk(null);
     setChunksDialogOpen(true);
-    await loadChunks(document.document_id);
-  }, [loadChunks]);
+  }, []);
+
+  useEffect(() => {
+    if (!chunksDialogOpen || !selectedDocument) return;
+
+    let cancelled = false;
+    (async () => {
+      setIsLoadingChunk(true);
+      try {
+        const response = await docRouterOrgApi.getKBDocumentChunks({
+          kbId,
+          documentId: selectedDocument.document_id,
+          skip: currentChunkIndex,
+          limit: 1
+        });
+        if (cancelled) return;
+        setChunkTotalCount(response.total_count);
+        setDisplayChunk(response.chunks[0] ?? null);
+      } catch (error) {
+        if (!cancelled) {
+          const errorMsg = getApiErrorMsg(error) || 'Error loading chunks';
+          toast.error('Error: ' + errorMsg);
+          setDisplayChunk(null);
+        }
+      } finally {
+        if (!cancelled) setIsLoadingChunk(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chunksDialogOpen, selectedDocument, currentChunkIndex, docRouterOrgApi, kbId]);
 
   const handlePrevChunk = useCallback(() => {
     setCurrentChunkIndex(prev => Math.max(0, prev - 1));
   }, []);
 
   const handleNextChunk = useCallback(() => {
-    setCurrentChunkIndex(prev => Math.min(chunks.length - 1, prev + 1));
-  }, [chunks.length]);
+    setCurrentChunkIndex(prev =>
+      chunkTotalCount > 0 ? Math.min(chunkTotalCount - 1, prev + 1) : prev
+    );
+  }, [chunkTotalCount]);
 
   // Keyboard navigation for chunks
   useEffect(() => {
-    if (!chunksDialogOpen || chunks.length === 0) return;
+    if (!chunksDialogOpen || chunkTotalCount === 0) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') {
@@ -100,7 +118,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [chunksDialogOpen, chunks.length, handlePrevChunk, handleNextChunk]);
+  }, [chunksDialogOpen, chunkTotalCount, handlePrevChunk, handleNextChunk]);
 
   const columns: GridColDef[] = [
     {
@@ -209,21 +227,21 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
             <Typography variant="h6">
               Chunks for {selectedDocument?.document_name}
             </Typography>
-            {chunks.length > 0 && (
+            {chunkTotalCount > 0 && (
               <Box display="flex" alignItems="center" gap={2}>
                 <IconButton
                   onClick={handlePrevChunk}
-                  disabled={currentChunkIndex === 0}
+                  disabled={currentChunkIndex === 0 || isLoadingChunk}
                   size="small"
                 >
                   <ArrowBack />
                 </IconButton>
                 <Typography variant="body2" sx={{ color: 'text.primary', fontWeight: 500 }}>
-                  Chunk {currentChunkIndex + 1} of {chunks.length}
+                  Chunk {currentChunkIndex + 1} of {chunkTotalCount.toLocaleString()}
                 </Typography>
                 <IconButton
                   onClick={handleNextChunk}
-                  disabled={currentChunkIndex === chunks.length - 1}
+                  disabled={currentChunkIndex >= chunkTotalCount - 1 || isLoadingChunk}
                   size="small"
                 >
                   <ArrowForward />
@@ -241,26 +259,39 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
             paddingTop: 2
           }}
         >
-          {isLoadingChunks ? (
+          {isLoadingChunk && !displayChunk ? (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight="200px">
               <CircularProgress />
             </Box>
-          ) : chunks.length === 0 ? (
+          ) : !isLoadingChunk && chunkTotalCount === 0 ? (
             <Typography variant="body2" color="text.secondary" align="center" py={4}>
               No chunks found for this document.
             </Typography>
-          ) : chunks[currentChunkIndex] ? (
-            <Box>
+          ) : displayChunk ? (
+            <Box sx={{ position: 'relative', opacity: isLoadingChunk ? 0.5 : 1 }}>
+              {isLoadingChunk ? (
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    zIndex: 1
+                  }}
+                >
+                  <CircularProgress size={32} />
+                </Box>
+              ) : null}
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                 <Chip
-                  label={`Chunk Index: ${chunks[currentChunkIndex].chunk_index}`}
+                  label={`Chunk Index: ${displayChunk.chunk_index}`}
                   size="small"
                   color="primary"
                   variant="outlined"
                 />
                 <Box display="flex" flexWrap="wrap" gap={2} alignItems="center">
                   {(() => {
-                    const chunk = chunks[currentChunkIndex];
+                    const chunk = displayChunk;
                     const start = chunk.indexed_text_start;
                     const end = chunk.indexed_text_end;
                     return start != null && end != null && typeof start === 'number' && typeof end === 'number' ? (
@@ -270,12 +301,12 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                     ) : null;
                   })()}
                   <Typography variant="caption" sx={{ color: 'text.primary', fontWeight: 500 }}>
-                    {chunks[currentChunkIndex].token_count} tokens
+                    {displayChunk.token_count} tokens
                   </Typography>
                 </Box>
               </Box>
               {(() => {
-                const ch = chunks[currentChunkIndex];
+                const ch = displayChunk;
                 const parts: string[] = [];
                 if (ch.chunk_type) parts.push(`Type: ${ch.chunk_type}`);
                 if (ch.page_start != null && ch.page_end != null && ch.page_start > 0) {
@@ -307,12 +338,12 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
               >
                 <div className="markdown-prose">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {chunks[currentChunkIndex].chunk_text}
+                    {displayChunk.chunk_text}
                   </ReactMarkdown>
                 </div>
               </Box>
               <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                Indexed: {new Date(chunks[currentChunkIndex].indexed_at).toLocaleString()}
+                Indexed: {new Date(displayChunk.indexed_at).toLocaleString()}
               </Typography>
             </Box>
           ) : null}

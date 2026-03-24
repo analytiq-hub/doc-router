@@ -17,6 +17,7 @@ from analytiq_data.kb.chunking_config import (
     ChunkingPreprocessConfig,
     ChunkingPresetName,
     chunking_preprocess_for_preset,
+    chunking_preprocess_from_kb_dict,
 )
 from analytiq_data.kb_search_indexes import (
     kb_lexical_search_index_definition,
@@ -249,15 +250,15 @@ class ListKBChunksResponse(BaseModel):
 
 # Helper Functions
 def _chunking_fields_from_kb_doc(kb: dict) -> tuple[Optional[ChunkingPresetName], ChunkingPreprocessConfig]:
-    """MongoDB doc may omit chunking fields (legacy KBs)."""
-    preset = kb.get("chunking_preset")
+    """MongoDB doc may omit chunking fields. API exposes only ``plain`` | ``structured_doc``."""
+    cprep = chunking_preprocess_from_kb_dict(kb)
+    preset_raw = kb.get("chunking_preset")
     preset_out: Optional[ChunkingPresetName] = None
-    if preset in ("plain", "structured_doc", "annual_report", "contract"):
-        preset_out = preset  # type: ignore[assignment]
-    raw = kb.get("chunking_preprocess")
-    if isinstance(raw, dict) and raw:
-        return preset_out, ChunkingPreprocessConfig.model_validate(raw)
-    return preset_out, ChunkingPreprocessConfig()
+    if preset_raw == "plain":
+        preset_out = "plain"
+    elif preset_raw == "structured_doc":
+        preset_out = "structured_doc"
+    return preset_out, cprep
 
 
 async def detect_embedding_dimensions(embedding_model: str, analytiq_client) -> int:
