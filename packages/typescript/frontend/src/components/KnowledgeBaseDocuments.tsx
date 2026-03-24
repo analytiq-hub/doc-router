@@ -10,6 +10,7 @@ import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import DraggablePanel from '@/components/DraggablePanel';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 interface KnowledgeBaseDocumentsProps {
   organizationId: string;
@@ -180,7 +181,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
       width: 200,
       renderCell: (params) => (
         <div className="flex items-center h-full w-full text-sm text-gray-600">
-          {new Date(params.row.indexed_at).toLocaleString()}
+          {formatLocalDateWithTZ(params.row.indexed_at)}
         </div>
       ),
     },
@@ -404,7 +405,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                       <span className="flex-1" />
 
                       <span className="text-[11px] tabular-nums text-slate-400">
-                        Indexed {new Date(displayChunk.indexed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                        Indexed {formatLocalDateWithTZ(displayChunk.indexed_at)}
                       </span>
                     </div>
 

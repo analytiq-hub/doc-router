@@ -7,6 +7,7 @@ import { LLMProvider } from '@docrouter/sdk';
 import { LLMChatModel, LLMEmbeddingModel } from '@docrouter/sdk';
 import LLMTestModal from './LLMTestModal';
 import LLMEmbeddingTestModal from './LLMEmbeddingTestModal';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 interface LLMProviderConfigProps {
   providerName: string;
@@ -335,7 +336,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
           <p className="mb-3">
             <b>Status:</b>{' '}
             {provider.token
-              ? <span className="text-green-600">Credentials set{provider.token_created_at ? ` (updated ${new Date(provider.token_created_at).toLocaleDateString()})` : ''}</span>
+              ? <span className="text-green-600">Credentials set{provider.token_created_at ? ` (updated ${formatLocalDateWithTZ(provider.token_created_at)})` : ''}</span>
               : <span className="text-yellow-600">Not configured</span>
             }
           </p>

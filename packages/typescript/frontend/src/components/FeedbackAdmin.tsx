@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Delete as DeleteIcon, Search as SearchIcon } from '@mui/icons-material';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 interface FeedbackItem {
   _id: string;
@@ -27,21 +28,6 @@ const FeedbackAdmin: React.FC = () => {
   // Delete confirmation
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-
-  // Format date without date-fns
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString);
-    
-    // Format date: "Mar 15, 2023 2:30 PM"
-    return date.toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true
-    });
-  };
 
   useEffect(() => {
     fetchFeedback();
@@ -173,7 +159,7 @@ const FeedbackAdmin: React.FC = () => {
             </div>
             <div className="flex items-center gap-3">
               <div className="text-sm text-gray-500">
-                {formatDate(item.createdAt)}
+                {formatLocalDateWithTZ(item.createdAt)}
               </div>
               <button 
                 onClick={() => handleDelete(item._id)}

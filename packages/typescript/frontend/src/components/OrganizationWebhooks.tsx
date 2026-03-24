@@ -15,6 +15,7 @@ import {
 import { useOrganizationData } from '@/hooks/useOrganizationData';
 import type { Organization as UiOrganization } from '@/types/organizations';
 import { copyToClipboard } from '@/utils/clipboard';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 type WebhookEventType =
   | 'document.uploaded'
@@ -544,7 +545,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                     {d.attempts}/{d.max_attempts}
                   </td>
                   <td className="px-3 py-2">{d.last_http_status ?? '-'}</td>
-                  <td className="px-3 py-2">{new Date(d.updated_at).toLocaleString()}</td>
+                  <td className="px-3 py-2">{formatLocalDateWithTZ(d.updated_at)}</td>
                   <td className="px-3 py-2 text-right whitespace-nowrap">
                     <button
                       type="button"

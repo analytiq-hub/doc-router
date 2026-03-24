@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { Prompt } from '@docrouter/sdk';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 interface PromptDiffViewProps {
   leftPrompt: Prompt;  // Older version
@@ -45,8 +46,8 @@ const PromptDiffView: React.FC<PromptDiffViewProps> = ({
             oldValue={leftContent}
             newValue={rightContent}
             splitView={true}
-            leftTitle={`Version ${leftPrompt.prompt_version} (${new Date(leftPrompt.created_at).toLocaleDateString()})`}
-            rightTitle={`Version ${rightPrompt.prompt_version} (${new Date(rightPrompt.created_at).toLocaleDateString()})`}
+            leftTitle={`Version ${leftPrompt.prompt_version} (${formatLocalDateWithTZ(leftPrompt.created_at)})`}
+            rightTitle={`Version ${rightPrompt.prompt_version} (${formatLocalDateWithTZ(rightPrompt.created_at)})`}
             showDiffOnly={false}
             useDarkTheme={false}
             styles={{

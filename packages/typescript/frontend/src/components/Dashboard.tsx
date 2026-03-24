@@ -21,6 +21,7 @@ import {
   Error as ErrorIcon
 } from '@mui/icons-material';
 import { Button, TextField, InputAdornment, Card, CardContent, Typography, CircularProgress } from '@mui/material';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 interface DashboardProps {
   organizationId: string;
@@ -222,15 +223,6 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
     }
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
   const filteredDocuments = useMemo(() => {
     if (!searchQuery.trim()) {
       return recentDocuments;
@@ -369,7 +361,7 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
                       {getDocumentStatusIcon(doc.state)}
                       <div className="min-w-0">
                         <div className="font-medium text-sm text-gray-900 truncate">{doc.document_name}</div>
-                        <div className="text-xs text-gray-500">{formatDate(doc.upload_date)}</div>
+                        <div className="text-xs text-gray-500">{formatLocalDateWithTZ(doc.upload_date)}</div>
                       </div>
                     </Link>
                     <div className="flex gap-1 items-center flex-shrink-0 ml-2">

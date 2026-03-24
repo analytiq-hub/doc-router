@@ -6,6 +6,7 @@ import { toast } from 'react-toastify';
 import { useAppSession } from '@/utils/useAppSession';
 import { isSysAdmin } from '@/utils/roles';
 import type { SubscriptionPlan } from '@/types/payments';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 interface SubscriptionPlansProps {
   organizationId: string;
@@ -302,7 +303,7 @@ const SubscriptionPlans: React.FC<SubscriptionPlansProps> = ({
                 {currentPlan === plan.plan_id && subscriptionStatus === 'cancelling' && currentPeriodEnd && (
                   <div className="mb-3 p-2 bg-orange-50 border border-orange-200 rounded-md">
                     <p className="text-xs text-orange-700">
-                      Cancels {new Date(currentPeriodEnd * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      Cancels {formatLocalDateWithTZ(new Date(currentPeriodEnd * 1000))}
                     </p>
                   </div>
                 )}

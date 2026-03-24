@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Schema } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 interface SchemaVersionSelectorProps {
   organizationId: string;
@@ -58,19 +59,6 @@ const SchemaVersionSelector: React.FC<SchemaVersionSelectorProps> = ({
     const selectedSchema = versions.find(v => v.schema_version === version);
     if (selectedSchema) {
       onVersionSelect(selectedSchema.schema_revid, version);
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric'
-      });
-    } catch {
-      return dateString;
     }
   };
 
@@ -144,7 +132,7 @@ const SchemaVersionSelector: React.FC<SchemaVersionSelectorProps> = ({
                     )}
                   </div>
                   <span className="text-xs text-gray-500">
-                    {formatDate(version.created_at)}
+                    {formatLocalDateWithTZ(version.created_at)}
                   </span>
                 </div>
               </button>

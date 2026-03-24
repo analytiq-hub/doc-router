@@ -3,6 +3,7 @@ import { Schema } from '@docrouter/sdk';
 import BadgeIcon from '@mui/icons-material/Badge';
 import { DocRouterAccountApi } from '@/utils/api';
 import DraggablePanel from '@/components/DraggablePanel';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 interface SchemaInfoModalProps {
   isOpen: boolean;
@@ -39,21 +40,6 @@ const SchemaInfoModal: React.FC<SchemaInfoModalProps> = ({
   }, [isOpen, schema.created_by, docRouterAccountApi]);
 
   if (!isOpen) return null;
-
-  const formatDate = (dateString: string) => {
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleString('en-US', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    } catch {
-      return dateString;
-    }
-  };
 
   return (
     <>
@@ -120,7 +106,7 @@ const SchemaInfoModal: React.FC<SchemaInfoModalProps> = ({
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1">Created At</label>
             <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-              {formatDate(schema.created_at)}
+              {formatLocalDateWithTZ(schema.created_at)}
             </div>
           </div>
           

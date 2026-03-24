@@ -11,6 +11,7 @@ import {
   isOcrNotReadyError,
   ocrBlockPageNum,
 } from '@/utils/ocr-utils';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 /** Document states that indicate an error; stop polling for OCR/bounding boxes when these are set. */
 const DOCUMENT_ERROR_STATES = ['ocr_failed', 'llm_failed'] as const;
@@ -312,8 +313,8 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
         'Author': info.Author || 'N/A',
         'Subject': info.Subject || 'N/A',
         'Keywords': info.Keywords || 'N/A',
-        'Creation Date': info.CreationDate ? new Date(info.CreationDate).toLocaleString() : 'N/A',
-        'Modification Date': info.ModDate ? new Date(info.ModDate).toLocaleString() : 'N/A',
+        'Creation Date': info.CreationDate ? formatLocalDateWithTZ(info.CreationDate) : 'N/A',
+        'Modification Date': info.ModDate ? formatLocalDateWithTZ(info.ModDate) : 'N/A',
         'Creator': info.Creator || 'N/A',
         'Producer': info.Producer || 'N/A',
         'Version': info.PDFFormatVersion || 'N/A',

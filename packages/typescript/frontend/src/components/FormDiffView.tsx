@@ -1,6 +1,7 @@
 import React from 'react';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { Form } from '@docrouter/sdk';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 interface FormDiffViewProps {
   leftForm: Form;  // Older version
@@ -45,8 +46,8 @@ const FormDiffView: React.FC<FormDiffViewProps> = ({
             oldValue={leftJson}
             newValue={rightJson}
             splitView={true}
-            leftTitle={`Version ${leftForm.form_version} (${new Date(leftForm.created_at).toLocaleDateString()})`}
-            rightTitle={`Version ${rightForm.form_version} (${new Date(rightForm.created_at).toLocaleDateString()})`}
+            leftTitle={`Version ${leftForm.form_version} (${formatLocalDateWithTZ(leftForm.created_at)})`}
+            rightTitle={`Version ${rightForm.form_version} (${formatLocalDateWithTZ(rightForm.created_at)})`}
             showDiffOnly={false}
             useDarkTheme={false}
             styles={{

@@ -349,8 +349,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
       renderCell: (params: GridRenderCellParams) => {
         if (!params.value) return '';
         const formattedDate = formatLocalDateWithTZ(params.value as string);
-        const date = new Date(params.value as string);
-        const tooltip = date.toLocaleString();
+        const tooltip = formattedDate;
         return (
           <div title={tooltip}>
             {formattedDate}

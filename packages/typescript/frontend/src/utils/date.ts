@@ -1,10 +1,13 @@
 /**
- * Formats a date string or Date object to "Mon/DD HH:MM TZ" (local time zone).
- * Only displays the year if it's not the current year.
- * Month is a short string, hour is 24-hour format.
+ * Canonical datetime display for the app (matches Document list "Upload Date": local timezone,
+ * short month + day, optional year when not current year, 24-hour time with seconds).
+ * Pass ISO strings from the API or a Date; invalid values fall back to the input string.
  */
 export function formatLocalDateWithTZ(dateInput: string | Date): string {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    if (Number.isNaN(date.getTime())) {
+        return typeof dateInput === 'string' ? dateInput : '';
+    }
     const now = new Date();
     const isCurrentYear = date.getFullYear() === now.getFullYear();
 
@@ -24,4 +27,4 @@ export function formatLocalDateWithTZ(dateInput: string | Date): string {
     });
 
     return `${datePart}, ${timePart}`;
-} 
+}

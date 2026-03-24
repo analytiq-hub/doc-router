@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { DocRouterAccountApi } from '@/utils/api';
 import { UsageData, SubscriptionResponse } from '@/types/index';
 import SubscriptionSPUUsageChart from './SubscriptionSPUUsageChart';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 interface SubscriptionUsageProps {
   organizationId: string;
@@ -41,14 +42,6 @@ const SubscriptionUsage: React.FC<SubscriptionUsageProps> = ({ organizationId, r
 
     fetchData();
   }, [organizationId, refreshKey, docRouterAccountApi]);
-
-  const formatDate = (timestamp: number) => {
-    return new Date(timestamp * 1000).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric'
-    });
-  };
 
   // Helper function to convert UTC timestamp to local date string (YYYY-MM-DD format)
   const convertUtcTimestampToLocalDateString = (timestamp: number): string => {
@@ -166,7 +159,7 @@ const SubscriptionUsage: React.FC<SubscriptionUsageProps> = ({ organizationId, r
           <div>
             <div className="text-gray-500">Billing Period</div>
             {usageData.period_start && usageData.period_end ? (
-              <div className="font-medium">{formatDate(usageData.period_start)} - {formatDate(usageData.period_end)}</div>
+              <div className="font-medium">{formatLocalDateWithTZ(new Date(usageData.period_start * 1000))} - {formatLocalDateWithTZ(new Date(usageData.period_end * 1000))}</div>
             ) : (
               <div className="font-medium text-gray-400">No Active Subscription</div>
             )}

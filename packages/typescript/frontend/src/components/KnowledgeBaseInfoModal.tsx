@@ -6,6 +6,7 @@ import { Chip, Button } from "@mui/material";
 import { toast } from "react-toastify";
 import { DocRouterOrgApi, getApiErrorMsg } from "@/utils/api";
 import DraggablePanel from "@/components/DraggablePanel";
+import { formatLocalDateWithTZ } from "@/utils/date";
 
 interface KnowledgeBaseInfoModalProps {
   isOpen: boolean;
@@ -55,31 +56,6 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
     if (!seconds) return "N/A";
     if (seconds < 60) return `${seconds}s`;
     return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-  };
-
-  const formatDate = (dateString: string) => {
-    try {
-      // Parse UTC timestamp from API (ISO 8601 format, e.g., "2026-01-24T21:12:34.738Z")
-      // JavaScript Date automatically converts UTC to local timezone
-      const date = new Date(dateString);
-
-      // Verify it's a valid date
-      if (isNaN(date.getTime())) {
-        return dateString;
-      }
-
-      // Format in local timezone (converted from UTC)
-      return date.toLocaleString(undefined, {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        timeZoneName: "short", // Shows timezone abbreviation (e.g., PST, EST)
-      });
-    } catch {
-      return dateString;
-    }
   };
 
   const getStatusColor = (
@@ -336,7 +312,7 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
                   Created At
                 </label>
                 <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {formatDate(kb.created_at)}
+                  {formatLocalDateWithTZ(kb.created_at)}
                 </div>
               </div>
 
@@ -345,7 +321,7 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
                   Updated At
                 </label>
                 <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {formatDate(kb.updated_at)}
+                  {formatLocalDateWithTZ(kb.updated_at)}
                 </div>
               </div>
 
@@ -371,7 +347,7 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
                   )}
                   {kb.last_reconciled_at && (
                     <div className="text-sm text-gray-600">
-                      Last reconciled: {formatDate(kb.last_reconciled_at)}
+                      Last reconciled: {formatLocalDateWithTZ(kb.last_reconciled_at)}
                     </div>
                   )}
                   {!kb.last_reconciled_at && (

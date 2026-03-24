@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { DocRouterAccountApi } from '@/utils/api';
 import { UsageRangeRequest, UsageRangeResponse, UsageDataPoint } from '@/types/payments';
 import { toast } from 'react-toastify';
+import { formatLocalDateWithTZ } from '@/utils/date';
 
 interface SubscriptionSPUUsageChartProps {
   organizationId: string;
@@ -150,33 +151,19 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
     }
   }, [rangeData, granularity]);
 
-  const formatDate = (dateStr: string) => {
-    // Parse date strings as local dates to avoid timezone issues
-    const parseLocalDate = (dateStr: string) => {
-      const [year, month, day] = dateStr.split('-').map(Number);
-      return new Date(year, month - 1, day); // month - 1 because Date constructor expects 0-based months
-    };
-    
-    const date = parseLocalDate(dateStr);
-    if (granularity === 'daily') {
-      return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    } else {
-      return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-    }
+  const parseLocalDate = (dateStr: string) => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
   };
 
+  const formatChartDate = (dateStr: string) => formatLocalDateWithTZ(parseLocalDate(dateStr));
+
   const formatPeriod = () => {
-    // Parse date strings as local dates to avoid timezone issues
-    const parseLocalDate = (dateStr: string) => {
-      const [year, month, day] = dateStr.split('-').map(Number);
-      return new Date(year, month - 1, day); // month - 1 because Date constructor expects 0-based months
-    };
-    
     const startDate = parseLocalDate(dateRange.start);
     const endDate = parseLocalDate(dateRange.end);
     
-    const startStr = startDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    const endStr = endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    const startStr = formatLocalDateWithTZ(startDate);
+    const endStr = formatLocalDateWithTZ(endDate);
     
     // Determine the correct label based on active preset or custom range
     let label = '';
@@ -453,7 +440,7 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
                     
                     {/* Tooltip */}
                     <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                      <div className="font-medium">{formatDate(point.date)}</div>
+                      <div className="font-medium">{formatChartDate(point.date)}</div>
                       <div>SPUs: {value.toLocaleString()}</div>
                       <div>Operation: {point.operation}</div>
                     </div>
@@ -461,7 +448,7 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
                   
                   {/* X-axis labels */}
                   <div className="text-xs text-gray-600 mt-2 text-center">
-                    {formatDate(point.date)}
+                    {formatChartDate(point.date)}
                   </div>
                 </div>
               );
