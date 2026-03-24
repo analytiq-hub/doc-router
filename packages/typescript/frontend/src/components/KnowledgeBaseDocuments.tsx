@@ -151,12 +151,14 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
       headerName: 'Document Name',
       flex: 2,
       renderCell: (params) => (
-        <Link
-          href={`/orgs/${organizationId}/docs/${params.row.document_id}`}
-          className="text-blue-600 hover:underline"
-        >
-          {params.row.document_name}
-        </Link>
+        <div className="flex h-full w-full items-center">
+          <Link
+            href={`/orgs/${organizationId}/docs/${params.row.document_id}`}
+            className="text-blue-600 hover:underline"
+          >
+            {params.row.document_name}
+          </Link>
+        </div>
       ),
     },
     {
