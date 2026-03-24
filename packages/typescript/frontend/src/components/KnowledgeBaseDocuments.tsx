@@ -277,19 +277,37 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
             }
           >
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="shrink-0 border-b border-slate-200/90 bg-gradient-to-b from-slate-50 to-white px-5 py-3.5">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-slate-500">
-                      Source file
-                    </p>
-                    <p className="mt-1 truncate text-sm font-medium leading-snug text-slate-900">
-                      {selectedDocument.document_name}
-                    </p>
+              <div className="shrink-0 border-b border-slate-200 bg-white px-5 py-4">
+                <div className="flex items-center justify-between gap-4">
+                  {/* ── Filename ── */}
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <svg
+                      className="h-4 w-4 shrink-0 text-slate-400"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={1.75}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <path d="M14 2v6h6" />
+                    </svg>
+                    <div className="min-w-0">
+                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
+                        Source file
+                      </p>
+                      <p className="truncate text-sm font-semibold text-slate-800">
+                        {selectedDocument.document_name}
+                      </p>
+                    </div>
                   </div>
+
+                  {/* ── Chunk navigation ── */}
                   {chunkTotalCount > 0 ? (
                     <div
-                      className="inline-flex shrink-0 items-center gap-1 rounded-[10px] bg-slate-100/95 p-1 ring-1 ring-slate-200/90"
+                      className="inline-flex shrink-0 items-center rounded-lg ring-1 ring-slate-200 divide-x divide-slate-200 overflow-hidden"
                       role="group"
                       aria-label="Chunk navigation"
                     >
@@ -297,48 +315,41 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                         type="button"
                         onClick={handlePrevChunk}
                         disabled={atFirstChunk || chunkNavDisabled}
-                        className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-slate-700 shadow-sm ring-1 ring-slate-200/90 transition hover:bg-slate-50 hover:ring-slate-300 active:scale-[0.97] disabled:pointer-events-none disabled:bg-slate-100/80 disabled:text-slate-300 disabled:shadow-none disabled:ring-slate-200/60"
+                        className="flex h-9 w-9 items-center justify-center bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 active:bg-slate-100 disabled:pointer-events-none disabled:text-slate-300"
                         aria-label="Previous chunk"
                       >
-                        <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden>
-                          <path
-                            fill="currentColor"
-                            d="M15.41 16.59 10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"
-                          />
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden>
+                          <path fill="currentColor" d="M15.41 16.59 10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z" />
                         </svg>
                       </button>
-                      <div className="flex items-baseline gap-1.5 px-1">
+
+                      <div className="flex items-center gap-1.5 bg-white px-3">
                         <input
                           type="text"
                           inputMode="numeric"
                           value={chunkJumpDraft}
                           onChange={(e) => setChunkJumpDraft(e.target.value)}
                           onKeyDown={(e) => {
-                            if (e.key === 'Enter') {
-                              e.preventDefault();
-                              applyChunkJump();
-                            }
+                            if (e.key === 'Enter') { e.preventDefault(); applyChunkJump(); }
                           }}
                           disabled={chunkNavDisabled}
                           aria-label="Chunk number (1-based, press Enter)"
-                          className="font-inconsolata h-10 w-[5.25rem] shrink-0 rounded-lg border-0 bg-white px-2 text-center text-[1.05rem] font-semibold tabular-nums tracking-tight text-slate-900 shadow-sm ring-1 ring-slate-200/80 outline-none transition placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500/40 disabled:opacity-45"
+                          className="h-9 w-12 border-0 bg-transparent text-center text-sm font-semibold tabular-nums text-slate-900 outline-none focus:ring-0 disabled:opacity-40"
                         />
-                        <span className="whitespace-nowrap pr-0.5 text-[0.7rem] font-medium tabular-nums text-slate-500">
+                        <span className="text-sm tabular-nums text-slate-400">
                           / {chunkTotalCount.toLocaleString()}
                         </span>
                       </div>
+
                       <button
                         type="button"
                         onClick={handleNextChunk}
                         disabled={atLastChunk || chunkNavDisabled}
-                        className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-slate-700 shadow-sm ring-1 ring-slate-200/90 transition hover:bg-slate-50 hover:ring-slate-300 active:scale-[0.97] disabled:pointer-events-none disabled:bg-slate-100/80 disabled:text-slate-300 disabled:shadow-none disabled:ring-slate-200/60"
+                        className="flex h-9 w-9 items-center justify-center bg-white text-slate-500 transition hover:bg-slate-50 hover:text-slate-700 active:bg-slate-100 disabled:pointer-events-none disabled:text-slate-300"
                         aria-label="Next chunk"
                       >
-                        <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden>
-                          <path
-                            fill="currentColor"
-                            d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"
-                          />
+                        <svg className="h-4 w-4" viewBox="0 0 24 24" aria-hidden>
+                          <path fill="currentColor" d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z" />
                         </svg>
                       </button>
                     </div>
