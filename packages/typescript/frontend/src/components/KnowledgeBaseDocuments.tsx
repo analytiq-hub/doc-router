@@ -367,64 +367,75 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                       </div>
                     ) : null}
 
-                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
-                      <dl className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-                        <div className="flex items-baseline gap-2">
-                          <dt className="sr-only">Chunk index</dt>
-                          <dd>
-                            <span className="inline-flex items-center rounded-md bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200/90">
-                              Index <span className="ml-1.5 font-inconsolata tabular-nums text-slate-900">{displayChunk.chunk_index}</span>
-                            </span>
-                          </dd>
-                        </div>
-                        <div className="hidden h-4 w-px bg-slate-200 sm:block" aria-hidden />
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
-                          {(() => {
-                            const chunk = displayChunk;
-                            const start = chunk.indexed_text_start;
-                            const end = chunk.indexed_text_end;
-                            return start != null && end != null && typeof start === 'number' && typeof end === 'number' ? (
-                              <span className="tabular-nums">
-                                Chars {start.toLocaleString()}–{end.toLocaleString()}
-                              </span>
-                            ) : null;
-                          })()}
-                          <span className="tabular-nums">{displayChunk.token_count} tokens</span>
-                        </div>
-                      </dl>
+                    {/* ── Metadata badges row ───────────────────────────── */}
+                    <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
+                      {/* Index */}
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-100">
+                        <span className="text-blue-400">#</span>
+                        {displayChunk.chunk_index}
+                      </span>
+
+                      {/* Char range */}
+                      {(() => {
+                        const { indexed_text_start: s, indexed_text_end: e } = displayChunk;
+                        return s != null && e != null ? (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium tabular-nums text-slate-600">
+                            {s.toLocaleString()}–{e.toLocaleString()} chars
+                          </span>
+                        ) : null;
+                      })()}
+
+                      {/* Token count */}
+                      <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium tabular-nums text-slate-600">
+                        {displayChunk.token_count.toLocaleString()} tokens
+                      </span>
+
+                      {/* Spacer pushes timestamp right */}
+                      <span className="flex-1" />
+
+                      <span className="text-[11px] tabular-nums text-slate-400">
+                        Indexed {new Date(displayChunk.indexed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                      </span>
                     </div>
 
+                    {/* ── Context tags (type · pages · heading) ─────────── */}
                     {(() => {
                       const ch = displayChunk;
-                      const parts: string[] = [];
-                      if (ch.chunk_type) parts.push(ch.chunk_type);
+                      const tags: string[] = [];
+                      if (ch.chunk_type) tags.push(ch.chunk_type);
                       if (ch.page_start != null && ch.page_end != null && ch.page_start > 0) {
-                        parts.push(
+                        tags.push(
                           ch.page_start === ch.page_end
                             ? `Page ${ch.page_start}`
                             : `Pages ${ch.page_start}–${ch.page_end}`
                         );
                       }
-                      if (ch.heading_path) parts.push(ch.heading_path);
-                      if (parts.length === 0) return null;
+                      if (ch.heading_path) tags.push(ch.heading_path);
+                      if (tags.length === 0) return null;
                       return (
-                        <p className="text-[13px] leading-relaxed text-slate-600">
-                          {parts.join(' · ')}
-                        </p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {tags.map((tag, i) => (
+                            <span
+                              key={i}
+                              className="inline-flex items-center rounded-md bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-700 ring-1 ring-amber-100"
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
                       );
                     })()}
 
-                    <div className="min-h-0 flex-1 overflow-y-auto rounded-xl bg-white p-5 shadow-[0_1px_0_0_rgba(15,23,42,0.06)] ring-1 ring-slate-200/80">
-                      <div className="markdown-prose text-[15px] leading-[1.65] text-slate-800">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {displayChunk.chunk_text}
-                        </ReactMarkdown>
+                    {/* ── Chunk text ────────────────────────────────────── */}
+                    <div className="min-h-0 flex-1 overflow-y-auto rounded-xl bg-slate-50 p-1.5 ring-1 ring-slate-200/80">
+                      <div className="rounded-lg bg-white px-5 py-4 shadow-sm">
+                        <div className="markdown-prose text-[15px] leading-[1.7] text-slate-800">
+                          <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {displayChunk.chunk_text}
+                          </ReactMarkdown>
+                        </div>
                       </div>
                     </div>
-
-                    <p className="text-[11px] font-medium tabular-nums text-slate-400">
-                      Indexed {new Date(displayChunk.indexed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
-                    </p>
                   </div>
                 ) : null}
               </div>
