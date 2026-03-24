@@ -282,7 +282,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                   {/* ── Filename ── */}
                   <div className="flex min-w-0 items-center gap-2.5">
                     <svg
-                      className="h-4 w-4 shrink-0 text-slate-400"
+                      className="h-4 w-4 shrink-0 -translate-y-0.5 text-slate-400"
                       viewBox="0 0 24 24"
                       fill="none"
                       stroke="currentColor"
@@ -295,9 +295,6 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                       <path d="M14 2v6h6" />
                     </svg>
                     <div className="min-w-0">
-                      <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">
-                        Source file
-                      </p>
                       <p className="truncate text-sm font-semibold text-slate-800">
                         {selectedDocument.document_name}
                       </p>
