@@ -4,12 +4,12 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { KnowledgeBaseDocument, KBChunk } from '@docrouter/sdk';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
-import { Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
 import colors from 'tailwindcss/colors';
 import { toast } from 'react-toastify';
 import Link from 'next/link';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import DraggablePanel from '@/components/DraggablePanel';
 
 interface KnowledgeBaseDocumentsProps {
   organizationId: string;
@@ -232,155 +232,206 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
         )}
       </div>
 
-      {/* Chunks Dialog */}
-      <Dialog
-        open={chunksDialogOpen}
-        onClose={() => setChunksDialogOpen(false)}
-        maxWidth="lg"
-        fullWidth
-        PaperProps={{
-          sx: {
-            height: '75vh',
-            maxHeight: '75vh',
-            display: 'flex',
-            flexDirection: 'column'
-          }
-        }}
-      >
-        <DialogTitle className="!flex !flex-row !items-start sm:!items-center !justify-between !gap-3 !pr-10">
-          <h2 className="text-lg font-semibold text-gray-900 leading-snug min-w-0 flex-1">
-            Chunks for{' '}
-            <span className="break-words">{selectedDocument?.document_name}</span>
-          </h2>
-          {chunkTotalCount > 0 ? (
-            <div
-              className="inline-flex shrink-0 items-stretch rounded-lg border border-gray-300 bg-white shadow-sm overflow-hidden"
-              role="group"
-              aria-label="Chunk navigation"
-            >
-              <button
-                type="button"
-                onClick={handlePrevChunk}
-                disabled={atFirstChunk || chunkNavDisabled}
-                className="flex h-9 w-9 items-center justify-center text-gray-700 hover:bg-gray-100 disabled:opacity-35 disabled:pointer-events-none transition-colors"
-                aria-label="Previous chunk"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-                </svg>
-              </button>
-              <div className="w-px self-stretch bg-gray-200" aria-hidden />
-              <div className="flex min-w-0 items-center gap-1.5 bg-gray-50/80 px-2">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  value={chunkJumpDraft}
-                  onChange={(e) => setChunkJumpDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault();
-                      applyChunkJump();
-                    }
-                  }}
-                  disabled={chunkNavDisabled}
-                  aria-label="Chunk number (1-based, press Enter to go)"
-                  className="h-9 w-[4.75rem] shrink-0 border-0 bg-transparent px-1 text-center text-sm font-semibold text-gray-900 tabular-nums outline-none ring-0 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-blue-400/60 disabled:opacity-50 rounded-sm"
-                />
-                <span className="text-xs font-medium text-gray-500 whitespace-nowrap tabular-nums">
-                  of {chunkTotalCount.toLocaleString()}
-                </span>
-              </div>
-              <div className="w-px self-stretch bg-gray-200" aria-hidden />
-              <button
-                type="button"
-                onClick={handleNextChunk}
-                disabled={atLastChunk || chunkNavDisabled}
-                className="flex h-9 w-9 items-center justify-center text-gray-700 hover:bg-gray-100 disabled:opacity-35 disabled:pointer-events-none transition-colors"
-                aria-label="Next chunk"
-              >
-                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
-          ) : null}
-        </DialogTitle>
-        <DialogContent className="!flex !flex-1 !flex-col !min-h-0 !overflow-y-auto !pt-4">
-          {isLoadingChunk && !displayChunk ? (
-            <div className="flex min-h-[200px] items-center justify-center">
-              <div
-                className="h-9 w-9 animate-spin rounded-full border-2 border-gray-200 border-t-blue-600"
-                aria-hidden
-              />
-            </div>
-          ) : !isLoadingChunk && chunkTotalCount === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-500">No chunks found for this document.</p>
-          ) : displayChunk ? (
-            <div className={`relative flex min-h-0 flex-1 flex-col ${isLoadingChunk ? 'opacity-50' : ''}`}>
-              {isLoadingChunk ? (
-                <div className="pointer-events-none absolute left-1/2 top-1/2 z-[1] -translate-x-1/2 -translate-y-1/2">
-                  <div
-                    className="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-blue-600"
-                    aria-hidden
-                  />
-                </div>
-              ) : null}
-              <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                <span className="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-xs font-medium text-blue-900">
-                  Chunk Index: {displayChunk.chunk_index}
-                </span>
-                <div className="flex flex-wrap items-center gap-3 text-xs font-medium text-gray-700">
-                  {(() => {
-                    const chunk = displayChunk;
-                    const start = chunk.indexed_text_start;
-                    const end = chunk.indexed_text_end;
-                    return start != null && end != null && typeof start === 'number' && typeof end === 'number' ? (
-                      <span>
-                        Characters: {start.toLocaleString()} – {end.toLocaleString()}
-                      </span>
-                    ) : null;
-                  })()}
-                  <span>{displayChunk.token_count} tokens</span>
-                </div>
-              </div>
-              {(() => {
-                const ch = displayChunk;
-                const parts: string[] = [];
-                if (ch.chunk_type) parts.push(`Type: ${ch.chunk_type}`);
-                if (ch.page_start != null && ch.page_end != null && ch.page_start > 0) {
-                  parts.push(
-                    ch.page_start === ch.page_end
-                      ? `Page ${ch.page_start}`
-                      : `Pages ${ch.page_start}–${ch.page_end}`
-                  );
-                }
-                if (ch.heading_path) parts.push(ch.heading_path);
-                if (parts.length === 0) return null;
-                return <p className="mb-2 text-sm text-gray-600">{parts.join(' · ')}</p>;
-              })()}
-              <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-gray-200 bg-gray-50 p-4">
-                <div className="markdown-prose">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {displayChunk.chunk_text}
-                  </ReactMarkdown>
-                </div>
-              </div>
-              <p className="mt-2 text-xs text-gray-500">
-                Indexed: {new Date(displayChunk.indexed_at).toLocaleString()}
-              </p>
-            </div>
-          ) : null}
-        </DialogContent>
-        <DialogActions className="!border-t !border-gray-200 !px-6 !py-2">
-          <button
-            type="button"
+      {chunksDialogOpen && selectedDocument ? (
+        <>
+          <div
+            className="fixed inset-0 z-[70] bg-slate-900/40 backdrop-blur-[2px]"
             onClick={() => setChunksDialogOpen(false)}
-            className="rounded-md px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1"
+            role="presentation"
+            aria-hidden
+          />
+          <DraggablePanel
+            open
+            resetToken={`${selectedDocument.document_id}-${kbId}`}
+            anchorPercent={{ x: 50, y: 50 }}
+            width="min(100vw - 2rem, 56rem)"
+            height="min(92vh, 900px)"
+            zIndex={71}
+            ariaLabel="Document chunks"
+            title={
+              <>
+                <svg
+                  className="h-5 w-5 shrink-0 text-blue-600"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.75}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden
+                >
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <path d="M14 2v6h6M16 13H8M16 17H8M10 9H8" />
+                </svg>
+                <span className="truncate">Document chunks</span>
+              </>
+            }
+            headerActions={
+              <button
+                type="button"
+                onClick={() => setChunksDialogOpen(false)}
+                className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-700"
+              >
+                Close
+              </button>
+            }
           >
-            Close
-          </button>
-        </DialogActions>
-      </Dialog>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="shrink-0 border-b border-slate-200/90 bg-gradient-to-b from-slate-50 to-white px-5 py-3.5">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-slate-500">
+                      Source file
+                    </p>
+                    <p className="mt-1 truncate text-sm font-medium leading-snug text-slate-900">
+                      {selectedDocument.document_name}
+                    </p>
+                  </div>
+                  {chunkTotalCount > 0 ? (
+                    <div
+                      className="inline-flex shrink-0 items-center gap-1 rounded-[10px] bg-slate-100/95 p-1 ring-1 ring-slate-200/90"
+                      role="group"
+                      aria-label="Chunk navigation"
+                    >
+                      <button
+                        type="button"
+                        onClick={handlePrevChunk}
+                        disabled={atFirstChunk || chunkNavDisabled}
+                        className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-slate-700 shadow-sm ring-1 ring-slate-200/90 transition hover:bg-slate-50 hover:ring-slate-300 active:scale-[0.97] disabled:pointer-events-none disabled:bg-slate-100/80 disabled:text-slate-300 disabled:shadow-none disabled:ring-slate-200/60"
+                        aria-label="Previous chunk"
+                      >
+                        <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden>
+                          <path
+                            fill="currentColor"
+                            d="M15.41 16.59 10.83 12l4.58-4.59L14 6l-6 6 6 6 1.41-1.41z"
+                          />
+                        </svg>
+                      </button>
+                      <div className="flex items-baseline gap-1.5 px-1">
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={chunkJumpDraft}
+                          onChange={(e) => setChunkJumpDraft(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              applyChunkJump();
+                            }
+                          }}
+                          disabled={chunkNavDisabled}
+                          aria-label="Chunk number (1-based, press Enter)"
+                          className="font-inconsolata h-10 w-[5.25rem] shrink-0 rounded-lg border-0 bg-white px-2 text-center text-[1.05rem] font-semibold tabular-nums tracking-tight text-slate-900 shadow-sm ring-1 ring-slate-200/80 outline-none transition placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500/40 disabled:opacity-45"
+                        />
+                        <span className="whitespace-nowrap pr-0.5 text-[0.7rem] font-medium tabular-nums text-slate-500">
+                          / {chunkTotalCount.toLocaleString()}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={handleNextChunk}
+                        disabled={atLastChunk || chunkNavDisabled}
+                        className="group flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-slate-700 shadow-sm ring-1 ring-slate-200/90 transition hover:bg-slate-50 hover:ring-slate-300 active:scale-[0.97] disabled:pointer-events-none disabled:bg-slate-100/80 disabled:text-slate-300 disabled:shadow-none disabled:ring-slate-200/60"
+                        aria-label="Next chunk"
+                      >
+                        <svg className="h-6 w-6" viewBox="0 0 24 24" aria-hidden>
+                          <path
+                            fill="currentColor"
+                            d="M8.59 16.59 13.17 12 8.59 7.41 10 6l6 6-6 6-1.41-1.41z"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-5 pt-4">
+                {isLoadingChunk && !displayChunk ? (
+                  <div className="flex min-h-[220px] items-center justify-center">
+                    <div
+                      className="h-9 w-9 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600"
+                      aria-hidden
+                    />
+                  </div>
+                ) : !isLoadingChunk && chunkTotalCount === 0 ? (
+                  <p className="py-12 text-center text-sm text-slate-500">No chunks found for this document.</p>
+                ) : displayChunk ? (
+                  <div className={`relative flex min-h-0 flex-1 flex-col gap-3 ${isLoadingChunk ? 'opacity-55' : ''}`}>
+                    {isLoadingChunk ? (
+                      <div className="pointer-events-none absolute left-1/2 top-1/3 z-[1] -translate-x-1/2 -translate-y-1/2">
+                        <div
+                          className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600"
+                          aria-hidden
+                        />
+                      </div>
+                    ) : null}
+
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-3">
+                      <dl className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+                        <div className="flex items-baseline gap-2">
+                          <dt className="sr-only">Chunk index</dt>
+                          <dd>
+                            <span className="inline-flex items-center rounded-md bg-white px-2.5 py-1 text-xs font-medium text-slate-700 ring-1 ring-slate-200/90">
+                              Index <span className="ml-1.5 font-inconsolata tabular-nums text-slate-900">{displayChunk.chunk_index}</span>
+                            </span>
+                          </dd>
+                        </div>
+                        <div className="hidden h-4 w-px bg-slate-200 sm:block" aria-hidden />
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-600">
+                          {(() => {
+                            const chunk = displayChunk;
+                            const start = chunk.indexed_text_start;
+                            const end = chunk.indexed_text_end;
+                            return start != null && end != null && typeof start === 'number' && typeof end === 'number' ? (
+                              <span className="tabular-nums">
+                                Chars {start.toLocaleString()}–{end.toLocaleString()}
+                              </span>
+                            ) : null;
+                          })()}
+                          <span className="tabular-nums">{displayChunk.token_count} tokens</span>
+                        </div>
+                      </dl>
+                    </div>
+
+                    {(() => {
+                      const ch = displayChunk;
+                      const parts: string[] = [];
+                      if (ch.chunk_type) parts.push(ch.chunk_type);
+                      if (ch.page_start != null && ch.page_end != null && ch.page_start > 0) {
+                        parts.push(
+                          ch.page_start === ch.page_end
+                            ? `Page ${ch.page_start}`
+                            : `Pages ${ch.page_start}–${ch.page_end}`
+                        );
+                      }
+                      if (ch.heading_path) parts.push(ch.heading_path);
+                      if (parts.length === 0) return null;
+                      return (
+                        <p className="text-[13px] leading-relaxed text-slate-600">
+                          {parts.join(' · ')}
+                        </p>
+                      );
+                    })()}
+
+                    <div className="min-h-0 flex-1 overflow-y-auto rounded-xl bg-white p-5 shadow-[0_1px_0_0_rgba(15,23,42,0.06)] ring-1 ring-slate-200/80">
+                      <div className="markdown-prose text-[15px] leading-[1.65] text-slate-800">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {displayChunk.chunk_text}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+
+                    <p className="text-[11px] font-medium tabular-nums text-slate-400">
+                      Indexed {new Date(displayChunk.indexed_at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </DraggablePanel>
+        </>
+      ) : null}
     </div>
   );
 };
