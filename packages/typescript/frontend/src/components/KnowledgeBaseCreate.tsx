@@ -40,7 +40,7 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
     description: '',
     system_prompt: '',
     tag_ids: [],
-    chunker_type: 'recursive',
+    chunker_type: 'markdown',
     chunk_size: DEFAULT_CHUNK_SIZE,
     chunk_overlap: DEFAULT_CHUNK_OVERLAP,
     embedding_model: DEFAULT_EMBEDDING_MODEL,
