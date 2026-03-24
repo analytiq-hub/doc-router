@@ -191,25 +191,6 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       ),
     },
     {
-      field: 'hybrid_search',
-      headerName: 'Search',
-      width: 100,
-      sortable: false,
-      renderCell: (params) => {
-        const hybrid = params.row.hybrid_search !== false;
-        return (
-          <div className="flex items-center h-full w-full">
-            <Chip
-              label={hybrid ? 'Hybrid' : 'Vector'}
-              color={hybrid ? 'primary' : 'default'}
-              size="small"
-              variant="outlined"
-            />
-          </div>
-        );
-      },
-    },
-    {
       field: 'document_count',
       headerName: 'Documents',
       width: 100,

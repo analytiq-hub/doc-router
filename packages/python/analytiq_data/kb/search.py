@@ -213,7 +213,7 @@ def _lexical_search_stage(query_text: str, search_filter: Dict[str, Any]) -> Dic
 
 
 def _fusion_heuristic_weights(query: str) -> Tuple[float, float]:
-    """Default RRF weights from query shape (see hybrid search design doc)."""
+    """Default RRF weights from query shape (lexical vs semantic)."""
     q = query.strip()
     if not q:
         return 0.5, 0.5
@@ -226,14 +226,6 @@ def _fusion_heuristic_weights(query: str) -> Tuple[float, float]:
     if re.search(r"[A-Z]{2,}[0-9A-Z]|\b[A-Z]{1,4}[0-9]{2,}\b|\b[A-Z0-9_-]{4,}\b", q):
         return 0.7, 0.3
     return 0.4, 0.6
-
-
-def _resolve_fusion_weights(kb: Dict[str, Any], query: str) -> Tuple[float, float]:
-    fl = kb.get("fusion_lexical_weight")
-    fs = kb.get("fusion_semantic_weight")
-    if fl is not None and fs is not None:
-        return float(fl), float(fs)
-    return _fusion_heuristic_weights(query)
 
 
 def _branch_candidate_limit(top_k: int) -> int:
@@ -420,10 +412,10 @@ async def search_knowledge_base(
     coalesce_neighbors: Optional[int] = None
 ) -> Dict[str, Any]:
     """
-    Search a knowledge base: by default hybrid retrieval ($rankFusion over lexical + vector).
-    Falls back to vector-only if hybrid is disabled, the query is empty, or $rankFusion is unavailable.
+    Search a knowledge base: hybrid retrieval ($rankFusion over lexical + vector) when the query
+    is non-empty. Falls back to vector-only if the query is empty or $rankFusion is unavailable.
 
-    ``min_vector_score`` on the KB applies only when ``hybrid_search`` is false (pure vector path).
+    ``min_vector_score`` on the KB applies only on that vector-only path (empty query or fusion failure).
     """
     db = analytiq_client.mongodb_async[analytiq_client.env]
     
@@ -496,12 +488,8 @@ async def search_knowledge_base(
     branch_limit = _branch_candidate_limit(top_k)
     num_candidates = _num_candidates_for_vector(branch_limit)
 
-    use_hybrid = (
-        kb.get("hybrid_search", True)
-        and kb.get("fusion_strategy", "rank") == "rank"
-        and bool(query.strip())
-    )
-    w_lex, w_sem = _resolve_fusion_weights(kb, query)
+    use_hybrid = bool(query.strip())
+    w_lex, w_sem = _fusion_heuristic_weights(query)
 
     search_results: List[Dict[str, Any]] = []
     if use_hybrid:
@@ -535,7 +523,7 @@ async def search_knowledge_base(
                 raise
 
     if not use_hybrid:
-        min_vs = kb.get("min_vector_score") if not kb.get("hybrid_search", True) else None
+        min_vs = kb.get("min_vector_score")
         pipeline = _vector_only_pipeline(
             query_embedding=query_embedding,
             search_filter=search_filter,
