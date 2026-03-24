@@ -17,6 +17,14 @@ interface KnowledgeBaseSearchProps {
   kbId: string;
 }
 
+/** Format fusion / vector relevance for display (not a 0–100% probability). */
+function formatRelevanceScore(value: number): string {
+  const a = Math.abs(value);
+  if (!Number.isFinite(value)) return String(value);
+  if (a === 0) return '0';
+  if (a >= 0.0001) return value.toFixed(4).replace(/\.?0+$/, '');
+  return value.toExponential(2);
+}
 
 const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationId, kbId }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
@@ -337,11 +345,12 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
                           />
                         )}
                       </div>
-                      {result.relevance !== undefined && (
-                        <Chip 
-                          label={`${(result.relevance * 100).toFixed(1)}%`}
+                      {result.relevance != null && (
+                        <Chip
+                          label={`Relevance: ${formatRelevanceScore(result.relevance)}`}
                           size="small"
                           className="bg-blue-100 text-blue-800"
+                          title="Fused score from hybrid search (RRF), or vector similarity when vector-only fallback is used"
                         />
                       )}
                     </div>

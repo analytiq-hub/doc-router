@@ -170,7 +170,11 @@ class KBSearchResult(BaseModel):
     content: str
     source: str
     document_id: str
-    relevance: Optional[float]
+    relevance: Optional[float] = Field(
+        default=None,
+        description="Fused relevance from $rankFusion when hybrid path is used; "
+        "vector similarity score when vector-only fallback is used. Not comparable across modes.",
+    )
     chunk_index: int
     is_matched: bool
 

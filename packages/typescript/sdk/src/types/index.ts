@@ -1021,7 +1021,8 @@ export interface KBSearchResult {
   content: string;
   source: string;
   document_id: string;
-  relevance?: number;
+  /** Fused relevance (RRF) from hybrid search, or vector score on vector-only fallback */
+  relevance?: number | null;
   chunk_index: number;
   is_matched: boolean;
 }

@@ -7,6 +7,7 @@ import re
 from datetime import datetime, UTC
 from typing import List, Dict, Any, Optional, Tuple
 from bson import ObjectId
+from bson.decimal128 import Decimal128
 
 import litellm
 import stamina
@@ -16,6 +17,18 @@ from .embedding_cache import get_embedding_from_cache, store_embedding_in_cache,
 from .errors import is_retryable_embedding_error, is_retryable_vector_index_error
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_relevance_score(val: Any) -> Optional[float]:
+    """Coerce MongoDB aggregation scores (float, Decimal128, etc.) to float for JSON."""
+    if val is None:
+        return None
+    if isinstance(val, Decimal128):
+        return float(val.to_decimal())
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
 
 
 def get_embedding_cost(response, embedding_model: str) -> float:
@@ -565,7 +578,7 @@ async def search_knowledge_base(
             "content": result.get("chunk_text", ""),
             "source": metadata_snapshot.get("document_name", "Unknown"),
             "document_id": result.get("document_id", ""),
-            "relevance": result.get("relevance"),
+            "relevance": _normalize_relevance_score(result.get("relevance")),
             "chunk_index": result.get("chunk_index", 0),
             "is_matched": result.get("is_matched", True)
         })
