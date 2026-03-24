@@ -3,7 +3,7 @@
  * short month + day, optional year when not current year, 24-hour time with seconds).
  * Pass ISO strings from the API or a Date; invalid values fall back to the input string.
  */
-export function formatLocalDateWithTZ(dateInput: string | Date): string {
+export function formatLocalDate(dateInput: string | Date): string {
     const date = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
     if (Number.isNaN(date.getTime())) {
         return typeof dateInput === 'string' ? dateInput : '';

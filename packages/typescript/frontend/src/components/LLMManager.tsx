@@ -9,7 +9,7 @@ import colors from 'tailwindcss/colors';
 import Checkbox from '@mui/material/Checkbox';
 import Switch from '@mui/material/Switch';
 import Link from 'next/link';
-import { formatLocalDateWithTZ } from '@/utils/date';
+import { formatLocalDate } from '@/utils/date';
 
 const LLMManager: React.FC = () => {
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
@@ -205,7 +205,7 @@ const LLMManager: React.FC = () => {
       flex: 1,
       minWidth: 150,
       renderCell: (params: GridRenderCellParams) => (
-        <span>{params.value ? formatLocalDateWithTZ(params.value) : '-'}</span>
+        <span>{params.value ? formatLocalDate(params.value) : '-'}</span>
       ),
     },
     {

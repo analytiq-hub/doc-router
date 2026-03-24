@@ -4,7 +4,7 @@ import { Delete as DeleteIcon, ContentCopy as ContentCopyIcon } from '@mui/icons
 import { DocRouterAccountApi } from '@/utils/api';
 import { CreateTokenRequest, AccessToken } from '@docrouter/sdk';
 import { copyToClipboard } from '@/utils/clipboard';
-import { formatLocalDateWithTZ } from '@/utils/date';
+import { formatLocalDate } from '@/utils/date';
 
 const AccountTokenManager: React.FC = () => {
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
@@ -117,10 +117,10 @@ const AccountTokenManager: React.FC = () => {
                 <TableCell sx={{ py: 0.5, fontFamily: 'monospace' }}>
                   {token.token ? `${token.token}...` : '-'}
                 </TableCell>
-                <TableCell sx={{ py: 0.5 }}>{formatLocalDateWithTZ(token.created_at)}</TableCell>
+                <TableCell sx={{ py: 0.5 }}>{formatLocalDate(token.created_at)}</TableCell>
                 <TableCell sx={{ py: 0.5 }}>
                   {token.lifetime
-                    ? formatLocalDateWithTZ(new Date(new Date(token.created_at).getTime() + token.lifetime * 24 * 60 * 60 * 1000))
+                    ? formatLocalDate(new Date(new Date(token.created_at).getTime() + token.lifetime * 24 * 60 * 60 * 1000))
                     : 'None'}
                 </TableCell>
                 <TableCell sx={{ py: 0.5 }} align="right">

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { Button, TextField } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
-import { formatLocalDateWithTZ } from '@/utils/date';
+import { formatLocalDate } from '@/utils/date';
 
 interface AccessToken {
   id: string;
@@ -102,7 +102,7 @@ export default function AccessTokenManager() {
             <div>
               <h3 className="font-medium">{token.name}</h3>
               <p className="text-sm text-gray-500">
-                Created: {formatLocalDateWithTZ(token.created_at)}
+                Created: {formatLocalDate(token.created_at)}
               </p>
               {token.token && (
                 <p className="mt-1 text-sm font-mono bg-gray-100 p-2 rounded">

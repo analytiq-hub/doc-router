@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDiffViewer from 'react-diff-viewer-continued';
 import { Schema } from '@docrouter/sdk';
-import { formatLocalDateWithTZ } from '@/utils/date';
+import { formatLocalDate } from '@/utils/date';
 
 interface SchemaDiffViewProps {
   leftSchema: Schema;  // Older version
@@ -46,8 +46,8 @@ const SchemaDiffView: React.FC<SchemaDiffViewProps> = ({
             oldValue={leftJson}
             newValue={rightJson}
             splitView={true}
-            leftTitle={`Version ${leftSchema.schema_version} (${formatLocalDateWithTZ(leftSchema.created_at)})`}
-            rightTitle={`Version ${rightSchema.schema_version} (${formatLocalDateWithTZ(rightSchema.created_at)})`}
+            leftTitle={`Version ${leftSchema.schema_version} (${formatLocalDate(leftSchema.created_at)})`}
+            rightTitle={`Version ${rightSchema.schema_version} (${formatLocalDate(rightSchema.created_at)})`}
             showDiffOnly={false}
             useDarkTheme={false}
             styles={{

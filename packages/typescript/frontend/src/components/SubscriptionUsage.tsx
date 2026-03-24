@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { DocRouterAccountApi } from '@/utils/api';
 import { UsageData, SubscriptionResponse } from '@/types/index';
 import SubscriptionSPUUsageChart from './SubscriptionSPUUsageChart';
-import { formatLocalDateWithTZ } from '@/utils/date';
+import { formatLocalDate } from '@/utils/date';
 
 interface SubscriptionUsageProps {
   organizationId: string;
@@ -75,7 +75,7 @@ const SubscriptionUsage: React.FC<SubscriptionUsageProps> = ({ organizationId, r
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     
-    const formatLocalDate = (date: Date) => {
+    const localDate = (date: Date) => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -83,8 +83,8 @@ const SubscriptionUsage: React.FC<SubscriptionUsageProps> = ({ organizationId, r
     };
     
     return {
-      start: formatLocalDate(startOfMonth),
-      end: formatLocalDate(endOfMonth)
+      start: localDate(startOfMonth),
+      end: localDate(endOfMonth)
     };
   };
 
@@ -159,7 +159,7 @@ const SubscriptionUsage: React.FC<SubscriptionUsageProps> = ({ organizationId, r
           <div>
             <div className="text-gray-500">Billing Period</div>
             {usageData.period_start && usageData.period_end ? (
-              <div className="font-medium">{formatLocalDateWithTZ(new Date(usageData.period_start * 1000))} - {formatLocalDateWithTZ(new Date(usageData.period_end * 1000))}</div>
+              <div className="font-medium">{formatLocalDate(new Date(usageData.period_start * 1000))} - {formatLocalDate(new Date(usageData.period_end * 1000))}</div>
             ) : (
               <div className="font-medium text-gray-400">No Active Subscription</div>
             )}

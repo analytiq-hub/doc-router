@@ -4,7 +4,7 @@ import BadgeIcon from '@mui/icons-material/Badge';
 import { DocRouterAccountApi } from '@/utils/api';
 import { isColorLight } from '@/utils/colors';
 import DraggablePanel from '@/components/DraggablePanel';
-import { formatLocalDateWithTZ } from '@/utils/date';
+import { formatLocalDate } from '@/utils/date';
 
 interface DocumentInfoModalProps {
   isOpen: boolean;
@@ -122,7 +122,7 @@ const DocumentInfoModal: React.FC<DocumentInfoModalProps> = ({
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1">Upload Date</label>
             <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-              {formatLocalDateWithTZ(document.upload_date)}
+              {formatLocalDate(document.upload_date)}
             </div>
           </div>
           

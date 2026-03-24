@@ -18,7 +18,7 @@ import { DocumentUpdate } from './DocumentUpdate';
 import SearchIcon from '@mui/icons-material/Search';
 import { toast } from 'react-toastify';
 import DocumentRenameModal from './DocumentRename';
-import { formatLocalDateWithTZ } from '@/utils/date';
+import { formatLocalDate } from '@/utils/date';
 import { BoltIcon } from '@heroicons/react/24/outline';
 import { DocumentBulkUpdate } from './DocumentBulkUpdate';
 import { DocRouterOrgApi } from '@/utils/api';
@@ -344,11 +344,11 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
       flex: .65, // Slightly wider than before
       valueFormatter: (params: GridRenderCellParams) => {
         if (!params.value) return '';
-        return formatLocalDateWithTZ(params.value as string);
+        return formatLocalDate(params.value as string);
       },
       renderCell: (params: GridRenderCellParams) => {
         if (!params.value) return '';
-        const formattedDate = formatLocalDateWithTZ(params.value as string);
+        const formattedDate = formatLocalDate(params.value as string);
         const tooltip = formattedDate;
         return (
           <div title={tooltip}>

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Form } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
-import { formatLocalDateWithTZ } from '@/utils/date';
+import { formatLocalDate } from '@/utils/date';
 
 interface FormVersionSelectorProps {
   organizationId: string;
@@ -132,7 +132,7 @@ const FormVersionSelector: React.FC<FormVersionSelectorProps> = ({
                     )}
                   </div>
                   <span className="text-xs text-gray-500">
-                    {formatLocalDateWithTZ(version.created_at)}
+                    {formatLocalDate(version.created_at)}
                   </span>
                 </div>
               </button>

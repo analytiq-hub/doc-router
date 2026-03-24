@@ -3,7 +3,7 @@ import { Form } from '@docrouter/sdk';
 import BadgeIcon from '@mui/icons-material/Badge';
 import { DocRouterAccountApi } from '@/utils/api';
 import DraggablePanel from '@/components/DraggablePanel';
-import { formatLocalDateWithTZ } from '@/utils/date';
+import { formatLocalDate } from '@/utils/date';
 
 interface FormInfoModalProps {
   isOpen: boolean;
@@ -106,7 +106,7 @@ const FormInfoModal: React.FC<FormInfoModalProps> = ({
           <div>
             <label className="text-sm font-semibold text-gray-700 block mb-1">Created At</label>
             <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-              {formatLocalDateWithTZ(form.created_at)}
+              {formatLocalDate(form.created_at)}
             </div>
           </div>
           

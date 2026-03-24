@@ -4,7 +4,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { DocRouterAccountApi } from '@/utils/api';
 import { UsageRangeRequest, UsageRangeResponse, UsageDataPoint } from '@/types/payments';
 import { toast } from 'react-toastify';
-import { formatLocalDateWithTZ } from '@/utils/date';
+import { formatLocalDate } from '@/utils/date';
 
 interface SubscriptionSPUUsageChartProps {
   organizationId: string;
@@ -37,7 +37,7 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     
     // Use local date formatting to avoid timezone issues
-    const formatLocalDate = (date: Date) => {
+    const localDate = (date: Date) => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -45,8 +45,8 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
     };
     
     return {
-      start: formatLocalDate(startOfMonth),
-      end: formatLocalDate(endOfMonth)
+      start: localDate(startOfMonth),
+      end: localDate(endOfMonth)
     };
   };
   
@@ -156,14 +156,14 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
     return new Date(year, month - 1, day);
   };
 
-  const formatChartDate = (dateStr: string) => formatLocalDateWithTZ(parseLocalDate(dateStr));
+  const formatChartDate = (dateStr: string) => formatLocalDate(parseLocalDate(dateStr));
 
   const formatPeriod = () => {
     const startDate = parseLocalDate(dateRange.start);
     const endDate = parseLocalDate(dateRange.end);
     
-    const startStr = formatLocalDateWithTZ(startDate);
-    const endStr = formatLocalDateWithTZ(endDate);
+    const startStr = formatLocalDate(startDate);
+    const endStr = formatLocalDate(endDate);
     
     // Determine the correct label based on active preset or custom range
     let label = '';
@@ -196,7 +196,7 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
     let start: Date, end: Date;
     
     // Helper function for local date formatting
-    const formatLocalDate = (date: Date) => {
+    const localDate = (date: Date) => {
       const year = date.getFullYear();
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
@@ -250,8 +250,8 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
     
     setActivePreset(preset);
     setDateRange({
-      start: formatLocalDate(start),
-      end: formatLocalDate(end)
+      start: localDate(start),
+      end: localDate(end)
     });
   };
 

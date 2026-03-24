@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Delete as DeleteIcon, Search as SearchIcon } from '@mui/icons-material';
-import { formatLocalDateWithTZ } from '@/utils/date';
+import { formatLocalDate } from '@/utils/date';
 
 interface FeedbackItem {
   _id: string;
@@ -159,7 +159,7 @@ const FeedbackAdmin: React.FC = () => {
             </div>
             <div className="flex items-center gap-3">
               <div className="text-sm text-gray-500">
-                {formatLocalDateWithTZ(item.createdAt)}
+                {formatLocalDate(item.createdAt)}
               </div>
               <button 
                 onClick={() => handleDelete(item._id)}

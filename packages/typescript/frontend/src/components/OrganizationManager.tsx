@@ -15,7 +15,7 @@ import { useAppSession } from '@/contexts/AppSessionContext';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import Menu from '@mui/material/Menu';
 import MenuItem from '@mui/material/MenuItem';
-import { formatLocalDateWithTZ } from '@/utils/date';
+import { formatLocalDate } from '@/utils/date';
 
 interface AddOrganizationModalProps {
   open: boolean;
@@ -309,7 +309,7 @@ const OrganizationManager: React.FC = () => {
       headerName: 'Created', 
       flex: 1,
       renderCell: (params) => (
-        <span>{formatLocalDateWithTZ(params.value)}</span>
+        <span>{formatLocalDate(params.value)}</span>
       )
     },
     {

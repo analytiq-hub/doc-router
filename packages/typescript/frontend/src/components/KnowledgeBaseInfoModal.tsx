@@ -6,7 +6,7 @@ import { Chip, Button } from "@mui/material";
 import { toast } from "react-toastify";
 import { DocRouterOrgApi, getApiErrorMsg } from "@/utils/api";
 import DraggablePanel from "@/components/DraggablePanel";
-import { formatLocalDateWithTZ } from "@/utils/date";
+import { formatLocalDate } from "@/utils/date";
 
 interface KnowledgeBaseInfoModalProps {
   isOpen: boolean;
@@ -312,7 +312,7 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
                   Created At
                 </label>
                 <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {formatLocalDateWithTZ(kb.created_at)}
+                  {formatLocalDate(kb.created_at)}
                 </div>
               </div>
 
@@ -321,7 +321,7 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
                   Updated At
                 </label>
                 <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {formatLocalDateWithTZ(kb.updated_at)}
+                  {formatLocalDate(kb.updated_at)}
                 </div>
               </div>
 
@@ -347,7 +347,7 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
                   )}
                   {kb.last_reconciled_at && (
                     <div className="text-sm text-gray-600">
-                      Last reconciled: {formatLocalDateWithTZ(kb.last_reconciled_at)}
+                      Last reconciled: {formatLocalDate(kb.last_reconciled_at)}
                     </div>
                   )}
                   {!kb.last_reconciled_at && (
