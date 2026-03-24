@@ -3,6 +3,7 @@ Knowledge Base vector search functionality.
 """
 
 import logging
+import re
 from datetime import datetime, UTC
 from typing import List, Dict, Any, Optional, Tuple
 from bson import ObjectId
@@ -155,6 +156,257 @@ def build_vector_search_filter(
     return filter_dict, post_filter
 
 
+def _coerce_object_id_list(values: Any) -> List[Any]:
+    """Normalize tag id values for Atlas Search ``in`` operator."""
+    if not isinstance(values, list):
+        values = [values]
+    out: List[Any] = []
+    for v in values:
+        if isinstance(v, ObjectId):
+            out.append(v)
+        elif isinstance(v, str):
+            try:
+                out.append(ObjectId(v))
+            except Exception:
+                out.append(v)
+        else:
+            out.append(v)
+    return out
+
+
+def build_atlas_search_filter_clauses(filter_dict: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """Map ``build_vector_search_filter`` output to Atlas Search ``compound.filter`` clauses."""
+    clauses: List[Dict[str, Any]] = []
+    if not filter_dict:
+        return clauses
+    oid = filter_dict.get("organization_id")
+    if oid is not None:
+        clauses.append({"equals": {"path": "organization_id", "value": oid}})
+    if "metadata_snapshot.tag_ids" in filter_dict:
+        v = filter_dict["metadata_snapshot.tag_ids"]
+        if isinstance(v, dict) and "$in" in v:
+            vals = _coerce_object_id_list(v["$in"])
+        elif isinstance(v, list):
+            vals = _coerce_object_id_list(v)
+        else:
+            vals = _coerce_object_id_list([v])
+        clauses.append({"in": {"path": "metadata_snapshot.tag_ids", "value": vals}})
+    if "metadata_snapshot.upload_date" in filter_dict:
+        df = filter_dict["metadata_snapshot.upload_date"]
+        rng: Dict[str, Any] = {"path": "metadata_snapshot.upload_date"}
+        if isinstance(df, dict):
+            if "$gte" in df:
+                rng["gte"] = df["$gte"]
+            if "$lte" in df:
+                rng["lte"] = df["$lte"]
+        clauses.append({"range": rng})
+    return clauses
+
+
+def _lexical_search_stage(query_text: str, search_filter: Dict[str, Any]) -> Dict[str, Any]:
+    must = [{"text": {"query": query_text, "path": "chunk_text"}}]
+    clauses = build_atlas_search_filter_clauses(search_filter)
+    compound: Dict[str, Any] = {"must": must}
+    if clauses:
+        compound["filter"] = clauses
+    return {"$search": {"index": "kb_lexical_index", "compound": compound}}
+
+
+def _fusion_heuristic_weights(query: str) -> Tuple[float, float]:
+    """Default RRF weights from query shape (see hybrid search design doc)."""
+    q = query.strip()
+    if not q:
+        return 0.5, 0.5
+    tokens = q.split()
+    n = len(tokens)
+    if n >= 8:
+        return 0.2, 0.8
+    if n <= 3:
+        return 0.6, 0.4
+    if re.search(r"[A-Z]{2,}[0-9A-Z]|\b[A-Z]{1,4}[0-9]{2,}\b|\b[A-Z0-9_-]{4,}\b", q):
+        return 0.7, 0.3
+    return 0.4, 0.6
+
+
+def _resolve_fusion_weights(kb: Dict[str, Any], query: str) -> Tuple[float, float]:
+    fl = kb.get("fusion_lexical_weight")
+    fs = kb.get("fusion_semantic_weight")
+    if fl is not None and fs is not None:
+        return float(fl), float(fs)
+    return _fusion_heuristic_weights(query)
+
+
+def _branch_candidate_limit(top_k: int) -> int:
+    """Per-branch cap before fusion (plan: ~5×k, bounded)."""
+    return min(max(5 * top_k, 25), 200)
+
+
+def _num_candidates_for_vector(branch_limit: int) -> int:
+    return max(branch_limit * 20, 200)
+
+
+def _hybrid_rank_fusion_pipeline(
+    query_text: str,
+    query_embedding: List[float],
+    search_filter: Dict[str, Any],
+    post_filter: Dict[str, Any],
+    branch_limit: int,
+    num_candidates: int,
+    skip: int,
+    top_k: int,
+    w_lex: float,
+    w_sem: float,
+) -> List[Dict[str, Any]]:
+    lexical = [
+        _lexical_search_stage(query_text, search_filter),
+        {"$limit": branch_limit},
+    ]
+    vector_stage: Dict[str, Any] = {
+        "index": "kb_vector_index",
+        "path": "embedding",
+        "queryVector": query_embedding,
+        "numCandidates": num_candidates,
+        "limit": branch_limit,
+    }
+    if search_filter:
+        vector_stage["filter"] = search_filter
+    semantic = [
+        {"$vectorSearch": vector_stage},
+        {"$limit": branch_limit},
+    ]
+    rank_fusion: Dict[str, Any] = {
+        "$rankFusion": {
+            "input": {
+                "pipelines": {
+                    "lexical": lexical,
+                    "semantic": semantic,
+                }
+            },
+            "combination": {
+                "weights": {
+                    "lexical": w_lex,
+                    "semantic": w_sem,
+                }
+            },
+        }
+    }
+    pipeline: List[Dict[str, Any]] = [
+        rank_fusion,
+        {"$addFields": {"score": {"$meta": "score"}}},
+    ]
+    if post_filter:
+        pipeline.append({"$match": post_filter})
+    if skip > 0:
+        pipeline.append({"$skip": skip})
+    pipeline.append({"$limit": top_k})
+    return pipeline
+
+
+def _vector_only_pipeline(
+    query_embedding: List[float],
+    search_filter: Dict[str, Any],
+    post_filter: Dict[str, Any],
+    branch_limit: int,
+    num_candidates: int,
+    skip: int,
+    top_k: int,
+    min_vector_score: Optional[float],
+) -> List[Dict[str, Any]]:
+    inner_limit = branch_limit * 3 if post_filter else skip + top_k
+    vector_search_stage: Dict[str, Any] = {
+        "index": "kb_vector_index",
+        "path": "embedding",
+        "queryVector": query_embedding,
+        "numCandidates": num_candidates,
+        "limit": inner_limit,
+    }
+    if search_filter:
+        vector_search_stage["filter"] = search_filter
+    pipeline: List[Dict[str, Any]] = [
+        {"$vectorSearch": vector_search_stage},
+        {"$addFields": {"score": {"$meta": "vectorSearchScore"}}},
+    ]
+    if min_vector_score is not None:
+        pipeline.append({"$match": {"score": {"$gte": min_vector_score}}})
+    if post_filter:
+        pipeline.append({"$match": post_filter})
+    if skip > 0:
+        pipeline.append({"$skip": skip})
+    pipeline.append({"$limit": top_k})
+    return pipeline
+
+
+def _rank_fusion_likely_unsupported(err: Exception) -> bool:
+    msg = str(err).lower()
+    if "rankfusion" in msg or "$rankfusion" in msg:
+        return True
+    if "unrecognized" in msg and "stage" in msg:
+        return True
+    if "unknown" in msg and "stage" in msg:
+        return True
+    if "not supported" in msg and "search" in msg:
+        return True
+    return False
+
+
+async def _apply_coalesce_neighbors_deduped(
+    vectors_collection,
+    search_results: List[Dict[str, Any]],
+    organization_id: str,
+    coalesce: int,
+    kb_id: str,
+) -> List[Dict[str, Any]]:
+    if coalesce <= 0:
+        for r in search_results:
+            r["is_matched"] = True
+            r["relevance"] = r.get("score")
+        return search_results
+
+    doc_chunks_cache: Dict[str, List[Dict[str, Any]]] = {}
+    output: List[Dict[str, Any]] = []
+    seen: set = set()
+
+    async def _chunks_for_doc(document_id: str) -> List[Dict[str, Any]]:
+        if document_id not in doc_chunks_cache:
+            doc_chunks_cache[document_id] = await _execute_find_query_with_retry(
+                vectors_collection,
+                {"document_id": document_id, "organization_id": organization_id},
+                kb_id,
+            )
+        return doc_chunks_cache[document_id]
+
+    for result in search_results:
+        document_id = result["document_id"]
+        chunk_index = result["chunk_index"]
+        score = result.get("score")
+        doc_chunks = await _chunks_for_doc(document_id)
+        matched_idx = next(
+            (i for i, chunk in enumerate(doc_chunks) if chunk["chunk_index"] == chunk_index),
+            None,
+        )
+        if matched_idx is None:
+            key = (document_id, chunk_index)
+            if key in seen:
+                continue
+            seen.add(key)
+            output.append({**result, "is_matched": True, "relevance": score})
+            continue
+        for i in range(
+            max(0, matched_idx - coalesce),
+            min(len(doc_chunks), matched_idx + coalesce + 1),
+        ):
+            key = (document_id, doc_chunks[i]["chunk_index"])
+            if key in seen:
+                continue
+            seen.add(key)
+            output.append({
+                **doc_chunks[i],
+                "is_matched": i == matched_idx,
+                "relevance": score if i == matched_idx else None,
+            })
+    return output
+
+
 async def search_knowledge_base(
     analytiq_client,
     kb_id: str,
@@ -168,22 +420,10 @@ async def search_knowledge_base(
     coalesce_neighbors: Optional[int] = None
 ) -> Dict[str, Any]:
     """
-    Perform vector search on a knowledge base.
-    
-    Args:
-        analytiq_client: The analytiq client
-        kb_id: Knowledge base ID
-        query: Search query text
-        organization_id: Organization ID
-        top_k: Number of results to return
-        skip: Pagination offset
-        metadata_filter: Optional metadata filters
-        upload_date_from: Optional upload date start
-        upload_date_to: Optional upload date end
-        coalesce_neighbors: Optional override for KB's coalesce_neighbors setting
-        
-    Returns:
-        Dict with search results and metadata
+    Search a knowledge base: by default hybrid retrieval ($rankFusion over lexical + vector).
+    Falls back to vector-only if hybrid is disabled, the query is empty, or $rankFusion is unavailable.
+
+    ``min_vector_score`` on the KB applies only when ``hybrid_search`` is false (pure vector path).
     """
     db = analytiq_client.mongodb_async[analytiq_client.env]
     
@@ -250,115 +490,80 @@ async def search_knowledge_base(
         upload_date_to=upload_date_to
     )
     
-    # Perform vector search
     collection_name = f"kb_vectors_{kb_id}"
     vectors_collection = db[collection_name]
-    
-    # Build aggregation pipeline with $vectorSearch
-    # Note: $vectorSearch must be the first stage
-    vector_search_stage = {
-        "index": "kb_vector_index",
-        "path": "embedding",
-        "queryVector": query_embedding,
-        "numCandidates": max(top_k * 10, 100),  # Search more candidates for better results
-        "limit": top_k * 3 if post_filter else top_k + skip  # Get more candidates if we need to post-filter
-    }
-    
-    # Add filter only if it's not empty
-    if search_filter:
-        vector_search_stage["filter"] = search_filter
-    
-    pipeline = [
-        {
-            "$vectorSearch": vector_search_stage
-        }
-    ]
-    
-    # Add score field (score is always available from $vectorSearch)
-    pipeline.append({
-        "$addFields": {
-            "score": {"$meta": "vectorSearchScore"}
-        }
-    })
-    
-    # Apply post-filtering for regex and other unsupported operators
-    if post_filter:
-        pipeline.append({
-            "$match": post_filter
-        })
-    
-    # Apply pagination
-    if skip > 0:
-        pipeline.append({"$skip": skip})
-    pipeline.append({"$limit": top_k})
-    
-    # Execute search with retry logic for vector index timing issues
-    search_results = await _execute_vector_search_with_retry(
-        vectors_collection,
-        pipeline,
-        top_k,
-        kb_id
+
+    branch_limit = _branch_candidate_limit(top_k)
+    num_candidates = _num_candidates_for_vector(branch_limit)
+
+    use_hybrid = (
+        kb.get("hybrid_search", True)
+        and kb.get("fusion_strategy", "rank") == "rank"
+        and bool(query.strip())
     )
-    
-    # Get total count (approximate, for pagination)
-    # Note: MongoDB vector search doesn't provide exact counts efficiently
-    # We'll use the number of results as an approximation
-    total_count = len(search_results) + skip if len(search_results) == top_k else len(search_results) + skip
-    
-    # Handle coalescing if needed
-    if coalesce > 0 and search_results:
-        coalesced_results = []
-        
-        for result in search_results:
-            document_id = result["document_id"]
-            chunk_index = result["chunk_index"]
-            
-            # Get all chunks for this document, sorted by chunk_index
-            # Use retry logic for this query too, in case index is still building
-            doc_chunks = await _execute_find_query_with_retry(
-                vectors_collection,
-                {"document_id": document_id, "organization_id": organization_id},
-                kb_id
+    w_lex, w_sem = _resolve_fusion_weights(kb, query)
+
+    search_results: List[Dict[str, Any]] = []
+    if use_hybrid:
+        try:
+            pipeline = _hybrid_rank_fusion_pipeline(
+                query_text=query,
+                query_embedding=query_embedding,
+                search_filter=search_filter,
+                post_filter=post_filter,
+                branch_limit=branch_limit,
+                num_candidates=num_candidates,
+                skip=skip,
+                top_k=top_k,
+                w_lex=w_lex,
+                w_sem=w_sem,
             )
-            
-            # Find the index of the matched chunk
-            matched_idx = next((i for i, chunk in enumerate(doc_chunks) if chunk["chunk_index"] == chunk_index), None)
-            
-            if matched_idx is not None:
-                # Add the matched chunk first
-                matched_chunk = doc_chunks[matched_idx]
-                coalesced_results.append({
-                    **matched_chunk,
-                    "is_matched": True,
-                    "relevance": result.get("score")
-                })
-                
-                # Add preceding chunks
-                for i in range(max(0, matched_idx - coalesce), matched_idx):
-                    coalesced_results.append({
-                        **doc_chunks[i],
-                        "is_matched": False,
-                        "relevance": None
-                    })
-                
-                # Add succeeding chunks
-                for i in range(matched_idx + 1, min(len(doc_chunks), matched_idx + 1 + coalesce)):
-                    coalesced_results.append({
-                        **doc_chunks[i],
-                        "is_matched": False,
-                        "relevance": None
-                    })
+            search_results = await _execute_vector_search_with_retry(
+                vectors_collection,
+                pipeline,
+                top_k,
+                kb_id,
+            )
+        except Exception as e:
+            if _rank_fusion_likely_unsupported(e):
+                logger.warning(
+                    "Hybrid rank fusion failed; falling back to vector search: %s",
+                    e,
+                )
+                use_hybrid = False
             else:
-                # Fallback: just add the matched chunk
-                coalesced_results.append({
-                    **result,
-                    "is_matched": True,
-                    "relevance": result.get("score")
-                })
-        
-        search_results = coalesced_results
+                raise
+
+    if not use_hybrid:
+        min_vs = kb.get("min_vector_score") if not kb.get("hybrid_search", True) else None
+        pipeline = _vector_only_pipeline(
+            query_embedding=query_embedding,
+            search_filter=search_filter,
+            post_filter=post_filter,
+            branch_limit=branch_limit,
+            num_candidates=num_candidates,
+            skip=skip,
+            top_k=top_k,
+            min_vector_score=min_vs,
+        )
+        search_results = await _execute_vector_search_with_retry(
+            vectors_collection,
+            pipeline,
+            top_k,
+            kb_id,
+        )
+
+    total_count = len(search_results) + skip if len(search_results) == top_k else len(search_results) + skip
+
+    if coalesce > 0 and search_results:
+        search_results = await _apply_coalesce_neighbors_deduped(
+            vectors_collection,
+            search_results,
+            organization_id,
+            coalesce,
+            kb_id,
+        )
     else:
-        # Mark all as matched if no coalescing
         for result in search_results:
             result["is_matched"] = True
             result["relevance"] = result.get("score")

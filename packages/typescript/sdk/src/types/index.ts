@@ -913,6 +913,13 @@ export interface KnowledgeBaseConfig {
   coalesce_neighbors?: number;
   reconcile_enabled?: boolean;
   reconcile_interval_seconds?: number;
+  /** When true (default), search uses $rankFusion over lexical + vector; when false, vector only */
+  hybrid_search?: boolean;
+  fusion_lexical_weight?: number | null;
+  fusion_semantic_weight?: number | null;
+  /** Minimum cosine similarity when hybrid_search is false */
+  min_vector_score?: number | null;
+  fusion_strategy?: "rank";
 }
 
 export interface KnowledgeBaseUpdate {
@@ -923,6 +930,11 @@ export interface KnowledgeBaseUpdate {
   coalesce_neighbors?: number;
   reconcile_enabled?: boolean;
   reconcile_interval_seconds?: number;
+  hybrid_search?: boolean;
+  fusion_lexical_weight?: number | null;
+  fusion_semantic_weight?: number | null;
+  min_vector_score?: number | null;
+  fusion_strategy?: "rank";
 }
 
 export interface KnowledgeBase extends KnowledgeBaseConfig {

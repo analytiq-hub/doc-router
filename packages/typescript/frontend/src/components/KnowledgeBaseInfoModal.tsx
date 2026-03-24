@@ -240,6 +240,54 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
                 </div>
               </div>
 
+              <div className="col-span-2 border-t border-gray-100 pt-3 mt-1">
+                <label className="text-sm font-semibold text-gray-700 block mb-2">
+                  Search &amp; retrieval
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-xs text-gray-500 block mb-1">Hybrid search</span>
+                    <Chip
+                      label={kb.hybrid_search !== false ? "On" : "Off"}
+                      color={kb.hybrid_search !== false ? "primary" : "default"}
+                      size="small"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-xs text-gray-500 block mb-1">Fusion strategy</span>
+                    <div className="text-gray-900 bg-gray-50 p-2 rounded border font-mono text-sm">
+                      {kb.fusion_strategy ?? "rank"}
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-xs text-gray-500 block mb-1">Fusion weights (RRF)</span>
+                    <div className="text-gray-900 bg-gray-50 p-2 rounded border text-sm">
+                      {kb.fusion_lexical_weight != null && kb.fusion_semantic_weight != null ? (
+                        <>
+                          Lexical {kb.fusion_lexical_weight} / semantic {kb.fusion_semantic_weight}
+                        </>
+                      ) : (
+                        <span className="text-gray-600">Automatic (per-query heuristics)</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="col-span-2">
+                    <span className="text-xs text-gray-500 block mb-1">Min vector score</span>
+                    <div className="text-gray-900 bg-gray-50 p-2 rounded border text-sm">
+                      {kb.hybrid_search === false ? (
+                        kb.min_vector_score != null ? (
+                          kb.min_vector_score
+                        ) : (
+                          <span className="text-gray-600">None (no cutoff)</span>
+                        )
+                      ) : (
+                        <span className="text-gray-500 italic">N/A (hybrid search on)</span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="text-sm font-semibold text-gray-700 block mb-1">
                   Document Count

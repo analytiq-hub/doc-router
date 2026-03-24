@@ -56,7 +56,31 @@ class KnowledgeBaseConfig(BaseModel):
     coalesce_neighbors: int = Field(default=DEFAULT_COALESCE_NEIGHBORS, description="Number of neighboring chunks to include (0-5)")
     reconcile_enabled: bool = Field(default=False, description="Enable periodic automatic reconciliation")
     reconcile_interval_seconds: Optional[int] = Field(default=None, ge=60, description="Reconciliation interval in seconds (minimum 60), required if reconcile_enabled=True")
-    
+    hybrid_search: bool = Field(
+        default=True,
+        description="If true, use $rankFusion over lexical + vector search; if false, vector search only",
+    )
+    fusion_lexical_weight: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        description="Optional fixed RRF weight for the lexical pipeline; must be set with fusion_semantic_weight",
+    )
+    fusion_semantic_weight: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        description="Optional fixed RRF weight for the semantic pipeline; must be set with fusion_lexical_weight",
+    )
+    min_vector_score: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="When hybrid_search is false: drop chunks below this vector similarity (cosine)",
+    )
+    fusion_strategy: Literal["rank"] = Field(
+        default="rank",
+        description="Fusion strategy; only reciprocal rank fusion (rank) is supported",
+    )
+
     @field_validator('chunker_type')
     @classmethod
     def validate_chunker_type(cls, v):
@@ -101,6 +125,13 @@ class KnowledgeBaseConfig(BaseModel):
         # The interval will be ignored by the worker, but saved for when they re-enable
         return self
 
+    @model_validator(mode='after')
+    def validate_fusion_weight_pair(self):
+        fl, fs = self.fusion_lexical_weight, self.fusion_semantic_weight
+        if (fl is None) != (fs is None):
+            raise ValueError("fusion_lexical_weight and fusion_semantic_weight must both be set or both omitted")
+        return self
+
 class KnowledgeBaseUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
@@ -109,7 +140,12 @@ class KnowledgeBaseUpdate(BaseModel):
     coalesce_neighbors: Optional[int] = None
     reconcile_enabled: Optional[bool] = None
     reconcile_interval_seconds: Optional[int] = Field(default=None, ge=60, description="Reconciliation interval in seconds (minimum 60)")
-    
+    hybrid_search: Optional[bool] = None
+    fusion_lexical_weight: Optional[float] = Field(default=None, ge=0.0)
+    fusion_semantic_weight: Optional[float] = Field(default=None, ge=0.0)
+    min_vector_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    fusion_strategy: Optional[Literal["rank"]] = None
+
     @field_validator('coalesce_neighbors')
     @classmethod
     def validate_coalesce_neighbors(cls, v):
@@ -124,6 +160,13 @@ class KnowledgeBaseUpdate(BaseModel):
             raise ValueError("reconcile_interval_seconds is required when reconcile_enabled=True")
         # If reconciliation is disabled, allow interval to be saved (user can change it in UI)
         # The interval will be ignored by the worker, but saved for when they re-enable
+        return self
+
+    @model_validator(mode='after')
+    def validate_fusion_weight_pair_update(self):
+        fl, fs = self.fusion_lexical_weight, self.fusion_semantic_weight
+        if (fl is None) != (fs is None):
+            raise ValueError("fusion_lexical_weight and fusion_semantic_weight must both be set or both omitted")
         return self
 
 class KnowledgeBase(KnowledgeBaseConfig):
@@ -469,6 +512,11 @@ async def create_knowledge_base(
         "coalesce_neighbors": config.coalesce_neighbors,
         "reconcile_enabled": config.reconcile_enabled,
         "reconcile_interval_seconds": config.reconcile_interval_seconds,
+        "hybrid_search": config.hybrid_search,
+        "fusion_lexical_weight": config.fusion_lexical_weight,
+        "fusion_semantic_weight": config.fusion_semantic_weight,
+        "min_vector_score": config.min_vector_score,
+        "fusion_strategy": config.fusion_strategy,
         "last_reconciled_at": None,
         "status": "indexing",  # Will be set to "active" after index creation
         "document_count": 0,
@@ -605,6 +653,11 @@ async def list_knowledge_bases(
             reconcile_interval_seconds=kb.get("reconcile_interval_seconds"),
             last_reconciled_at=last_reconciled_at,
             system_prompt=kb.get("system_prompt", ""),
+            hybrid_search=kb.get("hybrid_search", True),
+            fusion_lexical_weight=kb.get("fusion_lexical_weight"),
+            fusion_semantic_weight=kb.get("fusion_semantic_weight"),
+            min_vector_score=kb.get("min_vector_score"),
+            fusion_strategy=kb.get("fusion_strategy", "rank"),
         ))
     
     return ListKnowledgeBasesResponse(
@@ -663,6 +716,11 @@ async def get_knowledge_base(
         reconcile_interval_seconds=kb.get("reconcile_interval_seconds"),
         last_reconciled_at=last_reconciled_at,
         system_prompt=kb.get("system_prompt", ""),
+        hybrid_search=kb.get("hybrid_search", True),
+        fusion_lexical_weight=kb.get("fusion_lexical_weight"),
+        fusion_semantic_weight=kb.get("fusion_semantic_weight"),
+        min_vector_score=kb.get("min_vector_score"),
+        fusion_strategy=kb.get("fusion_strategy", "rank"),
     )
 
 @knowledge_bases_router.put("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}", response_model=KnowledgeBase)
@@ -714,7 +772,19 @@ async def update_knowledge_base(
         # Always save the interval, even if reconciliation is disabled
         # This allows users to change it in the UI for when they re-enable
         update_dict["reconcile_interval_seconds"] = update.reconcile_interval_seconds
-    
+
+    patch = update.model_dump(exclude_unset=True)
+    if "hybrid_search" in patch:
+        update_dict["hybrid_search"] = patch["hybrid_search"]
+    if "fusion_lexical_weight" in patch:
+        update_dict["fusion_lexical_weight"] = patch["fusion_lexical_weight"]
+    if "fusion_semantic_weight" in patch:
+        update_dict["fusion_semantic_weight"] = patch["fusion_semantic_weight"]
+    if "min_vector_score" in patch:
+        update_dict["min_vector_score"] = patch["min_vector_score"]
+    if "fusion_strategy" in patch:
+        update_dict["fusion_strategy"] = patch["fusion_strategy"]
+
     # Update KB
     await db.knowledge_bases.update_one(
         {"_id": ObjectId(kb_id)},
@@ -772,6 +842,11 @@ async def update_knowledge_base(
         reconcile_interval_seconds=updated_kb.get("reconcile_interval_seconds"),
         last_reconciled_at=last_reconciled_at,
         system_prompt=updated_kb.get("system_prompt", ""),
+        hybrid_search=updated_kb.get("hybrid_search", True),
+        fusion_lexical_weight=updated_kb.get("fusion_lexical_weight"),
+        fusion_semantic_weight=updated_kb.get("fusion_semantic_weight"),
+        min_vector_score=updated_kb.get("min_vector_score"),
+        fusion_strategy=updated_kb.get("fusion_strategy", "rank"),
     )
 
 @knowledge_bases_router.delete("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}")

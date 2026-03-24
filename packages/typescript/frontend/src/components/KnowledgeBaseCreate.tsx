@@ -2,7 +2,13 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi, DocRouterAccountApi, getApiErrorMsg } from '@/utils/api';
-import { KnowledgeBaseConfig, Tag, ChunkerType, LLMEmbeddingModel } from '@docrouter/sdk';
+import {
+  KnowledgeBaseConfig,
+  KnowledgeBaseUpdate,
+  Tag,
+  ChunkerType,
+  LLMEmbeddingModel,
+} from '@docrouter/sdk';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
 import InfoTooltip from '@/components/InfoTooltip';
@@ -16,6 +22,8 @@ const DEFAULT_COALESCE_NEIGHBORS = 0;
 const MIN_CHUNK_SIZE = 50;
 const MAX_CHUNK_SIZE = 2000;
 const MAX_COALESCE_NEIGHBORS = 5;
+const DEFAULT_HYBRID_SEARCH = true;
+const DEFAULT_FUSION_STRATEGY = 'rank' as const;
 
 const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> = ({ organizationId, kbId }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
@@ -33,11 +41,18 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
     embedding_model: DEFAULT_EMBEDDING_MODEL,
     coalesce_neighbors: DEFAULT_COALESCE_NEIGHBORS,
     reconcile_enabled: false,
-    reconcile_interval_seconds: undefined
+    reconcile_interval_seconds: undefined,
+    hybrid_search: DEFAULT_HYBRID_SEARCH,
+    fusion_strategy: DEFAULT_FUSION_STRATEGY,
+    fusion_lexical_weight: undefined,
+    fusion_semantic_weight: undefined,
+    min_vector_score: undefined,
   });
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [availableEmbeddingModels, setAvailableEmbeddingModels] = useState<LLMEmbeddingModel[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  /** When true, next save sends null,null to clear stored fusion weight overrides */
+  const [clearFusionOverrides, setClearFusionOverrides] = useState(false);
 
   // Load available tags
   useEffect(() => {
@@ -84,8 +99,14 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
             embedding_model: kb.embedding_model,
             coalesce_neighbors: kb.coalesce_neighbors || 0,
             reconcile_enabled: kb.reconcile_enabled || false,
-            reconcile_interval_seconds: kb.reconcile_interval_seconds
+            reconcile_interval_seconds: kb.reconcile_interval_seconds,
+            hybrid_search: kb.hybrid_search ?? DEFAULT_HYBRID_SEARCH,
+            fusion_strategy: kb.fusion_strategy ?? DEFAULT_FUSION_STRATEGY,
+            fusion_lexical_weight: kb.fusion_lexical_weight ?? undefined,
+            fusion_semantic_weight: kb.fusion_semantic_weight ?? undefined,
+            min_vector_score: kb.min_vector_score ?? undefined,
           });
+          setClearFusionOverrides(false);
           setIsEditing(true);
         } catch (error) {
           toast.error(`Error loading knowledge base: ${getApiErrorMsg(error)}`);
@@ -115,23 +136,54 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
       return;
     }
 
+    const fl = currentKB.fusion_lexical_weight;
+    const fs = currentKB.fusion_semantic_weight;
+    const hasLex = fl !== undefined && fl !== null;
+    const hasSem = fs !== undefined && fs !== null;
+    if (hasLex !== hasSem) {
+      toast.error('Set both fusion weights or leave both empty for automatic per-query weights');
+      return;
+    }
+    if (hasLex && hasSem && (typeof fl !== 'number' || typeof fs !== 'number' || fl < 0 || fs < 0)) {
+      toast.error('Fusion weights must be non-negative numbers');
+      return;
+    }
+
     try {
       setIsLoading(true);
       
       if (isEditing && kbId) {
-        // Update existing KB (only mutable fields)
+        const update: KnowledgeBaseUpdate = {
+          name: currentKB.name,
+          description: currentKB.description,
+          system_prompt: currentKB.system_prompt,
+          tag_ids: currentKB.tag_ids,
+          coalesce_neighbors: currentKB.coalesce_neighbors,
+          reconcile_enabled: currentKB.reconcile_enabled,
+          reconcile_interval_seconds: currentKB.reconcile_interval_seconds,
+          hybrid_search: currentKB.hybrid_search,
+          fusion_strategy: currentKB.fusion_strategy ?? DEFAULT_FUSION_STRATEGY,
+        };
+        if (clearFusionOverrides) {
+          update.fusion_lexical_weight = null;
+          update.fusion_semantic_weight = null;
+        } else if (hasLex && hasSem && typeof fl === 'number' && typeof fs === 'number') {
+          update.fusion_lexical_weight = fl;
+          update.fusion_semantic_weight = fs;
+        }
+        if (currentKB.hybrid_search) {
+          update.min_vector_score = null;
+        } else {
+          update.min_vector_score =
+            currentKB.min_vector_score === undefined || currentKB.min_vector_score === null
+              ? null
+              : currentKB.min_vector_score;
+        }
         await docRouterOrgApi.updateKnowledgeBase({
           kbId,
-          update: {
-            name: currentKB.name,
-            description: currentKB.description,
-            system_prompt: currentKB.system_prompt,
-            tag_ids: currentKB.tag_ids,
-            coalesce_neighbors: currentKB.coalesce_neighbors,
-            reconcile_enabled: currentKB.reconcile_enabled,
-            reconcile_interval_seconds: currentKB.reconcile_interval_seconds
-          }
+          update,
         });
+        setClearFusionOverrides(false);
         toast.success('Knowledge base updated successfully');
       } else {
         // Create new KB
@@ -365,6 +417,186 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
                 title="Coalesce Neighbors"
                 content="Number of neighboring chunks to include in search results for context. 0 means only return matched chunks."
               />
+            </div>
+          </div>
+
+          {/* Search & retrieval */}
+          <div className="border-t pt-4 space-y-3 sm:space-y-4">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-gray-700">Search &amp; retrieval</h3>
+              <InfoTooltip
+                title="Hybrid search"
+                content={
+                  <>
+                    <p className="mb-2">
+                      Hybrid search combines full-text (lexical) and vector similarity using reciprocal rank fusion (RRF).
+                      Turn off to use vectors only; you can then set a minimum cosine similarity threshold.
+                    </p>
+                    <p>
+                      Optional fixed weights override automatic per-query weighting. Leave both empty to use heuristics
+                      (short queries favor lexical; long questions favor semantic).
+                    </p>
+                  </>
+                }
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <label htmlFor="hybrid-search" className="w-full sm:w-40 text-sm font-medium text-gray-700">
+                Hybrid search
+              </label>
+              <div className="flex-1 flex items-center gap-2">
+                <input
+                  id="hybrid-search"
+                  type="checkbox"
+                  className="w-4 h-4"
+                  checked={currentKB.hybrid_search ?? DEFAULT_HYBRID_SEARCH}
+                  onChange={(e) => {
+                    const on = e.target.checked;
+                    setCurrentKB({
+                      ...currentKB,
+                      hybrid_search: on,
+                      ...(on ? { min_vector_score: undefined } : {}),
+                    });
+                  }}
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-gray-600">
+                  Combine lexical + vector ($rankFusion)
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <label className="w-full sm:w-40 text-sm font-medium text-gray-700">Fusion strategy</label>
+              <div className="flex-1 text-sm text-gray-700">
+                Reciprocal rank fusion (<span className="font-mono">rank</span>) — only strategy supported
+              </div>
+            </div>
+
+            {!currentKB.hybrid_search && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+                <label htmlFor="min-vector-score" className="w-full sm:w-40 text-sm font-medium text-gray-700">
+                  Min vector score
+                </label>
+                <div className="flex-1 flex items-center gap-2">
+                  <input
+                    id="min-vector-score"
+                    type="number"
+                    min={0}
+                    max={1}
+                    step={0.05}
+                    className="flex-1 p-2 border rounded disabled:bg-gray-100"
+                    value={
+                      currentKB.min_vector_score === undefined || currentKB.min_vector_score === null
+                        ? ''
+                        : currentKB.min_vector_score
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value.trim();
+                      if (v === '') {
+                        setCurrentKB({ ...currentKB, min_vector_score: undefined });
+                        return;
+                      }
+                      const n = parseFloat(v);
+                      setCurrentKB({
+                        ...currentKB,
+                        min_vector_score: Number.isNaN(n) ? undefined : n,
+                      });
+                    }}
+                    disabled={isLoading}
+                    placeholder="Optional (0–1 cosine)"
+                  />
+                  <InfoTooltip
+                    title="Min vector score"
+                    content="When hybrid search is off, drop chunks below this cosine similarity. Leave empty for no cutoff."
+                  />
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+              <label className="w-full sm:w-40 text-sm font-medium text-gray-700 pt-2">
+                Fusion weights
+              </label>
+              <div className="flex-1 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.05}
+                    className="w-28 p-2 border rounded disabled:bg-gray-100"
+                    value={
+                      currentKB.fusion_lexical_weight === undefined || currentKB.fusion_lexical_weight === null
+                        ? ''
+                        : currentKB.fusion_lexical_weight
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value.trim();
+                      setClearFusionOverrides(false);
+                      if (v === '') {
+                        setCurrentKB({ ...currentKB, fusion_lexical_weight: undefined });
+                        return;
+                      }
+                      const n = parseFloat(v);
+                      setCurrentKB({
+                        ...currentKB,
+                        fusion_lexical_weight: Number.isNaN(n) ? undefined : n,
+                      });
+                    }}
+                    disabled={isLoading || !(currentKB.hybrid_search ?? true)}
+                    placeholder="Lexical"
+                    aria-label="Lexical fusion weight"
+                  />
+                  <span className="text-gray-500">/</span>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.05}
+                    className="w-28 p-2 border rounded disabled:bg-gray-100"
+                    value={
+                      currentKB.fusion_semantic_weight === undefined || currentKB.fusion_semantic_weight === null
+                        ? ''
+                        : currentKB.fusion_semantic_weight
+                    }
+                    onChange={(e) => {
+                      const v = e.target.value.trim();
+                      setClearFusionOverrides(false);
+                      if (v === '') {
+                        setCurrentKB({ ...currentKB, fusion_semantic_weight: undefined });
+                        return;
+                      }
+                      const n = parseFloat(v);
+                      setCurrentKB({
+                        ...currentKB,
+                        fusion_semantic_weight: Number.isNaN(n) ? undefined : n,
+                      });
+                    }}
+                    disabled={isLoading || !(currentKB.hybrid_search ?? true)}
+                    placeholder="Semantic"
+                    aria-label="Semantic fusion weight"
+                  />
+                  <button
+                    type="button"
+                    className="text-sm text-blue-600 hover:underline disabled:opacity-50"
+                    disabled={isLoading || !(currentKB.hybrid_search ?? true)}
+                    onClick={() => {
+                      setCurrentKB({
+                        ...currentKB,
+                        fusion_lexical_weight: undefined,
+                        fusion_semantic_weight: undefined,
+                      });
+                      setClearFusionOverrides(true);
+                    }}
+                  >
+                    Use automatic weights
+                  </button>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Optional. Set both or leave both empty for automatic per-query weights. On update, &quot;Use automatic
+                  weights&quot; clears saved overrides on the server.
+                </p>
+              </div>
             </div>
           </div>
 
