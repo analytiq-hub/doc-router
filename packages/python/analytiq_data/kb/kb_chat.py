@@ -261,13 +261,10 @@ async def run_kb_chat(
                                     results_count = len(search_results.get("results", []))
                                     yield f"data: {json.dumps({'type': 'tool_result', 'tool_name': 'search_knowledge_base', 'results_count': results_count, 'iteration': iteration, 'done': False})}\n\n"
                                     
-                                    # Format search results for LLM
-                                    formatted_context = "Knowledge Base Search Results:\n"
-                                    for i, result in enumerate(search_results.get("results", []), 1):
-                                        formatted_context += f"\n[{i}] {result.get('content', '')}\n"
-                                        formatted_context += f"Source: {result.get('source', 'Unknown')}\n"
-                                        if result.get('relevance'):
-                                            formatted_context += f"Relevance: {result.get('relevance'):.3f}\n"
+                                    # Format search results for LLM (merge overlapping spans per document)
+                                    formatted_context = ad.kb.format_kb_search_results_for_llm(
+                                        search_results.get("results", [])
+                                    )
                                     
                                 except SPUCreditException as e:
                                     error_content = f"Insufficient SPU credits: {str(e)}"
@@ -436,12 +433,9 @@ async def run_kb_chat(
                                         "iteration": iteration,
                                         "done": False
                                     })
-                                    formatted_context = "Knowledge Base Search Results:\n"
-                                    for i, result_item in enumerate(search_results.get("results", []), 1):
-                                        formatted_context += f"\n[{i}] {result_item.get('content', '')}\n"
-                                        formatted_context += f"Source: {result_item.get('source', 'Unknown')}\n"
-                                        if result_item.get('relevance'):
-                                            formatted_context += f"Relevance: {result_item.get('relevance'):.3f}\n"
+                                    formatted_context = ad.kb.format_kb_search_results_for_llm(
+                                        search_results.get("results", [])
+                                    )
                                 except SPUCreditException as e:
                                     error_content = f"Insufficient SPU credits: {str(e)}"
                                     result["tool_results"].append({

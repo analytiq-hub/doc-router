@@ -1156,13 +1156,10 @@ async def run_llm(
                             coalesce_neighbors=coalesce_neighbors
                         )
                         
-                        # Format search results for LLM
-                        formatted_context = "Knowledge Base Search Results:\n"
-                        for i, result in enumerate(search_results.get("results", []), 1):
-                            formatted_context += f"\n[{i}] {result.get('content', '')}\n"
-                            formatted_context += f"Source: {result.get('source', 'Unknown')}\n"
-                            if result.get('relevance'):
-                                formatted_context += f"Relevance: {result.get('relevance'):.3f}\n"
+                        # Format search results for LLM (merge overlapping spans per document)
+                        formatted_context = ad.kb.format_kb_search_results_for_llm(
+                            search_results.get("results", [])
+                        )
                         
                         # Add tool response to messages
                         messages.append({
