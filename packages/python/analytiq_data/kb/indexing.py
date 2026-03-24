@@ -174,6 +174,7 @@ def _assign_indexed_text_spans(full_text: str, chonkie_chunks: List[Any]) -> Lis
     """
     spans: List[Tuple[int, int]] = []
     cursor = 0
+    prev_start = 0
     for i, ch in enumerate(chonkie_chunks):
         t = ch.text
         if not t:
@@ -181,7 +182,10 @@ def _assign_indexed_text_spans(full_text: str, chonkie_chunks: List[Any]) -> Lis
             continue
         pos = full_text.find(t, cursor)
         if pos == -1:
-            pos = full_text.find(t)
+            # Overlap >= chunk body: the chunk starts at or before cursor.
+            # Search from prev_start (tightest safe lower bound) rather than 0
+            # to avoid matching identical text that appeared earlier in the document.
+            pos = full_text.find(t, prev_start)
             if pos == -1:
                 raise ValueError(
                     f"Chunk {i} text not found in indexed source string (len full_text={len(full_text)})"
@@ -191,6 +195,7 @@ def _assign_indexed_text_spans(full_text: str, chonkie_chunks: List[Any]) -> Lis
         if full_text[start:end] != t:
             raise ValueError(f"Chunk {i} span mismatch at [{start}:{end}]")
         spans.append((start, end))
+        prev_start = pos
         cursor = pos + 1
     return spans
 
@@ -229,6 +234,10 @@ def find_page_range_for_span(start: int, end: int, page_offsets: List[Dict[str, 
             return int(page_offsets[-1]["page"])
         if p < page_offsets[0]["start"]:
             return int(page_offsets[0]["page"])
+        # p is in a gap between pages (e.g. the \n\n separator): return the preceding page
+        preceding = [r for r in page_offsets if r["end"] <= p]
+        if preceding:
+            return int(preceding[-1]["page"])
         return int(page_offsets[0]["page"])
 
     last_char = max(start, end - 1)
@@ -237,15 +246,24 @@ def find_page_range_for_span(start: int, end: int, page_offsets: List[Dict[str, 
     return (min(ps, pe), max(ps, pe))
 
 
-def extract_heading_path(chunk_text: str, full_markdown: str, depth: int) -> str:
-    """Nearest preceding markdown headings as a breadcrumb (depth = max heading level to track)."""
-    anchor = chunk_text[:120] if len(chunk_text) >= 120 else chunk_text
-    if not anchor.strip():
-        return ""
-    pos = full_markdown.find(anchor)
-    if pos == -1 and len(chunk_text) >= 40:
-        pos = full_markdown.find(chunk_text[:40])
-    if pos == -1:
+def extract_heading_path(chunk_text: str, full_markdown: str, depth: int, *, chunk_start: int = -1) -> str:
+    """Nearest preceding markdown headings as a breadcrumb (depth = max heading level to track).
+
+    Prefer passing ``chunk_start`` (the known character offset of the chunk in ``full_markdown``)
+    to avoid mis-locating repeated text via string search.
+    """
+    if chunk_start >= 0:
+        pos = chunk_start
+    else:
+        anchor = chunk_text[:120] if len(chunk_text) >= 120 else chunk_text
+        if not anchor.strip():
+            return ""
+        pos = full_markdown.find(anchor)
+        if pos == -1 and len(chunk_text) >= 40:
+            pos = full_markdown.find(chunk_text[:40])
+        if pos == -1:
+            return ""
+    if not chunk_text.strip():
         return ""
     preceding = full_markdown[:pos]
     headings = re.findall(rf"^(#{{1,{depth}}})\s+(.+)$", preceding, re.MULTILINE)
@@ -273,7 +291,7 @@ def make_recursive_chunker(chunk_size: int, cfg: ChunkingPreprocessConfig) -> An
     return RecursiveChunker(chunk_size=chunk_size, rules=rules)
 
 
-def _ordered_markdown_segments(md_doc: Any) -> List[Tuple[str, str, int, int]]:
+def _ordered_markdown_segments(md_doc: Any, source_text: str) -> List[Tuple[str, str, int, int]]:
     """Prose / table / code segments in source order (indices in original markdown string)."""
     items: List[Tuple[str, str, int, int]] = []
     for ch in getattr(md_doc, "chunks", None) or []:
@@ -283,13 +301,11 @@ def _ordered_markdown_segments(md_doc: Any) -> List[Tuple[str, str, int, int]]:
     for t in getattr(md_doc, "tables", None) or []:
         items.append(("table", t.content, t.start_index, t.end_index))
     for c in getattr(md_doc, "code", None) or []:
-        lang = c.language or ""
-        inner = c.content or ""
-        fenced = f"```{lang}\n{inner}\n```" if inner.strip() else "```\n```"
-        items.append(("code", fenced, c.start_index, c.end_index))
+        seg = source_text[c.start_index:c.end_index]
+        items.append(("code", seg, c.start_index, c.end_index))
     for im in getattr(md_doc, "images", None) or []:
-        line = f"![{im.alias}]({im.content})"
-        items.append(("prose", line, im.start_index, im.end_index))
+        seg = source_text[im.start_index:im.end_index]
+        items.append(("prose", seg, im.start_index, im.end_index))
     items.sort(key=lambda x: (x[2], x[3]))
     return items
 
@@ -307,7 +323,7 @@ def _chunk_markdown_document(
     table_chunker = TableChunker(chunk_size=chunk_size)
     raw_with_meta: List[Tuple[Any, str]] = []
 
-    for kind, seg_text, _si, _ei in _ordered_markdown_segments(md_doc):
+    for kind, seg_text, _si, _ei in _ordered_markdown_segments(md_doc, text):
         if not seg_text.strip():
             continue
         if kind == "table":
@@ -757,7 +773,7 @@ async def index_document_in_kb(
 
     for chunk in chunks:
         hp = (
-            extract_heading_path(chunk.text, text_to_chunk, prep.heading_split_depth)
+            extract_heading_path(chunk.text, text_to_chunk, prep.heading_split_depth, chunk_start=chunk.indexed_text_start)
             if prep.prepend_heading_path
             else ""
         )
