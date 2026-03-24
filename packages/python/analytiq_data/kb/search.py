@@ -580,7 +580,9 @@ async def search_knowledge_base(
             "document_id": result.get("document_id", ""),
             "relevance": _normalize_relevance_score(result.get("relevance")),
             "chunk_index": result.get("chunk_index", 0),
-            "is_matched": result.get("is_matched", True)
+            "is_matched": result.get("is_matched", True),
+            "indexed_text_start": result.get("indexed_text_start"),
+            "indexed_text_end": result.get("indexed_text_end"),
         })
     
     return {

@@ -991,8 +991,9 @@ export interface KBChunk {
   chunk_text: string;
   token_count: number;
   indexed_at: string;
-  char_offset_start?: number;
-  char_offset_end?: number;
+  /** UTF-8 character offsets into the canonical indexed full text used at chunking */
+  indexed_text_start?: number | null;
+  indexed_text_end?: number | null;
 }
 
 export interface ListKBDocumentChunksParams {
@@ -1025,6 +1026,9 @@ export interface KBSearchResult {
   relevance?: number | null;
   chunk_index: number;
   is_matched: boolean;
+  /** Present when the vector document stores indexed-text spans (for overlap-safe merging) */
+  indexed_text_start?: number | null;
+  indexed_text_end?: number | null;
 }
 
 export interface KBSearchResponse {

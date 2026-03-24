@@ -177,6 +177,14 @@ class KBSearchResult(BaseModel):
     )
     chunk_index: int
     is_matched: bool
+    indexed_text_start: Optional[int] = Field(
+        default=None,
+        description="Start index in canonical indexed full text at chunking time, when stored on the vector",
+    )
+    indexed_text_end: Optional[int] = Field(
+        default=None,
+        description="End index (exclusive) in canonical indexed full text, when stored",
+    )
 
 class KBSearchResponse(BaseModel):
     results: List[KBSearchResult]
@@ -200,8 +208,14 @@ class KBChunk(BaseModel):
     chunk_text: str
     token_count: int
     indexed_at: datetime
-    char_offset_start: Optional[int] = None
-    char_offset_end: Optional[int] = None
+    indexed_text_start: Optional[int] = Field(
+        default=None,
+        description="Start index in the canonical indexed full text used when chunking (UTF-8 characters)",
+    )
+    indexed_text_end: Optional[int] = Field(
+        default=None,
+        description="End index (exclusive) in the canonical indexed full text used when chunking",
+    )
 
 class ListKBChunksResponse(BaseModel):
     chunks: List[KBChunk]
@@ -947,115 +961,18 @@ async def list_kb_document_chunks(
     }).sort("chunk_index", 1).skip(skip).limit(limit)
     
     chunks_list = await chunks_cursor.to_list(length=limit)
-    
-    # Get full OCR text to calculate character offsets
-    ocr_text = await ad.common.ocr.get_ocr_text(analytiq_client, document_id)
-    
-    chunks = []
-    search_start = 0  # Track position in OCR text for sequential chunk finding
-    cumulative_offset = 0  # Fallback: cumulative character count
-    
-    for chunk_data in chunks_list:
-        char_offset_start = None
-        char_offset_end = None
-        
-        # Always calculate offsets, even if OCR text is not available (use cumulative)
-        if not ocr_text:
-            # No OCR text available, use cumulative offset estimate
-            char_offset_start = cumulative_offset
-            char_offset_end = cumulative_offset + len(chunk_data["chunk_text"])
-            cumulative_offset = char_offset_end
-        else:
-            chunk_text = chunk_data["chunk_text"]
-            
-            # Strategy 1: Try exact match starting from last position
-            chunk_pos = ocr_text.find(chunk_text, search_start)
-            if chunk_pos != -1:
-                char_offset_start = chunk_pos
-                char_offset_end = chunk_pos + len(chunk_text)
-                search_start = char_offset_end
-                cumulative_offset = char_offset_end  # Update cumulative for next chunk
-            else:
-                # Strategy 2: Try normalized whitespace matching
-                # Normalize both texts by collapsing whitespace
-                import re
-                chunk_normalized = re.sub(r'\s+', ' ', chunk_text.strip())
-                ocr_normalized = re.sub(r'\s+', ' ', ocr_text[search_start:].strip())
-                
-                chunk_pos_normalized = ocr_normalized.find(chunk_normalized)
-                if chunk_pos_normalized != -1:
-                    # Map back to original text position
-                    # Count characters in original text up to the match
-                    original_pos = search_start
-                    normalized_pos = 0
-                    for i in range(search_start, len(ocr_text)):
-                        if normalized_pos == chunk_pos_normalized:
-                            char_offset_start = i
-                            break
-                        # Count non-whitespace or single whitespace
-                        if not ocr_text[i].isspace() or (i > 0 and not ocr_text[i-1].isspace()):
-                            normalized_pos += 1
-                    
-                    if char_offset_start is not None:
-                        # Estimate end position (approximate)
-                        char_offset_end = char_offset_start + len(chunk_text)
-                        search_start = char_offset_end
-                        cumulative_offset = char_offset_end  # Update cumulative for next chunk
-                else:
-                    # Strategy 3: Use first significant substring (first 100 chars or first sentence)
-                    search_key = chunk_text[:100].strip() if len(chunk_text) > 100 else chunk_text.strip()
-                    if search_key and len(search_key) > 10:  # Only if we have enough to match
-                        # Try finding the key in OCR text
-                        key_pos = ocr_text.find(search_key, search_start)
-                        if key_pos != -1:
-                            char_offset_start = key_pos
-                            # Estimate end based on chunk length
-                            char_offset_end = key_pos + len(chunk_text)
-                            search_start = char_offset_end
-                            cumulative_offset = char_offset_end  # Update cumulative for next chunk
-                        else:
-                            # Fall through to cumulative offset
-                            pass
-                    
-                    # If we still don't have offsets, use cumulative estimate
-                    if char_offset_start is None or char_offset_end is None:
-                        if len(chunks) > 0:
-                            last_chunk = chunks[-1]
-                            if last_chunk.char_offset_end is not None:
-                                # Start from end of previous chunk
-                                char_offset_start = last_chunk.char_offset_end
-                                char_offset_end = char_offset_start + len(chunk_text)
-                                search_start = char_offset_end
-                                cumulative_offset = char_offset_end
-                            else:
-                                # Use cumulative offset as fallback
-                                char_offset_start = cumulative_offset
-                                char_offset_end = cumulative_offset + len(chunk_text)
-                                cumulative_offset = char_offset_end
-                                search_start = char_offset_end
-                        else:
-                            # First chunk, use cumulative offset
-                            char_offset_start = cumulative_offset
-                            char_offset_end = cumulative_offset + len(chunk_text)
-                            cumulative_offset = char_offset_end
-                            search_start = char_offset_end
-        
-        # Ensure we always have offsets (fallback to cumulative if not set)
-        if char_offset_start is None or char_offset_end is None:
-            char_offset_start = cumulative_offset
-            char_offset_end = cumulative_offset + len(chunk_data["chunk_text"])
-            cumulative_offset = char_offset_end
-        
-        chunks.append(
-            KBChunk(
-                chunk_index=chunk_data["chunk_index"],
-                chunk_text=chunk_data["chunk_text"],
-                token_count=chunk_data.get("token_count", 0),
-                indexed_at=chunk_data.get("indexed_at", datetime.now(UTC)),
-                char_offset_start=char_offset_start,
-                char_offset_end=char_offset_end
-            )
+
+    chunks = [
+        KBChunk(
+            chunk_index=chunk_data["chunk_index"],
+            chunk_text=chunk_data["chunk_text"],
+            token_count=chunk_data.get("token_count", 0),
+            indexed_at=chunk_data.get("indexed_at", datetime.now(UTC)),
+            indexed_text_start=chunk_data.get("indexed_text_start"),
+            indexed_text_end=chunk_data.get("indexed_text_end"),
         )
+        for chunk_data in chunks_list
+    ]
     
     return ListKBChunksResponse(
         chunks=chunks,

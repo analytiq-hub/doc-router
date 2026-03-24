@@ -113,11 +113,51 @@ def spus_for_kb_indexing_embedding_misses(cache_miss_count: int) -> int:
 
 class Chunk:
     """Represents a text chunk with metadata."""
-    def __init__(self, text: str, chunk_index: int, token_count: int):
+
+    def __init__(
+        self,
+        text: str,
+        chunk_index: int,
+        token_count: int,
+        indexed_text_start: int,
+        indexed_text_end: int,
+    ):
         self.text = text
         self.chunk_index = chunk_index
         self.token_count = token_count
+        self.indexed_text_start = indexed_text_start
+        self.indexed_text_end = indexed_text_end
         self.hash = compute_chunk_hash(text)
+
+
+def _assign_indexed_text_spans(full_text: str, chonkie_chunks: List[Any]) -> List[Tuple[int, int]]:
+    """
+    Map each chunk's ``.text`` to ``[start, end)`` character offsets in ``full_text``.
+
+    Chonkie's ``start_index`` / ``end_index`` are unreliable after ``OverlapRefinery`` on
+    recursive chunks, so we locate each chunk sequentially in the source string.
+    """
+    spans: List[Tuple[int, int]] = []
+    cursor = 0
+    for i, ch in enumerate(chonkie_chunks):
+        t = ch.text
+        if not t:
+            spans.append((cursor, cursor))
+            continue
+        pos = full_text.find(t, cursor)
+        if pos == -1:
+            pos = full_text.find(t)
+            if pos == -1:
+                raise ValueError(
+                    f"Chunk {i} text not found in indexed source string (len full_text={len(full_text)})"
+                )
+        start = pos
+        end = pos + len(t)
+        if full_text[start:end] != t:
+            raise ValueError(f"Chunk {i} span mismatch at [{start}:{end}]")
+        spans.append((start, end))
+        cursor = pos + 1
+    return spans
 
 
 async def chunk_text(
@@ -204,13 +244,16 @@ async def chunk_text(
         else:
             raise ValueError(f"Unknown chunker_type: {chunker_type}. Supported types: {list(chunkers_with_overlap.keys()) + list(chunkers_without_overlap.keys())}")
         
+        indexed_spans = _assign_indexed_text_spans(text, chonkie_chunks)
+
         # Convert chonkie Chunk objects to our Chunk objects with token counting
         encoding = tiktoken.get_encoding("cl100k_base")  # Used by OpenAI models
         result = []
         for idx, chonkie_chunk in enumerate(chonkie_chunks):
             chunk_text = chonkie_chunk.text
             token_count = len(encoding.encode(chunk_text))
-            result.append(Chunk(chunk_text, idx, token_count))
+            start, end = indexed_spans[idx]
+            result.append(Chunk(chunk_text, idx, token_count, start, end))
         
         logger.info(f"Chunked text into {len(result)} chunks using {chunker_type} chunker")
         return result
@@ -548,6 +591,8 @@ async def index_document_in_kb(
             "chunk_text": chunk.text,
             "embedding": embedding,
             "token_count": chunk.token_count,
+            "indexed_text_start": chunk.indexed_text_start,
+            "indexed_text_end": chunk.indexed_text_end,
             "metadata_snapshot": metadata_snapshot,
             "indexed_at": now
         })
