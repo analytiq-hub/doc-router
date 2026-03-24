@@ -381,7 +381,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                     <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3">
                       {/* Index */}
                       <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-100">
-                        <span className="text-blue-400">#</span>
+                        <span className="text-blue-400">Chunk Index #</span>
                         {displayChunk.chunk_index}
                       </span>
 
