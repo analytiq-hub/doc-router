@@ -69,7 +69,9 @@ async def test_ocr_returns_plain_text_when_no_tables(
     mock_open_doc.return_value = textract_doc
     client = object()
     out = await get_extracted_indexing_text(client, "doc-1")
-    assert out == "linearized text"
+    assert out is not None
+    assert out.text == "linearized text"
+    assert out.page_offsets == []
     textract_doc.get_text.assert_called_once()
 
 
@@ -93,7 +95,9 @@ async def test_ocr_returns_markdown_when_tables(
     mock_open_doc.return_value = textract_doc
     client = object()
     out = await get_extracted_indexing_text(client, "doc-42")
-    assert out == "| h |\n| - |"
+    assert out is not None
+    assert out.text == "| h |\n| - |"
+    assert out.page_offsets == []
     textract_doc.to_markdown.assert_called_once()
 
 
@@ -108,7 +112,9 @@ async def test_txt_returns_utf8_decoded_content(mock_get_doc, mock_get_file):
     mock_get_file.return_value = {"blob": b"hello \xc3\xbcber"}
     client = object()
     out = await get_extracted_indexing_text(client, "doc-1")
-    assert out == "hello über"
+    assert out is not None
+    assert out.text == "hello über"
+    assert out.page_offsets == []
 
 
 @pytest.mark.asyncio
@@ -122,7 +128,8 @@ async def test_txt_falls_back_to_latin1(mock_get_doc, mock_get_file):
     mock_get_file.return_value = {"blob": b"\xe9cole"}
     client = object()
     out = await get_extracted_indexing_text(client, "doc-1")
-    assert out == "école"
+    assert out is not None
+    assert out.text == "école"
 
 
 @pytest.mark.asyncio

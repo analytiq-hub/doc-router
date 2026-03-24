@@ -7,7 +7,9 @@ Handles chunking, embedding generation, caching, and atomic vector storage.
 import logging
 import math
 import os
+import re
 import warnings
+from dataclasses import dataclass
 from datetime import datetime, UTC
 from typing import List, Dict, Any, Optional, Tuple
 from bson import ObjectId
@@ -25,6 +27,11 @@ from .errors import (
     is_retryable_embedding_error,
     is_permanent_embedding_error,
     set_kb_status_to_error
+)
+from .chunking_config import (
+    ChunkingPreprocessConfig,
+    chunking_preprocess_from_kb_dict,
+    preprocess_markdown,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,11 +93,20 @@ try:
         TokenChunker,
         SentenceChunker,
         RecursiveChunker,
-        OverlapRefinery
+        RecursiveRules,
+        RecursiveLevel,
+        OverlapRefinery,
+        TableChunker,
     )
+    from chonkie.chef import MarkdownChef
+
     CHONKIE_AVAILABLE = True
 except ImportError:
     CHONKIE_AVAILABLE = False
+    MarkdownChef = None  # type: ignore[misc, assignment]
+    TableChunker = None  # type: ignore[misc, assignment]
+    RecursiveRules = None  # type: ignore[misc, assignment]
+    RecursiveLevel = None  # type: ignore[misc, assignment]
     logger.warning("Chonkie not available. KB indexing will not work.")
 
 # Disabled chunker types (require sentence_transformers which is too large)
@@ -111,6 +127,14 @@ def spus_for_kb_indexing_embedding_misses(cache_miss_count: int) -> int:
     return math.ceil(cache_miss_count / EMBEDDINGS_PER_SPU)
 
 
+@dataclass
+class ExtractedIndexingText:
+    """Text used for chunking plus optional per-page character offsets (1-based page numbers)."""
+
+    text: str
+    page_offsets: List[Dict[str, int]]
+
+
 class Chunk:
     """Represents a text chunk with metadata."""
 
@@ -121,12 +145,23 @@ class Chunk:
         token_count: int,
         indexed_text_start: int,
         indexed_text_end: int,
+        *,
+        heading_path: str = "",
+        page_start: int = 0,
+        page_end: int = 0,
+        chunk_type: str = "prose",
+        embedding_input: Optional[str] = None,
     ):
         self.text = text
         self.chunk_index = chunk_index
         self.token_count = token_count
         self.indexed_text_start = indexed_text_start
         self.indexed_text_end = indexed_text_end
+        self.heading_path = heading_path
+        self.page_start = page_start
+        self.page_end = page_end
+        self.chunk_type = chunk_type
+        self.embedding_input = embedding_input
         self.hash = compute_chunk_hash(text)
 
 
@@ -160,104 +195,261 @@ def _assign_indexed_text_spans(full_text: str, chonkie_chunks: List[Any]) -> Lis
     return spans
 
 
+def build_markdown_with_page_offsets(textract_doc: Any, cfg: ChunkingPreprocessConfig) -> Tuple[str, List[Dict[str, int]]]:
+    """Concatenate per-page OCR markdown with exact character offsets per page (1-based page numbers)."""
+    from textractor.data.markdown_linearization_config import MarkdownLinearizationConfig
+
+    config = MarkdownLinearizationConfig(table_linearization_format="markdown")
+    parts: List[str] = []
+    page_offsets: List[Dict[str, int]] = []
+    cursor = 0
+    pages = list(getattr(textract_doc, "pages", None) or [])
+    for page_num, page in enumerate(pages, start=1):
+        page_md_raw = page.to_markdown(config=config)
+        page_md = preprocess_markdown(page_md_raw, cfg)
+        page_offsets.append({"page": page_num, "start": cursor, "end": cursor + len(page_md)})
+        parts.append(page_md)
+        cursor += len(page_md)
+        if page_num < len(pages):
+            sep = "\n\n"
+            parts.append(sep)
+            cursor += len(sep)
+    return "".join(parts), page_offsets
+
+
+def find_page_range_for_span(start: int, end: int, page_offsets: List[Dict[str, int]]) -> Tuple[int, int]:
+    if not page_offsets or end <= start:
+        return (0, 0)
+
+    def page_at(p: int) -> int:
+        for r in page_offsets:
+            if r["start"] <= p < r["end"]:
+                return int(r["page"])
+        if p >= page_offsets[-1]["end"]:
+            return int(page_offsets[-1]["page"])
+        if p < page_offsets[0]["start"]:
+            return int(page_offsets[0]["page"])
+        return int(page_offsets[0]["page"])
+
+    last_char = max(start, end - 1)
+    ps = page_at(start)
+    pe = page_at(last_char)
+    return (min(ps, pe), max(ps, pe))
+
+
+def extract_heading_path(chunk_text: str, full_markdown: str, depth: int) -> str:
+    """Nearest preceding markdown headings as a breadcrumb (depth = max heading level to track)."""
+    anchor = chunk_text[:120] if len(chunk_text) >= 120 else chunk_text
+    if not anchor.strip():
+        return ""
+    pos = full_markdown.find(anchor)
+    if pos == -1 and len(chunk_text) >= 40:
+        pos = full_markdown.find(chunk_text[:40])
+    if pos == -1:
+        return ""
+    preceding = full_markdown[:pos]
+    headings = re.findall(rf"^(#{{1,{depth}}})\s+(.+)$", preceding, re.MULTILINE)
+    path_parts: Dict[int, str] = {}
+    for hashes, title in headings:
+        path_parts[len(hashes)] = title.strip()
+    if not path_parts:
+        return ""
+    return " > ".join(path_parts[k] for k in sorted(path_parts))
+
+
+def make_recursive_chunker(chunk_size: int, cfg: ChunkingPreprocessConfig) -> Any:
+    """Heading-aware recursive chunker without HuggingFace hub (Option B)."""
+    depth = cfg.heading_split_depth
+    heading_pattern = rf"(?m)(?=^#{{1,{depth}}} )"
+    rules = RecursiveRules(
+        levels=[
+            RecursiveLevel(pattern=heading_pattern, include_delim="next", pattern_mode="split"),
+            RecursiveLevel(delimiters=["\n\n"]),
+            RecursiveLevel(delimiters=[". ", "! ", "? "]),
+            RecursiveLevel(whitespace=True),
+            RecursiveLevel(),
+        ]
+    )
+    return RecursiveChunker(chunk_size=chunk_size, rules=rules)
+
+
+def _ordered_markdown_segments(md_doc: Any) -> List[Tuple[str, str, int, int]]:
+    """Prose / table / code segments in source order (indices in original markdown string)."""
+    items: List[Tuple[str, str, int, int]] = []
+    for ch in getattr(md_doc, "chunks", None) or []:
+        t = getattr(ch, "text", "") or ""
+        if t.strip():
+            items.append(("prose", t, ch.start_index, ch.end_index))
+    for t in getattr(md_doc, "tables", None) or []:
+        items.append(("table", t.content, t.start_index, t.end_index))
+    for c in getattr(md_doc, "code", None) or []:
+        lang = c.language or ""
+        inner = c.content or ""
+        fenced = f"```{lang}\n{inner}\n```" if inner.strip() else "```\n```"
+        items.append(("code", fenced, c.start_index, c.end_index))
+    for im in getattr(md_doc, "images", None) or []:
+        line = f"![{im.alias}]({im.content})"
+        items.append(("prose", line, im.start_index, im.end_index))
+    items.sort(key=lambda x: (x[2], x[3]))
+    return items
+
+
+def _chunk_markdown_document(
+    text: str,
+    chunk_size: int,
+    chunk_overlap: int,
+    cfg: ChunkingPreprocessConfig,
+    page_offsets: Optional[List[Dict[str, int]]],
+) -> List[Chunk]:
+    chef = MarkdownChef()
+    md_doc = chef.parse(text)
+    prose_chunker = make_recursive_chunker(chunk_size, cfg)
+    table_chunker = TableChunker(chunk_size=chunk_size)
+    raw_with_meta: List[Tuple[Any, str]] = []
+
+    for kind, seg_text, _si, _ei in _ordered_markdown_segments(md_doc):
+        if not seg_text.strip():
+            continue
+        if kind == "table":
+            for ch in table_chunker.chunk(seg_text):
+                raw_with_meta.append((ch, "table"))
+        elif kind == "code":
+            code_chunker = RecursiveChunker(chunk_size=chunk_size)
+            for ch in code_chunker.chunk(seg_text):
+                raw_with_meta.append((ch, "code"))
+        else:
+            pcs = prose_chunker.chunk(seg_text)
+            if chunk_overlap > 0:
+                refinery = OverlapRefinery(context_size=chunk_overlap, mode="token")
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "ignore",
+                        message=".*Context size is greater than the chunk size.*",
+                        category=UserWarning,
+                        module="chonkie.refinery.overlap",
+                    )
+                    pcs = refinery.refine(pcs)
+            for ch in pcs:
+                raw_with_meta.append((ch, "prose"))
+
+    chonkie_chunks = [x[0] for x in raw_with_meta]
+    types = [x[1] for x in raw_with_meta]
+    indexed_spans = _assign_indexed_text_spans(text, chonkie_chunks)
+    encoding = tiktoken.get_encoding("cl100k_base")
+    po = page_offsets or []
+    result: List[Chunk] = []
+    for idx, (chonkie_chunk, ctype) in enumerate(zip(chonkie_chunks, types)):
+        ct = chonkie_chunk.text
+        token_count = len(encoding.encode(ct))
+        start, end = indexed_spans[idx]
+        ps, pe = find_page_range_for_span(start, end, po)
+        result.append(Chunk(ct, idx, token_count, start, end, page_start=ps, page_end=pe, chunk_type=ctype))
+    return result
+
+
 async def chunk_text(
     text: str,
     chunker_type: str,
     chunk_size: int,
-    chunk_overlap: int
+    chunk_overlap: int,
+    *,
+    preprocess_cfg: Optional[ChunkingPreprocessConfig] = None,
+    page_offsets: Optional[List[Dict[str, int]]] = None,
 ) -> List[Chunk]:
     """
     Chunk text using Chonkie.
-    
+
     Args:
         text: The text to chunk
-        chunker_type: Chonkie chunker type ("token", "word", "sentence", "recursive")
+        chunker_type: Chonkie chunker type ("token", "word", "sentence", "recursive", "markdown")
         chunk_size: Target tokens per chunk
         chunk_overlap: Overlap tokens between chunks
-        
-    Returns:
-        List of Chunk objects
+        preprocess_cfg: Used by ``markdown`` chunker (heading depth); defaults if omitted
+        page_offsets: Optional page map from extraction (``page``, ``start``, ``end``) for metadata
     """
     if not CHONKIE_AVAILABLE:
         raise RuntimeError("Chonkie is not available. Please install chonkie package.")
-    
+
     if not text or not text.strip():
         return []
-    
-    # Check if chunker type is disabled
+
     if chunker_type in DISABLED_CHUNKER_TYPES:
         raise ValueError(
             f"Chunker type '{chunker_type}' is disabled as it requires sentence_transformers "
-            f"(large dependency). Supported types: token, word, sentence, recursive"
+            f"(large dependency). Supported types: token, word, sentence, recursive, markdown"
         )
-    
+
+    cfg = preprocess_cfg or ChunkingPreprocessConfig()
+
     try:
-        # Map chunker_type to chonkie chunker class
-        # Chunkers that support chunk_overlap directly
+        if chunker_type == "markdown":
+            result = _chunk_markdown_document(
+                text, chunk_size, chunk_overlap, cfg, page_offsets
+            )
+            logger.info(f"Chunked text into {len(result)} chunks using markdown chunker")
+            return result
+
         chunkers_with_overlap = {
             "token": TokenChunker,
-            "word": TokenChunker,  # Use TokenChunker with word tokenizer
-            "sentence": SentenceChunker
+            "word": TokenChunker,
+            "sentence": SentenceChunker,
         }
-        
-        # Chunkers that need OverlapRefinery for overlap
         chunkers_without_overlap = {
-            "recursive": RecursiveChunker
+            "recursive": RecursiveChunker,
         }
-        
-        # Create chunker based on type
+
         if chunker_type in chunkers_with_overlap:
             ChunkerClass = chunkers_with_overlap[chunker_type]
-            # For word tokenizer, use TokenChunker with word tokenizer
             if chunker_type == "word":
                 chunker = ChunkerClass(
                     tokenizer="word",
                     chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap
+                    chunk_overlap=chunk_overlap,
                 )
             else:
                 chunker = ChunkerClass(
                     chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap
+                    chunk_overlap=chunk_overlap,
                 )
-            # Chunk the text
             chonkie_chunks = chunker.chunk(text)
-            
+
         elif chunker_type in chunkers_without_overlap:
             ChunkerClass = chunkers_without_overlap[chunker_type]
-            # Create chunker without overlap
             chunker = ChunkerClass(chunk_size=chunk_size)
-            # Chunk the text
             chonkie_chunks = chunker.chunk(text)
-            
-            # Apply overlap using OverlapRefinery if overlap > 0
             if chunk_overlap > 0:
                 refinery = OverlapRefinery(
                     context_size=chunk_overlap,
-                    mode="token"
+                    mode="token",
                 )
-                # Suppress warning about context size being greater than chunk size
-                # This can happen with recursive chunker when chunks are smaller than expected
                 with warnings.catch_warnings():
-                    warnings.filterwarnings("ignore", message=".*Context size is greater than the chunk size.*", category=UserWarning, module="chonkie.refinery.overlap")
+                    warnings.filterwarnings(
+                        "ignore",
+                        message=".*Context size is greater than the chunk size.*",
+                        category=UserWarning,
+                        module="chonkie.refinery.overlap",
+                    )
                     chonkie_chunks = refinery.refine(chonkie_chunks)
         else:
-            raise ValueError(f"Unknown chunker_type: {chunker_type}. Supported types: {list(chunkers_with_overlap.keys()) + list(chunkers_without_overlap.keys())}")
-        
-        indexed_spans = _assign_indexed_text_spans(text, chonkie_chunks)
+            raise ValueError(
+                f"Unknown chunker_type: {chunker_type}. Supported types: "
+                f"{list(chunkers_with_overlap.keys()) + list(chunkers_without_overlap.keys()) + ['markdown']}"
+            )
 
-        # Convert chonkie Chunk objects to our Chunk objects with token counting
-        encoding = tiktoken.get_encoding("cl100k_base")  # Used by OpenAI models
+        indexed_spans = _assign_indexed_text_spans(text, chonkie_chunks)
+        encoding = tiktoken.get_encoding("cl100k_base")
+        po = page_offsets or []
         result = []
         for idx, chonkie_chunk in enumerate(chonkie_chunks):
-            chunk_text = chonkie_chunk.text
-            token_count = len(encoding.encode(chunk_text))
+            ctext = chonkie_chunk.text
+            token_count = len(encoding.encode(ctext))
             start, end = indexed_spans[idx]
-            result.append(Chunk(chunk_text, idx, token_count, start, end))
-        
+            ps, pe = find_page_range_for_span(start, end, po)
+            result.append(Chunk(ctext, idx, token_count, start, end, page_start=ps, page_end=pe))
+
         logger.info(f"Chunked text into {len(result)} chunks using {chunker_type} chunker")
         return result
-        
+
     except Exception as e:
         logger.error(f"Error chunking text with {chunker_type}: {e}")
         raise
@@ -348,12 +540,12 @@ async def get_or_generate_embeddings(
             chunk.hash,
             embedding_model
         )
-        
+
         if cached_embedding:
             embeddings.append(cached_embedding)
         else:
             embeddings.append(None)  # Placeholder
-            cache_misses.append(chunk.text)
+            cache_misses.append(chunk.embedding_input if chunk.embedding_input else chunk.text)
             cache_miss_indices.append(idx)
     
     # Generate embeddings for cache misses in batches
@@ -420,29 +612,33 @@ async def get_or_generate_embeddings(
     
     return embeddings, cache_miss_count
 
-async def get_extracted_indexing_text(analytiq_client, document_id: str) -> str | None:
+async def get_extracted_indexing_text(
+    analytiq_client,
+    document_id: str,
+    *,
+    preprocess: Optional[ChunkingPreprocessConfig] = None,
+) -> Optional[ExtractedIndexingText]:
     """
-    Get extracted text from a document.
+    Get extracted text from a document plus optional per-page character offsets.
 
-    For OCR-supported files, returns OCR markdown representation or text representation if no TABLE blocks.
-    For txt/md files, returns the original file content as text.
-    For other non-OCR files, returns None.
+    For OCR with ``prefer_markdown``, builds markdown per page (exact page map). Otherwise
+    preserves legacy behavior (single ``to_markdown()`` when tables exist, else ``get_text()``).
+    Applies ``preprocess_markdown`` to final text for .txt/.md and plain OCR fallbacks.
     """
-    # Get document info
+    cfg = preprocess or ChunkingPreprocessConfig()
+
     doc = await ad.common.doc.get_doc(analytiq_client, document_id)
     if not doc:
         return None
 
     file_name = doc.get("user_file_name", "")
 
-    # Check if OCR is supported
     if ad.common.doc.ocr_supported(file_name):
         ocr_json = await ad.common.get_ocr_json(analytiq_client, document_id)
         if ocr_json is None:
-            # Tests and legacy flows often only persist plain OCR text (no Textract JSON blob).
             text = await ad.common.get_ocr_text(analytiq_client, document_id)
             if isinstance(text, str) and text.strip():
-                return text
+                return ExtractedIndexingText(text=preprocess_markdown(text, cfg), page_offsets=[])
             return None
 
         blocks = ad.aws.textract.ocr_result_blocks(ocr_json)
@@ -460,36 +656,38 @@ async def get_extracted_indexing_text(analytiq_client, document_id: str) -> str 
             )
             text = await ad.common.get_ocr_text(analytiq_client, document_id)
             if isinstance(text, str) and text.strip():
-                return text
+                return ExtractedIndexingText(text=preprocess_markdown(text, cfg), page_offsets=[])
             return None
 
         if not textract_doc.pages:
             text = await ad.common.get_ocr_text(analytiq_client, document_id)
             if isinstance(text, str) and text.strip():
-                return text
+                return ExtractedIndexingText(text=preprocess_markdown(text, cfg), page_offsets=[])
             return None
+
+        if cfg.prefer_markdown:
+            logger.info(f"{document_id}: Exporting per-page OCR markdown for indexing")
+            full_md, page_offsets = build_markdown_with_page_offsets(textract_doc, cfg)
+            return ExtractedIndexingText(text=full_md, page_offsets=page_offsets)
 
         if table_blocks:
             logger.info(f"{document_id}: Exporting OCR markdown for indexing")
-            return textract_doc.to_markdown()
+            return ExtractedIndexingText(text=textract_doc.to_markdown(), page_offsets=[])
         logger.info(f"{document_id}: Exporting OCR text for indexing")
-        return textract_doc.get_text()
+        return ExtractedIndexingText(text=textract_doc.get_text(), page_offsets=[])
 
-    # For non-OCR files, check if it's a text file we can read
     if file_name:
         ext = os.path.splitext(file_name)[1].lower()
-        if ext in {'.txt', '.md'}:
-            # Get the original file and decode as text
+        if ext in {".txt", ".md"}:
             original_file = await ad.common.get_file_async(analytiq_client, doc["mongo_file_name"])
             if original_file and original_file["blob"]:
                 logger.info(f"{document_id}: Exporting original file content for indexing")
                 try:
-                    return original_file["blob"].decode("utf-8")
+                    raw = original_file["blob"].decode("utf-8")
                 except UnicodeDecodeError:
-                    # Fallback to latin-1 if UTF-8 fails
-                    return original_file["blob"].decode("latin-1")
+                    raw = original_file["blob"].decode("latin-1")
+                return ExtractedIndexingText(text=preprocess_markdown(raw, cfg), page_offsets=[])
 
-    # For other files (csv, xls, xlsx), return None to indicate file attachment needed
     logger.info(f"{document_id}: No extractable text. Skipping indexing.")
     return None
 
@@ -532,9 +730,11 @@ async def index_document_in_kb(
     if not doc:
         raise ValueError(f"Document {document_id} not found")
     
-    # Get text to chunk (OCR text for OCR-supported files, original content for .txt/.md files)
-    text_to_chunk = await get_extracted_indexing_text(analytiq_client, document_id)
-    if not text_to_chunk or not text_to_chunk.strip():
+    prep = chunking_preprocess_from_kb_dict(kb)
+    extracted = await get_extracted_indexing_text(
+        analytiq_client, document_id, preprocess=prep
+    )
+    if extracted is None or not extracted.text.strip():
         logger.warning(f"Document {document_id} has no extractable text. Skipping indexing.")
         return {
             "chunk_count": 0,
@@ -542,14 +742,29 @@ async def index_document_in_kb(
             "skipped": True,
             "reason": "no_text"
         }
-    
-    # Chunk the text
+
+    text_to_chunk = extracted.text
+    page_offsets = extracted.page_offsets
+
     chunks = await chunk_text(
         text_to_chunk,
         kb["chunker_type"],
         kb["chunk_size"],
-        kb["chunk_overlap"]
+        kb["chunk_overlap"],
+        preprocess_cfg=prep,
+        page_offsets=page_offsets,
     )
+
+    for chunk in chunks:
+        hp = (
+            extract_heading_path(chunk.text, text_to_chunk, prep.heading_split_depth)
+            if prep.prepend_heading_path
+            else ""
+        )
+        chunk.heading_path = hp
+        emb_in = f"{hp}\n\n{chunk.text}" if hp else chunk.text
+        chunk.embedding_input = emb_in
+        chunk.hash = compute_chunk_hash(emb_in)
     
     if not chunks:
         logger.warning(f"Document {document_id} produced no chunks. Skipping indexing.")
@@ -593,6 +808,10 @@ async def index_document_in_kb(
             "token_count": chunk.token_count,
             "indexed_text_start": chunk.indexed_text_start,
             "indexed_text_end": chunk.indexed_text_end,
+            "heading_path": chunk.heading_path or None,
+            "page_start": chunk.page_start,
+            "page_end": chunk.page_end,
+            "chunk_type": chunk.chunk_type,
             "metadata_snapshot": metadata_snapshot,
             "indexed_at": now
         })

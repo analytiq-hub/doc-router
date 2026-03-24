@@ -897,8 +897,51 @@ export interface AWSConfig {
 }
 
 // Knowledge Base types
-export type ChunkerType = "token" | "word" | "sentence" | "recursive";
+export type ChunkerType = "token" | "word" | "sentence" | "recursive" | "markdown";
 export type KBStatus = "indexing" | "active" | "error";
+
+export type ChunkingPreset = "plain" | "structured_doc" | "annual_report" | "contract";
+
+export interface ChunkingPreprocessConfig {
+  prefer_markdown: boolean;
+  strip_page_numbers: boolean;
+  strip_page_breaks: boolean;
+  strip_patterns: string[];
+  heading_split_depth: number;
+  prepend_heading_path: boolean;
+}
+
+/** Baseline preprocessing for a named preset (matches server `chunking_preprocess_for_preset`). */
+export function chunkingPreprocessForPreset(preset: ChunkingPreset): ChunkingPreprocessConfig {
+  const structured: ChunkingPreprocessConfig = {
+    prefer_markdown: true,
+    strip_page_numbers: true,
+    strip_page_breaks: true,
+    strip_patterns: [],
+    heading_split_depth: 3,
+    prepend_heading_path: true,
+  };
+  switch (preset) {
+    case "plain":
+      return {
+        prefer_markdown: false,
+        strip_page_numbers: false,
+        strip_page_breaks: false,
+        strip_patterns: [],
+        heading_split_depth: 3,
+        prepend_heading_path: false,
+      };
+    case "contract":
+      return {
+        ...structured,
+        strip_page_numbers: false,
+      };
+    case "structured_doc":
+    case "annual_report":
+    default:
+      return { ...structured };
+  }
+}
 
 export interface KnowledgeBaseConfig {
   name: string;
@@ -915,6 +958,8 @@ export interface KnowledgeBaseConfig {
   reconcile_interval_seconds?: number;
   /** Minimum cosine similarity when search falls back to vector-only (empty query or fusion unavailable) */
   min_vector_score?: number | null;
+  chunking_preset?: ChunkingPreset | null;
+  chunking_preprocess?: ChunkingPreprocessConfig;
 }
 
 export interface KnowledgeBaseUpdate {
@@ -926,6 +971,8 @@ export interface KnowledgeBaseUpdate {
   reconcile_enabled?: boolean;
   reconcile_interval_seconds?: number;
   min_vector_score?: number | null;
+  chunking_preset?: ChunkingPreset | null;
+  chunking_preprocess?: ChunkingPreprocessConfig;
 }
 
 export interface KnowledgeBase extends KnowledgeBaseConfig {
@@ -994,6 +1041,10 @@ export interface KBChunk {
   /** UTF-8 character offsets into the canonical indexed full text used at chunking */
   indexed_text_start?: number | null;
   indexed_text_end?: number | null;
+  heading_path?: string | null;
+  page_start?: number | null;
+  page_end?: number | null;
+  chunk_type?: string | null;
 }
 
 export interface ListKBDocumentChunksParams {
@@ -1029,6 +1080,10 @@ export interface KBSearchResult {
   /** Present when the vector document stores indexed-text spans (for overlap-safe merging) */
   indexed_text_start?: number | null;
   indexed_text_end?: number | null;
+  heading_path?: string | null;
+  page_start?: number | null;
+  page_end?: number | null;
+  chunk_type?: string | null;
 }
 
 export interface KBSearchResponse {

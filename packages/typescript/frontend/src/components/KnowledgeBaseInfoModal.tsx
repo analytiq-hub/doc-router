@@ -231,6 +231,39 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
                 </div>
               </div>
 
+              <div className="col-span-2">
+                <label className="text-sm font-semibold text-gray-700 block mb-1">
+                  Chunking preprocessing
+                </label>
+                <div className="text-gray-900 bg-gray-50 p-2 rounded border text-sm space-y-1">
+                  <div>
+                    <span className="text-gray-500">Preset: </span>
+                    {kb.chunking_preset != null ? (
+                      kb.chunking_preset
+                    ) : (
+                      <span className="text-gray-500 italic">(legacy default)</span>
+                    )}
+                  </div>
+                  {kb.chunking_preprocess ? (
+                    <ul className="list-disc list-inside text-xs text-gray-700 mt-1">
+                      <li>prefer_markdown: {String(kb.chunking_preprocess.prefer_markdown)}</li>
+                      <li>strip_page_numbers: {String(kb.chunking_preprocess.strip_page_numbers)}</li>
+                      <li>strip_page_breaks: {String(kb.chunking_preprocess.strip_page_breaks)}</li>
+                      <li>prepend_heading_path: {String(kb.chunking_preprocess.prepend_heading_path)}</li>
+                      <li>heading_split_depth: {kb.chunking_preprocess.heading_split_depth}</li>
+                      <li>
+                        strip_patterns:{' '}
+                        {kb.chunking_preprocess.strip_patterns?.length
+                          ? `${kb.chunking_preprocess.strip_patterns.length} regex(es)`
+                          : 'none'}
+                      </li>
+                    </ul>
+                  ) : (
+                    <span className="text-gray-500 text-xs">No custom preprocess stored (legacy KB).</span>
+                  )}
+                </div>
+              </div>
+
               <div>
                 <label className="text-sm font-semibold text-gray-700 block mb-1">
                   Coalesce Neighbors

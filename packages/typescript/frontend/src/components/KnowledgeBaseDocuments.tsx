@@ -258,7 +258,7 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                   color="primary"
                   variant="outlined"
                 />
-                <Box display="flex" gap={2}>
+                <Box display="flex" flexWrap="wrap" gap={2} alignItems="center">
                   {(() => {
                     const chunk = chunks[currentChunkIndex];
                     const start = chunk.indexed_text_start;
@@ -274,6 +274,25 @@ const KnowledgeBaseDocuments: React.FC<KnowledgeBaseDocumentsProps> = ({ organiz
                   </Typography>
                 </Box>
               </Box>
+              {(() => {
+                const ch = chunks[currentChunkIndex];
+                const parts: string[] = [];
+                if (ch.chunk_type) parts.push(`Type: ${ch.chunk_type}`);
+                if (ch.page_start != null && ch.page_end != null && ch.page_start > 0) {
+                  parts.push(
+                    ch.page_start === ch.page_end
+                      ? `Page ${ch.page_start}`
+                      : `Pages ${ch.page_start}–${ch.page_end}`
+                  );
+                }
+                if (ch.heading_path) parts.push(ch.heading_path);
+                if (parts.length === 0) return null;
+                return (
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                    {parts.join(' · ')}
+                  </Typography>
+                );
+              })()}
               <Box
                 sx={{
                   p: 2,

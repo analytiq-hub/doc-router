@@ -13,6 +13,11 @@ from bson import ObjectId
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.kb.chunking_config import (
+    ChunkingPreprocessConfig,
+    ChunkingPresetName,
+    chunking_preprocess_for_preset,
+)
 from analytiq_data.kb_search_indexes import (
     kb_lexical_search_index_definition,
     kb_vector_search_index_definition,
@@ -29,9 +34,9 @@ logger = logging.getLogger(__name__)
 knowledge_bases_router = APIRouter(tags=["knowledge-bases"])
 
 # KB Configuration Constants
-VALID_CHUNKER_TYPES = ["token", "word", "sentence", "recursive"]
+VALID_CHUNKER_TYPES = ["token", "word", "sentence", "recursive", "markdown"]
 # Note: "semantic", "late", and "sdpm" are disabled as they require sentence_transformers (large dependency)
-DEFAULT_CHUNKER_TYPE = "recursive"  # Uses RecursiveChunker from chonkie
+DEFAULT_CHUNKER_TYPE = "markdown"  # MarkdownChef + table / heading-aware prose (see analytiq_data.kb.indexing)
 DEFAULT_CHUNK_SIZE = 512
 DEFAULT_CHUNK_OVERLAP = 128
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
@@ -61,6 +66,14 @@ class KnowledgeBaseConfig(BaseModel):
         ge=0.0,
         le=1.0,
         description="When search uses vector-only (empty query or $rankFusion unavailable): drop chunks below this cosine similarity",
+    )
+    chunking_preset: Optional[ChunkingPresetName] = Field(
+        default="structured_doc",
+        description="Named preprocessing preset; user overrides via chunking_preprocess fields",
+    )
+    chunking_preprocess: ChunkingPreprocessConfig = Field(
+        default_factory=lambda: chunking_preprocess_for_preset("structured_doc"),
+        description="Pre-index text preprocessing and heading/embedding options",
     )
 
     @field_validator('chunker_type')
@@ -116,6 +129,8 @@ class KnowledgeBaseUpdate(BaseModel):
     reconcile_enabled: Optional[bool] = None
     reconcile_interval_seconds: Optional[int] = Field(default=None, ge=60, description="Reconciliation interval in seconds (minimum 60)")
     min_vector_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    chunking_preset: Optional[ChunkingPresetName] = None
+    chunking_preprocess: Optional[ChunkingPreprocessConfig] = None
 
     @field_validator('coalesce_neighbors')
     @classmethod
@@ -185,6 +200,10 @@ class KBSearchResult(BaseModel):
         default=None,
         description="End index (exclusive) in canonical indexed full text, when stored",
     )
+    heading_path: Optional[str] = Field(default=None, description="Heading breadcrumb when stored on the vector")
+    page_start: Optional[int] = Field(default=None, description="1-based page start when known")
+    page_end: Optional[int] = Field(default=None, description="1-based page end when known")
+    chunk_type: Optional[str] = Field(default=None, description='Chunk segment type when stored')
 
 class KBSearchResponse(BaseModel):
     results: List[KBSearchResult]
@@ -216,12 +235,31 @@ class KBChunk(BaseModel):
         default=None,
         description="End index (exclusive) in the canonical indexed full text used when chunking",
     )
+    heading_path: Optional[str] = Field(
+        default=None,
+        description="Nearest markdown heading breadcrumb at chunking time (embedding may include this prefix)",
+    )
+    page_start: Optional[int] = Field(default=None, description="1-based start page from OCR linearization when known")
+    page_end: Optional[int] = Field(default=None, description="1-based end page when known")
+    chunk_type: Optional[str] = Field(default=None, description='Segment type: "prose", "table", or "code"')
 
 class ListKBChunksResponse(BaseModel):
     chunks: List[KBChunk]
     total_count: int
 
 # Helper Functions
+def _chunking_fields_from_kb_doc(kb: dict) -> tuple[Optional[ChunkingPresetName], ChunkingPreprocessConfig]:
+    """MongoDB doc may omit chunking fields (legacy KBs)."""
+    preset = kb.get("chunking_preset")
+    preset_out: Optional[ChunkingPresetName] = None
+    if preset in ("plain", "structured_doc", "annual_report", "contract"):
+        preset_out = preset  # type: ignore[assignment]
+    raw = kb.get("chunking_preprocess")
+    if isinstance(raw, dict) and raw:
+        return preset_out, ChunkingPreprocessConfig.model_validate(raw)
+    return preset_out, ChunkingPreprocessConfig()
+
+
 async def detect_embedding_dimensions(embedding_model: str, analytiq_client) -> int:
     """
     Auto-detect embedding dimensions by making a test call to LiteLLM.
@@ -495,6 +533,8 @@ async def create_knowledge_base(
         "reconcile_enabled": config.reconcile_enabled,
         "reconcile_interval_seconds": config.reconcile_interval_seconds,
         "min_vector_score": config.min_vector_score,
+        "chunking_preset": config.chunking_preset,
+        "chunking_preprocess": config.chunking_preprocess.model_dump(),
         "last_reconciled_at": None,
         "status": "indexing",  # Will be set to "active" after index creation
         "document_count": 0,
@@ -611,6 +651,7 @@ async def list_knowledge_bases(
         if last_reconciled_at and isinstance(last_reconciled_at, datetime) and last_reconciled_at.tzinfo is None:
             last_reconciled_at = last_reconciled_at.replace(tzinfo=UTC)
         
+        cpreset, cprep = _chunking_fields_from_kb_doc(kb)
         knowledge_bases.append(KnowledgeBase(
             kb_id=str(kb["_id"]),
             embedding_dimensions=kb["embedding_dimensions"],
@@ -632,6 +673,8 @@ async def list_knowledge_bases(
             last_reconciled_at=last_reconciled_at,
             system_prompt=kb.get("system_prompt", ""),
             min_vector_score=kb.get("min_vector_score"),
+            chunking_preset=cpreset,
+            chunking_preprocess=cprep,
         ))
     
     return ListKnowledgeBasesResponse(
@@ -670,6 +713,7 @@ async def get_knowledge_base(
     if last_reconciled_at and isinstance(last_reconciled_at, datetime) and last_reconciled_at.tzinfo is None:
         last_reconciled_at = last_reconciled_at.replace(tzinfo=UTC)
     
+    cpreset, cprep = _chunking_fields_from_kb_doc(kb)
     return KnowledgeBase(
         kb_id=kb_id,
         embedding_dimensions=kb["embedding_dimensions"],
@@ -691,6 +735,8 @@ async def get_knowledge_base(
         last_reconciled_at=last_reconciled_at,
         system_prompt=kb.get("system_prompt", ""),
         min_vector_score=kb.get("min_vector_score"),
+        chunking_preset=cpreset,
+        chunking_preprocess=cprep,
     )
 
 @knowledge_bases_router.put("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}", response_model=KnowledgeBase)
@@ -746,6 +792,10 @@ async def update_knowledge_base(
     patch = update.model_dump(exclude_unset=True)
     if "min_vector_score" in patch:
         update_dict["min_vector_score"] = patch["min_vector_score"]
+    if update.chunking_preset is not None:
+        update_dict["chunking_preset"] = update.chunking_preset
+    if update.chunking_preprocess is not None:
+        update_dict["chunking_preprocess"] = update.chunking_preprocess.model_dump()
 
     # Update KB
     await db.knowledge_bases.update_one(
@@ -783,7 +833,8 @@ async def update_knowledge_base(
     last_reconciled_at = updated_kb.get("last_reconciled_at")
     if last_reconciled_at and isinstance(last_reconciled_at, datetime) and last_reconciled_at.tzinfo is None:
         last_reconciled_at = last_reconciled_at.replace(tzinfo=UTC)
-    
+
+    cpreset, cprep = _chunking_fields_from_kb_doc(updated_kb)
     return KnowledgeBase(
         kb_id=kb_id,
         embedding_dimensions=updated_kb["embedding_dimensions"],
@@ -805,6 +856,8 @@ async def update_knowledge_base(
         last_reconciled_at=last_reconciled_at,
         system_prompt=updated_kb.get("system_prompt", ""),
         min_vector_score=updated_kb.get("min_vector_score"),
+        chunking_preset=cpreset,
+        chunking_preprocess=cprep,
     )
 
 @knowledge_bases_router.delete("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}")
@@ -970,6 +1023,10 @@ async def list_kb_document_chunks(
             indexed_at=chunk_data.get("indexed_at", datetime.now(UTC)),
             indexed_text_start=chunk_data.get("indexed_text_start"),
             indexed_text_end=chunk_data.get("indexed_text_end"),
+            heading_path=chunk_data.get("heading_path"),
+            page_start=chunk_data.get("page_start"),
+            page_end=chunk_data.get("page_end"),
+            chunk_type=chunk_data.get("chunk_type"),
         )
         for chunk_data in chunks_list
     ]

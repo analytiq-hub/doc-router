@@ -583,6 +583,10 @@ async def search_knowledge_base(
             "is_matched": result.get("is_matched", True),
             "indexed_text_start": result.get("indexed_text_start"),
             "indexed_text_end": result.get("indexed_text_end"),
+            "heading_path": result.get("heading_path"),
+            "page_start": result.get("page_start"),
+            "page_end": result.get("page_end"),
+            "chunk_type": result.get("chunk_type"),
         })
     
     return {

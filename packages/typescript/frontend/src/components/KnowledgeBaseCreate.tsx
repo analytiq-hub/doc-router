@@ -7,6 +7,9 @@ import {
   KnowledgeBaseUpdate,
   Tag,
   ChunkerType,
+  ChunkingPreset,
+  ChunkingPreprocessConfig,
+  chunkingPreprocessForPreset,
   LLMEmbeddingModel,
 } from '@docrouter/sdk';
 import { useRouter } from 'next/navigation';
@@ -14,7 +17,14 @@ import { toast } from 'react-toastify';
 import InfoTooltip from '@/components/InfoTooltip';
 import TagSelector from '@/components/TagSelector';
 
-const CHUNKER_TYPES: ChunkerType[] = ['token', 'word', 'sentence', 'recursive'];
+const CHUNKER_TYPES: ChunkerType[] = ['token', 'word', 'sentence', 'recursive', 'markdown'];
+const CHUNKING_PRESET_OPTIONS: { value: ChunkingPreset; label: string }[] = [
+  { value: 'plain', label: 'Plain' },
+  { value: 'structured_doc', label: 'Structured document' },
+  { value: 'annual_report', label: 'Annual report' },
+  { value: 'contract', label: 'Contract' },
+];
+const DEFAULT_CHUNKING_PRESET: ChunkingPreset = 'structured_doc';
 const DEFAULT_CHUNK_SIZE = 512;
 const DEFAULT_CHUNK_OVERLAP = 128;
 const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
@@ -79,6 +89,7 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
         setIsLoading(true);
         try {
           const kb = await docRouterOrgApi.getKnowledgeBase({ kbId });
+          const loadedPreset = (kb.chunking_preset as ChunkingPreset | undefined) ?? DEFAULT_CHUNKING_PRESET;
           setCurrentKB({
             name: kb.name,
             description: kb.description || '',
@@ -92,6 +103,11 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
             reconcile_enabled: kb.reconcile_enabled || false,
             reconcile_interval_seconds: kb.reconcile_interval_seconds,
             min_vector_score: kb.min_vector_score ?? undefined,
+            chunking_preset: kb.chunking_preset ?? loadedPreset,
+            chunking_preprocess:
+              kb.chunking_preprocess != null
+                ? kb.chunking_preprocess
+                : chunkingPreprocessForPreset(loadedPreset),
           });
           setIsEditing(true);
         } catch (error) {
@@ -109,6 +125,13 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
       ...currentKB,
       tag_ids: tagIds
     });
+  };
+
+  const mergeChunkingPreprocess = (patch: Partial<ChunkingPreprocessConfig>) => {
+    const cur =
+      currentKB.chunking_preprocess ??
+      chunkingPreprocessForPreset(currentKB.chunking_preset ?? DEFAULT_CHUNKING_PRESET);
+    setCurrentKB({ ...currentKB, chunking_preprocess: { ...cur, ...patch } });
   };
 
   const saveKB = async () => {
@@ -138,6 +161,8 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
             currentKB.min_vector_score === undefined || currentKB.min_vector_score === null
               ? null
               : currentKB.min_vector_score,
+          chunking_preset: currentKB.chunking_preset ?? undefined,
+          chunking_preprocess: currentKB.chunking_preprocess,
         };
         await docRouterOrgApi.updateKnowledgeBase({
           kbId,
@@ -258,6 +283,130 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
               <p className="text-xs text-gray-500 mt-1">
                 Documents with these tags will be automatically indexed into this knowledge base.
               </p>
+            </div>
+          </div>
+
+          {/* Chunking preprocessing: presets + overrides (re-index to refresh old chunks) */}
+          <div className="border-t pt-4 sm:pt-6 mt-4 sm:mt-6 space-y-3 sm:space-y-4">
+            <div className="flex items-center gap-2">
+              <h3 className="text-base sm:text-lg font-semibold">Chunking preprocessing</h3>
+              <InfoTooltip
+                title="Chunking preprocessing"
+                content={
+                  <>
+                    <p className="mb-2">
+                      Named presets set defaults for OCR markdown, stripping boilerplate lines, and heading
+                      breadcrumbs used in embeddings. You can override individual options after selecting a preset.
+                    </p>
+                    <p>Already-indexed chunks keep prior text until documents are re-indexed into this KB.</p>
+                  </>
+                }
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <label htmlFor="chunking-preset" className="w-full sm:w-40 text-sm font-medium text-gray-700">
+                Preset
+              </label>
+              <select
+                id="chunking-preset"
+                className="flex-1 p-2 border rounded disabled:bg-gray-100"
+                disabled={isLoading}
+                value={currentKB.chunking_preset ?? DEFAULT_CHUNKING_PRESET}
+                onChange={(e) => {
+                  const p = e.target.value as ChunkingPreset;
+                  setCurrentKB({
+                    ...currentKB,
+                    chunking_preset: p,
+                    chunking_preprocess: chunkingPreprocessForPreset(p),
+                  });
+                }}
+              >
+                {CHUNKING_PRESET_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+              <span className="w-full sm:w-40 text-sm font-medium text-gray-700 pt-1">Options</span>
+              <div className="flex-1 space-y-2">
+                {(
+                  [
+                    ['prefer_markdown', 'Prefer per-page OCR markdown (exact page map)'] as const,
+                    ['strip_page_numbers', 'Strip digit-only lines (page numbers)'] as const,
+                    ['strip_page_breaks', 'Replace horizontal-rule page breaks with blank lines'] as const,
+                    ['prepend_heading_path', 'Prepend heading breadcrumb to embeddings only'] as const,
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      disabled={isLoading}
+                      checked={
+                        (currentKB.chunking_preprocess ??
+                          chunkingPreprocessForPreset(
+                            currentKB.chunking_preset ?? DEFAULT_CHUNKING_PRESET
+                          ))[key]
+                      }
+                      onChange={(e) => mergeChunkingPreprocess({ [key]: e.target.checked })}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">
+              <label htmlFor="heading-split-depth" className="w-full sm:w-40 text-sm font-medium text-gray-700">
+                Heading split depth
+              </label>
+              <input
+                id="heading-split-depth"
+                type="number"
+                min={1}
+                max={6}
+                className="flex-1 p-2 border rounded disabled:bg-gray-100 w-full sm:max-w-xs"
+                disabled={isLoading}
+                value={
+                  (currentKB.chunking_preprocess ??
+                    chunkingPreprocessForPreset(
+                      currentKB.chunking_preset ?? DEFAULT_CHUNKING_PRESET
+                    )).heading_split_depth
+                }
+                onChange={(e) => {
+                  const n = parseInt(e.target.value, 10);
+                  if (!Number.isNaN(n)) mergeChunkingPreprocess({ heading_split_depth: Math.min(6, Math.max(1, n)) });
+                }}
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-start gap-2 sm:gap-4">
+              <label htmlFor="strip-patterns" className="w-full sm:w-40 text-sm font-medium text-gray-700 pt-1">
+                Strip regexes
+              </label>
+              <div className="flex-1">
+                <textarea
+                  id="strip-patterns"
+                  className="w-full p-2 border rounded font-mono text-sm disabled:bg-gray-100"
+                  rows={3}
+                  disabled={isLoading}
+                  placeholder="One regex per line (multiline mode)"
+                  value={(
+                    currentKB.chunking_preprocess ??
+                    chunkingPreprocessForPreset(
+                      currentKB.chunking_preset ?? DEFAULT_CHUNKING_PRESET
+                    )
+                  ).strip_patterns.join('\n')}
+                  onChange={(e) =>
+                    mergeChunkingPreprocess({
+                      strip_patterns: e.target.value
+                        .split('\n')
+                        .map((s) => s.trim())
+                        .filter(Boolean),
+                    })
+                  }
+                />
+                <p className="text-xs text-gray-500 mt-1">Applied to extracted text before chunking. Invalid regex will fail at index time.</p>
+              </div>
             </div>
           </div>
 
