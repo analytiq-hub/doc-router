@@ -9,6 +9,7 @@ from pymongo.errors import DuplicateKeyError
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 
 import analytiq_data as ad
+from analytiq_data.kb_search_indexes import kb_lexical_search_index_definition
 
 logger = logging.getLogger(__name__)
 
@@ -2528,6 +2529,84 @@ class OcrPayloadTextractEnvelopeMigration(Migration):
             return False
 
 
+class AddKbLexicalSearchIndexes(Migration):
+    """Add Atlas Search lexical index (chunk_text) on existing KB vector collections for hybrid retrieval."""
+
+    def __init__(self):
+        super().__init__(
+            description="Add kb_lexical_index Atlas Search index on each kb_vectors_* collection"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            lexical_def = kb_lexical_search_index_definition()
+            kbs = await db.knowledge_bases.find({}, projection={"_id": 1}).to_list(length=None)
+            collections = set(await db.list_collection_names())
+            for kb in kbs:
+                kb_id = str(kb["_id"])
+                coll_name = f"kb_vectors_{kb_id}"
+                if coll_name not in collections:
+                    continue
+                try:
+                    await db.command({
+                        "createSearchIndexes": coll_name,
+                        "indexes": [lexical_def],
+                    })
+                    logger.info(
+                        "Created lexical search index kb_lexical_index on %s",
+                        coll_name,
+                    )
+                except Exception as e:
+                    err = str(e).lower()
+                    if (
+                        "already exists" in err
+                        or "duplicate" in err
+                        or "index already exists" in err
+                    ):
+                        logger.info(
+                            "Lexical search index already present on %s: %s",
+                            coll_name,
+                            str(e)[:200],
+                        )
+                        continue
+                    logger.error(
+                        "Failed to create lexical search index on %s: %s",
+                        coll_name,
+                        e,
+                    )
+                    return False
+            return True
+        except Exception as e:
+            logger.error("AddKbLexicalSearchIndexes failed: %s", e)
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            kbs = await db.knowledge_bases.find({}, projection={"_id": 1}).to_list(length=None)
+            collections = set(await db.list_collection_names())
+            for kb in kbs:
+                kb_id = str(kb["_id"])
+                coll_name = f"kb_vectors_{kb_id}"
+                if coll_name not in collections:
+                    continue
+                try:
+                    await db.command({
+                        "dropSearchIndexes": coll_name,
+                        "index": "kb_lexical_index",
+                    })
+                    logger.info("Dropped lexical search index on %s", coll_name)
+                except Exception as e:
+                    logger.warning(
+                        "Could not drop lexical search index on %s: %s",
+                        coll_name,
+                        e,
+                    )
+            return True
+        except Exception as e:
+            logger.error("AddKbLexicalSearchIndexes down failed: %s", e)
+            return False
+
+
 # List of all migrations in order
 MIGRATIONS = [
     OcrKeyMigration(),
@@ -2561,6 +2640,7 @@ MIGRATIONS = [
     AddQueueVisibilityTimeoutIndexes(),
     FixLegacyProcessingQueueMessages(),
     OcrPayloadTextractEnvelopeMigration(),
+    AddKbLexicalSearchIndexes(),
     # Add more migrations here
 ]
 

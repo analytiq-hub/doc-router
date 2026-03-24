@@ -13,6 +13,10 @@ from bson import ObjectId
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.kb_search_indexes import (
+    kb_lexical_search_index_definition,
+    kb_vector_search_index_definition,
+)
 from app.auth import get_org_user
 from app.models import User
 from analytiq_data.payments.exceptions import SPUCreditException
@@ -313,8 +317,9 @@ async def create_vector_search_index(
     organization_id: str
 ) -> None:
     """
-    Create a vector search index on the KB's vector collection.
-    
+    Create MongoDB Search indexes on the KB vector collection: vector search (embeddings)
+    and lexical Atlas Search on ``chunk_text`` for hybrid retrieval.
+
     Args:
         analytiq_client: AnalytiqClient instance
         kb_id: Knowledge base ID
@@ -357,43 +362,23 @@ async def create_vector_search_index(
             except Exception:
                 pass  # Collection exists but we can't insert - proceed anyway
     
-    # For MongoDB Atlas: Use Atlas Search API
-    # For self-hosted MongoDB 8.2+: Use createSearchIndexes command
-    index_definition = {
-        "name": "kb_vector_index",
-        "type": "vectorSearch",
-        "definition": {
-            "fields": [
-                {
-                    "type": "vector",
-                    "path": "embedding",
-                    "numDimensions": embedding_dimensions,
-                    "similarity": "cosine"
-                },
-                {
-                    "type": "filter",
-                    "path": "organization_id"
-                },
-                {
-                    "type": "filter",
-                    "path": "metadata_snapshot.tag_ids"
-                },
-                {
-                    "type": "filter",
-                    "path": "metadata_snapshot.upload_date"
-                }
-            ]
-        }
-    }
-    
-    # Create the search index - fail if this doesn't work
+    # Atlas / MongoDB Search: vector + lexical indexes in one command
+    search_indexes = [
+        kb_vector_search_index_definition(embedding_dimensions),
+        kb_lexical_search_index_definition(),
+    ]
+
+    # Create the search indexes - fail if this doesn't work
     try:
         # Use createSearchIndexes command (works for both Atlas and self-hosted 8.2+)
         await db.command({
             "createSearchIndexes": collection_name,
-            "indexes": [index_definition]
+            "indexes": search_indexes
         })
-        logger.info(f"Created vector search index for KB {kb_id}")
+        logger.info(
+            f"Created vector + lexical search indexes for KB {kb_id} "
+            f"(kb_vector_index, kb_lexical_index)"
+        )
         
         # Clean up temporary document after successful index creation
         if temp_doc_inserted:
@@ -402,10 +387,11 @@ async def create_vector_search_index(
             except Exception:
                 pass  # Ignore cleanup errors
     except Exception as e:
-        logger.error(f"Failed to create vector search index for KB {kb_id}: {e}")
+        logger.error(f"Failed to create KB search indexes for KB {kb_id}: {e}")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to create vector search index: {str(e)}. Ensure MongoDB supports vector search (Atlas or 8.2+)."
+            detail=f"Failed to create KB search indexes: {str(e)}. "
+            f"Ensure MongoDB supports Vector Search and Atlas Search (Atlas or 8.2+ with mongot)."
         )
 
 async def validate_tag_ids(tag_ids: List[str], organization_id: str, analytiq_client) -> None:
@@ -811,16 +797,17 @@ async def delete_knowledge_base(
     
     # Drop vector collection and its search index
     collection_name = f"kb_vectors_{kb_id}"
-    # Drop search index first (if it exists)
-    try:
-        await db.command({
-            "dropSearchIndexes": collection_name,
-            "index": "kb_vector_index"
-        })
-        logger.info(f"Dropped search index for KB {kb_id}")
-    except Exception as e:
-        # Index might not exist - that's okay
-        logger.warning(f"Could not drop search index (may not exist): {e}")
+    # Drop search indexes first (if they exist)
+    for index_name in ("kb_vector_index", "kb_lexical_index"):
+        try:
+            await db.command({
+                "dropSearchIndexes": collection_name,
+                "index": index_name
+            })
+            logger.info(f"Dropped search index {index_name} for KB {kb_id}")
+        except Exception as e:
+            # Index might not exist - that's okay
+            logger.warning(f"Could not drop search index {index_name} (may not exist): {e}")
     # Then drop the collection (this will also clean up any remaining indexes)
     await db[collection_name].drop()
     
