@@ -132,6 +132,16 @@ class KnowledgeBaseUpdate(BaseModel):
     min_vector_score: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     chunking_preset: Optional[ChunkingPresetName] = None
     chunking_preprocess: Optional[ChunkingPreprocessConfig] = None
+    chunker_type: Optional[str] = None
+    chunk_size: Optional[int] = Field(default=None, ge=1)
+    chunk_overlap: Optional[int] = Field(default=None, ge=0)
+
+    @field_validator('chunker_type')
+    @classmethod
+    def validate_chunker_type(cls, v):
+        if v is not None and v not in VALID_CHUNKER_TYPES:
+            raise ValueError(f"chunker_type must be one of {VALID_CHUNKER_TYPES}")
+        return v
 
     @field_validator('coalesce_neighbors')
     @classmethod
@@ -770,6 +780,13 @@ async def update_knowledge_base(
         old_tag_ids = set(kb.get("tag_ids", []))
         new_tag_ids = set(update.tag_ids)
         tags_changed = old_tag_ids != new_tag_ids
+
+    # Check if chunker settings changed (requires full re-index)
+    chunker_settings_changed = (
+        (update.chunker_type is not None and update.chunker_type != kb.get("chunker_type")) or
+        (update.chunk_size is not None and update.chunk_size != kb.get("chunk_size")) or
+        (update.chunk_overlap is not None and update.chunk_overlap != kb.get("chunk_overlap"))
+    )
     
     # Build update dict (only include provided fields)
     update_dict = {"updated_at": datetime.now(UTC)}
@@ -797,16 +814,31 @@ async def update_knowledge_base(
         update_dict["chunking_preset"] = update.chunking_preset
     if update.chunking_preprocess is not None:
         update_dict["chunking_preprocess"] = update.chunking_preprocess.model_dump()
+    if update.chunker_type is not None:
+        update_dict["chunker_type"] = update.chunker_type
+    if update.chunk_size is not None:
+        update_dict["chunk_size"] = update.chunk_size
+    if update.chunk_overlap is not None:
+        update_dict["chunk_overlap"] = update.chunk_overlap
 
     # Update KB
     await db.knowledge_bases.update_one(
         {"_id": ObjectId(kb_id)},
         {"$set": update_dict},
     )
-    
-    # Trigger reconciliation if tags changed to re-evaluate document membership
+
+    # If chunker settings changed, drop all document_index entries so reconciliation
+    # treats every document as missing and queues a full re-index.
+    if chunker_settings_changed:
+        try:
+            delete_result = await db.document_index.delete_many({"kb_id": kb_id})
+            logger.info(f"Dropped {delete_result.deleted_count} document_index entries for KB {kb_id} after chunker settings change")
+        except Exception as e:
+            logger.error(f"Error dropping document_index for KB {kb_id} after chunker settings change: {e}")
+
+    # Trigger reconciliation if tags changed or chunker settings changed
     # This runs in the background - errors are logged but don't fail KB update
-    if tags_changed:
+    if tags_changed or chunker_settings_changed:
         try:
             await ad.kb.reconciliation.reconcile_knowledge_base(
                 analytiq_client=analytiq_client,

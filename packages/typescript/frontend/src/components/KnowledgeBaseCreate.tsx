@@ -161,6 +161,9 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
               : currentKB.min_vector_score,
           chunking_preset: currentKB.chunking_preset ?? undefined,
           chunking_preprocess: currentKB.chunking_preprocess,
+          chunker_type: currentKB.chunker_type,
+          chunk_size: currentKB.chunk_size,
+          chunk_overlap: currentKB.chunk_overlap,
         };
         await docRouterOrgApi.updateKnowledgeBase({
           kbId,
@@ -408,99 +411,99 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
             </div>
           </div>
 
-          {/* Configuration Section - Only editable when creating */}
-          {!isEditing && (
-            <>
-              <div className="border-t pt-4 sm:pt-6 mt-4 sm:mt-6">
-                <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Indexing Configuration</h3>
-                <p className="text-sm text-gray-600 mb-3 sm:mb-4">
-                  These settings cannot be changed after creation. To use different settings, create a new KB.
-                </p>
+          {/* Indexing Configuration */}
+          <div className="border-t pt-4 sm:pt-6 mt-4 sm:mt-6">
+            <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Indexing Configuration</h3>
+            {isEditing && (
+              <p className="text-sm text-amber-600 mb-3 sm:mb-4">
+                Changing chunker type, chunk size, or chunk overlap will trigger a full re-index of all documents.
+              </p>
+            )}
 
-                {/* Chunker Type */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4">
-                  <label htmlFor="chunker-type" className="w-full sm:w-40 text-sm font-medium text-gray-700">
-                    Chunker Type
-                  </label>
-                  <select
-                    id="chunker-type"
-                    className="flex-1 p-2 border rounded disabled:bg-gray-100"
-                    value={currentKB.chunker_type}
-                    onChange={e => setCurrentKB({ ...currentKB, chunker_type: e.target.value as ChunkerType })}
-                    disabled={isLoading}
-                  >
-                    {CHUNKER_TYPES.map(type => (
-                      <option key={type} value={type}>{type}</option>
-                    ))}
-                  </select>
-                </div>
+            {/* Chunker Type */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4">
+              <label htmlFor="chunker-type" className="w-full sm:w-40 text-sm font-medium text-gray-700">
+                Chunker Type
+              </label>
+              <select
+                id="chunker-type"
+                className="flex-1 p-2 border rounded disabled:bg-gray-100"
+                value={currentKB.chunker_type}
+                onChange={e => setCurrentKB({ ...currentKB, chunker_type: e.target.value as ChunkerType })}
+                disabled={isLoading}
+              >
+                {CHUNKER_TYPES.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
 
-                {/* Chunk Size */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4">
-                  <label htmlFor="chunk-size" className="w-full sm:w-40 text-sm font-medium text-gray-700">
-                    Chunk Size (tokens)
-                  </label>
-                  <div className="flex-1 flex items-center gap-2">
-                    <input
-                      id="chunk-size"
-                      type="number"
-                      min={MIN_CHUNK_SIZE}
-                      max={MAX_CHUNK_SIZE}
-                      className="flex-1 p-2 border rounded disabled:bg-gray-100"
-                      value={currentKB.chunk_size ?? DEFAULT_CHUNK_SIZE}
-                      onChange={e => setCurrentKB({ ...currentKB, chunk_size: parseInt(e.target.value) || DEFAULT_CHUNK_SIZE })}
-                      disabled={isLoading}
-                    />
-                    <span className="text-sm text-gray-500 whitespace-nowrap">{MIN_CHUNK_SIZE}-{MAX_CHUNK_SIZE}</span>
-                  </div>
-                </div>
-
-                {/* Chunk Overlap */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4">
-                  <label htmlFor="chunk-overlap" className="w-full sm:w-40 text-sm font-medium text-gray-700">
-                    Chunk Overlap (tokens)
-                  </label>
-                  <div className="flex-1 flex items-center gap-2">
-                    <input
-                      id="chunk-overlap"
-                      type="number"
-                      min={0}
-                      max={(currentKB.chunk_size ?? DEFAULT_CHUNK_SIZE) - 1}
-                      className="flex-1 p-2 border rounded disabled:bg-gray-100"
-                      value={currentKB.chunk_overlap ?? DEFAULT_CHUNK_OVERLAP}
-                      onChange={e => setCurrentKB({ ...currentKB, chunk_overlap: parseInt(e.target.value) || 0 })}
-                      disabled={isLoading}
-                    />
-                    <span className="text-sm text-gray-500 whitespace-nowrap">0-{(currentKB.chunk_size ?? DEFAULT_CHUNK_SIZE) - 1}</span>
-                  </div>
-                </div>
-
-                {/* Embedding Model */}
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4">
-                  <label htmlFor="embedding-model" className="w-full sm:w-40 text-sm font-medium text-gray-700">
-                    Embedding Model
-                  </label>
-                  <select
-                    id="embedding-model"
-                    className="flex-1 p-2 border rounded disabled:bg-gray-100"
-                    value={currentKB.embedding_model ?? DEFAULT_EMBEDDING_MODEL}
-                    onChange={e => setCurrentKB({ ...currentKB, embedding_model: e.target.value })}
-                    disabled={isLoading}
-                  >
-                    {availableEmbeddingModels.length > 0 ? (
-                      availableEmbeddingModels.map(model => (
-                        <option key={model.litellm_model} value={model.litellm_model}>
-                          {model.litellm_model} ({model.dimensions}D)
-                        </option>
-                      ))
-                    ) : (
-                      <option value={DEFAULT_EMBEDDING_MODEL}>{DEFAULT_EMBEDDING_MODEL}</option>
-                    )}
-                  </select>
-                </div>
+            {/* Chunk Size */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4">
+              <label htmlFor="chunk-size" className="w-full sm:w-40 text-sm font-medium text-gray-700">
+                Chunk Size (tokens)
+              </label>
+              <div className="flex-1 flex items-center gap-2">
+                <input
+                  id="chunk-size"
+                  type="number"
+                  min={MIN_CHUNK_SIZE}
+                  max={MAX_CHUNK_SIZE}
+                  className="flex-1 p-2 border rounded disabled:bg-gray-100"
+                  value={currentKB.chunk_size ?? DEFAULT_CHUNK_SIZE}
+                  onChange={e => setCurrentKB({ ...currentKB, chunk_size: parseInt(e.target.value) || DEFAULT_CHUNK_SIZE })}
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-gray-500 whitespace-nowrap">{MIN_CHUNK_SIZE}-{MAX_CHUNK_SIZE}</span>
               </div>
-            </>
-          )}
+            </div>
+
+            {/* Chunk Overlap */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4">
+              <label htmlFor="chunk-overlap" className="w-full sm:w-40 text-sm font-medium text-gray-700">
+                Chunk Overlap (tokens)
+              </label>
+              <div className="flex-1 flex items-center gap-2">
+                <input
+                  id="chunk-overlap"
+                  type="number"
+                  min={0}
+                  max={(currentKB.chunk_size ?? DEFAULT_CHUNK_SIZE) - 1}
+                  className="flex-1 p-2 border rounded disabled:bg-gray-100"
+                  value={currentKB.chunk_overlap ?? DEFAULT_CHUNK_OVERLAP}
+                  onChange={e => setCurrentKB({ ...currentKB, chunk_overlap: parseInt(e.target.value) || 0 })}
+                  disabled={isLoading}
+                />
+                <span className="text-sm text-gray-500 whitespace-nowrap">0-{(currentKB.chunk_size ?? DEFAULT_CHUNK_SIZE) - 1}</span>
+              </div>
+            </div>
+
+            {/* Embedding Model - creation only */}
+            {!isEditing && (
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-3 sm:mb-4">
+                <label htmlFor="embedding-model" className="w-full sm:w-40 text-sm font-medium text-gray-700">
+                  Embedding Model
+                </label>
+                <select
+                  id="embedding-model"
+                  className="flex-1 p-2 border rounded disabled:bg-gray-100"
+                  value={currentKB.embedding_model ?? DEFAULT_EMBEDDING_MODEL}
+                  onChange={e => setCurrentKB({ ...currentKB, embedding_model: e.target.value })}
+                  disabled={isLoading}
+                >
+                  {availableEmbeddingModels.length > 0 ? (
+                    availableEmbeddingModels.map(model => (
+                      <option key={model.litellm_model} value={model.litellm_model}>
+                        {model.litellm_model} ({model.dimensions}D)
+                      </option>
+                    ))
+                  ) : (
+                    <option value={DEFAULT_EMBEDDING_MODEL}>{DEFAULT_EMBEDDING_MODEL}</option>
+                  )}
+                </select>
+              </div>
+            )}
+          </div>
 
           {/* Coalesce Neighbors - Editable */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4">

@@ -963,6 +963,9 @@ export interface KnowledgeBaseUpdate {
   min_vector_score?: number | null;
   chunking_preset?: ChunkingPreset | null;
   chunking_preprocess?: ChunkingPreprocessConfig;
+  chunker_type?: ChunkerType;
+  chunk_size?: number;
+  chunk_overlap?: number;
 }
 
 export interface KnowledgeBase extends KnowledgeBaseConfig {
