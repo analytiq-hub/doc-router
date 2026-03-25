@@ -17,7 +17,7 @@ import { toast } from 'react-toastify';
 import InfoTooltip from '@/components/InfoTooltip';
 import TagSelector from '@/components/TagSelector';
 
-const CHUNKER_TYPES: ChunkerType[] = ['token', 'word', 'sentence', 'recursive', 'markdown'];
+const CHUNKER_TYPES: ChunkerType[] = ['token', 'word', 'sentence', 'recursive'];
 const CHUNKING_PRESET_OPTIONS: { value: ChunkingPreset; label: string }[] = [
   { value: 'plain', label: 'Plain' },
   { value: 'structured_doc', label: 'Structured document' },
