@@ -35,9 +35,10 @@ logger = logging.getLogger(__name__)
 knowledge_bases_router = APIRouter(tags=["knowledge-bases"])
 
 # KB Configuration Constants
-VALID_CHUNKER_TYPES = ["token", "word", "sentence", "recursive", "markdown"]
+VALID_CHUNKER_TYPES = ["token", "word", "sentence", "recursive"]
 # Note: "semantic", "late", and "sdpm" are disabled as they require sentence_transformers (large dependency)
-DEFAULT_CHUNKER_TYPE = "markdown"  # MarkdownChef + table / heading-aware prose (see analytiq_data.kb.indexing)
+# "markdown" was removed: use chunker_type="recursive" + chef_type="markdown" in chunking_preprocess (Phase 1c).
+DEFAULT_CHUNKER_TYPE = "recursive"  # prose chunker; chef_type="auto" in chunking_preprocess drives MarkdownChef
 DEFAULT_CHUNK_SIZE = 512
 DEFAULT_CHUNK_OVERLAP = 128
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
@@ -80,11 +81,10 @@ class KnowledgeBaseConfig(BaseModel):
     @field_validator('chunker_type')
     @classmethod
     def validate_chunker_type(cls, v):
-        # "recursive" is a valid chunker type (uses RecursiveChunker)
         if v not in VALID_CHUNKER_TYPES:
             raise ValueError(f"chunker_type must be one of {VALID_CHUNKER_TYPES}")
         return v
-    
+
     @field_validator('chunk_size')
     @classmethod
     def validate_chunk_size(cls, v):

@@ -133,12 +133,31 @@ async def test_txt_falls_back_to_latin1(mock_get_doc, mock_get_file):
 
 
 @pytest.mark.asyncio
+@patch("analytiq_data.kb.indexing.ad.common.get_file_async", new_callable=AsyncMock)
 @patch("analytiq_data.kb.indexing.ad.common.doc.get_doc", new_callable=AsyncMock)
-async def test_csv_returns_none(mock_get_doc):
+async def test_csv_returns_markdown_table(mock_get_doc, mock_get_file):
     mock_get_doc.return_value = {
         "user_file_name": "data.csv",
         "mongo_file_name": "files/data.csv",
     }
+    mock_get_file.return_value = {"blob": b"name,score\nalice,90\nbob,85"}
+    client = object()
+    out = await get_extracted_indexing_text(client, "doc-1")
+    assert out is not None
+    assert "name" in out.text
+    assert "alice" in out.text
+    assert out.page_offsets == []
+
+
+@pytest.mark.asyncio
+@patch("analytiq_data.kb.indexing.ad.common.get_file_async", new_callable=AsyncMock)
+@patch("analytiq_data.kb.indexing.ad.common.doc.get_doc", new_callable=AsyncMock)
+async def test_csv_returns_none_when_blob_missing(mock_get_doc, mock_get_file):
+    mock_get_doc.return_value = {
+        "user_file_name": "data.csv",
+        "mongo_file_name": "files/data.csv",
+    }
+    mock_get_file.return_value = None
     client = object()
     out = await get_extracted_indexing_text(client, "doc-1")
     assert out is None

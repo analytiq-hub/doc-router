@@ -411,17 +411,21 @@ async def test_kb_not_found_errors(test_db, mock_auth, setup_test_models):
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
 @patch('litellm.aembedding')
 async def test_kb_immutable_fields(mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models):
-    """Test that immutable fields cannot be updated"""
+    """Test mutable vs immutable KB fields.
+
+    chunker_type, chunk_size, chunk_overlap are mutable (trigger re-index on change).
+    embedding_model is immutable after creation.
+    """
     logger.info(f"test_kb_immutable_fields() start")
-    
+
     # Set up mock embedding response
     mock_embedding.return_value = create_mock_embedding_response()
-    
+
     try:
         # Create a KB
         kb_data = {
             "name": "Test Immutable KB",
-            "chunker_type": "recursive",  # Use recursive instead of semantic (semantic is disabled)
+            "chunker_type": "recursive",
             "chunk_size": 512,
             "chunk_overlap": 128,
             "embedding_model": "text-embedding-3-small"
@@ -433,15 +437,13 @@ async def test_kb_immutable_fields(mock_embedding, mock_get_model_info, test_db,
         )
         assert create_response.status_code == 200
         kb_id = create_response.json()["kb_id"]
-        
-        # Try to update immutable fields (should be ignored or rejected)
-        # Note: The current implementation allows these in the request but doesn't update them
-        # This test verifies the behavior
+
+        # Update: chunker_type and chunk_size are mutable; embedding_model is not
         update_data = {
             "name": "Updated Name",
-            "chunker_type": "token",  # Immutable - should be ignored
-            "chunk_size": 256,  # Immutable - should be ignored
-            "embedding_model": "text-embedding-3-large"  # Immutable - should be ignored
+            "chunker_type": "token",       # Mutable — should update and trigger re-index
+            "chunk_size": 256,             # Mutable — should update and trigger re-index
+            "embedding_model": "text-embedding-3-large"  # Immutable — should be ignored
         }
         update_response = client.put(
             f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
@@ -450,17 +452,16 @@ async def test_kb_immutable_fields(mock_embedding, mock_get_model_info, test_db,
         )
         assert update_response.status_code == 200
         updated_kb = update_response.json()
-        assert updated_kb["name"] == "Updated Name"  # Mutable field updated
-        # Immutable fields should remain unchanged
-        assert updated_kb["chunker_type"] == "recursive"  # Not changed
-        assert updated_kb["chunk_size"] == 512  # Not changed
-        assert updated_kb["embedding_model"] == "text-embedding-3-small"  # Not changed
-        
+        assert updated_kb["name"] == "Updated Name"            # Mutable — updated
+        assert updated_kb["chunker_type"] == "token"           # Mutable — updated
+        assert updated_kb["chunk_size"] == 256                 # Mutable — updated
+        assert updated_kb["embedding_model"] == "text-embedding-3-small"  # Immutable — unchanged
+
         # Cleanup
         client.delete(
             f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
             headers=get_auth_headers()
         )
-        
+
     finally:
         pass

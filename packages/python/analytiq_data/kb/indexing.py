@@ -29,6 +29,7 @@ from .errors import (
     set_kb_status_to_error
 )
 from .chunking_config import (
+    ChefType,
     ChunkingPreprocessConfig,
     chunking_preprocess_from_kb_dict,
     preprocess_markdown,
@@ -98,12 +99,14 @@ try:
         OverlapRefinery,
         TableChunker,
     )
-    from chonkie.chef import MarkdownChef
+    from chonkie.chef import MarkdownChef, TableChef, TextChef
 
     CHONKIE_AVAILABLE = True
 except ImportError:
     CHONKIE_AVAILABLE = False
     MarkdownChef = None  # type: ignore[misc, assignment]
+    TableChef = None  # type: ignore[misc, assignment]
+    TextChef = None  # type: ignore[misc, assignment]
     TableChunker = None  # type: ignore[misc, assignment]
     RecursiveRules = None  # type: ignore[misc, assignment]
     RecursiveLevel = None  # type: ignore[misc, assignment]
@@ -363,6 +366,16 @@ def _chunk_markdown_document(
     return result
 
 
+def _effective_chef_type(chunker_type: str, cfg: ChunkingPreprocessConfig) -> ChefType:
+    """Resolve the effective chef from config. ``chunker_type`` is the prose splitter strategy."""
+    chef = cfg.chef_type
+    if chef == "auto":
+        # "auto" defaults to markdown chef (handles prose + tables).
+        # File-extension-based routing happens earlier in get_extracted_indexing_text.
+        return "markdown"
+    return chef
+
+
 async def chunk_text(
     text: str,
     chunker_type: str,
@@ -377,10 +390,12 @@ async def chunk_text(
 
     Args:
         text: The text to chunk
-        chunker_type: Chonkie chunker type ("token", "word", "sentence", "recursive", "markdown")
+        chunker_type: Prose chunker strategy ("token", "word", "sentence", "recursive").
+            Chef selection (MarkdownChef, TableChunker, etc.) is controlled by
+            chef_type in ChunkingPreprocessConfig, not by this parameter.
         chunk_size: Target tokens per chunk
         chunk_overlap: Overlap tokens between chunks
-        preprocess_cfg: Used by ``markdown`` chunker (heading depth); defaults if omitted
+        preprocess_cfg: Preprocessing config (heading depth, chef_type, …); defaults if omitted
         page_offsets: Optional page map from extraction (``page``, ``start``, ``end``) for metadata
     """
     if not CHONKIE_AVAILABLE:
@@ -392,19 +407,40 @@ async def chunk_text(
     if chunker_type in DISABLED_CHUNKER_TYPES:
         raise ValueError(
             f"Chunker type '{chunker_type}' is disabled as it requires sentence_transformers "
-            f"(large dependency). Supported types: token, word, sentence, recursive, markdown"
+            f"(large dependency). Supported types: token, word, sentence, recursive"
         )
 
     cfg = preprocess_cfg or ChunkingPreprocessConfig()
+    effective_chef = _effective_chef_type(chunker_type, cfg)
+    effective_chunker_type = chunker_type
 
     try:
-        if chunker_type == "markdown":
+        # --- Chef-driven paths ---
+        if effective_chef == "markdown":
             result = _chunk_markdown_document(
                 text, chunk_size, chunk_overlap, cfg, page_offsets
             )
-            logger.info(f"Chunked text into {len(result)} chunks using markdown chunker")
+            logger.info(f"Chunked text into {len(result)} chunks using markdown chef + {chunker_type} chunker")
             return result
 
+        if effective_chef == "table":
+            # Pure table text (e.g. converted from CSV/XLS): use TableChunker directly.
+            table_chunker = TableChunker(chunk_size=chunk_size)
+            chonkie_chunks = table_chunker.chunk(text)
+            indexed_spans = _assign_indexed_text_spans(text, chonkie_chunks)
+            encoding = tiktoken.get_encoding("cl100k_base")
+            po = page_offsets or []
+            result = []
+            for idx, chonkie_chunk in enumerate(chonkie_chunks):
+                ctext = chonkie_chunk.text
+                token_count = len(encoding.encode(ctext))
+                start, end = indexed_spans[idx]
+                ps, pe = find_page_range_for_span(start, end, po)
+                result.append(Chunk(ctext, idx, token_count, start, end, page_start=ps, page_end=pe, chunk_type="table"))
+            logger.info(f"Chunked text into {len(result)} chunks using table chef")
+            return result
+
+        # --- Plain chunker paths (chef_type in ("text", "none")) ---
         chunkers_with_overlap = {
             "token": TokenChunker,
             "word": TokenChunker,
@@ -414,9 +450,9 @@ async def chunk_text(
             "recursive": RecursiveChunker,
         }
 
-        if chunker_type in chunkers_with_overlap:
-            ChunkerClass = chunkers_with_overlap[chunker_type]
-            if chunker_type == "word":
+        if effective_chunker_type in chunkers_with_overlap:
+            ChunkerClass = chunkers_with_overlap[effective_chunker_type]
+            if effective_chunker_type == "word":
                 chunker = ChunkerClass(
                     tokenizer="word",
                     chunk_size=chunk_size,
@@ -429,8 +465,8 @@ async def chunk_text(
                 )
             chonkie_chunks = chunker.chunk(text)
 
-        elif chunker_type in chunkers_without_overlap:
-            ChunkerClass = chunkers_without_overlap[chunker_type]
+        elif effective_chunker_type in chunkers_without_overlap:
+            ChunkerClass = chunkers_without_overlap[effective_chunker_type]
             chunker = ChunkerClass(chunk_size=chunk_size)
             chonkie_chunks = chunker.chunk(text)
             if chunk_overlap > 0:
@@ -449,7 +485,7 @@ async def chunk_text(
         else:
             raise ValueError(
                 f"Unknown chunker_type: {chunker_type}. Supported types: "
-                f"{list(chunkers_with_overlap.keys()) + list(chunkers_without_overlap.keys()) + ['markdown']}"
+                f"{list(chunkers_with_overlap.keys()) + list(chunkers_without_overlap.keys())}"
             )
 
         indexed_spans = _assign_indexed_text_spans(text, chonkie_chunks)
@@ -463,7 +499,7 @@ async def chunk_text(
             ps, pe = find_page_range_for_span(start, end, po)
             result.append(Chunk(ctext, idx, token_count, start, end, page_start=ps, page_end=pe))
 
-        logger.info(f"Chunked text into {len(result)} chunks using {chunker_type} chunker")
+        logger.info(f"Chunked text into {len(result)} chunks using {effective_chunker_type} chunker")
         return result
 
     except Exception as e:
@@ -704,8 +740,70 @@ async def get_extracted_indexing_text(
                     raw = original_file["blob"].decode("latin-1")
                 return ExtractedIndexingText(text=preprocess_markdown(raw, cfg), page_offsets=[])
 
+        if ext in {".csv", ".xls", ".xlsx"}:
+            original_file = await ad.common.get_file_async(analytiq_client, doc["mongo_file_name"])
+            if original_file and original_file["blob"]:
+                table_md = _convert_tabular_file_to_markdown(ext, original_file["blob"], document_id)
+                if table_md:
+                    return ExtractedIndexingText(text=table_md, page_offsets=[])
+
     logger.info(f"{document_id}: No extractable text. Skipping indexing.")
     return None
+
+
+def _convert_tabular_file_to_markdown(ext: str, blob: bytes, document_id: str) -> Optional[str]:
+    """Convert a CSV / XLS / XLSX binary blob to a markdown table string for indexing."""
+    try:
+        import io
+        import pandas as pd
+
+        if ext == ".csv":
+            try:
+                df_map = {"Sheet1": pd.read_csv(io.BytesIO(blob))}
+            except Exception as e:
+                logger.warning(f"{document_id}: Failed to parse CSV: {e}")
+                return None
+        else:
+            # .xls / .xlsx — may contain multiple sheets
+            try:
+                engine = "openpyxl" if ext == ".xlsx" else None
+                df_map = pd.read_excel(io.BytesIO(blob), sheet_name=None, engine=engine)
+            except ImportError as e:
+                logger.warning(
+                    f"{document_id}: Cannot read {ext}: missing dependency ({e}). "
+                    "Install openpyxl (for .xlsx) or xlrd (for .xls)."
+                )
+                return None
+            except Exception as e:
+                logger.warning(f"{document_id}: Failed to parse {ext}: {e}")
+                return None
+
+        parts: List[str] = []
+        for sheet_name, df in df_map.items():
+            if df.empty:
+                continue
+            # Drop columns/rows that are entirely NaN
+            df = df.dropna(how="all", axis=0).dropna(how="all", axis=1)
+            if df.empty:
+                continue
+            if len(df_map) > 1:
+                parts.append(f"## {sheet_name}\n")
+            try:
+                parts.append(df.to_markdown(index=False))
+            except ImportError:
+                # tabulate not installed — fall back to CSV-style rendering
+                parts.append(df.to_csv(index=False))
+            parts.append("\n\n")
+
+        result = "".join(parts).strip()
+        if not result:
+            return None
+        logger.info(f"{document_id}: Converted {ext} ({len(df_map)} sheet(s)) to markdown table ({len(result)} chars)")
+        return result
+
+    except Exception as e:
+        logger.warning(f"{document_id}: Unexpected error converting {ext} to markdown: {e}")
+        return None
 
 async def index_document_in_kb(
     analytiq_client,
