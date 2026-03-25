@@ -898,8 +898,6 @@ export interface AWSConfig {
 
 // Knowledge Base types
 export type ChunkerType = "token" | "word" | "sentence" | "recursive";
-/** Document parser selection. "auto" infers from file extension and prefer_markdown. */
-export type ChefType = "auto" | "markdown" | "table" | "text" | "none";
 export type KBStatus = "indexing" | "active" | "error";
 
 export type ChunkingPreset = "plain" | "structured_doc";
@@ -911,8 +909,6 @@ export interface ChunkingPreprocessConfig {
   strip_patterns: string[];
   heading_split_depth: number;
   prepend_heading_path: boolean;
-  /** Document parser selection. Defaults to "auto" (infer from file extension + prefer_markdown). */
-  chef_type?: ChefType;
 }
 
 /** Baseline preprocessing for a named preset (matches server `chunking_preprocess_for_preset`). */
@@ -934,7 +930,6 @@ export function chunkingPreprocessForPreset(preset: ChunkingPreset): ChunkingPre
     strip_patterns: [],
     heading_split_depth: 3,
     prepend_heading_path: true,
-    chef_type: "auto",
   };
 }
 

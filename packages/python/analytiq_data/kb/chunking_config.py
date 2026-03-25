@@ -8,15 +8,11 @@ Values are stored on the KB document and drive ``get_extracted_indexing_text`` /
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, Dict, List, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
 ChunkingPresetName = Literal["plain", "structured_doc"]
-
-# How to select the document parser (chef) that turns raw file bytes / text into
-# typed segments (prose, table, code) before the chunker splits them.
-ChefType = Literal["auto", "markdown", "table", "text", "none"]
 
 
 class ChunkingPreprocessConfig(BaseModel):
@@ -45,17 +41,6 @@ class ChunkingPreprocessConfig(BaseModel):
     prepend_heading_path: bool = Field(
         default=False,
         description="Prepend nearest heading breadcrumb to embedding input only (not chunk_text)",
-    )
-    chef_type: ChefType = Field(
-        default="auto",
-        description=(
-            "Document parser (chef) selection. "
-            "'auto' infers from file extension and prefer_markdown: .md/.ocr-markdown → MarkdownChef, "
-            ".csv/.xls/.xlsx → TableChef, .txt → plain chunker. "
-            "'markdown' forces MarkdownChef (heading-aware prose + table-aware splits). "
-            "'table' forces TableChunker directly (best for pure table text). "
-            "'text'/'none' bypasses chef — apply the prose chunker directly to the raw text."
-        ),
     )
 
     @field_validator("strip_patterns")
@@ -90,7 +75,6 @@ def chunking_preprocess_for_preset(name: ChunkingPresetName) -> ChunkingPreproce
             strip_patterns=[],
             heading_split_depth=3,
             prepend_heading_path=True,
-            chef_type="auto",
         )
     raise ValueError(f"Unknown chunking preset: {name}")
 

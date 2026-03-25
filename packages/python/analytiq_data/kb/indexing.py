@@ -29,7 +29,6 @@ from .errors import (
     set_kb_status_to_error
 )
 from .chunking_config import (
-    ChefType,
     ChunkingPreprocessConfig,
     chunking_preprocess_from_kb_dict,
     preprocess_markdown,
@@ -366,16 +365,6 @@ def _chunk_markdown_document(
     return result
 
 
-def _effective_chef_type(chunker_type: str, cfg: ChunkingPreprocessConfig) -> ChefType:
-    """Resolve the effective chef from config. ``chunker_type`` is the prose splitter strategy."""
-    chef = cfg.chef_type
-    if chef == "auto":
-        # "auto" defaults to markdown chef (handles prose + tables).
-        # File-extension-based routing happens earlier in get_extracted_indexing_text.
-        return "markdown"
-    return chef
-
-
 async def chunk_text(
     text: str,
     chunker_type: str,
@@ -388,15 +377,10 @@ async def chunk_text(
     """
     Chunk text using Chonkie.
 
-    Args:
-        text: The text to chunk
-        chunker_type: Prose chunker strategy ("token", "word", "sentence", "recursive").
-            Chef selection (MarkdownChef, TableChunker, etc.) is controlled by
-            chef_type in ChunkingPreprocessConfig, not by this parameter.
-        chunk_size: Target tokens per chunk
-        chunk_overlap: Overlap tokens between chunks
-        preprocess_cfg: Preprocessing config (heading depth, chef_type, …); defaults if omitted
-        page_offsets: Optional page map from extraction (``page``, ``start``, ``end``) for metadata
+    ``chunker_type="recursive"`` routes through MarkdownChef (heading-aware prose +
+    table-aware splits via TableChunker). All other types ("token", "word", "sentence")
+    apply the chunker directly to the raw text. Chef selection is internal to this
+    function and not user-configurable.
     """
     if not CHONKIE_AVAILABLE:
         raise RuntimeError("Chonkie is not available. Please install chonkie package.")
@@ -411,82 +395,35 @@ async def chunk_text(
         )
 
     cfg = preprocess_cfg or ChunkingPreprocessConfig()
-    effective_chef = _effective_chef_type(chunker_type, cfg)
-    effective_chunker_type = chunker_type
 
     try:
-        # --- Chef-driven paths ---
-        if effective_chef == "markdown":
+        # "recursive" uses MarkdownChef: heading-aware prose splits + TableChunker for tables.
+        if chunker_type == "recursive":
             result = _chunk_markdown_document(
                 text, chunk_size, chunk_overlap, cfg, page_offsets
             )
-            logger.info(f"Chunked text into {len(result)} chunks using markdown chef + {chunker_type} chunker")
+            logger.info(f"Chunked text into {len(result)} chunks using recursive+markdown chunker")
             return result
 
-        if effective_chef == "table":
-            # Pure table text (e.g. converted from CSV/XLS): use TableChunker directly.
-            table_chunker = TableChunker(chunk_size=chunk_size)
-            chonkie_chunks = table_chunker.chunk(text)
-            indexed_spans = _assign_indexed_text_spans(text, chonkie_chunks)
-            encoding = tiktoken.get_encoding("cl100k_base")
-            po = page_offsets or []
-            result = []
-            for idx, chonkie_chunk in enumerate(chonkie_chunks):
-                ctext = chonkie_chunk.text
-                token_count = len(encoding.encode(ctext))
-                start, end = indexed_spans[idx]
-                ps, pe = find_page_range_for_span(start, end, po)
-                result.append(Chunk(ctext, idx, token_count, start, end, page_start=ps, page_end=pe, chunk_type="table"))
-            logger.info(f"Chunked text into {len(result)} chunks using table chef")
-            return result
-
-        # --- Plain chunker paths (chef_type in ("text", "none")) ---
-        chunkers_with_overlap = {
+        # token / word / sentence: apply chunker directly to raw text.
+        chunkers_with_overlap: Dict[str, Any] = {
             "token": TokenChunker,
             "word": TokenChunker,
             "sentence": SentenceChunker,
         }
-        chunkers_without_overlap = {
-            "recursive": RecursiveChunker,
-        }
 
-        if effective_chunker_type in chunkers_with_overlap:
-            ChunkerClass = chunkers_with_overlap[effective_chunker_type]
-            if effective_chunker_type == "word":
-                chunker = ChunkerClass(
-                    tokenizer="word",
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap,
-                )
-            else:
-                chunker = ChunkerClass(
-                    chunk_size=chunk_size,
-                    chunk_overlap=chunk_overlap,
-                )
-            chonkie_chunks = chunker.chunk(text)
-
-        elif effective_chunker_type in chunkers_without_overlap:
-            ChunkerClass = chunkers_without_overlap[effective_chunker_type]
-            chunker = ChunkerClass(chunk_size=chunk_size)
-            chonkie_chunks = chunker.chunk(text)
-            if chunk_overlap > 0:
-                refinery = OverlapRefinery(
-                    context_size=chunk_overlap,
-                    mode="token",
-                )
-                with warnings.catch_warnings():
-                    warnings.filterwarnings(
-                        "ignore",
-                        message=".*Context size is greater than the chunk size.*",
-                        category=UserWarning,
-                        module="chonkie.refinery.overlap",
-                    )
-                    chonkie_chunks = refinery.refine(chonkie_chunks)
-        else:
+        if chunker_type not in chunkers_with_overlap:
             raise ValueError(
                 f"Unknown chunker_type: {chunker_type}. Supported types: "
-                f"{list(chunkers_with_overlap.keys()) + list(chunkers_without_overlap.keys())}"
+                f"{['recursive'] + list(chunkers_with_overlap.keys())}"
             )
+
+        ChunkerClass = chunkers_with_overlap[chunker_type]
+        if chunker_type == "word":
+            chunker = ChunkerClass(tokenizer="word", chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        else:
+            chunker = ChunkerClass(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+        chonkie_chunks = chunker.chunk(text)
 
         indexed_spans = _assign_indexed_text_spans(text, chonkie_chunks)
         encoding = tiktoken.get_encoding("cl100k_base")
@@ -499,7 +436,7 @@ async def chunk_text(
             ps, pe = find_page_range_for_span(start, end, po)
             result.append(Chunk(ctext, idx, token_count, start, end, page_start=ps, page_end=pe))
 
-        logger.info(f"Chunked text into {len(result)} chunks using {effective_chunker_type} chunker")
+        logger.info(f"Chunked text into {len(result)} chunks using {chunker_type} chunker")
         return result
 
     except Exception as e:
