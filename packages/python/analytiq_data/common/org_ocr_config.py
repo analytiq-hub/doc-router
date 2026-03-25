@@ -28,10 +28,13 @@ def textract_spu_cost(feature_types: list[str]) -> int:
     """
     SPUs to charge for a successful Textract AnalyzeDocument run.
 
-    2 SPUs when TABLES or FORMS is requested (higher Textract work); otherwise 1.
+    4 SPUs when FORMS is requested (highest Textract cost, applies whether or not
+    TABLES is also enabled); 2 SPUs when TABLES only is requested; otherwise 1.
     """
     fts = set(feature_types)
-    if "TABLES" in fts or "FORMS" in fts:
+    if "FORMS" in fts:
+        return 4
+    if "TABLES" in fts:
         return 2
     return 1
 
