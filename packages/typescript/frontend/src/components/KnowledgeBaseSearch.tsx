@@ -359,8 +359,27 @@ const KnowledgeBaseSearch: React.FC<KnowledgeBaseSearchProps> = ({ organizationI
                         {result.content}
                       </ReactMarkdown>
                     </div>
-                    <div className="mt-2 text-xs text-gray-500">
-                      Chunk {result.chunk_index} • Document ID: {result.document_id}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      {/* Chunk index */}
+                      <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 ring-1 ring-blue-100">
+                        <span className="text-blue-400">Chunk Index #</span>
+                        {result.chunk_index}
+                      </span>
+                      {/* Char range */}
+                      {result.indexed_text_start != null && result.indexed_text_end != null && (
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium tabular-nums text-slate-600">
+                          {result.indexed_text_start.toLocaleString()}–{result.indexed_text_end.toLocaleString()} chars
+                        </span>
+                      )}
+                      {/* Page range */}
+                      {result.page_start != null && result.page_end != null && result.page_start > 0 && (
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium tabular-nums text-slate-600">
+                          {result.page_start === result.page_end
+                            ? `Page ${result.page_start}`
+                            : `Pages ${result.page_start}–${result.page_end}`}
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-400">{result.document_id}</span>
                     </div>
                   </CardContent>
                 </Card>
