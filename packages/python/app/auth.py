@@ -7,7 +7,7 @@ from bson import ObjectId
 
 # Third-party imports
 from fastapi import (
-    FastAPI, HTTPException, Depends, Security, Request
+    FastAPI, HTTPException, Depends, Security, Request, Header
 )
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
@@ -33,8 +33,8 @@ logger = logging.getLogger(__name__)
 NEXTAUTH_SECRET = os.getenv("NEXTAUTH_SECRET")
 ALGORITHM = "HS256"
 
-# Security scheme for JWT authentication
-security = HTTPBearer()
+# Security scheme for JWT authentication (auto_error=False so X-Api-Key can be used instead)
+security = HTTPBearer(auto_error=False)
 
 def get_api_context(path: str) -> tuple[str, Optional[str]]:
     """
@@ -93,68 +93,86 @@ async def get_session_user(credentials: HTTPAuthorizationCredentials = Security(
         )
 
 # Modify get_current_user to validate based on context
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Security(security), request: Request = None):
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    request: Request = None,
+    x_api_key: Optional[str] = Header(None, alias="X-Api-Key"),
+):
     """
     Validate user based on JWT or API token, considering the API context.
     Account APIs only accept account-level tokens.
     Organization APIs only accept org-specific tokens for that organization.
+    Accepts the API token via Authorization: Bearer or X-Api-Key header.
     """
     db = ad.common.get_async_db()
-    token = credentials.credentials
-    
+
+    # Resolve the raw token: prefer Authorization: Bearer, fall back to X-Api-Key
+    if credentials is not None:
+        token = credentials.credentials
+    elif x_api_key is not None:
+        token = x_api_key
+    else:
+        raise HTTPException(status_code=401, detail="No authentication credentials provided")
+
     # Get API context
     context_type, org_id = get_api_context(request.url.path)
-    
-    try:
-        # First, try to validate as JWT using the session user function
-        return await get_session_user(credentials)
-                   
-    except HTTPException:
-        # If JWT validation fails, check if it's an API token
-        encrypted_token = ad.crypto.encrypt_token(token)
-        
-        # Build query based on context
-        token_query = {"token": encrypted_token}
-        
-        if context_type == "account":
-            # For account APIs, only accept account-level tokens
-            token_query["organization_id"] = None
-        elif context_type == "organization" and org_id:
-            # For org APIs, only accept tokens for that specific org
-            token_query["organization_id"] = org_id
-        else:
-            raise HTTPException(status_code=401, detail=f"Invalid API context: '{context_type}'")
-            
-        stored_token = await db.access_tokens.find_one(token_query)
-        
-        if stored_token:
-            # Validate that user_id from stored token exists in database
-            user = await db.users.find_one({"_id": ObjectId(stored_token["user_id"])})
-            if not user:
-                raise HTTPException(status_code=401, detail="User not found in database")
 
-            # Extract organization from URL path
-            path = request.url.path if request else ""
-            org_id = extract_org_id_from_path(path)  # You'd need to implement this
-            
-            # Check if token's organization matches URL organization
-            if org_id and stored_token.get("organization_id") != org_id:
-                raise HTTPException(
-                    status_code=403,
-                    detail="Token is not valid for this organization"
-                )
-                
-            return User(
-                user_id=stored_token["user_id"],
-                user_name=stored_token["name"],
-                token_type="api"
+    try:
+        # Try JWT first — only possible when credentials (Bearer) are present
+        if credentials is not None:
+            return await get_session_user(credentials)
+    except HTTPException:
+        pass
+
+    # JWT failed or absent — treat token as an API token
+    encrypted_token = ad.crypto.encrypt_token(token)
+
+    # Build query based on context
+    token_query = {"token": encrypted_token}
+
+    if context_type == "account":
+        # For account APIs, only accept account-level tokens
+        token_query["organization_id"] = None
+    elif context_type == "organization" and org_id:
+        # For org APIs, only accept tokens for that specific org
+        token_query["organization_id"] = org_id
+    else:
+        raise HTTPException(status_code=401, detail=f"Invalid API context: '{context_type}'")
+
+    stored_token = await db.access_tokens.find_one(token_query)
+
+    if stored_token:
+        # Validate that user_id from stored token exists in database
+        user = await db.users.find_one({"_id": ObjectId(stored_token["user_id"])})
+        if not user:
+            raise HTTPException(status_code=401, detail="User not found in database")
+
+        # Extract organization from URL path
+        path = request.url.path if request else ""
+        org_id = extract_org_id_from_path(path)
+
+        # Check if token's organization matches URL organization
+        if org_id and stored_token.get("organization_id") != org_id:
+            raise HTTPException(
+                status_code=403,
+                detail="Token is not valid for this organization"
             )
-                
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials: invalid token")
+
+        return User(
+            user_id=stored_token["user_id"],
+            user_name=stored_token["name"],
+            token_type="api"
+        )
+
+    raise HTTPException(status_code=401, detail="Invalid authentication credentials: invalid token")
 
 # Add this helper function to check admin status
-async def get_admin_user(credentials: HTTPAuthorizationCredentials = Security(security), request: Request = None):
-    user = await get_current_user(credentials, request)
+async def get_admin_user(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+    request: Request = None,
+    x_api_key: Optional[str] = Header(None, alias="X-Api-Key"),
+):
+    user = await get_current_user(credentials, request, x_api_key)
 
     if not await is_system_admin(user.user_id):
         raise HTTPException(

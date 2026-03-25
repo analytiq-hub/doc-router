@@ -65,11 +65,15 @@ def test_apply_rejects_empty_feature_types():
 def test_textract_and_spu_costs():
     assert textract_spu_cost(["LAYOUT"]) == 1
     assert textract_spu_cost(["TABLES"]) == 2
-    assert textract_spu_cost(["FORMS"]) == 2
+    assert textract_spu_cost(["FORMS"]) == 4
+    assert textract_spu_cost(["FORMS", "TABLES"]) == 4
+    assert textract_spu_cost(["LAYOUT", "FORMS", "TABLES"]) == 4
     base = merge_org_ocr_config(None)
     assert max_reserved_spu_for_ocr_config(base) == 1
     tables = merge_org_ocr_config({"textract": {"feature_types": ["LAYOUT", "TABLES"]}})
     assert max_reserved_spu_for_ocr_config(tables) == 2
+    forms = merge_org_ocr_config({"textract": {"feature_types": ["LAYOUT", "FORMS"]}})
+    assert max_reserved_spu_for_ocr_config(forms) == 4
 
 
 def test_apply_update_textract():
