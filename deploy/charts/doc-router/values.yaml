@@ -37,3 +37,4 @@ config:
   nWorkers: "4"
   appBucketName: ""                     # AWS S3 bucket for document storage
   region: ""                            # AWS region
+  corsOriginsExtra: ""                  # comma-separated extra CORS origins, e.g. https://make.powerautomate.com

@@ -13,3 +13,4 @@ data:
   N_WORKERS: {{ .Values.config.nWorkers | quote }}
   AWS_S3_BUCKET_NAME: {{ .Values.config.appBucketName | quote }}
   AWS_REGION: {{ .Values.config.region | quote }}
+  CORS_ORIGINS_EXTRA: {{ .Values.config.corsOriginsExtra | quote }}

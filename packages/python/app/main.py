@@ -130,7 +130,8 @@ CORS_ORIGINS_DEF = [
 if NEXTAUTH_URL:
     CORS_ORIGINS_DEF.append(NEXTAUTH_URL)
 
-cors_origins = os.getenv("CORS_ORIGINS", ",".join(CORS_ORIGINS_DEF)).split(",")
+cors_origins_extra = [o for o in os.getenv("CORS_ORIGINS_EXTRA", "").split(",") if o]
+cors_origins = list(CORS_ORIGINS_DEF) + cors_origins_extra
 logger.info(f"CORS allowed origins: {cors_origins}")
 
 app.add_middleware(
