@@ -1,0 +1,1651 @@
+swagger: '2.0'
+info:
+  title: DocRouter
+  description: >
+    Smart Document Router — upload documents, run OCR and LLM extraction, manage
+    prompts/schemas/knowledge-bases, and configure webhooks. Use Bearer token
+    authentication (create a token under Settings → Developer).
+  version: '1.0'
+  contact:
+    name: DocRouter Support
+host: app.docrouter.ai
+basePath: /fastapi
+schemes:
+  - https
+x-ms-parameterized-host:
+  hostTemplate: https://{host}{basePath}
+  useDefaultUrl: true
+  parameters:
+    - name: host
+      in: path
+      required: true
+      type: string
+      default: app.docrouter.ai
+      x-ms-parameter-location: connection
+      x-ms-summary: DocRouter Host
+      description: >
+        Hostname of your DocRouter instance. Use app.docrouter.ai for the cloud
+        service, or your own domain for an on-premises deployment.
+    - name: basePath
+      in: path
+      required: true
+      type: string
+      default: /fastapi
+      x-ms-parameter-location: connection
+      x-ms-summary: Base Path
+      description: >-
+        API base path. Default is /fastapi; change only for non-standard
+        on-premises deployments.
+consumes:
+  - application/json
+produces:
+  - application/json
+securityDefinitions:
+  api_key:
+    type: apiKey
+    in: header
+    name: X-Api-Key
+    x-ms-summary: Token
+    description: >-
+      Developer API token from DocRouter (Settings → Developer). Sent as the
+      X-Api-Key header on every request.
+security:
+  - api_key: []
+x-ms-connector-metadata:
+  - propertyName: Website
+    propertyValue: https://docrouter.ai
+  - propertyName: Privacy policy
+    propertyValue: ''
+  - propertyName: Categories
+    propertyValue: AI, Data
+parameters:
+  organization_id:
+    name: organization_id
+    in: path
+    required: true
+    type: string
+    x-ms-parameter-location: connection
+    x-ms-summary: Organization ID
+    description: >-
+      Organization ID for all DocRouter API paths. Stored on the connection and
+      applied automatically to every action (no per-action input).
+  document_id:
+    name: document_id
+    in: path
+    required: true
+    type: string
+    x-ms-summary: Document ID
+  prompt_id:
+    name: prompt_id
+    in: path
+    required: true
+    type: string
+    x-ms-summary: Prompt ID
+    description: >-
+      Prompt ID. For GetPrompt, you may instead supply a revision ID in the
+      format {prompt_id}:{version}.
+  schema_id:
+    name: schema_id
+    in: path
+    required: true
+    type: string
+    x-ms-summary: Schema ID
+    description: >-
+      Schema ID. For GetSchema, you may instead supply a revision ID in the
+      format {schema_id}:{version}.
+  tag_id:
+    name: tag_id
+    in: path
+    required: true
+    type: string
+    x-ms-summary: Tag ID
+  kb_id:
+    name: kb_id
+    in: path
+    required: true
+    type: string
+    x-ms-summary: Knowledge Base ID
+  subscription_id:
+    name: subscription_id
+    in: path
+    required: true
+    type: string
+    x-ms-summary: Subscription ID
+definitions:
+  MessageResponse:
+    type: object
+    properties:
+      message:
+        type: string
+        x-ms-summary: Message
+  OkResponse:
+    type: object
+    properties:
+      status:
+        type: string
+        x-ms-summary: Status
+  DocumentUpload:
+    type: object
+    required:
+      - document_name
+      - content
+    properties:
+      document_name:
+        type: string
+        x-ms-summary: File Name
+        description: Original file name including extension (e.g. invoice.pdf).
+      content:
+        type: string
+        format: byte
+        x-ms-summary: File Content (Base64)
+        description: Base64-encoded file content.
+      tag_ids:
+        type: array
+        items:
+          type: string
+        x-ms-summary: Tag IDs
+        x-ms-visibility: advanced
+      metadata:
+        type: object
+        x-ms-summary: Metadata
+        x-ms-visibility: advanced
+  DocumentsUpload:
+    type: object
+    required:
+      - documents
+    properties:
+      documents:
+        type: array
+        items:
+          $ref: '#/definitions/DocumentUpload'
+        x-ms-summary: Documents
+  DocumentUpdate:
+    type: object
+    properties:
+      document_name:
+        type: string
+        x-ms-summary: File Name
+      tag_ids:
+        type: array
+        items:
+          type: string
+        x-ms-summary: Tag IDs
+      metadata:
+        type: object
+        x-ms-summary: Metadata
+  Document:
+    type: object
+    properties:
+      document_id:
+        type: string
+        x-ms-summary: Document ID
+      document_name:
+        type: string
+        x-ms-summary: File Name
+      state:
+        type: string
+        x-ms-summary: Processing State
+        description: uploaded | ocr_processing | ocr_completed | llm_completed
+      organization_id:
+        type: string
+        x-ms-summary: Organization ID
+      tag_ids:
+        type: array
+        items:
+          type: string
+        x-ms-summary: Tag IDs
+      metadata:
+        type: object
+        x-ms-summary: Metadata
+      created_at:
+        type: string
+        format: date-time
+        x-ms-summary: Created At
+      updated_at:
+        type: string
+        format: date-time
+        x-ms-summary: Updated At
+  ListDocumentsResponse:
+    type: object
+    properties:
+      documents:
+        type: array
+        items:
+          $ref: '#/definitions/Document'
+        x-ms-summary: Documents
+      total:
+        type: integer
+        x-ms-summary: Total
+  OCRRunResponse:
+    type: object
+    properties:
+      status:
+        type: string
+        x-ms-summary: Status
+      document_id:
+        type: string
+        x-ms-summary: Document ID
+  OCRMetadataResponse:
+    type: object
+    properties:
+      n_pages:
+        type: integer
+        x-ms-summary: Page Count
+      ocr_date:
+        type: string
+        format: date-time
+        x-ms-summary: OCR Date
+  LLMRunResponse:
+    type: object
+    properties:
+      status:
+        type: string
+        x-ms-summary: Status
+      result:
+        type: object
+        x-ms-summary: Result
+  LLMResult:
+    type: object
+    properties:
+      document_id:
+        type: string
+        x-ms-summary: Document ID
+      prompt_revid:
+        type: string
+        x-ms-summary: Prompt Revision ID
+      llm_result:
+        type: object
+        x-ms-summary: Extracted Data
+      is_verified:
+        type: boolean
+        x-ms-summary: Verified
+      created_at:
+        type: string
+        format: date-time
+        x-ms-summary: Created At
+      updated_at:
+        type: string
+        format: date-time
+        x-ms-summary: Updated At
+  UpdateLLMResultRequest:
+    type: object
+    properties:
+      updated_llm_result:
+        type: object
+        x-ms-summary: Updated Result
+      is_verified:
+        type: boolean
+        x-ms-summary: Mark as Verified
+  ListLLMModelsResponse:
+    type: object
+    properties:
+      models:
+        type: array
+        items:
+          type: string
+        x-ms-summary: Available Models
+  PromptConfig:
+    type: object
+    required:
+      - name
+      - content
+    properties:
+      name:
+        type: string
+        x-ms-summary: Name
+      content:
+        type: string
+        x-ms-summary: Prompt Text
+      model:
+        type: string
+        x-ms-summary: LLM Model
+        x-ms-visibility: advanced
+      schema_id:
+        type: string
+        x-ms-summary: Schema ID
+        x-ms-visibility: advanced
+      tag_ids:
+        type: array
+        items:
+          type: string
+        x-ms-summary: Tag IDs
+        x-ms-visibility: advanced
+      kb_id:
+        type: string
+        x-ms-summary: Knowledge Base ID
+        x-ms-visibility: advanced
+  Prompt:
+    type: object
+    properties:
+      prompt_id:
+        type: string
+        x-ms-summary: Prompt ID
+      prompt_revid:
+        type: string
+        x-ms-summary: Prompt Revision ID
+        description: 'Format: {prompt_id}:{version}'
+      name:
+        type: string
+        x-ms-summary: Name
+      content:
+        type: string
+        x-ms-summary: Prompt Text
+      model:
+        type: string
+        x-ms-summary: LLM Model
+      version:
+        type: integer
+        x-ms-summary: Version
+      created_at:
+        type: string
+        format: date-time
+        x-ms-summary: Created At
+  ListPromptsResponse:
+    type: object
+    properties:
+      prompts:
+        type: array
+        items:
+          $ref: '#/definitions/Prompt'
+        x-ms-summary: Prompts
+      total:
+        type: integer
+        x-ms-summary: Total
+  TagConfig:
+    type: object
+    required:
+      - name
+    properties:
+      name:
+        type: string
+        x-ms-summary: Name
+      color:
+        type: string
+        x-ms-summary: Color
+        x-ms-visibility: advanced
+      description:
+        type: string
+        x-ms-summary: Description
+        x-ms-visibility: advanced
+  Tag:
+    type: object
+    properties:
+      tag_id:
+        type: string
+        x-ms-summary: Tag ID
+      name:
+        type: string
+        x-ms-summary: Name
+      color:
+        type: string
+        x-ms-summary: Color
+      description:
+        type: string
+        x-ms-summary: Description
+  ListTagsResponse:
+    type: object
+    properties:
+      tags:
+        type: array
+        items:
+          $ref: '#/definitions/Tag'
+        x-ms-summary: Tags
+      total:
+        type: integer
+        x-ms-summary: Total
+  SchemaConfig:
+    type: object
+    required:
+      - name
+      - response_format
+    properties:
+      name:
+        type: string
+        x-ms-summary: Name
+      response_format:
+        type: object
+        x-ms-summary: JSON Schema Definition
+  Schema:
+    type: object
+    properties:
+      schema_id:
+        type: string
+        x-ms-summary: Schema ID
+      schema_revid:
+        type: string
+        x-ms-summary: Schema Revision ID
+        description: 'Format: {schema_id}:{version}'
+      name:
+        type: string
+        x-ms-summary: Name
+      response_format:
+        type: object
+        x-ms-summary: JSON Schema Definition
+      version:
+        type: integer
+        x-ms-summary: Version
+      created_at:
+        type: string
+        format: date-time
+        x-ms-summary: Created At
+  ListSchemasResponse:
+    type: object
+    properties:
+      schemas:
+        type: array
+        items:
+          $ref: '#/definitions/Schema'
+        x-ms-summary: Schemas
+      total:
+        type: integer
+        x-ms-summary: Total
+  SchemaValidateRequest:
+    type: object
+    required:
+      - data
+    properties:
+      data:
+        type: object
+        x-ms-summary: Data to Validate
+  SchemaValidateResponse:
+    type: object
+    properties:
+      valid:
+        type: boolean
+        x-ms-summary: Is Valid
+      errors:
+        type: array
+        items:
+          type: string
+        x-ms-summary: Validation Errors
+  KnowledgeBaseConfig:
+    type: object
+    required:
+      - name
+    properties:
+      name:
+        type: string
+        x-ms-summary: Name
+      description:
+        type: string
+        x-ms-summary: Description
+      system_prompt:
+        type: string
+        x-ms-summary: System Prompt
+        x-ms-visibility: advanced
+      tag_ids:
+        type: array
+        items:
+          type: string
+        x-ms-summary: Tag IDs
+        x-ms-visibility: advanced
+      embedding_model:
+        type: string
+        x-ms-summary: Embedding Model
+        x-ms-visibility: advanced
+  KnowledgeBase:
+    type: object
+    properties:
+      kb_id:
+        type: string
+        x-ms-summary: Knowledge Base ID
+      name:
+        type: string
+        x-ms-summary: Name
+      description:
+        type: string
+        x-ms-summary: Description
+      created_at:
+        type: string
+        format: date-time
+        x-ms-summary: Created At
+  ListKnowledgeBasesResponse:
+    type: object
+    properties:
+      knowledge_bases:
+        type: array
+        items:
+          $ref: '#/definitions/KnowledgeBase'
+        x-ms-summary: Knowledge Bases
+      total:
+        type: integer
+        x-ms-summary: Total
+  KBSearchRequest:
+    type: object
+    required:
+      - query
+    properties:
+      query:
+        type: string
+        x-ms-summary: Search Query
+      top_k:
+        type: integer
+        x-ms-summary: Max Results
+        default: 5
+        x-ms-visibility: advanced
+      metadata_filter:
+        type: object
+        x-ms-summary: Metadata Filter
+        x-ms-visibility: advanced
+  KBSearchResponse:
+    type: object
+    properties:
+      results:
+        type: array
+        items:
+          type: object
+        x-ms-summary: Search Results
+      total:
+        type: integer
+        x-ms-summary: Total Results
+  WebhookSubscribeRequest:
+    type: object
+    required:
+      - callbackUrl
+    properties:
+      callbackUrl:
+        type: string
+        title: Callback URL
+        x-ms-notification-url: true
+        x-ms-visibility: internal
+      events:
+        type: array
+        items:
+          type: string
+          enum:
+            - document.uploaded
+            - document.error
+            - llm.completed
+            - llm.error
+        x-ms-summary: Events
+        description: Events to subscribe to. Leave empty to receive all events.
+        x-ms-visibility: advanced
+  WebhookSubscribeResponse:
+    type: object
+    properties:
+      subscription_id:
+        type: string
+        x-ms-summary: Subscription ID
+  WebhookEventPayload:
+    type: object
+    description: Payload DocRouter POSTs to the callback URL when an event fires.
+    properties:
+      event_id:
+        type: string
+        x-ms-summary: Event ID
+        description: Unique identifier for this event delivery.
+      event_type:
+        type: string
+        x-ms-summary: Event Type
+        enum:
+          - document.uploaded
+          - document.error
+          - llm.completed
+          - llm.error
+          - webhook.test
+      timestamp:
+        type: integer
+        x-ms-summary: Timestamp
+        description: Unix timestamp (seconds) when the event was fired.
+      organization_id:
+        type: string
+        x-ms-summary: Organization ID
+      document:
+        type: object
+        x-ms-summary: Document
+        description: Present for all document and LLM events.
+        properties:
+          document_id:
+            type: string
+            x-ms-summary: Document ID
+          document_name:
+            type: string
+            x-ms-summary: File Name
+          tag_ids:
+            type: array
+            items:
+              type: string
+            x-ms-summary: Tag IDs
+          metadata:
+            type: object
+            x-ms-summary: Metadata
+      prompt:
+        type: object
+        x-ms-summary: Prompt
+        description: Present for llm.completed and llm.error events.
+        properties:
+          prompt_id:
+            type: string
+            x-ms-summary: Prompt ID
+          prompt_revid:
+            type: string
+            x-ms-summary: Prompt Revision ID
+          prompt_version:
+            type: integer
+            x-ms-summary: Prompt Version
+      llm_output:
+        type: object
+        x-ms-summary: LLM Output
+        description: Present for llm.completed events. Contains the extracted data.
+      error:
+        type: object
+        x-ms-summary: Error
+        description: Present for document.error and llm.error events.
+        properties:
+          stage:
+            type: string
+            x-ms-summary: Stage
+            description: ocr | llm
+          message:
+            type: string
+            x-ms-summary: Error Message
+tags:
+  - name: Triggers
+    description: Power Automate trigger — fires a flow when a DocRouter event occurs.
+  - name: Documents
+    description: Upload, retrieve, update, and delete documents.
+  - name: OCR
+    description: Run OCR and download text, markdown, or HTML output.
+  - name: LLM
+    description: Run LLM extraction, retrieve and update results, list models.
+  - name: Prompts
+    description: Manage prompts that drive LLM extraction.
+  - name: Tags
+    description: Manage tags used to categorize documents and route them to prompts.
+  - name: Schemas
+    description: Manage JSON schemas that enforce structured LLM output.
+  - name: Knowledge Bases
+    description: Manage knowledge bases for semantic search and RAG-augmented prompts.
+paths:
+  /v0/orgs/{organization_id}/documents:
+    get:
+      operationId: ListDocuments
+      summary: List Documents
+      description: >-
+        Returns a paginated list of documents in the organization, optionally
+        filtered by tag or name.
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - name: skip
+          in: query
+          type: integer
+          default: 0
+          x-ms-summary: Skip
+          x-ms-visibility: advanced
+        - name: limit
+          in: query
+          type: integer
+          default: 10
+          x-ms-summary: Limit
+          x-ms-visibility: advanced
+        - name: tag_ids
+          in: query
+          type: string
+          x-ms-summary: Filter by Tag IDs (comma-separated)
+          x-ms-visibility: advanced
+        - name: name_search
+          in: query
+          type: string
+          x-ms-summary: Search by Name
+          x-ms-visibility: advanced
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/ListDocumentsResponse'
+    post:
+      operationId: UploadDocuments
+      summary: Upload Documents
+      description: >
+        Upload one or more documents. File content must be Base64-encoded. After
+        upload, OCR and LLM processing are queued automatically.
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/DocumentsUpload'
+      responses:
+        '200':
+          description: OK
+          schema:
+            type: object
+            properties:
+              documents:
+                type: array
+                items:
+                  $ref: '#/definitions/Document'
+  /v0/orgs/{organization_id}/documents/{document_id}:
+    get:
+      operationId: GetDocument
+      summary: Get Document
+      description: >-
+        Returns metadata and optionally the file content (Base64) for a single
+        document.
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+        - name: include_content
+          in: query
+          type: boolean
+          default: true
+          x-ms-summary: Include File Content
+          x-ms-visibility: advanced
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Document'
+    delete:
+      operationId: DeleteDocument
+      summary: Delete Document
+      description: >-
+        Permanently deletes a document along with its OCR output, LLM results,
+        and file content.
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/MessageResponse'
+    put:
+      operationId: UpdateDocument
+      summary: Update Document Metadata
+      description: >-
+        Updates the document's display name, tag assignments, or custom metadata
+        fields.
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/DocumentUpdate'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/MessageResponse'
+  /v0/orgs/{organization_id}/ocr/run/{document_id}:
+    post:
+      operationId: RunOCR
+      summary: Run OCR on Document
+      description: Triggers OCR (AWS Textract) for a document. Use force=true to re-run.
+      tags:
+        - OCR
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+        - name: force
+          in: query
+          type: boolean
+          default: true
+          x-ms-summary: Force Re-run
+          x-ms-visibility: advanced
+        - name: ocr_only
+          in: query
+          type: boolean
+          default: false
+          x-ms-summary: OCR Only (skip LLM)
+          x-ms-visibility: advanced
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/OCRRunResponse'
+  /v0/orgs/{organization_id}/ocr/download/text/{document_id}:
+    get:
+      operationId: GetOCRText
+      summary: Get OCR Text
+      description: Returns the plain-text OCR output for a document.
+      tags:
+        - OCR
+      x-ms-visibility: advanced
+      produces:
+        - text/plain
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+        - name: page_num
+          in: query
+          type: integer
+          x-ms-summary: Page Number (blank = all pages)
+          x-ms-visibility: advanced
+      responses:
+        '200':
+          description: Plain text OCR output
+          schema:
+            type: string
+  /v0/orgs/{organization_id}/ocr/download/metadata/{document_id}:
+    get:
+      operationId: GetOCRMetadata
+      summary: Get OCR Metadata
+      description: Returns page count and OCR date.
+      tags:
+        - OCR
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/OCRMetadataResponse'
+  /v0/orgs/{organization_id}/ocr/export/markdown/{document_id}:
+    get:
+      operationId: ExportOCRMarkdown
+      summary: Export OCR as Markdown
+      description: >-
+        Returns the document's OCR output rendered as Markdown, preserving
+        headings and layout structure.
+      tags:
+        - OCR
+      x-ms-visibility: advanced
+      produces:
+        - text/markdown
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+      responses:
+        '200':
+          description: Markdown
+          schema:
+            type: string
+  /v0/orgs/{organization_id}/ocr/export/html/{document_id}:
+    get:
+      operationId: ExportOCRHtml
+      summary: Export OCR as HTML
+      description: >-
+        Returns the document's OCR output as an HTML page, suitable for
+        embedding or display in a browser.
+      tags:
+        - OCR
+      x-ms-visibility: advanced
+      produces:
+        - text/html
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+      responses:
+        '200':
+          description: HTML
+          schema:
+            type: string
+  /v0/orgs/{organization_id}/llm/run/{document_id}:
+    post:
+      operationId: RunLLM
+      summary: Run LLM Extraction on Document
+      description: Queues LLM processing for a document using the specified prompt.
+      tags:
+        - LLM
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+        - name: prompt_revid
+          in: query
+          type: string
+          default: default
+          x-ms-summary: Prompt Revision ID
+          description: Pass a prompt_revid ({prompt_id}:{version}) or 'default'.
+          x-ms-visibility: advanced
+        - name: force
+          in: query
+          type: boolean
+          default: false
+          x-ms-summary: Force Re-run
+          x-ms-visibility: advanced
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/LLMRunResponse'
+  /v0/orgs/{organization_id}/llm/result/{document_id}:
+    get:
+      operationId: GetLLMResult
+      summary: Get LLM Extraction Result
+      description: >-
+        Returns the structured data extracted by the LLM for a document, along
+        with verification status.
+      tags:
+        - LLM
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+        - name: prompt_revid
+          in: query
+          type: string
+          default: default
+          x-ms-summary: Prompt Revision ID
+          description: Pass a prompt_revid ({prompt_id}:{version}) or 'default'.
+          x-ms-visibility: advanced
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/LLMResult'
+    delete:
+      operationId: DeleteLLMResult
+      summary: Delete LLM Result
+      description: >-
+        Removes the stored LLM extraction result for a document, allowing it to
+        be re-processed.
+      tags:
+        - LLM
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+        - name: prompt_revid
+          in: query
+          type: string
+          required: true
+          x-ms-summary: Prompt Revision ID
+          description: 'Format: {prompt_id}:{version}'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/OkResponse'
+    put:
+      operationId: UpdateLLMResult
+      summary: Update / Verify LLM Result
+      description: >-
+        Allows human reviewers to correct extracted data and mark it as
+        verified.
+      tags:
+        - LLM
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+        - name: prompt_revid
+          in: query
+          type: string
+          required: true
+          x-ms-summary: Prompt Revision ID
+          description: 'Format: {prompt_id}:{version}'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/UpdateLLMResultRequest'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/LLMResult'
+  /v0/orgs/{organization_id}/llm/results/{document_id}/download:
+    get:
+      operationId: DownloadLLMResult
+      summary: Download LLM Result as JSON
+      description: >-
+        Downloads the LLM extraction result as a JSON file attachment, useful
+        for archiving or passing to downstream systems.
+      tags:
+        - LLM
+      x-ms-visibility: advanced
+      produces:
+        - application/json
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+      responses:
+        '200':
+          description: JSON file download
+          schema:
+            type: object
+  /v0/orgs/{organization_id}/llm/models:
+    get:
+      operationId: ListOrgLLMModels
+      summary: List Available LLM Models
+      description: >-
+        Returns the LLM models enabled for this organization, for use in prompt
+        configuration or direct LLM calls.
+      tags:
+        - LLM
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - name: chat_only
+          in: query
+          type: boolean
+          default: false
+          x-ms-summary: Chat Models Only
+          x-ms-visibility: advanced
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/ListLLMModelsResponse'
+  /v0/orgs/{organization_id}/prompts:
+    get:
+      operationId: ListPrompts
+      summary: List Prompts
+      description: >-
+        Returns all prompts in the organization. Each prompt drives LLM
+        extraction for documents matching its assigned tags.
+      tags:
+        - Prompts
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - name: name_search
+          in: query
+          type: string
+          x-ms-summary: Search by Name
+          x-ms-visibility: advanced
+        - name: skip
+          in: query
+          type: integer
+          default: 0
+          x-ms-summary: Skip
+          x-ms-visibility: advanced
+        - name: limit
+          in: query
+          type: integer
+          default: 10
+          x-ms-summary: Limit
+          x-ms-visibility: advanced
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/ListPromptsResponse'
+    post:
+      operationId: CreatePrompt
+      summary: Create Prompt
+      description: >-
+        Creates a new prompt for LLM-based data extraction. Optionally link a
+        schema to enforce structured output.
+      tags:
+        - Prompts
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/PromptConfig'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Prompt'
+  /v0/orgs/{organization_id}/prompts/{prompt_id}:
+    get:
+      operationId: GetPromptByRevId
+      summary: Get Prompt by Revision ID
+      description: >
+        Fetch a specific prompt version. Supply a revision ID in the format
+        {prompt_id}:{version} (e.g. 64a1b2c3:3). To get the latest version, pass
+        just the prompt_id.
+      tags:
+        - Prompts
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - name: prompt_id
+          in: path
+          required: true
+          type: string
+          x-ms-summary: Prompt Revision ID
+          description: >-
+            Revision ID format: {prompt_id}:{version}. Pass prompt_id alone for
+            latest.
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Prompt'
+    delete:
+      operationId: DeletePrompt
+      summary: Delete Prompt (by Prompt ID)
+      description: >-
+        Permanently deletes the prompt and all its versions. Supply the
+        prompt_id (not a revid).
+      tags:
+        - Prompts
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/prompt_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/MessageResponse'
+    put:
+      operationId: UpdatePrompt
+      summary: Update Prompt (by Prompt ID)
+      description: Creates a new version of the prompt. Supply the prompt_id (not a revid).
+      tags:
+        - Prompts
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/prompt_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/PromptConfig'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Prompt'
+  /v0/orgs/{organization_id}/prompts/{prompt_id}/versions:
+    get:
+      operationId: ListPromptVersions
+      summary: List Prompt Versions
+      description: >-
+        Returns the full version history of a prompt. Each edit creates a new
+        version; older revids remain usable.
+      tags:
+        - Prompts
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/prompt_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/ListPromptsResponse'
+  /v0/orgs/{organization_id}/tags:
+    get:
+      operationId: ListTags
+      summary: List Tags
+      description: >-
+        Returns all tags in the organization. Tags are used to categorize
+        documents and route them to the correct prompts.
+      tags:
+        - Tags
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - name: name_search
+          in: query
+          type: string
+          x-ms-summary: Search by Name
+          x-ms-visibility: advanced
+        - name: skip
+          in: query
+          type: integer
+          default: 0
+          x-ms-summary: Skip
+          x-ms-visibility: advanced
+        - name: limit
+          in: query
+          type: integer
+          default: 10
+          x-ms-summary: Limit
+          x-ms-visibility: advanced
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/ListTagsResponse'
+    post:
+      operationId: CreateTag
+      summary: Create Tag
+      description: >-
+        Creates a new tag for categorizing documents and associating them with
+        prompts or forms.
+      tags:
+        - Tags
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/TagConfig'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Tag'
+  /v0/orgs/{organization_id}/tags/{tag_id}:
+    get:
+      operationId: GetTag
+      summary: Get Tag
+      description: Returns the name, color, and description of a single tag.
+      tags:
+        - Tags
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/tag_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Tag'
+    delete:
+      operationId: DeleteTag
+      summary: Delete Tag
+      description: >-
+        Deletes a tag. Documents that carried the tag are not deleted; the tag
+        association is removed.
+      tags:
+        - Tags
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/tag_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/MessageResponse'
+    put:
+      operationId: UpdateTag
+      summary: Update Tag
+      description: Updates a tag's name, color, or description.
+      tags:
+        - Tags
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/tag_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/TagConfig'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Tag'
+  /v0/orgs/{organization_id}/schemas:
+    get:
+      operationId: ListSchemas
+      summary: List Schemas
+      description: >-
+        Returns all JSON schemas in the organization. Schemas define the
+        structured output shape for LLM extraction prompts.
+      tags:
+        - Schemas
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - name: name_search
+          in: query
+          type: string
+          x-ms-summary: Search by Name
+          x-ms-visibility: advanced
+        - name: skip
+          in: query
+          type: integer
+          default: 0
+          x-ms-summary: Skip
+          x-ms-visibility: advanced
+        - name: limit
+          in: query
+          type: integer
+          default: 10
+          x-ms-summary: Limit
+          x-ms-visibility: advanced
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/ListSchemasResponse'
+    post:
+      operationId: CreateSchema
+      summary: Create Schema
+      description: >-
+        Creates a new JSON schema to enforce structured output on an LLM prompt.
+        Uses standard JSON Schema format.
+      tags:
+        - Schemas
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/SchemaConfig'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Schema'
+  /v0/orgs/{organization_id}/schemas/{schema_id}:
+    get:
+      operationId: GetSchemaByRevId
+      summary: Get Schema by Revision ID
+      description: >
+        Fetch a specific schema version. Supply a revision ID in the format
+        {schema_id}:{version} (e.g. 64a1b2c3:2). To get the latest version, pass
+        just the schema_id.
+      tags:
+        - Schemas
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - name: schema_id
+          in: path
+          required: true
+          type: string
+          x-ms-summary: Schema Revision ID
+          description: >-
+            Revision ID format: {schema_id}:{version}. Pass schema_id alone for
+            latest.
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Schema'
+    delete:
+      operationId: DeleteSchema
+      summary: Delete Schema (by Schema ID)
+      description: >-
+        Permanently deletes the schema and all its versions. Supply the
+        schema_id (not a revid).
+      tags:
+        - Schemas
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/schema_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/MessageResponse'
+    put:
+      operationId: UpdateSchema
+      summary: Update Schema (by Schema ID)
+      description: Creates a new version of the schema. Supply the schema_id (not a revid).
+      tags:
+        - Schemas
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/schema_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/SchemaConfig'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Schema'
+  /v0/orgs/{organization_id}/schemas/{schema_id}/validate:
+    post:
+      operationId: ValidateSchema
+      summary: Validate Data Against Schema
+      description: >
+        Validate a JSON object against a schema version. Supply a revision ID
+        ({schema_id}:{version}) to validate against a specific version, or just
+        the schema_id for the latest version.
+      tags:
+        - Schemas
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/schema_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/SchemaValidateRequest'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/SchemaValidateResponse'
+  /v0/orgs/{organization_id}/schemas/{schema_id}/versions:
+    get:
+      operationId: ListSchemaVersions
+      summary: List Schema Versions
+      description: >-
+        Returns the full version history of a schema. Each edit creates a new
+        version; older revids remain usable by pinned prompts.
+      tags:
+        - Schemas
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/schema_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/ListSchemasResponse'
+  /v0/orgs/{organization_id}/knowledge-bases:
+    get:
+      operationId: ListKnowledgeBases
+      summary: List Knowledge Bases
+      description: >-
+        Returns all knowledge bases in the organization. Knowledge bases index
+        documents for semantic search and RAG-augmented prompts.
+      tags:
+        - Knowledge Bases
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - name: name_search
+          in: query
+          type: string
+          x-ms-summary: Search by Name
+          x-ms-visibility: advanced
+        - name: skip
+          in: query
+          type: integer
+          default: 0
+          x-ms-summary: Skip
+          x-ms-visibility: advanced
+        - name: limit
+          in: query
+          type: integer
+          default: 10
+          x-ms-summary: Limit
+          x-ms-visibility: advanced
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/ListKnowledgeBasesResponse'
+    post:
+      operationId: CreateKnowledgeBase
+      summary: Create Knowledge Base
+      description: >-
+        Creates a new knowledge base. Documents tagged to the KB will be chunked
+        and indexed for semantic search.
+      tags:
+        - Knowledge Bases
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/KnowledgeBaseConfig'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/KnowledgeBase'
+  /v0/orgs/{organization_id}/knowledge-bases/{kb_id}:
+    get:
+      operationId: GetKnowledgeBase
+      summary: Get Knowledge Base
+      description: Returns configuration and status for a single knowledge base.
+      tags:
+        - Knowledge Bases
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/kb_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/KnowledgeBase'
+    delete:
+      operationId: DeleteKnowledgeBase
+      summary: Delete Knowledge Base
+      description: >-
+        Permanently deletes the knowledge base and all its indexed chunks.
+        Source documents are not deleted.
+      tags:
+        - Knowledge Bases
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/kb_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/MessageResponse'
+    put:
+      operationId: UpdateKnowledgeBase
+      summary: Update Knowledge Base
+      description: >-
+        Updates the knowledge base name, description, system prompt, or
+        chunking/embedding settings.
+      tags:
+        - Knowledge Bases
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/kb_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/KnowledgeBaseConfig'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/KnowledgeBase'
+  /v0/orgs/{organization_id}/knowledge-bases/{kb_id}/search:
+    post:
+      operationId: SearchKnowledgeBase
+      summary: Search Knowledge Base
+      description: Semantic search over indexed documents in the knowledge base.
+      tags:
+        - Knowledge Bases
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/kb_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/KBSearchRequest'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/KBSearchResponse'
+  /v0/orgs/{organization_id}/knowledge-bases/{kb_id}/reconcile:
+    post:
+      operationId: ReconcileKnowledgeBase
+      summary: Reconcile Knowledge Base
+      description: Re-indexes any documents that are out of sync with the knowledge base.
+      tags:
+        - Knowledge Bases
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/kb_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/MessageResponse'
+  /v0/orgs/{organization_id}/webhook/subscriptions:
+    x-ms-notification-content:
+      description: DocRouter event payload
+      schema:
+        $ref: '#/definitions/WebhookEventPayload'
+    post:
+      operationId: OnDocRouterEvent
+      summary: When a DocRouter Event Occurs
+      description: >
+        Triggers the flow when DocRouter fires a webhook event (document
+        uploaded, OCR or LLM completed, or error). Power Automate calls this to
+        register the flow's callback URL; DocRouter posts events to that URL.
+      tags:
+        - Triggers
+      x-ms-trigger: single
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            type: object
+            required:
+              - callbackUrl
+            properties:
+              callbackUrl:
+                type: string
+                title: Callback URL
+                x-ms-notification-url: true
+                x-ms-visibility: internal
+              events:
+                type: array
+                items:
+                  type: string
+                  enum:
+                    - document.uploaded
+                    - document.error
+                    - llm.completed
+                    - llm.error
+                x-ms-summary: Events
+                description: Events to subscribe to. Leave empty to receive all events.
+                x-ms-visibility: advanced
+      responses:
+        '200':
+          description: Subscription created.
+          schema:
+            $ref: '#/definitions/WebhookSubscribeResponse'
+  /v0/orgs/{organization_id}/webhook/subscriptions/{subscription_id}:
+    delete:
+      operationId: DeleteDocRouterEventSubscription
+      summary: Unsubscribe from DocRouter Events
+      description: >
+        Deregisters the flow's callback URL. Called automatically by Power
+        Automate when the flow is turned off or deleted.
+      tags:
+        - Triggers
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/subscription_id'
+      responses:
+        '200':
+          description: Subscription deleted.
+          schema:
+            $ref: '#/definitions/OkResponse'
