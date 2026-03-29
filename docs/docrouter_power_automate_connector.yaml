@@ -21,7 +21,6 @@ x-ms-parameterized-host:
       required: true
       type: string
       default: app.docrouter.ai
-      x-ms-parameter-location: connection
       x-ms-summary: DocRouter Host
       description: >
         Hostname of your DocRouter instance. Use app.docrouter.ai for the cloud
@@ -31,7 +30,6 @@ x-ms-parameterized-host:
       required: true
       type: string
       default: /fastapi
-      x-ms-parameter-location: connection
       x-ms-summary: Base Path
       description: >-
         API base path. Default is /fastapi; change only for non-standard
@@ -45,10 +43,6 @@ securityDefinitions:
     type: apiKey
     in: header
     name: X-Api-Key
-    x-ms-summary: Token
-    description: >-
-      Developer API token from DocRouter (Settings → Developer). Sent as the
-      X-Api-Key header on every request.
 security:
   - api_key: []
 x-ms-connector-metadata:
@@ -64,11 +58,7 @@ parameters:
     in: path
     required: true
     type: string
-    x-ms-parameter-location: connection
     x-ms-summary: Organization ID
-    description: >-
-      Organization ID for all DocRouter API paths. Stored on the connection and
-      applied automatically to every action (no per-action input).
   document_id:
     name: document_id
     in: path
@@ -721,6 +711,22 @@ paths:
                 items:
                   $ref: '#/definitions/Document'
   /v0/orgs/{organization_id}/documents/{document_id}:
+    delete:
+      operationId: DeleteDocument
+      summary: Delete Document
+      description: >-
+        Permanently deletes a document along with its OCR output, LLM results,
+        and file content.
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/MessageResponse'
     get:
       operationId: GetDocument
       summary: Get Document
@@ -743,22 +749,6 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/Document'
-    delete:
-      operationId: DeleteDocument
-      summary: Delete Document
-      description: >-
-        Permanently deletes a document along with its OCR output, LLM results,
-        and file content.
-      tags:
-        - Documents
-      parameters:
-        - $ref: '#/parameters/organization_id'
-        - $ref: '#/parameters/document_id'
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/MessageResponse'
     put:
       operationId: UpdateDocument
       summary: Update Document Metadata
@@ -916,29 +906,6 @@ paths:
           schema:
             $ref: '#/definitions/LLMRunResponse'
   /v0/orgs/{organization_id}/llm/result/{document_id}:
-    get:
-      operationId: GetLLMResult
-      summary: Get LLM Extraction Result
-      description: >-
-        Returns the structured data extracted by the LLM for a document, along
-        with verification status.
-      tags:
-        - LLM
-      parameters:
-        - $ref: '#/parameters/organization_id'
-        - $ref: '#/parameters/document_id'
-        - name: prompt_revid
-          in: query
-          type: string
-          default: default
-          x-ms-summary: Prompt Revision ID
-          description: Pass a prompt_revid ({prompt_id}:{version}) or 'default'.
-          x-ms-visibility: advanced
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/LLMResult'
     delete:
       operationId: DeleteLLMResult
       summary: Delete LLM Result
@@ -962,6 +929,29 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/OkResponse'
+    get:
+      operationId: GetLLMResult
+      summary: Get LLM Extraction Result
+      description: >-
+        Returns the structured data extracted by the LLM for a document, along
+        with verification status.
+      tags:
+        - LLM
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/document_id'
+        - name: prompt_revid
+          in: query
+          type: string
+          default: default
+          x-ms-summary: Prompt Revision ID
+          description: Pass a prompt_revid ({prompt_id}:{version}) or 'default'.
+          x-ms-visibility: advanced
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/LLMResult'
     put:
       operationId: UpdateLLMResult
       summary: Update / Verify LLM Result
@@ -1034,6 +1024,27 @@ paths:
           schema:
             $ref: '#/definitions/ListLLMModelsResponse'
   /v0/orgs/{organization_id}/prompts:
+    post:
+      operationId: CreatePrompt
+      summary: Create Prompt
+      description: >-
+        Creates a new prompt for LLM-based data extraction. Optionally link a
+        schema to enforce structured output.
+      tags:
+        - Prompts
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/PromptConfig'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Prompt'
     get:
       operationId: ListPrompts
       summary: List Prompts
@@ -1067,28 +1078,24 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/ListPromptsResponse'
-    post:
-      operationId: CreatePrompt
-      summary: Create Prompt
+  /v0/orgs/{organization_id}/prompts/{prompt_id}:
+    delete:
+      operationId: DeletePrompt
+      summary: Delete Prompt (by Prompt ID)
       description: >-
-        Creates a new prompt for LLM-based data extraction. Optionally link a
-        schema to enforce structured output.
+        Permanently deletes the prompt and all its versions. Supply the
+        prompt_id (not a revid).
       tags:
         - Prompts
       x-ms-visibility: advanced
       parameters:
         - $ref: '#/parameters/organization_id'
-        - in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/PromptConfig'
+        - $ref: '#/parameters/prompt_id'
       responses:
         '200':
           description: OK
           schema:
-            $ref: '#/definitions/Prompt'
-  /v0/orgs/{organization_id}/prompts/{prompt_id}:
+            $ref: '#/definitions/MessageResponse'
     get:
       operationId: GetPromptByRevId
       summary: Get Prompt by Revision ID
@@ -1114,23 +1121,6 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/Prompt'
-    delete:
-      operationId: DeletePrompt
-      summary: Delete Prompt (by Prompt ID)
-      description: >-
-        Permanently deletes the prompt and all its versions. Supply the
-        prompt_id (not a revid).
-      tags:
-        - Prompts
-      x-ms-visibility: advanced
-      parameters:
-        - $ref: '#/parameters/organization_id'
-        - $ref: '#/parameters/prompt_id'
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/MessageResponse'
     put:
       operationId: UpdatePrompt
       summary: Update Prompt (by Prompt ID)
@@ -1170,6 +1160,27 @@ paths:
           schema:
             $ref: '#/definitions/ListPromptsResponse'
   /v0/orgs/{organization_id}/tags:
+    post:
+      operationId: CreateTag
+      summary: Create Tag
+      description: >-
+        Creates a new tag for categorizing documents and associating them with
+        prompts or forms.
+      tags:
+        - Tags
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/TagConfig'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Tag'
     get:
       operationId: ListTags
       summary: List Tags
@@ -1203,43 +1214,7 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/ListTagsResponse'
-    post:
-      operationId: CreateTag
-      summary: Create Tag
-      description: >-
-        Creates a new tag for categorizing documents and associating them with
-        prompts or forms.
-      tags:
-        - Tags
-      x-ms-visibility: advanced
-      parameters:
-        - $ref: '#/parameters/organization_id'
-        - in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/TagConfig'
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/Tag'
   /v0/orgs/{organization_id}/tags/{tag_id}:
-    get:
-      operationId: GetTag
-      summary: Get Tag
-      description: Returns the name, color, and description of a single tag.
-      tags:
-        - Tags
-      x-ms-visibility: advanced
-      parameters:
-        - $ref: '#/parameters/organization_id'
-        - $ref: '#/parameters/tag_id'
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/Tag'
     delete:
       operationId: DeleteTag
       summary: Delete Tag
@@ -1257,6 +1232,21 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/MessageResponse'
+    get:
+      operationId: GetTag
+      summary: Get Tag
+      description: Returns the name, color, and description of a single tag.
+      tags:
+        - Tags
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/tag_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Tag'
     put:
       operationId: UpdateTag
       summary: Update Tag
@@ -1278,6 +1268,27 @@ paths:
           schema:
             $ref: '#/definitions/Tag'
   /v0/orgs/{organization_id}/schemas:
+    post:
+      operationId: CreateSchema
+      summary: Create Schema
+      description: >-
+        Creates a new JSON schema to enforce structured output on an LLM prompt.
+        Uses standard JSON Schema format.
+      tags:
+        - Schemas
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/SchemaConfig'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/Schema'
     get:
       operationId: ListSchemas
       summary: List Schemas
@@ -1311,28 +1322,24 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/ListSchemasResponse'
-    post:
-      operationId: CreateSchema
-      summary: Create Schema
+  /v0/orgs/{organization_id}/schemas/{schema_id}:
+    delete:
+      operationId: DeleteSchema
+      summary: Delete Schema (by Schema ID)
       description: >-
-        Creates a new JSON schema to enforce structured output on an LLM prompt.
-        Uses standard JSON Schema format.
+        Permanently deletes the schema and all its versions. Supply the
+        schema_id (not a revid).
       tags:
         - Schemas
       x-ms-visibility: advanced
       parameters:
         - $ref: '#/parameters/organization_id'
-        - in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/SchemaConfig'
+        - $ref: '#/parameters/schema_id'
       responses:
         '200':
           description: OK
           schema:
-            $ref: '#/definitions/Schema'
-  /v0/orgs/{organization_id}/schemas/{schema_id}:
+            $ref: '#/definitions/MessageResponse'
     get:
       operationId: GetSchemaByRevId
       summary: Get Schema by Revision ID
@@ -1358,23 +1365,6 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/Schema'
-    delete:
-      operationId: DeleteSchema
-      summary: Delete Schema (by Schema ID)
-      description: >-
-        Permanently deletes the schema and all its versions. Supply the
-        schema_id (not a revid).
-      tags:
-        - Schemas
-      x-ms-visibility: advanced
-      parameters:
-        - $ref: '#/parameters/organization_id'
-        - $ref: '#/parameters/schema_id'
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/MessageResponse'
     put:
       operationId: UpdateSchema
       summary: Update Schema (by Schema ID)
@@ -1438,6 +1428,27 @@ paths:
           schema:
             $ref: '#/definitions/ListSchemasResponse'
   /v0/orgs/{organization_id}/knowledge-bases:
+    post:
+      operationId: CreateKnowledgeBase
+      summary: Create Knowledge Base
+      description: >-
+        Creates a new knowledge base. Documents tagged to the KB will be chunked
+        and indexed for semantic search.
+      tags:
+        - Knowledge Bases
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - in: body
+          name: body
+          required: true
+          schema:
+            $ref: '#/definitions/KnowledgeBaseConfig'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/KnowledgeBase'
     get:
       operationId: ListKnowledgeBases
       summary: List Knowledge Bases
@@ -1471,43 +1482,7 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/ListKnowledgeBasesResponse'
-    post:
-      operationId: CreateKnowledgeBase
-      summary: Create Knowledge Base
-      description: >-
-        Creates a new knowledge base. Documents tagged to the KB will be chunked
-        and indexed for semantic search.
-      tags:
-        - Knowledge Bases
-      x-ms-visibility: advanced
-      parameters:
-        - $ref: '#/parameters/organization_id'
-        - in: body
-          name: body
-          required: true
-          schema:
-            $ref: '#/definitions/KnowledgeBaseConfig'
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/KnowledgeBase'
   /v0/orgs/{organization_id}/knowledge-bases/{kb_id}:
-    get:
-      operationId: GetKnowledgeBase
-      summary: Get Knowledge Base
-      description: Returns configuration and status for a single knowledge base.
-      tags:
-        - Knowledge Bases
-      x-ms-visibility: advanced
-      parameters:
-        - $ref: '#/parameters/organization_id'
-        - $ref: '#/parameters/kb_id'
-      responses:
-        '200':
-          description: OK
-          schema:
-            $ref: '#/definitions/KnowledgeBase'
     delete:
       operationId: DeleteKnowledgeBase
       summary: Delete Knowledge Base
@@ -1525,6 +1500,21 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/MessageResponse'
+    get:
+      operationId: GetKnowledgeBase
+      summary: Get Knowledge Base
+      description: Returns configuration and status for a single knowledge base.
+      tags:
+        - Knowledge Bases
+      x-ms-visibility: advanced
+      parameters:
+        - $ref: '#/parameters/organization_id'
+        - $ref: '#/parameters/kb_id'
+      responses:
+        '200':
+          description: OK
+          schema:
+            $ref: '#/definitions/KnowledgeBase'
     put:
       operationId: UpdateKnowledgeBase
       summary: Update Knowledge Base
