@@ -2072,7 +2072,8 @@ class BackfillWebhookEndpointsFromOrganizations(Migration):
             now = datetime.now(UTC)
 
             for org in orgs:
-                org_id = str(org["_id"])
+                org_oid = org["_id"]
+                org_id = str(org_oid)
                 existing_count = await db.webhook_endpoints.count_documents(
                     {"organization_id": org_id}
                 )
@@ -2101,6 +2102,11 @@ class BackfillWebhookEndpointsFromOrganizations(Migration):
                 }
 
                 await db.webhook_endpoints.insert_one(doc)
+                # Remove legacy embedded config now that it's been migrated to webhook_endpoints.
+                await db.organizations.update_one(
+                    {"_id": org_oid},
+                    {"$unset": {"webhook": ""}},
+                )
                 total_inserted += 1
 
             logger.info("BackfillWebhookEndpointsFromOrganizations inserted %d endpoints", total_inserted)

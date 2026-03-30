@@ -212,8 +212,8 @@ async def enqueue_event(
         auth_header_value = ep.get("auth_header_value")
         auth_header_preview = ep.get("auth_header_preview")
 
-        webhook_id = ep.get("_id")
-        webhook_id_str = str(webhook_id) if webhook_id is not None else None
+        ep_oid = ep.get("_id")
+        webhook_id_str = str(ep_oid) if ep_oid is not None else None
 
         delivery_doc = {
             "event_id": event_id,
