@@ -11,6 +11,8 @@ import {
   Replay as RetryIcon,
   Close as CloseIcon,
   ContentCopy as CopyIcon,
+  Add as AddIcon,
+  DeleteOutline as DeleteIcon,
 } from '@mui/icons-material';
 import { useOrganizationData } from '@/hooks/useOrganizationData';
 import type { Organization as UiOrganization } from '@/types/organizations';
@@ -23,19 +25,6 @@ type WebhookEventType =
   | 'llm.completed'
   | 'llm.error'
   | 'webhook.test';
-
-interface WebhookConfigResponse {
-  enabled: boolean;
-  url: string | null;
-  events: Array<WebhookEventType> | null;
-  secret_set: boolean;
-  secret_preview?: string | null;
-  generated_secret?: string | null;
-  auth_type?: 'hmac' | 'header' | null;
-  auth_header_name?: string | null;
-  auth_header_set?: boolean | null;
-  auth_header_preview?: string | null;
-}
 
 interface WebhookDeliveryItem {
   id: string;
@@ -61,6 +50,7 @@ interface DeliveriesResponse {
 }
 
 interface WebhookConfigSnapshot {
+  name: string;
   enabled: boolean;
   url: string;
   events: WebhookEventType[];
@@ -108,6 +98,11 @@ const normalizeEventList = (incoming: WebhookEventType[]) =>
 
 type DeliveryDetails = Record<string, unknown>;
 
+function endpointLabel(ep: WebhookEndpoint): string {
+  if (ep.name && ep.name.trim()) return ep.name.trim();
+  return `Endpoint ${ep.id.slice(-8)}`;
+}
+
 export default function OrganizationWebhooks({ organizationId }: { organizationId: string }) {
   const { session } = useAppSession();
   const { organization, loading: orgLoading } = useOrganizationData(organizationId);
@@ -122,12 +117,9 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
 
   const [endpoints, setEndpoints] = useState<WebhookEndpoint[]>([]);
   const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(null);
+  const [isCreatingNew, setIsCreatingNew] = useState(false);
 
-  const selectedEndpoint = useMemo(
-    () => endpoints.find((e) => e.id === selectedEndpointId) ?? endpoints[0],
-    [endpoints, selectedEndpointId]
-  );
-
+  const [name, setName] = useState('');
   const [enabled, setEnabled] = useState(false);
   const [url, setUrl] = useState('');
   const [secret, setSecret] = useState('');
@@ -144,61 +136,91 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
   const [deliveries, setDeliveries] = useState<WebhookDeliveryItem[]>([]);
   const [deliveriesLoading, setDeliveriesLoading] = useState(false);
   const [deliveriesTotal, setDeliveriesTotal] = useState(0);
-  const [page, setPage] = useState(0); // 0-based
+  const [page, setPage] = useState(0);
   const [pageSize, setPageSize] = useState(25);
 
   const [selectedDeliveryId, setSelectedDeliveryId] = useState<string | null>(null);
   const [deliveryDetails, setDeliveryDetails] = useState<DeliveryDetails | null>(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
 
-  const loadConfig = useCallback(async () => {
-    const res = await apiClient.get<WebhookEndpoint[]>(`/v0/orgs/${organizationId}/webhooks`);
-    const list = res.data;
-    setEndpoints(list);
-    const primary = list[0];
-    if (!primary) {
-      setEnabled(false);
-      setUrl('');
-      setSecretSet(false);
-      setSecretPreview(null);
-      setEvents(CONFIG_EVENTS);
-      setAuthType('hmac');
-      setAuthHeaderName('Authorization');
-      setAuthHeaderPreview(null);
-      setInitialConfig(null);
-      setSelectedEndpointId(null);
-      return;
-    }
-
-    const normalizedEvents = normalizeWebhookEvents(primary.events);
-    const resolvedAuthType = primary.auth_type;
-    const resolvedAuthHeaderName = primary.auth_header_name ?? 'Authorization';
-
-    setSelectedEndpointId(primary.id);
-    setEnabled(primary.enabled);
-    setUrl(primary.url ?? '');
-    setSecretSet(primary.secret_set);
-    setSecretPreview(primary.secret_preview ?? null);
+  const applyEndpointToForm = useCallback((ep: WebhookEndpoint) => {
+    const normalizedEvents = normalizeWebhookEvents(ep.events);
+    const resolvedAuthType = ep.auth_type;
+    const resolvedAuthHeaderName = ep.auth_header_name ?? 'Authorization';
+    setName(ep.name ?? '');
+    setEnabled(ep.enabled);
+    setUrl(ep.url ?? '');
+    setSecretSet(ep.secret_set);
+    setSecretPreview(ep.secret_preview ?? null);
     setEvents(normalizedEvents);
     setAuthType(resolvedAuthType);
     setAuthHeaderName(resolvedAuthHeaderName);
-    setAuthHeaderPreview(primary.auth_header_preview ?? null);
+    setAuthHeaderPreview(ep.auth_header_preview ?? null);
+    setSecret('');
+    setAuthHeaderValue('');
     setInitialConfig({
-      enabled: primary.enabled,
-      url: primary.url ?? '',
+      name: ep.name ?? '',
+      enabled: ep.enabled,
+      url: ep.url ?? '',
       events: normalizedEvents,
       authType: resolvedAuthType,
       authHeaderName: resolvedAuthHeaderName,
     });
+  }, []);
+
+  const resetFormForNew = useCallback(() => {
+    setName('');
+    setEnabled(true);
+    setUrl('');
+    setSecretSet(false);
+    setSecretPreview(null);
+    setEvents(CONFIG_EVENTS);
+    setAuthType('hmac');
+    setAuthHeaderName('Authorization');
+    setAuthHeaderPreview(null);
+    setSecret('');
+    setAuthHeaderValue('');
+    setInitialConfig(null);
+  }, []);
+
+  const loadEndpoints = useCallback(async () => {
+    const res = await apiClient.get<WebhookEndpoint[]>(`/v0/orgs/${organizationId}/webhooks`);
+    const list = res.data;
+    setEndpoints(list);
+    setSelectedEndpointId((prev) => {
+      if (prev && list.some((e) => e.id === prev)) return prev;
+      return list[0]?.id ?? null;
+    });
+    return list;
   }, [organizationId]);
+
+  useEffect(() => {
+    if (isCreatingNew) {
+      return;
+    }
+    const ep = selectedEndpointId ? endpoints.find((e) => e.id === selectedEndpointId) : undefined;
+    if (!ep) {
+      if (endpoints.length === 0) {
+        setInitialConfig(null);
+        resetFormForNew();
+        setIsCreatingNew(false);
+      }
+      return;
+    }
+    applyEndpointToForm(ep);
+  }, [endpoints, selectedEndpointId, isCreatingNew, applyEndpointToForm, resetFormForNew]);
+
+  const loadConfig = useCallback(async () => {
+    await loadEndpoints();
+  }, [loadEndpoints]);
 
   const loadDeliveries = useCallback(async () => {
     setDeliveriesLoading(true);
     try {
       const skip = page * pageSize;
       const params: Record<string, unknown> = { skip, limit: pageSize };
-      if (selectedEndpoint) {
-        params.webhook_id = selectedEndpoint.id;
+      if (selectedEndpointId) {
+        params.webhook_id = selectedEndpointId;
       }
       const res = await apiClient.get<DeliveriesResponse>(`/v0/orgs/${organizationId}/webhook/deliveries`, {
         params,
@@ -208,7 +230,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
     } finally {
       setDeliveriesLoading(false);
     }
-  }, [organizationId, page, pageSize, selectedEndpoint]);
+  }, [organizationId, page, pageSize, selectedEndpointId]);
 
   const loadDeliveryDetails = useCallback(
     async (deliveryId: string) => {
@@ -228,20 +250,43 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
       try {
         setLoading(true);
         await loadConfig();
-        await loadDeliveries();
       } catch (e) {
         toast.error(getApiErrorMsg(e));
       } finally {
         setLoading(false);
       }
     })();
-  }, [loadConfig, loadDeliveries]);
+  }, [loadConfig]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [selectedEndpointId]);
+
+  useEffect(() => {
+    if (loading) return;
+    (async () => {
+      try {
+        await loadDeliveries();
+      } catch (e) {
+        toast.error(getApiErrorMsg(e));
+      }
+    })();
+  }, [loading, page, pageSize, selectedEndpointId, loadDeliveries]);
 
   const toggleEvent = (ev: WebhookEventType) => {
     setEvents((prev) => (prev.includes(ev) ? prev.filter((x) => x !== ev) : [...prev, ev]));
   };
 
   const isDirty = useMemo(() => {
+    if (isCreatingNew) {
+      return (
+        name.trim().length > 0 ||
+        url.trim().length > 0 ||
+        enabled ||
+        secret.trim().length > 0 ||
+        authHeaderValue.trim().length > 0
+      );
+    }
     if (!initialConfig) return false;
     const trimmedUrl = url.trim();
     const initialUrl = initialConfig.url.trim();
@@ -251,6 +296,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
     const hasHeaderValueChange = authType === 'header' && authHeaderValue.trim().length > 0;
 
     return (
+      name.trim() !== (initialConfig.name || '').trim() ||
       enabled !== initialConfig.enabled ||
       trimmedUrl !== initialUrl ||
       !eventsMatch ||
@@ -259,25 +305,67 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
       hasSecretChange ||
       hasHeaderValueChange
     );
-  }, [authHeaderName, authHeaderValue, authType, enabled, events, initialConfig, secret, url]);
+  }, [
+    authHeaderName,
+    authHeaderValue,
+    authType,
+    enabled,
+    events,
+    initialConfig,
+    isCreatingNew,
+    name,
+    secret,
+    url,
+  ]);
 
   const save = async () => {
     setSaving(true);
     try {
-      await apiClient.put(`/v0/orgs/${organizationId}/webhook`, {
+      if (isCreatingNew) {
+        const body: Record<string, unknown> = {
+          name: name.trim() || null,
+          enabled,
+          url: url.trim() || null,
+          events,
+          auth_type: authType,
+          auth_header_name: authHeaderName.trim() || null,
+        };
+        if (authType === 'header' && authHeaderValue.trim().length > 0) {
+          body.auth_header_value = authHeaderValue;
+        }
+        if (authType === 'hmac') {
+          body.secret = secret.trim().length > 0 ? secret.trim() : '';
+        }
+        await apiClient.post(`/v0/orgs/${organizationId}/webhooks`, body);
+        setIsCreatingNew(false);
+        setSecret('');
+        setAuthHeaderValue('');
+        toast.success('Webhook endpoint created');
+        await loadEndpoints();
+        await loadDeliveries();
+        return;
+      }
+
+      if (!selectedEndpointId) {
+        toast.error('Select or create a webhook endpoint');
+        return;
+      }
+
+      await apiClient.put(`/v0/orgs/${organizationId}/webhooks/${selectedEndpointId}`, {
+        name: name.trim() || null,
         enabled,
         url: url.trim() || null,
         events,
         auth_type: authType,
         auth_header_name: authHeaderName.trim() || null,
         ...(authHeaderValue.trim().length > 0 ? { auth_header_value: authHeaderValue } : {}),
-        // If secret is blank, do not update it.
         ...(secret.trim().length > 0 ? { secret: secret.trim() } : {}),
       });
       setSecret('');
       setAuthHeaderValue('');
       toast.success('Webhook settings saved');
-      await loadConfig();
+      await loadEndpoints();
+      await loadDeliveries();
     } catch (e) {
       toast.error(getApiErrorMsg(e));
     } finally {
@@ -286,18 +374,14 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
   };
 
   const regenerateSecret = async () => {
+    if (!selectedEndpointId || isCreatingNew) return;
     setSaving(true);
     try {
-      const res = await apiClient.put<WebhookConfigResponse>(`/v0/orgs/${organizationId}/webhook`, {
+      await apiClient.put(`/v0/orgs/${organizationId}/webhooks/${selectedEndpointId}`, {
         secret: '',
       });
-      await loadConfig();
-      const newSecret = res.data.generated_secret ?? null;
-      if (newSecret) {
-        setGeneratedSecret(newSecret);
-      } else {
-        toast.success('Secret regenerated');
-      }
+      await loadEndpoints();
+      toast.success('Secret regenerated — copy from the API response if your client shows it once');
     } catch (e) {
       toast.error(getApiErrorMsg(e));
     } finally {
@@ -306,10 +390,14 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
   };
 
   const testWebhook = async () => {
+    if (!selectedEndpointId || isCreatingNew) {
+      toast.error('Select a webhook endpoint to test');
+      return;
+    }
     setTesting(true);
     try {
       const res = await apiClient.post<{ status: string; delivery_id: string }>(
-        `/v0/orgs/${organizationId}/webhook/test`
+        `/v0/orgs/${organizationId}/webhooks/${selectedEndpointId}/test`
       );
       toast.success(`Test enqueued (delivery ${res.data.delivery_id})`);
       await loadDeliveries();
@@ -317,6 +405,31 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
       toast.error(getApiErrorMsg(e));
     } finally {
       setTesting(false);
+    }
+  };
+
+  const addEndpoint = () => {
+    setIsCreatingNew(true);
+    setSelectedEndpointId(null);
+    resetFormForNew();
+  };
+
+  const selectEndpoint = (id: string) => {
+    setIsCreatingNew(false);
+    setSelectedEndpointId(id);
+  };
+
+  const deleteEndpoint = async () => {
+    if (!selectedEndpointId || isCreatingNew) return;
+    if (!window.confirm('Delete this webhook endpoint? Deliveries history remains.')) return;
+    try {
+      await apiClient.delete(`/v0/orgs/${organizationId}/webhooks/${selectedEndpointId}`);
+      toast.success('Webhook endpoint deleted');
+      setSelectedEndpointId(null);
+      await loadEndpoints();
+      await loadDeliveries();
+    } catch (e) {
+      toast.error(getApiErrorMsg(e));
     }
   };
 
@@ -366,187 +479,282 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
 
   return (
     <div className="max-w-5xl mx-auto min-h-[calc(100vh-80px)]">
-      {/* Gray header panel: title left, actions right */}
       <div className="mb-4 bg-gray-50 rounded-lg px-0 py-3">
         <div className="flex flex-wrap items-center gap-3">
-          <h2 className="text-xl font-semibold text-gray-900">Organization Webhook</h2>
-          <div className="flex items-center gap-2">
+          <h2 className="text-xl font-semibold text-gray-900">Organization webhooks</h2>
+          <div className="flex items-center gap-2 flex-wrap">
+            {canEdit && (
+              <button
+                type="button"
+                onClick={addEndpoint}
+                className="inline-flex items-center justify-center px-3 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-sm"
+              >
+                <AddIcon fontSize="small" className="mr-1" />
+                Add endpoint
+              </button>
+            )}
             <button
               type="button"
               onClick={save}
               disabled={!canEdit || saving || !isDirty}
               className="inline-flex items-center justify-center px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
             >
-              Save
+              {isCreatingNew ? 'Create' : 'Save'}
             </button>
             <button
               type="button"
               onClick={testWebhook}
-              disabled={!canEdit || testing}
+              disabled={!canEdit || testing || !selectedEndpointId || isCreatingNew}
               className="inline-flex items-center justify-center px-4 py-2 rounded-md border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
             >
               <SendIcon fontSize="small" className="mr-2" />
               Test webhook
             </button>
+            {canEdit && selectedEndpointId && !isCreatingNew && (
+              <button
+                type="button"
+                onClick={deleteEndpoint}
+                className="inline-flex items-center justify-center px-3 py-2 rounded-md border border-red-200 text-red-700 bg-white hover:bg-red-50 text-sm"
+              >
+                <DeleteIcon fontSize="small" className="mr-1" />
+                Delete
+              </button>
+            )}
           </div>
         </div>
       </div>
 
-      {/* Main card */}
       <div className="bg-white rounded-lg shadow p-6">
         <div className="mb-8">
-        <div className="flex flex-col md:flex-row md:items-center gap-3">
-          <div className="flex-1">
-            <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
-            <input
-              type="url"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              disabled={!canEdit}
-              placeholder="https://example.com/webhook"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
-            />
-          </div>
-
-          <div className="md:w-32 md:flex md:justify-center">
-            <label className="inline-flex items-center gap-2 text-sm md:mt-6">
-              <input
-                type="checkbox"
-                checked={enabled}
-                onChange={(e) => setEnabled(e.target.checked)}
-                disabled={!canEdit}
-                className="h-4 w-4"
-              />
-              Enabled
-            </label>
-          </div>
-        </div>
-
-        <div className="mt-6 space-y-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Authentication Method</label>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
-              <div className="md:col-span-1">
-                <select
-                  value={authType}
-                  onChange={(e) => setAuthType(e.target.value as 'hmac' | 'header')}
-                  disabled={!canEdit}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
-                >
-                  <option value="hmac">HMAC signature</option>
-                  <option value="header">Header Auth</option>
-                </select>
-              </div>
-              <div className="md:col-span-2 text-xs text-gray-600">
-                {authType === 'hmac' ? (
-                  <div>
-                    DocRouter sends body signature in <span className="font-mono">X-DocRouter-Signature</span>.
+          {endpoints.length > 0 || isCreatingNew ? (
+            <>
+              <div className="mb-4 flex flex-col sm:flex-row sm:items-end gap-3">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Endpoint</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white"
+                    value={isCreatingNew ? '__new__' : selectedEndpointId ?? ''}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      if (v === '__new__') addEndpoint();
+                      else selectEndpoint(v);
+                    }}
+                    disabled={!canEdit && !isCreatingNew}
+                  >
+                    {endpoints.map((ep) => (
+                      <option key={ep.id} value={ep.id}>
+                        {endpointLabel(ep)}
+                      </option>
+                    ))}
+                    {isCreatingNew && <option value="__new__">New endpoint…</option>}
+                  </select>
+                </div>
+                {isCreatingNew && (
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Display name (optional)</label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      placeholder="e.g. Production n8n"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                    />
                   </div>
-                ) : (
-                  <div>DocRouter sends a static auth header (works with n8n Webhook “Header Auth”).</div>
                 )}
               </div>
-            </div>
-          </div>
 
-          {authType === 'header' ? (
-            <div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
-                <div className="md:col-span-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Header name</label>
+              {!isCreatingNew && (
+                <div className="mb-4">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Display name (optional)</label>
                   <input
                     type="text"
-                    value={authHeaderName}
-                    onChange={(e) => setAuthHeaderName(e.target.value)}
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                     disabled={!canEdit}
-                    placeholder="Authorization"
+                    placeholder="Label for this endpoint"
+                    className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md disabled:bg-gray-100"
+                  />
+                </div>
+              )}
+
+              <div className="flex flex-col md:flex-row md:items-center gap-3">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Webhook URL</label>
+                  <input
+                    type="url"
+                    value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    disabled={!canEdit}
+                    placeholder="https://example.com/webhook"
                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
                   />
                 </div>
-                <div className="md:col-span-2">
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="block text-sm font-medium text-gray-700">Header value</label>
-                    <div className="text-xs text-gray-500">
-                      {authHeaderPreview ? <span className="font-mono">Header Value begins with: {authHeaderPreview}</span> : 'Not set'}
+
+                <div className="md:w-32 md:flex md:justify-center">
+                  <label className="inline-flex items-center gap-2 text-sm md:mt-6">
+                    <input
+                      type="checkbox"
+                      checked={enabled}
+                      onChange={(e) => setEnabled(e.target.checked)}
+                      disabled={!canEdit}
+                      className="h-4 w-4"
+                    />
+                    Enabled
+                  </label>
+                </div>
+              </div>
+
+              <div className="mt-6 space-y-6">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Authentication Method</label>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-center">
+                    <div className="md:col-span-1">
+                      <select
+                        value={authType}
+                        onChange={(e) => setAuthType(e.target.value as 'hmac' | 'header')}
+                        disabled={!canEdit}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
+                      >
+                        <option value="hmac">HMAC signature</option>
+                        <option value="header">Header Auth</option>
+                      </select>
+                    </div>
+                    <div className="md:col-span-2 text-xs text-gray-600">
+                      {authType === 'hmac' ? (
+                        <div>
+                          DocRouter sends body signature in <span className="font-mono">X-DocRouter-Signature</span>.
+                        </div>
+                      ) : (
+                        <div>DocRouter sends a static auth header (works with n8n Webhook “Header Auth”).</div>
+                      )}
                     </div>
                   </div>
-                  <input
-                    type="password"
-                    value={authHeaderValue}
-                    onChange={(e) => setAuthHeaderValue(e.target.value)}
-                    disabled={!canEdit}
-                    placeholder="Enter header value (leave blank to keep)"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
-                  />
                 </div>
+
+                {authType === 'header' ? (
+                  <div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+                      <div className="md:col-span-1">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Header name</label>
+                        <input
+                          type="text"
+                          value={authHeaderName}
+                          onChange={(e) => setAuthHeaderName(e.target.value)}
+                          disabled={!canEdit}
+                          placeholder="Authorization"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
+                        />
+                      </div>
+                      <div className="md:col-span-2">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-sm font-medium text-gray-700">Header value</label>
+                          <div className="text-xs text-gray-500">
+                            {authHeaderPreview ? (
+                              <span className="font-mono">Header Value begins with: {authHeaderPreview}</span>
+                            ) : (
+                              'Not set'
+                            )}
+                          </div>
+                        </div>
+                        <input
+                          type="password"
+                          value={authHeaderValue}
+                          onChange={(e) => setAuthHeaderValue(e.target.value)}
+                          disabled={!canEdit}
+                          placeholder="Enter header value (leave blank to keep)"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between gap-3 mb-1">
+                      <label className="block text-sm font-medium text-gray-700">Webhook secret</label>
+                      <div className="text-xs text-gray-500">
+                        {secretPreview ? (
+                          <span className="font-mono">Secret begins with: {secretPreview}</span>
+                        ) : secretSet ? (
+                          'Secret is set'
+                        ) : (
+                          'Not set'
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex flex-col md:flex-row gap-2">
+                      <input
+                        type="password"
+                        value={secret}
+                        onChange={(e) => setSecret(e.target.value)}
+                        disabled={!canEdit}
+                        placeholder="Enter new secret (leave blank to keep, or use Regenerate)"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
+                      />
+                      <button
+                        type="button"
+                        onClick={regenerateSecret}
+                        disabled={!canEdit || saving || !selectedEndpointId || isCreatingNew}
+                        className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                      >
+                        Regenerate
+                      </button>
+                    </div>
+                    {isCreatingNew && authType === 'hmac' && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Leave secret empty on create to generate one automatically.
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Events</label>
+                  <div className="flex flex-col gap-2">
+                    {CONFIG_EVENTS.map((ev) => (
+                      <label key={ev} className="flex items-center gap-2 text-sm">
+                        <input
+                          type="checkbox"
+                          checked={events.includes(ev)}
+                          onChange={() => toggleEvent(ev)}
+                          disabled={!canEdit}
+                          className="h-4 w-4"
+                        />
+                        <span className="font-mono text-xs">{ev}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-2">
+                    The “Test webhook” action sends a <span className="font-mono">webhook.test</span> event and does not
+                    require enabling it in the event list.
+                  </div>
+                </div>
+
+                {!canEdit && (
+                  <div className="text-sm text-gray-600">
+                    Only organization admins (or system admins) can change webhook settings.
+                  </div>
+                )}
               </div>
-            </div>
+            </>
           ) : (
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-1">
-                <label className="block text-sm font-medium text-gray-700">Webhook secret</label>
-                <div className="text-xs text-gray-500">
-                  {secretPreview ? (
-                    <span className="font-mono">Secret begins with: {secretPreview}</span>
-                  ) : secretSet ? (
-                    'Secret is set'
-                  ) : (
-                    'Not set'
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-col md:flex-row gap-2">
-                <input
-                  type="password"
-                  value={secret}
-                  onChange={(e) => setSecret(e.target.value)}
-                  disabled={!canEdit}
-                  placeholder="Enter new secret (leave blank to keep)"
-                  className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100"
-                />
+            <div className="text-center py-10 text-gray-600">
+              <p className="mb-4">No webhook endpoints yet.</p>
+              {canEdit && (
                 <button
                   type="button"
-                  onClick={regenerateSecret}
-                  disabled={!canEdit || saving}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50"
+                  onClick={addEndpoint}
+                  className="inline-flex items-center px-4 py-2 rounded-md bg-blue-600 text-white hover:bg-blue-700"
                 >
-                  Regenerate
+                  <AddIcon fontSize="small" className="mr-2" />
+                  Add your first webhook
                 </button>
-              </div>
-            </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Events</label>
-            <div className="flex flex-col gap-2">
-              {CONFIG_EVENTS.map((ev) => (
-                <label key={ev} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={events.includes(ev)}
-                    onChange={() => toggleEvent(ev)}
-                    disabled={!canEdit}
-                    className="h-4 w-4"
-                  />
-                  <span className="font-mono text-xs">{ev}</span>
-                </label>
-              ))}
-            </div>
-            <div className="text-xs text-gray-500 mt-2">
-              Note: the “Test webhook” button sends a <span className="font-mono">webhook.test</span> event and does not
-              require enabling it in the event list.
-            </div>
-          </div>
-
-          {!canEdit && (
-            <div className="text-sm text-gray-600">
-              Only organization admins (or system admins) can change webhook settings.
+              )}
             </div>
           )}
         </div>
       </div>
 
-      <div>
+      <div className="bg-white rounded-lg shadow p-6 mt-6">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-lg font-medium text-gray-900">Recent deliveries</h3>
           <div className="flex items-center gap-3">
@@ -667,7 +875,6 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
         </div>
       </div>
 
-      {/* Details drawer */}
       {selectedDeliveryId && (
         <div className="fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/30" onClick={closeDetails} />
@@ -713,7 +920,6 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
         </div>
       )}
 
-      {/* Generated secret modal (Tailwind only) */}
       {generatedSecret && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/30" onClick={() => setGeneratedSecret(null)} />
@@ -757,8 +963,6 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
           </div>
         </div>
       )}
-      </div>
     </div>
   );
 }
-
