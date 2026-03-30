@@ -115,6 +115,89 @@ export interface ListOrganizationsResponse {
   skip: number;
 }
 
+// Webhook types
+
+export type WebhookEventType =
+  | 'document.uploaded'
+  | 'document.error'
+  | 'llm.completed'
+  | 'llm.error'
+  | 'webhook.test';
+
+export type WebhookAuthType = 'hmac' | 'header';
+
+export interface WebhookEndpoint {
+  id: string;
+  name?: string | null;
+  enabled: boolean;
+  url: string | null;
+  events: WebhookEventType[] | null;
+  auth_type: WebhookAuthType;
+  auth_header_name?: string | null;
+  secret_set: boolean;
+  secret_preview?: string | null;
+  auth_header_set?: boolean | null;
+  auth_header_preview?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}
+
+export interface CreateWebhookParams {
+  name?: string;
+  enabled?: boolean;
+  url: string;
+  events?: WebhookEventType[];
+  auth_type?: WebhookAuthType;
+  auth_header_name?: string;
+  auth_header_value?: string;
+  secret?: string;
+}
+
+export interface UpdateWebhookParams {
+  webhookId: string;
+  name?: string;
+  enabled?: boolean;
+  url?: string;
+  events?: WebhookEventType[];
+  auth_type?: WebhookAuthType;
+  auth_header_name?: string;
+  auth_header_value?: string;
+  secret?: string;
+}
+
+export interface WebhookDelivery {
+  id: string;
+  event_id: string;
+  event_type: string;
+  webhook_id?: string | null;
+  status: string;
+  attempts: number;
+  max_attempts: number;
+  document_id?: string | null;
+  prompt_revid?: string | null;
+  prompt_id?: string | null;
+  prompt_version?: number | null;
+  last_http_status?: number | null;
+  last_error?: string | null;
+  created_at: string;
+  updated_at: string;
+  next_attempt_at?: string | null;
+}
+
+export interface ListWebhookDeliveriesParams {
+  status?: string;
+  event_type?: string;
+  webhook_id?: string;
+  skip?: number;
+  limit?: number;
+}
+
+export interface ListWebhookDeliveriesResponse {
+  deliveries: WebhookDelivery[];
+  total_count: number;
+  skip: number;
+}
+
 // Document types
 export interface Document {
   id: string;

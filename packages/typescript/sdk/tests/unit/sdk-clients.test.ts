@@ -94,6 +94,16 @@ describe('SDK Client Unit Tests', () => {
       expect(typeof client.searchKnowledgeBase).toBe('function');
       expect(typeof client.reconcileKnowledgeBase).toBe('function');
       expect(typeof client.reconcileAllKnowledgeBases).toBe('function');
+      // webhooks
+      expect(typeof client.listWebhooks).toBe('function');
+      expect(typeof client.createWebhook).toBe('function');
+      expect(typeof client.getWebhook).toBe('function');
+      expect(typeof client.updateWebhook).toBe('function');
+      expect(typeof client.deleteWebhook).toBe('function');
+      expect(typeof client.testWebhook).toBe('function');
+      expect(typeof client.listWebhookDeliveries).toBe('function');
+      expect(typeof client.getWebhookDelivery).toBe('function');
+      expect(typeof client.retryWebhookDelivery).toBe('function');
     });
 
     test('getOCRBlocks accepts format param and requests gzip by default', async () => {
@@ -163,6 +173,100 @@ describe('SDK Client Unit Tests', () => {
 
       client.updateToken('new-token');
       expect(client).toBeDefined();
+    });
+
+    test('webhook endpoint methods call correct URLs', async () => {
+      const mockGet = jest.fn();
+      const mockPost = jest.fn();
+      const mockPut = jest.fn();
+      const mockDelete = jest.fn();
+
+      const client = new DocRouterOrg({
+        baseURL: 'https://api.example.com',
+        orgToken: 'org-token',
+        organizationId: 'org-123'
+      });
+
+      (client as any).http = {
+        get: mockGet,
+        post: mockPost,
+        put: mockPut,
+        delete: mockDelete,
+      };
+
+      await client.listWebhooks();
+      expect(mockGet).toHaveBeenCalledWith('/v0/orgs/org-123/webhooks');
+
+      await client.createWebhook({ url: 'https://example.com/hook' });
+      expect(mockPost).toHaveBeenCalledWith(
+        '/v0/orgs/org-123/webhooks',
+        expect.objectContaining({ url: 'https://example.com/hook' }),
+      );
+
+      await client.getWebhook('wh_1');
+      expect(mockGet).toHaveBeenCalledWith('/v0/orgs/org-123/webhooks/wh_1');
+
+      await client.updateWebhook({ webhookId: 'wh_1', enabled: false });
+      expect(mockPut).toHaveBeenCalledWith(
+        '/v0/orgs/org-123/webhooks/wh_1',
+        expect.objectContaining({ enabled: false }),
+      );
+
+      await client.deleteWebhook('wh_1');
+      expect(mockDelete).toHaveBeenCalledWith('/v0/orgs/org-123/webhooks/wh_1');
+
+      await client.testWebhook('wh_1');
+      expect(mockPost).toHaveBeenCalledWith(
+        '/v0/orgs/org-123/webhooks/wh_1/test',
+        {},
+      );
+    });
+
+    test('webhook delivery methods call correct URLs and params', async () => {
+      const mockGet = jest.fn();
+      const mockPost = jest.fn();
+
+      const client = new DocRouterOrg({
+        baseURL: 'https://api.example.com',
+        orgToken: 'org-token',
+        organizationId: 'org-123'
+      });
+
+      (client as any).http = {
+        get: mockGet,
+        post: mockPost,
+      };
+
+      await client.listWebhookDeliveries({
+        status: 'failed',
+        event_type: 'document.uploaded',
+        webhook_id: 'wh_1',
+        skip: 10,
+        limit: 25,
+      });
+      expect(mockGet).toHaveBeenCalledWith(
+        '/v0/orgs/org-123/webhook/deliveries',
+        {
+          params: {
+            status: 'failed',
+            event_type: 'document.uploaded',
+            webhook_id: 'wh_1',
+            skip: 10,
+            limit: 25,
+          },
+        },
+      );
+
+      await client.getWebhookDelivery('deliv_1');
+      expect(mockGet).toHaveBeenCalledWith(
+        '/v0/orgs/org-123/webhook/deliveries/deliv_1',
+      );
+
+      await client.retryWebhookDelivery('deliv_1');
+      expect(mockPost).toHaveBeenCalledWith(
+        '/v0/orgs/org-123/webhook/deliveries/deliv_1/retry',
+        {},
+      );
     });
   });
 

@@ -80,6 +80,13 @@ import {
   KBChatStreamError,
   // LLM Models
   ListOrgLLMModelsResponse,
+  // Webhooks
+  WebhookEndpoint,
+  CreateWebhookParams,
+  UpdateWebhookParams,
+  WebhookDelivery,
+  ListWebhookDeliveriesParams,
+  ListWebhookDeliveriesResponse,
 } from './types';
 
 /**
@@ -661,6 +668,107 @@ export class DocRouterOrg {
       onChunk,
       onError,
       abortSignal
+    );
+  }
+
+  // ---------------- Webhooks ----------------
+
+  /**
+   * List all webhook endpoints for this organization.
+   */
+  async listWebhooks(): Promise<WebhookEndpoint[]> {
+    return this.http.get<WebhookEndpoint[]>(`/v0/orgs/${this.organizationId}/webhooks`);
+  }
+
+  /**
+   * Create a new webhook endpoint for this organization.
+   */
+  async createWebhook(params: CreateWebhookParams): Promise<WebhookEndpoint> {
+    const body: Record<string, unknown> = {
+      name: params.name,
+      enabled: params.enabled ?? true,
+      url: params.url,
+      events: params.events,
+      auth_type: params.auth_type,
+      auth_header_name: params.auth_header_name,
+      auth_header_value: params.auth_header_value,
+      secret: params.secret,
+    };
+    return this.http.post<WebhookEndpoint>(`/v0/orgs/${this.organizationId}/webhooks`, body);
+  }
+
+  /**
+   * Get a single webhook endpoint by ID.
+   */
+  async getWebhook(webhookId: string): Promise<WebhookEndpoint> {
+    return this.http.get<WebhookEndpoint>(`/v0/orgs/${this.organizationId}/webhooks/${webhookId}`);
+  }
+
+  /**
+   * Update an existing webhook endpoint.
+   */
+  async updateWebhook(params: UpdateWebhookParams): Promise<WebhookEndpoint> {
+    const { webhookId, ...rest } = params;
+    return this.http.put<WebhookEndpoint>(
+      `/v0/orgs/${this.organizationId}/webhooks/${webhookId}`,
+      rest,
+    );
+  }
+
+  /**
+   * Delete a webhook endpoint.
+   */
+  async deleteWebhook(webhookId: string): Promise<void> {
+    await this.http.delete(`/v0/orgs/${this.organizationId}/webhooks/${webhookId}`);
+  }
+
+  /**
+   * Trigger a test event for a specific webhook endpoint.
+   */
+  async testWebhook(webhookId: string): Promise<{ status: string; delivery_id: string }> {
+    return this.http.post<{ status: string; delivery_id: string }>(
+      `/v0/orgs/${this.organizationId}/webhooks/${webhookId}/test`,
+      {},
+    );
+  }
+
+  /**
+   * List webhook deliveries for this organization, optionally filtered by status, event type, or webhook_id.
+   */
+  async listWebhookDeliveries(
+    params?: ListWebhookDeliveriesParams,
+  ): Promise<ListWebhookDeliveriesResponse> {
+    const { status, event_type, webhook_id, skip, limit } = params || {};
+    const query: Record<string, unknown> = {};
+    if (status) query.status = status;
+    if (event_type) query.event_type = event_type;
+    if (webhook_id) query.webhook_id = webhook_id;
+    if (skip !== undefined) query.skip = skip;
+    if (limit !== undefined) query.limit = limit;
+    return this.http.get<ListWebhookDeliveriesResponse>(
+      `/v0/orgs/${this.organizationId}/webhook/deliveries`,
+      { params: query },
+    );
+  }
+
+  /**
+   * Get a single webhook delivery by ID.
+   */
+  async getWebhookDelivery(deliveryId: string): Promise<WebhookDelivery> {
+    return this.http.get<WebhookDelivery>(
+      `/v0/orgs/${this.organizationId}/webhook/deliveries/${deliveryId}`,
+    );
+  }
+
+  /**
+   * Retry a failed webhook delivery.
+   */
+  async retryWebhookDelivery(
+    deliveryId: string,
+  ): Promise<{ status: string; delivery_id: string }> {
+    return this.http.post<{ status: string; delivery_id: string }>(
+      `/v0/orgs/${this.organizationId}/webhook/deliveries/${deliveryId}/retry`,
+      {},
     );
   }
 
