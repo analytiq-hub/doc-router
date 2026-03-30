@@ -2026,6 +2026,127 @@ class AddWebhookDeliveriesIndexes(Migration):
             return False
 
 
+class AddWebhookEndpointsIndexes(Migration):
+    def __init__(self):
+        super().__init__(description="Add indexes for webhook_endpoints (org queries)")
+
+    async def up(self, db) -> bool:
+        try:
+            await db.webhook_endpoints.create_index(
+                [("organization_id", 1), ("created_at", 1)],
+                name="webhook_endpoints_org_created_at",
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create webhook_endpoints indexes: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            await db.webhook_endpoints.drop_index("webhook_endpoints_org_created_at")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to remove webhook_endpoints indexes: {e}")
+            return False
+
+
+class BackfillWebhookEndpointsFromOrganizations(Migration):
+    def __init__(self):
+        super().__init__(
+            description="Backfill webhook_endpoints from legacy organizations.webhook config"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            cursor = db.organizations.find(
+                {
+                    "webhook": {"$exists": True, "$ne": None},
+                    "webhook.url": {"$ne": None},
+                }
+            )
+            orgs = await cursor.to_list(length=None)
+            if not orgs:
+                return True
+
+            total_inserted = 0
+            now = datetime.now(UTC)
+
+            for org in orgs:
+                org_id = str(org["_id"])
+                existing_count = await db.webhook_endpoints.count_documents(
+                    {"organization_id": org_id}
+                )
+                if existing_count > 0:
+                    continue
+
+                cfg = org.get("webhook") or {}
+                if not cfg.get("url"):
+                    continue
+
+                doc = {
+                    "organization_id": org_id,
+                    "name": None,
+                    "enabled": bool(cfg.get("enabled", False)),
+                    "url": cfg.get("url"),
+                    "events": cfg.get("events"),
+                    "auth_type": cfg.get("auth_type"),
+                    "auth_header_name": cfg.get("auth_header_name"),
+                    "auth_header_value": cfg.get("auth_header_value"),
+                    "auth_header_preview": cfg.get("auth_header_preview"),
+                    "secret": cfg.get("secret"),
+                    "secret_preview": cfg.get("secret_preview"),
+                    "signature_enabled": cfg.get("signature_enabled"),
+                    "created_at": cfg.get("created_at") or now,
+                    "updated_at": cfg.get("updated_at") or now,
+                }
+
+                await db.webhook_endpoints.insert_one(doc)
+                total_inserted += 1
+
+            logger.info("BackfillWebhookEndpointsFromOrganizations inserted %d endpoints", total_inserted)
+            return True
+        except Exception as e:
+            logger.error(f"Failed to backfill webhook_endpoints from organizations: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            await db.webhook_endpoints.delete_many({})
+            logger.info("BackfillWebhookEndpointsFromOrganizations down() removed all webhook_endpoints")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to remove webhook_endpoints during backfill down(): {e}")
+            return False
+
+
+class AddWebhookDeliveriesWebhookIdIndex(Migration):
+    def __init__(self):
+        super().__init__(
+            description="Add index for webhook_deliveries by organization_id, webhook_id, created_at"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            await db.webhook_deliveries.create_index(
+                [("organization_id", 1), ("webhook_id", 1), ("created_at", -1)],
+                name="webhook_deliveries_org_webhook_created_at",
+            )
+            logger.info("Successfully created webhook_deliveries_org_webhook_created_at index")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create webhook_deliveries_org_webhook_created_at index: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            await db.webhook_deliveries.drop_index("webhook_deliveries_org_webhook_created_at")
+            logger.info("Successfully removed webhook_deliveries_org_webhook_created_at index")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to remove webhook_deliveries_org_webhook_created_at index: {e}")
+            return False
+
+
 class AddQueueAndCollectionIndexes(Migration):
     """Add indexes for queue collections, document_index, and docs to optimize common queries."""
 
@@ -2641,6 +2762,9 @@ MIGRATIONS = [
     FixLegacyProcessingQueueMessages(),
     OcrPayloadTextractEnvelopeMigration(),
     AddKbLexicalSearchIndexes(),
+    AddWebhookEndpointsIndexes(),
+    BackfillWebhookEndpointsFromOrganizations(),
+    AddWebhookDeliveriesWebhookIdIndex(),
     # Add more migrations here
 ]
 

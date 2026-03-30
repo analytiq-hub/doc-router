@@ -35,26 +35,30 @@ assert os.environ["ENV"] == "pytest"
 
 
 @pytest.mark.asyncio
-async def test_webhook_config_update_all_options(test_db, mock_auth):
-    logger.info("test_webhook_config_update_all_options() start")
+async def test_webhook_endpoint_create_and_get(test_db, mock_auth):
+    logger.info("test_webhook_endpoint_create_and_get() start")
 
     payload = {
+        "name": "Primary webhook",
         "enabled": True,
         "url": "https://example.com/webhook",
-        "events": ["document.uploaded", "llm.completed", "llm.error", "webhook.test"],
+        "events": ["document.uploaded", "llm.completed", "llm.error"],
         "auth_type": "header",
         "auth_header_name": "X-Api-Key",
         "auth_header_value": "supersecret",
     }
 
-    response = client.put(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook",
+    # Create endpoint
+    response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks",
         json=payload,
         headers=get_auth_headers(),
     )
     assert response.status_code == 200, response.json()
     data = response.json()
 
+    endpoint_id = data["id"]
+    assert data["name"] == payload["name"]
     assert data["enabled"] is True
     assert data["url"] == payload["url"]
     assert data["events"] == payload["events"]
@@ -63,77 +67,87 @@ async def test_webhook_config_update_all_options(test_db, mock_auth):
     assert data["auth_header_set"] is True
     assert data["auth_header_preview"] == f"{payload['auth_header_value'][:5]}..."
 
-    secret_payload = {"secret": "whs_test_secret_value"}
-    secret_response = client.put(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook",
-        json=secret_payload,
+    # List endpoints
+    list_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks",
         headers=get_auth_headers(),
     )
-    assert secret_response.status_code == 200, secret_response.json()
-    secret_data = secret_response.json()
-    assert secret_data["secret_set"] is True
-    assert secret_data["secret_preview"] == f"{secret_payload['secret'][:16]}..."
+    assert list_response.status_code == 200, list_response.json()
+    items = list_response.json()
+    assert len(items) == 1
+    assert items[0]["id"] == endpoint_id
 
+    # Get single endpoint
     get_response = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook",
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/{endpoint_id}",
         headers=get_auth_headers(),
     )
     assert get_response.status_code == 200, get_response.json()
     get_data = get_response.json()
-    assert get_data["enabled"] is True
+    assert get_data["id"] == endpoint_id
     assert get_data["url"] == payload["url"]
-    assert get_data["events"] == payload["events"]
-    assert get_data["auth_type"] == "header"
-    assert get_data["auth_header_name"] == "X-Api-Key"
-    assert get_data["secret_set"] is True
-    assert get_data["auth_header_set"] is True
 
-    org = await test_db.organizations.find_one({"_id": ObjectId(TEST_ORG_ID)})
-    assert org is not None
-    cfg = org.get("webhook") or {}
-    assert cfg.get("auth_type") == "header"
-    assert cfg.get("signature_enabled") is False
+    # Check persistence in webhook_endpoints collection
+    doc = await test_db.webhook_endpoints.find_one({"organization_id": TEST_ORG_ID})
+    assert doc is not None
+    assert doc["url"] == payload["url"]
+    assert doc["auth_type"] == "header"
 
-    logger.info("test_webhook_config_update_all_options() end")
+    logger.info("test_webhook_endpoint_create_and_get() end")
 
 
 @pytest.mark.asyncio
-async def test_webhook_config_clear_and_regenerate(test_db, mock_auth):
-    logger.info("test_webhook_config_clear_and_regenerate() start")
+async def test_webhook_endpoint_update_secret_and_header(test_db, mock_auth):
+    logger.info("test_webhook_endpoint_update_secret_and_header() start")
+
+    # Create an endpoint first
+    create_payload = {
+        "enabled": True,
+        "url": "https://example.com/webhook",
+        "events": ["document.uploaded"],
+        "auth_type": "header",
+        "auth_header_name": "X-Api-Key",
+        "auth_header_value": "supersecret",
+    }
+    create_response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks",
+        json=create_payload,
+        headers=get_auth_headers(),
+    )
+    assert create_response.status_code == 200, create_response.json()
+    endpoint_id = create_response.json()["id"]
 
     regen_secret = "whs_regenerated_secret_value"
     with patch("analytiq_data.webhooks.generate_webhook_secret", return_value=regen_secret):
-        payload = {
+        update_payload = {
             "auth_type": "hmac",
             "auth_header_name": "   ",
             "auth_header_value": "",
             "secret": "",
         }
         response = client.put(
-            f"/v0/orgs/{TEST_ORG_ID}/webhook",
-            json=payload,
+            f"/v0/orgs/{TEST_ORG_ID}/webhooks/{endpoint_id}",
+            json=update_payload,
             headers=get_auth_headers(),
         )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.json()
     data = response.json()
     assert data["auth_type"] == "hmac"
     assert data["auth_header_name"] is None
     assert data["auth_header_set"] is False
     assert data["auth_header_preview"] is None
-    assert data["generated_secret"] == regen_secret
     assert data["secret_set"] is True
     assert data["secret_preview"] == f"{regen_secret[:16]}..."
 
-    org = await test_db.organizations.find_one({"_id": ObjectId(TEST_ORG_ID)})
-    assert org is not None
-    cfg = org.get("webhook") or {}
-    assert cfg.get("auth_type") == "hmac"
-    assert cfg.get("signature_enabled") is True
-    assert cfg.get("auth_header_name") is None
-    assert cfg.get("auth_header_value") is None
+    doc = await test_db.webhook_endpoints.find_one({"_id": ObjectId(endpoint_id)})
+    assert doc is not None
+    assert doc.get("auth_type") == "hmac"
+    assert doc.get("signature_enabled") is True
+    assert doc.get("auth_header_name") is None
+    assert doc.get("auth_header_value") is None
 
-    logger.info("test_webhook_config_clear_and_regenerate() end")
+    logger.info("test_webhook_endpoint_update_secret_and_header() end")
 
 
 def test_webhook_enabled_for_all_triggers():
@@ -195,6 +209,289 @@ async def test_send_delivery_retries_on_exception():
     assert "exception: RuntimeError: boom" in kwargs["error"]
 
     logger.info("test_send_delivery_retries_on_exception() end")
+
+
+@pytest.mark.asyncio
+async def test_enqueue_event_fanout_multiple_endpoints(test_db, mock_auth):
+    logger.info("test_enqueue_event_fanout_multiple_endpoints() start")
+
+    # Insert two endpoints for the same org
+    ep1_id = await test_db.webhook_endpoints.insert_one(
+        {
+            "organization_id": TEST_ORG_ID,
+            "enabled": True,
+            "url": "https://example.com/hook1",
+            "events": ["llm.completed"],
+            "auth_type": "hmac",
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
+    )
+    ep2_id = await test_db.webhook_endpoints.insert_one(
+        {
+            "organization_id": TEST_ORG_ID,
+            "enabled": True,
+            "url": "https://example.com/hook2",
+            "events": ["llm.completed"],
+            "auth_type": "header",
+            "auth_header_name": "X-Api-Key",
+            "auth_header_value": "encrypted-value",  # treated as encrypted
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
+    )
+
+    # Patch DB and queue access inside dispatch
+    with patch("analytiq_data.webhooks.dispatch.ad.common.get_async_db", return_value=test_db), patch(
+        "analytiq_data.webhooks.dispatch.ad.queue.send_msg", new_callable=AsyncMock
+    ) as mock_send_msg:
+        analytiq_client = object()
+        delivery_id = await ad.webhooks.enqueue_event(
+            analytiq_client,
+            organization_id=TEST_ORG_ID,
+            event_type="llm.completed",
+            document_id=None,
+            prompt=None,
+            llm_output={"ok": True},
+            error=None,
+        )
+
+    assert delivery_id is not None
+
+    deliveries = await test_db[DELIVERIES_COLLECTION].find({"organization_id": TEST_ORG_ID}).to_list(length=None)
+    assert len(deliveries) == 2
+
+    event_ids = {d["event_id"] for d in deliveries}
+    assert len(event_ids) == 1  # same logical event
+
+    webhook_ids = {d.get("webhook_id") for d in deliveries}
+    # Both deliveries should be tied to their respective endpoints
+    assert webhook_ids == {str(ep1_id.inserted_id), str(ep2_id.inserted_id)}
+
+    # Ensure one queue message per delivery
+    assert mock_send_msg.await_count == 2
+
+    logger.info("test_enqueue_event_fanout_multiple_endpoints() end")
+
+
+@pytest.mark.asyncio
+async def test_webhook_endpoint_delete(test_db, mock_auth):
+    logger.info("test_webhook_endpoint_delete() start")
+
+    # Create an endpoint
+    create_payload = {
+        "enabled": True,
+        "url": "https://example.com/webhook",
+        "events": ["document.uploaded"],
+        "auth_type": "hmac",
+    }
+    create_response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks",
+        json=create_payload,
+        headers=get_auth_headers(),
+    )
+    assert create_response.status_code == 200, create_response.json()
+    endpoint_id = create_response.json()["id"]
+
+    # Delete it
+    delete_response = client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/{endpoint_id}",
+        headers=get_auth_headers(),
+    )
+    assert delete_response.status_code == 204
+
+    # Ensure it is gone
+    assert await test_db.webhook_endpoints.count_documents({"_id": ObjectId(endpoint_id)}) == 0
+
+    # 404 on get
+    get_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/{endpoint_id}",
+        headers=get_auth_headers(),
+    )
+    assert get_response.status_code == 404
+
+    logger.info("test_webhook_endpoint_delete() end")
+
+
+@pytest.mark.asyncio
+async def test_webhook_endpoint_test_route_enqueues_single_delivery(test_db, mock_auth):
+    logger.info("test_webhook_endpoint_test_route_enqueues_single_delivery() start")
+
+    # Create endpoint
+    create_payload = {
+        "enabled": True,
+        "url": "https://example.com/webhook",
+        "events": ["document.uploaded"],
+        "auth_type": "hmac",
+    }
+    create_response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks",
+        json=create_payload,
+        headers=get_auth_headers(),
+    )
+    assert create_response.status_code == 200, create_response.json()
+    endpoint_id = create_response.json()["id"]
+
+    # Patch queue send to avoid needing worker
+    with patch("analytiq_data.webhooks.dispatch.ad.queue.send_msg", new_callable=AsyncMock) as mock_send_msg:
+        resp = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/webhooks/{endpoint_id}/test",
+            headers=get_auth_headers(),
+        )
+
+    assert resp.status_code == 200, resp.json()
+    body = resp.json()
+    assert body["status"] == "enqueued"
+    delivery_id = body["delivery_id"]
+    assert isinstance(delivery_id, str)
+
+    delivery = await test_db[DELIVERIES_COLLECTION].find_one({"_id": ObjectId(delivery_id)})
+    assert delivery is not None
+    assert delivery["event_type"] == "webhook.test"
+    assert delivery["organization_id"] == TEST_ORG_ID
+    assert delivery.get("webhook_id") == endpoint_id
+
+    # One queue message sent
+    assert mock_send_msg.await_count == 1
+
+    logger.info("test_webhook_endpoint_test_route_enqueues_single_delivery() end")
+
+
+@pytest.mark.asyncio
+async def test_list_deliveries_with_and_without_webhook_filter(test_db, mock_auth):
+    logger.info("test_list_deliveries_with_and_without_webhook_filter() start")
+
+    # Create two endpoints
+    ep1 = await test_db.webhook_endpoints.insert_one(
+        {
+            "organization_id": TEST_ORG_ID,
+            "enabled": True,
+            "url": "https://example.com/hook1",
+            "events": ["document.uploaded"],
+            "auth_type": "hmac",
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
+    )
+    ep2 = await test_db.webhook_endpoints.insert_one(
+        {
+            "organization_id": TEST_ORG_ID,
+            "enabled": True,
+            "url": "https://example.com/hook2",
+            "events": ["document.uploaded"],
+            "auth_type": "hmac",
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
+    )
+
+    now = datetime.now(UTC)
+    # Insert deliveries for each
+    d1 = {
+        "event_id": "evt1",
+        "event_type": "document.uploaded",
+        "organization_id": TEST_ORG_ID,
+        "webhook_id": str(ep1.inserted_id),
+        "status": "delivered",
+        "attempts": 1,
+        "max_attempts": 3,
+        "payload": {},
+        "target_url": "https://example.com/hook1",
+        "created_at": now,
+        "updated_at": now,
+    }
+    d2 = {
+        "event_id": "evt2",
+        "event_type": "document.uploaded",
+        "organization_id": TEST_ORG_ID,
+        "webhook_id": str(ep2.inserted_id),
+        "status": "failed",
+        "attempts": 2,
+        "max_attempts": 3,
+        "payload": {},
+        "target_url": "https://example.com/hook2",
+        "created_at": now,
+        "updated_at": now,
+    }
+    await test_db[DELIVERIES_COLLECTION].insert_many([d1, d2])
+
+    # Without filter: both
+    res_all = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries",
+        headers=get_auth_headers(),
+    )
+    assert res_all.status_code == 200, res_all.json()
+    all_data = res_all.json()
+    assert all_data["total_count"] == 2
+    assert len(all_data["deliveries"]) == 2
+
+    # Filter by ep1
+    res_ep1 = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries",
+        params={"webhook_id": str(ep1.inserted_id)},
+        headers=get_auth_headers(),
+    )
+    assert res_ep1.status_code == 200, res_ep1.json()
+    data_ep1 = res_ep1.json()
+    assert data_ep1["total_count"] == 1
+    assert len(data_ep1["deliveries"]) == 1
+    assert data_ep1["deliveries"][0]["webhook_id"] == str(ep1.inserted_id)
+
+    logger.info("test_list_deliveries_with_and_without_webhook_filter() end")
+
+
+@pytest.mark.asyncio
+async def test_get_delivery_and_retry(test_db, mock_auth):
+    logger.info("test_get_delivery_and_retry() start")
+
+    now = datetime.now(UTC)
+    delivery_doc = {
+        "event_id": "evt_retry",
+        "event_type": "document.error",
+        "organization_id": TEST_ORG_ID,
+        "status": "failed",
+        "attempts": 1,
+        "max_attempts": 3,
+        "payload": {},
+        "target_url": "https://example.com/webhook",
+        "created_at": now,
+        "updated_at": now,
+        "next_attempt_at": now,
+    }
+    result = await test_db[DELIVERIES_COLLECTION].insert_one(delivery_doc)
+    delivery_id = str(result.inserted_id)
+
+    # Get delivery
+    res_get = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries/{delivery_id}",
+        headers=get_auth_headers(),
+    )
+    assert res_get.status_code == 200, res_get.json()
+    body = res_get.json()
+    assert body["id"] == delivery_id
+    assert body["event_id"] == "evt_retry"
+
+    # Retry
+    with patch("analytiq_data.webhooks.dispatch.ad.queue.send_msg", new_callable=AsyncMock) as mock_send_msg:
+        res_retry = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries/{delivery_id}/retry",
+            headers=get_auth_headers(),
+        )
+
+    assert res_retry.status_code == 200, res_retry.json()
+    retry_body = res_retry.json()
+    assert retry_body["status"] == "enqueued"
+    assert retry_body["delivery_id"] == delivery_id
+
+    # Delivery should be set back to pending
+    updated = await test_db[DELIVERIES_COLLECTION].find_one({"_id": ObjectId(delivery_id)})
+    assert updated is not None
+    assert updated["status"] == "pending"
+
+    # Queue send called once
+    assert mock_send_msg.await_count == 1
+
+    logger.info("test_get_delivery_and_retry() end")
 
 
 # ============================================================================
@@ -793,28 +1090,28 @@ async def test_mark_retry_fails_after_max_attempts(test_db, mock_auth):
 
 
 @pytest.mark.asyncio
-async def test_enqueue_event_creates_delivery(test_db, mock_auth):
-    """Test enqueue_event creates a delivery record and sends queue message"""
-    logger.info("test_enqueue_event_creates_delivery() start")
+async def test_enqueue_event_creates_delivery_single_endpoint(test_db, mock_auth):
+    """Test enqueue_event creates a delivery record for a single endpoint and sends queue message"""
+    logger.info("test_enqueue_event_creates_delivery_single_endpoint() start")
 
-    # Set up webhook config for the organization
-    await test_db.organizations.update_one(
-        {"_id": ObjectId(TEST_ORG_ID)},
-        {"$set": {
-            "webhook": {
-                "enabled": True,
-                "url": "https://example.com/webhook",
-                "events": None,
-                "auth_type": "hmac",
-                "secret": "encrypted_secret",
-            }
-        }}
+    # Set up a single webhook endpoint for the organization
+    await test_db.webhook_endpoints.insert_one(
+        {
+            "organization_id": TEST_ORG_ID,
+            "enabled": True,
+            "url": "https://example.com/webhook",
+            "events": None,
+            "auth_type": "hmac",
+            "secret": "encrypted_secret",
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
     )
 
     analytiq_client = MagicMock()
 
-    with patch("analytiq_data.common.get_async_db", return_value=test_db):
-        with patch("analytiq_data.queue.send_msg", new_callable=AsyncMock) as mock_send:
+    with patch("analytiq_data.webhooks.dispatch.ad.common.get_async_db", return_value=test_db):
+        with patch("analytiq_data.webhooks.dispatch.ad.queue.send_msg", new_callable=AsyncMock) as mock_send:
             delivery_id = await ad.webhooks.enqueue_event(
                 analytiq_client,
                 organization_id=TEST_ORG_ID,
@@ -833,28 +1130,30 @@ async def test_enqueue_event_creates_delivery(test_db, mock_auth):
     assert delivery["status"] == "pending"
     assert delivery["target_url"] == "https://example.com/webhook"
 
-    logger.info("test_enqueue_event_creates_delivery() end")
+    logger.info("test_enqueue_event_creates_delivery_single_endpoint() end")
 
 
 @pytest.mark.asyncio
 async def test_enqueue_event_returns_none_when_disabled(test_db, mock_auth):
-    """Test enqueue_event returns None when webhook is disabled"""
+    """Test enqueue_event returns None when all endpoints are disabled"""
     logger.info("test_enqueue_event_returns_none_when_disabled() start")
 
-    # Set up disabled webhook config
-    await test_db.organizations.update_one(
-        {"_id": ObjectId(TEST_ORG_ID)},
-        {"$set": {
-            "webhook": {
-                "enabled": False,
-                "url": "https://example.com/webhook",
-            }
-        }}
+    # Set up a disabled endpoint
+    await test_db.webhook_endpoints.insert_one(
+        {
+            "organization_id": TEST_ORG_ID,
+            "enabled": False,
+            "url": "https://example.com/webhook",
+            "events": None,
+            "auth_type": "hmac",
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
     )
 
     analytiq_client = MagicMock()
 
-    with patch("analytiq_data.common.get_async_db", return_value=test_db):
+    with patch("analytiq_data.webhooks.dispatch.ad.common.get_async_db", return_value=test_db):
         delivery_id = await ad.webhooks.enqueue_event(
             analytiq_client,
             organization_id=TEST_ORG_ID,
@@ -869,24 +1168,25 @@ async def test_enqueue_event_returns_none_when_disabled(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_enqueue_event_filters_by_event_type(test_db, mock_auth):
-    """Test enqueue_event respects event type filter"""
+    """Test enqueue_event respects event type filter on endpoints"""
     logger.info("test_enqueue_event_filters_by_event_type() start")
 
-    # Set up webhook config with limited events
-    await test_db.organizations.update_one(
-        {"_id": ObjectId(TEST_ORG_ID)},
-        {"$set": {
-            "webhook": {
-                "enabled": True,
-                "url": "https://example.com/webhook",
-                "events": ["document.uploaded"],  # Only document.uploaded
-            }
-        }}
+    # Set up endpoint with limited events
+    await test_db.webhook_endpoints.insert_one(
+        {
+            "organization_id": TEST_ORG_ID,
+            "enabled": True,
+            "url": "https://example.com/webhook",
+            "events": ["document.uploaded"],  # Only document.uploaded
+            "auth_type": "hmac",
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
     )
 
     analytiq_client = MagicMock()
 
-    with patch("analytiq_data.common.get_async_db", return_value=test_db):
+    with patch("analytiq_data.webhooks.dispatch.ad.common.get_async_db", return_value=test_db):
         # This should be filtered out
         delivery_id = await ad.webhooks.enqueue_event(
             analytiq_client,
@@ -1012,64 +1312,6 @@ async def test_claim_next_due_delivery(test_db, mock_auth):
 # ============================================================================
 # API Endpoint Tests
 # ============================================================================
-
-
-@pytest.mark.asyncio
-async def test_webhook_test_endpoint(test_db, mock_auth):
-    """Test POST /webhook/test endpoint"""
-    logger.info("test_webhook_test_endpoint() start")
-
-    # Set up webhook config
-    await test_db.organizations.update_one(
-        {"_id": ObjectId(TEST_ORG_ID)},
-        {"$set": {
-            "webhook": {
-                "enabled": True,
-                "url": "https://example.com/webhook",
-                "events": None,
-                "auth_type": "hmac",
-            }
-        }}
-    )
-
-    with patch("analytiq_data.queue.send_msg", new_callable=AsyncMock):
-        response = client.post(
-            f"/v0/orgs/{TEST_ORG_ID}/webhook/test",
-            headers=get_auth_headers(),
-        )
-
-    assert response.status_code == 200
-    data = response.json()
-    assert data["status"] == "enqueued"
-    assert data["delivery_id"] is not None
-
-    logger.info("test_webhook_test_endpoint() end")
-
-
-@pytest.mark.asyncio
-async def test_webhook_test_endpoint_not_configured(test_db, mock_auth):
-    """Test POST /webhook/test returns 400 when not configured"""
-    logger.info("test_webhook_test_endpoint_not_configured() start")
-
-    # Ensure webhook is disabled
-    await test_db.organizations.update_one(
-        {"_id": ObjectId(TEST_ORG_ID)},
-        {"$set": {
-            "webhook": {
-                "enabled": False,
-            }
-        }}
-    )
-
-    response = client.post(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook/test",
-        headers=get_auth_headers(),
-    )
-
-    assert response.status_code == 400
-    assert "not enabled" in response.json()["detail"]
-
-    logger.info("test_webhook_test_endpoint_not_configured() end")
 
 
 @pytest.mark.asyncio

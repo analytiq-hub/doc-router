@@ -18,6 +18,7 @@ import analytiq_data as ad
 logger = logging.getLogger(__name__)
 
 DELIVERIES_COLLECTION = "webhook_deliveries"
+ENDPOINTS_COLLECTION = "webhook_endpoints"
 WEBHOOK_QUEUE_NAME = "webhook"
 
 
@@ -75,12 +76,14 @@ def _compute_backoff(attempts: int) -> timedelta:
     return timedelta(seconds=secs)
 
 
-async def _get_org_webhook_config(analytiq_client, organization_id: str) -> dict | None:
+async def _get_org_webhook_endpoints(analytiq_client, organization_id: str) -> list[dict]:
+    """
+    Return all webhook endpoint configs for an organization.
+    """
     db = ad.common.get_async_db(analytiq_client)
-    org = await db.organizations.find_one({"_id": ObjectId(organization_id)})
-    if not org:
-        return None
-    return org.get("webhook")
+    cursor = db[ENDPOINTS_COLLECTION].find({"organization_id": organization_id})
+    endpoints = await cursor.to_list(length=None)
+    return endpoints
 
 
 def _webhook_enabled_for_event(webhook_cfg: dict | None, event_type: str) -> bool:
@@ -141,13 +144,25 @@ async def enqueue_event(
     prompt: dict | None = None,
     llm_output: dict | None = None,
     error: dict | None = None,
+    webhook_id: str | None = None,
 ) -> str | None:
     """
-    Create a webhook delivery record and enqueue it for sending.
-    Returns delivery_id if enqueued, otherwise None (webhook disabled/not configured).
+    Create webhook delivery records (one per matching endpoint) and enqueue them for sending.
+    Returns the first delivery_id if any were enqueued, otherwise None (no endpoints enabled/not configured).
     """
-    webhook_cfg = await _get_org_webhook_config(analytiq_client, organization_id)
-    if not _webhook_enabled_for_event(webhook_cfg, event_type):
+    endpoints = await _get_org_webhook_endpoints(analytiq_client, organization_id)
+    if not endpoints:
+        return None
+
+    active_endpoints: list[dict] = []
+    for ep in endpoints:
+        if webhook_id is not None:
+            ep_id = ep.get("_id")
+            if ep_id is None or str(ep_id) != webhook_id:
+                continue
+        if _webhook_enabled_for_event(ep, event_type):
+            active_endpoints.append(ep)
+    if not active_endpoints:
         return None
 
     doc_snapshot = None
@@ -155,21 +170,6 @@ async def enqueue_event(
         doc_snapshot = await _get_document_snapshot(analytiq_client, document_id)
         if not doc_snapshot:
             return None
-
-    target_url = webhook_cfg["url"]
-    secret_encrypted = webhook_cfg.get("secret")
-    auth_type = webhook_cfg.get("auth_type")
-    if not auth_type:
-        # Backward-compatible: if signature_enabled truthy -> hmac, else header if auth header exists, else hmac
-        if bool(webhook_cfg.get("signature_enabled", False)):
-            auth_type = "hmac"
-        elif webhook_cfg.get("auth_header_value"):
-            auth_type = "header"
-        else:
-            auth_type = "hmac"
-    auth_header_name = webhook_cfg.get("auth_header_name")
-    auth_header_value = webhook_cfg.get("auth_header_value")
-    auth_header_preview = webhook_cfg.get("auth_header_preview")
 
     event_id = str(uuid.uuid4())
     ts = int(time.time())
@@ -189,40 +189,78 @@ async def enqueue_event(
         payload["error"] = error
 
     now = _now_utc()
-    delivery_doc = {
-        "event_id": event_id,
-        "event_type": event_type,
-        "organization_id": organization_id,
-        "document_id": document_id,
-        "prompt_revid": (prompt or {}).get("prompt_revid"),
-        "prompt_id": (prompt or {}).get("prompt_id"),
-        "prompt_version": (prompt or {}).get("prompt_version"),
-        "payload": payload,
-        "target_url": target_url,
-        "secret_encrypted": secret_encrypted,
-        "auth_type": auth_type,
-        "auth_header_name": auth_header_name,
-        "auth_header_value": auth_header_value,
-        "status": "pending",
-        "attempts": 0,
-        "max_attempts": _get_int_env("WEBHOOK_MAX_ATTEMPTS", 10),
-        "next_attempt_at": now,
-        "created_at": now,
-        "updated_at": now,
-    }
-
     db = ad.common.get_async_db(analytiq_client)
-    result = await db[DELIVERIES_COLLECTION].insert_one(delivery_doc)
-    delivery_id = str(result.inserted_id)
 
-    await ad.queue.send_msg(
-        analytiq_client,
-        WEBHOOK_QUEUE_NAME,
-        msg={"delivery_id": delivery_id, "event_id": event_id},
-    )
+    first_delivery_id: str | None = None
 
-    logger.info(f"Webhook enqueued: {delivery_id} {event_type} org={organization_id} doc={document_id}")
-    return delivery_id
+    for ep in active_endpoints:
+        target_url = ep.get("url")
+        if not target_url:
+            continue
+
+        auth_type = ep.get("auth_type")
+        if not auth_type:
+            if bool(ep.get("signature_enabled", False)):
+                auth_type = "hmac"
+            elif ep.get("auth_header_value"):
+                auth_type = "header"
+            else:
+                auth_type = "hmac"
+
+        secret_encrypted = ep.get("secret")
+        auth_header_name = ep.get("auth_header_name")
+        auth_header_value = ep.get("auth_header_value")
+        auth_header_preview = ep.get("auth_header_preview")
+
+        webhook_id = ep.get("_id")
+        webhook_id_str = str(webhook_id) if webhook_id is not None else None
+
+        delivery_doc = {
+            "event_id": event_id,
+            "event_type": event_type,
+            "organization_id": organization_id,
+            "webhook_id": webhook_id_str,
+            "document_id": document_id,
+            "prompt_revid": (prompt or {}).get("prompt_revid"),
+            "prompt_id": (prompt or {}).get("prompt_id"),
+            "prompt_version": (prompt or {}).get("prompt_version"),
+            "payload": payload,
+            "target_url": target_url,
+            "secret_encrypted": secret_encrypted,
+            "auth_type": auth_type,
+            "auth_header_name": auth_header_name,
+            "auth_header_value": auth_header_value,
+            "auth_header_preview": auth_header_preview,
+            "status": "pending",
+            "attempts": 0,
+            "max_attempts": _get_int_env("WEBHOOK_MAX_ATTEMPTS", 10),
+            "next_attempt_at": now,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+        result = await db[DELIVERIES_COLLECTION].insert_one(delivery_doc)
+        delivery_id = str(result.inserted_id)
+
+        await ad.queue.send_msg(
+            analytiq_client,
+            WEBHOOK_QUEUE_NAME,
+            msg={"delivery_id": delivery_id, "event_id": event_id},
+        )
+
+        logger.info(
+            "Webhook enqueued: %s %s org=%s doc=%s webhook_id=%s",
+            delivery_id,
+            event_type,
+            organization_id,
+            document_id,
+            webhook_id_str,
+        )
+
+        if first_delivery_id is None:
+            first_delivery_id = delivery_id
+
+    return first_delivery_id
 
 
 async def claim_delivery_by_id(analytiq_client, delivery_id: str) -> dict | None:

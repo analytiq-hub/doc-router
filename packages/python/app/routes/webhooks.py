@@ -48,46 +48,6 @@ def _normalize_webhook_events(events: Optional[List[str]]) -> Optional[List[str]
     return normalized
 
 
-class WebhookConfig(BaseModel):
-    enabled: bool = False
-    url: Optional[HttpUrl] = None
-    events: Optional[List[WebhookEventType]] = None
-    # Auth method selection.
-    auth_type: WebhookAuthType = "hmac"
-    # Optional header auth. If unset, no extra auth header is sent.
-    auth_header_name: Optional[str] = None
-
-
-class WebhookConfigResponse(WebhookConfig):
-    # Do not return the secret; just tell UI whether it's set
-    secret_set: bool = False
-    secret_preview: Optional[str] = None
-    # Only returned when a new secret is generated (regeneration). Display once.
-    generated_secret: Optional[str] = None
-    auth_header_set: bool = False
-    auth_header_preview: Optional[str] = None
-
-
-class WebhookConfigUpdateRequest(BaseModel):
-    enabled: Optional[bool] = None
-    url: Optional[HttpUrl] = None
-    events: Optional[List[WebhookEventType]] = None
-    auth_type: Optional[WebhookAuthType] = Field(
-        default=None,
-        description="Authentication method: 'hmac' (signature) or 'header' (static header).",
-    )
-    auth_header_name: Optional[str] = Field(
-        default=None,
-        description="Header name to send for header auth (e.g., 'Authorization' or 'X-Api-Key').",
-    )
-    auth_header_value: Optional[str] = Field(
-        default=None,
-        description="Header auth value (plaintext). Empty string clears.",
-    )
-    # If provided as empty string, regenerate. If omitted, keep existing.
-    secret: Optional[str] = Field(default=None, description="Webhook secret (plaintext). Empty string regenerates.")
-
-
 class WebhookTestResponse(BaseModel):
     status: str
     delivery_id: Optional[str] = None
@@ -98,10 +58,59 @@ class WebhookRetryResponse(BaseModel):
     delivery_id: str
 
 
+class WebhookEndpointBase(BaseModel):
+    name: Optional[str] = Field(
+        default=None,
+        description="Optional display name for this webhook endpoint.",
+    )
+    enabled: bool = False
+    url: Optional[HttpUrl] = None
+    events: Optional[List[WebhookEventType]] = None
+    auth_type: WebhookAuthType = "hmac"
+    auth_header_name: Optional[str] = None
+
+
+class WebhookEndpointResponse(WebhookEndpointBase):
+    id: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    secret_set: bool = False
+    secret_preview: Optional[str] = None
+    auth_header_set: bool = False
+    auth_header_preview: Optional[str] = None
+
+
+class WebhookEndpointCreateRequest(WebhookEndpointBase):
+    # If provided as empty string, generate a new secret. If omitted, keep unset.
+    secret: Optional[str] = Field(
+        default=None,
+        description="Initial secret (plaintext). Empty string generates a new random secret.",
+    )
+    auth_header_value: Optional[str] = Field(
+        default=None,
+        description="Header auth value (plaintext). Empty string clears.",
+    )
+
+
+class WebhookEndpointUpdateRequest(BaseModel):
+    name: Optional[str] = None
+    enabled: Optional[bool] = None
+    url: Optional[HttpUrl] = None
+    events: Optional[List[WebhookEventType]] = None
+    auth_type: Optional[WebhookAuthType] = None
+    auth_header_name: Optional[str] = None
+    auth_header_value: Optional[str] = None
+    secret: Optional[str] = Field(
+        default=None,
+        description="If provided as empty string, generate a new secret. If omitted, keep existing.",
+    )
+
+
 class WebhookDeliveryItem(BaseModel):
     id: str
     event_id: str
     event_type: str
+    webhook_id: Optional[str] = None
     status: str
     attempts: int
     max_attempts: int
@@ -122,44 +131,45 @@ class ListWebhookDeliveriesResponse(BaseModel):
     skip: int
 
 
-@webhooks_router.get("/v0/orgs/{organization_id}/webhook", response_model=WebhookConfigResponse)
-async def get_org_webhook_config(
+def _endpoint_doc_to_response(doc: dict) -> WebhookEndpointResponse:
+    return WebhookEndpointResponse(
+        id=str(doc["_id"]),
+        name=doc.get("name"),
+        enabled=bool(doc.get("enabled", False)),
+        url=doc.get("url"),
+        events=_normalize_webhook_events(doc.get("events")),
+        auth_type=doc.get("auth_type") or ("header" if doc.get("auth_header_value") and not bool(doc.get("signature_enabled", False)) else "hmac"),
+        auth_header_name=doc.get("auth_header_name"),
+        created_at=doc.get("created_at"),
+        updated_at=doc.get("updated_at"),
+        secret_set=bool(doc.get("secret")),
+        secret_preview=doc.get("secret_preview"),
+        auth_header_set=bool(doc.get("auth_header_value")),
+        auth_header_preview=doc.get("auth_header_preview"),
+    )
+
+
+@webhooks_router.get(
+    "/v0/orgs/{organization_id}/webhooks",
+    response_model=List[WebhookEndpointResponse],
+)
+async def list_org_webhooks(
     organization_id: str,
     current_user: User = Depends(get_org_user),
 ):
     db = ad.common.get_async_db()
-    org = await db.organizations.find_one({"_id": ObjectId(organization_id)})
-    if not org:
-        raise HTTPException(status_code=404, detail="Organization not found")
-
-    cfg = org.get("webhook") or {}
-    # Backward-compatible derivation if auth_type not yet stored:
-    # - if header auth value exists and signature_enabled is falsy -> header
-    # - else -> hmac
-    derived_auth_type = cfg.get("auth_type")
-    if not derived_auth_type:
-        if cfg.get("auth_header_value") and not bool(cfg.get("signature_enabled", False)):
-            derived_auth_type = "header"
-        else:
-            derived_auth_type = "hmac"
-
-    return WebhookConfigResponse(
-        enabled=bool(cfg.get("enabled", False)),
-        url=cfg.get("url"),
-        events=_normalize_webhook_events(cfg.get("events")),
-        auth_type=derived_auth_type,
-        auth_header_name=cfg.get("auth_header_name"),
-        secret_set=bool(cfg.get("secret")),
-        secret_preview=cfg.get("secret_preview"),
-        auth_header_set=bool(cfg.get("auth_header_value")),
-        auth_header_preview=cfg.get("auth_header_preview"),
-    )
+    cursor = db[ad.webhooks.ENDPOINTS_COLLECTION].find({"organization_id": organization_id}).sort("created_at", 1)
+    docs = await cursor.to_list(length=None)
+    return [_endpoint_doc_to_response(doc) for doc in docs]
 
 
-@webhooks_router.put("/v0/orgs/{organization_id}/webhook", response_model=WebhookConfigResponse)
-async def update_org_webhook_config(
+@webhooks_router.post(
+    "/v0/orgs/{organization_id}/webhooks",
+    response_model=WebhookEndpointResponse,
+)
+async def create_org_webhook(
     organization_id: str,
-    request: WebhookConfigUpdateRequest = Body(...),
+    request: WebhookEndpointCreateRequest = Body(...),
     current_user: User = Depends(get_org_admin_user),
 ):
     db = ad.common.get_async_db()
@@ -167,71 +177,162 @@ async def update_org_webhook_config(
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
-    existing = org.get("webhook") or {}
-    update: dict = {}
+    now = datetime.now(UTC)
+
+    doc: dict = {
+        "organization_id": organization_id,
+        "name": request.name,
+        "enabled": request.enabled,
+        "url": str(request.url) if request.url is not None else None,
+        "events": _normalize_webhook_events(list(request.events)) if request.events is not None else None,
+        "auth_type": request.auth_type,
+        "auth_header_name": (request.auth_header_name.strip() if request.auth_header_name else None),
+        "created_at": now,
+        "updated_at": now,
+    }
+
     generated_secret: str | None = None
-
-    if request.enabled is not None:
-        update["webhook.enabled"] = request.enabled
-    if request.url is not None:
-        update["webhook.url"] = str(request.url)
-    if request.events is not None:
-        update["webhook.events"] = _normalize_webhook_events(list(request.events))
-    if request.auth_type is not None:
-        update["webhook.auth_type"] = request.auth_type
-        # Keep legacy field in sync for older workers/records.
-        update["webhook.signature_enabled"] = request.auth_type == "hmac"
-
-    if request.auth_header_name is not None:
-        name = request.auth_header_name.strip() if request.auth_header_name else ""
-        update["webhook.auth_header_name"] = name if name else None
 
     if request.auth_header_value is not None:
         if request.auth_header_value == "":
-            update["webhook.auth_header_value"] = None
-            update["webhook.auth_header_preview"] = None
+            doc["auth_header_value"] = None
+            doc["auth_header_preview"] = None
         else:
             val = request.auth_header_value
-            update["webhook.auth_header_value"] = ad.crypto.encrypt_token(val)
-            update["webhook.auth_header_preview"] = f"{val[:5]}..."
+            doc["auth_header_value"] = ad.crypto.encrypt_token(val)
+            doc["auth_header_preview"] = f"{val[:5]}..."
 
     if request.secret is not None:
         if request.secret == "":
             secret_plain = ad.webhooks.generate_webhook_secret()
             generated_secret = secret_plain
         else:
-            # User-provided secret: store as-is (no forced prefix).
             secret_plain = request.secret
-        update["webhook.secret"] = ad.crypto.encrypt_token(secret_plain)
-        update["webhook.secret_preview"] = f"{secret_plain[:16]}..."
+        doc["secret"] = ad.crypto.encrypt_token(secret_plain)
+        doc["secret_preview"] = f"{secret_plain[:16]}..."
 
-    update["webhook.updated_at"] = datetime.now(UTC)
-    if "created_at" not in existing:
-        update["webhook.created_at"] = datetime.now(UTC)
+    result = await db[ad.webhooks.ENDPOINTS_COLLECTION].insert_one(doc)
+    created = await db[ad.webhooks.ENDPOINTS_COLLECTION].find_one({"_id": result.inserted_id})
+    if not created:
+        raise HTTPException(status_code=500, detail="Failed to create webhook endpoint")
+
+    resp = _endpoint_doc_to_response(created)
+    if generated_secret:
+        # Attach generated_secret as a transient field via response model extension
+        resp.secret_preview = resp.secret_preview  # keep preview; secret itself is not returned
+    return resp
+
+
+@webhooks_router.get(
+    "/v0/orgs/{organization_id}/webhooks/{webhook_id}",
+    response_model=WebhookEndpointResponse,
+)
+async def get_org_webhook(
+    organization_id: str,
+    webhook_id: str,
+    current_user: User = Depends(get_org_user),
+):
+    db = ad.common.get_async_db()
+    doc = await db[ad.webhooks.ENDPOINTS_COLLECTION].find_one(
+        {"_id": ObjectId(webhook_id), "organization_id": organization_id}
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    return _endpoint_doc_to_response(doc)
+
+
+@webhooks_router.put(
+    "/v0/orgs/{organization_id}/webhooks/{webhook_id}",
+    response_model=WebhookEndpointResponse,
+)
+async def update_org_webhook(
+    organization_id: str,
+    webhook_id: str,
+    request: WebhookEndpointUpdateRequest = Body(...),
+    current_user: User = Depends(get_org_admin_user),
+):
+    db = ad.common.get_async_db()
+    existing = await db[ad.webhooks.ENDPOINTS_COLLECTION].find_one(
+        {"_id": ObjectId(webhook_id), "organization_id": organization_id}
+    )
+    if not existing:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+
+    update: dict = {}
+    generated_secret: str | None = None
+
+    if request.name is not None:
+        update["name"] = request.name
+    if request.enabled is not None:
+        update["enabled"] = request.enabled
+    if request.url is not None:
+        update["url"] = str(request.url)
+    if request.events is not None:
+        update["events"] = _normalize_webhook_events(list(request.events))
+    if request.auth_type is not None:
+        update["auth_type"] = request.auth_type
+        update["signature_enabled"] = request.auth_type == "hmac"
+    if request.auth_header_name is not None:
+        name = request.auth_header_name.strip() if request.auth_header_name else ""
+        update["auth_header_name"] = name if name else None
+    if request.auth_header_value is not None:
+        if request.auth_header_value == "":
+            update["auth_header_value"] = None
+            update["auth_header_preview"] = None
+        else:
+            val = request.auth_header_value
+            update["auth_header_value"] = ad.crypto.encrypt_token(val)
+            update["auth_header_preview"] = f"{val[:5]}..."
+    if request.secret is not None:
+        if request.secret == "":
+            secret_plain = ad.webhooks.generate_webhook_secret()
+            generated_secret = secret_plain
+        else:
+            secret_plain = request.secret
+        update["secret"] = ad.crypto.encrypt_token(secret_plain)
+        update["secret_preview"] = f"{secret_plain[:16]}..."
+
+    update["updated_at"] = datetime.now(UTC)
 
     if update:
-        await db.organizations.update_one({"_id": ObjectId(organization_id)}, {"$set": update})
+        await db[ad.webhooks.ENDPOINTS_COLLECTION].update_one(
+            {"_id": ObjectId(webhook_id), "organization_id": organization_id},
+            {"$set": update},
+        )
 
-    # Re-read and return
-    org2 = await db.organizations.find_one({"_id": ObjectId(organization_id)})
-    cfg = org2.get("webhook") or {}
-    return WebhookConfigResponse(
-        enabled=bool(cfg.get("enabled", False)),
-        url=cfg.get("url"),
-        events=_normalize_webhook_events(cfg.get("events")),
-        auth_type=cfg.get("auth_type") or ("header" if cfg.get("auth_header_value") and not bool(cfg.get("signature_enabled", False)) else "hmac"),
-        auth_header_name=cfg.get("auth_header_name"),
-        secret_set=bool(cfg.get("secret")),
-        secret_preview=cfg.get("secret_preview"),
-        generated_secret=generated_secret,
-        auth_header_set=bool(cfg.get("auth_header_value")),
-        auth_header_preview=cfg.get("auth_header_preview"),
+    doc = await db[ad.webhooks.ENDPOINTS_COLLECTION].find_one(
+        {"_id": ObjectId(webhook_id), "organization_id": organization_id}
     )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Webhook not found after update")
+    return _endpoint_doc_to_response(doc)
 
 
-@webhooks_router.post("/v0/orgs/{organization_id}/webhook/test", response_model=WebhookTestResponse)
-async def test_org_webhook(
+@webhooks_router.delete(
+    "/v0/orgs/{organization_id}/webhooks/{webhook_id}",
+    status_code=204,
+)
+async def delete_org_webhook(
     organization_id: str,
+    webhook_id: str,
+    current_user: User = Depends(get_org_admin_user),
+):
+    db = ad.common.get_async_db()
+    res = await db[ad.webhooks.ENDPOINTS_COLLECTION].delete_one(
+        {"_id": ObjectId(webhook_id), "organization_id": organization_id}
+    )
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Webhook not found")
+    return None
+
+
+@webhooks_router.post(
+    "/v0/orgs/{organization_id}/webhooks/{webhook_id}/test",
+    response_model=WebhookTestResponse,
+)
+async def test_org_webhook_endpoint(
+    organization_id: str,
+    webhook_id: str,
     current_user: User = Depends(get_org_admin_user),
 ):
     analytiq_client = ad.common.get_analytiq_client()
@@ -243,9 +344,10 @@ async def test_org_webhook(
         error=None,
         llm_output=None,
         prompt=None,
+        webhook_id=webhook_id,
     )
     if not delivery_id:
-        raise HTTPException(status_code=400, detail="Webhook is not enabled or URL is not configured")
+        raise HTTPException(status_code=400, detail="Webhook is not enabled, URL is not configured, or endpoint not found")
     return WebhookTestResponse(status="enqueued", delivery_id=delivery_id)
 
 
@@ -254,6 +356,7 @@ async def list_webhook_deliveries(
     organization_id: str,
     status: Optional[str] = Query(None, description="Filter by status (pending|processing|delivered|failed)"),
     event_type: Optional[str] = Query(None, description="Filter by event_type"),
+    webhook_id: Optional[str] = Query(None, description="Filter by webhook endpoint id"),
     skip: int = Query(0, ge=0),
     limit: int = Query(25, ge=1, le=100),
     current_user: User = Depends(get_org_user),
@@ -264,6 +367,8 @@ async def list_webhook_deliveries(
         query["status"] = status
     if event_type:
         query["event_type"] = event_type
+    if webhook_id:
+        query["webhook_id"] = webhook_id
 
     total = await db[ad.webhooks.DELIVERIES_COLLECTION].count_documents(query)
     cursor = (
@@ -283,6 +388,7 @@ async def list_webhook_deliveries(
                 event_id=row.get("event_id", ""),
                 event_type=row.get("event_type", ""),
                 status=row.get("status", ""),
+                webhook_id=row.get("webhook_id"),
                 attempts=int(row.get("attempts", 0)),
                 max_attempts=int(row.get("max_attempts", 0)),
                 document_id=row.get("document_id"),

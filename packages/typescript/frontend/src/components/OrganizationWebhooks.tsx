@@ -42,6 +42,7 @@ interface WebhookDeliveryItem {
   event_id: string;
   event_type: string;
   status: string;
+  webhook_id?: string | null;
   attempts: number;
   max_attempts: number;
   document_id?: string | null;
@@ -65,6 +66,20 @@ interface WebhookConfigSnapshot {
   events: WebhookEventType[];
   authType: 'hmac' | 'header';
   authHeaderName: string;
+}
+
+interface WebhookEndpoint {
+  id: string;
+  name?: string | null;
+  enabled: boolean;
+  url: string | null;
+  events: Array<WebhookEventType> | null;
+  auth_type: 'hmac' | 'header';
+  auth_header_name?: string | null;
+  secret_set: boolean;
+  secret_preview?: string | null;
+  auth_header_set?: boolean | null;
+  auth_header_preview?: string | null;
 }
 
 const CONFIG_EVENTS: Array<Exclude<WebhookEventType, 'webhook.test'>> = [
@@ -105,6 +120,14 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
 
+  const [endpoints, setEndpoints] = useState<WebhookEndpoint[]>([]);
+  const [selectedEndpointId, setSelectedEndpointId] = useState<string | null>(null);
+
+  const selectedEndpoint = useMemo(
+    () => endpoints.find((e) => e.id === selectedEndpointId) ?? endpoints[0],
+    [endpoints, selectedEndpointId]
+  );
+
   const [enabled, setEnabled] = useState(false);
   const [url, setUrl] = useState('');
   const [secret, setSecret] = useState('');
@@ -129,21 +152,40 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
   const [detailsLoading, setDetailsLoading] = useState(false);
 
   const loadConfig = useCallback(async () => {
-    const res = await apiClient.get<WebhookConfigResponse>(`/v0/orgs/${organizationId}/webhook`);
-    const normalizedEvents = normalizeWebhookEvents(res.data.events);
-    const resolvedAuthType = (res.data.auth_type as 'hmac' | 'header' | null) ?? 'hmac';
-    const resolvedAuthHeaderName = res.data.auth_header_name ?? 'Authorization';
-    setEnabled(res.data.enabled);
-    setUrl(res.data.url ?? '');
-    setSecretSet(res.data.secret_set);
-    setSecretPreview(res.data.secret_preview ?? null);
+    const res = await apiClient.get<WebhookEndpoint[]>(`/v0/orgs/${organizationId}/webhooks`);
+    const list = res.data;
+    setEndpoints(list);
+    const primary = list[0];
+    if (!primary) {
+      setEnabled(false);
+      setUrl('');
+      setSecretSet(false);
+      setSecretPreview(null);
+      setEvents(CONFIG_EVENTS);
+      setAuthType('hmac');
+      setAuthHeaderName('Authorization');
+      setAuthHeaderPreview(null);
+      setInitialConfig(null);
+      setSelectedEndpointId(null);
+      return;
+    }
+
+    const normalizedEvents = normalizeWebhookEvents(primary.events);
+    const resolvedAuthType = primary.auth_type;
+    const resolvedAuthHeaderName = primary.auth_header_name ?? 'Authorization';
+
+    setSelectedEndpointId(primary.id);
+    setEnabled(primary.enabled);
+    setUrl(primary.url ?? '');
+    setSecretSet(primary.secret_set);
+    setSecretPreview(primary.secret_preview ?? null);
     setEvents(normalizedEvents);
     setAuthType(resolvedAuthType);
     setAuthHeaderName(resolvedAuthHeaderName);
-    setAuthHeaderPreview(res.data.auth_header_preview ?? null);
+    setAuthHeaderPreview(primary.auth_header_preview ?? null);
     setInitialConfig({
-      enabled: res.data.enabled,
-      url: res.data.url ?? '',
+      enabled: primary.enabled,
+      url: primary.url ?? '',
       events: normalizedEvents,
       authType: resolvedAuthType,
       authHeaderName: resolvedAuthHeaderName,
@@ -154,15 +196,19 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
     setDeliveriesLoading(true);
     try {
       const skip = page * pageSize;
+      const params: Record<string, unknown> = { skip, limit: pageSize };
+      if (selectedEndpoint) {
+        params.webhook_id = selectedEndpoint.id;
+      }
       const res = await apiClient.get<DeliveriesResponse>(`/v0/orgs/${organizationId}/webhook/deliveries`, {
-        params: { skip, limit: pageSize },
+        params,
       });
       setDeliveries(res.data.deliveries);
       setDeliveriesTotal(res.data.total_count);
     } finally {
       setDeliveriesLoading(false);
     }
-  }, [organizationId, page, pageSize]);
+  }, [organizationId, page, pageSize, selectedEndpoint]);
 
   const loadDeliveryDetails = useCallback(
     async (deliveryId: string) => {
