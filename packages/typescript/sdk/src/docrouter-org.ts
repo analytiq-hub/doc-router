@@ -85,6 +85,7 @@ import {
   CreateWebhookParams,
   UpdateWebhookParams,
   WebhookDelivery,
+  WebhookDeliveryDetail,
   ListWebhookDeliveriesParams,
   ListWebhookDeliveriesResponse,
 } from './types';
@@ -754,8 +755,8 @@ export class DocRouterOrg {
   /**
    * Get a single webhook delivery by ID.
    */
-  async getWebhookDelivery(deliveryId: string): Promise<WebhookDelivery> {
-    return this.http.get<WebhookDelivery>(
+  async getWebhookDelivery(deliveryId: string): Promise<WebhookDeliveryDetail> {
+    return this.http.get<WebhookDeliveryDetail>(
       `/v0/orgs/${this.organizationId}/webhooks/deliveries/${deliveryId}`,
     );
   }

@@ -92,8 +92,34 @@ async def test_webhook_endpoint_create_and_get(test_db, mock_auth):
     assert doc is not None
     assert doc["url"] == payload["url"]
     assert doc["auth_type"] == "header"
+    assert doc.get("signature_enabled") is False
 
     logger.info("test_webhook_endpoint_create_and_get() end")
+
+
+@pytest.mark.asyncio
+async def test_webhook_create_enabled_requires_url(test_db, mock_auth):
+    """Enabled endpoints must have a non-empty URL."""
+    response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks",
+        json={
+            "enabled": True,
+            "url": None,
+            "auth_type": "hmac",
+            "secret": "",
+        },
+        headers=get_auth_headers(),
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_webhook_get_invalid_id_returns_404(test_db, mock_auth):
+    response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/not-a-valid-object-id",
+        headers=get_auth_headers(),
+    )
+    assert response.status_code == 404
 
 
 @pytest.mark.asyncio

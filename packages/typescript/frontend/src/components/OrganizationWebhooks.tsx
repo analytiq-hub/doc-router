@@ -70,6 +70,7 @@ interface WebhookEndpoint {
   secret_preview?: string | null;
   auth_header_set?: boolean | null;
   auth_header_preview?: string | null;
+  generated_secret?: string | null;
 }
 
 const CONFIG_EVENTS: Array<Exclude<WebhookEventType, 'webhook.test'>> = [
@@ -337,7 +338,10 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
         if (authType === 'hmac') {
           body.secret = secret.trim().length > 0 ? secret.trim() : '';
         }
-        await apiClient.post(`/v0/orgs/${organizationId}/webhooks`, body);
+        const createRes = await apiClient.post<WebhookEndpoint>(`/v0/orgs/${organizationId}/webhooks`, body);
+        if (createRes.data.generated_secret) {
+          setGeneratedSecret(createRes.data.generated_secret);
+        }
         setIsCreatingNew(false);
         setSecret('');
         setAuthHeaderValue('');
@@ -352,7 +356,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
         return;
       }
 
-      await apiClient.put(`/v0/orgs/${organizationId}/webhooks/${selectedEndpointId}`, {
+      const updateRes = await apiClient.put<WebhookEndpoint>(`/v0/orgs/${organizationId}/webhooks/${selectedEndpointId}`, {
         name: name.trim() || null,
         enabled,
         url: url.trim() || null,
@@ -362,6 +366,9 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
         ...(authHeaderValue.trim().length > 0 ? { auth_header_value: authHeaderValue } : {}),
         ...(secret.trim().length > 0 ? { secret: secret.trim() } : {}),
       });
+      if (updateRes.data.generated_secret) {
+        setGeneratedSecret(updateRes.data.generated_secret);
+      }
       setSecret('');
       setAuthHeaderValue('');
       await loadEndpoints();
@@ -377,11 +384,18 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
     if (!selectedEndpointId || isCreatingNew) return;
     setSaving(true);
     try {
-      await apiClient.put(`/v0/orgs/${organizationId}/webhooks/${selectedEndpointId}`, {
+      const regenRes = await apiClient.put<WebhookEndpoint>(`/v0/orgs/${organizationId}/webhooks/${selectedEndpointId}`, {
         secret: '',
       });
+      if (regenRes.data.generated_secret) {
+        setGeneratedSecret(regenRes.data.generated_secret);
+      }
       await loadEndpoints();
-      toast.success('Secret regenerated — copy from the API response if your client shows it once');
+      toast.success(
+        regenRes.data.generated_secret
+          ? 'Secret regenerated — copy it from the dialog'
+          : 'Secret updated'
+      );
     } catch (e) {
       toast.error(getApiErrorMsg(e));
     } finally {

@@ -140,6 +140,8 @@ export interface WebhookEndpoint {
   auth_header_preview?: string | null;
   created_at?: string | null;
   updated_at?: string | null;
+  /** Present only once when the server auto-generated a secret on create or update. */
+  generated_secret?: string | null;
 }
 
 export interface CreateWebhookParams {
@@ -182,6 +184,20 @@ export interface WebhookDelivery {
   created_at: string;
   updated_at: string;
   next_attempt_at?: string | null;
+}
+
+/** Full delivery record from GET .../webhooks/deliveries/{id} (debugging; no secrets). */
+export interface WebhookDeliveryDetail extends WebhookDelivery {
+  organization_id: string;
+  payload: Record<string, unknown>;
+  target_url?: string | null;
+  auth_type?: string | null;
+  auth_header_name?: string | null;
+  /** Truncated preview when header auth is used. */
+  auth_header_value?: string | null;
+  last_response_text?: string | null;
+  delivered_at?: string | null;
+  failed_at?: string | null;
 }
 
 export interface ListWebhookDeliveriesParams {

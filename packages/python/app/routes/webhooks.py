@@ -2,11 +2,12 @@
 
 import logging
 from datetime import datetime, UTC
-from typing import Optional, List, Literal
+from typing import Any, Optional, List, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Body
 from pydantic import BaseModel, Field, HttpUrl
 from bson import ObjectId
+from bson.errors import InvalidId
 
 import analytiq_data as ad
 from app.auth import get_org_admin_user, get_org_user
@@ -34,6 +35,21 @@ ALLOWED_WEBHOOK_EVENTS = {
     "llm.error",
     "webhook.test",
 }
+
+
+def _object_id_or_404(value: str, what: str = "resource") -> ObjectId:
+    try:
+        return ObjectId(value)
+    except InvalidId:
+        raise HTTPException(status_code=404, detail=f"Invalid {what} id")
+
+
+def _validate_enabled_requires_url(enabled: bool, url: Optional[str]) -> None:
+    if enabled and not (url and str(url).strip()):
+        raise HTTPException(
+            status_code=422,
+            detail="An enabled webhook endpoint requires a non-empty URL",
+        )
 
 
 def _normalize_webhook_events(events: Optional[List[str]]) -> Optional[List[str]]:
@@ -78,6 +94,10 @@ class WebhookEndpointResponse(WebhookEndpointBase):
     secret_preview: Optional[str] = None
     auth_header_set: bool = False
     auth_header_preview: Optional[str] = None
+    generated_secret: Optional[str] = Field(
+        default=None,
+        description="Plaintext secret returned only once when generated via create or update.",
+    )
 
 
 class WebhookEndpointCreateRequest(WebhookEndpointBase):
@@ -131,7 +151,40 @@ class ListWebhookDeliveriesResponse(BaseModel):
     skip: int
 
 
-def _endpoint_doc_to_response(doc: dict) -> WebhookEndpointResponse:
+class WebhookDeliveryDetailResponse(BaseModel):
+    """Single delivery for debugging; secrets are never returned."""
+
+    id: str
+    event_id: str
+    event_type: str
+    organization_id: str
+    webhook_id: Optional[str] = None
+    document_id: Optional[str] = None
+    prompt_revid: Optional[str] = None
+    prompt_id: Optional[str] = None
+    prompt_version: Optional[int] = None
+    payload: dict[str, Any] = Field(default_factory=dict)
+    target_url: Optional[str] = None
+    auth_type: Optional[str] = None
+    auth_header_name: Optional[str] = None
+    auth_header_value: Optional[str] = Field(
+        default=None,
+        description="Truncated preview of header auth value when present.",
+    )
+    status: str
+    attempts: int
+    max_attempts: int
+    last_http_status: Optional[int] = None
+    last_error: Optional[str] = None
+    last_response_text: Optional[str] = None
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+    next_attempt_at: Optional[datetime] = None
+    delivered_at: Optional[datetime] = None
+    failed_at: Optional[datetime] = None
+
+
+def _endpoint_doc_to_response(doc: dict, *, generated_secret: Optional[str] = None) -> WebhookEndpointResponse:
     return WebhookEndpointResponse(
         id=str(doc["_id"]),
         name=doc.get("name"),
@@ -146,6 +199,46 @@ def _endpoint_doc_to_response(doc: dict) -> WebhookEndpointResponse:
         secret_preview=doc.get("secret_preview"),
         auth_header_set=bool(doc.get("auth_header_value")),
         auth_header_preview=doc.get("auth_header_preview"),
+        generated_secret=generated_secret,
+    )
+
+
+def _delivery_row_to_detail(row: dict) -> WebhookDeliveryDetailResponse:
+    auth_header_value: Optional[str] = None
+    enc = row.get("auth_header_value")
+    if enc:
+        try:
+            plain = ad.crypto.decrypt_token(enc)
+        except Exception:
+            plain = None
+        if plain:
+            auth_header_value = plain[:4] + "..."
+    return WebhookDeliveryDetailResponse(
+        id=str(row["_id"]),
+        event_id=row.get("event_id", ""),
+        event_type=row.get("event_type", ""),
+        organization_id=str(row.get("organization_id", "")),
+        webhook_id=row.get("webhook_id"),
+        document_id=row.get("document_id"),
+        prompt_revid=row.get("prompt_revid"),
+        prompt_id=row.get("prompt_id"),
+        prompt_version=row.get("prompt_version"),
+        payload=row.get("payload") if isinstance(row.get("payload"), dict) else {},
+        target_url=row.get("target_url"),
+        auth_type=row.get("auth_type"),
+        auth_header_name=row.get("auth_header_name"),
+        auth_header_value=auth_header_value,
+        status=str(row.get("status", "")),
+        attempts=int(row.get("attempts", 0)),
+        max_attempts=int(row.get("max_attempts", 0)),
+        last_http_status=row.get("last_http_status"),
+        last_error=row.get("last_error"),
+        last_response_text=row.get("last_response_text"),
+        created_at=row.get("created_at"),
+        updated_at=row.get("updated_at"),
+        next_attempt_at=row.get("next_attempt_at"),
+        delivered_at=row.get("delivered_at"),
+        failed_at=row.get("failed_at"),
     )
 
 
@@ -204,31 +297,25 @@ async def list_webhook_deliveries(
     return ListWebhookDeliveriesResponse(deliveries=deliveries, total_count=total, skip=skip)
 
 
-@webhooks_router.get("/v0/orgs/{organization_id}/webhooks/deliveries/{delivery_id}")
+@webhooks_router.get(
+    "/v0/orgs/{organization_id}/webhooks/deliveries/{delivery_id}",
+    response_model=WebhookDeliveryDetailResponse,
+)
 async def get_webhook_delivery(
     organization_id: str,
     delivery_id: str,
     current_user: User = Depends(get_org_user),
 ):
     db = ad.common.get_async_db()
+    did = _object_id_or_404(delivery_id, "delivery")
     row = await db[ad.webhooks.DELIVERIES_COLLECTION].find_one(
-        {"_id": ObjectId(delivery_id), "organization_id": organization_id}
+        {"_id": did, "organization_id": organization_id}
     )
     if not row:
         raise HTTPException(status_code=404, detail="Delivery not found")
 
-    # Return full payload for debugging; never return secret.
-    row["id"] = str(row.pop("_id"))
     row.pop("secret_encrypted", None)
-    # Decrypt the auth header value if present
-    auth_header_value = ad.crypto.decrypt_token(row.get("auth_header_value"))
-    if auth_header_value:
-        # Truncate the auth header value to 4 characters
-        row["auth_header_value"] = auth_header_value[:4] + "..."
-    else:
-        row["auth_header_value"] = None
-   
-    return row
+    return _delivery_row_to_detail(row)
 
 
 @webhooks_router.post("/v0/orgs/{organization_id}/webhooks/deliveries/{delivery_id}/retry", response_model=WebhookRetryResponse)
@@ -242,14 +329,15 @@ async def retry_webhook_delivery(
     """
     db = ad.common.get_async_db()
     now = datetime.now(UTC)
+    did = _object_id_or_404(delivery_id, "delivery")
     row = await db[ad.webhooks.DELIVERIES_COLLECTION].find_one(
-        {"_id": ObjectId(delivery_id), "organization_id": organization_id}
+        {"_id": did, "organization_id": organization_id}
     )
     if not row:
         raise HTTPException(status_code=404, detail="Delivery not found")
 
     await db[ad.webhooks.DELIVERIES_COLLECTION].update_one(
-        {"_id": ObjectId(delivery_id), "organization_id": organization_id},
+        {"_id": did, "organization_id": organization_id},
         {"$set": {"status": "pending", "next_attempt_at": now, "updated_at": now}},
     )
 
@@ -282,20 +370,25 @@ async def create_org_webhook(
     current_user: User = Depends(get_org_admin_user),
 ):
     db = ad.common.get_async_db()
-    org = await db.organizations.find_one({"_id": ObjectId(organization_id)})
+    org_oid = _object_id_or_404(organization_id, "organization")
+    org = await db.organizations.find_one({"_id": org_oid})
     if not org:
         raise HTTPException(status_code=404, detail="Organization not found")
 
     now = datetime.now(UTC)
 
+    url_str = str(request.url) if request.url is not None else None
+    _validate_enabled_requires_url(request.enabled, url_str)
+
     doc: dict = {
         "organization_id": organization_id,
         "name": request.name,
         "enabled": request.enabled,
-        "url": str(request.url) if request.url is not None else None,
+        "url": url_str,
         "events": _normalize_webhook_events(list(request.events)) if request.events is not None else None,
         "auth_type": request.auth_type,
         "auth_header_name": (request.auth_header_name.strip() if request.auth_header_name else None),
+        "signature_enabled": request.auth_type == "hmac",
         "created_at": now,
         "updated_at": now,
     }
@@ -325,11 +418,7 @@ async def create_org_webhook(
     if not created:
         raise HTTPException(status_code=500, detail="Failed to create webhook endpoint")
 
-    resp = _endpoint_doc_to_response(created)
-    if generated_secret:
-        # Attach generated_secret as a transient field via response model extension
-        resp.secret_preview = resp.secret_preview  # keep preview; secret itself is not returned
-    return resp
+    return _endpoint_doc_to_response(created, generated_secret=generated_secret)
 
 
 @webhooks_router.get(
@@ -342,8 +431,9 @@ async def get_org_webhook(
     current_user: User = Depends(get_org_user),
 ):
     db = ad.common.get_async_db()
+    wid = _object_id_or_404(webhook_id, "webhook")
     doc = await db[ad.webhooks.ENDPOINTS_COLLECTION].find_one(
-        {"_id": ObjectId(webhook_id), "organization_id": organization_id}
+        {"_id": wid, "organization_id": organization_id}
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Webhook not found")
@@ -361,8 +451,9 @@ async def update_org_webhook(
     current_user: User = Depends(get_org_admin_user),
 ):
     db = ad.common.get_async_db()
+    wid = _object_id_or_404(webhook_id, "webhook")
     existing = await db[ad.webhooks.ENDPOINTS_COLLECTION].find_one(
-        {"_id": ObjectId(webhook_id), "organization_id": organization_id}
+        {"_id": wid, "organization_id": organization_id}
     )
     if not existing:
         raise HTTPException(status_code=404, detail="Webhook not found")
@@ -404,18 +495,26 @@ async def update_org_webhook(
 
     update["updated_at"] = datetime.now(UTC)
 
+    eff_enabled = bool(existing.get("enabled", False))
+    eff_url = existing.get("url")
+    if request.enabled is not None:
+        eff_enabled = bool(request.enabled)
+    if request.url is not None:
+        eff_url = str(request.url) if request.url else None
+    _validate_enabled_requires_url(eff_enabled, eff_url)
+
     if update:
         await db[ad.webhooks.ENDPOINTS_COLLECTION].update_one(
-            {"_id": ObjectId(webhook_id), "organization_id": organization_id},
+            {"_id": wid, "organization_id": organization_id},
             {"$set": update},
         )
 
     doc = await db[ad.webhooks.ENDPOINTS_COLLECTION].find_one(
-        {"_id": ObjectId(webhook_id), "organization_id": organization_id}
+        {"_id": wid, "organization_id": organization_id}
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Webhook not found after update")
-    return _endpoint_doc_to_response(doc)
+    return _endpoint_doc_to_response(doc, generated_secret=generated_secret)
 
 
 @webhooks_router.delete(
@@ -428,8 +527,9 @@ async def delete_org_webhook(
     current_user: User = Depends(get_org_admin_user),
 ):
     db = ad.common.get_async_db()
+    wid = _object_id_or_404(webhook_id, "webhook")
     res = await db[ad.webhooks.ENDPOINTS_COLLECTION].delete_one(
-        {"_id": ObjectId(webhook_id), "organization_id": organization_id}
+        {"_id": wid, "organization_id": organization_id}
     )
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Webhook not found")
