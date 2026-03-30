@@ -450,7 +450,7 @@ async def test_list_deliveries_with_and_without_webhook_filter(test_db, mock_aut
 
     # Without filter: both
     res_all = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries",
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries",
         headers=get_auth_headers(),
     )
     assert res_all.status_code == 200, res_all.json()
@@ -460,7 +460,7 @@ async def test_list_deliveries_with_and_without_webhook_filter(test_db, mock_aut
 
     # Filter by ep1
     res_ep1 = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries",
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries",
         params={"webhook_id": str(ep1.inserted_id)},
         headers=get_auth_headers(),
     )
@@ -496,7 +496,7 @@ async def test_get_delivery_and_retry(test_db, mock_auth):
 
     # Get delivery
     res_get = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries/{delivery_id}",
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries/{delivery_id}",
         headers=get_auth_headers(),
     )
     assert res_get.status_code == 200, res_get.json()
@@ -507,7 +507,7 @@ async def test_get_delivery_and_retry(test_db, mock_auth):
     # Retry
     with patch("analytiq_data.webhooks.dispatch.ad.queue.send_msg", new_callable=AsyncMock) as mock_send_msg:
         res_retry = client.post(
-            f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries/{delivery_id}/retry",
+            f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries/{delivery_id}/retry",
             headers=get_auth_headers(),
         )
 
@@ -1349,7 +1349,7 @@ async def test_claim_next_due_delivery(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_list_webhook_deliveries(test_db, mock_auth):
-    """Test GET /webhook/deliveries endpoint"""
+    """Test GET /webhooks/deliveries endpoint"""
     logger.info("test_list_webhook_deliveries() start")
 
     now = datetime.now(UTC)
@@ -1381,7 +1381,7 @@ async def test_list_webhook_deliveries(test_db, mock_auth):
     ])
 
     response = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries",
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries",
         headers=get_auth_headers(),
     )
 
@@ -1398,7 +1398,7 @@ async def test_list_webhook_deliveries(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_list_webhook_deliveries_with_filters(test_db, mock_auth):
-    """Test GET /webhook/deliveries with status and event_type filters"""
+    """Test GET /webhooks/deliveries with status and event_type filters"""
     logger.info("test_list_webhook_deliveries_with_filters() start")
 
     now = datetime.now(UTC)
@@ -1441,7 +1441,7 @@ async def test_list_webhook_deliveries_with_filters(test_db, mock_auth):
 
     # Filter by status
     response = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries?status=failed",
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries?status=failed",
         headers=get_auth_headers(),
     )
     assert response.status_code == 200
@@ -1451,7 +1451,7 @@ async def test_list_webhook_deliveries_with_filters(test_db, mock_auth):
 
     # Filter by event_type
     response = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries?event_type=document.uploaded",
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries?event_type=document.uploaded",
         headers=get_auth_headers(),
     )
     assert response.status_code == 200
@@ -1464,7 +1464,7 @@ async def test_list_webhook_deliveries_with_filters(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_list_webhook_deliveries_pagination(test_db, mock_auth):
-    """Test GET /webhook/deliveries pagination"""
+    """Test GET /webhooks/deliveries pagination"""
     logger.info("test_list_webhook_deliveries_pagination() start")
 
     now = datetime.now(UTC)
@@ -1485,7 +1485,7 @@ async def test_list_webhook_deliveries_pagination(test_db, mock_auth):
 
     # Get first page
     response = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries?skip=0&limit=2",
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries?skip=0&limit=2",
         headers=get_auth_headers(),
     )
     assert response.status_code == 200
@@ -1496,7 +1496,7 @@ async def test_list_webhook_deliveries_pagination(test_db, mock_auth):
 
     # Get second page
     response = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries?skip=2&limit=2",
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries?skip=2&limit=2",
         headers=get_auth_headers(),
     )
     assert response.status_code == 200
@@ -1510,7 +1510,7 @@ async def test_list_webhook_deliveries_pagination(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_get_webhook_delivery_details(test_db, mock_auth):
-    """Test GET /webhook/deliveries/{delivery_id} endpoint"""
+    """Test GET /webhooks/deliveries/{delivery_id} endpoint"""
     logger.info("test_get_webhook_delivery_details() start")
 
     delivery_id = ObjectId()
@@ -1539,7 +1539,7 @@ async def test_get_webhook_delivery_details(test_db, mock_auth):
     })
 
     response = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries/{delivery_id}",
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries/{delivery_id}",
         headers=get_auth_headers(),
     )
 
@@ -1556,12 +1556,12 @@ async def test_get_webhook_delivery_details(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_get_webhook_delivery_not_found(test_db, mock_auth):
-    """Test GET /webhook/deliveries/{delivery_id} returns 404 for non-existent"""
+    """Test GET /webhooks/deliveries/{delivery_id} returns 404 for non-existent"""
     logger.info("test_get_webhook_delivery_not_found() start")
 
     fake_id = ObjectId()
     response = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries/{fake_id}",
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries/{fake_id}",
         headers=get_auth_headers(),
     )
 
@@ -1572,7 +1572,7 @@ async def test_get_webhook_delivery_not_found(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_retry_webhook_delivery(test_db, mock_auth):
-    """Test POST /webhook/deliveries/{delivery_id}/retry endpoint"""
+    """Test POST /webhooks/deliveries/{delivery_id}/retry endpoint"""
     logger.info("test_retry_webhook_delivery() start")
 
     delivery_id = ObjectId()
@@ -1592,7 +1592,7 @@ async def test_retry_webhook_delivery(test_db, mock_auth):
 
     with patch("analytiq_data.queue.send_msg", new_callable=AsyncMock):
         response = client.post(
-            f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries/{delivery_id}/retry",
+            f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries/{delivery_id}/retry",
             headers=get_auth_headers(),
         )
 
@@ -1610,12 +1610,12 @@ async def test_retry_webhook_delivery(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_retry_webhook_delivery_not_found(test_db, mock_auth):
-    """Test POST /webhook/deliveries/{delivery_id}/retry returns 404"""
+    """Test POST /webhooks/deliveries/{delivery_id}/retry returns 404"""
     logger.info("test_retry_webhook_delivery_not_found() start")
 
     fake_id = ObjectId()
     response = client.post(
-        f"/v0/orgs/{TEST_ORG_ID}/webhook/deliveries/{fake_id}/retry",
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/deliveries/{fake_id}/retry",
         headers=get_auth_headers(),
     )
 

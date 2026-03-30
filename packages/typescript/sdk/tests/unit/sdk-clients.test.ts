@@ -245,7 +245,7 @@ describe('SDK Client Unit Tests', () => {
         limit: 25,
       });
       expect(mockGet).toHaveBeenCalledWith(
-        '/v0/orgs/org-123/webhook/deliveries',
+        '/v0/orgs/org-123/webhooks/deliveries',
         {
           params: {
             status: 'failed',
@@ -259,12 +259,12 @@ describe('SDK Client Unit Tests', () => {
 
       await client.getWebhookDelivery('deliv_1');
       expect(mockGet).toHaveBeenCalledWith(
-        '/v0/orgs/org-123/webhook/deliveries/deliv_1',
+        '/v0/orgs/org-123/webhooks/deliveries/deliv_1',
       );
 
       await client.retryWebhookDelivery('deliv_1');
       expect(mockPost).toHaveBeenCalledWith(
-        '/v0/orgs/org-123/webhook/deliveries/deliv_1/retry',
+        '/v0/orgs/org-123/webhooks/deliveries/deliv_1/retry',
         {},
       );
     });

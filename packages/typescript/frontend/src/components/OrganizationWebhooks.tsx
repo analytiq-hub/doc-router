@@ -223,7 +223,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
       if (selectedEndpointId) {
         params.webhook_id = selectedEndpointId;
       }
-      const res = await apiClient.get<DeliveriesResponse>(`/v0/orgs/${organizationId}/webhook/deliveries`, {
+      const res = await apiClient.get<DeliveriesResponse>(`/v0/orgs/${organizationId}/webhooks/deliveries`, {
         params,
       });
       setDeliveries(res.data.deliveries);
@@ -237,7 +237,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
     async (deliveryId: string) => {
       setDetailsLoading(true);
       try {
-        const res = await apiClient.get(`/v0/orgs/${organizationId}/webhook/deliveries/${deliveryId}`);
+        const res = await apiClient.get(`/v0/orgs/${organizationId}/webhooks/deliveries/${deliveryId}`);
         setDeliveryDetails(res.data);
       } finally {
         setDetailsLoading(false);
@@ -450,7 +450,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
 
   const retryDelivery = async (deliveryId: string) => {
     try {
-      await apiClient.post(`/v0/orgs/${organizationId}/webhook/deliveries/${deliveryId}/retry`);
+      await apiClient.post(`/v0/orgs/${organizationId}/webhooks/deliveries/${deliveryId}/retry`);
       toast.success('Retry enqueued');
       await loadDeliveries();
       if (selectedDeliveryId === deliveryId) {

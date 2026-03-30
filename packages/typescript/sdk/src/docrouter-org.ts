@@ -746,7 +746,7 @@ export class DocRouterOrg {
     if (skip !== undefined) query.skip = skip;
     if (limit !== undefined) query.limit = limit;
     return this.http.get<ListWebhookDeliveriesResponse>(
-      `/v0/orgs/${this.organizationId}/webhook/deliveries`,
+      `/v0/orgs/${this.organizationId}/webhooks/deliveries`,
       { params: query },
     );
   }
@@ -756,7 +756,7 @@ export class DocRouterOrg {
    */
   async getWebhookDelivery(deliveryId: string): Promise<WebhookDelivery> {
     return this.http.get<WebhookDelivery>(
-      `/v0/orgs/${this.organizationId}/webhook/deliveries/${deliveryId}`,
+      `/v0/orgs/${this.organizationId}/webhooks/deliveries/${deliveryId}`,
     );
   }
 
@@ -767,7 +767,7 @@ export class DocRouterOrg {
     deliveryId: string,
   ): Promise<{ status: string; delivery_id: string }> {
     return this.http.post<{ status: string; delivery_id: string }>(
-      `/v0/orgs/${this.organizationId}/webhook/deliveries/${deliveryId}/retry`,
+      `/v0/orgs/${this.organizationId}/webhooks/deliveries/${deliveryId}/retry`,
       {},
     );
   }

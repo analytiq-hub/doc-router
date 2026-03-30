@@ -149,6 +149,115 @@ def _endpoint_doc_to_response(doc: dict) -> WebhookEndpointResponse:
     )
 
 
+@webhooks_router.get("/v0/orgs/{organization_id}/webhooks/deliveries", response_model=ListWebhookDeliveriesResponse)
+async def list_webhook_deliveries(
+    organization_id: str,
+    status: Optional[str] = Query(None, description="Filter by status (pending|processing|delivered|failed)"),
+    event_type: Optional[str] = Query(None, description="Filter by event_type"),
+    webhook_id: Optional[str] = Query(None, description="Filter by webhook endpoint id"),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+    current_user: User = Depends(get_org_user),
+):
+    db = ad.common.get_async_db()
+    query: dict = {"organization_id": organization_id}
+    if status:
+        query["status"] = status
+    if event_type:
+        query["event_type"] = event_type
+    if webhook_id:
+        query["webhook_id"] = webhook_id
+
+    total = await db[ad.webhooks.DELIVERIES_COLLECTION].count_documents(query)
+    cursor = (
+        db[ad.webhooks.DELIVERIES_COLLECTION]
+        .find(query)
+        .sort("created_at", -1)
+        .skip(skip)
+        .limit(limit)
+    )
+    rows = await cursor.to_list(length=limit)
+
+    deliveries = []
+    for row in rows:
+        deliveries.append(
+            WebhookDeliveryItem(
+                id=str(row["_id"]),
+                event_id=row.get("event_id", ""),
+                event_type=row.get("event_type", ""),
+                status=row.get("status", ""),
+                webhook_id=row.get("webhook_id"),
+                attempts=int(row.get("attempts", 0)),
+                max_attempts=int(row.get("max_attempts", 0)),
+                document_id=row.get("document_id"),
+                prompt_revid=row.get("prompt_revid"),
+                prompt_id=row.get("prompt_id"),
+                prompt_version=row.get("prompt_version"),
+                last_http_status=row.get("last_http_status"),
+                last_error=row.get("last_error"),
+                created_at=row.get("created_at"),
+                updated_at=row.get("updated_at"),
+                next_attempt_at=row.get("next_attempt_at"),
+            )
+        )
+
+    return ListWebhookDeliveriesResponse(deliveries=deliveries, total_count=total, skip=skip)
+
+
+@webhooks_router.get("/v0/orgs/{organization_id}/webhooks/deliveries/{delivery_id}")
+async def get_webhook_delivery(
+    organization_id: str,
+    delivery_id: str,
+    current_user: User = Depends(get_org_user),
+):
+    db = ad.common.get_async_db()
+    row = await db[ad.webhooks.DELIVERIES_COLLECTION].find_one(
+        {"_id": ObjectId(delivery_id), "organization_id": organization_id}
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Delivery not found")
+
+    # Return full payload for debugging; never return secret.
+    row["id"] = str(row.pop("_id"))
+    row.pop("secret_encrypted", None)
+    # Decrypt the auth header value if present
+    auth_header_value = ad.crypto.decrypt_token(row.get("auth_header_value"))
+    if auth_header_value:
+        # Truncate the auth header value to 4 characters
+        row["auth_header_value"] = auth_header_value[:4] + "..."
+    else:
+        row["auth_header_value"] = None
+   
+    return row
+
+
+@webhooks_router.post("/v0/orgs/{organization_id}/webhooks/deliveries/{delivery_id}/retry", response_model=WebhookRetryResponse)
+async def retry_webhook_delivery(
+    organization_id: str,
+    delivery_id: str,
+    current_user: User = Depends(get_org_admin_user),
+):
+    """
+    Manually retry a delivery by setting it back to pending and enqueueing a webhook queue message.
+    """
+    db = ad.common.get_async_db()
+    now = datetime.now(UTC)
+    row = await db[ad.webhooks.DELIVERIES_COLLECTION].find_one(
+        {"_id": ObjectId(delivery_id), "organization_id": organization_id}
+    )
+    if not row:
+        raise HTTPException(status_code=404, detail="Delivery not found")
+
+    await db[ad.webhooks.DELIVERIES_COLLECTION].update_one(
+        {"_id": ObjectId(delivery_id), "organization_id": organization_id},
+        {"$set": {"status": "pending", "next_attempt_at": now, "updated_at": now}},
+    )
+
+    analytiq_client = ad.common.get_analytiq_client()
+    await ad.queue.send_msg(analytiq_client, ad.webhooks.WEBHOOK_QUEUE_NAME, msg={"delivery_id": delivery_id})
+    return WebhookRetryResponse(status="enqueued", delivery_id=delivery_id)
+
+
 @webhooks_router.get(
     "/v0/orgs/{organization_id}/webhooks",
     response_model=List[WebhookEndpointResponse],
@@ -350,113 +459,3 @@ async def test_org_webhook_endpoint(
     if not delivery_id:
         raise HTTPException(status_code=400, detail="Webhook is not enabled, URL is not configured, or endpoint not found")
     return WebhookTestResponse(status="enqueued", delivery_id=delivery_id)
-
-
-@webhooks_router.get("/v0/orgs/{organization_id}/webhook/deliveries", response_model=ListWebhookDeliveriesResponse)
-async def list_webhook_deliveries(
-    organization_id: str,
-    status: Optional[str] = Query(None, description="Filter by status (pending|processing|delivered|failed)"),
-    event_type: Optional[str] = Query(None, description="Filter by event_type"),
-    webhook_id: Optional[str] = Query(None, description="Filter by webhook endpoint id"),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(25, ge=1, le=100),
-    current_user: User = Depends(get_org_user),
-):
-    db = ad.common.get_async_db()
-    query: dict = {"organization_id": organization_id}
-    if status:
-        query["status"] = status
-    if event_type:
-        query["event_type"] = event_type
-    if webhook_id:
-        query["webhook_id"] = webhook_id
-
-    total = await db[ad.webhooks.DELIVERIES_COLLECTION].count_documents(query)
-    cursor = (
-        db[ad.webhooks.DELIVERIES_COLLECTION]
-        .find(query)
-        .sort("created_at", -1)
-        .skip(skip)
-        .limit(limit)
-    )
-    rows = await cursor.to_list(length=limit)
-
-    deliveries = []
-    for row in rows:
-        deliveries.append(
-            WebhookDeliveryItem(
-                id=str(row["_id"]),
-                event_id=row.get("event_id", ""),
-                event_type=row.get("event_type", ""),
-                status=row.get("status", ""),
-                webhook_id=row.get("webhook_id"),
-                attempts=int(row.get("attempts", 0)),
-                max_attempts=int(row.get("max_attempts", 0)),
-                document_id=row.get("document_id"),
-                prompt_revid=row.get("prompt_revid"),
-                prompt_id=row.get("prompt_id"),
-                prompt_version=row.get("prompt_version"),
-                last_http_status=row.get("last_http_status"),
-                last_error=row.get("last_error"),
-                created_at=row.get("created_at"),
-                updated_at=row.get("updated_at"),
-                next_attempt_at=row.get("next_attempt_at"),
-            )
-        )
-
-    return ListWebhookDeliveriesResponse(deliveries=deliveries, total_count=total, skip=skip)
-
-
-@webhooks_router.get("/v0/orgs/{organization_id}/webhook/deliveries/{delivery_id}")
-async def get_webhook_delivery(
-    organization_id: str,
-    delivery_id: str,
-    current_user: User = Depends(get_org_user),
-):
-    db = ad.common.get_async_db()
-    row = await db[ad.webhooks.DELIVERIES_COLLECTION].find_one(
-        {"_id": ObjectId(delivery_id), "organization_id": organization_id}
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Delivery not found")
-
-    # Return full payload for debugging; never return secret.
-    row["id"] = str(row.pop("_id"))
-    row.pop("secret_encrypted", None)
-    # Decrypt the auth header value if present
-    auth_header_value = ad.crypto.decrypt_token(row.get("auth_header_value"))
-    if auth_header_value:
-        # Truncate the auth header value to 4 characters
-        row["auth_header_value"] = auth_header_value[:4] + "..."
-    else:
-        row["auth_header_value"] = None
-   
-    return row
-
-
-@webhooks_router.post("/v0/orgs/{organization_id}/webhook/deliveries/{delivery_id}/retry", response_model=WebhookRetryResponse)
-async def retry_webhook_delivery(
-    organization_id: str,
-    delivery_id: str,
-    current_user: User = Depends(get_org_admin_user),
-):
-    """
-    Manually retry a delivery by setting it back to pending and enqueueing a webhook queue message.
-    """
-    db = ad.common.get_async_db()
-    now = datetime.now(UTC)
-    row = await db[ad.webhooks.DELIVERIES_COLLECTION].find_one(
-        {"_id": ObjectId(delivery_id), "organization_id": organization_id}
-    )
-    if not row:
-        raise HTTPException(status_code=404, detail="Delivery not found")
-
-    await db[ad.webhooks.DELIVERIES_COLLECTION].update_one(
-        {"_id": ObjectId(delivery_id), "organization_id": organization_id},
-        {"$set": {"status": "pending", "next_attempt_at": now, "updated_at": now}},
-    )
-
-    analytiq_client = ad.common.get_analytiq_client()
-    await ad.queue.send_msg(analytiq_client, ad.webhooks.WEBHOOK_QUEUE_NAME, msg={"delivery_id": delivery_id})
-    return WebhookRetryResponse(status="enqueued", delivery_id=delivery_id)
-
