@@ -261,7 +261,8 @@ async def update_org_webhook(
     update: dict = {}
     generated_secret: str | None = None
 
-    if request.name is not None:
+    # Use model_fields_set so explicit JSON null clears the field; bare None from omission is ignored.
+    if "name" in request.model_fields_set:
         update["name"] = request.name
     if request.enabled is not None:
         update["enabled"] = request.enabled

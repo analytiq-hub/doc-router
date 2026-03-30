@@ -98,9 +98,10 @@ const normalizeEventList = (incoming: WebhookEventType[]) =>
 
 type DeliveryDetails = Record<string, unknown>;
 
-function endpointLabel(ep: WebhookEndpoint): string {
-  if (ep.name && ep.name.trim()) return ep.name.trim();
-  return `Endpoint ${ep.id.slice(-8)}`;
+/** Label shown in the endpoint dropdown: display name (or fallback) plus ID in parentheses. */
+function endpointOptionLabel(ep: WebhookEndpoint): string {
+  const namePart = ep.name?.trim() ? ep.name.trim() : 'Endpoint';
+  return `${namePart} (${ep.id})`;
 }
 
 export default function OrganizationWebhooks({ organizationId }: { organizationId: string }) {
@@ -363,7 +364,6 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
       });
       setSecret('');
       setAuthHeaderValue('');
-      toast.success('Webhook settings saved');
       await loadEndpoints();
       await loadDeliveries();
     } catch (e) {
@@ -543,37 +543,56 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                   >
                     {endpoints.map((ep) => (
                       <option key={ep.id} value={ep.id}>
-                        {endpointLabel(ep)}
+                        {endpointOptionLabel(ep)}
                       </option>
                     ))}
                     {isCreatingNew && <option value="__new__">New endpoint…</option>}
                   </select>
                 </div>
                 {isCreatingNew && (
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Display name (optional)</label>
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="e.g. Production n8n"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                    />
+                  <div className="flex-1 flex flex-col sm:flex-row sm:items-end gap-2 min-w-0">
+                    <div className="flex-1 min-w-0">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Display name (optional)</label>
+                      <input
+                        type="text"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        placeholder="e.g. Production n8n"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                      />
+                    </div>
+                    <div
+                      className="text-sm text-gray-500 sm:pb-2 shrink-0"
+                      title="Endpoint id is assigned after you create the webhook"
+                    >
+                      <span className="text-gray-400">ID</span> <span className="font-mono">—</span>
+                    </div>
                   </div>
                 )}
               </div>
 
               {!isCreatingNew && (
-                <div className="mb-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Display name (optional)</label>
-                  <input
-                    type="text"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    disabled={!canEdit}
-                    placeholder="Label for this endpoint"
-                    className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md disabled:bg-gray-100"
-                  />
+                <div className="mb-4 flex flex-col sm:flex-row sm:items-end gap-2 min-w-0">
+                  <div className="flex-1 min-w-0 max-w-md">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Display name (optional)</label>
+                    <input
+                      type="text"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      disabled={!canEdit}
+                      placeholder="Label for this endpoint"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md disabled:bg-gray-100"
+                    />
+                  </div>
+                  {selectedEndpointId && (
+                    <div
+                      className="text-sm text-gray-600 sm:pb-2 shrink-0 break-all sm:max-w-[min(100%,28rem)]"
+                      title="Webhook endpoint id"
+                    >
+                      <span className="text-gray-500">ID</span>{' '}
+                      <span className="font-mono text-gray-800">{selectedEndpointId}</span>
+                    </div>
+                  )}
                 </div>
               )}
 

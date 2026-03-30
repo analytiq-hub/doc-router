@@ -97,6 +97,39 @@ async def test_webhook_endpoint_create_and_get(test_db, mock_auth):
 
 
 @pytest.mark.asyncio
+async def test_webhook_endpoint_update_clears_display_name(test_db, mock_auth):
+    """Explicit JSON null for name must clear the stored display name (Pydantic omits vs null)."""
+    create_payload = {
+        "name": "My webhook",
+        "enabled": True,
+        "url": "https://example.com/webhook",
+        "events": ["document.uploaded"],
+        "auth_type": "hmac",
+    }
+    create_response = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks",
+        json=create_payload,
+        headers=get_auth_headers(),
+    )
+    assert create_response.status_code == 200, create_response.json()
+    endpoint_id = create_response.json()["id"]
+
+    clear_response = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/webhooks/{endpoint_id}",
+        json={"name": None},
+        headers=get_auth_headers(),
+    )
+    assert clear_response.status_code == 200, clear_response.json()
+    assert clear_response.json().get("name") is None
+
+    doc = await test_db.webhook_endpoints.find_one({"_id": ObjectId(endpoint_id)})
+    assert doc is not None
+    assert doc.get("name") is None
+
+    logger.info("test_webhook_endpoint_update_clears_display_name() end")
+
+
+@pytest.mark.asyncio
 async def test_webhook_endpoint_update_secret_and_header(test_db, mock_auth):
     logger.info("test_webhook_endpoint_update_secret_and_header() start")
 
