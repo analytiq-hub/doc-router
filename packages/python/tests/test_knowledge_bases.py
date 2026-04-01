@@ -1,43 +1,16 @@
 import pytest
 from bson import ObjectId
 import os
-from datetime import datetime, UTC
 import logging
-from unittest.mock import patch, AsyncMock, Mock
-import asyncio
+from unittest.mock import patch
 
-# Import shared test utilities
-from .conftest_utils import (
-    client, TEST_ORG_ID, 
-    get_auth_headers
-)
+from .conftest_utils import client, TEST_ORG_ID, get_auth_headers
+from .kb_test_helpers import create_mock_embedding_response
 import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
-# Check that ENV is set to pytest
 assert os.environ["ENV"] == "pytest"
-
-# Note: Only LiteLLM API calls are mocked (to avoid external API costs and key requirements).
-# MongoDB operations, including vector search index creation, use the real MongoDB instance.
-# The test MongoDB (localhost:27017) must support vector search (mongodb-atlas-local or MongoDB 8.2+).
-
-# Mock embedding response for dimension detection
-MOCK_EMBEDDING_DIMENSIONS = 1536
-
-def create_mock_embedding_response(num_embeddings=1):
-    """Create a mock embedding response with non-zero vectors (required for cosine similarity).
-    Uses Mock() not AsyncMock() so get_embedding_cost() does not trigger unawaited coroutines."""
-    mock_response = Mock()
-    # Generate non-zero embeddings (simple pattern that's not all zeros)
-    # Use a small non-zero value to avoid zero vector issues with MongoDB cosine similarity
-    embeddings = []
-    for i in range(num_embeddings):
-        # Create a simple non-zero vector: [0.1, 0.2, 0.3, ...] pattern
-        embedding = [0.001 * (j % 100 + 1) for j in range(MOCK_EMBEDDING_DIMENSIONS)]
-        embeddings.append({"embedding": embedding})
-    mock_response.data = embeddings
-    return mock_response
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})

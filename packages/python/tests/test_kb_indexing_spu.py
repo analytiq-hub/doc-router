@@ -12,34 +12,13 @@ from bson import ObjectId
 
 from analytiq_data.kb.indexing import spus_for_kb_indexing_embedding_misses
 
-# Import shared test utilities
-from .conftest_utils import (
-    client, TEST_ORG_ID, 
-    get_auth_headers
-)
+from .conftest_utils import client, TEST_ORG_ID, get_auth_headers
+from .kb_test_helpers import create_mock_embedding_response, delete_kb_api
 import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
-# Check that ENV is set to pytest
 assert os.environ["ENV"] == "pytest"
-
-# Mock embedding response for dimension detection
-MOCK_EMBEDDING_DIMENSIONS = 1536
-
-def create_mock_embedding_response(num_embeddings=1):
-    """Create a mock embedding response with non-zero vectors (required for cosine similarity).
-    Uses Mock() not AsyncMock() so get_embedding_cost() does not trigger unawaited coroutines."""
-    mock_response = Mock()
-    # Generate non-zero embeddings (simple pattern that's not all zeros)
-    # Use a small non-zero value to avoid zero vector issues with MongoDB cosine similarity
-    embeddings = []
-    for i in range(num_embeddings):
-        # Create a simple non-zero vector: [0.1, 0.2, 0.3, ...] pattern
-        embedding = [0.001 * (j % 100 + 1) for j in range(MOCK_EMBEDDING_DIMENSIONS)]
-        embeddings.append({"embedding": embedding})
-    mock_response.data = embeddings
-    return mock_response
 
 
 def test_spus_for_kb_indexing_embedding_misses_formula():
@@ -148,7 +127,7 @@ async def test_kb_indexing_spu_recording(
         logger.info(f"SPU test passed: {num_chunks} chunks -> {expected_spus} SPUs")
         
         # Cleanup
-        client.delete(f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+        delete_kb_api(kb_id)
         await test_db.docs.delete_one({"_id": ObjectId(document_id)})
         
     finally:
@@ -235,7 +214,7 @@ async def test_kb_indexing_spu_insufficient_credits(
         logger.info("SPU credit exception test passed")
         
         # Cleanup
-        client.delete(f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+        delete_kb_api(kb_id)
         await test_db.docs.delete_one({"_id": ObjectId(document_id)})
         
     finally:
@@ -355,7 +334,7 @@ async def test_kb_indexing_spu_cache_hits_free(
         logger.info("SPU cache hits free test passed")
         
         # Cleanup
-        client.delete(f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+        delete_kb_api(kb_id)
         await test_db.docs.delete_one({"_id": ObjectId(document_id)})
         
     finally:
@@ -488,7 +467,7 @@ async def test_kb_search_spu_recording(
         logger.info("SPU search recording test passed")
         
         # Cleanup
-        client.delete(f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+        delete_kb_api(kb_id)
         await test_db.docs.delete_one({"_id": ObjectId(document_id)})
         
     finally:
@@ -601,7 +580,7 @@ async def test_kb_search_spu_insufficient_credits(
         logger.info("SPU search credit exception test passed")
         
         # Cleanup
-        client.delete(f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+        delete_kb_api(kb_id)
         await test_db.docs.delete_one({"_id": ObjectId(document_id)})
         
     finally:
@@ -710,7 +689,7 @@ async def test_kb_search_spu_cache_hit_free(
         logger.info("SPU search cache hits free test passed")
         
         # Cleanup
-        client.delete(f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+        delete_kb_api(kb_id)
         await test_db.docs.delete_one({"_id": ObjectId(document_id)})
         
     finally:

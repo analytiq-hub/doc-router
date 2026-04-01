@@ -20,13 +20,13 @@ from datetime import datetime, UTC
 
 from tests.conftest_utils import client, get_token_headers, TEST_ORG_ID, get_auth_headers
 from tests.conftest_llm import mock_litellm_acreate_file_with_retry
+from tests.kb_test_helpers import create_active_kb_api, create_mock_embedding_response, delete_kb_api
 
 import analytiq_data as ad
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Check that ENV is set to pytest
 assert os.environ["ENV"] == "pytest"
 
 # Text aligned with conftest_llm.mock_run_textract LINE blocks — persisted without running OCR/AWS.
@@ -40,24 +40,6 @@ MOCK_OCR_TEXT_FOR_TESTS = (
 async def seed_mock_ocr_for_unit_test(analytiq_client, document_id: str) -> None:
     """Simulate completed OCR for unit tests (no process_ocr_msg / no AWS)."""
     await ad.common.ocr.save_ocr_text(analytiq_client, document_id, MOCK_OCR_TEXT_FOR_TESTS)
-
-
-# Mock embedding response for dimension detection
-MOCK_EMBEDDING_DIMENSIONS = 1536
-
-def create_mock_embedding_response(num_embeddings=1):
-    """Create a mock embedding response with non-zero vectors (required for cosine similarity).
-    Uses Mock() not AsyncMock() so get_embedding_cost() does not trigger unawaited coroutines."""
-    mock_response = Mock()
-    # Generate non-zero embeddings (simple pattern that's not all zeros)
-    # Use a small non-zero value to avoid zero vector issues with MongoDB cosine similarity
-    embeddings = []
-    for i in range(num_embeddings):
-        # Create a simple non-zero vector: [0.1, 0.2, 0.3, ...] pattern
-        embedding = [0.001 * (j % 100 + 1) for j in range(MOCK_EMBEDDING_DIMENSIONS)]
-        embeddings.append({"embedding": embedding})
-    mock_response.data = embeddings
-    return mock_response
 
 
 class MockToolCall:
@@ -141,38 +123,10 @@ async def test_llm_with_kb_agentic_loop_single_tool_call(mock_embedding, mock_ge
     mock_embedding.return_value = create_mock_embedding_response()
     
     org_id = TEST_ORG_ID
-    
-    # Create tag and KB
-    tag_data = {"name": "KB Test Tag", "color": "#FF5733"}
-    tag_response = client.post(
-        f"/v0/orgs/{org_id}/tags",
-        json=tag_data,
-        headers=get_auth_headers()
+    tag_id, kb_id, analytiq_client = await create_active_kb_api(
+        "KB Test Tag", "Test KB", chunk_size=512, chunk_overlap=128
     )
-    tag_id = tag_response.json()["id"]
-    
-    kb_data = {
-        "name": "Test KB",
-        "tag_ids": [tag_id],
-        "chunker_type": "recursive",
-        "chunk_size": 512,
-        "chunk_overlap": 128
-    }
-    kb_response = client.post(
-        f"/v0/orgs/{org_id}/knowledge-bases",
-        json=kb_data,
-        headers=get_auth_headers()
-    )
-    kb_id = kb_response.json()["kb_id"]
-    
-    # Set KB status to active (required for prompt creation)
-    analytiq_client = ad.common.get_analytiq_client()
-    db = ad.common.get_async_db(analytiq_client)
-    await db.knowledge_bases.update_one(
-        {"_id": ObjectId(kb_id)},
-        {"$set": {"status": "active"}}
-    )
-    
+
     # Create prompt with KB
     prompt_data = {
         "name": "KB Test Prompt",
@@ -266,8 +220,7 @@ async def test_llm_with_kb_agentic_loop_single_tool_call(mock_embedding, mock_ge
         assert messages[-1]["role"] == "tool"
         assert "Knowledge Base Search Results" in messages[-1]["content"]
     
-    # Cleanup
-    client.delete(f"/v0/orgs/{org_id}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+    delete_kb_api(kb_id)
 
 
 @pytest.mark.asyncio
@@ -279,38 +232,10 @@ async def test_llm_with_kb_multiple_tool_calls(mock_embedding, mock_get_model_in
     mock_embedding.return_value = create_mock_embedding_response()
     
     org_id = TEST_ORG_ID
-    
-    # Create tag and KB
-    tag_data = {"name": "KB Multi Test Tag", "color": "#FF5733"}
-    tag_response = client.post(
-        f"/v0/orgs/{org_id}/tags",
-        json=tag_data,
-        headers=get_auth_headers()
+    tag_id, kb_id, analytiq_client = await create_active_kb_api(
+        "KB Multi Test Tag", "Multi Test KB", chunk_size=512, chunk_overlap=128
     )
-    tag_id = tag_response.json()["id"]
-    
-    kb_data = {
-        "name": "Multi Test KB",
-        "tag_ids": [tag_id],
-        "chunker_type": "recursive",
-        "chunk_size": 512,
-        "chunk_overlap": 128
-    }
-    kb_response = client.post(
-        f"/v0/orgs/{org_id}/knowledge-bases",
-        json=kb_data,
-        headers=get_auth_headers()
-    )
-    kb_id = kb_response.json()["kb_id"]
-    
-    # Set KB status to active (required for prompt creation)
-    analytiq_client = ad.common.get_analytiq_client()
-    db = ad.common.get_async_db(analytiq_client)
-    await db.knowledge_bases.update_one(
-        {"_id": ObjectId(kb_id)},
-        {"$set": {"status": "active"}}
-    )
-    
+
     # Create prompt with KB
     prompt_data = {
         "name": "KB Multi Test Prompt",
@@ -393,7 +318,7 @@ async def test_llm_with_kb_multiple_tool_calls(mock_embedding, mock_get_model_in
         # The final call should have accumulated tokens from all iterations
     
     # Cleanup
-    client.delete(f"/v0/orgs/{org_id}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+    delete_kb_api(kb_id)
 
 
 @pytest.mark.asyncio
@@ -405,38 +330,10 @@ async def test_llm_with_kb_model_no_function_calling(mock_embedding, mock_get_mo
     mock_embedding.return_value = create_mock_embedding_response()
     
     org_id = TEST_ORG_ID
-    
-    # Create tag and KB
-    tag_data = {"name": "KB No FC Test Tag", "color": "#FF5733"}
-    tag_response = client.post(
-        f"/v0/orgs/{org_id}/tags",
-        json=tag_data,
-        headers=get_auth_headers()
+    tag_id, kb_id, analytiq_client = await create_active_kb_api(
+        "KB No FC Test Tag", "No FC Test KB", chunk_size=512, chunk_overlap=128
     )
-    tag_id = tag_response.json()["id"]
-    
-    kb_data = {
-        "name": "No FC Test KB",
-        "tag_ids": [tag_id],
-        "chunker_type": "recursive",
-        "chunk_size": 512,
-        "chunk_overlap": 128
-    }
-    kb_response = client.post(
-        f"/v0/orgs/{org_id}/knowledge-bases",
-        json=kb_data,
-        headers=get_auth_headers()
-    )
-    kb_id = kb_response.json()["kb_id"]
-    
-    # Set KB status to active (required for prompt creation)
-    analytiq_client = ad.common.get_analytiq_client()
-    db = ad.common.get_async_db(analytiq_client)
-    await db.knowledge_bases.update_one(
-        {"_id": ObjectId(kb_id)},
-        {"$set": {"status": "active"}}
-    )
-    
+
     # Create prompt with KB
     prompt_data = {
         "name": "KB No FC Test Prompt",
@@ -504,7 +401,7 @@ async def test_llm_with_kb_model_no_function_calling(mock_embedding, mock_get_mo
         assert "tools" not in kwargs or kwargs.get("tools") is None
     
     # Cleanup
-    client.delete(f"/v0/orgs/{org_id}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+    delete_kb_api(kb_id)
 
 
 @pytest.mark.asyncio
@@ -516,38 +413,10 @@ async def test_llm_with_kb_search_error_handling(mock_embedding, mock_get_model_
     mock_embedding.return_value = create_mock_embedding_response()
     
     org_id = TEST_ORG_ID
-    
-    # Create tag and KB
-    tag_data = {"name": "KB Error Test Tag", "color": "#FF5733"}
-    tag_response = client.post(
-        f"/v0/orgs/{org_id}/tags",
-        json=tag_data,
-        headers=get_auth_headers()
+    tag_id, kb_id, analytiq_client = await create_active_kb_api(
+        "KB Error Test Tag", "Error Test KB", chunk_size=512, chunk_overlap=128
     )
-    tag_id = tag_response.json()["id"]
-    
-    kb_data = {
-        "name": "Error Test KB",
-        "tag_ids": [tag_id],
-        "chunker_type": "recursive",
-        "chunk_size": 512,
-        "chunk_overlap": 128
-    }
-    kb_response = client.post(
-        f"/v0/orgs/{org_id}/knowledge-bases",
-        json=kb_data,
-        headers=get_auth_headers()
-    )
-    kb_id = kb_response.json()["kb_id"]
-    
-    # Set KB status to active (required for prompt creation)
-    analytiq_client = ad.common.get_analytiq_client()
-    db = ad.common.get_async_db(analytiq_client)
-    await db.knowledge_bases.update_one(
-        {"_id": ObjectId(kb_id)},
-        {"$set": {"status": "active"}}
-    )
-    
+
     # Create prompt with KB
     prompt_data = {
         "name": "KB Error Test Prompt",
@@ -628,7 +497,7 @@ async def test_llm_with_kb_search_error_handling(mock_embedding, mock_get_model_
         assert "Error searching knowledge base" in tool_messages[-1]["content"]
     
     # Cleanup
-    client.delete(f"/v0/orgs/{org_id}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+    delete_kb_api(kb_id)
 
 
 @pytest.mark.asyncio
@@ -640,38 +509,10 @@ async def test_llm_with_kb_max_iterations(mock_embedding, mock_get_model_info, t
     mock_embedding.return_value = create_mock_embedding_response()
     
     org_id = TEST_ORG_ID
-    
-    # Create tag and KB
-    tag_data = {"name": "KB Max Iter Test Tag", "color": "#FF5733"}
-    tag_response = client.post(
-        f"/v0/orgs/{org_id}/tags",
-        json=tag_data,
-        headers=get_auth_headers()
+    tag_id, kb_id, analytiq_client = await create_active_kb_api(
+        "KB Max Iter Test Tag", "Max Iter Test KB", chunk_size=512, chunk_overlap=128
     )
-    tag_id = tag_response.json()["id"]
-    
-    kb_data = {
-        "name": "Max Iter Test KB",
-        "tag_ids": [tag_id],
-        "chunker_type": "recursive",
-        "chunk_size": 512,
-        "chunk_overlap": 128
-    }
-    kb_response = client.post(
-        f"/v0/orgs/{org_id}/knowledge-bases",
-        json=kb_data,
-        headers=get_auth_headers()
-    )
-    kb_id = kb_response.json()["kb_id"]
-    
-    # Set KB status to active (required for prompt creation)
-    analytiq_client = ad.common.get_analytiq_client()
-    db = ad.common.get_async_db(analytiq_client)
-    await db.knowledge_bases.update_one(
-        {"_id": ObjectId(kb_id)},
-        {"$set": {"status": "active"}}
-    )
-    
+
     # Create prompt with KB
     prompt_data = {
         "name": "KB Max Iter Test Prompt",
@@ -740,7 +581,7 @@ async def test_llm_with_kb_max_iterations(mock_embedding, mock_get_model_info, t
         assert mock_kb_search.call_count >= 1
     
     # Cleanup
-    client.delete(f"/v0/orgs/{org_id}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+    delete_kb_api(kb_id)
 
 
 @pytest.mark.asyncio
@@ -752,38 +593,10 @@ async def test_llm_with_kb_token_accumulation(mock_embedding, mock_get_model_inf
     mock_embedding.return_value = create_mock_embedding_response()
     
     org_id = TEST_ORG_ID
-    
-    # Create tag and KB
-    tag_data = {"name": "KB Token Test Tag", "color": "#FF5733"}
-    tag_response = client.post(
-        f"/v0/orgs/{org_id}/tags",
-        json=tag_data,
-        headers=get_auth_headers()
+    tag_id, kb_id, analytiq_client = await create_active_kb_api(
+        "KB Token Test Tag", "Token Test KB", chunk_size=512, chunk_overlap=128
     )
-    tag_id = tag_response.json()["id"]
-    
-    kb_data = {
-        "name": "Token Test KB",
-        "tag_ids": [tag_id],
-        "chunker_type": "recursive",
-        "chunk_size": 512,
-        "chunk_overlap": 128
-    }
-    kb_response = client.post(
-        f"/v0/orgs/{org_id}/knowledge-bases",
-        json=kb_data,
-        headers=get_auth_headers()
-    )
-    kb_id = kb_response.json()["kb_id"]
-    
-    # Set KB status to active (required for prompt creation)
-    analytiq_client = ad.common.get_analytiq_client()
-    db = ad.common.get_async_db(analytiq_client)
-    await db.knowledge_bases.update_one(
-        {"_id": ObjectId(kb_id)},
-        {"$set": {"status": "active"}}
-    )
-    
+
     # Create prompt with KB
     prompt_data = {
         "name": "KB Token Test Prompt",
@@ -858,7 +671,7 @@ async def test_llm_with_kb_token_accumulation(mock_embedding, mock_get_model_inf
         # We can't easily verify exact values without inspecting the call, but we know it was called
     
     # Cleanup
-    client.delete(f"/v0/orgs/{org_id}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+    delete_kb_api(kb_id)
 
 
 @pytest.mark.asyncio

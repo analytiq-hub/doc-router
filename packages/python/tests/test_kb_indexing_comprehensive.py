@@ -14,66 +14,28 @@ from bson import ObjectId
 import os
 from datetime import datetime, UTC
 import logging
-from unittest.mock import patch, AsyncMock, Mock
+from unittest.mock import patch
 
-# Import shared test utilities
-from .conftest_utils import (
-    client, TEST_ORG_ID, 
-    get_auth_headers
+from .conftest_utils import client, TEST_ORG_ID, get_auth_headers
+from .kb_test_helpers import (
+    cleanup_org_kb_artifacts,
+    create_kb_api,
+    create_mock_embedding_response,
+    create_tag_api,
 )
 import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
-# Check that ENV is set to pytest
 assert os.environ["ENV"] == "pytest"
 
-# Mock embedding response for dimension detection
-MOCK_EMBEDDING_DIMENSIONS = 1536
 
-def create_mock_embedding_response(num_embeddings=1):
-    """Create a mock embedding response with non-zero vectors (required for cosine similarity).
-    Uses Mock() not AsyncMock() so get_embedding_cost() does not trigger unawaited coroutines."""
-    mock_response = Mock()
-    # Generate non-zero embeddings (simple pattern that's not all zeros)
-    embeddings = []
-    for i in range(num_embeddings):
-        # Create a simple non-zero vector: [0.1, 0.2, 0.3, ...] pattern
-        embedding = [0.001 * (j % 100 + 1) for j in range(MOCK_EMBEDDING_DIMENSIONS)]
-        embeddings.append({"embedding": embedding})
-    mock_response.data = embeddings
-    return mock_response
-
-
-# Helper functions for test setup
 async def create_tag(name: str, color: str = "#FF5733") -> str:
-    """Create a tag and return its ID"""
-    tag_data = {"name": name, "color": color}
-    tag_response = client.post(
-        f"/v0/orgs/{TEST_ORG_ID}/tags",
-        json=tag_data,
-        headers=get_auth_headers()
-    )
-    assert tag_response.status_code == 200
-    return tag_response.json()["id"]
+    return create_tag_api(name, color)
+
 
 async def create_kb(name: str, tag_ids: list, **kwargs) -> str:
-    """Create a KB and return its ID"""
-    kb_data = {
-        "name": name,
-        "tag_ids": tag_ids,
-        "chunker_type": "recursive",
-        "chunk_size": 100,
-        "chunk_overlap": 20,
-        **kwargs
-    }
-    kb_response = client.post(
-        f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
-        json=kb_data,
-        headers=get_auth_headers()
-    )
-    assert kb_response.status_code == 200
-    return kb_response.json()["kb_id"]
+    return create_kb_api(name, tag_ids, **kwargs)
 
 async def create_document(test_db, tag_ids: list, test_text: str = None) -> str:
     """Create a document with tags and OCR text, return document ID"""
@@ -176,10 +138,7 @@ async def test_1_1_delete_document_not_indexed(mock_embedding, mock_get_model_in
         assert kb1["document_count"] == 0, "KB1 should have 0 documents"
         
     finally:
-        # Cleanup
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -211,9 +170,7 @@ async def test_1_2_delete_document_indexed_single_kb(mock_embedding, mock_get_mo
         assert kb1["document_count"] == 0, "KB1 should have 0 documents after deletion"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -256,9 +213,7 @@ async def test_1_3_delete_document_indexed_multiple_kbs(mock_embedding, mock_get
         assert kb2["document_count"] == 0, "KB2 should have 0 documents"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 
 # ============================================================================
@@ -307,9 +262,7 @@ async def test_2_1_remove_tag_matching_single_kb(mock_embedding, mock_get_model_
         assert kb1["document_count"] == 0, "KB1 should have 0 documents"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -359,9 +312,7 @@ async def test_2_2_remove_tag_matching_multiple_kbs(mock_embedding, mock_get_mod
         assert kb2["document_count"] == 1, "KB2 should have 1 document"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -411,9 +362,7 @@ async def test_2_3_add_tag_matching_new_kb(mock_embedding, mock_get_model_info, 
         assert kb2["document_count"] == 1, "KB2 should have 1 document"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -463,9 +412,7 @@ async def test_2_4_replace_tags(mock_embedding, mock_get_model_info, test_db, mo
         assert kb2["document_count"] == 1, "KB2 should have 1 document"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -515,9 +462,7 @@ async def test_2_5_remove_all_tags(mock_embedding, mock_get_model_info, test_db,
         assert kb2["document_count"] == 0, "KB2 should have 0 documents"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 
 # ============================================================================
@@ -582,9 +527,7 @@ async def test_2_6_remove_kb_tag_fragments_removed(mock_embedding, mock_get_mode
         assert kb1["chunk_count"] == 0, "KB1 should have 0 chunks"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 
 # ============================================================================
@@ -633,9 +576,7 @@ async def test_3_1_remove_kb_tag_matching_document(mock_embedding, mock_get_mode
         assert kb1["document_count"] == 0, "KB1 should have 0 documents"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -671,9 +612,7 @@ async def test_3_1b_remove_all_kb_tags_clears_index(mock_embedding, mock_get_mod
         assert kb1["document_count"] == 0, "KB1 should have 0 documents after clearing tags"
 
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -723,9 +662,7 @@ async def test_3_2_remove_kb_tag_multiple_documents(mock_embedding, mock_get_mod
         assert kb2["document_count"] == 1, "KB2 should have 1 document"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -769,9 +706,7 @@ async def test_3_3_remove_kb_tag_document_has_other_matching_tags(mock_embedding
         assert kb1["document_count"] == 1, "KB1 should still have 1 document"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 
 # ============================================================================
@@ -812,9 +747,7 @@ async def test_user_2_document_indexed_with_extra_tag_delete(mock_embedding, moc
         assert kb1["document_count"] == 0, "KB1 should have 0 documents"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 # Note: USER TEST 1 is covered by test_1_1_delete_document_not_indexed
 # Note: USER TEST 3 is covered by test_2_3_add_tag_matching_new_kb
@@ -858,9 +791,7 @@ async def test_4_1_kb_created_after_document(mock_embedding, mock_get_model_info
         assert kb1["chunk_count"] > 0, "KB1 should have chunks"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -898,9 +829,7 @@ async def test_4_2_kb_created_after_document_multiple_kbs(mock_embedding, mock_g
         assert kb2["document_count"] == 1, "KB2 should have 1 document"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -930,9 +859,7 @@ async def test_4_3_kb_created_after_document_no_match(mock_embedding, mock_get_m
         assert kb1["document_count"] == 0, "KB1 should have 0 documents"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 
 # ============================================================================
@@ -964,9 +891,7 @@ async def test_edge_case_document_no_tags(mock_embedding, mock_get_model_info, t
         assert kb1["document_count"] == 0, "KB1 should have 0 documents"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
@@ -993,6 +918,4 @@ async def test_edge_case_kb_no_tags(mock_embedding, mock_get_model_info, test_db
         assert kb1["document_count"] == 0, "KB1 should have 0 documents"
         
     finally:
-        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
-        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+        await cleanup_org_kb_artifacts(test_db)
