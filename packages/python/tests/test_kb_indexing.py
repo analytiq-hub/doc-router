@@ -4,6 +4,7 @@ Additional unit tests for KB indexing, caching, deletion cleanup, tag updates, r
 
 import pytest
 from bson import ObjectId
+from pymongo.errors import OperationFailure
 import os
 from datetime import datetime, UTC
 import logging
@@ -507,6 +508,111 @@ async def test_kb_reconciliation(mock_embedding, mock_get_model_info, test_db, m
         
     finally:
         pass
+
+@pytest.mark.asyncio
+@patch('litellm.get_model_info', return_value={"provider": "openai"})
+@patch('litellm.aembedding')
+async def test_kb_delete_removes_vector_collection_and_document_index(
+    mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models
+):
+    """DELETE /knowledge-bases/{id} drops search indexes, the kb_vectors_* collection, and document_index rows."""
+    mock_embedding.return_value = create_mock_embedding_response()
+    kb_id = None
+    document_id = None
+    tag_id = None
+    try:
+        tag_response = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/tags",
+            json={"name": "KB Delete Cleanup Tag", "color": "#111111"},
+            headers=get_auth_headers(),
+        )
+        assert tag_response.status_code == 200
+        tag_id = tag_response.json()["id"]
+
+        kb_response = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
+            json={
+                "name": "KB Delete Cleanup KB",
+                "tag_ids": [tag_id],
+                "chunker_type": "recursive",
+                "chunk_size": 100,
+                "chunk_overlap": 20,
+            },
+            headers=get_auth_headers(),
+        )
+        assert kb_response.status_code == 200
+        kb_id = kb_response.json()["kb_id"]
+
+        collection_name = f"kb_vectors_{kb_id}"
+        assert collection_name in await test_db.list_collection_names()
+
+        document_id = str(ObjectId())
+        test_text = "Content for KB delete cleanup test. " * 10
+        await test_db.docs.insert_one(
+            {
+                "_id": ObjectId(document_id),
+                "organization_id": TEST_ORG_ID,
+                "user_file_name": "kb_delete_cleanup.pdf",
+                "tag_ids": [tag_id],
+                "upload_date": datetime.now(UTC),
+                "state": ad.common.doc.DOCUMENT_STATE_OCR_COMPLETED,
+            }
+        )
+        analytiq_client = ad.common.get_analytiq_client()
+        await ad.common.ocr.save_ocr_text(analytiq_client, document_id, test_text)
+
+        await ad.msg_handlers.process_kb_index_msg(
+            analytiq_client,
+            {"_id": str(ObjectId()), "msg": {"document_id": document_id, "kb_id": kb_id}},
+        )
+
+        assert (
+            await test_db.document_index.find_one({"kb_id": kb_id, "document_id": document_id})
+            is not None
+        )
+        vectors_coll = test_db[collection_name]
+        assert await vectors_coll.count_documents({}) > 0
+
+        # Search indexes must exist and be listed (vector + lexical) before delete
+        list_before = await test_db.command({"listSearchIndexes": collection_name})
+        batch_before = (list_before.get("cursor") or {}).get("firstBatch") or []
+        assert len(batch_before) >= 2, (
+            f"Expected kb_vector_index and kb_lexical_index on {collection_name}, got {batch_before!r}"
+        )
+        names_before = {entry.get("name") for entry in batch_before}
+        assert "kb_vector_index" in names_before
+        assert "kb_lexical_index" in names_before
+
+        del_response = client.delete(
+            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
+            headers=get_auth_headers(),
+        )
+        assert del_response.status_code == 200
+
+        assert await test_db.knowledge_bases.find_one({"_id": ObjectId(kb_id)}) is None
+        assert await test_db.document_index.count_documents({"kb_id": kb_id}) == 0
+        assert collection_name not in await test_db.list_collection_names()
+
+        # Search indexes must be gone with the collection (empty batch or command fails)
+        try:
+            list_after = await test_db.command({"listSearchIndexes": collection_name})
+        except OperationFailure:
+            pass
+        else:
+            batch_after = (list_after.get("cursor") or {}).get("firstBatch") or []
+            assert len(batch_after) == 0, f"Search indexes should be dropped, got {batch_after!r}"
+
+        kb_id = None  # already removed; skip finally DELETE
+    finally:
+        if document_id:
+            await test_db.docs.delete_one({"_id": ObjectId(document_id)})
+        if kb_id:
+            client.delete(
+                f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
+                headers=get_auth_headers(),
+            )
+        if tag_id:
+            await test_db.tags.delete_one({"_id": ObjectId(tag_id)})
 
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})

@@ -117,9 +117,7 @@ async def test_db(unique_db_name):
     finally:
         # Ensure DB cleanup and client close to avoid hanging on Ctrl-C
         if os.environ["ENV"].startswith("pytest"):
-            collections = await db.list_collection_names()
-            for collection in collections:
-                await db.drop_collection(collection)
+            await client.drop_database(unique_db_name)
         else:
             # This should never happen, but just in case
             raise ValueError(f"Attempted to clean up non-test database! ENV={os.environ['ENV']}")
