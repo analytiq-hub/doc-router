@@ -330,17 +330,9 @@ async def _reconcile_kb_full(
         raise ValueError(f"Knowledge base {kb_id} not found")
     
     kb_tag_ids = set(kb.get("tag_ids", []))
-    if not kb_tag_ids:
-        # KB has no tags, nothing to reconcile
-        return {
-            "kb_id": kb_id,
-            "missing_documents": [],
-            "stale_documents": [],
-            "orphaned_vectors": 0,
-            "missing_embeddings": 0,
-            "dry_run": dry_run
-        }
-    
+    # When the KB has no tags, no document should remain indexed; do not return early
+    # or stale entries (and vectors) would never be removed.
+
     results = {
         "kb_id": kb_id,
         "missing_documents": [],
