@@ -640,6 +640,44 @@ async def test_3_1_remove_kb_tag_matching_document(mock_embedding, mock_get_mode
 @pytest.mark.asyncio
 @patch('litellm.get_model_info', return_value={"provider": "openai"})
 @patch('litellm.aembedding')
+async def test_3_1b_remove_all_kb_tags_clears_index(mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models):
+    """Removing every tag from a KB must drop all indexed documents (regression: empty tag_ids skipped reconciliation)."""
+    mock_embedding.return_value = create_mock_embedding_response()
+
+    try:
+        tagA_id = await create_tag("TagA")
+        tagC_id = await create_tag("TagC")
+
+        kb1_id = await create_kb("KB1", [tagA_id, tagC_id])
+        document_id = await create_document(test_db, [tagA_id])
+
+        await index_document(document_id, None, test_db)
+        await process_pending_kb_index_messages(test_db, document_id)
+
+        await verify_document_in_kb(test_db, document_id, kb1_id, should_be_indexed=True)
+
+        update_response = client.put(
+            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb1_id}",
+            json={"tag_ids": []},
+            headers=get_auth_headers(),
+        )
+        assert update_response.status_code == 200
+
+        await process_pending_kb_index_messages(test_db)
+
+        await verify_document_in_kb(test_db, document_id, kb1_id, should_be_indexed=False)
+
+        kb1 = await test_db.knowledge_bases.find_one({"_id": ObjectId(kb1_id)})
+        assert kb1["document_count"] == 0, "KB1 should have 0 documents after clearing tags"
+
+    finally:
+        await test_db.docs.delete_many({"organization_id": TEST_ORG_ID})
+        await test_db.knowledge_bases.delete_many({"organization_id": TEST_ORG_ID})
+        await test_db.tags.delete_many({"organization_id": TEST_ORG_ID})
+
+@pytest.mark.asyncio
+@patch('litellm.get_model_info', return_value={"provider": "openai"})
+@patch('litellm.aembedding')
 async def test_3_2_remove_kb_tag_multiple_documents(mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models):
     """Test 3.2: Remove tag from KB that matches document (multiple documents) - USER TEST 4"""
     mock_embedding.return_value = create_mock_embedding_response()
