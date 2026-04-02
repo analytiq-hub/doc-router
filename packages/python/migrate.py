@@ -19,8 +19,11 @@ import analytiq_data as ad
 async def main():
     ad.common.setup()
     client = ad.common.get_analytiq_client()
-    await ad.migrations.run_migrations(client)
-    print("Migrations complete.")
+    try:
+        await ad.migrations.run_migrations(client)
+        print("Migrations complete.")
+    finally:
+        await ad.mongodb.close_shared_async_client()
 
 
 if __name__ == "__main__":

@@ -3,7 +3,6 @@ import os
 import sys
 from dotenv import load_dotenv
 import asyncio
-from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime, UTC
 import logging
 # Add the parent directory to the sys path
@@ -33,7 +32,7 @@ async def worker_ocr(worker_id: str) -> None:
     # Re-read the environment variables, in case they were changed by unit tests
     ENV = os.getenv("ENV", "dev")
 
-    # Create a separate client instance for each worker
+    # Shared Motor pool per process; name is for logging/trace context only
     analytiq_client = ad.common.get_analytiq_client(env=ENV, name=worker_id)
     logger.info(f"Starting worker {worker_id}")
 
@@ -84,7 +83,7 @@ async def worker_llm(worker_id: str) -> None:
     # Re-read the environment variables, in case they were changed by unit tests
     ENV = os.getenv("ENV", "dev")
 
-    # Create a separate client instance for each worker
+    # Shared Motor pool per process; name is for logging/trace context only
     analytiq_client = ad.common.get_analytiq_client(env=ENV, name=worker_id)
     logger.info(f"Starting worker {worker_id}")
 
@@ -130,7 +129,7 @@ async def worker_kb_index(worker_id: str) -> None:
     # Re-read the environment variables, in case they were changed by unit tests
     ENV = os.getenv("ENV", "dev")
 
-    # Create a separate client instance for each worker
+    # Shared Motor pool per process; name is for logging/trace context only
     analytiq_client = ad.common.get_analytiq_client(env=ENV, name=worker_id)
     logger.info(f"Starting worker {worker_id}")
 

@@ -21,7 +21,6 @@ sys.path.append(f"{cwd}/..")
 from fastapi import FastAPI
 from fastapi.security import HTTPBearer
 from fastapi.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
 
 # Local imports
 from app import startup
@@ -70,12 +69,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Define MongoDB connection check function to be used in lifespan
 async def check_mongodb_connection(uri):
+    """Ping MongoDB using the shared Motor client (same pool and options as the app)."""
     try:
-        # Create a MongoDB client
-        mongo_client = AsyncIOMotorClient(uri)
-        
-        # The ismaster command is cheap and does not require auth
-        await mongo_client.admin.command('ismaster')
+        mongo_client = ad.mongodb.get_mongodb_client_async()
+        await mongo_client.admin.command("ismaster")
         logger.info(f"MongoDB connection successful at {uri}")
         return True
     except Exception as e:
@@ -111,6 +108,8 @@ async def lifespan(app):
     for task in worker_tasks:
         task.cancel()
     await asyncio.gather(*worker_tasks, return_exceptions=True)
+
+    await ad.mongodb.close_shared_async_client()
 
 # Create the FastAPI app with the lifespan
 app = FastAPI(

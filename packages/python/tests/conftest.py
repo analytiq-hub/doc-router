@@ -45,6 +45,14 @@ def pytest_addoption(parser):
         default="function",
     )
 
+
+@pytest_asyncio.fixture(autouse=True)
+async def _close_motor_clients_after_async_test():
+    """Tear down per-loop Motor clients so async tests do not accumulate pools (two loops per test when using TestClient)."""
+    yield
+    await ad.mongodb.close_shared_async_client()
+
+
 @pytest_asyncio.fixture(scope="function")
 def unique_db_name():
     # Use xdist worker id if available, else use a UUID

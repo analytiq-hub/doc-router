@@ -30,6 +30,21 @@ The DocRouter project uses a single `.env` file at the project root that is shar
   - Used in payments module (`packages/python/app/payments.py`)
 - **Format**: `mongodb://[username:password@]host:port[/database]?authSource=admin`
 
+### `MONGODB_MAX_POOL_SIZE`
+- **Purpose**: Optional cap on connections in the Motor client pool for the Python backend and workers (one shared pool per process).
+- **Default**: Motor/PyMongo default (typically 100) when unset.
+- **Usage**: Set in production when the cluster connection limit must be shared across many app/worker processes. Parsed in `packages/python/analytiq_data/mongodb/client.py`.
+
+### `MONGODB_MIN_POOL_SIZE`
+- **Purpose**: Optional minimum connections kept in the shared Motor pool.
+- **Default**: Motor/PyMongo default when unset.
+- **Usage**: Same module as `MONGODB_MAX_POOL_SIZE`.
+
+### `MONGODB_MAX_IDLE_TIME_MS`
+- **Purpose**: Optional idle timeout (ms) after which pooled connections may be closed.
+- **Default**: Driver default when unset.
+- **Usage**: Same module as `MONGODB_MAX_POOL_SIZE`.
+
 ### `FASTAPI_ROOT_PATH`
 - **Purpose**: Root path for FastAPI application (useful for reverse proxies)
 - **Default**: `"/"`
