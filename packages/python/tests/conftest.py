@@ -293,15 +293,3 @@ def mock_search_index_commands(request):
 
     with patch.object(motor.motor_asyncio.AsyncIOMotorDatabase, "command", fake_command):
         yield
-
-
-def pytest_runtest_setup(item):
-    if item.get_closest_marker("mongot") is not None:
-        enabled = os.environ.get("RUN_MONGOT_TESTS", "").strip().lower() in {
-            "1",
-            "true",
-            "yes",
-            "on",
-        }
-        if not enabled:
-            pytest.skip("mongot tests disabled (set RUN_MONGOT_TESTS=1 to enable)")
