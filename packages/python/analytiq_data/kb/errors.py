@@ -102,7 +102,7 @@ def is_retryable_vector_index_error(exception: Exception) -> bool:
     
     error_message = str(exception).lower()
     
-    # Check for MongoDB vector index building states
+    # Check for MongoDB / mongot vector index building states and catalog races
     retryable_patterns = [
         "initial_sync",
         "not_started",
@@ -112,6 +112,9 @@ def is_retryable_vector_index_error(exception: Exception) -> bool:
         "index.*not ready",
         "not initialized",
         "index.*not initialized",
+        # Mongot may log "No index in catalog" server-side; driver error often includes this phrase
+        # when $vectorSearch runs before the index is registered in mongot's catalog.
+        "no index in catalog",
     ]
     
     for pattern in retryable_patterns:

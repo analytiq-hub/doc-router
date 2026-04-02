@@ -353,9 +353,13 @@ async def wait_for_vector_index_ready(
             return
         except Exception as e:
             error_msg = str(e)
-            # Check for index building states
-            if ("INITIAL_SYNC" in error_msg or "NOT_STARTED" in error_msg or 
-                "not initialized" in error_msg.lower()):
+            # Check for index building states (includes mongot "no index in catalog" race)
+            if (
+                "INITIAL_SYNC" in error_msg
+                or "NOT_STARTED" in error_msg
+                or "not initialized" in error_msg.lower()
+                or "no index in catalog" in error_msg.lower()
+            ):
                 # Index is still building, wait and retry
                 if i < max_attempts - 1:
                     await asyncio.sleep(poll_interval)

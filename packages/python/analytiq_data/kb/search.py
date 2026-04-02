@@ -605,7 +605,8 @@ async def _execute_vector_search_with_retry(
     """
     Execute vector search with retry logic for MongoDB vector index timing issues.
     
-    If the index is in INITIAL_SYNC or NOT_STARTED state, this will retry with exponential backoff.
+    If the index is in INITIAL_SYNC or NOT_STARTED state, or mongot returns a catalog race
+    (e.g. "no index in catalog"), this will retry with exponential backoff.
     
     Args:
         vectors_collection: MongoDB collection for vectors
