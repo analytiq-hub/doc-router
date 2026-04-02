@@ -6,15 +6,20 @@ import asyncio
 import logging
 import os
 import threading
+import weakref
 from motor.motor_asyncio import AsyncIOMotorClient
 
 logger = logging.getLogger(__name__)
 
 _lock = threading.Lock()
-# One Motor client per running asyncio loop id. Production (uvicorn) uses a single loop → one pool.
-# Tests may use pytest-asyncio's loop and Starlette TestClient's loop in the same test; closing a
-# client when switching loops would invalidate AsyncIOMotorDatabase handles still held on the first loop.
-_clients_by_loop_id: dict[int, AsyncIOMotorClient] = {}
+# One Motor client per running asyncio loop. WeakKeyDictionary keys on the loop object itself so
+# entries are evicted automatically when a loop is garbage-collected, preventing stale lookups from
+# loop-ID reuse (CPython can assign the same id() to a new loop after the old one is freed).
+# Production (uvicorn) uses a single loop → one pool.
+# Tests may use pytest-asyncio's loop and Starlette TestClient's loop in the same process.
+_clients_by_loop: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, AsyncIOMotorClient] = (
+    weakref.WeakKeyDictionary()
+)
 # Rare: sync bootstrap with no running loop (avoid creating per-loop entry).
 _shared_client_no_loop: AsyncIOMotorClient | None = None
 
@@ -63,15 +68,13 @@ def _get_shared_async_client() -> AsyncIOMotorClient:
         current_loop = None
 
     if current_loop is not None:
-        key = id(current_loop)
         with _lock:
-            client = _clients_by_loop_id.get(key)
+            client = _clients_by_loop.get(current_loop)
             if client is None:
                 mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-                opts = _motor_client_kwargs()
-                opts["io_loop"] = current_loop
-                client = AsyncIOMotorClient(mongo_uri, **opts)
-                _clients_by_loop_id[key] = client
+                # Motor 3.x auto-detects the running loop; no need to pass io_loop explicitly.
+                client = AsyncIOMotorClient(mongo_uri, **_motor_client_kwargs())
+                _clients_by_loop[current_loop] = client
             return client
 
     with _lock:
@@ -99,8 +102,8 @@ async def close_shared_async_client() -> None:
     """
     global _shared_client_no_loop
     with _lock:
-        clients = list(_clients_by_loop_id.values())
-        _clients_by_loop_id.clear()
+        clients = list(_clients_by_loop.values())
+        _clients_by_loop.clear()
         solo = _shared_client_no_loop
         _shared_client_no_loop = None
     for c in clients:
