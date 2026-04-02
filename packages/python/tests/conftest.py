@@ -10,7 +10,7 @@ from bson import ObjectId
 from fastapi.testclient import TestClient
 from fastapi.security import HTTPAuthorizationCredentials
 from filelock import FileLock
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 # Set up the path first, before other imports
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -292,4 +292,9 @@ def mock_search_index_commands(request):
         return await original_command(self, command, *args, **kwargs)
 
     with patch.object(motor.motor_asyncio.AsyncIOMotorDatabase, "command", fake_command):
-        yield
+        # createSearchIndexes is a no-op here; $vectorSearch would fail without a real mongot index
+        with patch(
+            "app.routes.knowledge_bases.wait_for_vector_index_ready",
+            new=AsyncMock(return_value=None),
+        ):
+            yield

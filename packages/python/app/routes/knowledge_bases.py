@@ -1,6 +1,7 @@
 # knowledge_bases.py
 
 # Standard library imports
+import asyncio
 import logging
 import hashlib
 from datetime import datetime, UTC
@@ -19,6 +20,7 @@ from analytiq_data.kb.chunking_config import (
     chunking_preprocess_for_preset,
     chunking_preprocess_from_kb_dict,
 )
+from analytiq_data.kb.errors import is_retryable_vector_index_error
 from analytiq_data.kb_search_indexes import (
     kb_lexical_search_index_definition,
     kb_vector_search_index_definition,
@@ -315,78 +317,74 @@ async def detect_embedding_dimensions(embedding_model: str, analytiq_client) -> 
 async def wait_for_vector_index_ready(
     analytiq_client,
     kb_id: str,
+    embedding_dimensions: int,
     max_wait_seconds: int = 30,
-    poll_interval: float = 0.5
+    poll_interval: float = 0.5,
 ) -> None:
     """
-    Wait for the vector search index to be ready (not in INITIAL_SYNC or NOT_STARTED state).
-    
+    Poll until a minimal ``$vectorSearch`` succeeds, so mongot has registered the index.
+
+    Call after ``createSearchIndexes`` so clients do not hit "no index in catalog" races.
+
     Args:
         analytiq_client: AnalytiqClient instance
         kb_id: Knowledge base ID
+        embedding_dimensions: Embedding width for the KB (must match ``kb_vector_index``)
         max_wait_seconds: Maximum time to wait in seconds
         poll_interval: Time between polls in seconds
+
+    Raises:
+        HTTPException: 503 if the index does not become queryable in time; 500 on unexpected errors
     """
-    import asyncio
     db = ad.common.get_async_db(analytiq_client)
     collection_name = f"kb_vectors_{kb_id}"
-    
-    max_attempts = int(max_wait_seconds / poll_interval)
+    max_attempts = max(1, int(max_wait_seconds / poll_interval))
+
     for i in range(max_attempts):
         try:
-            # Try a minimal vector search query to check if index is ready
-            # Use a non-zero vector to avoid "zero vector" errors
-            test_vector = [0.001] * 1536  # Small non-zero values
-            test_result = await db[collection_name].aggregate([
-                {
-                    "$vectorSearch": {
-                        "index": "kb_vector_index",
-                        "path": "embedding",
-                        "queryVector": test_vector,
-                        "numCandidates": 1,
-                        "limit": 1
+            test_vector = [0.001] * embedding_dimensions
+            await db[collection_name].aggregate(
+                [
+                    {
+                        "$vectorSearch": {
+                            "index": "kb_vector_index",
+                            "path": "embedding",
+                            "queryVector": test_vector,
+                            "numCandidates": 1,
+                            "limit": 1,
+                        }
                     }
-                }
-            ]).to_list(length=1)
-            # If we get here without an error, the index is ready
-            logger.debug(f"Vector index for KB {kb_id} is ready after {i * poll_interval:.1f}s")
+                ]
+            ).to_list(length=1)
+            logger.debug(
+                "Vector index for KB %s is queryable after %.1fs",
+                kb_id,
+                i * poll_interval,
+            )
             return
         except Exception as e:
-            error_msg = str(e)
-            # Check for index building states (includes mongot "no index in catalog" race)
-            if (
-                "INITIAL_SYNC" in error_msg
-                or "NOT_STARTED" in error_msg
-                or "not initialized" in error_msg.lower()
-                or "no index in catalog" in error_msg.lower()
-            ):
-                # Index is still building, wait and retry
+            err_lower = str(e).lower()
+            transient = (
+                is_retryable_vector_index_error(e)
+                or "zero vector" in err_lower
+                or "not found" in err_lower
+                or "no such command" in err_lower
+            )
+            if transient:
                 if i < max_attempts - 1:
                     await asyncio.sleep(poll_interval)
                     continue
-                else:
-                    state = "INITIAL_SYNC" if "INITIAL_SYNC" in error_msg else ("NOT_STARTED" if "NOT_STARTED" in error_msg else "not initialized")
-                    logger.warning(f"Vector index for KB {kb_id} still building after {max_wait_seconds}s (state: {state})")
-                    # Don't raise - let the actual search handle the error
-                    return
-            elif "zero vector" in error_msg.lower():
-                # This is a different error - the index might be ready but we used a zero vector
-                # Try again with a non-zero vector (shouldn't happen with our test_vector, but just in case)
-                if i < max_attempts - 1:
-                    await asyncio.sleep(poll_interval)
-                    continue
-            else:
-                # Different error - might be that index doesn't exist or other issue
-                # For test purposes, if it's not a building state error, log and continue
-                if "no such command" not in error_msg.lower() and "not found" not in error_msg.lower():
-                    logger.debug(f"Vector index check for KB {kb_id} returned non-building error: {error_msg[:100]}")
-                    # Assume it might be ready and let the actual search handle it
-                    return
-                # If it's a "not found" type error, wait a bit more
-                if i < max_attempts - 1:
-                    await asyncio.sleep(poll_interval)
-                    continue
-                raise
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        f"Knowledge base search index is still not ready after {max_wait_seconds}s. "
+                        f"Last error: {str(e)[:400]}"
+                    ),
+                )
+            raise HTTPException(
+                status_code=500,
+                detail=f"Unexpected error while waiting for vector index: {str(e)[:500]}",
+            )
 
 async def create_vector_search_index(
     analytiq_client,
@@ -457,13 +455,21 @@ async def create_vector_search_index(
             f"Created vector + lexical search indexes for KB {kb_id} "
             f"(kb_vector_index, kb_lexical_index)"
         )
-        
+
         # Clean up temporary document after successful index creation
         if temp_doc_inserted:
             try:
                 await collection.delete_one({"_id": "temp_init"})
             except Exception:
                 pass  # Ignore cleanup errors
+
+        await wait_for_vector_index_ready(
+            analytiq_client,
+            kb_id=kb_id,
+            embedding_dimensions=embedding_dimensions,
+        )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Failed to create KB search indexes for KB {kb_id}: {e}")
         raise HTTPException(
