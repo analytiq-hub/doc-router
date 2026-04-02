@@ -52,3 +52,6 @@ disallow_incomplete_defs = true
 filterwarnings = [
     "ignore:enable_cleanup_closed ignored because:DeprecationWarning",
 ]
+markers = [
+    "mongot: tests that require MongoDB vector search ($vectorSearch) / mongot",
+]

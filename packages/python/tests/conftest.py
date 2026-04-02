@@ -10,6 +10,7 @@ from bson import ObjectId
 from fastapi.testclient import TestClient
 from fastapi.security import HTTPAuthorizationCredentials
 from filelock import FileLock
+from unittest.mock import patch
 
 # Set up the path first, before other imports
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -264,3 +265,43 @@ async def setup_test_models(test_db):
     }
     
     await test_db.llm_providers.insert_one(test_provider)
+
+
+@pytest.fixture(autouse=True)
+def mock_search_index_commands(request):
+    """Skip real search-index commands and listSearchIndexes to avoid mongot load during tests.
+
+    Tests marked with ``@pytest.mark.mongot`` opt into running the real commands.
+    """
+    if request.node.get_closest_marker("mongot") is not None:
+        yield
+        return
+
+    _MOCKED = frozenset(
+        {"createSearchIndexes", "dropSearchIndexes", "updateSearchIndex", "listSearchIndexes"}
+    )
+    original_command = motor.motor_asyncio.AsyncIOMotorDatabase.command
+
+    async def fake_command(self, command, *args, **kwargs):
+        if isinstance(command, dict):
+            name = next(iter(command), "")
+            if name in _MOCKED:
+                if name == "listSearchIndexes":
+                    return {"cursor": {"firstBatch": [], "id": 0}}
+                return {"ok": 1}
+        return await original_command(self, command, *args, **kwargs)
+
+    with patch.object(motor.motor_asyncio.AsyncIOMotorDatabase, "command", fake_command):
+        yield
+
+
+def pytest_runtest_setup(item):
+    if item.get_closest_marker("mongot") is not None:
+        enabled = os.environ.get("RUN_MONGOT_TESTS", "").strip().lower() in {
+            "1",
+            "true",
+            "yes",
+            "on",
+        }
+        if not enabled:
+            pytest.skip("mongot tests disabled (set RUN_MONGOT_TESTS=1 to enable)")
