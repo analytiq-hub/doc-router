@@ -269,11 +269,18 @@ async def setup_test_models(test_db):
 
 @pytest.fixture(autouse=True)
 def mock_search_index_commands(request):
-    """Skip real search-index commands and listSearchIndexes to avoid mongot load during tests.
+    """Optionally skip real search-index commands (mongot) during tests.
 
-    Tests marked with ``@pytest.mark.mongot`` opt into running the real commands.
+    By default, tests use real mongot index creation. Set `MOCK_SEARCH_INDEX_COMMANDS=1`
+    to re-enable the lightweight mocking (useful when mongot is unavailable).
     """
-    if request.node.get_closest_marker("mongot") is not None:
+    enabled = os.environ.get("MOCK_SEARCH_INDEX_COMMANDS", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    if not enabled:
         yield
         return
 
