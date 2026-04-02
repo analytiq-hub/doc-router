@@ -4,7 +4,7 @@ import logging
 from datetime import datetime, UTC
 from typing import Any, Optional, List, Literal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Response
 from pydantic import BaseModel, Field, HttpUrl
 from bson import ObjectId
 from bson.errors import InvalidId
@@ -363,11 +363,13 @@ async def list_org_webhooks(
 @webhooks_router.post(
     "/v0/orgs/{organization_id}/webhooks",
     response_model=WebhookEndpointResponse,
+    status_code=201,
 )
 async def create_org_webhook(
     organization_id: str,
     request: WebhookEndpointCreateRequest = Body(...),
     current_user: User = Depends(get_org_admin_user),
+    response: Response = None,
 ):
     db = ad.common.get_async_db()
     org_oid = _object_id_or_404(organization_id, "organization")
@@ -417,6 +419,10 @@ async def create_org_webhook(
     created = await db[ad.webhooks.ENDPOINTS_COLLECTION].find_one({"_id": result.inserted_id})
     if not created:
         raise HTTPException(status_code=500, detail="Failed to create webhook endpoint")
+
+    webhook_id = str(result.inserted_id)
+    if response is not None:
+        response.headers["Location"] = f"/fastapi/v0/orgs/{organization_id}/webhooks/{webhook_id}"
 
     return _endpoint_doc_to_response(created, generated_secret=generated_secret)
 

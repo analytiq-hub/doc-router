@@ -34,6 +34,12 @@ logger = logging.getLogger(__name__)
 assert os.environ["ENV"] == "pytest"
 
 
+def _assert_webhook_create_location(response, organization_id: str, endpoint_id: str) -> None:
+    assert response.headers.get("location") == (
+        f"/fastapi/v0/orgs/{organization_id}/webhooks/{endpoint_id}"
+    )
+
+
 @pytest.mark.asyncio
 async def test_webhook_endpoint_create_and_get(test_db, mock_auth):
     logger.info("test_webhook_endpoint_create_and_get() start")
@@ -54,10 +60,11 @@ async def test_webhook_endpoint_create_and_get(test_db, mock_auth):
         json=payload,
         headers=get_auth_headers(),
     )
-    assert response.status_code == 200, response.json()
+    assert response.status_code == 201, response.json()
     data = response.json()
 
     endpoint_id = data["id"]
+    _assert_webhook_create_location(response, TEST_ORG_ID, endpoint_id)
     assert data["name"] == payload["name"]
     assert data["enabled"] is True
     assert data["url"] == payload["url"]
@@ -137,8 +144,9 @@ async def test_webhook_endpoint_update_clears_display_name(test_db, mock_auth):
         json=create_payload,
         headers=get_auth_headers(),
     )
-    assert create_response.status_code == 200, create_response.json()
+    assert create_response.status_code == 201, create_response.json()
     endpoint_id = create_response.json()["id"]
+    _assert_webhook_create_location(create_response, TEST_ORG_ID, endpoint_id)
 
     clear_response = client.put(
         f"/v0/orgs/{TEST_ORG_ID}/webhooks/{endpoint_id}",
@@ -173,8 +181,9 @@ async def test_webhook_endpoint_update_secret_and_header(test_db, mock_auth):
         json=create_payload,
         headers=get_auth_headers(),
     )
-    assert create_response.status_code == 200, create_response.json()
+    assert create_response.status_code == 201, create_response.json()
     endpoint_id = create_response.json()["id"]
+    _assert_webhook_create_location(create_response, TEST_ORG_ID, endpoint_id)
 
     regen_secret = "whs_regenerated_secret_value"
     with patch("analytiq_data.webhooks.generate_webhook_secret", return_value=regen_secret):
@@ -349,8 +358,9 @@ async def test_webhook_endpoint_delete(test_db, mock_auth):
         json=create_payload,
         headers=get_auth_headers(),
     )
-    assert create_response.status_code == 200, create_response.json()
+    assert create_response.status_code == 201, create_response.json()
     endpoint_id = create_response.json()["id"]
+    _assert_webhook_create_location(create_response, TEST_ORG_ID, endpoint_id)
 
     # Delete it
     delete_response = client.delete(
@@ -388,8 +398,9 @@ async def test_webhook_endpoint_test_route_enqueues_single_delivery(test_db, moc
         json=create_payload,
         headers=get_auth_headers(),
     )
-    assert create_response.status_code == 200, create_response.json()
+    assert create_response.status_code == 201, create_response.json()
     endpoint_id = create_response.json()["id"]
+    _assert_webhook_create_location(create_response, TEST_ORG_ID, endpoint_id)
 
     # Patch queue send to avoid needing worker
     with patch("analytiq_data.webhooks.dispatch.ad.queue.send_msg", new_callable=AsyncMock) as mock_send_msg:
