@@ -1,36 +1,31 @@
 # MongoDB Community Edition on Fedora (doc-router)
 
-This document describes how we run **MongoDB Community Edition** on **Fedora** for local development and testing, including the **mongot** sidecar used for **Atlas Search** features on self-hosted MongoDB (for example **`$vectorSearch`** and **`$search`** used by knowledge bases).
+This document walks through how we run **MongoDB Community Edition** and **mongot** (search / `$vectorSearch`) on **Fedora** for local development—same order you would follow on a new machine. It complements [INSTALL.local_devel.md](INSTALL.local_devel.md) and [env.md](env.md).
 
-It complements [INSTALL.local_devel.md](INSTALL.local_devel.md) and the `MONGODB_URI` notes in [env.md](env.md).
+Official overview (Community install **with** Search on Linux):  
+[Install MongoDB Community Edition — with Search](https://www.mongodb.com/docs/manual/administration/install-community/?linux-distribution=red-hat&linux-package=default&operating-system=linux&search-linux=with-search-linux).
 
----
+**Components:**
 
-## What we run
+| Piece | Role |
+|--------|------|
+| **`mongod`** | Data server on **27017** (unit name may be `mongod` or `mongod-community` depending on package). |
+| **Replica set** | Required for mongot sync; we use a single-node set named **`rs0`**. |
+| **mongot** | Separate process for `createSearchIndexes`, **`$vectorSearch`**, **`$search`** (MongoDB 8.x self-hosted + community mongot). Listens on **gRPC** (we use **27028** below). |
 
-| Component | Role |
-|-----------|------|
-| **`mongod`** | Data server (`mongod` / `mongod-community.service`), default port **27017**. |
-| **Replica set** | A single-node replica set (for example name **`rs0`**) is typical for local dev; it matches how PyMongo and tools connect and is compatible with mongot replication. |
-| **mongot** | Separate process (**`mongot-community.service`**) that implements search indexes for `createSearchIndexes` / `$vectorSearch` / `$search` when using MongoDB 8.x self-hosted with community mongot. |
-
-Connection strings often use:
+App connection string:
 
 ```text
 mongodb://localhost:27017/?directConnection=true
 ```
 
-`directConnection=true` avoids the driver trying to discover other replica set members when only one node exists.
+`directConnection=true` avoids the driver discovering extra replica-set hosts when only one node exists.
 
 ---
 
-## 1. Install MongoDB Community Edition on Fedora
+## Install MongoDB on Fedora
 
-MongoDB publishes **`.repo`** files for RHEL-compatible systems; Fedora is close enough that the **current** MongoDB instructions for [Install on Red Hat](https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-redhat/) apply with small adjustments.
-
-### 1.1 Add the MongoDB package repository
-
-Create a repo file (exact filename and URL should match the MongoDB version you want, for example **8.0**):
+MongoDB publishes RPM repos for RHEL-family systems; Fedora usually works with the [Red Hat install tutorial](https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-redhat/). Add a repo file for the **major version** you want (example **8.0**, **x86_64**):
 
 ```bash
 sudo tee /etc/yum.repos.d/mongodb-org-8.0.repo <<'EOF'
@@ -43,19 +38,13 @@ gpgkey=https://pgp.mongodb.com/server-8.0.asc
 EOF
 ```
 
-Pick the **baseurl** that matches your **MongoDB major** and **architecture** (`x86_64` vs `aarch64`). If `dnf` reports a mismatch, use the URL from the official tutorial for your version.
-
-### 1.2 Install packages
+Adjust **baseurl** for your **architecture** (`aarch64` URL variants exist on MongoDB’s site).
 
 ```bash
-sudo dnf install -y mongodb-org mongodb-org-server mongodb-org-mongos mongodb-org-database-tools mongodb-mongosh
+sudo dnf install -y mongodb-org mongodb-mongosh
 ```
 
-For a **minimal** server install, `mongodb-org-server` and `mongosh` may be enough; the meta-package **`mongodb-org`** pulls the usual set.
-
-### 1.3 Firewall (if enabled)
-
-If clients are not only on localhost:
+If clients reach MongoDB from other hosts, open the port (local-only dev often skips this):
 
 ```bash
 sudo firewall-cmd --permanent --add-port=27017/tcp
@@ -64,28 +53,38 @@ sudo firewall-cmd --reload
 
 ---
 
-## 2. Configure `mongod`
+## Configure `mongod`: storage, network, replication, and mongot
 
-Main config file: **`/etc/mongod.conf`** (path may vary slightly by package; check `rpm -ql mongodb-org-server`).
+Edit **`/etc/mongod.conf`** (exact path: `rpm -ql mongodb-org-server`).
 
-Typical areas to set explicitly:
+You want:
 
-- **`net.bindIp`**: for local-only dev, `127.0.0.1` is fine; for LAN access, include the host IP or `0.0.0.0` (with firewall rules).
-- **`storage.dbPath`**: default is often `/var/lib/mongo`.
-- **`replication.replSetName`**: set to the name you will use when initiating the replica set (for example **`rs0`**).
+- **`storage.dbPath`** (often `/var/lib/mongo`).
+- **`net.bindIp`** / **`net.port`**.
+- **`replication.replSetName`**: **`rs0`** (must match what you pass to `rs.initiate`).
+- **`setParameter`** so `mongod` knows how to reach mongot over **gRPC** (match the `server.grpc.address` you set in mongot’s `config.yml`—see below; we use **localhost:27028**).
 
-Example snippet (YAML):
+Example (combine with your existing `systemLog` / security settings as needed):
 
 ```yaml
 storage:
   dbPath: /var/lib/mongo
+  wiredTiger:
+    engineConfig:
+      cacheSizeGB: 2   # cap WiredTiger RAM; tune for your machine
 
 net:
   port: 27017
   bindIp: 127.0.0.1
 
 replication:
-  replSetName: rs0
+  replSetName: "rs0"
+
+setParameter:
+  searchIndexManagementHostAndPort: localhost:27028
+  mongotHost: localhost:27028
+  skipAuthenticationToSearchIndexManagementServer: false
+  useGrpcForSearch: true
 
 systemLog:
   destination: file
@@ -93,99 +92,157 @@ systemLog:
   logAppend: true
 ```
 
-### WiredTiger cache (RAM)
+**WiredTiger `cacheSizeGB`** is the main knob for **limiting `mongod` RAM** before you reach for systemd caps.
 
-MongoDB’s **WiredTiger** cache defaults to a fraction of RAM. To **cap** memory used by `mongod`, set something like:
-
-```yaml
-storage:
-  wiredTiger:
-    engineConfig:
-      cacheSizeGB: 2
-```
-
-Adjust to your machine; this is one of the main levers for **limiting mongod RAM** without involving systemd.
-
-After edits:
+Restart `mongod` after editing:
 
 ```bash
 sudo systemctl restart mongod
-# or on some installs:
-sudo systemctl restart mongod-community
 ```
-
-Use `systemctl status` to confirm the exact unit name on your system (`mongod` vs `mongod-community`).
 
 ---
 
-## 3. Initialize the replica set
+## Initialize the replica set
 
-Start the server, then use **`mongosh`**:
+`mongot` expects a replica set. After `mongod` is running:
 
 ```bash
-sudo systemctl enable --now mongod   # or mongod-community
-
-mongosh --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "localhost:27017" }] })'
+mongosh "mongodb://localhost:27017" --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'localhost:27017'}]})"
 ```
 
-Wait until `rs.status()` shows a **PRIMARY** for the member.
+Wait until **`rs.status()`** shows your member as **PRIMARY**.
 
 ---
 
-## 4. Mongot (vector / Atlas Search on self-hosted)
+## Create the mongot database user
 
-For **Knowledge Base** vector search in this project, the server must support **`createSearchIndexes`** and **`$vectorSearch`**. On **self-hosted MongoDB 8.2+**, that is provided by the **mongot** process (often packaged or installed separately from the core `mongod` RPM).
+Mongot connects to `mongod` as a dedicated user (we use **`mongotUser`**) with the **`searchCoordinator`** role. In **`mongosh`**:
 
-### 4.1 Install and configure mongot
+```javascript
+use admin
+db.createUser({
+  user: "mongotUser",
+  pwd: "<strong-password>",
+  roles: [ "searchCoordinator" ]
+})
+```
 
-Follow the **current MongoDB documentation** for **Community mongot** (install path, config file location, and systemd unit name can change by release). On our setups we run a **`mongot-community.service`** that:
+Store the password in a **file** readable only by the account that runs mongot (see next section)—**do not** commit real passwords to the repo.
 
-- Points at the same **`localhost:27017`** sync source.
-- Uses a **config file** (for example `config.yml` in mongot’s working directory).
-- Logs to **journald** (see below).
+---
 
-### 4.2 Mongot user
+## Install mongot from the community tarball
 
-Mongot typically connects with a **dedicated user** (logs often show something like `mongotUser` on `admin`). Create that user in MongoDB per the mongot install guide and grant the roles it requires.
+Download the **mongot community** tarball for Linux from MongoDB (version in the URL changes; check [Search in Community](https://www.mongodb.com/try/download/search-in-community) for the current release):
 
-### 4.3 Start order
+```text
+https://downloads.mongodb.org/mongodb-search-community/<version>/mongot_community_<version>_linux_x86_64.tgz
+```
 
-1. **`mongod`** must be running and PRIMARY.
-2. Then start **`mongot-community`** (or the unit name your package installed).
+Example layout after unpacking under a fixed directory (we use **`/var/lib/mongot-community`**):
+
+```text
+/var/lib/mongot-community/
+  bin/          # optional helper binaries
+  lib/
+  mongot        # main executable
+  config.default.yml
+  config.yml    # your edits
+  README.md
+  VERSION.txt
+  mongot.example.logrotate
+```
+
+Unpack as the user that will run the service (below we use a normal user; production might use a dedicated system account).
+
+---
+
+## Mongot `config.yml` and password file
+
+Create **`config.yml`** next to the `mongot` binary (paths are examples—keep them consistent on your host):
+
+```yaml
+syncSource:
+  replicaSet:
+    hostAndPort: "localhost:27017"
+    username: mongotUser
+    passwordFile: "/var/lib/mongot-community/passwordFile"
+    tls: false
+
+storage:
+  dataPath: "/var/lib/mongot"
+
+server:
+  grpc:
+    address: "localhost:27028"
+    tls:
+      mode: "disabled"
+
+metrics:
+  enabled: true
+  address: "localhost:9946"
+
+logging:
+  verbosity: INFO
+```
+
+- **`passwordFile`**: single line, the password for **`mongotUser`**. Restrict permissions: `chmod 600 passwordFile`.
+- **`storage.dataPath`**: on-disk Lucene / mongot state (large churn during heavy indexing).
+- **`server.grpc.address`**: must align with **`setParameter.mongotHost`** / **`searchIndexManagementHostAndPort`** in **`mongod.conf`**.
+
+Optional blocks in upstream samples (for example **embedding** / Voyage) are not required for basic doc-router KB search; leave them commented unless you use them.
+
+Start mongot **once** from the install directory to verify config (optional debug flag—see **systemd** below for production-style invocation):
 
 ```bash
+cd /var/lib/mongot-community
+./mongot --config config.yml --internalListAllIndexesForTesting=true
+```
+
+Use **`--internalListAllIndexesForTesting=true`** only for troubleshooting; a normal **`ExecStart`** often omits it.
+
+---
+
+## Run mongot under systemd
+
+Example unit: run as a specific user, working directory where **`config.yml`** lives, logs to **journald**:
+
+```bash
+sudo tee /etc/systemd/system/mongot-community.service <<'EOF'
+[Unit]
+Description=Mongot Community Service
+After=network.target mongod.service
+
+[Service]
+Type=simple
+User=andrei
+WorkingDirectory=/var/lib/mongot-community
+ExecStart=/var/lib/mongot-community/mongot --config config.yml
+StandardOutput=journal
+StandardError=journal
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+```
+
+Replace **`User=`** and paths with your deployment (a dedicated **`mongot`** system user is reasonable for shared servers). Ensure **`mongod`** is already up and PRIMARY before mongot starts (**`After=mongod.service`** helps ordering).
+
+```bash
+sudo systemctl daemon-reload
 sudo systemctl enable --now mongot-community
 sudo systemctl status mongot-community
 ```
 
 ---
 
-## 5. Systemd services (how we run things)
+## Limit CPU and RAM (systemd and JVM)
 
-Enable both services to start on boot:
+**mongod:** prefer **`wiredTiger.engineConfig.cacheSizeGB`** in **`mongod.conf`**. Optionally add **`MemoryMax=`** on the `mongod` unit as a hard ceiling.
 
-```bash
-sudo systemctl enable mongod          # or mongod-community
-sudo systemctl enable mongot-community
-```
-
-Check they are active:
-
-```bash
-systemctl is-active mongod mongot-community
-```
-
-### Limit CPU and RAM with systemd
-
-Use **drop-in overrides** so upgrades to the unit file do not wipe your limits.
-
-**Example:** cap mongot Java heap indirectly via environment, and cap CPU/RAM via cgroup limits.
-
-```bash
-sudo systemctl edit mongot-community
-```
-
-Example override (adjust paths and variable names to match your mongot unit):
+**mongot (Java):** use **`systemctl edit mongot-community`** and set cgroup limits plus heap, for example:
 
 ```ini
 [Service]
@@ -194,16 +251,7 @@ CPUQuota=200%
 Environment=JAVA_TOOL_OPTIONS=-Xmx2g
 ```
 
-Then:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl restart mongot-community
-```
-
-For **`mongod`**, prefer **`storage.wiredTiger.engineConfig.cacheSizeGB`** for RAM; you can still use **`MemoryMax=`** in systemd as a hard ceiling if needed.
-
-Verify:
+Then `daemon-reload` and `restart`. Excessive initial-sync queues or **`OutOfMemoryError: Java heap space`** in mongot logs usually mean raising **`-Xmx`**, **`MemoryMax`**, or reducing parallel index churn.
 
 ```bash
 systemctl show mongot-community -p MemoryMax -p CPUQuotaProportion
@@ -211,146 +259,125 @@ systemctl show mongot-community -p MemoryMax -p CPUQuotaProportion
 
 ---
 
-## 6. Application configuration (doc-router)
+## doc-router application
 
-In the project root **`.env`**:
+In the project **`.env`**:
 
 ```bash
 MONGODB_URI=mongodb://localhost:27017/?directConnection=true
 ```
 
-The app and tests use this URI; pytest may set `ENV=pytest_*` per worker—those are **logical database names** inside the same `mongod`, not separate servers.
+Pytest uses logical DB names like **`pytest_gw*`** inside the same `mongod`; they are not separate servers.
 
 ---
 
-## 7. Upgrading MongoDB and mongot
+## Upgrading
 
-1. **Back up** (see [Backup](#9-backup) below).
-2. Read the **release notes** for your target **minor** (8.x) for incompatible changes.
-3. **Upgrade packages**:
+### MongoDB (`mongod`)
 
-   ```bash
-   sudo dnf upgrade mongodb-org '*'
-   ```
+1. Back up ([Backup](#backup-and-restore) below).
+2. `sudo dnf upgrade mongodb-org '*'` (or your pinned packages).
+3. `sudo systemctl restart mongod`, confirm **`rs.status()`**, then restart mongot.
 
-4. Restart **`mongod`**, then **`mongot-community`**:
+### mongot (tarball)
 
-   ```bash
-   sudo systemctl restart mongod
-   sudo systemctl restart mongot-community
-   ```
-
-5. Smoke-test: `mongosh` connect, `rs.status()`, and a small **`createSearchIndexes`** / **`$vectorSearch`** against a test collection.
-
----
-
-## 8. Logs and what to watch for
-
-### 8.1 Where logs go
-
-| Component | Typical log source |
-|-----------|-------------------|
-| **mongod** | File: `/var/log/mongodb/mongod.log` (if configured), and/or **journald**: `journalctl -u mongod` |
-| **mongot** | **journald**: `journalctl -u mongot-community` |
-
-Follow live:
+Check the running build:
 
 ```bash
-journalctl -u mongod -f
-journalctl -u mongot-community -f --since "now"
+cat /var/lib/mongot-community/VERSION.txt
 ```
 
-Mongot may also write **FTDC / diagnostic** data under something like **`/var/lib/mongot/`** (see mongot logs for the exact path).
+Compare with the current release on [Search in Community](https://www.mongodb.com/try/download/search-in-community). Upgrade by **replacing binaries** while keeping **`config.yml`**, **`passwordFile`**, and **`storage.dataPath`** (e.g. `/var/lib/mongot`):
 
-### 8.2 Messages that are usually normal
+```bash
+sudo systemctl stop mongot-community
 
-- **Initial sync / `Enqueueing initial sync` / `Queued initial syncs`**: mongot is building Lucene indexes for new search indexes.
-- **`Collection was dropped` / `SteadyStateException` / “closing change stream”** after a drop: expected when databases or collections are removed; mongot tears down indexes for that namespace.
-- **`No index in catalog` (WARN)** right after **`createSearchIndexes`**: short race before mongot registers the index; the application retries readiness where implemented. If it persists, the index may not have been created or mongot is overloaded.
+curl -L -o /tmp/mongot-new.tgz \
+  'https://downloads.mongodb.org/mongodb-search-community/0.64.0/mongot_community_0.64.0_linux_x86_64.tgz'
+tar -xzf /tmp/mongot-new.tgz -C /tmp
 
-### 8.3 Problems we have actually hit
+cp -r /tmp/mongot_community_0.64.0_linux_x86_64/bin /var/lib/mongot-community/
+cp -r /tmp/mongot_community_0.64.0_linux_x86_64/lib /var/lib/mongot-community/
+cp /tmp/mongot_community_0.64.0_linux_x86_64/mongot /var/lib/mongot-community/
+cp /tmp/mongot_community_0.64.0_linux_x86_64/VERSION.txt /var/lib/mongot-community/
 
-| Symptom | Likely cause | Mitigation |
-|---------|----------------|------------|
-| **`java.lang.OutOfMemoryError: Java heap space`** in mongot | Too many indexes / initial sync backlog / heap too small | Increase **`JAVA_TOOL_OPTIONS=-Xmx...`**, raise **`MemoryMax`**, reduce parallel test load, or give the host more RAM. |
-| **`No index in catalog`** (mongot WARN) | Query before index is registered | Wait after index creation (app uses a readiness probe), retry searches, avoid hammering mongot during mass index creation. |
-| **High CPU / long `numQueued` initial syncs** | Many collections / parallel workers creating indexes | Limit concurrency, cap systemd CPU/RAM, or use a dedicated dev instance. |
+sudo systemctl start mongot-community
+```
+
+Adjust paths and version numbers to match the tarball you downloaded.
 
 ---
 
-## 9. Backup
+## Logs and what to watch for
 
-### 9.1 Filesystem backup of `dbPath`
+| Source | Command |
+|--------|--------|
+| **mongod** | `/var/log/mongodb/mongod.log` if configured, and/or `journalctl -u mongod` |
+| **mongot** | `journalctl -u mongot-community` (follow: `-f`, only new lines: `-f -n 0` or `--since "now"`) |
 
-Stop writes or use filesystem snapshots consistently with MongoDB documentation for your storage. Not always ideal for fast iteration.
+Mongot may also write diagnostics under **`storage.dataPath`** (e.g. FTDC under a subdirectory—see mongot startup logs).
 
-### 9.2 `mongodump` / `mongorestore`
+**Usually normal**
 
-Logical backup (good for moving a database between hosts):
+- **`Enqueueing initial sync` / `Queued initial syncs`**: index builds after `createSearchIndexes`.
+- After **dropping** a collection/database: **`Collection was dropped`**, steady-state shutdown, Lucene **drop**—mongot releasing indexes for that namespace.
+
+**Worth attention**
+
+| Symptom | Likely cause | What to do |
+|---------|----------------|------------|
+| **`java.lang.OutOfMemoryError: Java heap space`** | Heap too small or too many indexes syncing | Increase **`-Xmx`**, **`MemoryMax`**, lighten load |
+| **`No index in catalog` (WARN)** | Query before mongot registered the index | Short race; app retries; if persistent, check index creation and mongot health |
+| Repeated failures right after upgrades | Config / port mismatch | Align **`mongod.conf`** `setParameter` with **`config.yml`** `server.grpc.address` |
+
+---
+
+## Backup and restore
+
+**Logical backup:**
 
 ```bash
 mongodump --uri="mongodb://localhost:27017/?directConnection=true" --db=yourdb --out=/backup/mongodump-$(date +%F)
 mongorestore --uri="mongodb://localhost:27017/?directConnection=true" /backup/mongodump-YYYY-MM-DD/yourdb
 ```
 
-### 9.3 Project helper
+**Project scripts:** `packages/python/analytiq_data/migrations/` (**MIGRATIONS.md**, **`backup_db.py`**) for URI/database copies in line with this repo.
 
-The repo includes migration tooling under `packages/python/analytiq_data/migrations/` (see **MIGRATIONS.md** and **`backup_db.py`**). Use those for copying between URIs/databases when aligning with how this project expects data.
+For **mongot**, backing up **`storage.dataPath`** (while mongot is stopped or using procedures consistent with MongoDB guidance) preserves on-disk index state; often **`mongodump` of the data** plus rebuilding indexes is enough for dev—match your recovery requirements.
 
 ---
 
-## 10. Cleanup: databases, collections, and mongot
+## Cleanup: databases, indexes, and mongot
 
-### 10.1 Drop a database (application data)
-
-From **`mongosh`**:
+**Drop a database** (mongot sees drops via replication and tears down search indexes for those namespaces):
 
 ```javascript
 use yourdb
 db.dropDatabase()
 ```
 
-Dropping the database removes **collections** and **data**. Mongot learns via the oplog/change streams and will **tear down** search indexes tied to those namespaces (you may see drop-related lines in **`journalctl -u mongot-community`**).
+**Drop search indexes only:** use **`dropSearchIndexes`** (or current equivalent) for your server version; mongot stops maintaining those definitions.
 
-### 10.2 Drop search indexes only
+**Leftover pytest DBs** (`pytest_gw0`, …): `show dbs`, then `use pytest_gwN` / `db.dropDatabase()`.
 
-If you need to remove Atlas Search indexes without dropping the whole collection, use the appropriate **`dropSearchIndexes`** / admin commands for your MongoDB version (see MongoDB docs). Mongot will stop maintaining those indexes.
-
-### 10.3 Test databases (`pytest_*`)
-
-When running pytest, the suite typically uses per-worker database names like **`pytest_gw0`**. You can list and drop leftover DBs:
-
-```javascript
-show dbs
-// then for each name:
-use pytest_gw0
-db.dropDatabase()
-```
-
-### 10.4 Mongot on-disk state
-
-After large index churn, mongot’s on-disk directories may not shrink immediately. If you **fully** decommission mongot (only in a dev VM), you might:
-
-1. Stop **`mongot-community`**.
-2. Remove mongot state **only** as documented for your mongot version (often under **`/var/lib/mongot/`** or similar—confirm before `rm -rf`).
-3. Start mongot again and let it rebuild from MongoDB metadata.
-
-Do **not** delete mongot’s data directory while production traffic depends on it without following MongoDB’s procedures.
+**Mongot disk:** after heavy use, **`storage.dataPath`** may not shrink immediately. Only remove that tree on a **dev** box with mongot stopped and after you understand the data loss risk; on production follow MongoDB procedures.
 
 ---
 
-## 11. Quick health checklist
+## Quick health checklist
 
 - [ ] `mongosh "mongodb://localhost:27017/?directConnection=true"` connects.
-- [ ] `rs.status()` shows PRIMARY (if using a replica set).
+- [ ] `rs.status()` → PRIMARY.
+- [ ] `mongod.conf` **`setParameter`** ports match mongot **`config.yml`** gRPC address.
 - [ ] `systemctl is-active mongod mongot-community` → `active`.
-- [ ] Create a test collection, **`createSearchIndexes`**, then a minimal **`$vectorSearch`** (or run the project’s mongot integration test).
-- [ ] `journalctl -u mongot-community -n 50` shows no repeated OOM / fatal errors after load.
+- [ ] `journalctl -u mongot-community -n 50` shows no repeated OOM after a smoke test (`createSearchIndexes` + small **`$vectorSearch`**, or the repo’s mongot integration test).
 
 ---
 
 ## References
 
+- [MongoDB: Install Community with Search (Red Hat)](https://www.mongodb.com/docs/manual/administration/install-community/?linux-distribution=red-hat&linux-package=default&operating-system=linux&search-linux=with-search-linux)
 - [MongoDB: Install on Red Hat / CentOS](https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-redhat/)
 - [MongoDB: mongod configuration](https://www.mongodb.com/docs/manual/reference/configuration-options/)
-- Project: [INSTALL.local_devel.md](INSTALL.local_devel.md), [env.md](env.md), `deploy/compose/docker-compose.embedded.yml` (Atlas Local / mongot in Docker alternative).
+- [Search in Community (downloads)](https://www.mongodb.com/try/download/search-in-community)
+- Project: [INSTALL.local_devel.md](INSTALL.local_devel.md), [env.md](env.md), Docker alternative: `deploy/compose/docker-compose.embedded.yml` (Atlas Local image with mongot).
