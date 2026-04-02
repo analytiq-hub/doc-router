@@ -2,6 +2,12 @@
 
 This document walks through how we run **MongoDB Community Edition** and **mongot** (search / `$vectorSearch`) on **Fedora** for local development—same order you would follow on a new machine. It complements [INSTALL.local_devel.md](INSTALL.local_devel.md) and [env.md](env.md).
 
+This setup has been validated on Linux Fedora 41 with:
+
+- **MongoDB (`mongod`)**: **8.2.4**
+- **mongot community**: **0.64.0**
+- **mongosh**: **2.6.0**
+
 Official overview (Community install **with** Search on Linux):  
 [Install MongoDB Community Edition — with Search](https://www.mongodb.com/docs/manual/administration/install-community/?linux-distribution=red-hat&linux-package=default&operating-system=linux&search-linux=with-search-linux).
 
@@ -64,18 +70,18 @@ You want:
 - **`replication.replSetName`**: **`rs0`** (must match what you pass to `rs.initiate`).
 - **`setParameter`** so `mongod` knows how to reach mongot over **gRPC** (match the `server.grpc.address` you set in mongot’s `config.yml`—see below; we use **localhost:27028**).
 
-Example (combine with your existing `systemLog` / security settings as needed):
+Example (mirrors our current Fedora host; adjust `bindIp` for your environment):
 
 ```yaml
 storage:
   dbPath: /var/lib/mongo
   wiredTiger:
     engineConfig:
-      cacheSizeGB: 2   # cap WiredTiger RAM; tune for your machine
+      cacheSizeGB: 2.0   # cap WiredTiger RAM; tune for your machine
 
 net:
   port: 27017
-  bindIp: 127.0.0.1
+  bindIp: 0.0.0.0
 
 replication:
   replSetName: "rs0"
@@ -182,6 +188,9 @@ metrics:
   enabled: true
   address: "localhost:9946"
 
+healthCheck:
+  address: "localhost:8088"
+
 logging:
   verbosity: INFO
 ```
@@ -211,7 +220,7 @@ Example unit: run as a specific user, working directory where **`config.yml`** l
 sudo tee /etc/systemd/system/mongot-community.service <<'EOF'
 [Unit]
 Description=Mongot Community Service
-After=network.target mongod.service
+After=network.target
 
 [Service]
 Type=simple
@@ -242,13 +251,15 @@ sudo systemctl status mongot-community
 
 **mongod:** prefer **`wiredTiger.engineConfig.cacheSizeGB`** in **`mongod.conf`**. Optionally add **`MemoryMax=`** on the `mongod` unit as a hard ceiling.
 
-**mongot (Java):** use **`systemctl edit mongot-community`** and set cgroup limits plus heap, for example:
+**mongot (Java):** use **drop-in overrides**. On this host we have an override at **`/etc/systemd/system/mongot-community.service.d/limits.conf`** that replaces `ExecStart` and applies caps:
 
 ```ini
 [Service]
-MemoryMax=4G
-CPUQuota=200%
-Environment=JAVA_TOOL_OPTIONS=-Xmx2g
+ExecStart=
+ExecStart=/var/lib/mongot-community/mongot --jvm-flags "-Xms512m -Xmx4g" --config config.yml
+CPUQuota=400%
+MemoryMax=5G
+MemoryHigh=4.5G
 ```
 
 Then `daemon-reload` and `restart`. Excessive initial-sync queues or **`OutOfMemoryError: Java heap space`** in mongot logs usually mean raising **`-Xmx`**, **`MemoryMax`**, or reducing parallel index churn.
