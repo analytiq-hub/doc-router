@@ -1096,6 +1096,8 @@ export interface GetKnowledgeBaseParams {
 export interface CreateKnowledgeBaseParams {
   organizationId: string;
   kb: KnowledgeBaseConfig;
+  /** When set, forwarded to axios; instance timeout is disabled for this call so the caller’s deadline (e.g. UI AbortController) is not preempted at 30s. */
+  signal?: AbortSignal;
 }
 
 export interface UpdateKnowledgeBaseParams {

@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { KnowledgeBase, Tag } from '@docrouter/sdk';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import type { ChipProps } from '@mui/material';
 import { TextField, InputAdornment, IconButton, Menu, MenuItem, Chip, Tooltip, Box } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -93,7 +94,6 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
     try {
       setIsLoading(true);
       await docRouterOrgApi.deleteKnowledgeBase({ kbId });
-      toast.success('Knowledge base deleted successfully');
       await loadKnowledgeBases();
       handleMenuClose();
     } catch (error) {
@@ -138,7 +138,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string): NonNullable<ChipProps['color']> => {
     switch (status) {
       case 'active':
         return 'success';
@@ -184,7 +184,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
         <div className="flex items-center h-full w-full">
           <Chip 
             label={params.row.status} 
-            color={getStatusColor(params.row.status) as any}
+            color={getStatusColor(params.row.status)}
             size="small"
           />
         </div>

@@ -512,7 +512,14 @@ export class DocRouterOrg {
   // ---------------- Knowledge Bases ----------------
 
   async createKnowledgeBase(params: Omit<CreateKnowledgeBaseParams, 'organizationId'>): Promise<KnowledgeBase> {
-    const { kb } = params;
+    const { kb, signal } = params;
+    if (signal) {
+      return this.http.post<KnowledgeBase>(
+        `/v0/orgs/${this.organizationId}/knowledge-bases`,
+        kb,
+        { signal, timeout: 0 }
+      );
+    }
     return this.http.post<KnowledgeBase>(`/v0/orgs/${this.organizationId}/knowledge-bases`, kb);
   }
 
