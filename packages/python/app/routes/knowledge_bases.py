@@ -450,8 +450,8 @@ async def create_vector_search_index(
             "indexes": search_indexes
         })
         logger.info(
-            "createSearchIndexes for KB %s completed in %.1fs (kb_vector_index, kb_lexical_index)",
-            kb_id, time.monotonic() - t0,
+            f"Created vector + lexical search indexes for KB {kb_id} "
+            f"(kb_vector_index, kb_lexical_index)"
         )
 
         # Clean up temporary document after successful index creation
