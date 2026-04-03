@@ -54,5 +54,5 @@ filterwarnings = [
 ]
 markers = [
     "mongot: tests that require MongoDB vector search ($vectorSearch) / mongot",
-    "kb_slow: KB tests that create real search indexes (slow, run via make tests-kb)",
+    "kb_slow: Slow KB tests — real search indexes, mongot integration, and test_llm_kb (make tests-kb)",
 ]

@@ -29,6 +29,9 @@ logger = logging.getLogger(__name__)
 
 assert os.environ["ENV"] == "pytest"
 
+# Slow agentic-loop + real KB creation; excluded from `make tests`, run via `make tests-kb`.
+pytestmark = pytest.mark.kb_slow
+
 # Text aligned with conftest_llm.mock_run_textract LINE blocks — persisted without running OCR/AWS.
 MOCK_OCR_TEXT_FOR_TESTS = (
     "INVOICE #12345\n"
