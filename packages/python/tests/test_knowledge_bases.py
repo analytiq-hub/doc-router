@@ -78,7 +78,7 @@ async def test_kb_lifecycle(mock_embedding, _mock_model_info, _mock_idx, test_db
     assert kb["name"] == "Test Invoice KB"
     assert kb["description"] == "Knowledge base for invoice processing"
     assert kb["embedding_dimensions"] > 0
-    assert kb["status"] in ["indexing", "active"]
+    assert kb["status"] == "indexing"
     assert kb["document_count"] == 0
     assert kb["chunk_count"] == 0
     assert kb.get("system_prompt") == "Always prefer vendor names from the header."
@@ -90,9 +90,10 @@ async def test_kb_lifecycle(mock_embedding, _mock_model_info, _mock_idx, test_db
         assert lr.status_code == 200
         assert any(k["kb_id"] == kb_id for k in lr.json()["knowledge_bases"])
 
-        # Get
+        # Get (BackgroundTasks from create have finished under TestClient, so status is active)
         gr = client.get(f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}", headers=get_auth_headers())
         assert gr.status_code == 200
+        assert gr.json()["status"] == "active"
         assert gr.json()["embedding_model"] == "text-embedding-3-small"
         assert gr.json()["chunk_size"] == 512
 

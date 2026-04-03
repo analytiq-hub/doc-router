@@ -1091,12 +1091,14 @@ export interface ListKnowledgeBasesResponse {
 
 export interface GetKnowledgeBaseParams {
   kbId: string;
+  /** When set, forwarded to axios (e.g. cancel polling). */
+  signal?: AbortSignal;
 }
 
 export interface CreateKnowledgeBaseParams {
   organizationId: string;
   kb: KnowledgeBaseConfig;
-  /** When set, forwarded to axios; instance timeout is disabled for this call so the caller’s deadline (e.g. UI AbortController) is not preempted at 30s. */
+  /** When set, forwarded to axios (e.g. cancel). */
   signal?: AbortSignal;
 }
 

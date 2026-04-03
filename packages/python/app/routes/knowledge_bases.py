@@ -10,7 +10,7 @@ from typing import Optional, List, Dict, Literal, Any
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 # Third-party imports
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, BackgroundTasks
 from bson import ObjectId
 
 # Local imports
@@ -521,14 +521,83 @@ async def validate_tag_ids(tag_ids: List[str], organization_id: str, analytiq_cl
             detail=f"Tags not found or not accessible: {list(missing_tags)}"
         )
 
+
+async def _finalize_knowledge_base_creation(
+    organization_id: str,
+    kb_id: str,
+    embedding_dimensions: int,
+) -> None:
+    """
+    Build MongoDB search indexes, mark KB active, then reconcile matching documents.
+    Runs after the create HTTP response (BackgroundTasks / ASGI); clients should poll GET until status is active or error.
+    """
+    try:
+        analytiq_client = ad.common.get_analytiq_client()
+        db = ad.common.get_async_db(analytiq_client)
+        doc = await db.knowledge_bases.find_one(
+            {"_id": ObjectId(kb_id), "organization_id": organization_id}
+        )
+        if not doc:
+            logger.info("KB finalize skipped: %s not found", kb_id)
+            return
+        if doc.get("status") != "indexing":
+            logger.info(
+                "KB finalize skipped: %s status=%s (expected indexing)",
+                kb_id,
+                doc.get("status"),
+            )
+            return
+
+        await create_vector_search_index(
+            analytiq_client,
+            kb_id,
+            embedding_dimensions,
+            organization_id,
+        )
+        await db.knowledge_bases.update_one(
+            {"_id": ObjectId(kb_id)},
+            {"$set": {"status": "active", "updated_at": datetime.now(UTC)}},
+        )
+    except Exception as e:
+        logger.exception("KB %s search index setup failed: %s", kb_id, e)
+        try:
+            analytiq_client = ad.common.get_analytiq_client()
+            db = ad.common.get_async_db(analytiq_client)
+            await db.knowledge_bases.update_one(
+                {"_id": ObjectId(kb_id), "organization_id": organization_id},
+                {"$set": {"status": "error", "updated_at": datetime.now(UTC)}},
+            )
+        except Exception:
+            logger.exception("Failed to mark KB %s as error", kb_id)
+        try:
+            db = ad.common.get_async_db(ad.common.get_analytiq_client())
+            await db[f"kb_vectors_{kb_id}"].drop()
+        except Exception:
+            pass
+        return
+
+    try:
+        analytiq_client = ad.common.get_analytiq_client()
+        await ad.kb.reconciliation.reconcile_knowledge_base(
+            analytiq_client=analytiq_client,
+            organization_id=organization_id,
+            kb_id=kb_id,
+            dry_run=False,
+        )
+        logger.info("Reconciliation finished for newly created KB %s", kb_id)
+    except Exception as e:
+        logger.error("Error reconciling newly created KB %s: %s", kb_id, e)
+
+
 # API Endpoints
 @knowledge_bases_router.post("/v0/orgs/{organization_id}/knowledge-bases", response_model=KnowledgeBase)
 async def create_knowledge_base(
     organization_id: str,
+    background_tasks: BackgroundTasks,
     config: KnowledgeBaseConfig = Body(...),
     current_user: User = Depends(get_org_user)
 ):
-    """Create a new knowledge base"""
+    """Create a new knowledge base (returns immediately with status indexing; poll GET until active or error)."""
     logger.info(f"Creating KB for org {organization_id}: {config.name}")
     
     analytiq_client = ad.common.get_analytiq_client()
@@ -569,47 +638,15 @@ async def create_knowledge_base(
 
     result = await db.knowledge_bases.insert_one(kb_doc)
     kb_id = str(result.inserted_id)
-    
-    # Create vector search index (await completion)
-    # For a new empty KB, this should be fast
-    # If this fails, we'll delete the KB and return an error
-    try:
-        await create_vector_search_index(
-            analytiq_client,
-            kb_id,
-            embedding_dimensions,
-            organization_id
-        )
-        # Update status to active after successful index creation
-        await db.knowledge_bases.update_one(
-            {"_id": ObjectId(kb_id)},
-            {"$set": {"status": "active", "updated_at": datetime.now(UTC)}}
-        )
-    except HTTPException:
-        # If index creation fails, clean up the KB and re-raise the exception
-        await db.knowledge_bases.delete_one({"_id": ObjectId(kb_id)})
-        # Also clean up the vector collection if it was created
-        try:
-            await db[f"kb_vectors_{kb_id}"].drop()
-        except Exception:
-            pass  # Collection may not exist
-        raise  # Re-raise the HTTPException
-    
-    # Trigger reconciliation to index existing documents with matching tags
-    # This runs in the background - errors are logged but don't fail KB creation
-    try:
-        await ad.kb.reconciliation.reconcile_knowledge_base(
-            analytiq_client=analytiq_client,
-            organization_id=organization_id,
-            kb_id=kb_id,
-            dry_run=False
-        )
-        logger.info(f"Reconciliation triggered for newly created KB {kb_id}")
-    except Exception as e:
-        # Log error but don't fail KB creation - reconciliation can be retried later
-        logger.error(f"Error triggering reconciliation for KB {kb_id} after creation: {e}")
-    
-    # Fetch and return created KB
+
+    background_tasks.add_task(
+        _finalize_knowledge_base_creation,
+        organization_id,
+        kb_id,
+        embedding_dimensions,
+    )
+
+    # Fetch and return created KB (still indexing until background task completes)
     kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id)})
     
     # Normalize timestamps to UTC-aware if they're naive

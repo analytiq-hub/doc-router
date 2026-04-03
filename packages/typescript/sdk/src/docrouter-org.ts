@@ -517,7 +517,7 @@ export class DocRouterOrg {
       return this.http.post<KnowledgeBase>(
         `/v0/orgs/${this.organizationId}/knowledge-bases`,
         kb,
-        { signal, timeout: 0 }
+        { signal }
       );
     }
     return this.http.post<KnowledgeBase>(`/v0/orgs/${this.organizationId}/knowledge-bases`, kb);
@@ -535,7 +535,13 @@ export class DocRouterOrg {
   }
 
   async getKnowledgeBase(params: Omit<GetKnowledgeBaseParams, 'organizationId'>): Promise<KnowledgeBase> {
-    const { kbId } = params;
+    const { kbId, signal } = params;
+    if (signal) {
+      return this.http.get<KnowledgeBase>(
+        `/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}`,
+        { signal }
+      );
+    }
     return this.http.get<KnowledgeBase>(`/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}`);
   }
 
