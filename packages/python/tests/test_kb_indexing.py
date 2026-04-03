@@ -37,6 +37,7 @@ async def _process_pending_kb_index_messages(test_db, document_id: str | None = 
         await ad.msg_handlers.process_kb_index_msg(analytiq_client, kb_msg)
 
 
+@pytest.mark.kb_slow
 @pytest.mark.asyncio
 @patch("litellm.get_model_info", return_value={"provider": "openai"})
 @patch("litellm.aembedding")
@@ -177,6 +178,7 @@ async def test_kb_integration_single_kb_lifecycle(
             await test_db.docs.delete_many({"_id": {"$in": doc_ids}})
 
 
+@pytest.mark.kb_slow
 @pytest.mark.asyncio
 @patch("litellm.get_model_info", return_value={"provider": "openai"})
 @patch("litellm.aembedding")

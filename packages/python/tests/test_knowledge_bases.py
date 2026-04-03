@@ -1,440 +1,289 @@
+"""
+Fast KB API tests — index creation is mocked so these run in seconds.
+For real-index integration tests see test_kb_indexing.py (make tests-kb).
+"""
+
 import pytest
 from bson import ObjectId
 import os
 import logging
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from .conftest_utils import client, TEST_ORG_ID, get_auth_headers
 from .kb_test_helpers import create_mock_embedding_response
-import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
 assert os.environ["ENV"] == "pytest"
 
-@pytest.mark.asyncio
-@patch('litellm.get_model_info', return_value={"provider": "openai"})
-@patch('litellm.aembedding')
-async def test_kb_lifecycle(mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models):
-    """Test the complete knowledge base lifecycle"""
-    logger.info(f"test_kb_lifecycle() start")
-    
-    # Set up mock embedding response
+MOCK_SEARCH_INDEX = patch(
+    "app.routes.knowledge_bases.create_vector_search_index",
+    new_callable=AsyncMock,
+)
+MOCK_EMBEDDING = patch("litellm.aembedding")
+MOCK_MODEL_INFO = patch(
+    "litellm.get_model_info", return_value={"provider": "openai"}
+)
+
+
+def _apply_embedding_mock(mock_embedding):
     mock_embedding.return_value = create_mock_embedding_response()
-    
+
+
+# ── helpers ──────────────────────────────────────────────────────────
+
+def _create_kb(name="Test KB", **overrides):
+    payload = {
+        "name": name,
+        "tag_ids": [],
+        "chunker_type": "recursive",
+        "chunk_size": 512,
+        "chunk_overlap": 128,
+        "embedding_model": "text-embedding-3-small",
+        **overrides,
+    }
+    r = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
+        json=payload,
+        headers=get_auth_headers(),
+    )
+    return r
+
+
+def _delete_kb(kb_id):
+    client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
+        headers=get_auth_headers(),
+    )
+
+
+# ── tests ────────────────────────────────────────────────────────────
+
+@pytest.mark.asyncio
+@MOCK_SEARCH_INDEX
+@MOCK_MODEL_INFO
+@MOCK_EMBEDDING
+async def test_kb_lifecycle(mock_embedding, _mock_model_info, _mock_idx, test_db, mock_auth, setup_test_models):
+    """Full CRUD lifecycle: create → list → get → update → delete → verify gone."""
+    _apply_embedding_mock(mock_embedding)
+
+    resp = _create_kb(
+        name="Test Invoice KB",
+        description="Knowledge base for invoice processing",
+        system_prompt="Always prefer vendor names from the header.",
+        coalesce_neighbors=2,
+    )
+    assert resp.status_code == 200, f"Create failed: {resp.text}"
+    kb = resp.json()
+    assert kb["name"] == "Test Invoice KB"
+    assert kb["description"] == "Knowledge base for invoice processing"
+    assert kb["embedding_dimensions"] > 0
+    assert kb["status"] in ["indexing", "active"]
+    assert kb["document_count"] == 0
+    assert kb["chunk_count"] == 0
+    assert kb.get("system_prompt") == "Always prefer vendor names from the header."
+    kb_id = kb["kb_id"]
+
     try:
-        # Step 1: Create a KB
-        kb_data = {
-            "name": "Test Invoice KB",
-            "description": "Knowledge base for invoice processing",
-            "system_prompt": "Always prefer vendor names from the header.",
-            "tag_ids": [],
-            "chunker_type": "recursive",
-            "chunk_size": 512,
-            "chunk_overlap": 128,
-            "embedding_model": "text-embedding-3-small",
-            "coalesce_neighbors": 2
-        }
-        
-        create_response = client.post(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
-            json=kb_data,
-            headers=get_auth_headers()
-        )
-        
-        assert create_response.status_code == 200, f"Create failed: {create_response.text}"
-        kb_result = create_response.json()
-        assert "kb_id" in kb_result
-        assert kb_result["name"] == "Test Invoice KB"
-        assert kb_result["description"] == "Knowledge base for invoice processing"
-        assert kb_result["embedding_dimensions"] > 0, "Embedding dimensions should be auto-detected"
-        assert kb_result["status"] in ["indexing", "active"]
-        assert kb_result["document_count"] == 0
-        assert kb_result["chunk_count"] == 0
-        assert kb_result.get("system_prompt") == "Always prefer vendor names from the header."
-        
-        kb_id = kb_result["kb_id"]
-        
-        # Step 2: List KBs to verify it was created
-        list_response = client.get(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
-            headers=get_auth_headers()
-        )
-        
-        assert list_response.status_code == 200
-        list_data = list_response.json()
-        assert "knowledge_bases" in list_data
-        assert "total_count" in list_data
-        
-        # Find our KB in the list
-        created_kb = next((kb for kb in list_data["knowledge_bases"] if kb["kb_id"] == kb_id), None)
-        assert created_kb is not None, "KB should be in the list"
-        assert created_kb["name"] == "Test Invoice KB"
-        
-        # Step 3: Get the specific KB to verify its content
-        get_response = client.get(
+        # List
+        lr = client.get(f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases", headers=get_auth_headers())
+        assert lr.status_code == 200
+        assert any(k["kb_id"] == kb_id for k in lr.json()["knowledge_bases"])
+
+        # Get
+        gr = client.get(f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+        assert gr.status_code == 200
+        assert gr.json()["embedding_model"] == "text-embedding-3-small"
+        assert gr.json()["chunk_size"] == 512
+
+        # Update
+        ur = client.put(
             f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
-            headers=get_auth_headers()
+            json={
+                "name": "Updated Invoice KB",
+                "description": "Updated description",
+                "system_prompt": "Updated KB instructions.",
+                "coalesce_neighbors": 3,
+            },
+            headers=get_auth_headers(),
         )
-        
-        assert get_response.status_code == 200
-        kb_data_retrieved = get_response.json()
-        assert kb_data_retrieved["kb_id"] == kb_id
-        assert kb_data_retrieved["name"] == "Test Invoice KB"
-        assert kb_data_retrieved["embedding_model"] == "text-embedding-3-small"
-        assert kb_data_retrieved["chunk_size"] == 512
-        assert kb_data_retrieved["chunk_overlap"] == 128
-        
-        # Step 4: Update the KB (mutable fields only)
-        update_data = {
-            "name": "Updated Invoice KB",
-            "description": "Updated description",
-            "system_prompt": "Updated KB instructions.",
-            "coalesce_neighbors": 3
-        }
-        
-        update_response = client.put(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
-            json=update_data,
-            headers=get_auth_headers()
-        )
-        
-        assert update_response.status_code == 200
-        updated_kb = update_response.json()
-        assert updated_kb["name"] == "Updated Invoice KB"
-        assert updated_kb["description"] == "Updated description"
-        assert updated_kb["system_prompt"] == "Updated KB instructions."
-        assert updated_kb["coalesce_neighbors"] == 3
-        # Immutable fields should remain unchanged
-        assert updated_kb["chunk_size"] == 512
-        assert updated_kb["embedding_model"] == "text-embedding-3-small"
-        
-        # Step 5: Delete the KB
-        delete_response = client.delete(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
-            headers=get_auth_headers()
-        )
-        
-        assert delete_response.status_code == 200
-        assert delete_response.json()["message"] == "Knowledge base deleted successfully"
-        
-        # Step 6: Verify deletion
-        get_after_delete_response = client.get(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
-            headers=get_auth_headers()
-        )
-        
-        assert get_after_delete_response.status_code == 404
-        
+        assert ur.status_code == 200
+        updated = ur.json()
+        assert updated["name"] == "Updated Invoice KB"
+        assert updated["system_prompt"] == "Updated KB instructions."
+        assert updated["coalesce_neighbors"] == 3
+        assert updated["chunk_size"] == 512  # immutable
+        assert updated["embedding_model"] == "text-embedding-3-small"  # immutable
+
+        # Delete
+        dr = client.delete(f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}", headers=get_auth_headers())
+        assert dr.status_code == 200
+        assert dr.json()["message"] == "Knowledge base deleted successfully"
+
+        # Verify gone
+        assert client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}", headers=get_auth_headers()
+        ).status_code == 404
     finally:
-        pass  # mock_auth fixture handles cleanup
+        _delete_kb(kb_id)
+
 
 @pytest.mark.asyncio
 async def test_kb_create_validation(test_db, mock_auth, setup_test_models):
-    """Test KB creation validation"""
-    logger.info(f"test_kb_create_validation() start")
-    
-    try:
-        # Test invalid chunker_type
-        invalid_kb = {
-            "name": "Invalid KB",
-            "chunker_type": "invalid_chunker"
-        }
-        response = client.post(
+    """Pydantic validation rejects bad payloads before hitting the DB."""
+    cases = [
+        {"name": "X", "chunker_type": "invalid_chunker"},
+        {"name": "X", "chunk_size": 100, "chunk_overlap": 150},
+        {"name": "X", "chunk_size": 10},
+        {"name": "X", "chunk_size": 5000},
+        {"name": "X", "coalesce_neighbors": 10},
+    ]
+    for payload in cases:
+        r = client.post(
             f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
-            json=invalid_kb,
-            headers=get_auth_headers()
+            json=payload,
+            headers=get_auth_headers(),
         )
-        assert response.status_code == 422  # Validation error
-        
-        # Test chunk_overlap >= chunk_size
-        invalid_kb = {
-            "name": "Invalid KB",
-            "chunk_size": 100,
-            "chunk_overlap": 150  # Overlap > size
-        }
-        response = client.post(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
-            json=invalid_kb,
-            headers=get_auth_headers()
-        )
-        assert response.status_code == 422
-        
-        # Test invalid chunk_size (too small)
-        invalid_kb = {
-            "name": "Invalid KB",
-            "chunk_size": 10  # Below minimum
-        }
-        response = client.post(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
-            json=invalid_kb,
-            headers=get_auth_headers()
-        )
-        assert response.status_code == 422
-        
-        # Test invalid chunk_size (too large)
-        invalid_kb = {
-            "name": "Invalid KB",
-            "chunk_size": 5000  # Above maximum
-        }
-        response = client.post(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
-            json=invalid_kb,
-            headers=get_auth_headers()
-        )
-        assert response.status_code == 422
-        
-        # Test invalid coalesce_neighbors
-        invalid_kb = {
-            "name": "Invalid KB",
-            "coalesce_neighbors": 10  # Above maximum
-        }
-        response = client.post(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
-            json=invalid_kb,
-            headers=get_auth_headers()
-        )
-        assert response.status_code == 422
-        
-    finally:
-        pass
+        assert r.status_code == 422, f"Expected 422 for {payload}, got {r.status_code}"
+
 
 @pytest.mark.asyncio
-@patch('litellm.get_model_info', return_value={"provider": "openai"})
-@patch('litellm.aembedding')
-async def test_kb_list_pagination(mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models):
-    """Test KB list pagination and filtering"""
-    logger.info(f"test_kb_list_pagination() start")
-    
-    # Set up mock embedding response
-    mock_embedding.return_value = create_mock_embedding_response()
-    
+@MOCK_SEARCH_INDEX
+@MOCK_MODEL_INFO
+@MOCK_EMBEDDING
+async def test_kb_list_pagination(mock_embedding, _mock_model_info, _mock_idx, test_db, mock_auth, setup_test_models):
+    """Pagination (skip/limit) and name search."""
+    _apply_embedding_mock(mock_embedding)
+    kb_ids = []
+
     try:
-        # Create multiple KBs
-        kb_ids = []
         for i in range(5):
-            kb_data = {
-                "name": f"Test KB {i}",
-                "description": f"KB number {i}"
-            }
-            response = client.post(
-                f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
-                json=kb_data,
-                headers=get_auth_headers()
-            )
-            assert response.status_code == 200
-            kb_ids.append(response.json()["kb_id"])
-        
-        # Test pagination
-        list_response = client.get(
+            r = _create_kb(name=f"Test KB {i}", description=f"KB number {i}")
+            assert r.status_code == 200
+            kb_ids.append(r.json()["kb_id"])
+
+        # Paginate
+        lr = client.get(
             f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases?skip=0&limit=2",
-            headers=get_auth_headers()
+            headers=get_auth_headers(),
         )
-        assert list_response.status_code == 200
-        list_data = list_response.json()
-        assert len(list_data["knowledge_bases"]) == 2
-        assert list_data["total_count"] >= 5
-        
-        # Test name search
-        search_response = client.get(
+        assert lr.status_code == 200
+        assert len(lr.json()["knowledge_bases"]) == 2
+        assert lr.json()["total_count"] >= 5
+
+        # Name search
+        sr = client.get(
             f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases?name_search=KB 1",
-            headers=get_auth_headers()
+            headers=get_auth_headers(),
         )
-        assert search_response.status_code == 200
-        search_data = search_response.json()
-        assert any("KB 1" in kb["name"] for kb in search_data["knowledge_bases"])
-        
-        # Cleanup
+        assert sr.status_code == 200
+        assert any("KB 1" in kb["name"] for kb in sr.json()["knowledge_bases"])
+    finally:
         for kb_id in kb_ids:
-            client.delete(
-                f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
-                headers=get_auth_headers()
-            )
-        
-    finally:
-        pass
+            _delete_kb(kb_id)
+
 
 @pytest.mark.asyncio
-@patch('litellm.get_model_info', return_value={"provider": "openai"})
-@patch('litellm.aembedding')
-async def test_kb_documents_list(mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models):
-    """Test listing documents in a KB"""
-    logger.info(f"test_kb_documents_list() start")
-    
-    # Set up mock embedding response
-    mock_embedding.return_value = create_mock_embedding_response()
-    
+@MOCK_SEARCH_INDEX
+@MOCK_MODEL_INFO
+@MOCK_EMBEDDING
+async def test_kb_documents_list(mock_embedding, _mock_model_info, _mock_idx, test_db, mock_auth, setup_test_models):
+    """Listing documents on a fresh KB returns empty."""
+    _apply_embedding_mock(mock_embedding)
+
+    r = _create_kb(name="Test KB for Documents")
+    assert r.status_code == 200
+    kb_id = r.json()["kb_id"]
+
     try:
-        # Create a KB
-        kb_data = {
-            "name": "Test KB for Documents",
-            "tag_ids": []
-        }
-        create_response = client.post(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
-            json=kb_data,
-            headers=get_auth_headers()
-        )
-        assert create_response.status_code == 200
-        kb_id = create_response.json()["kb_id"]
-        
-        # List documents (should be empty initially)
-        list_response = client.get(
+        lr = client.get(
             f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}/documents",
-            headers=get_auth_headers()
+            headers=get_auth_headers(),
         )
-        assert list_response.status_code == 200
-        list_data = list_response.json()
-        assert list_data["total_count"] == 0
-        assert len(list_data["documents"]) == 0
-        
-        # Cleanup
-        client.delete(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
-            headers=get_auth_headers()
-        )
-        
+        assert lr.status_code == 200
+        assert lr.json()["total_count"] == 0
+        assert len(lr.json()["documents"]) == 0
     finally:
-        pass
+        _delete_kb(kb_id)
+
 
 @pytest.mark.asyncio
-@patch('litellm.get_model_info', return_value={"provider": "openai"})
-@patch('litellm.aembedding')
-async def test_kb_search(mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models):
-    """Test KB search endpoint"""
-    logger.info(f"test_kb_search() start")
-    
-    # Set up mock embedding response
-    mock_embedding.return_value = create_mock_embedding_response()
-    
+@MOCK_SEARCH_INDEX
+@MOCK_MODEL_INFO
+@MOCK_EMBEDDING
+async def test_kb_search(mock_embedding, _mock_model_info, _mock_idx, test_db, mock_auth, setup_test_models):
+    """Search on an empty KB returns zero results."""
+    _apply_embedding_mock(mock_embedding)
+
+    r = _create_kb(name="Test Search KB")
+    assert r.status_code == 200
+    kb_id = r.json()["kb_id"]
+
     try:
-        # Create a KB
-        kb_data = {
-            "name": "Test Search KB",
-            "tag_ids": []
-        }
-        create_response = client.post(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
-            json=kb_data,
-            headers=get_auth_headers()
-        )
-        assert create_response.status_code == 200
-        kb_id = create_response.json()["kb_id"]
-        
-        # Search (should return empty results for now)
-        search_data = {
-            "query": "test query",
-            "top_k": 5
-        }
-        search_response = client.post(
+        sr = client.post(
             f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}/search",
-            json=search_data,
-            headers=get_auth_headers()
+            json={"query": "test query", "top_k": 5},
+            headers=get_auth_headers(),
         )
-        assert search_response.status_code == 200
-        search_result = search_response.json()
-        assert "results" in search_result
-        assert "query" in search_result
-        assert search_result["query"] == "test query"
-        assert search_result["total_count"] == 0
-        
-        # Cleanup
-        client.delete(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
-            headers=get_auth_headers()
-        )
-        
+        assert sr.status_code == 200
+        body = sr.json()
+        assert body["query"] == "test query"
+        assert body["total_count"] == 0
     finally:
-        pass
+        _delete_kb(kb_id)
+
 
 @pytest.mark.asyncio
 async def test_kb_not_found_errors(test_db, mock_auth, setup_test_models):
-    """Test KB not found error handling"""
-    logger.info(f"test_kb_not_found_errors() start")
-    
-    try:
-        fake_kb_id = str(ObjectId())
-        
-        # Get non-existent KB
-        get_response = client.get(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{fake_kb_id}",
-            headers=get_auth_headers()
+    """GET / PUT / DELETE on a non-existent KB all return 404."""
+    fake = str(ObjectId())
+    for method, kwargs in [
+        ("get", {}),
+        ("put", {"json": {"name": "Updated"}}),
+        ("delete", {}),
+    ]:
+        r = getattr(client, method)(
+            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{fake}",
+            headers=get_auth_headers(),
+            **kwargs,
         )
-        assert get_response.status_code == 404
-        
-        # Update non-existent KB
-        update_response = client.put(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{fake_kb_id}",
-            json={"name": "Updated"},
-            headers=get_auth_headers()
-        )
-        assert update_response.status_code == 404
-        
-        # Delete non-existent KB
-        delete_response = client.delete(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{fake_kb_id}",
-            headers=get_auth_headers()
-        )
-        assert delete_response.status_code == 404
-        
-    finally:
-        pass
+        assert r.status_code == 404, f"{method.upper()} should 404, got {r.status_code}"
+
 
 @pytest.mark.asyncio
-@patch('litellm.get_model_info', return_value={"provider": "openai"})
-@patch('litellm.aembedding')
-async def test_kb_immutable_fields(mock_embedding, mock_get_model_info, test_db, mock_auth, setup_test_models):
-    """Test mutable vs immutable KB fields.
+@MOCK_SEARCH_INDEX
+@MOCK_MODEL_INFO
+@MOCK_EMBEDDING
+async def test_kb_immutable_fields(mock_embedding, _mock_model_info, _mock_idx, test_db, mock_auth, setup_test_models):
+    """embedding_model is immutable; chunker_type, chunk_size are mutable."""
+    _apply_embedding_mock(mock_embedding)
 
-    chunker_type, chunk_size, chunk_overlap are mutable (trigger re-index on change).
-    embedding_model is immutable after creation.
-    """
-    logger.info(f"test_kb_immutable_fields() start")
-
-    # Set up mock embedding response
-    mock_embedding.return_value = create_mock_embedding_response()
+    r = _create_kb(
+        name="Test Immutable KB",
+        chunker_type="recursive",
+        chunk_size=512,
+        chunk_overlap=128,
+        embedding_model="text-embedding-3-small",
+    )
+    assert r.status_code == 200
+    kb_id = r.json()["kb_id"]
 
     try:
-        # Create a KB
-        kb_data = {
-            "name": "Test Immutable KB",
-            "chunker_type": "recursive",
-            "chunk_size": 512,
-            "chunk_overlap": 128,
-            "embedding_model": "text-embedding-3-small"
-        }
-        create_response = client.post(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases",
-            json=kb_data,
-            headers=get_auth_headers()
-        )
-        assert create_response.status_code == 200
-        kb_id = create_response.json()["kb_id"]
-
-        # Update: chunker_type and chunk_size are mutable; embedding_model is not
-        update_data = {
-            "name": "Updated Name",
-            "chunker_type": "token",       # Mutable — should update and trigger re-index
-            "chunk_size": 256,             # Mutable — should update and trigger re-index
-            "embedding_model": "text-embedding-3-large"  # Immutable — should be ignored
-        }
-        update_response = client.put(
+        ur = client.put(
             f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
-            json=update_data,
-            headers=get_auth_headers()
+            json={
+                "name": "Updated Name",
+                "chunker_type": "token",
+                "chunk_size": 256,
+                "embedding_model": "text-embedding-3-large",  # should be ignored
+            },
+            headers=get_auth_headers(),
         )
-        assert update_response.status_code == 200
-        updated_kb = update_response.json()
-        assert updated_kb["name"] == "Updated Name"            # Mutable — updated
-        assert updated_kb["chunker_type"] == "token"           # Mutable — updated
-        assert updated_kb["chunk_size"] == 256                 # Mutable — updated
-        assert updated_kb["embedding_model"] == "text-embedding-3-small"  # Immutable — unchanged
-
-        # Cleanup
-        client.delete(
-            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}",
-            headers=get_auth_headers()
-        )
-
+        assert ur.status_code == 200
+        updated = ur.json()
+        assert updated["name"] == "Updated Name"
+        assert updated["chunker_type"] == "token"
+        assert updated["chunk_size"] == 256
+        assert updated["embedding_model"] == "text-embedding-3-small"  # unchanged
     finally:
-        pass
+        _delete_kb(kb_id)

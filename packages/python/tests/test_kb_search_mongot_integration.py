@@ -11,6 +11,7 @@ from .conftest_utils import TEST_ORG_ID, client, get_auth_headers
 from .kb_test_helpers import create_kb_api, create_mock_embedding_response, create_tag_api, delete_kb_api
 
 
+@pytest.mark.kb_slow
 @pytest.mark.mongot
 @pytest.mark.asyncio
 @patch("litellm.get_model_info", return_value={"provider": "openai"})

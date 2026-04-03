@@ -44,7 +44,8 @@ help:
 	@echo "  make destroy-kind            - Delete the Kind cluster entirely"
 	@echo ""
 	@echo "Testing:"
-	@echo "  make tests                   - Run Python unit tests"
+	@echo "  make tests                   - Run Python unit tests (fast, excludes kb_slow)"
+	@echo "  make tests-kb                - Run slow KB integration tests (real search indexes)"
 	@echo "  make tests-scale             - Run Python scale tests"
 	@echo "  make tests-all               - Run all Python tests"
 	@echo "  make tests-ui                - Run UI tests"
@@ -222,12 +223,15 @@ destroy-kind:
 	./deploy/scripts/destroy-kind.sh
 
 tests: setup-python
-	. .venv/bin/activate && pytest -n auto packages/python/tests/
+	. .venv/bin/activate && pytest -n auto -m "not kb_slow" packages/python/tests/
+
+tests-kb: setup-python
+	. .venv/bin/activate && pytest -v -m "kb_slow" packages/python/tests/
 
 tests-scale: setup-python
 	. .venv/bin/activate && pytest packages/python/tests_scale
 
-tests-all: tests tests-scale
+tests-all: tests tests-kb tests-scale
 
 setup-ui:
 	cd tests-ui && npm install
@@ -279,4 +283,4 @@ dockerhub-push: dockerhub-push-frontend dockerhub-push-backend
 dockerhub-build-push: dockerhub-build dockerhub-push
 	@echo "✅ Build and push complete!"
 
-.PHONY: help deploy-dev tests setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean
+.PHONY: help deploy-dev tests tests-kb setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean
