@@ -20,7 +20,6 @@ from analytiq_data.kb.chunking_config import (
     chunking_preprocess_for_preset,
     chunking_preprocess_from_kb_dict,
 )
-from analytiq_data.kb.errors import is_retryable_vector_index_error
 from analytiq_data.kb_search_indexes import (
     kb_lexical_search_index_definition,
     kb_vector_search_index_definition,
@@ -318,11 +317,11 @@ async def wait_for_vector_index_ready(
     analytiq_client,
     kb_id: str,
     embedding_dimensions: int,
-    max_wait_seconds: int = 30,
-    poll_interval: float = 0.5,
+    max_wait_seconds: int = 60,
+    poll_interval: float = 1.0,
 ) -> None:
     """
-    Poll until a minimal ``$vectorSearch`` succeeds, so mongot has registered the index.
+    Poll ``listSearchIndexes`` until the vector index is queryable.
 
     Call after ``createSearchIndexes`` so clients do not hit "no index in catalog" races.
 
@@ -338,53 +337,50 @@ async def wait_for_vector_index_ready(
     """
     db = ad.common.get_async_db(analytiq_client)
     collection_name = f"kb_vectors_{kb_id}"
+    collection = db[collection_name]
     max_attempts = max(1, int(max_wait_seconds / poll_interval))
 
+    last_status = "UNKNOWN"
     for i in range(max_attempts):
         try:
-            test_vector = [0.001] * embedding_dimensions
-            await db[collection_name].aggregate(
-                [
-                    {
-                        "$vectorSearch": {
-                            "index": "kb_vector_index",
-                            "path": "embedding",
-                            "queryVector": test_vector,
-                            "numCandidates": 1,
-                            "limit": 1,
-                        }
-                    }
-                ]
-            ).to_list(length=1)
-            logger.debug(
-                "Vector index for KB %s is queryable after %.1fs",
-                kb_id,
-                i * poll_interval,
-            )
-            return
-        except Exception as e:
-            err_lower = str(e).lower()
-            transient = (
-                is_retryable_vector_index_error(e)
-                or "zero vector" in err_lower
-                or "not found" in err_lower
-                or "no such command" in err_lower
-            )
-            if transient:
-                if i < max_attempts - 1:
-                    await asyncio.sleep(poll_interval)
-                    continue
-                raise HTTPException(
-                    status_code=503,
-                    detail=(
-                        f"Knowledge base search index is still not ready after {max_wait_seconds}s. "
-                        f"Last error: {str(e)[:400]}"
-                    ),
+            cursor = collection.list_search_indexes(name="kb_vector_index")
+            indexes = await cursor.to_list(length=10)
+            if indexes:
+                last_status = indexes[0].get("status", "UNKNOWN")
+                queryable = indexes[0].get("queryable", False)
+                if queryable:
+                    logger.info(
+                        "Vector index for KB %s is queryable (status=%s) after %.1fs",
+                        kb_id, last_status, i * poll_interval,
+                    )
+                    return
+                logger.debug(
+                    "Vector index for KB %s not ready: status=%s queryable=%s (attempt %d/%d)",
+                    kb_id, last_status, queryable, i + 1, max_attempts,
                 )
-            raise HTTPException(
-                status_code=500,
-                detail=f"Unexpected error while waiting for vector index: {str(e)[:500]}",
+            else:
+                last_status = "NOT_FOUND"
+                logger.debug(
+                    "Vector index for KB %s not yet visible (attempt %d/%d)",
+                    kb_id, i + 1, max_attempts,
+                )
+        except Exception as e:
+            logger.warning(
+                "Error polling vector index status for KB %s (attempt %d/%d): %s",
+                kb_id, i + 1, max_attempts, e,
             )
+
+        if i < max_attempts - 1:
+            await asyncio.sleep(poll_interval)
+
+    raise HTTPException(
+        status_code=503,
+        detail=(
+            f"Knowledge base search index not ready after {max_wait_seconds}s "
+            f"(last status: {last_status}). "
+            f"This may indicate the MongoDB cluster does not support Atlas Search / Vector Search."
+        ),
+    )
 
 async def create_vector_search_index(
     analytiq_client,
