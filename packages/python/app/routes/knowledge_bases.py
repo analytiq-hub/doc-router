@@ -4,6 +4,7 @@
 import asyncio
 import logging
 import hashlib
+import time
 from datetime import datetime, UTC
 from typing import Optional, List, Dict, Literal, Any
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -443,13 +444,14 @@ async def create_vector_search_index(
     # Create the search indexes - fail if this doesn't work
     try:
         # Use createSearchIndexes command (works for both Atlas and self-hosted 8.2+)
+        t0 = time.monotonic()
         await db.command({
             "createSearchIndexes": collection_name,
             "indexes": search_indexes
         })
         logger.info(
-            f"Created vector + lexical search indexes for KB {kb_id} "
-            f"(kb_vector_index, kb_lexical_index)"
+            "createSearchIndexes for KB %s completed in %.1fs (kb_vector_index, kb_lexical_index)",
+            kb_id, time.monotonic() - t0,
         )
 
         # Clean up temporary document after successful index creation
@@ -459,10 +461,15 @@ async def create_vector_search_index(
             except Exception:
                 pass  # Ignore cleanup errors
 
+        t0 = time.monotonic()
         await wait_for_vector_index_ready(
             analytiq_client,
             kb_id=kb_id,
             embedding_dimensions=embedding_dimensions,
+        )
+        logger.info(
+            "Vector index for KB %s became queryable in %.1fs",
+            kb_id, time.monotonic() - t0,
         )
     except HTTPException:
         raise
