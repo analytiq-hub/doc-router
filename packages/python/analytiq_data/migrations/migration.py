@@ -2718,8 +2718,8 @@ class AddKbLexicalSearchIndexes(Migration):
                     continue
                 try:
                     await db.command({
-                        "dropSearchIndexes": coll_name,
-                        "index": "kb_lexical_index",
+                        "dropSearchIndex": coll_name,
+                        "name": "kb_lexical_index",
                     })
                     logger.info("Dropped lexical search index on %s", coll_name)
                 except Exception as e:

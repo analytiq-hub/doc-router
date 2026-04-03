@@ -933,8 +933,8 @@ async def delete_knowledge_base(
     for index_name in ("kb_vector_index", "kb_lexical_index"):
         try:
             await db.command({
-                "dropSearchIndexes": collection_name,
-                "index": index_name
+                "dropSearchIndex": collection_name,
+                "name": index_name,
             })
             logger.info(f"Dropped search index {index_name} for KB {kb_id}")
         except Exception as e:

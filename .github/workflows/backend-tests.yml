@@ -113,8 +113,8 @@ jobs:
                     # Clean up test index
                     try:
                         test_db.command({
-                            'dropSearchIndexes': 'test_vectors',
-                            'index': 'test_vector_index'
+                            'dropSearchIndex': 'test_vectors',
+                            'name': 'test_vector_index'
                         })
                         print('✓ Test index cleaned up')
                     except Exception as cleanup_error:

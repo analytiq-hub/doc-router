@@ -295,7 +295,7 @@ def mock_search_index_commands(request):
         return
 
     _MOCKED = frozenset(
-        {"createSearchIndexes", "dropSearchIndexes", "updateSearchIndex", "listSearchIndexes"}
+        {"createSearchIndexes", "dropSearchIndex", "updateSearchIndex", "listSearchIndexes"}
     )
     original_command = motor.motor_asyncio.AsyncIOMotorDatabase.command
 
