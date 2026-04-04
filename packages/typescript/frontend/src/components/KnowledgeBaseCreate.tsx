@@ -172,7 +172,6 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
         toast.success('Knowledge base updated successfully');
       } else {
         await docRouterOrgApi.createKnowledgeBase({ kb: currentKB });
-        toast.success('Knowledge base created successfully');
       }
 
       router.push(`/orgs/${organizationId}/knowledge-bases`);
