@@ -245,7 +245,7 @@ const KnowledgeBaseInfoModal: React.FC<KnowledgeBaseInfoModalProps> = ({
                   Coalesce Neighbors
                 </label>
                 <div className="text-gray-900 bg-gray-50 p-2 rounded border">
-                  {kb.coalesce_neighbors || 0}
+                  {kb.coalesce_neighbors ?? 1}
                 </div>
               </div>
 

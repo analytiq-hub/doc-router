@@ -1079,7 +1079,7 @@ async def run_llm(
                                 },
                                 "coalesce_neighbors": {
                                     "type": "integer",
-                                    "description": "Number of neighboring chunks to include for context (default: 0)"
+                                    "description": "Number of neighboring chunks to include for context (default: 1)"
                                 }
                             },
                             "required": ["query"]

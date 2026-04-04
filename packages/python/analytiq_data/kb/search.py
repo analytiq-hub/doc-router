@@ -441,7 +441,7 @@ async def search_knowledge_base(
         raise ValueError(f"Knowledge base {kb_id} is not active (status: {kb.get('status')})")
     
     # Determine coalesce_neighbors
-    coalesce = coalesce_neighbors if coalesce_neighbors is not None else kb.get("coalesce_neighbors", 0)
+    coalesce = coalesce_neighbors if coalesce_neighbors is not None else kb.get("coalesce_neighbors", 1)
     
     # Generate query embedding
     embedding_model = kb["embedding_model"]

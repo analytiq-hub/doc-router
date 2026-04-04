@@ -26,7 +26,7 @@ const DEFAULT_CHUNKING_PRESET: ChunkingPreset = 'structured_doc';
 const DEFAULT_CHUNK_SIZE = 512;
 const DEFAULT_CHUNK_OVERLAP = 128;
 const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
-const DEFAULT_COALESCE_NEIGHBORS = 0;
+const DEFAULT_COALESCE_NEIGHBORS = 1;
 const MIN_CHUNK_SIZE = 50;
 const MAX_CHUNK_SIZE = 2000;
 const MAX_COALESCE_NEIGHBORS = 5;
@@ -97,7 +97,7 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
             chunk_size: kb.chunk_size,
             chunk_overlap: kb.chunk_overlap,
             embedding_model: kb.embedding_model,
-            coalesce_neighbors: kb.coalesce_neighbors || 0,
+            coalesce_neighbors: kb.coalesce_neighbors ?? DEFAULT_COALESCE_NEIGHBORS,
             reconcile_enabled: kb.reconcile_enabled || false,
             reconcile_interval_seconds: kb.reconcile_interval_seconds,
             min_vector_score: kb.min_vector_score ?? undefined,

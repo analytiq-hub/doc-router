@@ -1091,15 +1091,11 @@ export interface ListKnowledgeBasesResponse {
 
 export interface GetKnowledgeBaseParams {
   kbId: string;
-  /** When set, forwarded to axios (e.g. cancel polling). */
-  signal?: AbortSignal;
 }
 
 export interface CreateKnowledgeBaseParams {
   organizationId: string;
   kb: KnowledgeBaseConfig;
-  /** When set, forwarded to axios (e.g. cancel). */
-  signal?: AbortSignal;
 }
 
 export interface UpdateKnowledgeBaseParams {

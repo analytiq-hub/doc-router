@@ -69,35 +69,6 @@ describe('DocRouterOrg Knowledge Bases Unit Tests', () => {
       expect(result).toEqual(expectedResponse);
     });
 
-    test('should forward AbortSignal on create when provided', async () => {
-      const kbConfig = { name: 'KB' };
-      const expectedResponse = {
-        kb_id: 'kb-sig',
-        name: 'KB',
-        description: '',
-        tag_ids: [],
-        chunker_type: 'recursive' as const,
-        chunk_size: 512,
-        chunk_overlap: 128,
-        embedding_model: 'text-embedding-3-small',
-        coalesce_neighbors: 0,
-        embedding_dimensions: 1536,
-        status: 'indexing' as const,
-        document_count: 0,
-        chunk_count: 0,
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-      };
-      mockHttpClient.post.mockResolvedValue(expectedResponse);
-      const controller = new AbortController();
-      await client.createKnowledgeBase({ kb: kbConfig, signal: controller.signal });
-      expect(mockHttpClient.post).toHaveBeenCalledWith(
-        `/v0/orgs/${testOrgId}/knowledge-bases`,
-        kbConfig,
-        { signal: controller.signal }
-      );
-    });
-
     test('should handle minimal KB config', async () => {
       const kbConfig = {
         name: 'Minimal KB'
@@ -271,34 +242,6 @@ describe('DocRouterOrg Knowledge Bases Unit Tests', () => {
         `/v0/orgs/${testOrgId}/knowledge-bases/${kbId}`
       );
       expect(result).toEqual(expectedResponse);
-    });
-
-    test('should forward AbortSignal on get when provided', async () => {
-      const kbId = 'kb-123';
-      const expectedResponse = {
-        kb_id: kbId,
-        name: 'Test KB',
-        description: '',
-        tag_ids: [] as string[],
-        chunker_type: 'recursive' as const,
-        chunk_size: 512,
-        chunk_overlap: 128,
-        embedding_model: 'text-embedding-3-small',
-        coalesce_neighbors: 0,
-        embedding_dimensions: 1536,
-        status: 'indexing' as const,
-        document_count: 0,
-        chunk_count: 0,
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-      };
-      mockHttpClient.get.mockResolvedValue(expectedResponse);
-      const controller = new AbortController();
-      await client.getKnowledgeBase({ kbId, signal: controller.signal });
-      expect(mockHttpClient.get).toHaveBeenCalledWith(
-        `/v0/orgs/${testOrgId}/knowledge-bases/${kbId}`,
-        { signal: controller.signal }
-      );
     });
   });
 

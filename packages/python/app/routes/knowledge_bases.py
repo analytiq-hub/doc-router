@@ -44,7 +44,7 @@ DEFAULT_CHUNKER_TYPE = "recursive"  # prose chunker; chef_type="auto" in chunkin
 DEFAULT_CHUNK_SIZE = 512
 DEFAULT_CHUNK_OVERLAP = 128
 DEFAULT_EMBEDDING_MODEL = "text-embedding-3-small"
-DEFAULT_COALESCE_NEIGHBORS = 0
+DEFAULT_COALESCE_NEIGHBORS = 1
 MIN_CHUNK_SIZE = 50
 MAX_CHUNK_SIZE = 2000
 MAX_COALESCE_NEIGHBORS = 5
@@ -728,7 +728,7 @@ async def list_knowledge_bases(
             chunk_size=kb["chunk_size"],
             chunk_overlap=kb["chunk_overlap"],
             embedding_model=kb["embedding_model"],
-            coalesce_neighbors=kb.get("coalesce_neighbors", 0),
+            coalesce_neighbors=kb.get("coalesce_neighbors", DEFAULT_COALESCE_NEIGHBORS),
             reconcile_enabled=kb.get("reconcile_enabled", False),
             reconcile_interval_seconds=kb.get("reconcile_interval_seconds"),
             last_reconciled_at=last_reconciled_at,
@@ -790,7 +790,7 @@ async def get_knowledge_base(
         chunk_size=kb["chunk_size"],
         chunk_overlap=kb["chunk_overlap"],
         embedding_model=kb["embedding_model"],
-        coalesce_neighbors=kb.get("coalesce_neighbors", 0),
+        coalesce_neighbors=kb.get("coalesce_neighbors", DEFAULT_COALESCE_NEIGHBORS),
         reconcile_enabled=kb.get("reconcile_enabled", False),
         reconcile_interval_seconds=kb.get("reconcile_interval_seconds"),
         last_reconciled_at=last_reconciled_at,
@@ -933,7 +933,7 @@ async def update_knowledge_base(
         chunk_size=updated_kb["chunk_size"],
         chunk_overlap=updated_kb["chunk_overlap"],
         embedding_model=updated_kb["embedding_model"],
-        coalesce_neighbors=updated_kb.get("coalesce_neighbors", 0),
+        coalesce_neighbors=updated_kb.get("coalesce_neighbors", DEFAULT_COALESCE_NEIGHBORS),
         reconcile_enabled=updated_kb.get("reconcile_enabled", False),
         reconcile_interval_seconds=updated_kb.get("reconcile_interval_seconds"),
         last_reconciled_at=last_reconciled_at,
