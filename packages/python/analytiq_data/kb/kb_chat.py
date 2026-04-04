@@ -87,6 +87,17 @@ async def run_kb_chat(
     
     # Check if org has enough credits (throws SPUCreditException if insufficient)
     await ad.payments.check_spu_limits(organization_id, total_spu_needed)
+
+    if request.thread_id:
+        scoped = await ad.agent.agent_threads.get_thread_scoped(
+            analytiq_client,
+            request.thread_id,
+            organization_id,
+            current_user.user_id,
+            kb_id=kb_id,
+        )
+        if not scoped:
+            raise HTTPException(status_code=404, detail="Thread not found")
     
     try:
         # Use KB-level system prompt (if configured) so LLM "prompt caching"
@@ -98,7 +109,12 @@ async def run_kb_chat(
         if system_prompt and (not messages or messages[0].get("role") != "system"):
             # Ensure the cached prompt is at index 0 and has role="system".
             messages.insert(0, {"role": "system", "content": system_prompt})
-        
+
+        # Capture the message count before the agentic loop so we can identify the
+        # delta (current user turn + loop additions) for thread persistence, excluding
+        # the injected system prompt.
+        initial_len = len(messages)
+
         # Get the provider and API key for this model
         llm_provider = ad.llm.get_llm_model_provider(request.model)
         
@@ -343,7 +359,23 @@ async def run_kb_chat(
                 except Exception as e:
                     logger.error(f"Error recording SPU usage for KB chat: {e}")
                     # Don't fail the chat if SPU recording fails
-                
+
+                # Persist turn to thread (user msg + loop additions, excluding system prompt)
+                if request.thread_id and initial_len > 0:
+                    try:
+                        turn_messages = messages[initial_len - 1:]
+                        await ad.agent.agent_threads.append_turn(
+                            analytiq_client,
+                            request.thread_id,
+                            organization_id,
+                            current_user.user_id,
+                            turn_messages,
+                            model=request.model,
+                            truncate_to=request.truncate_thread_to_message_count,
+                        )
+                    except Exception as e:
+                        logger.error(f"Error persisting KB chat thread: {e}")
+
             except SPUCreditException as e:
                 logger.warning(f"SPU credit exhausted in KB chat: {str(e)}")
                 yield f"data: {json.dumps({'error': f'Insufficient SPU credits: {str(e)}', 'done': True})}\n\n"
@@ -499,6 +531,23 @@ async def run_kb_chat(
                     logger.info(f"Recorded {total_spu_needed} SPU usage for KB chat (non-streaming), actual cost: ${total_cost:.6f}, tokens: {total_tokens}")
                 except Exception as e:
                     logger.error(f"Error recording SPU usage for KB chat: {e}")
+
+                # Persist turn to thread (user msg + loop additions, excluding system prompt)
+                if request.thread_id and initial_len > 0:
+                    try:
+                        turn_messages = messages[initial_len - 1:]
+                        await ad.agent.agent_threads.append_turn(
+                            analytiq_client,
+                            request.thread_id,
+                            organization_id,
+                            current_user.user_id,
+                            turn_messages,
+                            model=request.model,
+                            truncate_to=request.truncate_thread_to_message_count,
+                        )
+                    except Exception as e:
+                        logger.error(f"Error persisting KB chat thread: {e}")
+
                 return result
             except SPUCreditException as e:
                 logger.warning(f"SPU credit exhausted in KB chat: {str(e)}")

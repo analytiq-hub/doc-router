@@ -4,6 +4,8 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { DocRouterOrgApi, DocRouterAccountApi, getApiErrorMsg } from '@/utils/api';
 import { KBChatRequest, LLMMessage, KBChatStreamChunk, KBChatStreamError, Tag } from '@docrouter/sdk';
 import { toast } from 'react-toastify';
+import ThreadDropdown from '@/components/agent/ThreadDropdown';
+import type { AgentThreadSummary } from '@/components/agent/useAgentChat';
 import SendIcon from '@mui/icons-material/Send';
 import ClearIcon from '@mui/icons-material/Clear';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
@@ -39,6 +41,52 @@ interface Message {
   toolCalls?: ToolCallInfo[];
 }
 
+/** Map persisted API messages (user/assistant/tool) to UI messages. */
+function mapApiThreadMessagesToUi(raw: Array<Record<string, unknown>>): Message[] {
+  const out: Message[] = [];
+  for (const m of raw) {
+    const role = m.role as string;
+    if (role === 'system' || role === 'tool') continue;
+    if (role === 'user') {
+      out.push({ role: 'user', content: String(m.content ?? '') });
+      continue;
+    }
+    if (role === 'assistant') {
+      const toolCalls: ToolCallInfo[] = [];
+      const tcs = m.tool_calls as Array<Record<string, unknown>> | undefined;
+      if (Array.isArray(tcs)) {
+        for (let idx = 0; idx < tcs.length; idx++) {
+          const tc = tcs[idx];
+          const fn = tc.function as { name?: string; arguments?: string } | undefined;
+          const id = tc.id ? String(tc.id) : `tc-${idx}`;
+          let args: Record<string, unknown> = {};
+          if (fn?.arguments) {
+            try {
+              args = JSON.parse(fn.arguments) as Record<string, unknown>;
+            } catch {
+              args = {};
+            }
+          }
+          toolCalls.push({
+            id,
+            toolName: fn?.name ?? 'search_knowledge_base',
+            arguments: args,
+            iteration: idx + 1,
+            status: 'completed',
+            timestamp: new Date(),
+          });
+        }
+      }
+      out.push({
+        role: 'assistant',
+        content: String(m.content ?? ''),
+        toolCalls: toolCalls.length ? toolCalls : undefined,
+      });
+    }
+  }
+  return out;
+}
+
 const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, kbId }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
@@ -61,6 +109,10 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
   const [uploadDateFrom, setUploadDateFrom] = useState('');
   const [uploadDateTo, setUploadDateTo] = useState('');
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
+
+  const [threadId, setThreadId] = useState<string | null>(null);
+  const [threads, setThreads] = useState<AgentThreadSummary[]>([]);
+  const [threadsLoading, setThreadsLoading] = useState(false);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -101,6 +153,44 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
     };
     loadFilterData();
   }, [docRouterOrgApi, kbId]);
+
+  const loadThreads = useCallback(async () => {
+    setThreadsLoading(true);
+    try {
+      const list = await docRouterOrgApi.listKbChatThreads(kbId);
+      setThreads(Array.isArray(list) ? list : []);
+    } catch {
+      setThreads([]);
+    } finally {
+      setThreadsLoading(false);
+    }
+  }, [docRouterOrgApi, kbId]);
+
+  useEffect(() => {
+    void loadThreads();
+  }, [loadThreads]);
+
+  const loadThread = useCallback(
+    async (id: string) => {
+      setThreadsLoading(true);
+      setError(null);
+      try {
+        const data = await docRouterOrgApi.getKbChatThread(kbId, id);
+        setThreadId(data.id);
+        setMessages(mapApiThreadMessagesToUi(data.messages));
+        if (data.model && String(data.model).trim()) {
+          setSelectedModel(String(data.model));
+        }
+      } catch (err) {
+        const msg = getApiErrorMsg(err) ?? 'Failed to load conversation';
+        setError(msg);
+        toast.error(msg);
+      } finally {
+        setThreadsLoading(false);
+      }
+    },
+    [docRouterOrgApi, kbId]
+  );
 
   const buildMetadataFilter = useCallback((): Record<string, unknown> | undefined => {
     if (selectedTags.length > 0) {
@@ -145,6 +235,22 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
     setAbortController(controller);
 
     try {
+      let effectiveThreadId = threadId;
+      if (!effectiveThreadId) {
+        const created = await docRouterOrgApi.createKbChatThread(kbId);
+        effectiveThreadId = created.thread_id;
+        setThreadId(created.thread_id);
+        setThreads((prev) => [
+          {
+            id: created.thread_id,
+            title: 'New chat',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+          ...prev.filter((t) => t.id !== created.thread_id),
+        ]);
+      }
+
       // Build conversation history
       const conversationMessages: LLMMessage[] = messages.map(msg => ({
         role: msg.role,
@@ -162,6 +268,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
         messages: conversationMessages,
         temperature: 0.7,
         stream: true,
+        thread_id: effectiveThreadId,
         ...(metadataFilter && { metadata_filter: metadataFilter }),
         ...(uploadDateFrom && { upload_date_from: uploadDateFrom }),
         ...(uploadDateTo && { upload_date_to: uploadDateTo })
@@ -265,6 +372,26 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
     }
   };
 
+  const handleNewChat = () => {
+    setThreadId(null);
+    setMessages([]);
+    setCurrentStreamingMessage('');
+    setCurrentToolCalls([]);
+    setError(null);
+  };
+
+  const handleDeleteThread = async (id: string) => {
+    try {
+      await docRouterOrgApi.deleteKbChatThread(kbId, id);
+      setThreads((prev) => prev.filter((t) => t.id !== id));
+      if (threadId === id) {
+        handleNewChat();
+      }
+    } catch (err) {
+      toast.error(getApiErrorMsg(err) ?? 'Failed to delete conversation');
+    }
+  };
+
   const handleCancel = () => {
     if (abortController) {
       abortController.abort();
@@ -305,7 +432,22 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
       {/* Header */}
       <div className="bg-gradient-to-r bg-blue-600 px-3 sm:px-6 py-2 sm:py-4 sm:rounded-t-lg">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-          <h2 className="text-base sm:text-xl font-semibold text-white truncate">Chat with Knowledge Base</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 min-w-0">
+            <h2 className="text-base sm:text-xl font-semibold text-white truncate shrink-0">
+              Chat with Knowledge Base
+            </h2>
+            <ThreadDropdown
+              threads={threads}
+              threadId={threadId}
+              threadsLoading={threadsLoading}
+              onSelectThread={(t) => void loadThread(t.id)}
+              onNewChat={handleNewChat}
+              onDeleteThread={(id) => void handleDeleteThread(id)}
+              onOpen={() => {
+                if (threads.length === 0) void loadThreads();
+              }}
+            />
+          </div>
           <div className="flex items-center gap-2 sm:gap-4">
             {availableModels.length > 0 && (
               <select

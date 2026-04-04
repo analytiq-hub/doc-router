@@ -2734,6 +2734,43 @@ class AddKbLexicalSearchIndexes(Migration):
             return False
 
 
+class AddAgentThreadsIndexes(Migration):
+    def __init__(self):
+        super().__init__(
+            description="Add compound indexes on agent_threads for document and KB thread list queries"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            # For document-agent thread listing: GET .../documents/{id}/chat/threads
+            await db.agent_threads.create_index(
+                [("organization_id", 1), ("document_id", 1), ("created_by", 1), ("updated_at", -1)],
+                name="agent_threads_doc_list_idx",
+                background=True,
+            )
+            # For KB chat thread listing: GET .../knowledge-bases/{kb_id}/chat/threads
+            await db.agent_threads.create_index(
+                [("organization_id", 1), ("kb_id", 1), ("created_by", 1), ("updated_at", -1)],
+                name="agent_threads_kb_list_idx",
+                background=True,
+            )
+            logger.info("Created agent_threads list indexes")
+            return True
+        except Exception as e:
+            logger.error("AddAgentThreadsIndexes up failed: %s", e)
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            await db.agent_threads.drop_index("agent_threads_doc_list_idx")
+            await db.agent_threads.drop_index("agent_threads_kb_list_idx")
+            logger.info("Dropped agent_threads list indexes")
+            return True
+        except Exception as e:
+            logger.error("AddAgentThreadsIndexes down failed: %s", e)
+            return False
+
+
 # List of all migrations in order
 MIGRATIONS = [
     OcrKeyMigration(),
@@ -2771,6 +2808,7 @@ MIGRATIONS = [
     AddWebhookEndpointsIndexes(),
     BackfillWebhookEndpointsFromOrganizations(),
     AddWebhookDeliveriesWebhookIdIndex(),
+    AddAgentThreadsIndexes(),
     # Add more migrations here
 ]
 

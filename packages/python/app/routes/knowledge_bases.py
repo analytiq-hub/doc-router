@@ -27,6 +27,7 @@ from analytiq_data.kb_search_indexes import (
 )
 from app.auth import get_org_user
 from app.models import User
+from app.routes.agent import CreateThreadBody, CreateThreadResponse, ThreadDetail, ThreadSummary
 from analytiq_data.payments.exceptions import SPUCreditException
 from app.routes.llm import LLMMessage
 
@@ -234,6 +235,8 @@ class KBChatRequest(BaseModel):
     metadata_filter: Optional[Dict[str, Any]] = Field(default=None, description="Metadata filters (sanitized server-side)")
     upload_date_from: Optional[datetime] = Field(default=None, description="Filter by upload date from")
     upload_date_to: Optional[datetime] = Field(default=None, description="Filter by upload date to")
+    thread_id: Optional[str] = Field(default=None, description="If set, persist this turn to the thread after success")
+    truncate_thread_to_message_count: Optional[int] = Field(default=None, description="If set with thread_id, keep only this many messages before appending (resubmit-from-turn)")
 
 class KBChunk(BaseModel):
     chunk_index: int
@@ -1197,6 +1200,111 @@ async def chat_knowledge_base(
             status_code=500,
             detail=f"Error processing KB chat request: {error_msg}"
         )
+
+
+@knowledge_bases_router.get(
+    "/v0/orgs/{organization_id}/knowledge-bases/{kb_id}/chat/threads",
+    response_model=List[ThreadSummary],
+)
+async def list_kb_chat_threads(
+    organization_id: str,
+    kb_id: str,
+    limit: int = Query(50, ge=1, le=100),
+    current_user: User = Depends(get_org_user),
+):
+    """List chat threads for this knowledge base, most recent first."""
+    db = ad.common.get_async_db(ad.common.get_analytiq_client())
+    kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id), "organization_id": organization_id})
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    items = await ad.agent.agent_threads.list_threads(
+        ad.common.get_analytiq_client(),
+        organization_id,
+        current_user.user_id,
+        limit=limit,
+        kb_id=kb_id,
+    )
+    return [ThreadSummary(**x) for x in items]
+
+
+@knowledge_bases_router.post(
+    "/v0/orgs/{organization_id}/knowledge-bases/{kb_id}/chat/threads",
+    response_model=CreateThreadResponse,
+)
+async def create_kb_chat_thread(
+    organization_id: str,
+    kb_id: str,
+    body: CreateThreadBody | None = Body(None),
+    current_user: User = Depends(get_org_user),
+):
+    """Create a new KB chat thread."""
+    db = ad.common.get_async_db(ad.common.get_analytiq_client())
+    kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id), "organization_id": organization_id})
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    title = body.title if body else None
+    thread_id = await ad.agent.agent_threads.create_thread(
+        ad.common.get_analytiq_client(),
+        organization_id,
+        current_user.user_id,
+        title=title,
+        kb_id=kb_id,
+    )
+    return CreateThreadResponse(thread_id=thread_id)
+
+
+@knowledge_bases_router.get(
+    "/v0/orgs/{organization_id}/knowledge-bases/{kb_id}/chat/threads/{thread_id}",
+    response_model=ThreadDetail,
+)
+async def get_kb_chat_thread(
+    organization_id: str,
+    kb_id: str,
+    thread_id: str,
+    current_user: User = Depends(get_org_user),
+):
+    """Get a KB chat thread with full messages."""
+    db = ad.common.get_async_db(ad.common.get_analytiq_client())
+    kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id), "organization_id": organization_id})
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    thread_doc = await ad.agent.agent_threads.get_thread_scoped(
+        ad.common.get_analytiq_client(),
+        thread_id,
+        organization_id,
+        current_user.user_id,
+        kb_id=kb_id,
+    )
+    if not thread_doc:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    return ThreadDetail(**thread_doc)
+
+
+@knowledge_bases_router.delete(
+    "/v0/orgs/{organization_id}/knowledge-bases/{kb_id}/chat/threads/{thread_id}",
+)
+async def delete_kb_chat_thread(
+    organization_id: str,
+    kb_id: str,
+    thread_id: str,
+    current_user: User = Depends(get_org_user),
+):
+    """Delete a KB chat thread."""
+    db = ad.common.get_async_db(ad.common.get_analytiq_client())
+    kb = await db.knowledge_bases.find_one({"_id": ObjectId(kb_id), "organization_id": organization_id})
+    if not kb:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+    deleted = await ad.agent.agent_threads.delete_thread(
+        ad.common.get_analytiq_client(),
+        thread_id,
+        organization_id,
+        current_user.user_id,
+        kb_id=kb_id,
+    )
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    return {"ok": True}
+
 
 @knowledge_bases_router.post("/v0/orgs/{organization_id}/knowledge-bases/{kb_id}/reconcile")
 async def reconcile_knowledge_base_endpoint(

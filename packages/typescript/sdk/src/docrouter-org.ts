@@ -78,6 +78,9 @@ import {
   KBChatRequest,
   KBChatStreamChunk,
   KBChatStreamError,
+  ChatThreadSummary,
+  ChatThreadDetail,
+  CreateChatThreadResponse,
   // LLM Models
   ListOrgLLMModelsResponse,
   // Webhooks
@@ -669,6 +672,36 @@ export class DocRouterOrg {
       onChunk,
       onError,
       abortSignal
+    );
+  }
+
+  /** List KB chat threads (most recent first). */
+  async listKbChatThreads(kbId: string, params?: { limit?: number }): Promise<ChatThreadSummary[]> {
+    return this.http.get<ChatThreadSummary[]>(
+      `/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}/chat/threads`,
+      { params: params as Record<string, string | number | undefined> }
+    );
+  }
+
+  /** Create a KB chat thread. */
+  async createKbChatThread(kbId: string, body?: { title?: string | null }): Promise<CreateChatThreadResponse> {
+    return this.http.post<CreateChatThreadResponse>(
+      `/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}/chat/threads`,
+      body ?? {}
+    );
+  }
+
+  /** Load a KB chat thread with messages. */
+  async getKbChatThread(kbId: string, threadId: string): Promise<ChatThreadDetail> {
+    return this.http.get<ChatThreadDetail>(
+      `/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}/chat/threads/${threadId}`
+    );
+  }
+
+  /** Delete a KB chat thread. */
+  async deleteKbChatThread(kbId: string, threadId: string): Promise<{ ok: boolean }> {
+    return this.http.delete<{ ok: boolean }>(
+      `/v0/orgs/${this.organizationId}/knowledge-bases/${kbId}/chat/threads/${threadId}`
     );
   }
 

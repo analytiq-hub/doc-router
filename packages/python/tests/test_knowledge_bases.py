@@ -235,6 +235,59 @@ async def test_kb_search(mock_embedding, _mock_model_info, _mock_idx, test_db, m
 
 
 @pytest.mark.asyncio
+@MOCK_SEARCH_INDEX
+@MOCK_MODEL_INFO
+@MOCK_EMBEDDING
+async def test_kb_chat_thread_crud(mock_embedding, _mock_model_info, _mock_idx, test_db, mock_auth, setup_test_models):
+    """List / create / get / delete KB chat threads (scoped to kb_id)."""
+    _apply_embedding_mock(mock_embedding)
+    r = _create_kb(name="Thread KB")
+    assert r.status_code == 200
+    kb_id = r.json()["kb_id"]
+    try:
+        lr = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}/chat/threads",
+            headers=get_auth_headers(),
+        )
+        assert lr.status_code == 200
+        assert lr.json() == []
+
+        cr = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}/chat/threads",
+            json={},
+            headers=get_auth_headers(),
+        )
+        assert cr.status_code == 200
+        thread_id = cr.json()["thread_id"]
+
+        lr2 = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}/chat/threads",
+            headers=get_auth_headers(),
+        )
+        assert lr2.status_code == 200
+        assert len(lr2.json()) == 1
+        assert lr2.json()[0]["id"] == thread_id
+
+        gr = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}/chat/threads/{thread_id}",
+            headers=get_auth_headers(),
+        )
+        assert gr.status_code == 200
+        body = gr.json()
+        assert body["id"] == thread_id
+        assert body["messages"] == []
+
+        dr = client.delete(
+            f"/v0/orgs/{TEST_ORG_ID}/knowledge-bases/{kb_id}/chat/threads/{thread_id}",
+            headers=get_auth_headers(),
+        )
+        assert dr.status_code == 200
+        assert dr.json() == {"ok": True}
+    finally:
+        _delete_kb(kb_id)
+
+
+@pytest.mark.asyncio
 async def test_kb_not_found_errors(test_db, mock_auth, setup_test_models):
     """GET / PUT / DELETE on a non-existent KB all return 404."""
     fake = str(ObjectId())

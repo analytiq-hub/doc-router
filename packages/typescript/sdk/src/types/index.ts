@@ -400,6 +400,32 @@ export interface KBChatRequest {
   metadata_filter?: Record<string, unknown>;
   upload_date_from?: string;
   upload_date_to?: string;
+  /** If set, persist this turn to the thread after success (must belong to this KB). */
+  thread_id?: string;
+  /** With thread_id: keep only this many messages before appending (resubmit-from-turn). */
+  truncate_thread_to_message_count?: number;
+}
+
+/** KB / document chat thread list item (same shape as document agent threads). */
+export interface ChatThreadSummary {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatThreadDetail {
+  id: string;
+  title: string;
+  messages: Array<Record<string, unknown>>;
+  extraction: Record<string, unknown>;
+  model?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CreateChatThreadResponse {
+  thread_id: string;
 }
 
 export interface KBChatStreamChunk {

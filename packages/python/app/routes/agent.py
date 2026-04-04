@@ -127,6 +127,21 @@ async def _resolve_mentions(
     return resolved
 
 
+async def _require_document_thread(
+    analytiq_client,
+    organization_id: str,
+    document_id: str,
+    thread_id: str,
+    user_id: str,
+) -> None:
+    """Ensure the thread exists and belongs to this document."""
+    t = await ad.agent.agent_threads.get_thread_scoped(
+        analytiq_client, thread_id, organization_id, user_id, document_id=document_id
+    )
+    if not t:
+        raise HTTPException(status_code=404, detail="Thread not found")
+
+
 async def _append_assistant_to_thread(
     analytiq_client,
     organization_id: str,
@@ -145,40 +160,16 @@ async def _append_assistant_to_thread(
         "executed_rounds": result.get("executed_rounds"),
     }
     extraction = (result.get("working_state") or {}).get("extraction")
-    if request.truncate_thread_to_message_count is not None:
-        await ad.agent.agent_threads.truncate_and_append_messages(
-            analytiq_client,
-            request.thread_id,
-            organization_id,
-            current_user.user_id,
-            request.truncate_thread_to_message_count,
-            [user_msg, assistant_msg],
-            extraction=extraction,
-            model=request.model,
-        )
-    else:
-        await ad.agent.agent_threads.append_messages(
-            analytiq_client,
-            request.thread_id,
-            organization_id,
-            current_user.user_id,
-            [user_msg, assistant_msg],
-            extraction=extraction,
-            model=request.model,
-        )
-    thread_doc = await ad.agent.agent_threads.get_thread(
-        analytiq_client, request.thread_id, organization_id, current_user.user_id
+    await ad.agent.agent_threads.append_turn(
+        analytiq_client,
+        request.thread_id,
+        organization_id,
+        current_user.user_id,
+        [user_msg, assistant_msg],
+        extraction=extraction,
+        model=request.model,
+        truncate_to=request.truncate_thread_to_message_count,
     )
-    if thread_doc and thread_doc.get("title") == "New chat":
-        first_content = None
-        for m in thread_doc.get("messages", []):
-            if m.get("role") == "user" and m.get("content"):
-                first_content = (m.get("content") or "").strip()[:50]
-                break
-        if first_content:
-            await ad.agent.agent_threads.update_thread_title(
-                analytiq_client, request.thread_id, organization_id, current_user.user_id, first_content
-            )
 
 
 @agent_router.post("/v0/orgs/{organization_id}/documents/{document_id}/chat")
@@ -202,6 +193,10 @@ async def post_chat(
     doc = await ad.common.doc.get_doc(analytiq_client, document_id, organization_id)
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    if request.thread_id:
+        await _require_document_thread(
+            analytiq_client, organization_id, document_id, request.thread_id, current_user.user_id
+        )
     mentions_data = [m.model_dump() for m in request.mentions]
     resolved = await _resolve_mentions(analytiq_client, organization_id, mentions_data)
     messages = [m.model_dump() for m in request.messages]
@@ -323,6 +318,14 @@ async def post_chat_approve(
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    if request.thread_id:
+        await _require_document_thread(
+            ad.common.get_analytiq_client(),
+            organization_id,
+            document_id,
+            request.thread_id,
+            current_user.user_id,
+        )
     result = await ad.agent.run_agent_approve(
         turn_id=request.turn_id,
         approvals=request.approvals,
@@ -341,7 +344,7 @@ async def post_chat_approve(
         }
         extraction = (result.get("working_state") or {}).get("extraction")
         model = result.get("model")
-        await ad.agent.agent_threads.append_messages(
+        await ad.agent.agent_threads.append_turn(
             analytiq_client,
             request.thread_id,
             organization_id,
@@ -350,20 +353,6 @@ async def post_chat_approve(
             extraction=extraction,
             model=model,
         )
-        # Update thread title from first user message if still "New chat"
-        thread_doc = await ad.agent.agent_threads.get_thread(
-            analytiq_client, request.thread_id, organization_id, current_user.user_id
-        )
-        if thread_doc and thread_doc.get("title") == "New chat":
-            first_content = None
-            for m in thread_doc.get("messages", []):
-                if m.get("role") == "user" and m.get("content"):
-                    first_content = (m.get("content") or "").strip()[:50]
-                    break
-            if first_content:
-                await ad.agent.agent_threads.update_thread_title(
-                    analytiq_client, request.thread_id, organization_id, current_user.user_id, first_content
-                )
     return result
 
 
@@ -405,7 +394,8 @@ async def list_threads(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     items = await ad.agent.agent_threads.list_threads(
-        ad.common.get_analytiq_client(), organization_id, document_id, current_user.user_id, limit=limit
+        ad.common.get_analytiq_client(), organization_id, current_user.user_id, limit=limit,
+        document_id=document_id,
     )
     return [ThreadSummary(**x) for x in items]
 
@@ -430,9 +420,9 @@ async def create_thread(
     thread_id = await ad.agent.agent_threads.create_thread(
         ad.common.get_analytiq_client(),
         organization_id,
-        document_id,
         current_user.user_id,
         title=title,
+        document_id=document_id,
     )
     return CreateThreadResponse(thread_id=thread_id)
 
@@ -453,8 +443,12 @@ async def get_thread(
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
-    thread_doc = await ad.agent.agent_threads.get_thread(
-        ad.common.get_analytiq_client(), thread_id, organization_id, current_user.user_id
+    thread_doc = await ad.agent.agent_threads.get_thread_scoped(
+        ad.common.get_analytiq_client(),
+        thread_id,
+        organization_id,
+        current_user.user_id,
+        document_id=document_id,
     )
     if not thread_doc:
         raise HTTPException(status_code=404, detail="Thread not found")
@@ -477,7 +471,11 @@ async def delete_thread(
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     deleted = await ad.agent.agent_threads.delete_thread(
-        ad.common.get_analytiq_client(), thread_id, organization_id, current_user.user_id
+        ad.common.get_analytiq_client(),
+        thread_id,
+        organization_id,
+        current_user.user_id,
+        document_id=document_id,
     )
     if not deleted:
         raise HTTPException(status_code=404, detail="Thread not found")
