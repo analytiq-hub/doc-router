@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
+import { DocRouterOrgApi, DocRouterAccountApi, getApiErrorMsg } from '@/utils/api';
 import { KBChatRequest, LLMMessage, KBChatStreamChunk, KBChatStreamError, Tag } from '@docrouter/sdk';
 import { toast } from 'react-toastify';
 import SendIcon from '@mui/icons-material/Send';
@@ -41,6 +41,7 @@ interface Message {
 
 const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, kbId }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
+  const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentInput, setCurrentInput] = useState('');
@@ -64,14 +65,18 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Load available models
+  // Load available models (same source as prompt configuration: account chat_models)
   useEffect(() => {
     const loadModels = async () => {
       try {
-        const response = await docRouterOrgApi.listLLMModels();
-        setAvailableModels(response.models);
-        if (response.models.length > 0 && !selectedModel) {
-          setSelectedModel(response.models[0]);
+        const response = await docRouterAccountApi.listLLMModels({
+          providerEnabled: true,
+          llmEnabled: true,
+        });
+        const names = response.chat_models.map((m) => m.litellm_model);
+        setAvailableModels(names);
+        if (names.length > 0 && !selectedModel) {
+          setSelectedModel(names[0]);
         }
       } catch (error) {
         const errorMsg = getApiErrorMsg(error) || 'Error loading models';
@@ -79,7 +84,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
       }
     };
     loadModels();
-  }, [docRouterOrgApi, selectedModel]);
+  }, [docRouterAccountApi, selectedModel]);
 
   // Load tags and documents for filters
   useEffect(() => {

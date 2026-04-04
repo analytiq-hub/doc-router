@@ -67,7 +67,13 @@ async def run_kb_chat(
             status_code=400,
             detail=f"Invalid model: {request.model}"
         )
-    
+
+    if not ad.llm.is_chat_model(request.model):
+        raise HTTPException(
+            status_code=400,
+            detail="Model must be a chat model (same as prompt configuration). Embedding and non-chat models are not supported.",
+        )
+
     # Verify model supports function calling
     if not litellm.supports_function_calling(model=request.model):
         raise HTTPException(
