@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DocRouterOrgApi, DocRouterAccountApi, getApiErrorMsg } from '@/utils/api';
 import {
   KnowledgeBaseConfig,
@@ -13,16 +13,7 @@ import {
   LLMEmbeddingModel,
 } from '@docrouter/sdk';
 import { useRouter } from 'next/navigation';
-import { isAxiosError } from 'axios';
 import { toast } from 'react-toastify';
-import {
-  Button,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  LinearProgress,
-} from '@mui/material';
 import InfoTooltip from '@/components/InfoTooltip';
 import TagSelector from '@/components/TagSelector';
 
@@ -36,9 +27,6 @@ const DEFAULT_CHUNK_SIZE = 512;
 const DEFAULT_CHUNK_OVERLAP = 128;
 const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
 const DEFAULT_COALESCE_NEIGHBORS = 0;
-/** Max time to wait for KB status to leave `indexing` (poll GET after fast POST). */
-const KB_CREATE_UI_TIMEOUT_MS = 60_000;
-const KB_CREATE_POLL_MS = 1_500;
 const MIN_CHUNK_SIZE = 50;
 const MAX_CHUNK_SIZE = 2000;
 const MAX_COALESCE_NEIGHBORS = 5;
@@ -64,30 +52,6 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [availableEmbeddingModels, setAvailableEmbeddingModels] = useState<LLMEmbeddingModel[]>([]);
   const [isEditing, setIsEditing] = useState(false);
-  const [isCreatingKB, setIsCreatingKB] = useState(false);
-  const [createProgressPct, setCreateProgressPct] = useState(0);
-  const createAbortRef = useRef<AbortController | null>(null);
-  const createCancelledByUserRef = useRef(false);
-
-  useEffect(() => {
-    if (!isCreatingKB) {
-      setCreateProgressPct(0);
-      return;
-    }
-    const started = Date.now();
-    const tick = () => {
-      const elapsed = Date.now() - started;
-      setCreateProgressPct(Math.min(95, (elapsed / KB_CREATE_UI_TIMEOUT_MS) * 100));
-    };
-    tick();
-    const id = window.setInterval(tick, 200);
-    return () => window.clearInterval(id);
-  }, [isCreatingKB]);
-
-  const handleCreateModalCancel = useCallback(() => {
-    createCancelledByUserRef.current = true;
-    createAbortRef.current?.abort();
-  }, []);
 
   // Load available tags
   useEffect(() => {
@@ -207,70 +171,14 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
         });
         toast.success('Knowledge base updated successfully');
       } else {
-        createCancelledByUserRef.current = false;
-        const controller = new AbortController();
-        createAbortRef.current = controller;
-        const timeoutId = window.setTimeout(() => controller.abort(), KB_CREATE_UI_TIMEOUT_MS);
-        setIsCreatingKB(true);
-
-        const delayForPoll = (ms: number) =>
-          new Promise<void>((resolve, reject) => {
-            if (controller.signal.aborted) {
-              reject(new Error('ABORT_POLL'));
-              return;
-            }
-            const t = window.setTimeout(resolve, ms);
-            const onAbort = () => {
-              window.clearTimeout(t);
-              reject(new Error('ABORT_POLL'));
-            };
-            controller.signal.addEventListener('abort', onAbort, { once: true });
-          });
-
-        try {
-          let kb = await docRouterOrgApi.createKnowledgeBase({
-            kb: currentKB,
-            signal: controller.signal,
-          });
-          while (kb.status === 'indexing') {
-            if (controller.signal.aborted) {
-              throw new Error('ABORT_POLL');
-            }
-            await delayForPoll(KB_CREATE_POLL_MS);
-            kb = await docRouterOrgApi.getKnowledgeBase({
-              kbId: kb.kb_id,
-              signal: controller.signal,
-            });
-          }
-          if (kb.status === 'error') {
-            throw new Error(
-              'Knowledge base setup failed while building search indexes. You can delete it from the list and try again.'
-            );
-          }
-          setCreateProgressPct(100);
-          toast.success('Knowledge base created successfully');
-        } finally {
-          window.clearTimeout(timeoutId);
-          createAbortRef.current = null;
-          setIsCreatingKB(false);
-        }
+        await docRouterOrgApi.createKnowledgeBase({ kb: currentKB });
+        toast.success('Knowledge base created successfully');
       }
 
       router.push(`/orgs/${organizationId}/knowledge-bases`);
     } catch (error) {
-      if (createCancelledByUserRef.current) {
-        // User cancelled from the modal; no toast
-      } else if (error instanceof Error && error.message === 'ABORT_POLL') {
-        toast.error(
-          `Timed out after ${KB_CREATE_UI_TIMEOUT_MS / 1000} seconds while waiting for the knowledge base to become ready. Check the list — it may still finish in the background.`
-        );
-      } else {
-        let errorMsg = getApiErrorMsg(error) || 'Error saving knowledge base';
-        if (isAxiosError(error) && error.code === 'ERR_CANCELED') {
-          errorMsg = `Timed out after ${KB_CREATE_UI_TIMEOUT_MS / 1000} seconds while waiting for the knowledge base to become ready. Check the list — it may still finish in the background.`;
-        }
-        toast.error('Error: ' + errorMsg);
-      }
+      const errorMsg = getApiErrorMsg(error) || 'Error saving knowledge base';
+      toast.error('Error: ' + errorMsg);
     } finally {
       setIsLoading(false);
     }
@@ -757,30 +665,6 @@ const KnowledgeBaseCreate: React.FC<{ organizationId: string; kbId?: string }> =
           </div>
         </form>
       </div>
-
-      <Dialog
-        open={isCreatingKB}
-        onClose={(_, reason) => {
-          if (reason === 'backdropClick') return;
-          if (reason === 'escapeKeyDown') handleCreateModalCancel();
-        }}
-        aria-labelledby="kb-create-progress-title"
-        PaperProps={{ sx: { minWidth: { xs: '100%', sm: 400 } } }}
-      >
-        <DialogTitle id="kb-create-progress-title">Creating knowledge base</DialogTitle>
-        <DialogContent>
-          <p className="text-sm text-gray-600 mb-3">
-            The server is creating search indexes. We poll until the knowledge base is active (up to {KB_CREATE_UI_TIMEOUT_MS / 1000}s). Cancel stops waiting; provisioning may still continue.
-          </p>
-          <LinearProgress variant="determinate" value={createProgressPct} sx={{ height: 8, borderRadius: 1 }} />
-          <p className="text-xs text-gray-500 mt-2 tabular-nums">{Math.round(createProgressPct)}% (max wait {KB_CREATE_UI_TIMEOUT_MS / 1000}s)</p>
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 2 }}>
-          <Button onClick={handleCreateModalCancel} color="inherit" variant="outlined">
-            Cancel
-          </Button>
-        </DialogActions>
-      </Dialog>
     </div>
   );
 };
