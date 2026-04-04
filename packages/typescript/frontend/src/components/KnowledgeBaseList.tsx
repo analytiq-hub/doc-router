@@ -21,6 +21,10 @@ import Link from 'next/link';
 import KnowledgeBaseInfoModal from '@/components/KnowledgeBaseInfoModal';
 import { isColorLight } from '@/utils/colors';
 
+/** Poll while the current page has KBs not yet active; faster while any row is still indexing. */
+const KB_POLL_MS_INDEXING = 5_000;
+const KB_POLL_MS_SLOW = 30_000;
+
 const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
@@ -38,22 +42,31 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
   const [selectedKB, setSelectedKB] = useState<KnowledgeBase | null>(null);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
-  const loadKnowledgeBases = useCallback(async () => {
+  const loadKnowledgeBases = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
     try {
-      setIsLoading(true);
-      const response = await docRouterOrgApi.listKnowledgeBases({ 
-        skip: page * pageSize, 
-        limit: pageSize, 
-        name_search: searchTerm || undefined 
+      if (!silent) {
+        setIsLoading(true);
+      }
+      const response = await docRouterOrgApi.listKnowledgeBases({
+        skip: page * pageSize,
+        limit: pageSize,
+        name_search: searchTerm || undefined,
       });
       setKnowledgeBases(response.knowledge_bases);
       setTotal(response.total_count);
     } catch (error) {
       const errorMsg = getApiErrorMsg(error) || 'Error loading knowledge bases';
-      setMessage('Error: ' + errorMsg);
-      toast.error('Error loading knowledge bases');
+      if (!silent) {
+        setMessage('Error: ' + errorMsg);
+        toast.error('Error loading knowledge bases');
+      } else {
+        console.error('Knowledge base list refresh failed:', errorMsg);
+      }
     } finally {
-      setIsLoading(false);
+      if (!silent) {
+        setIsLoading(false);
+      }
     }
   }, [docRouterOrgApi, page, pageSize, searchTerm]);
 
@@ -70,6 +83,37 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
   useEffect(() => {
     loadKnowledgeBases();
   }, [loadKnowledgeBases]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void loadKnowledgeBases({ silent: true });
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, [loadKnowledgeBases]);
+
+  useEffect(() => {
+    const shouldPoll =
+      knowledgeBases.length > 0 &&
+      !knowledgeBases.every((kb) => kb.status === 'active');
+    if (!shouldPoll) {
+      return;
+    }
+
+    const hasIndexing = knowledgeBases.some((kb) => kb.status === 'indexing');
+    const intervalMs = hasIndexing ? KB_POLL_MS_INDEXING : KB_POLL_MS_SLOW;
+
+    const id = window.setInterval(() => {
+      if (document.hidden) {
+        return;
+      }
+      void loadKnowledgeBases({ silent: true });
+    }, intervalMs);
+
+    return () => window.clearInterval(id);
+  }, [knowledgeBases, loadKnowledgeBases]);
 
   useEffect(() => {
     loadTags();
