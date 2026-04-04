@@ -273,12 +273,14 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
 
       let assistantContent = '';
       const toolCalls: ToolCallInfo[] = [];
+      let streamHadError = false;
 
       await docRouterOrgApi.runKBChatStream(
         kbId,
         request,
         (chunk: KBChatStreamChunk | KBChatStreamError) => {
           if ('error' in chunk) {
+            streamHadError = true;
             setError(chunk.error || 'An error occurred');
             setIsStreaming(false);
             return;
@@ -346,6 +348,7 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
           }
         },
         (error) => {
+          streamHadError = true;
           if (error.name === 'AbortError') {
             setError('Request was cancelled');
           } else {
@@ -355,6 +358,10 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
         },
         controller.signal
       );
+
+      if (!streamHadError) {
+        await loadThreads();
+      }
     } catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
         setError('Request was cancelled');
