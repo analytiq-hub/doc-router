@@ -370,7 +370,6 @@ async def run_kb_chat(
                             organization_id,
                             current_user.user_id,
                             turn_messages,
-                            model=request.model,
                             truncate_to=request.truncate_thread_to_message_count,
                         )
                     except Exception as e:
@@ -542,7 +541,6 @@ async def run_kb_chat(
                             organization_id,
                             current_user.user_id,
                             turn_messages,
-                            model=request.model,
                             truncate_to=request.truncate_thread_to_message_count,
                         )
                     except Exception as e:

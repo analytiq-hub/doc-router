@@ -419,7 +419,6 @@ export interface ChatThreadDetail {
   title: string;
   messages: Array<Record<string, unknown>>;
   extraction: Record<string, unknown>;
-  model?: string | null;
   created_at: string;
   updated_at: string;
 }

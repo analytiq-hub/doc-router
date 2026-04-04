@@ -1,6 +1,6 @@
 """
 Persistence for document agent and KB chat threads.
-Stored in MongoDB collection agent_threads; scoped by organization_id,
+Stored in MongoDB collection chat_threads; scoped by organization_id,
 document_id (document agent) or kb_id (KB chat), and created_by (user).
 """
 from __future__ import annotations
@@ -12,11 +12,13 @@ from typing import Any
 from bson import ObjectId
 from bson.errors import InvalidId
 
+from analytiq_data.agent.thread_limits import MAX_STORED_MESSAGES, trim_stored_messages
+
 import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
-COLLECTION = "agent_threads"
+COLLECTION = "chat_threads"
 
 
 def _thread_doc(
@@ -28,7 +30,6 @@ def _thread_doc(
     title: str | None = None,
     messages: list[dict] | None = None,
     extraction: dict | None = None,
-    model: str | None = None,
 ) -> dict:
     if (document_id is None) == (kb_id is None):
         raise ValueError("Exactly one of document_id or kb_id must be provided")
@@ -46,8 +47,6 @@ def _thread_doc(
         doc["document_id"] = document_id
     if kb_id is not None:
         doc["kb_id"] = kb_id
-    if model is not None:
-        doc["model"] = model
     return doc
 
 
@@ -91,7 +90,6 @@ def _thread_doc_to_detail(doc: dict) -> dict:
         "title": doc.get("title", "New chat"),
         "messages": doc.get("messages", []),
         "extraction": doc.get("extraction") or {},
-        "model": doc.get("model"),
         "created_at": doc.get("created_at"),
         "updated_at": doc.get("updated_at"),
     }
@@ -183,12 +181,11 @@ async def append_messages(
     user_id: str,
     new_messages: list[dict],
     extraction: dict | None = None,
-    model: str | None = None,
 ) -> bool:
     """
-    Append messages to a thread and optionally set extraction and model.
+    Append messages to a thread and optionally set extraction.
     new_messages: list of { role, content?, tool_calls? } in API format.
-    User must own the thread.
+    User must own the thread. Stored messages are trimmed to MAX_STORED_MESSAGES (oldest removed).
     """
     if not new_messages:
         return True
@@ -204,12 +201,19 @@ async def append_messages(
     }
     if extraction is not None:
         update["$set"]["extraction"] = extraction
-    if model is not None:
-        update["$set"]["model"] = model
     result = await coll.update_one(
         {"_id": oid, "organization_id": organization_id, "created_by": user_id},
         update,
     )
+    if result.modified_count > 0:
+        doc = await coll.find_one({"_id": oid}, projection={"messages": 1})
+        msgs = doc.get("messages") or []
+        trimmed = trim_stored_messages(msgs)
+        if len(trimmed) != len(msgs):
+            await coll.update_one(
+                {"_id": oid},
+                {"$set": {"messages": trimmed, "updated_at": datetime.now(UTC)}},
+            )
     return result.modified_count > 0
 
 
@@ -221,12 +225,11 @@ async def truncate_and_append_messages(
     keep_message_count: int,
     new_messages: list[dict],
     extraction: dict | None = None,
-    model: str | None = None,
 ) -> bool:
     """
     Keep only the first keep_message_count messages in the thread, then append new_messages.
     Used when the user resubmits from a prior turn so the persisted thread forgets later turns.
-    User must own the thread.
+    User must own the thread. Result is trimmed to MAX_STORED_MESSAGES.
     """
     if keep_message_count < 0:
         keep_message_count = 0
@@ -243,13 +246,11 @@ async def truncate_and_append_messages(
         return False
     messages = doc.get("messages", [])
     kept = messages[:keep_message_count] if messages else []
-    final_messages = kept + list(new_messages)
+    final_messages = trim_stored_messages(kept + list(new_messages))
     now = datetime.now(UTC)
     update: dict = {"$set": {"messages": final_messages, "updated_at": now}}
     if extraction is not None:
         update["$set"]["extraction"] = extraction
-    if model is not None:
-        update["$set"]["model"] = model
     result = await coll.update_one(
         {"_id": oid, "organization_id": organization_id, "created_by": user_id},
         update,
@@ -318,7 +319,6 @@ async def append_turn(
     new_messages: list[dict],
     *,
     extraction: dict | None = None,
-    model: str | None = None,
     truncate_to: int | None = None,
 ) -> None:
     """
@@ -328,12 +328,12 @@ async def append_turn(
     if truncate_to is not None:
         await truncate_and_append_messages(
             analytiq_client, thread_id, organization_id, user_id,
-            truncate_to, new_messages, extraction=extraction, model=model,
+            truncate_to, new_messages, extraction=extraction,
         )
     else:
         await append_messages(
             analytiq_client, thread_id, organization_id, user_id,
-            new_messages, extraction=extraction, model=model,
+            new_messages, extraction=extraction,
         )
     thread_doc = await get_thread(analytiq_client, thread_id, organization_id, user_id)
     if thread_doc and thread_doc.get("title") == "New chat":

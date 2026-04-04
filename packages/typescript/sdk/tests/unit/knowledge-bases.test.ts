@@ -604,4 +604,50 @@ describe('DocRouterOrg Knowledge Bases Unit Tests', () => {
       expect(result).toEqual(expectedResponse);
     });
   });
+
+  describe('KB chat threads', () => {
+    test('listKbChatThreads calls GET with params', async () => {
+      mockHttpClient.get.mockResolvedValue([]);
+      await client.listKbChatThreads('kb-1', { limit: 10 });
+      expect(mockHttpClient.get).toHaveBeenCalledWith(
+        `/v0/orgs/${testOrgId}/knowledge-bases/kb-1/chat/threads`,
+        { params: { limit: 10 } }
+      );
+    });
+
+    test('createKbChatThread posts to chat/threads', async () => {
+      mockHttpClient.post.mockResolvedValue({ thread_id: 'tid' });
+      const r = await client.createKbChatThread('kb-1', { title: 'T' });
+      expect(r.thread_id).toBe('tid');
+      expect(mockHttpClient.post).toHaveBeenCalledWith(
+        `/v0/orgs/${testOrgId}/knowledge-bases/kb-1/chat/threads`,
+        { title: 'T' }
+      );
+    });
+
+    test('getKbChatThread GETs thread detail', async () => {
+      const detail = {
+        id: 't1',
+        title: 'x',
+        messages: [],
+        extraction: {},
+        created_at: 'a',
+        updated_at: 'b',
+      };
+      mockHttpClient.get.mockResolvedValue(detail);
+      const r = await client.getKbChatThread('kb-1', 't1');
+      expect(r).toEqual(detail);
+      expect(mockHttpClient.get).toHaveBeenCalledWith(
+        `/v0/orgs/${testOrgId}/knowledge-bases/kb-1/chat/threads/t1`
+      );
+    });
+
+    test('deleteKbChatThread DELETEs', async () => {
+      mockHttpClient.delete.mockResolvedValue({ ok: true });
+      await client.deleteKbChatThread('kb-1', 't1');
+      expect(mockHttpClient.delete).toHaveBeenCalledWith(
+        `/v0/orgs/${testOrgId}/knowledge-bases/kb-1/chat/threads/t1`
+      );
+    });
+  });
 });

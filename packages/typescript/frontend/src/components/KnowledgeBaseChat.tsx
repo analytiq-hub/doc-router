@@ -178,9 +178,6 @@ const KnowledgeBaseChat: React.FC<KnowledgeBaseChatProps> = ({ organizationId, k
         const data = await docRouterOrgApi.getKbChatThread(kbId, id);
         setThreadId(data.id);
         setMessages(mapApiThreadMessagesToUi(data.messages));
-        if (data.model && String(data.model).trim()) {
-          setSelectedModel(String(data.model));
-        }
       } catch (err) {
         const msg = getApiErrorMsg(err) ?? 'Failed to load conversation';
         setError(msg);

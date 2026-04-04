@@ -2771,6 +2771,105 @@ class AddAgentThreadsIndexes(Migration):
             return False
 
 
+class RenameAgentThreadsToChatThreads(Migration):
+    """
+    agent_threads → chat_threads (same pattern as RenameAwsCredentialsCollection / RenameLlmRunsCollection:
+    copy documents, drop old collection). Recreate list indexes on chat_threads (copy does not move indexes).
+    Then unset model and trim messages to 25.
+    """
+
+    def __init__(self):
+        super().__init__(
+            description="Rename agent_threads to chat_threads, remove model field, trim messages to 25"
+        )
+
+    async def _copy_collection(self, db, src: str, dst: str) -> None:
+        cursor = db[src].find({})
+        async for doc in cursor:
+            await db[dst].insert_one(doc)
+
+    async def _create_chat_threads_list_indexes(self, db) -> None:
+        await db.chat_threads.create_index(
+            [("organization_id", 1), ("document_id", 1), ("created_by", 1), ("updated_at", -1)],
+            name="chat_threads_doc_list_idx",
+            background=True,
+        )
+        await db.chat_threads.create_index(
+            [("organization_id", 1), ("kb_id", 1), ("created_by", 1), ("updated_at", -1)],
+            name="chat_threads_kb_list_idx",
+            background=True,
+        )
+
+    async def _create_agent_threads_list_indexes(self, db) -> None:
+        await db.agent_threads.create_index(
+            [("organization_id", 1), ("document_id", 1), ("created_by", 1), ("updated_at", -1)],
+            name="agent_threads_doc_list_idx",
+            background=True,
+        )
+        await db.agent_threads.create_index(
+            [("organization_id", 1), ("kb_id", 1), ("created_by", 1), ("updated_at", -1)],
+            name="agent_threads_kb_list_idx",
+            background=True,
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            names = await db.list_collection_names()
+            if "agent_threads" in names:
+                if "chat_threads" in names:
+                    logger.warning(
+                        "RenameAgentThreadsToChatThreads: both agent_threads and chat_threads exist; "
+                        "skipping copy (run manual cleanup if needed)"
+                    )
+                else:
+                    await self._copy_collection(db, "agent_threads", "chat_threads")
+                    await db["agent_threads"].drop()
+                    await self._create_chat_threads_list_indexes(db)
+                    logger.info("Moved agent_threads → chat_threads (copy + drop), recreated list indexes")
+
+            names = await db.list_collection_names()
+            if "chat_threads" not in names:
+                logger.info("RenameAgentThreadsToChatThreads: no chat_threads collection, done")
+                return True
+
+            coll = db["chat_threads"]
+            await coll.update_many({}, {"$unset": {"model": ""}})
+            await coll.update_many(
+                {},
+                [
+                    {
+                        "$set": {
+                            "messages": {
+                                "$cond": [
+                                    {"$gt": [{"$size": {"$ifNull": ["$messages", []]}}, 25]},
+                                    {"$slice": [{"$ifNull": ["$messages", []]}, -25]},
+                                    {"$ifNull": ["$messages", []]},
+                                ]
+                            }
+                        }
+                    }
+                ],
+            )
+            logger.info("RenameAgentThreadsToChatThreads: unset model and trimmed long message arrays")
+            return True
+        except Exception as e:
+            logger.error("RenameAgentThreadsToChatThreads up failed: %s", e)
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            names = await db.list_collection_names()
+            if "chat_threads" in names and "agent_threads" not in names:
+                await self._copy_collection(db, "chat_threads", "agent_threads")
+                await db["chat_threads"].drop()
+                await self._create_agent_threads_list_indexes(db)
+                logger.info("Reverted: chat_threads → agent_threads (copy + drop), recreated list indexes")
+            return True
+        except Exception as e:
+            logger.error("RenameAgentThreadsToChatThreads down failed: %s", e)
+            return False
+
+
 # List of all migrations in order
 MIGRATIONS = [
     OcrKeyMigration(),
@@ -2809,6 +2908,7 @@ MIGRATIONS = [
     BackfillWebhookEndpointsFromOrganizations(),
     AddWebhookDeliveriesWebhookIdIndex(),
     AddAgentThreadsIndexes(),
+    RenameAgentThreadsToChatThreads(),
     # Add more migrations here
 ]
 
