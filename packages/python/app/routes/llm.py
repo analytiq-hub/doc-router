@@ -42,6 +42,9 @@ class LLMChatModel(BaseModel):
     max_output_tokens: int
     input_cost_per_token: float
     output_cost_per_token: float
+    # Mongo llm_providers.name / display_name (for org OCR and UIs that cannot call admin-only providers API)
+    provider_name: str = ""
+    provider_display_name: str = ""
 
 class LLMEmbeddingModel(BaseModel):
     litellm_model: str
@@ -562,6 +565,10 @@ async def list_llm_models(
     provider_name: str | None = Query(None, description="Filter models by provider name"),
     provider_enabled: bool | None = Query(None, description="Filter models by provider enabled status"),
     llm_enabled: bool | None = Query(True, description="Filter models by enabled status"),
+    chat_agent_only: bool = Query(
+        False,
+        description="When true, use litellm_models_chat_agent (fallback: enabled) as the model list",
+    ),
 ):
     """List all supported LLM models"""
     # Import litellm here to avoid event loop warnings
@@ -587,7 +594,11 @@ async def list_llm_models(
             continue
 
         # Which models to return?
-        if llm_enabled:
+        if chat_agent_only:
+            models = provider.get("litellm_models_chat_agent") or []
+            if not models:
+                models = provider["litellm_models_enabled"]
+        elif llm_enabled:
             models = provider["litellm_models_enabled"]
         else:
             models = provider["litellm_models_available"]
@@ -613,6 +624,8 @@ async def list_llm_models(
                     max_output_tokens=max_output_tokens,
                     input_cost_per_token=input_cost_per_token,
                     output_cost_per_token=output_cost_per_token,
+                    provider_name=provider["name"],
+                    provider_display_name=provider.get("display_name") or provider["name"],
                 )
                 chat_models.append(chat_model)
                 logger.info(f"chat_model: {chat_model}")

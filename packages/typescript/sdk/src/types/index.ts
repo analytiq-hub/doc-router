@@ -493,6 +493,8 @@ export interface ListLLMModelsParams {
   providerName?: string;
   providerEnabled?: boolean;
   llmEnabled?: boolean;
+  /** Use chat-agent model list (fallback: all enabled) — OCR / chat pickers */
+  chatAgentOnly?: boolean;
 }
 
 export interface LLMChatModel {
@@ -502,6 +504,9 @@ export interface LLMChatModel {
   max_output_tokens: number;
   input_cost_per_token: number;
   output_cost_per_token: number;
+  /** Mongo llm_providers.name */
+  provider_name?: string;
+  provider_display_name?: string;
 }
 
 export interface LLMEmbeddingModel {

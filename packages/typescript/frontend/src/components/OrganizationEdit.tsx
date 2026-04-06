@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import type { OcrMode, OrgOcrConfig } from '@docrouter/sdk'
+import type { LLMChatModel, OcrMode, OrgOcrConfig } from '@docrouter/sdk'
 import { OrganizationMember, OrganizationType } from '@/types/index'
 import { DocRouterAccountApi } from '@/utils/api'
 import { isAxiosError } from 'axios'
@@ -12,7 +12,7 @@ import {
   GridColDef, 
   GridRenderCellParams 
 } from '@mui/x-data-grid'
-import { Switch, IconButton, Alert, TextField } from '@mui/material'
+import { Switch, IconButton, Alert } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import UserAddToOrgModal from './UserAddToOrgModal'
@@ -106,6 +106,10 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const [selectedMember, setSelectedMember] = useState<{ id: string, isAdmin: boolean } | null>(null);
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
 
+  const [ocrLlmChatModels, setOcrLlmChatModels] = useState<LLMChatModel[]>([])
+  const [ocrLlmCatalogLoading, setOcrLlmCatalogLoading] = useState(true)
+  const [ocrLlmCatalogError, setOcrLlmCatalogError] = useState<string | null>(null)
+
   const mistralEnabled = organization?.ocr_catalog?.mistral_enabled !== false
 
   // Filter current organization members
@@ -170,6 +174,38 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
 
     fetchUsers();
   }, [organizationId, organization, session, docRouterAccountApi]);
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      setOcrLlmCatalogLoading(true)
+      setOcrLlmCatalogError(null)
+      try {
+        const res = await docRouterAccountApi.listLLMModels({
+          llmEnabled: true,
+          providerEnabled: true,
+          chatAgentOnly: true,
+        })
+        if (!cancelled) {
+          setOcrLlmChatModels(res.chat_models)
+        }
+      } catch (e) {
+        console.error('Failed to load LLM catalog for OCR:', e)
+        if (!cancelled) {
+          setOcrLlmChatModels([])
+          setOcrLlmCatalogError('Could not load LLM providers and models. Try again later.')
+        }
+      } finally {
+        if (!cancelled) {
+          setOcrLlmCatalogLoading(false)
+        }
+      }
+    }
+    void load()
+    return () => {
+      cancelled = true
+    }
+  }, [docRouterAccountApi])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -393,6 +429,48 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     })
   }
 
+  const ocrLlmProviderOptions = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const cm of ocrLlmChatModels) {
+      const pn = cm.provider_name?.trim()
+      if (pn && !m.has(pn)) {
+        m.set(pn, (cm.provider_display_name?.trim() || pn) as string)
+      }
+    }
+    return Array.from(m.entries())
+      .map(([name, display]) => ({ name, display }))
+      .sort((a, b) => a.display.localeCompare(b.display))
+  }, [ocrLlmChatModels])
+
+  const ocrLlmProviderOptionsWithLegacy = useMemo(() => {
+    const cur = ocrConfig?.llm?.provider?.trim()
+    if (!cur || ocrLlmProviderOptions.some((r) => r.name === cur)) {
+      return ocrLlmProviderOptions
+    }
+    return [
+      ...ocrLlmProviderOptions,
+      { name: cur, display: `${cur} (not available — update account LLM settings)` },
+    ].sort((a, b) => a.display.localeCompare(b.display))
+  }, [ocrConfig?.llm?.provider, ocrLlmProviderOptions])
+
+  const ocrLlmModelsForProvider = useMemo(() => {
+    const p = ocrConfig?.llm?.provider?.trim()
+    if (!p) return []
+    const names = ocrLlmChatModels
+      .filter((cm) => (cm.provider_name?.trim() ?? '') === p)
+      .map((cm) => cm.litellm_model)
+    return Array.from(new Set(names)).sort((a, b) => a.localeCompare(b))
+  }, [ocrLlmChatModels, ocrConfig?.llm?.provider])
+
+  const ocrLlmModelSelectValues = useMemo(() => {
+    const cur = ocrConfig?.llm?.model?.trim()
+    const base = ocrLlmModelsForProvider
+    if (!cur || base.includes(cur)) {
+      return base
+    }
+    return [...base, cur].sort((a, b) => a.localeCompare(b))
+  }, [ocrConfig?.llm?.model, ocrLlmModelsForProvider])
+
   // Check if form has changes
   const hasChanges = () => {
     if (name !== originalName) return true;
@@ -609,28 +687,84 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                     LLM OCR backend processing may still be in development; document runs can fail
                     until the pipeline is enabled for your provider.
                   </Alert>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                    <TextField
-                      label="LLM provider"
-                      value={ocrConfig.llm.provider ?? ''}
-                      onChange={(e) => setLlmField('provider', e.target.value)}
-                      placeholder="e.g. openai"
-                      size="small"
-                      fullWidth
-                      required
-                      helperText="LiteLLM provider id (e.g. openai, anthropic)"
-                    />
-                    <TextField
-                      label="Model"
-                      value={ocrConfig.llm.model ?? ''}
-                      onChange={(e) => setLlmField('model', e.target.value)}
-                      placeholder="e.g. gpt-4o"
-                      size="small"
-                      fullWidth
-                      required
-                      helperText="Model name as passed to LiteLLM"
-                    />
-                  </div>
+                  {ocrLlmCatalogError && (
+                    <Alert severity="error" sx={{ mb: 2 }}>
+                      {ocrLlmCatalogError}
+                    </Alert>
+                  )}
+                  {ocrLlmCatalogLoading ? (
+                    <p className="text-sm text-gray-600 mb-4">Loading LLM providers and models…</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                      <div>
+                        <label
+                          htmlFor="ocr-llm-provider"
+                          className="block text-sm font-medium text-gray-700 mb-1"
+                        >
+                          LLM provider <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          id="ocr-llm-provider"
+                          value={ocrConfig.llm.provider ?? ''}
+                          onChange={(e) => {
+                            const v = e.target.value
+                            setOcrConfig((prev) => {
+                              if (!prev) return prev
+                              return {
+                                ...prev,
+                                llm: {
+                                  provider: v === '' ? null : v,
+                                  model: null,
+                                },
+                              }
+                            })
+                          }}
+                          required
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                        >
+                          <option value="">Select a provider</option>
+                          {ocrLlmProviderOptionsWithLegacy.map((row) => (
+                            <option key={row.name} value={row.name}>
+                              {row.display}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Enabled accounts with enabled chat models (from account LLM settings).
+                        </p>
+                      </div>
+                      <div>
+                        <label
+                          htmlFor="ocr-llm-model"
+                          className="block text-sm font-medium text-gray-700 mb-1"
+                        >
+                          Model <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                          id="ocr-llm-model"
+                          value={ocrConfig.llm.model ?? ''}
+                          onChange={(e) => setLlmField('model', e.target.value)}
+                          required
+                          disabled={!ocrConfig.llm.provider}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white disabled:bg-gray-100 disabled:text-gray-500"
+                        >
+                          <option value="">
+                            {ocrConfig.llm.provider ? 'Select a model' : 'Select a provider first'}
+                          </option>
+                          {ocrLlmModelSelectValues.map((m) => (
+                            <option key={m} value={m}>
+                              {m}
+                              {!ocrLlmModelsForProvider.includes(m) ? ' (not available)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Chat models only (same pool as chat/agent). Choose a vision/PDF-capable model
+                          for best OCR results.
+                        </p>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
 

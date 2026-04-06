@@ -1,7 +1,7 @@
 """
 Run OCR for a document PDF blob using organization OCR settings.
 
-``OrgOcrConfig.mode`` selects Textract, native Mistral OCR, or LLM OCR (future).
+``OrgOcrConfig.mode`` selects Textract, native Mistral OCR, or LLM OCR.
 """
 from __future__ import annotations
 
@@ -41,6 +41,16 @@ def _mistral_page_count(payload: dict[str, Any]) -> int:
     return 1
 
 
+def _llm_page_count(payload: dict[str, Any], pdf_bytes: bytes) -> int:
+    pages = payload.get("pages")
+    if isinstance(pages, list) and pages:
+        return len(pages)
+    from analytiq_data.common.pdf_pages import pdf_page_count
+
+    n = pdf_page_count(pdf_bytes)
+    return n if n is not None and n > 0 else 1
+
+
 async def run_document_ocr(
     analytiq_client,
     pdf_bytes: bytes,
@@ -54,6 +64,7 @@ async def run_document_ocr(
 
     For ``textract``, the return value is Textract-shaped dict with ``Blocks``.
     For ``mistral``, the return value is Mistral ``OCRResponse`` JSON.
+    For ``llm``, the return value is ``{ provider, model, pages: [{ index, markdown }] }`` JSON.
     """
     reserved = max_reserved_spu_for_ocr_config(cfg, pdf_bytes=pdf_bytes)
     if reserved > 0:
@@ -134,9 +145,40 @@ async def run_document_ocr(
         return payload
 
     if cfg.mode == "llm":
-        raise NotImplementedError(
-            "LLM OCR is not implemented yet; set organizations.ocr_config.mode to "
-            "'textract' or 'mistral'"
+        from analytiq_data.ocr.llm_ocr import run_llm_ocr_pdf
+
+        try:
+            payload = await run_llm_ocr_pdf(
+                analytiq_client,
+                pdf_bytes,
+                provider_name=cfg.llm.provider or "",
+                model=cfg.llm.model or "",
+            )
+        except Exception as e:
+            logger.error(
+                "OCR engine llm failed for org_id=%s document_id=%s: %s",
+                org_id,
+                document_id,
+                e,
+            )
+            raise
+        n_pages = _llm_page_count(payload, pdf_bytes)
+        spus = spu_ocr_for_page_count(n_pages)
+        if spus > 0:
+            await ad.payments.record_spu_usage(
+                org_id=org_id,
+                spus=spus,
+                llm_provider="ocr",
+                llm_model=cfg.llm.model or "llm-ocr",
+                operation="ocr",
+            )
+        logger.info(
+            "OCR llm finished org_id=%s document_id=%s pages=%s spus=%s",
+            org_id,
+            document_id,
+            n_pages,
+            spus,
         )
+        return payload
 
     raise RuntimeError(f"Unknown OCR mode: {cfg.mode!r}")

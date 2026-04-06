@@ -343,6 +343,7 @@ async def _litellm_acompletion_with_retry(
     tool_choice: Optional[Union[str, Dict]] = None,
     thinking: Optional[Dict] = None,
     use_prompt_caching: bool = False,
+    max_tokens: Optional[int] = None,
 ):
     """
     Make an LLM call with stamina retry mechanism.
@@ -382,6 +383,8 @@ async def _litellm_acompletion_with_retry(
         # litellm's timeout kwarg (overall request timeout in seconds)
         "timeout": LLM_REQUEST_TIMEOUT_SECS,
     }
+    if max_tokens is not None:
+        params["max_tokens"] = max_tokens
     # Vertex AI uses vertex_credentials (service account JSON or file path) instead of api_key.
     if model.startswith("vertex_ai/"):
         params.pop("api_key", None)

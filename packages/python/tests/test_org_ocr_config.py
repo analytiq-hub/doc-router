@@ -1,7 +1,7 @@
 """Tests for organization OCR configuration merge and validation."""
 import pytest
 from pydantic import ValidationError
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from analytiq_data.ocr.mistral_ocr_provider import provider_and_llm_enabled
 from analytiq_data.ocr.ocr_config import (
@@ -15,6 +15,7 @@ from analytiq_data.ocr.ocr_config import (
     textract_spu_cost,
 )
 from analytiq_data.ocr.ocr_runners import run_document_ocr
+from analytiq_data.ocr.llm_ocr import _parse_llm_ocr_response
 
 
 def test_provider_and_llm_enabled_requires_both():
@@ -211,3 +212,44 @@ async def test_gemini_only_stored_config_resets_to_defaults_then_textract_runs()
         await run_document_ocr(
             None, b"%PDF-1.4", org_id="o", document_id="d", cfg=cfg
         )
+
+
+def test_parse_llm_ocr_response_plain_json():
+    raw = '{"pages":[{"index":0,"markdown":"hello"}]}'
+    assert _parse_llm_ocr_response(raw) == [{"index": 0, "markdown": "hello"}]
+
+
+def test_parse_llm_ocr_response_json_fence():
+    raw = '```json\n{"pages":[{"index":0,"markdown":"x"}]}\n```'
+    assert _parse_llm_ocr_response(raw) == [{"index": 0, "markdown": "x"}]
+
+
+def test_parse_llm_ocr_response_invalid_json_falls_back():
+    raw = "just markdown text"
+    assert _parse_llm_ocr_response(raw) == [{"index": 0, "markdown": "just markdown text"}]
+
+
+@pytest.mark.asyncio
+async def test_run_document_ocr_llm_mode():
+    cfg = merge_org_ocr_config(
+        {"mode": "llm", "llm": {"provider": "openai", "model": "gpt-4o"}}
+    )
+    payload = {
+        "provider": "openai",
+        "model": "gpt-4o",
+        "pages": [{"index": 0, "markdown": "a"}, {"index": 1, "markdown": "b"}],
+    }
+    with (
+        patch(
+            "analytiq_data.ocr.llm_ocr.run_llm_ocr_pdf",
+            new=AsyncMock(return_value=payload),
+        ),
+        patch("analytiq_data.ocr.ocr_runners.ad.payments.check_spu_limits"),
+        patch("analytiq_data.ocr.ocr_runners.ad.payments.record_spu_usage") as rec,
+    ):
+        out = await run_document_ocr(
+            object(), b"%PDF-1.4", org_id="o", document_id="d", cfg=cfg
+        )
+    assert out == payload
+    rec.assert_called_once()
+    assert rec.call_args.kwargs["spus"] == 1

@@ -146,6 +146,7 @@ export class DocRouterAccount {
         provider_name: params.providerName,
         provider_enabled: params.providerEnabled,
         llm_enabled: params.llmEnabled,
+        chat_agent_only: params.chatAgentOnly,
       }
     });
   }

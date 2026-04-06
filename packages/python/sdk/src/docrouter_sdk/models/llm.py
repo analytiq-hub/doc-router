@@ -9,6 +9,8 @@ class LLMChatModel(BaseModel):
     max_output_tokens: int
     input_cost_per_token: float
     output_cost_per_token: float
+    provider_name: str = ""
+    provider_display_name: str = ""
 
 class LLMEmbeddingModel(BaseModel):
     litellm_model: str
