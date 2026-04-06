@@ -4,6 +4,9 @@ import type { OCRBlock } from '@docrouter/sdk';
  * Flatten OCR blocks from the API or cached state: always a `OCRBlock[]`.
  * Handles a Textract envelope `{ Blocks: [...] }`, JSON strings, and stale `@docrouter/sdk` dist
  * that still returns the raw envelope from `getOCRBlocks`.
+ *
+ * Mistral/LLM OCR responses (`{ pages: [...] }`) are not Textract blocks — this returns `[]`.
+ * Use `DocRouterOrg.getOCRStoredPayload` (same `/ocr/download/json` URL, no normalization).
  */
 export function normalizeOcrBlocksPayload(raw: unknown): OCRBlock[] {
   if (raw == null) return [];

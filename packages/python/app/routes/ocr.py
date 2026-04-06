@@ -15,7 +15,6 @@ from fastapi.responses import JSONResponse
 
 # Local imports
 import analytiq_data as ad
-from analytiq_data.aws.textract import ocr_result_blocks
 from app.auth import get_org_user
 from app.models import User
 
@@ -67,8 +66,8 @@ async def run_ocr(
     )
     return {"status": "queued", "document_id": document_id}
 
-@ocr_router.get("/v0/orgs/{organization_id}/ocr/download/blocks/{document_id}")
-async def download_ocr_blocks(
+@ocr_router.get("/v0/orgs/{organization_id}/ocr/download/json/{document_id}")
+async def download_ocr_json(
     organization_id: str,
     document_id: str,
     format: Literal["plain", "gzip"] = Query(
@@ -77,8 +76,17 @@ async def download_ocr_blocks(
     ),
     current_user: User = Depends(get_org_user),
 ):
-    """Download OCR blocks for a document. Use format=gzip for compressed response."""
-    logger.debug(f"download_ocr_blocks() start: document_id: {document_id}, format: {format}")
+    """
+    Download stored OCR JSON as persisted (decoded UTF-8 JSON from GridFS).
+
+    Shape depends on engine: legacy flat block list, Textract ``GetDocumentAnalysis``-style dict
+    (with ``Blocks`` / ``DocumentMetadata``), Mistral/LLM ``{ "pages": [...] }``, etc. No server-side
+    reshaping — clients that need a flat Textract block array should read ``Blocks`` from the object
+    or use :func:`analytiq_data.aws.textract.ocr_result_blocks` locally.
+
+    Use format=gzip for compressed response.
+    """
+    logger.debug(f"download_ocr_json() start: document_id: {document_id}, format: {format}")
     analytiq_client = ad.common.get_analytiq_client()
 
     document = await ad.common.get_doc(
@@ -97,25 +105,22 @@ async def download_ocr_blocks(
     if ocr_json is None:
         raise HTTPException(status_code=404, detail="OCR data not found")
 
-    # Flat list expected by clients (SDK / PDF viewer). Stored payload may be a legacy list or
-    # a Textract-shaped dict with ``Blocks`` (see :func:`ocr_result_blocks`).
-    blocks = ocr_result_blocks(ocr_json)
-
     headers = {"Cache-Control": "private, max-age=3600"}
 
     if format == "gzip":
         # Run CPU-bound json.dumps + gzip.compress in a thread pool so the event loop is not blocked
-        def _serialize_and_compress(data: list) -> bytes:
+        def _serialize_and_compress(data: object) -> bytes:
             return gzip.compress(json.dumps(data).encode("utf-8"))
 
-        body = await asyncio.to_thread(_serialize_and_compress, blocks)
+        body = await asyncio.to_thread(_serialize_and_compress, ocr_json)
         return Response(
             content=body,
             media_type="application/json",
             headers={**headers, "Content-Encoding": "gzip"},
         )
 
-    return JSONResponse(content=blocks, headers=headers)
+    return JSONResponse(content=ocr_json, headers=headers)
+
 
 @ocr_router.get("/v0/orgs/{organization_id}/ocr/download/text/{document_id}", response_model=str)
 async def download_ocr_text(

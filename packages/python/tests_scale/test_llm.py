@@ -103,7 +103,7 @@ async def test_textract_and_llm_default_pipeline(test_db, mock_auth, setup_test_
 
         # Test OCR blocks/JSON endpoint
         blocks_resp = client.get(
-            f"/v0/orgs/{TEST_ORG_ID}/ocr/download/blocks/{document_id}",
+            f"/v0/orgs/{TEST_ORG_ID}/ocr/download/json/{document_id}",
             headers=get_auth_headers()
         )
         assert blocks_resp.status_code == 200, f"Failed to get OCR blocks: {blocks_resp.text}"

@@ -25,9 +25,9 @@ class OCRAPI:
         """
         return self.client.request(
             "GET",
-            f"/v0/orgs/{organization_id}/ocr/download/blocks/{document_id}"
+            f"/v0/orgs/{organization_id}/ocr/download/json/{document_id}"
         )
-    
+
     def get_text(self, organization_id: str, document_id: str, page_num: Optional[int] = None) -> str:
         """
         Get OCR text for a document

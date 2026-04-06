@@ -764,10 +764,8 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       return;
     }
     try {
-      const blocks = await docRouterOrgApi.getOCRBlocks({
-        documentId: id
-      });
-      const blob = new Blob([JSON.stringify(blocks, null, 2)], { type: 'application/json' });
+      const payload = await docRouterOrgApi.getOCRStoredPayload({ documentId: id });
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const defaultFileName = (fileName || `Document_${id}`) + `_ocr.json`;
       saveAs(blob, defaultFileName);
     } catch (err) {

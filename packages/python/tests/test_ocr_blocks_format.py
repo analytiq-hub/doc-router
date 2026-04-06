@@ -15,6 +15,10 @@ SAMPLE_OCR_TEXTRACT_ENVELOPE = {
     "Blocks": SAMPLE_OCR_JSON,
     "DocumentMetadata": {"Pages": 1},
 }
+SAMPLE_OCR_PAGES_MARKDOWN = {
+    "pages": [{"index": 0, "markdown": "# Hello"}],
+    "provider": "mistral",
+}
 SAMPLE_DOC = {"user_file_name": "test.pdf", "organization_id": "org-123"}
 
 
@@ -30,7 +34,7 @@ async def test_ocr_blocks_format_plain(org_and_users, test_db):
         patch("app.routes.ocr.ad.ocr.get_ocr_json", new_callable=AsyncMock, return_value=SAMPLE_OCR_JSON),
     ):
         resp = client.get(
-            f"/v0/orgs/{org_id}/ocr/download/blocks/{doc_id}",
+            f"/v0/orgs/{org_id}/ocr/download/json/{doc_id}",
             params={"format": "plain"},
             headers=get_token_headers(admin["token"]),
         )
@@ -57,7 +61,7 @@ async def test_ocr_blocks_format_gzip(org_and_users, test_db):
         mock_ad.common.doc.ocr_supported = lambda fn: fn.endswith(".pdf")
 
         resp = client.get(
-            f"/v0/orgs/{org_id}/ocr/download/blocks/{doc_id}?format=gzip",
+            f"/v0/orgs/{org_id}/ocr/download/json/{doc_id}?format=gzip",
             headers=get_token_headers(admin["token"]),
         )
     assert resp.status_code == 200
@@ -87,7 +91,7 @@ async def test_ocr_blocks_format_default_is_plain(org_and_users, test_db):
         patch("app.routes.ocr.ad.ocr.get_ocr_json", new_callable=AsyncMock, return_value=SAMPLE_OCR_JSON),
     ):
         resp = client.get(
-            f"/v0/orgs/{org_id}/ocr/download/blocks/{doc_id}",
+            f"/v0/orgs/{org_id}/ocr/download/json/{doc_id}",
             headers=get_token_headers(admin["token"]),
         )
     assert resp.status_code == 200
@@ -96,8 +100,8 @@ async def test_ocr_blocks_format_default_is_plain(org_and_users, test_db):
 
 
 @pytest.mark.asyncio
-async def test_ocr_blocks_textract_envelope_returns_flat_list(org_and_users, test_db):
-    """Stored Textract-shaped dict is normalized to a block list for the API."""
+async def test_ocr_blocks_textract_envelope_returned_as_stored(org_and_users, test_db):
+    """Textract envelope dict is returned as stored (not unwrapped to a flat block list)."""
     org_id = org_and_users["org_id"]
     admin = org_and_users["admin"]
     doc_id = "507f1f77bcf86cd799439011"
@@ -111,12 +115,12 @@ async def test_ocr_blocks_textract_envelope_returns_flat_list(org_and_users, tes
         ),
     ):
         resp = client.get(
-            f"/v0/orgs/{org_id}/ocr/download/blocks/{doc_id}",
+            f"/v0/orgs/{org_id}/ocr/download/json/{doc_id}",
             params={"format": "plain"},
             headers=get_token_headers(admin["token"]),
         )
     assert resp.status_code == 200
-    assert resp.json() == SAMPLE_OCR_JSON
+    assert resp.json() == SAMPLE_OCR_TEXTRACT_ENVELOPE
 
 
 @pytest.mark.asyncio
@@ -127,8 +131,32 @@ async def test_ocr_blocks_format_invalid(org_and_users, test_db):
     doc_id = "507f1f77bcf86cd799439011"
 
     resp = client.get(
-        f"/v0/orgs/{org_id}/ocr/download/blocks/{doc_id}",
+        f"/v0/orgs/{org_id}/ocr/download/json/{doc_id}",
         params={"format": "invalid"},
         headers=get_token_headers(admin["token"]),
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_ocr_download_blocks_pages_markdown_returns_native_payload(org_and_users, test_db):
+    """Blocks endpoint returns Mistral/LLM JSON as-is; TS SDK normalizes to [] only in getOCRBlocks."""
+    org_id = org_and_users["org_id"]
+    admin = org_and_users["admin"]
+    doc_id = "507f1f77bcf86cd799439011"
+
+    with (
+        patch("app.routes.ocr.ad.common.get_doc", new_callable=AsyncMock, return_value=SAMPLE_DOC),
+        patch(
+            "app.routes.ocr.ad.ocr.get_ocr_json",
+            new_callable=AsyncMock,
+            return_value=SAMPLE_OCR_PAGES_MARKDOWN,
+        ),
+    ):
+        resp = client.get(
+            f"/v0/orgs/{org_id}/ocr/download/json/{doc_id}",
+            params={"format": "plain"},
+            headers=get_token_headers(admin["token"]),
+        )
+    assert resp.status_code == 200
+    assert resp.json() == SAMPLE_OCR_PAGES_MARKDOWN

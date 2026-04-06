@@ -228,17 +228,32 @@ export class DocRouterOrg {
   // ---------------- OCR ----------------
 
   /**
-   * Get OCR blocks for a document.
+   * Textract-oriented block list for search/bbox (WORD/LINE blocks). For Mistral/LLM payloads
+   * (`{ pages: [...] }`), the download/json API still returns that JSON, but this method
+   * normalizes unknown shapes to `[]` — use {@link getOCRStoredPayload} for a faithful export.
+   *
    * @param format - 'gzip' (default) requests compressed response for smaller transfer; 'plain' for raw JSON (backward compatible).
    * Browser/axios automatically decompresses gzip responses.
    */
   async getOCRBlocks(params: { documentId: string; format?: 'plain' | 'gzip' }): Promise<OCRBlock[]> {
     const { documentId, format = 'gzip' } = params;
     const raw = await this.http.get<unknown>(
-      `/v0/orgs/${this.organizationId}/ocr/download/blocks/${documentId}`,
+      `/v0/orgs/${this.organizationId}/ocr/download/json/${documentId}`,
       { params: { format } }
     );
     return normalizeOcrBlocksPayload(raw);
+  }
+
+  /**
+   * Same HTTP resource as {@link getOCRBlocks} (`/ocr/download/json/...`) but returns the JSON
+   * body without normalizing — suitable for saving `_ocr.json` (Textract list, Mistral/LLM pages, etc.).
+   */
+  async getOCRStoredPayload(params: { documentId: string; format?: 'plain' | 'gzip' }): Promise<unknown> {
+    const { documentId, format = 'gzip' } = params;
+    return this.http.get<unknown>(
+      `/v0/orgs/${this.organizationId}/ocr/download/json/${documentId}`,
+      { params: { format } }
+    );
   }
 
   async getOCRText(params: { documentId: string; pageNum?: number; }): Promise<string> {

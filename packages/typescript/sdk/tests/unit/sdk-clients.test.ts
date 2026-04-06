@@ -117,7 +117,7 @@ describe('SDK Client Unit Tests', () => {
 
       await client.getOCRBlocks({ documentId: 'doc-456' });
       expect(mockGet).toHaveBeenCalledWith(
-        '/v0/orgs/org-123/ocr/download/blocks/doc-456',
+        '/v0/orgs/org-123/ocr/download/json/doc-456',
         { params: { format: 'gzip' } }
       );
     });
@@ -133,7 +133,7 @@ describe('SDK Client Unit Tests', () => {
 
       await client.getOCRBlocks({ documentId: 'doc-789', format: 'plain' });
       expect(mockGet).toHaveBeenCalledWith(
-        '/v0/orgs/org-123/ocr/download/blocks/doc-789',
+        '/v0/orgs/org-123/ocr/download/json/doc-789',
         { params: { format: 'plain' } }
       );
     });

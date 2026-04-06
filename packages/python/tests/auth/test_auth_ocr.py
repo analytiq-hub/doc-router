@@ -25,7 +25,7 @@ async def test_ocr_permissions(org_and_users, test_db):
     doc_id = resp.json()["documents"][0]["document_id"]
 
     # --- OCR BLOCKS ---
-    url_blocks = f"/v0/orgs/{org_id}/ocr/download/blocks/{doc_id}"
+    url_blocks = f"/v0/orgs/{org_id}/ocr/download/json/{doc_id}"
     resp = client.get(url_blocks, headers=get_token_headers(admin["token"]))
     assert resp.status_code in (200, 404), f"Admin should be able to access OCR blocks, got {resp.status_code}: {resp.text}"
 

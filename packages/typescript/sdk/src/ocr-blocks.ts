@@ -1,7 +1,7 @@
 import type { OCRBlock } from './types';
 
 /**
- * Normalize OCR blocks from the download/blocks API.
+ * Normalize OCR blocks from the download/json API (stored OCR payload).
  * The backend returns a flat block list, but older responses or caches may still send a
  * Textract envelope `{ Blocks: [...] }`.
  */
