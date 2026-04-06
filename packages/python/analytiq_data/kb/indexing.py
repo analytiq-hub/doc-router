@@ -630,6 +630,12 @@ async def get_extracted_indexing_text(
                 return ExtractedIndexingText(text=preprocess_markdown(text, cfg), page_offsets=[])
             return None
 
+        if ad.common.is_pages_markdown_ocr(ocr_json):
+            full_md = ad.common.export_pages_markdown_full_text(ocr_json)
+            return ExtractedIndexingText(
+                text=preprocess_markdown(full_md, cfg), page_offsets=[]
+            )
+
         blocks = ad.aws.textract.ocr_result_blocks(ocr_json)
         table_blocks = [b for b in blocks if b.get("BlockType") == "TABLE"]
 

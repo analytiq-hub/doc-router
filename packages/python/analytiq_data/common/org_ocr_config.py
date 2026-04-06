@@ -1,15 +1,13 @@
 """
 Organization-level OCR configuration.
 
-**AWS Textract is always used** for OCR (feature types are configurable). Additional
-engines can be added later by extending :data:`OCR_ENGINE_RUN_ORDER`, this module’s
-settings models, and :func:`analytiq_data.common.ocr_runners.run_document_ocr`.
-
+``mode`` selects exactly one engine: Textract, native Mistral OCR, or LLM OCR.
 See :mod:`analytiq_data.common.ocr_runners`.
 """
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any, Literal
 
 from bson import ObjectId
@@ -19,17 +17,18 @@ logger = logging.getLogger(__name__)
 
 TEXTRACT_FEATURES = frozenset({"LAYOUT", "TABLES", "FORMS", "SIGNATURES"})
 
-# Registered backends; extend when implementing optional engines alongside Textract.
+OcrMode = Literal["textract", "mistral", "llm"]
+
+# Legacy export (tests); single-mode config replaces multi-engine order.
 OcrEngineId = Literal["textract"]
 OCR_ENGINE_RUN_ORDER: tuple[OcrEngineId, ...] = ("textract",)
 
 
 def textract_spu_cost(feature_types: list[str]) -> int:
     """
-    SPUs to charge for a successful Textract AnalyzeDocument run.
+    Legacy Textract SPU cost by feature types (pre-unified billing).
 
-    4 SPUs when FORMS is requested (highest Textract cost, applies whether or not
-    TABLES is also enabled); 2 SPUs when TABLES only is requested; otherwise 1.
+    Kept for migrations/tests referencing old behavior.
     """
     fts = set(feature_types)
     if "FORMS" in fts:
@@ -39,8 +38,19 @@ def textract_spu_cost(feature_types: list[str]) -> int:
     return 1
 
 
+def spu_ocr_for_page_count(n_pages: int) -> int:
+    """
+    SPUs to charge for a successful OCR run: 1 SPU per 25 pages (rounded up).
+
+    Minimum 1 SPU when n_pages >= 1; 0 pages -> 0 SPUs.
+    """
+    if n_pages <= 0:
+        return 0
+    return max(1, math.ceil(n_pages / 25))
+
+
 class OrgOcrTextractSettings(BaseModel):
-    """AWS Textract: always-on; only AnalyzeDocument feature types are configurable."""
+    """AWS Textract: AnalyzeDocument feature types."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -69,20 +79,59 @@ class OrgOcrTextractSettings(BaseModel):
         return self
 
 
+class OrgOcrMistralSettings(BaseModel):
+    """Optional native Mistral OCR flags (model is fixed in code: mistral-ocr-latest)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+
+class OrgOcrLlmSettings(BaseModel):
+    """LLM OCR provider + model when ``mode == \"llm\"``."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    provider: str | None = None
+    model: str | None = None
+
+
 class OrgOcrConfig(BaseModel):
-    """
-    Per-organization OCR settings.
+    """Per-organization OCR settings."""
 
-    Textract is always the OCR engine; ``textract.feature_types`` selects AnalyzeDocument
-    features. Optional backends can be added under this model in the future.
-    """
+    model_config = ConfigDict(extra="ignore")
 
+    mode: OcrMode = "textract"
     textract: OrgOcrTextractSettings = Field(default_factory=OrgOcrTextractSettings)
+    mistral: OrgOcrMistralSettings = Field(default_factory=OrgOcrMistralSettings)
+    llm: OrgOcrLlmSettings = Field(default_factory=OrgOcrLlmSettings)
+
+    @model_validator(mode="after")
+    def _llm_required_when_mode_llm(self) -> OrgOcrConfig:
+        if self.mode == "llm":
+            if not (self.llm.provider and str(self.llm.provider).strip()):
+                raise ValueError('ocr_config: when mode is "llm", llm.provider is required')
+            if not (self.llm.model and str(self.llm.model).strip()):
+                raise ValueError('ocr_config: when mode is "llm", llm.model is required')
+        return self
 
 
-def max_reserved_spu_for_ocr_config(cfg: OrgOcrConfig) -> int:
-    """Upper-bound SPUs this OCR job might consume (for credit pre-check)."""
-    return textract_spu_cost(cfg.textract.feature_types)
+def max_reserved_spu_for_ocr_config(
+    cfg: OrgOcrConfig,
+    *,
+    pdf_bytes: bytes | None = None,
+) -> int:
+    """
+    Upper-bound SPUs to reserve before an OCR job (credit pre-check).
+
+    Uses PDF page count when ``pdf_bytes`` is provided; otherwise a conservative default.
+    """
+    if pdf_bytes:
+        from analytiq_data.common.pdf_pages import pdf_page_count
+
+        n = pdf_page_count(pdf_bytes)
+        if n is not None and n > 0:
+            return max(1, spu_ocr_for_page_count(n))
+    # Unknown page count: reserve as if 100 pages (4 SPUs) to avoid blocking large jobs.
+    return max(1, spu_ocr_for_page_count(100))
 
 
 def _normalize_legacy_ocr_dict(raw: dict[str, Any]) -> dict[str, Any]:
@@ -96,6 +145,12 @@ def _normalize_legacy_ocr_dict(raw: dict[str, Any]) -> dict[str, Any]:
         tx = dict(tx)
         tx.pop("enabled", None)
         out["textract"] = tx
+    if "mode" not in out:
+        out["mode"] = "textract"
+    if "mistral" not in out or not isinstance(out.get("mistral"), dict):
+        out["mistral"] = {}
+    if "llm" not in out or not isinstance(out.get("llm"), dict):
+        out["llm"] = {"provider": None, "model": None}
     return out
 
 
@@ -144,9 +199,10 @@ def apply_ocr_config_update(
 
 
 def ocr_settings_catalog() -> dict[str, Any]:
-    """Textract features for OCR UI / API discovery."""
+    """OCR UI / API discovery."""
     return {
         "textract_feature_types": sorted(TEXTRACT_FEATURES),
+        "modes": ["textract", "mistral", "llm"],
     }
 
 

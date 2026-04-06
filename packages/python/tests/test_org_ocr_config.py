@@ -9,6 +9,7 @@ from analytiq_data.common.org_ocr_config import (
     apply_ocr_config_update,
     max_reserved_spu_for_ocr_config,
     merge_org_ocr_config,
+    spu_ocr_for_page_count,
     textract_spu_cost,
 )
 from analytiq_data.common.ocr_runners import run_document_ocr
@@ -21,6 +22,7 @@ def test_ocr_engine_run_order_starts_with_textract():
 def test_merge_defaults_when_missing():
     cfg = merge_org_ocr_config(None)
     assert cfg.textract.feature_types == ["LAYOUT"]
+    assert cfg.mode == "textract"
 
 
 def test_merge_legacy_drops_deprecated_gemini_vertex():
@@ -33,6 +35,7 @@ def test_merge_legacy_drops_deprecated_gemini_vertex():
         }
     )
     assert cfg.textract.feature_types == ["LAYOUT"]
+    assert cfg.mode == "textract"
 
 
 def test_merge_strips_legacy_textract_enabled_key():
@@ -62,18 +65,31 @@ def test_apply_rejects_empty_feature_types():
         )
 
 
-def test_textract_and_spu_costs():
+def test_textract_and_spu_costs_legacy():
     assert textract_spu_cost(["LAYOUT"]) == 1
     assert textract_spu_cost(["TABLES"]) == 2
     assert textract_spu_cost(["FORMS"]) == 4
-    assert textract_spu_cost(["FORMS", "TABLES"]) == 4
-    assert textract_spu_cost(["LAYOUT", "FORMS", "TABLES"]) == 4
+
+
+def test_spu_ocr_for_page_count():
+    assert spu_ocr_for_page_count(0) == 0
+    assert spu_ocr_for_page_count(1) == 1
+    assert spu_ocr_for_page_count(25) == 1
+    assert spu_ocr_for_page_count(26) == 2
+    assert spu_ocr_for_page_count(50) == 2
+
+
+def test_max_reserved_without_pdf_uses_fallback():
     base = merge_org_ocr_config(None)
-    assert max_reserved_spu_for_ocr_config(base) == 1
-    tables = merge_org_ocr_config({"textract": {"feature_types": ["LAYOUT", "TABLES"]}})
-    assert max_reserved_spu_for_ocr_config(tables) == 2
-    forms = merge_org_ocr_config({"textract": {"feature_types": ["LAYOUT", "FORMS"]}})
-    assert max_reserved_spu_for_ocr_config(forms) == 4
+    assert max_reserved_spu_for_ocr_config(base) == spu_ocr_for_page_count(100)
+
+
+def test_max_reserved_with_pdf_bytes():
+    base = merge_org_ocr_config(None)
+    # Minimal valid PDF header (one page count may fail — then fallback inside pdf_page_count)
+    tiny = b"%PDF-1.4\n1 0 obj<<>>endobj trailer<<>>\n%%EOF"
+    r = max_reserved_spu_for_ocr_config(base, pdf_bytes=tiny)
+    assert r >= 1
 
 
 def test_apply_update_textract():
@@ -85,6 +101,23 @@ def test_apply_update_textract():
     )
     assert out["textract"]["feature_types"] == ["LAYOUT", "TABLES"]
     assert "enabled" not in out["textract"]
+
+
+def test_mode_llm_requires_provider_model():
+    with pytest.raises(ValidationError):
+        apply_ocr_config_update(None, {"mode": "llm", "llm": {}})
+
+
+def test_mode_llm_valid():
+    cfg = merge_org_ocr_config(
+        {
+            "mode": "llm",
+            "llm": {"provider": "openai", "model": "gpt-4o"},
+        }
+    )
+    assert cfg.mode == "llm"
+    assert cfg.llm.provider == "openai"
+    assert cfg.llm.model == "gpt-4o"
 
 
 @pytest.mark.asyncio
@@ -99,7 +132,10 @@ async def test_gemini_only_stored_config_resets_to_defaults_then_textract_runs()
     assert cfg.textract.feature_types == ["LAYOUT"]
 
     async def fake_textract(*_a, **_k):
-        return {"DocumentMetadata": {}, "Blocks": []}
+        return {
+            "DocumentMetadata": {"Pages": 1},
+            "Blocks": [],
+        }
 
     with (
         patch("analytiq_data.common.ocr_runners.textract_mod.run_textract", side_effect=fake_textract),

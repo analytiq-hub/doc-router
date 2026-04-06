@@ -56,9 +56,10 @@ class OrganizationUpdate(BaseModel):
     ocr_config: Optional[dict[str, Any]] = None
 
 class OrganizationOcrCatalog(BaseModel):
-    """Allowed Textract features for OCR UI (same for all orgs)."""
+    """OCR UI catalog (Textract features + available modes)."""
 
     textract_feature_types: list[str]
+    modes: list[str]
 
 
 class Organization(BaseModel):
@@ -77,6 +78,7 @@ def _organization_ocr_catalog() -> OrganizationOcrCatalog:
     cat = ocr_settings_catalog()
     return OrganizationOcrCatalog(
         textract_feature_types=cat["textract_feature_types"],
+        modes=cat["modes"],
     )
 
 
