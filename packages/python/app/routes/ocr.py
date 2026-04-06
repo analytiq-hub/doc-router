@@ -93,7 +93,7 @@ async def download_ocr_blocks(
         raise HTTPException(status_code=404, detail="OCR not supported for this document extension")
 
     # Get the OCR JSON data from mongodb
-    ocr_json = await ad.common.get_ocr_json(analytiq_client, document_id)
+    ocr_json = await ad.ocr.get_ocr_json(analytiq_client, document_id)
     if ocr_json is None:
         raise HTTPException(status_code=404, detail="OCR data not found")
 
@@ -145,7 +145,7 @@ async def download_ocr_text(
         page_idx = page_num - 1
 
     # Get the OCR text data from mongodb
-    text = await ad.common.get_ocr_text(analytiq_client, document_id, page_idx)
+    text = await ad.ocr.get_ocr_text(analytiq_client, document_id, page_idx)
     if text is None:
         raise HTTPException(status_code=404, detail="OCR text not found")
     
@@ -172,7 +172,7 @@ async def get_ocr_metadata(
         raise HTTPException(status_code=404, detail="OCR not supported for this document extension")
 
     # Get the OCR metadata from mongodb
-    metadata = await ad.common.get_ocr_metadata(analytiq_client, document_id)
+    metadata = await ad.ocr.get_ocr_metadata(analytiq_client, document_id)
     if metadata is None:
         raise HTTPException(status_code=404, detail="OCR metadata not found")
     
@@ -218,7 +218,7 @@ async def get_ocr_export_markdown(
         )
 
     try:
-        body = await ad.common.export_ocr_markdown(
+        body = await ad.ocr.export_ocr_markdown(
             analytiq_client, document_id, org_id=organization_id
         )
     except (ValueError, RuntimeError) as e:
@@ -254,7 +254,7 @@ async def get_ocr_export_html(
         )
 
     try:
-        body = await ad.common.export_ocr_html(
+        body = await ad.ocr.export_ocr_html(
             analytiq_client, document_id, org_id=organization_id
         )
     except (ValueError, RuntimeError) as e:
@@ -297,7 +297,7 @@ async def get_ocr_export_tables_xlsx(
         )
 
     try:
-        body = await ad.common.export_ocr_tables_excel(
+        body = await ad.ocr.export_ocr_tables_excel(
             analytiq_client,
             document_id,
             org_id=organization_id,

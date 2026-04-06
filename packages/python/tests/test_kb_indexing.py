@@ -77,7 +77,7 @@ async def test_kb_integration_single_kb_lifecycle(
                 "mongo_file_name": "f1.pdf",
             }
         )
-        await ad.common.ocr.save_ocr_text(analytiq_client, doc1, text1)
+        await ad.ocr.save_ocr_text(analytiq_client, doc1, text1)
         await ad.msg_handlers.process_kb_index_msg(
             analytiq_client,
             {"_id": str(ObjectId()), "msg": {"document_id": doc1, "kb_id": kb_id}},
@@ -115,7 +115,7 @@ async def test_kb_integration_single_kb_lifecycle(
                 "mongo_file_name": "f2.pdf",
             }
         )
-        await ad.common.ocr.save_ocr_text(analytiq_client, doc2, text2)
+        await ad.ocr.save_ocr_text(analytiq_client, doc2, text2)
 
         dry = await ad.kb.reconciliation.reconcile_knowledge_base(
             analytiq_client, TEST_ORG_ID, kb_id=kb_id, dry_run=True

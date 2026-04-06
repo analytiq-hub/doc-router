@@ -19,8 +19,8 @@ async def test_returns_none_when_document_missing(mock_get_doc):
 
 
 @pytest.mark.asyncio
-@patch("analytiq_data.kb.indexing.ad.common.get_ocr_text", new_callable=AsyncMock)
-@patch("analytiq_data.kb.indexing.ad.common.get_ocr_json", new_callable=AsyncMock)
+@patch("analytiq_data.kb.indexing.ad.ocr.get_ocr_text", new_callable=AsyncMock)
+@patch("analytiq_data.kb.indexing.ad.ocr.get_ocr_json", new_callable=AsyncMock)
 @patch("analytiq_data.kb.indexing.ad.common.doc.get_doc", new_callable=AsyncMock)
 async def test_ocr_returns_none_when_no_ocr_json(
     mock_get_doc, mock_get_ocr_json, mock_get_ocr_text
@@ -34,9 +34,9 @@ async def test_ocr_returns_none_when_no_ocr_json(
 
 
 @pytest.mark.asyncio
-@patch("analytiq_data.kb.indexing.ad.common.get_ocr_text", new_callable=AsyncMock)
+@patch("analytiq_data.kb.indexing.ad.ocr.get_ocr_text", new_callable=AsyncMock)
 @patch("analytiq_data.kb.indexing.ad.aws.textract.open_textract_document_from_ocr_json")
-@patch("analytiq_data.kb.indexing.ad.common.get_ocr_json", new_callable=AsyncMock)
+@patch("analytiq_data.kb.indexing.ad.ocr.get_ocr_json", new_callable=AsyncMock)
 @patch("analytiq_data.kb.indexing.ad.common.doc.get_doc", new_callable=AsyncMock)
 async def test_ocr_returns_none_when_no_pages(
     mock_get_doc, mock_get_ocr_json, mock_open_doc, mock_get_ocr_text
@@ -54,7 +54,7 @@ async def test_ocr_returns_none_when_no_pages(
 
 @pytest.mark.asyncio
 @patch("analytiq_data.kb.indexing.ad.aws.textract.open_textract_document_from_ocr_json")
-@patch("analytiq_data.kb.indexing.ad.common.get_ocr_json", new_callable=AsyncMock)
+@patch("analytiq_data.kb.indexing.ad.ocr.get_ocr_json", new_callable=AsyncMock)
 @patch("analytiq_data.kb.indexing.ad.common.doc.get_doc", new_callable=AsyncMock)
 async def test_ocr_returns_plain_text_when_no_tables(
     mock_get_doc, mock_get_ocr_json, mock_open_doc
@@ -77,7 +77,7 @@ async def test_ocr_returns_plain_text_when_no_tables(
 
 @pytest.mark.asyncio
 @patch("analytiq_data.kb.indexing.ad.aws.textract.open_textract_document_from_ocr_json")
-@patch("analytiq_data.kb.indexing.ad.common.get_ocr_json", new_callable=AsyncMock)
+@patch("analytiq_data.kb.indexing.ad.ocr.get_ocr_json", new_callable=AsyncMock)
 @patch("analytiq_data.kb.indexing.ad.common.doc.get_doc", new_callable=AsyncMock)
 async def test_ocr_returns_markdown_when_tables(
     mock_get_doc, mock_get_ocr_json, mock_open_doc

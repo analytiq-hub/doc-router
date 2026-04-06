@@ -33,7 +33,7 @@ async def get_ocr_text(context: dict, params: dict) -> dict[str, Any]:
     page_num = params.get("page_num")
     page_idx = (int(page_num) - 1) if page_num is not None else None
     try:
-        text = await ad.common.ocr.get_ocr_text(
+        text = await ad.ocr.get_ocr_text(
             context["analytiq_client"], document_id, page_idx=page_idx
         )
         if text is None:

@@ -75,7 +75,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
         ocr_json = None
         if not force:
             # Check if the OCR text already exists
-            ocr_json = await ad.common.get_ocr_json(analytiq_client, document_id)
+            ocr_json = await ad.ocr.get_ocr_json(analytiq_client, document_id)
             if ocr_json is not None:
                 logger.info(f"OCR list for {document_id} already exists. Skipping OCR.")        
         
@@ -147,8 +147,8 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
                 return
 
             # Run OCR (mode from org settings: textract, mistral, or llm)
-            ocr_cfg = await ad.common.fetch_org_ocr_config(analytiq_client, org_id)
-            ocr_json = await ad.common.run_document_ocr(
+            ocr_cfg = await ad.ocr.fetch_org_ocr_config(analytiq_client, org_id)
+            ocr_json = await ad.ocr.run_document_ocr(
                 analytiq_client,
                 file["blob"],
                 org_id=org_id,
@@ -157,7 +157,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
             )
             logger.info(f"OCR completed for {document_id}")
 
-            await ad.common.save_ocr_json(
+            await ad.ocr.save_ocr_json(
                 analytiq_client,
                 document_id,
                 ocr_json,
@@ -165,9 +165,9 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
             )
             logger.info(f"OCR list for {document_id} has been saved.")
 
-        ocr_cfg = await ad.common.fetch_org_ocr_config(analytiq_client, org_id)
+        ocr_cfg = await ad.ocr.fetch_org_ocr_config(analytiq_client, org_id)
         # Extract plain text blobs (Textract or pages-markdown)
-        await ad.common.save_ocr_text_from_json(
+        await ad.ocr.save_ocr_text_from_json(
             analytiq_client,
             document_id,
             ocr_json,

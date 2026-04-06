@@ -29,6 +29,8 @@ export interface OrgOcrConfig {
 export interface OrganizationOcrCatalog {
   textract_feature_types: string[];
   modes: string[];
+  /** False when Mistral provider is off or no models enabled in llm_providers. */
+  mistral_enabled?: boolean;
 }
 
 export interface Organization {

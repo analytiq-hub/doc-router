@@ -37,7 +37,7 @@ def _safe_block_page_int(block: object) -> Optional[int]:
 
 def ocr_result_blocks(ocr_json: Union[list, dict]) -> List[dict]:
     """
-    Normalize OCR payload from :func:`run_textract` or persisted :func:`analytiq_data.common.ocr.get_ocr_json`:
+    Normalize OCR payload from :func:`run_textract` or persisted :func:`analytiq_data.ocr.ocr.get_ocr_json`:
     either a legacy flat list of blocks or a dict shaped like ``GetDocumentAnalysis`` / ``GetDocumentTextDetection``.
     """
     if isinstance(ocr_json, dict) and "Blocks" in ocr_json:

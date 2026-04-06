@@ -26,8 +26,8 @@ async def test_ocr_blocks_format_plain(org_and_users, test_db):
     doc_id = "507f1f77bcf86cd799439011"
 
     with (
-        patch("analytiq_data.common.get_doc", new_callable=AsyncMock, return_value=SAMPLE_DOC),
-        patch("analytiq_data.common.get_ocr_json", new_callable=AsyncMock, return_value=SAMPLE_OCR_JSON),
+        patch("app.routes.ocr.ad.common.get_doc", new_callable=AsyncMock, return_value=SAMPLE_DOC),
+        patch("app.routes.ocr.ad.ocr.get_ocr_json", new_callable=AsyncMock, return_value=SAMPLE_OCR_JSON),
     ):
         resp = client.get(
             f"/v0/orgs/{org_id}/ocr/download/blocks/{doc_id}",
@@ -52,7 +52,7 @@ async def test_ocr_blocks_format_gzip(org_and_users, test_db):
         patch("app.routes.ocr.ad") as mock_ad,
     ):
         mock_ad.common.get_doc = AsyncMock(return_value=SAMPLE_DOC)
-        mock_ad.common.get_ocr_json = AsyncMock(return_value=SAMPLE_OCR_JSON)
+        mock_ad.ocr.get_ocr_json = AsyncMock(return_value=SAMPLE_OCR_JSON)
         mock_ad.common.get_analytiq_client = lambda: None
         mock_ad.common.doc.ocr_supported = lambda fn: fn.endswith(".pdf")
 
@@ -83,8 +83,8 @@ async def test_ocr_blocks_format_default_is_plain(org_and_users, test_db):
     doc_id = "507f1f77bcf86cd799439011"
 
     with (
-        patch("analytiq_data.common.get_doc", new_callable=AsyncMock, return_value=SAMPLE_DOC),
-        patch("analytiq_data.common.get_ocr_json", new_callable=AsyncMock, return_value=SAMPLE_OCR_JSON),
+        patch("app.routes.ocr.ad.common.get_doc", new_callable=AsyncMock, return_value=SAMPLE_DOC),
+        patch("app.routes.ocr.ad.ocr.get_ocr_json", new_callable=AsyncMock, return_value=SAMPLE_OCR_JSON),
     ):
         resp = client.get(
             f"/v0/orgs/{org_id}/ocr/download/blocks/{doc_id}",
@@ -103,9 +103,9 @@ async def test_ocr_blocks_textract_envelope_returns_flat_list(org_and_users, tes
     doc_id = "507f1f77bcf86cd799439011"
 
     with (
-        patch("analytiq_data.common.get_doc", new_callable=AsyncMock, return_value=SAMPLE_DOC),
+        patch("app.routes.ocr.ad.common.get_doc", new_callable=AsyncMock, return_value=SAMPLE_DOC),
         patch(
-            "analytiq_data.common.get_ocr_json",
+            "app.routes.ocr.ad.ocr.get_ocr_json",
             new_callable=AsyncMock,
             return_value=SAMPLE_OCR_TEXTRACT_ENVELOPE,
         ),

@@ -71,7 +71,7 @@ async def test_kb_indexing_spu_recording(
         }
     )
     analytiq_client = ad.common.get_analytiq_client()
-    await ad.common.ocr.save_ocr_text(analytiq_client, document_id, test_text)
+    await ad.ocr.save_ocr_text(analytiq_client, document_id, test_text)
 
     mock_check_spu_limits.reset_mock()
     mock_record_spu_usage.reset_mock()
@@ -137,7 +137,7 @@ async def test_kb_indexing_spu_insufficient_credits(
         }
     )
     analytiq_client = ad.common.get_analytiq_client()
-    await ad.common.ocr.save_ocr_text(
+    await ad.ocr.save_ocr_text(
         analytiq_client, document_id, "This is a test document. " * 10
     )
 
@@ -183,7 +183,7 @@ async def test_kb_indexing_spu_cache_hits_free(
         }
     )
     analytiq_client = ad.common.get_analytiq_client()
-    await ad.common.ocr.save_ocr_text(
+    await ad.ocr.save_ocr_text(
         analytiq_client, document_id, "This is a test document for cache testing. " * 5
     )
 

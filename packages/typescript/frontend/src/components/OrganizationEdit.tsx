@@ -106,6 +106,8 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const [selectedMember, setSelectedMember] = useState<{ id: string, isAdmin: boolean } | null>(null);
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
 
+  const mistralEnabled = organization?.ocr_catalog?.mistral_enabled !== false
+
   // Filter current organization members
   const filteredMembers = members.filter(member => {
     const user = allUsers.find(u => u.id === member.user_id);
@@ -189,6 +191,12 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
           toast.error('LLM OCR requires both provider and model.');
           return;
         }
+      }
+      if (ocrConfig.mode === 'mistral' && !mistralEnabled) {
+        toast.error(
+          'Mistral OCR is not available: enable the Mistral LLM provider and at least one model in account LLM settings, then try again.'
+        );
+        return;
       }
     }
 
@@ -564,22 +572,35 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                   className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
                   {ocrModeOptions.map((m) => (
-                    <option key={m} value={m}>
-                      {OCR_MODE_LABELS[m]}
+                    <option
+                      key={m}
+                      value={m}
+                      disabled={m === 'mistral' && !mistralEnabled}
+                    >
+                      {m === 'mistral' && !mistralEnabled
+                        ? `${OCR_MODE_LABELS[m]} (unavailable)`
+                        : OCR_MODE_LABELS[m]}
                     </option>
                   ))}
                 </select>
               </div>
+
+              {!mistralEnabled && ocrConfig.mode === 'mistral' && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  Mistral OCR is unavailable because the Mistral provider is off or no models are enabled
+                  in account LLM settings. Select another engine before you can save.
+                </Alert>
+              )}
 
               {ocrConfig.mode === 'textract' && (
                 <Alert severity="info" sx={{ mb: 2 }}>
                   Uses AWS Textract AnalyzeDocument. Choose feature types below.
                 </Alert>
               )}
-              {ocrConfig.mode === 'mistral' && (
+              {ocrConfig.mode === 'mistral' && mistralEnabled && (
                 <Alert severity="info" sx={{ mb: 2 }}>
-                  Uses Mistral OCR (<code className="text-sm">mistral-ocr-latest</code>). The
-                  server must have <code className="text-sm">MISTRAL_API_KEY</code> configured.
+                  Uses Mistral OCR (<code className="text-sm">mistral-ocr-latest</code>). The API key is
+                  read from the Mistral LLM provider in account settings when a document is processed.
                 </Alert>
               )}
               {ocrConfig.mode === 'llm' && (

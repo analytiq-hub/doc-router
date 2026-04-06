@@ -13,7 +13,7 @@ from pydantic import BaseModel
 
 # Local imports
 import analytiq_data as ad
-from analytiq_data.common.org_ocr_config import (
+from analytiq_data.ocr.ocr_config import (
     OrgOcrConfig,
     apply_ocr_config_update,
     merge_org_ocr_config,
@@ -60,6 +60,7 @@ class OrganizationOcrCatalog(BaseModel):
 
     textract_feature_types: list[str]
     modes: list[str]
+    mistral_enabled: bool
 
 
 class Organization(BaseModel):
@@ -74,11 +75,12 @@ class Organization(BaseModel):
     updated_at: datetime
 
 
-def _organization_ocr_catalog() -> OrganizationOcrCatalog:
-    cat = ocr_settings_catalog()
+async def _organization_ocr_catalog() -> OrganizationOcrCatalog:
+    cat = await ocr_settings_catalog()
     return OrganizationOcrCatalog(
         textract_feature_types=cat["textract_feature_types"],
         modes=cat["modes"],
+        mistral_enabled=cat["mistral_enabled"],
     )
 
 
@@ -147,6 +149,7 @@ async def list_organizations(
                 detail="Not authorized to view this organization"
             )
 
+        ocr_catalog = await _organization_ocr_catalog()
         return ListOrganizationsResponse(organizations=[
             Organization(**{
                 **organization,
@@ -154,7 +157,7 @@ async def list_organizations(
                 "type": organization.get("type", "individual"),
                 "default_prompt_enabled": organization.get("default_prompt_enabled", True),
                 "ocr_config": merge_org_ocr_config(organization.get("ocr_config")),
-                "ocr_catalog": _organization_ocr_catalog(),
+                "ocr_catalog": ocr_catalog,
             })
         ], total_count=1, skip=0)
 
@@ -201,6 +204,7 @@ async def list_organizations(
     cursor = db.organizations.find(final_query).sort("_id", -1).skip(skip).limit(limit)
     organizations = await cursor.to_list(None)
 
+    ocr_catalog = await _organization_ocr_catalog()
     ret = ListOrganizationsResponse(organizations=[
         Organization(**{
             **org,
@@ -208,7 +212,7 @@ async def list_organizations(
             "type": org.get("type", "individual"),
             "default_prompt_enabled": org.get("default_prompt_enabled", True),
             "ocr_config": merge_org_ocr_config(org.get("ocr_config")),
-            "ocr_catalog": _organization_ocr_catalog(),
+            "ocr_catalog": ocr_catalog,
         }) for org in organizations
     ], total_count=total_count, skip=skip)
     return ret
@@ -272,7 +276,9 @@ async def create_organization(
     }
     if organization.ocr_config is not None:
         try:
-            organization_doc["ocr_config"] = apply_ocr_config_update(None, organization.ocr_config)
+            organization_doc["ocr_config"] = await apply_ocr_config_update(
+                None, organization.ocr_config
+            )
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Invalid ocr_config: {e}")
     
@@ -286,7 +292,7 @@ async def create_organization(
         **organization_doc,
         "id": org_id,
         "ocr_config": merge_org_ocr_config(organization_doc.get("ocr_config")),
-        "ocr_catalog": _organization_ocr_catalog(),
+        "ocr_catalog": await _organization_ocr_catalog(),
     })
 
 @orgs_router.put("/v0/account/organizations/{organization_id}", response_model=Organization, tags=["account/organizations"])
@@ -348,7 +354,7 @@ async def update_organization(
 
     if organization_update.ocr_config is not None:
         try:
-            update_data["ocr_config"] = apply_ocr_config_update(
+            update_data["ocr_config"] = await apply_ocr_config_update(
                 organization.get("ocr_config"), organization_update.ocr_config
             )
         except Exception as e:
@@ -380,7 +386,7 @@ async def update_organization(
         "type": updated_organization.get("type", "individual"),
         "default_prompt_enabled": updated_organization.get("default_prompt_enabled", True),
         "ocr_config": merge_org_ocr_config(updated_organization.get("ocr_config")),
-        "ocr_catalog": _organization_ocr_catalog(),
+        "ocr_catalog": await _organization_ocr_catalog(),
         "created_at": updated_organization["created_at"],
         "updated_at": updated_organization["updated_at"]
     })

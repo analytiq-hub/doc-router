@@ -213,7 +213,7 @@ async def test_extraction_tools_with_mocks(org_and_users, test_db, monkeypatch):
     document_id = "507f1f77bcf86cd799439011"
 
     # Mock OCR + LLM calls so we don't depend on external services.
-    monkeypatch.setattr(ad.common.ocr, "get_ocr_text", AsyncMock(return_value="OCR TEXT"))
+    monkeypatch.setattr(ad.ocr, "get_ocr_text", AsyncMock(return_value="OCR TEXT"))
     monkeypatch.setattr(ad.llm, "run_llm", AsyncMock(return_value={"extracted": True}))
     monkeypatch.setattr(
         ad.llm,

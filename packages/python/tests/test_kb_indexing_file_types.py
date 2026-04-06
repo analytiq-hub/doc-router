@@ -26,9 +26,9 @@ async def test_get_extracted_indexing_text_pdf_plain_ocr():
                 }
             ),
         ):
-            with patch("analytiq_data.common.get_ocr_json", AsyncMock(return_value=None)):
+            with patch("analytiq_data.kb.indexing.ad.ocr.get_ocr_json", AsyncMock(return_value=None)):
                 with patch(
-                    "analytiq_data.common.get_ocr_text",
+                    "analytiq_data.kb.indexing.ad.ocr.get_ocr_text",
                     AsyncMock(return_value="plain ocr body text"),
                 ):
                     ex = await get_extracted_indexing_text(analytiq_client, "d1")

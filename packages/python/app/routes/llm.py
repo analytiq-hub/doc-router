@@ -165,7 +165,7 @@ async def run_llm_analysis(
     # Verify OCR is complete only if the document requires OCR
     file_name = document.get("user_file_name", "")
     if ad.common.doc.ocr_supported(file_name):
-        ocr_metadata = await ad.common.get_ocr_metadata(analytiq_client, document_id)
+        ocr_metadata = await ad.ocr.get_ocr_metadata(analytiq_client, document_id)
         if ocr_metadata is None:
             raise HTTPException(status_code=404, detail="OCR metadata not found")
 

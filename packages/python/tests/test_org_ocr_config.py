@@ -3,16 +3,26 @@ import pytest
 from pydantic import ValidationError
 from unittest.mock import patch
 
-from analytiq_data.common.org_ocr_config import (
+from analytiq_data.ocr.mistral_ocr_provider import provider_and_llm_enabled
+from analytiq_data.ocr.ocr_config import (
     OCR_ENGINE_RUN_ORDER,
     OrgOcrTextractSettings,
     apply_ocr_config_update,
     max_reserved_spu_for_ocr_config,
     merge_org_ocr_config,
+    ocr_settings_catalog,
     spu_ocr_for_page_count,
     textract_spu_cost,
 )
-from analytiq_data.common.ocr_runners import run_document_ocr
+from analytiq_data.ocr.ocr_runners import run_document_ocr
+
+
+def test_provider_and_llm_enabled_requires_both():
+    assert provider_and_llm_enabled(None) is False
+    assert provider_and_llm_enabled({}) is False
+    assert provider_and_llm_enabled({"enabled": True, "litellm_models_enabled": []}) is False
+    assert provider_and_llm_enabled({"enabled": False, "litellm_models_enabled": ["m"]}) is False
+    assert provider_and_llm_enabled({"enabled": True, "litellm_models_enabled": ["mistral/mistral-tiny"]}) is True
 
 
 def test_ocr_engine_run_order_starts_with_textract():
@@ -55,9 +65,10 @@ def test_textract_requires_at_least_one_feature():
         OrgOcrTextractSettings(feature_types=[])
 
 
-def test_apply_rejects_empty_feature_types():
+@pytest.mark.asyncio
+async def test_apply_rejects_empty_feature_types():
     with pytest.raises(ValidationError, match="At least one Textract feature type"):
-        apply_ocr_config_update(
+        await apply_ocr_config_update(
             None,
             {
                 "textract": {"feature_types": []},
@@ -92,8 +103,62 @@ def test_max_reserved_with_pdf_bytes():
     assert r >= 1
 
 
-def test_apply_update_textract():
-    out = apply_ocr_config_update(
+@pytest.mark.asyncio
+async def test_ocr_settings_catalog_includes_mistral_flag(monkeypatch):
+    async def mistral_on():
+        return True
+
+    monkeypatch.setattr(
+        "analytiq_data.ocr.mistral_ocr_provider.mistral_ocr_enabled_from_llm_providers",
+        mistral_on,
+    )
+    cat = await ocr_settings_catalog()
+    assert cat["modes"] == ["textract", "mistral", "llm"]
+    assert cat["mistral_enabled"] is True
+
+
+@pytest.mark.asyncio
+async def test_ocr_settings_catalog_mistral_disabled(monkeypatch):
+    async def mistral_off():
+        return False
+
+    monkeypatch.setattr(
+        "analytiq_data.ocr.mistral_ocr_provider.mistral_ocr_enabled_from_llm_providers",
+        mistral_off,
+    )
+    cat = await ocr_settings_catalog()
+    assert cat["mistral_enabled"] is False
+
+
+@pytest.mark.asyncio
+async def test_apply_rejects_mistral_when_mistral_llm_not_configured(monkeypatch):
+    async def mistral_off():
+        return False
+
+    monkeypatch.setattr(
+        "analytiq_data.ocr.mistral_ocr_provider.mistral_ocr_enabled_from_llm_providers",
+        mistral_off,
+    )
+    with pytest.raises(ValueError, match="Mistral OCR is not available"):
+        await apply_ocr_config_update(None, {"mode": "mistral"})
+
+
+@pytest.mark.asyncio
+async def test_apply_allows_mistral_when_mistral_llm_configured(monkeypatch):
+    async def mistral_on():
+        return True
+
+    monkeypatch.setattr(
+        "analytiq_data.ocr.mistral_ocr_provider.mistral_ocr_enabled_from_llm_providers",
+        mistral_on,
+    )
+    out = await apply_ocr_config_update(None, {"mode": "mistral"})
+    assert out["mode"] == "mistral"
+
+
+@pytest.mark.asyncio
+async def test_apply_update_textract():
+    out = await apply_ocr_config_update(
         None,
         {
             "textract": {"feature_types": ["LAYOUT", "TABLES"]},
@@ -103,9 +168,10 @@ def test_apply_update_textract():
     assert "enabled" not in out["textract"]
 
 
-def test_mode_llm_requires_provider_model():
+@pytest.mark.asyncio
+async def test_mode_llm_requires_provider_model():
     with pytest.raises(ValidationError):
-        apply_ocr_config_update(None, {"mode": "llm", "llm": {}})
+        await apply_ocr_config_update(None, {"mode": "llm", "llm": {}})
 
 
 def test_mode_llm_valid():
@@ -138,9 +204,9 @@ async def test_gemini_only_stored_config_resets_to_defaults_then_textract_runs()
         }
 
     with (
-        patch("analytiq_data.common.ocr_runners.textract_mod.run_textract", side_effect=fake_textract),
-        patch("analytiq_data.common.ocr_runners.ad.payments.check_spu_limits"),
-        patch("analytiq_data.common.ocr_runners.ad.payments.record_spu_usage"),
+        patch("analytiq_data.ocr.ocr_runners.textract_mod.run_textract", side_effect=fake_textract),
+        patch("analytiq_data.ocr.ocr_runners.ad.payments.check_spu_limits"),
+        patch("analytiq_data.ocr.ocr_runners.ad.payments.record_spu_usage"),
     ):
         await run_document_ocr(
             None, b"%PDF-1.4", org_id="o", document_id="d", cfg=cfg

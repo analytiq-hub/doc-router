@@ -7,6 +7,7 @@ from . import llm
 from . import migrations
 from . import mongodb
 from . import msg_handlers
+from . import ocr
 from . import queue
 from . import payments
 from . import webhooks

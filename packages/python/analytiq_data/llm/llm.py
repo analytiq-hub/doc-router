@@ -121,7 +121,7 @@ async def get_extracted_llm_text(analytiq_client, document_id: str) -> str | Non
         last_err: Exception | None = None
         for step in range(max_steps):
             try:
-                text = await ad.common.get_ocr_text(analytiq_client, document_id)
+                text = await ad.ocr.get_ocr_text(analytiq_client, document_id)
                 if isinstance(text, str) and text.strip():
                     return text
                 last_err = None

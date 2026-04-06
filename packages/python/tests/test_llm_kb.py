@@ -42,7 +42,7 @@ MOCK_OCR_TEXT_FOR_TESTS = (
 
 async def seed_mock_ocr_for_unit_test(analytiq_client, document_id: str) -> None:
     """Simulate completed OCR for unit tests (no process_ocr_msg / no AWS)."""
-    await ad.common.ocr.save_ocr_text(analytiq_client, document_id, MOCK_OCR_TEXT_FOR_TESTS)
+    await ad.ocr.save_ocr_text(analytiq_client, document_id, MOCK_OCR_TEXT_FOR_TESTS)
 
 
 class MockToolCall:

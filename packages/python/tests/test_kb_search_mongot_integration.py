@@ -45,7 +45,7 @@ async def test_kb_search_http_endpoint_returns_results_with_mongot(
             "mongo_file_name": "doc_search.pdf",
         }
     )
-    await ad.common.ocr.save_ocr_text(
+    await ad.ocr.save_ocr_text(
         analytiq_client,
         doc_id,
         "This is a mongot-backed search integration test about invoices and totals.",

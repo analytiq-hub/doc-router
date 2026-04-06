@@ -623,15 +623,15 @@ async def get_extracted_indexing_text(
     file_name = doc.get("user_file_name", "")
 
     if ad.common.doc.ocr_supported(file_name):
-        ocr_json = await ad.common.get_ocr_json(analytiq_client, document_id)
+        ocr_json = await ad.ocr.get_ocr_json(analytiq_client, document_id)
         if ocr_json is None:
-            text = await ad.common.get_ocr_text(analytiq_client, document_id)
+            text = await ad.ocr.get_ocr_text(analytiq_client, document_id)
             if isinstance(text, str) and text.strip():
                 return ExtractedIndexingText(text=preprocess_markdown(text, cfg), page_offsets=[])
             return None
 
-        if ad.common.is_pages_markdown_ocr(ocr_json):
-            full_md = ad.common.export_pages_markdown_full_text(ocr_json)
+        if ad.ocr.is_pages_markdown_ocr(ocr_json):
+            full_md = ad.ocr.export_pages_markdown_full_text(ocr_json)
             return ExtractedIndexingText(
                 text=preprocess_markdown(full_md, cfg), page_offsets=[]
             )
@@ -649,13 +649,13 @@ async def get_extracted_indexing_text(
                 document_id,
                 e,
             )
-            text = await ad.common.get_ocr_text(analytiq_client, document_id)
+            text = await ad.ocr.get_ocr_text(analytiq_client, document_id)
             if isinstance(text, str) and text.strip():
                 return ExtractedIndexingText(text=preprocess_markdown(text, cfg), page_offsets=[])
             return None
 
         if not textract_doc.pages:
-            text = await ad.common.get_ocr_text(analytiq_client, document_id)
+            text = await ad.ocr.get_ocr_text(analytiq_client, document_id)
             if isinstance(text, str) and text.strip():
                 return ExtractedIndexingText(text=preprocess_markdown(text, cfg), page_offsets=[])
             return None
