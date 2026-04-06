@@ -61,18 +61,32 @@ export interface OrganizationMember {
 
 export type OrganizationType = 'individual' | 'team' | 'enterprise';
 
-/** Textract is always used; only feature types are configurable. */
+/** Textract AnalyzeDocument feature types (used when `mode` is `textract`). */
 export interface OrgOcrTextractSettings {
   feature_types: string[];
 }
 
-export interface OrgOcrConfig {
-  textract: OrgOcrTextractSettings;
+/** Reserved for future Mistral OCR options; server uses `mistral-ocr-latest`. */
+export type OrgOcrMistralSettings = Record<string, never>;
+
+export interface OrgOcrLlmSettings {
+  provider: string | null;
+  model: string | null;
 }
 
-/** Allowed Textract features for OCR UI (returned with each organization). */
+export type OcrMode = 'textract' | 'mistral' | 'llm';
+
+export interface OrgOcrConfig {
+  mode: OcrMode;
+  textract: OrgOcrTextractSettings;
+  mistral: OrgOcrMistralSettings;
+  llm: OrgOcrLlmSettings;
+}
+
+/** Allowed values for org OCR UI (returned with each organization). */
 export interface OrganizationOcrCatalog {
   textract_feature_types: string[];
+  modes: string[];
 }
 
 export interface TokenOrganizationResponse {

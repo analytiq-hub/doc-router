@@ -5,18 +5,30 @@ export interface OrganizationMember {
 
 export type OrganizationType = 'individual' | 'team' | 'enterprise';
 
-/** Textract is always used; only feature types are configurable. */
+/** Textract AnalyzeDocument feature types (used when `mode` is `textract`). */
 export interface OrgOcrTextractSettings {
   feature_types: string[];
 }
 
-/** AWS Textract only. */
+export type OrgOcrMistralSettings = Record<string, never>;
+
+export interface OrgOcrLlmSettings {
+  provider: string | null;
+  model: string | null;
+}
+
+export type OcrMode = 'textract' | 'mistral' | 'llm';
+
 export interface OrgOcrConfig {
+  mode: OcrMode;
   textract: OrgOcrTextractSettings;
+  mistral: OrgOcrMistralSettings;
+  llm: OrgOcrLlmSettings;
 }
 
 export interface OrganizationOcrCatalog {
   textract_feature_types: string[];
+  modes: string[];
 }
 
 export interface Organization {

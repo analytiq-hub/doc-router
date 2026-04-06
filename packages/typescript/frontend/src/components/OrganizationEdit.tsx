@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
-import type { OrgOcrConfig } from '@docrouter/sdk'
+import type { OcrMode, OrgOcrConfig } from '@docrouter/sdk'
 import { OrganizationMember, OrganizationType } from '@/types/index'
 import { DocRouterAccountApi } from '@/utils/api'
 import { isAxiosError } from 'axios'
@@ -12,7 +12,7 @@ import {
   GridColDef, 
   GridRenderCellParams 
 } from '@mui/x-data-grid'
-import { Switch, IconButton, Alert } from '@mui/material'
+import { Switch, IconButton, Alert, TextField } from '@mui/material'
 import DeleteIcon from '@mui/icons-material/Delete'
 import { useAppSession } from '@/contexts/AppSessionContext'
 import UserAddToOrgModal from './UserAddToOrgModal'
@@ -27,9 +27,39 @@ interface OrganizationEditProps {
   organizationId: string
 }
 
-const cloneOcrConfig = (c: OrgOcrConfig): OrgOcrConfig => JSON.parse(JSON.stringify(c)) as OrgOcrConfig
-
 const FALLBACK_TEXTRACT_FEATURES = ['LAYOUT', 'TABLES', 'FORMS', 'SIGNATURES'] as const
+
+const FALLBACK_OCR_MODES: OcrMode[] = ['textract', 'mistral', 'llm']
+
+const OCR_MODE_LABELS: Record<OcrMode, string> = {
+  textract: 'AWS Textract',
+  mistral: 'Mistral OCR',
+  llm: 'LLM OCR',
+}
+
+function isOcrMode(s: string): s is OcrMode {
+  return s === 'textract' || s === 'mistral' || s === 'llm'
+}
+
+function normalizeOcrConfig(raw: OrgOcrConfig): OrgOcrConfig {
+  return {
+    mode: raw.mode ?? 'textract',
+    textract: {
+      feature_types:
+        raw.textract?.feature_types && raw.textract.feature_types.length > 0
+          ? raw.textract.feature_types
+          : ['LAYOUT'],
+    },
+    mistral: raw.mistral ?? {},
+    llm: {
+      provider: raw.llm?.provider ?? null,
+      model: raw.llm?.model ?? null,
+    },
+  }
+}
+
+const cloneOcrConfig = (c: OrgOcrConfig): OrgOcrConfig =>
+  normalizeOcrConfig(JSON.parse(JSON.stringify(c)) as OrgOcrConfig)
 
 const getAvailableOrganizationTypes = (currentType: OrganizationType, isSystemAdmin: boolean): OrganizationType[] => {
   switch (currentType) {
@@ -147,9 +177,19 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       return;
     }
 
-    if (ocrConfig && ocrConfig.textract.feature_types.length === 0) {
-      toast.error('Select at least one Textract feature type (e.g. LAYOUT).');
-      return;
+    if (ocrConfig) {
+      if (ocrConfig.mode === 'textract' && ocrConfig.textract.feature_types.length === 0) {
+        toast.error('Select at least one Textract feature type (e.g. LAYOUT).');
+        return;
+      }
+      if (ocrConfig.mode === 'llm') {
+        const p = ocrConfig.llm.provider?.trim() ?? '';
+        const m = ocrConfig.llm.model?.trim() ?? '';
+        if (!p || !m) {
+          toast.error('LLM OCR requires both provider and model.');
+          return;
+        }
+      }
     }
 
     // Validate individual organization member count
@@ -305,6 +345,15 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       ? organization.ocr_catalog.textract_feature_types
       : [...FALLBACK_TEXTRACT_FEATURES]
 
+  const ocrModeOptions = useMemo((): OcrMode[] => {
+    const fromCatalog = organization?.ocr_catalog?.modes?.filter(isOcrMode) ?? []
+    const base = fromCatalog.length > 0 ? fromCatalog : [...FALLBACK_OCR_MODES]
+    if (ocrConfig && !base.includes(ocrConfig.mode)) {
+      return [...base, ocrConfig.mode]
+    }
+    return base
+  }, [organization?.ocr_catalog?.modes, ocrConfig?.mode])
+
   const toggleTextractFeature = (ft: string) => {
     setOcrConfig((prev) => {
       if (!prev) return prev
@@ -317,6 +366,21 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       return {
         ...prev,
         textract: { ...prev.textract, feature_types: Array.from(types) },
+      }
+    })
+  }
+
+  const setOcrMode = (mode: OcrMode) => {
+    setOcrConfig((prev) => (prev ? { ...prev, mode } : prev))
+  }
+
+  const setLlmField = (field: 'provider' | 'model', value: string) => {
+    const trimmed = value.trim()
+    setOcrConfig((prev) => {
+      if (!prev) return prev
+      return {
+        ...prev,
+        llm: { ...prev.llm, [field]: trimmed === '' ? null : trimmed },
       }
     })
   }
@@ -485,32 +549,91 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
           </div>
 
           {/* OCR settings */}
-          {ocrConfig && organization?.ocr_catalog && (
+          {ocrConfig && organization && (
             <div className="bg-gray-50 p-4 rounded-lg mb-6 border border-gray-200">
               <h3 className="text-lg font-medium text-gray-900 mb-2">OCR</h3>
-              <Alert severity="info" sx={{ mb: 2 }}>
-                Document OCR always uses AWS Textract (AnalyzeDocument). Choose feature types below.
-              </Alert>
 
-              <div className="space-y-4">
-                <div className="border-t border-gray-200 pt-4 first:border-t-0 first:pt-0">
-                  <p className="text-sm font-medium text-gray-800 mb-2">AWS Textract</p>
-                  <p className="text-xs text-gray-500 mb-2">Feature types (AnalyzeDocument)</p>
-                  <div className="flex flex-wrap gap-3">
-                    {textractFeatureOptions.map((ft) => (
-                      <label key={ft} className="inline-flex items-center gap-2 text-sm text-gray-700">
-                        <input
-                          type="checkbox"
-                          checked={ocrConfig.textract.feature_types.includes(ft)}
-                          onChange={() => toggleTextractFeature(ft)}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                        />
-                        {ft}
-                      </label>
-                    ))}
+              <div className="flex flex-col gap-1 mb-4">
+                <label htmlFor="ocr-mode" className="block text-sm font-medium text-gray-700">
+                  OCR engine
+                </label>
+                <select
+                  id="ocr-mode"
+                  value={ocrConfig.mode}
+                  onChange={(e) => setOcrMode(e.target.value as OcrMode)}
+                  className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  {ocrModeOptions.map((m) => (
+                    <option key={m} value={m}>
+                      {OCR_MODE_LABELS[m]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {ocrConfig.mode === 'textract' && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Uses AWS Textract AnalyzeDocument. Choose feature types below.
+                </Alert>
+              )}
+              {ocrConfig.mode === 'mistral' && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Uses Mistral OCR (<code className="text-sm">mistral-ocr-latest</code>). The
+                  server must have <code className="text-sm">MISTRAL_API_KEY</code> configured.
+                </Alert>
+              )}
+              {ocrConfig.mode === 'llm' && (
+                <>
+                  <Alert severity="warning" sx={{ mb: 2 }}>
+                    LLM OCR backend processing may still be in development; document runs can fail
+                    until the pipeline is enabled for your provider.
+                  </Alert>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <TextField
+                      label="LLM provider"
+                      value={ocrConfig.llm.provider ?? ''}
+                      onChange={(e) => setLlmField('provider', e.target.value)}
+                      placeholder="e.g. openai"
+                      size="small"
+                      fullWidth
+                      required
+                      helperText="LiteLLM provider id (e.g. openai, anthropic)"
+                    />
+                    <TextField
+                      label="Model"
+                      value={ocrConfig.llm.model ?? ''}
+                      onChange={(e) => setLlmField('model', e.target.value)}
+                      placeholder="e.g. gpt-4o"
+                      size="small"
+                      fullWidth
+                      required
+                      helperText="Model name as passed to LiteLLM"
+                    />
+                  </div>
+                </>
+              )}
+
+              {ocrConfig.mode === 'textract' && (
+                <div className="space-y-4">
+                  <div className="border-t border-gray-200 pt-4 first:border-t-0 first:pt-0">
+                    <p className="text-sm font-medium text-gray-800 mb-2">AWS Textract</p>
+                    <p className="text-xs text-gray-500 mb-2">Feature types (AnalyzeDocument)</p>
+                    <div className="flex flex-wrap gap-3">
+                      {textractFeatureOptions.map((ft) => (
+                        <label key={ft} className="inline-flex items-center gap-2 text-sm text-gray-700">
+                          <input
+                            type="checkbox"
+                            checked={ocrConfig.textract.feature_types.includes(ft)}
+                            onChange={() => toggleTextractFeature(ft)}
+                            className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                          />
+                          {ft}
+                        </label>
+                      ))}
+                    </div>
                   </div>
                 </div>
-              </div>
+              )}
             </div>
           )}
 
