@@ -392,8 +392,9 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const ocrModeOptions = useMemo((): OcrMode[] => {
     const fromCatalog = organization?.ocr_catalog?.modes?.filter(isOcrMode) ?? []
     const base = fromCatalog.length > 0 ? fromCatalog : [...FALLBACK_OCR_MODES]
-    if (ocrConfig && !base.includes(ocrConfig.mode)) {
-      return [...base, ocrConfig.mode]
+    const mode = ocrConfig?.mode
+    if (mode != null && !base.includes(mode)) {
+      return [...base, mode]
     }
     return base
   }, [organization?.ocr_catalog?.modes, ocrConfig?.mode])
