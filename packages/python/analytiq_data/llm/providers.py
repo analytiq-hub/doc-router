@@ -404,6 +404,7 @@ def get_llm_providers() -> dict:
                 "claude-sonnet-4-6",
                 "claude-opus-4-6",
                 ],
+            "litellm_models_ocr": [],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -415,6 +416,7 @@ def get_llm_providers() -> dict:
             "litellm_models_available": ["azure/gpt-4.1-nano"],
             "litellm_models_enabled": ["azure/gpt-4.1-nano"],
             "litellm_models_chat_agent": [],
+            "litellm_models_ocr": [],
             "enabled": False,
             "token" : "",
             "token_created_at": None,
@@ -426,6 +428,7 @@ def get_llm_providers() -> dict:
             "litellm_models_available": ["azure_ai/deepseek-v3"],
             "litellm_models_enabled": ["azure_ai/deepseek-v3"],
             "litellm_models_chat_agent": ["azure_ai/deepseek-v3"],
+            "litellm_models_ocr": [],
             "enabled": False,
             "token" : "",
             "token_created_at": None,
@@ -449,6 +452,7 @@ def get_llm_providers() -> dict:
             "litellm_models_chat_agent": [
                 "us.anthropic.claude-opus-4-1-20250805-v1:0"
             ],
+            "litellm_models_ocr": [],
             "enabled": False,
             "token" : "",
             "token_created_at": None,
@@ -473,6 +477,10 @@ def get_llm_providers() -> dict:
                 "gemini/gemini-3-flash-preview",
                 "gemini/gemini-3-pro-preview"
             ],
+            "litellm_models_ocr": [
+                "gemini/gemini-3-flash-preview",
+                "gemini/gemini-3-pro-preview"
+            ],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -484,6 +492,7 @@ def get_llm_providers() -> dict:
             "litellm_models_available": ["groq/deepseek-r1-distill-llama-70b"],
             "litellm_models_enabled": ["groq/deepseek-r1-distill-llama-70b"],
             "litellm_models_chat_agent": [],
+            "litellm_models_ocr": [],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -495,6 +504,7 @@ def get_llm_providers() -> dict:
             "litellm_models_available": ["mistral/mistral-tiny"],
             "litellm_models_enabled": ["mistral/mistral-tiny"],
             "litellm_models_chat_agent": [],
+            "litellm_models_ocr": [],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -520,6 +530,9 @@ def get_llm_providers() -> dict:
             "litellm_models_chat_agent": [
                 "gpt-5.2"
             ],
+            "litellm_models_ocr": [
+                "gpt-5.2",
+            ],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -531,6 +544,7 @@ def get_llm_providers() -> dict:
             "litellm_models_available": ["openrouter/openai/gpt-5.2-chat"],
             "litellm_models_enabled": ["openrouter/openai/gpt-5.2-chat"],
             "litellm_models_chat_agent": ["openrouter/openai/gpt-5.2-chat"],
+            "litellm_models_ocr": ["openrouter/openai/gpt-5.2-chat"],
             "enabled": True,
             "token" : "",
             "token_created_at": None,
@@ -552,8 +566,10 @@ def get_llm_providers() -> dict:
                 "vertex_ai/gemini-3.1-pro-preview",
             ],
             "litellm_models_chat_agent": [
-                "vertex_ai/gemini-2.5-flash",
-                "vertex_ai/gemini-2.5-pro",
+                "vertex_ai/gemini-3.1-flash-lite-preview",
+                "vertex_ai/gemini-3.1-pro-preview",
+            ],
+            "litellm_models_ocr": [
                 "vertex_ai/gemini-3.1-flash-lite-preview",
                 "vertex_ai/gemini-3.1-pro-preview",
             ],
@@ -568,6 +584,7 @@ def get_llm_providers() -> dict:
             "litellm_models_available": ["xai/grok-4-1-fast-reasoning"],
             "litellm_models_enabled": ["xai/grok-4-1-fast-reasoning"],
             "litellm_models_chat_agent": ["xai/grok-4-1-fast-reasoning"],
+            "litellm_models_ocr": [],
             "enabled": True,
             "token" : "",
             "token_created_at": None,

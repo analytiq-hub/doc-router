@@ -569,6 +569,10 @@ async def list_llm_models(
         False,
         description="When true, use litellm_models_chat_agent (fallback: enabled) as the model list",
     ),
+    ocr_only: bool = Query(
+        False,
+        description="When true, use litellm_models_ocr only (intersected with enabled/available per llm_enabled); no chat-agent fallback",
+    ),
 ):
     """List all supported LLM models"""
     # Import litellm here to avoid event loop warnings
@@ -582,6 +586,12 @@ async def list_llm_models(
     # Get all enabled providers
     providers = await cursor.to_list(length=None)
 
+    if ocr_only and chat_agent_only:
+        raise HTTPException(
+            status_code=422,
+            detail="Use only one of ocr_only or chat_agent_only",
+        )
+
     # Get all available models for each provider
     chat_models = []
     embedding_models = []
@@ -594,7 +604,13 @@ async def list_llm_models(
             continue
 
         # Which models to return?
-        if chat_agent_only:
+        if ocr_only:
+            ocr_list = provider.get("litellm_models_ocr") or []
+            if llm_enabled:
+                models = [m for m in ocr_list if m in provider["litellm_models_enabled"]]
+            else:
+                models = [m for m in ocr_list if m in provider["litellm_models_available"]]
+        elif chat_agent_only:
             models = provider.get("litellm_models_chat_agent") or []
             if not models:
                 models = provider["litellm_models_enabled"]

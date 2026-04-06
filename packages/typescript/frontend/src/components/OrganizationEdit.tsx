@@ -184,7 +184,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
         const res = await docRouterAccountApi.listLLMModels({
           llmEnabled: true,
           providerEnabled: true,
-          chatAgentOnly: true,
+          ocrOnly: true,
         })
         if (!cancelled) {
           setOcrLlmChatModels(res.chat_models)
@@ -727,7 +727,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                           ))}
                         </select>
                         <p className="text-xs text-gray-500 mt-1">
-                          Enabled accounts with enabled chat models (from account LLM settings).
+                          Enabled accounts that expose at least one OCR-capable model (account LLM settings).
                         </p>
                       </div>
                       <div>
@@ -756,8 +756,8 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                           ))}
                         </select>
                         <p className="text-xs text-gray-500 mt-1">
-                          Chat models only (same pool as chat/agent). Choose a vision/PDF-capable model
-                          for best OCR results.
+                          OCR-approved models only (configured per provider). Prefer vision/PDF-capable
+                          models for best results.
                         </p>
                       </div>
                     </div>

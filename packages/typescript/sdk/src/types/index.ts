@@ -493,8 +493,10 @@ export interface ListLLMModelsParams {
   providerName?: string;
   providerEnabled?: boolean;
   llmEnabled?: boolean;
-  /** Use chat-agent model list (fallback: all enabled) — OCR / chat pickers */
+  /** Use chat-agent model list (fallback: all enabled) */
   chatAgentOnly?: boolean;
+  /** OCR-capable subset (litellm_models_ocr); use for LLM OCR org settings */
+  ocrOnly?: boolean;
 }
 
 export interface LLMChatModel {
