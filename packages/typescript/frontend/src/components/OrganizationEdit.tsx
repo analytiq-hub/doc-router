@@ -683,10 +683,6 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
               )}
               {ocrConfig.mode === 'llm' && (
                 <>
-                  <Alert severity="warning" sx={{ mb: 2 }}>
-                    LLM OCR backend processing may still be in development; document runs can fail
-                    until the pipeline is enabled for your provider.
-                  </Alert>
                   {ocrLlmCatalogError && (
                     <Alert severity="error" sx={{ mb: 2 }}>
                       {ocrLlmCatalogError}
