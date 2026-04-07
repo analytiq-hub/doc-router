@@ -81,7 +81,7 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
 
             {showPdfPanel && (
               <Panel defaultSize={panelSizes.main}>
-                <Box sx={{ height: '100%', overflow: 'hidden' }}>
+                <Box sx={{ height: '100%', overflow: 'hidden', minWidth: 0 }}>
                   <PDFViewer
                     organizationId={organizationId}
                     id={id}

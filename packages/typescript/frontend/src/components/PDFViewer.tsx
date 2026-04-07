@@ -12,6 +12,7 @@ import {
   ocrBlockPageNum,
 } from '@/utils/ocr-utils';
 import { formatLocalDate } from '@/utils/date';
+import { searchPdf, isPdfDocumentDetachedError, type PdfSearchHit } from '@/utils/pdfTextSearch';
 
 /** Document states that indicate an error; stop polling for OCR/bounding boxes when these are set. */
 const DOCUMENT_ERROR_STATES = ['ocr_failed', 'llm_failed'] as const;
@@ -20,7 +21,7 @@ function isDocumentErrorState(state: string | null): boolean {
 }
 import { toast } from 'react-toastify';
 import { BoltIcon } from '@heroicons/react/24/outline';
-import { Toolbar, Typography, IconButton, TextField, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, List, Tooltip, Tabs, Tab } from '@mui/material';
+import { Toolbar, Typography, IconButton, TextField, Menu, MenuItem, Divider, Dialog, DialogTitle, DialogContent, DialogActions, Button, List, Tooltip, Tabs, Tab, Box, Paper } from '@mui/material';
 import ZoomInIcon from '@mui/icons-material/ZoomIn';
 import ZoomOutIcon from '@mui/icons-material/ZoomOut';
 import RotateLeftIcon from '@mui/icons-material/RotateLeft';
@@ -43,6 +44,10 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { PanelGroup, Panel } from 'react-resizable-panels';
 import CheckIcon from '@mui/icons-material/Check';
+import SearchIcon from '@mui/icons-material/Search';
+import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
+import NavigateNextIcon from '@mui/icons-material/NavigateNext';
+import CloseIcon from '@mui/icons-material/Close';
 import CropFreeIcon from '@mui/icons-material/CropFree';
 import type { OCRBlock } from '@docrouter/sdk';
 import type { HighlightInfo } from '@/types/index';
@@ -252,6 +257,17 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const error = fetchError ?? pdfLoadError;
 
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const pdfDocRef = useRef<pdfjs.PDFDocumentProxy | null>(null);
+
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [searchHits, setSearchHits] = useState<PdfSearchHit[]>([]);
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
+  const [searchBusy, setSearchBusy] = useState(false);
+  const [findBarOpen, setFindBarOpen] = useState(false);
+  const findInputRef = useRef<HTMLInputElement | null>(null);
+  /** Bumps on each successful `Document` load so search re-runs even when `numPages` is unchanged. */
+  const [pdfLoadVersion, setPdfLoadVersion] = useState(0);
 
   const [fileName, setFileName] = useState<string>('');
   const [fileSize, setFileSize] = useState<number>(0);
@@ -291,6 +307,81 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     setOcrHtml('');
     setOcrHtmlError(null);
   }, [id]);
+
+  useEffect(() => {
+    setSearchInput('');
+    setDebouncedSearch('');
+    setSearchHits([]);
+    setActiveMatchIndex(0);
+    setFindBarOpen(false);
+    pdfDocRef.current = null;
+    setPdfLoadVersion(0);
+  }, [id]);
+
+  /** Avoid using a stale PDFDocumentProxy after react-pdf swaps `file` (destroyed worker / null messageHandler). */
+  useEffect(() => {
+    pdfDocRef.current = null;
+  }, [fileUrl]);
+
+  const openFindBar = useCallback(() => {
+    setFindBarOpen(true);
+    queueMicrotask(() => findInputRef.current?.focus());
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const isFindShortcut =
+        (e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F' || e.code === 'KeyF');
+      if (isFindShortcut) {
+        if (!fileUrl || loading) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openFindBar();
+        return;
+      }
+      if (e.key === 'Escape' && findBarOpen) {
+        e.preventDefault();
+        setFindBarOpen(false);
+      }
+    };
+    // Capture phase: canvas / inner nodes may stop bubbling; we still see the shortcut first.
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [fileUrl, loading, findBarOpen, openFindBar]);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  useEffect(() => {
+    const pdf = pdfDocRef.current;
+    const q = debouncedSearch.trim();
+    if (!pdf || !q) {
+      setSearchHits([]);
+      setActiveMatchIndex(0);
+      setSearchBusy(false);
+      return;
+    }
+    const ac = new AbortController();
+    setSearchBusy(true);
+    void searchPdf(pdf, q, false, ac.signal)
+      .then((hits) => {
+        if (!ac.signal.aborted) {
+          setSearchHits(hits);
+          setActiveMatchIndex(0);
+        }
+      })
+      .catch((e) => {
+        if (e instanceof DOMException && e.name === 'AbortError') return;
+        if (isPdfDocumentDetachedError(e)) return;
+        console.error(e);
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setSearchBusy(false);
+      });
+    return () => ac.abort();
+  }, [debouncedSearch, numPages, fileUrl, pdfLoadVersion]);
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
@@ -337,6 +428,8 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const [originalRotation, setOriginalRotation] = useState(0);
 
   const handleLoadSuccess = (pdf: pdfjs.PDFDocumentProxy) => {
+    pdfDocRef.current = pdf;
+    setPdfLoadVersion((v) => v + 1);
     setNumPages(pdf.numPages);
     setPageNumber(1);
     pageRefs.current = new Array(pdf.numPages).fill(null);
@@ -999,6 +1092,72 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     );
   }, [showBoundingBoxes, ocrBlocksForBoxes]);
 
+  const goToActiveMatch = useCallback(
+    (index: number) => {
+      if (searchHits.length === 0) return;
+      const i = Math.max(0, Math.min(index, searchHits.length - 1));
+      setActiveMatchIndex(i);
+      const hit = searchHits[i];
+      setPageNumber(hit.page);
+      setInputPageNumber(String(hit.page));
+    },
+    [searchHits],
+  );
+
+  const goToNextSearchMatch = useCallback(() => {
+    if (searchHits.length === 0) return;
+    const next = (activeMatchIndex + 1) % searchHits.length;
+    goToActiveMatch(next);
+  }, [searchHits, activeMatchIndex, goToActiveMatch]);
+
+  const goToPrevSearchMatch = useCallback(() => {
+    if (searchHits.length === 0) return;
+    const prev = (activeMatchIndex - 1 + searchHits.length) % searchHits.length;
+    goToActiveMatch(prev);
+  }, [searchHits, activeMatchIndex, goToActiveMatch]);
+
+  const renderSearchHighlights = useCallback(
+    (page: number) => {
+      if (searchHits.length === 0) return null;
+      return (
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            right: 0,
+            bottom: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+            zIndex: 11,
+          }}
+        >
+          {searchHits.map((hit, globalIdx) => {
+            if (hit.page !== page) return null;
+            const isActive = globalIdx === activeMatchIndex;
+            return (
+              <div
+                key={`search-hit-${globalIdx}`}
+                style={{
+                  position: 'absolute',
+                  left: `${hit.left * 100}%`,
+                  top: `${hit.top * 100}%`,
+                  width: `${hit.width * 100}%`,
+                  height: `${hit.height * 100}%`,
+                  backgroundColor: isActive ? 'rgba(255, 180, 0, 0.45)' : 'rgba(255, 255, 100, 0.22)',
+                  boxShadow: isActive ? '0 0 0 1px rgba(255, 140, 0, 0.85)' : 'none',
+                  pointerEvents: 'none',
+                }}
+              />
+            );
+          })}
+        </div>
+      );
+    },
+    [searchHits, activeMatchIndex],
+  );
+
   // Add this near the other state declarations
   const [lastSearch, setLastSearch] = useState<{
     promptId: string;
@@ -1089,40 +1248,77 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   }, [pageNumber, scrollToPage]);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden', minWidth: 0 }}>
       <Toolbar 
         variant='dense'
         sx={{ 
           backgroundColor: theme => theme.palette.pdf_menubar.main,
           minHeight: '48px',
           flexShrink: 0,
+          minWidth: 0,
+          width: '100%',
+          boxSizing: 'border-box',
+          justifyContent: 'flex-start',
+          gap: 0.5,
           '& .MuiIconButton-root': {
             padding: '4px',
           },
           '& .MuiTypography-root': {
             fontSize: '0.875rem',
           },
-          justifyContent: 'space-between',
         }}
       >
-      
-        <div style={{ display: 'flex', alignItems: 'center', overflow: 'hidden' }}>
-          <div style={{ width: '200px', marginRight: '8px', display: 'flex', justifyContent: 'flex-end' }}>
-            <Tooltip title={fileName || 'Untitled Document'} arrow>
-              <Typography
-                variant="body2"
-                noWrap
-                sx={{
-                  maxWidth: '100%',
-                  color: theme => theme.palette.pdf_menubar.contrastText,
-                  fontWeight: 'bold',
-                  cursor: 'default',
-                }}
-              >
-                {fileName || 'Untitled Document'}
-              </Typography>
-            </Tooltip>
-          </div>
+        {/*
+          Toolbar layout: [title][find][rest | clip][menu]
+          Find and title are NOT inside the overflow:hidden row so a long filename cannot push Find off-screen.
+        */}
+        <div
+          style={{
+            flex: '0 1 200px',
+            minWidth: 0,
+            maxWidth: 200,
+            marginRight: 4,
+            overflow: 'hidden',
+          }}
+        >
+          <Tooltip title={fileName || 'Untitled Document'} arrow>
+            <Typography
+              variant="body2"
+              noWrap
+              sx={{
+                display: 'block',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                color: theme => theme.palette.pdf_menubar.contrastText,
+                fontWeight: 'bold',
+                cursor: 'default',
+              }}
+            >
+              {fileName || 'Untitled Document'}
+            </Typography>
+          </Tooltip>
+        </div>
+        <Tooltip title="Find in document — search text in this PDF (Ctrl+F or ⌘F)">
+          <span>
+            <IconButton
+              onClick={openFindBar}
+              disabled={!fileUrl || !!loading}
+              color="inherit"
+              size="small"
+              aria-label="Find in document"
+              sx={{
+                flexShrink: 0,
+                border: '1px solid',
+                borderColor: theme => `${theme.palette.pdf_menubar.contrastText}55`,
+                borderRadius: 1,
+                backgroundColor: theme => `${theme.palette.pdf_menubar.contrastText}12`,
+              }}
+            >
+              <SearchIcon fontSize="small" />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <div style={{ display: 'flex', alignItems: 'center', overflow: 'hidden', flex: '1 1 0%', minWidth: 0 }}>
           <IconButton onClick={goToPrevPage} disabled={pageNumber <= 1} color="inherit" size="small">
             <ArrowUpwardIcon fontSize="small" />
           </IconButton>
@@ -1186,6 +1382,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
           aria-controls={open ? 'pdf-menu' : undefined}
           aria-haspopup="true"
           aria-expanded={open ? 'true' : undefined}
+          sx={{ flexShrink: 0, ml: 'auto' }}
         >
           <MoreVertIcon fontSize="small" />
         </IconButton>
@@ -1198,6 +1395,16 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
             'aria-labelledby': 'more-button',
           }}
         >
+          <StyledMenuItem
+            onClick={() => {
+              handleMenuClose();
+              openFindBar();
+            }}
+            disabled={!fileUrl || !!loading}
+          >
+            <SearchIcon fontSize="small" sx={{ mr: 1 }} />
+            Find in document…
+          </StyledMenuItem>
           <StyledMenuItem onClick={handlePrint}>
             <PrintIcon fontSize="small" sx={{ mr: 1 }} />
             Print
@@ -1270,64 +1477,197 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       
       <PanelGroup id={`pdf-viewer-panels-${id}`} direction="horizontal" style={{ flexGrow: 1 }}>
           <Panel defaultSize={70}>
-            <div ref={containerRef} style={{ height: '100%', overflowY: 'auto', padding: '16px' }}>
-              {loading ? (
-                <div>Loading PDF...</div>
-              ) : error ? (
-                <Typography color="error" align="center">{error}</Typography>
-              ) : fileUrl ? (
-                <Document
-                  file={fileUrl}
-                  onLoadSuccess={handleLoadSuccess}
-                  onLoadError={handleLoadError}
+            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
+              <div
+                ref={containerRef}
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  overflowY: 'auto',
+                  padding: '16px',
+                }}
+              >
+                {loading ? (
+                  <div>Loading PDF...</div>
+                ) : error ? (
+                  <Typography color="error" align="center">{error}</Typography>
+                ) : fileUrl ? (
+                  <Document
+                    file={fileUrl}
+                    onLoadSuccess={handleLoadSuccess}
+                    onLoadError={handleLoadError}
+                  >
+                    {Array.from(new Array(numPages), (el, index) => (
+                      <div 
+                        key={`page_container_${index + 1}`}
+                        ref={el => { pageRefs.current[index] = el; }}
+                        style={{ 
+                          position: 'relative',
+                          width: Math.abs(rotation) === 90 || Math.abs(rotation) === 270 
+                            ? pdfDimensions.height * scale 
+                            : pdfDimensions.width * scale,
+                          height: Math.abs(rotation) === 90 || Math.abs(rotation) === 270 
+                            ? pdfDimensions.width * scale 
+                            : pdfDimensions.height * scale,
+                          transform: `rotate(${rotation}deg)`,
+                          transformOrigin: 'center center',
+                          margin: '8px auto',
+                          display: 'flex',
+                          justifyContent: 'center',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <Page 
+                          key={`page_${index + 1}`} 
+                          pageNumber={index + 1} 
+                          width={pdfDimensions.width}
+                          height={pdfDimensions.height}
+                          scale={scale}
+                          rotate={originalRotation}
+                          renderTextLayer={false}
+                          renderAnnotationLayer={false}
+                        >
+                          {renderHighlights(index + 1)}
+                          {renderSearchHighlights(index + 1)}
+                          {renderBoundingBoxes(index + 1)}
+                        </Page>
+                        {index < numPages! - 1 && <hr style={{ border: '2px solid black' }} />}
+                      </div>
+                    ))}
+                  </Document>
+                ) : (documentState === 'ocr_processing' || documentState === 'llm_processing') ? (
+                  <Typography color="text.secondary" align="center" sx={{ py: 2 }}>
+                    Document is being processed. PDF will appear when ready.
+                  </Typography>
+                ) : (
+                  <Typography color="error" align="center">
+                    No PDF file available.
+                  </Typography>
+                )}
+              </div>
+
+              {findBarOpen && fileUrl && !loading && (
+                <Paper
+                  elevation={0}
+                  square
+                  component="div"
+                  role="search"
+                  aria-label="Find in document"
+                  sx={{
+                    flexShrink: 0,
+                    borderTop: 1,
+                    borderColor: 'divider',
+                    px: 1.25,
+                    py: 0.5,
+                    bgcolor: theme => (theme.palette.mode === 'dark' ? 'grey.900' : 'grey.100'),
+                  }}
                 >
-                  {Array.from(new Array(numPages), (el, index) => (
-                    <div 
-                      key={`page_container_${index + 1}`}
-                      ref={el => { pageRefs.current[index] = el; }}
-                      style={{ 
-                        position: 'relative',
-                        width: Math.abs(rotation) === 90 || Math.abs(rotation) === 270 
-                          ? pdfDimensions.height * scale 
-                          : pdfDimensions.width * scale,
-                        height: Math.abs(rotation) === 90 || Math.abs(rotation) === 270 
-                          ? pdfDimensions.width * scale 
-                          : pdfDimensions.height * scale,
-                        transform: `rotate(${rotation}deg)`,
-                        transformOrigin: 'center center',
-                        margin: '8px auto',
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 0.75,
+                      width: '100%',
+                      flexWrap: 'wrap',
+                      minHeight: 32,
+                    }}
+                  >
+                    <Box
+                      sx={{
                         display: 'flex',
-                        justifyContent: 'center',
-                        alignItems: 'center'
+                        alignItems: 'center',
+                        gap: 0.75,
+                        flex: '1 1 0',
+                        minWidth: 0,
+                        flexWrap: 'wrap',
                       }}
                     >
-                      <Page 
-                        key={`page_${index + 1}`} 
-                        pageNumber={index + 1} 
-                        width={pdfDimensions.width}
-                        height={pdfDimensions.height}
-                        scale={scale}
-                        rotate={originalRotation}
-                        renderTextLayer={false}
-                        renderAnnotationLayer={false}
+                      <Tooltip title="Embedded PDF text only — scanned image pages are not searched">
+                        <SearchIcon sx={{ color: 'text.secondary', flexShrink: 0, fontSize: '1.125rem' }} aria-hidden />
+                      </Tooltip>
+                      <TextField
+                        inputRef={findInputRef}
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            if (searchHits.length > 0) goToActiveMatch(0);
+                          }
+                        }}
+                        placeholder="Find in document…"
+                        size="small"
+                        autoFocus
+                        sx={{
+                          flex: '1 1 200px',
+                          minWidth: { xs: 140, sm: 240 },
+                          maxWidth: { md: 640 },
+                          '& .MuiInputBase-root': {
+                            backgroundColor: theme => theme.palette.background.paper,
+                            minHeight: 30,
+                            height: 30,
+                            fontSize: '0.8125rem',
+                          },
+                          '& .MuiInputBase-input': {
+                            py: 0.5,
+                          },
+                        }}
+                      />
+                      <IconButton
+                        onClick={goToPrevSearchMatch}
+                        disabled={searchHits.length === 0}
+                        color="default"
+                        size="small"
+                        aria-label="Previous match"
+                        sx={{ flexShrink: 0, p: 0.375 }}
                       >
-                        {renderHighlights(index + 1)}
-                        {renderBoundingBoxes(index + 1)}
-                      </Page>
-                      {index < numPages! - 1 && <hr style={{ border: '2px solid black' }} />}
-                    </div>
-                  ))}
-                </Document>
-              ) : (documentState === 'ocr_processing' || documentState === 'llm_processing') ? (
-                <Typography color="text.secondary" align="center" sx={{ py: 2 }}>
-                  Document is being processed. PDF will appear when ready.
-                </Typography>
-              ) : (
-                <Typography color="error" align="center">
-                  No PDF file available.
-                </Typography>
+                        <NavigateBeforeIcon sx={{ fontSize: '1.125rem' }} />
+                      </IconButton>
+                      <IconButton
+                        onClick={goToNextSearchMatch}
+                        disabled={searchHits.length === 0}
+                        color="default"
+                        size="small"
+                        aria-label="Next match"
+                        sx={{ flexShrink: 0, p: 0.375 }}
+                      >
+                        <NavigateNextIcon sx={{ fontSize: '1.125rem' }} />
+                      </IconButton>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          minWidth: '3.5rem',
+                          lineHeight: 1,
+                          color: 'text.secondary',
+                          opacity: searchBusy ? 0.6 : 1,
+                          flexShrink: 0,
+                          fontVariantNumeric: 'tabular-nums',
+                          alignSelf: 'center',
+                        }}
+                      >
+                        {debouncedSearch.trim()
+                          ? searchBusy
+                            ? '…'
+                            : searchHits.length > 0
+                              ? `${activeMatchIndex + 1} / ${searchHits.length}`
+                              : '0 / 0'
+                          : '—'}
+                      </Typography>
+                    </Box>
+                    <Tooltip title="Close (Esc)">
+                      <IconButton
+                        onClick={() => setFindBarOpen(false)}
+                        size="small"
+                        aria-label="Close find bar"
+                        sx={{ flexShrink: 0, p: 0.375 }}
+                      >
+                        <CloseIcon sx={{ fontSize: '1.125rem' }} />
+                      </IconButton>
+                    </Tooltip>
+                  </Box>
+                </Paper>
               )}
-            </div>
+            </Box>
           </Panel>
 
           {ocrPanelKind && (

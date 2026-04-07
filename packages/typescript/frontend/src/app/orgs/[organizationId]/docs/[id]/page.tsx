@@ -106,7 +106,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
 
             {showPdfPanel && (
               <Panel defaultSize={defaultSizes.main} minSize={20} order={2}>
-                <Box sx={{ height: '100%', overflow: 'hidden' }}>
+                <Box sx={{ height: '100%', overflow: 'hidden', minWidth: 0 }}>
                   <PDFViewer 
                     organizationId={organizationId} 
                     id={pdfId}
