@@ -205,7 +205,7 @@ async def get_ocr_export_markdown(
     current_user: User = Depends(get_org_user),
 ):
     """Return OCR linearized as Markdown (textractor), computed from stored OCR JSON."""
-    logger.debug(
+    logger.info(
         f"get_ocr_export_markdown() document_id={document_id} org={organization_id}"
     )
     analytiq_client = ad.common.get_analytiq_client()
