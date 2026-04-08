@@ -1306,13 +1306,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
               color="inherit"
               size="small"
               aria-label="Find in document"
-              sx={{
-                flexShrink: 0,
-                border: '1px solid',
-                borderColor: theme => `${theme.palette.pdf_menubar.contrastText}55`,
-                borderRadius: 1,
-                backgroundColor: theme => `${theme.palette.pdf_menubar.contrastText}12`,
-              }}
+              sx={{ flexShrink: 0 }}
             >
               <SearchIcon fontSize="small" />
             </IconButton>
