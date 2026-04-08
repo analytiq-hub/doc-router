@@ -1039,12 +1039,17 @@ export interface UsageRangeResponse {
   total_spus: number;
 }
 
-// AWS Config types
+// AWS Config types (GET returns masked keys; POST body expects full keys)
 export interface AWSConfig {
   access_key_id: string;
   secret_access_key: string;
   s3_bucket_name: string;
   created_at: string;
+}
+
+/** GET: masked JSON prefix (same rules as LLM token display). POST: full service account JSON. */
+export interface GCPConfig {
+  service_account_json: string;
 }
 
 // Knowledge Base types

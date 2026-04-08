@@ -12,12 +12,15 @@ const nextConfig = {
   // Include files from monorepo parent for file: dependencies (production build)
   outputFileTracingRoot: path.join(__dirname, '..'),
   // Proxy /fastapi/* to the backend — only active in local dev (npm run dev).
+  // Strip the /fastapi prefix when forwarding, matching deploy/compose/nginx.conf
+  // (location /fastapi/ { proxy_pass http://backend:8000/; }).
+  // Routes are registered at /v0/... on FastAPI, not /fastapi/v0/...
   // In Docker Compose and Kubernetes, nginx/ingress intercepts /fastapi/ before
   // Next.js sees it, so this rewrite never fires in deployed environments.
   async rewrites() {
     return [{
       source: '/fastapi/:path*',
-      destination: 'http://localhost:8000/fastapi/:path*',
+      destination: 'http://localhost:8000/:path*',
     }];
   },
   // Cache for hashed static assets (chunks, CSS); 8h max so post-midnight release is picked up next day

@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 import analytiq_data as ad
 from app.auth import get_admin_user
 from app.models import User
+from app.secret_mask import mask_secret_plaintext
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -71,16 +72,18 @@ async def create_aws_config(
     encrypted_secret_key = ad.crypto.encrypt_token(config.secret_access_key)
     
     update_data = {
+        "type": "aws",
+        "user_id": current_user.user_id,
         "access_key_id": encrypted_access_key,
         "secret_access_key": encrypted_secret_key,
         "s3_bucket_name": config.s3_bucket_name,
-        "created_at": datetime.now(UTC)
+        "created_at": datetime.now(UTC),
     }
 
-    await db.aws_config.update_one(
-        {"user_id": current_user.user_id},
+    await db.cloud_config.update_one(
+        {"type": "aws", "user_id": current_user.user_id},
         {"$set": update_data},
-        upsert=True
+        upsert=True,
     )
     
     return {"message": "AWS configuration saved successfully"}
@@ -89,21 +92,27 @@ async def create_aws_config(
 async def get_aws_config(current_user: User = Depends(get_admin_user)):
     """Get AWS configuration (admin only)"""
     db = ad.common.get_async_db()
-    config = await db.aws_config.find_one({"user_id": current_user.user_id})
+    config = await db.cloud_config.find_one({"type": "aws", "user_id": current_user.user_id})
+    if not config:
+        config = await db.aws_config.find_one({"user_id": current_user.user_id})
     if not config:
         raise HTTPException(status_code=404, detail="AWS configuration not found")
-        
+
+    access_key = ad.crypto.decrypt_token(config["access_key_id"])
+    secret_key = ad.crypto.decrypt_token(config["secret_access_key"])
     return {
-        "access_key_id": ad.crypto.decrypt_token(config["access_key_id"]),
-        "secret_access_key": ad.crypto.decrypt_token(config["secret_access_key"]),
-        "s3_bucket_name": config.get("s3_bucket_name")
+        "access_key_id": mask_secret_plaintext(access_key) or "",
+        "secret_access_key": mask_secret_plaintext(secret_key) or "",
+        "s3_bucket_name": config.get("s3_bucket_name"),
     }
 
 @aws_router.delete("/v0/account/aws_config")
 async def delete_aws_config(current_user: User = Depends(get_admin_user)):
     """Delete AWS configuration (admin only)"""
     db = ad.common.get_async_db()
-    result = await db.aws_config.delete_one({"user_id": current_user.user_id})
+    result = await db.cloud_config.delete_one({"type": "aws", "user_id": current_user.user_id})
+    if result.deleted_count == 0:
+        result = await db.aws_config.delete_one({"user_id": current_user.user_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="AWS configuration not found")
     return {"message": "AWS configuration deleted successfully"}

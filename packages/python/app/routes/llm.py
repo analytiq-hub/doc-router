@@ -13,8 +13,10 @@ from bson import ObjectId
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.cloud.cloud_config import TYPE_GCP, gcp_credentials_configured
 from app.auth import get_org_user, get_current_user, get_admin_user
 from app.models import User
+from app.secret_mask import mask_secret_plaintext
 from analytiq_data.payments.exceptions import SPUCreditException
 
 # Configure logger
@@ -681,18 +683,29 @@ async def list_llm_providers(
     
     # Convert MongoDB documents to LLMModel instances
     llm_providers = []
+
     for provider in providers:
         logger.info(f"provider: {provider}")
 
-        token = provider["token"]
-        if len(token) > 0:
-            token = ad.crypto.decrypt_token(token)
-            if len(token) > 16:
-                token = token[:16] + "******"
-            elif len(token) > 0:
-                token = "******"
-        else:
+        litellm_provider = provider["litellm_provider"]
+        token_created_at = provider.get("token_created_at")
+
+        if litellm_provider == "vertex_ai":
             token = None
+            if await gcp_credentials_configured(db):
+                gdoc = await db.cloud_config.find_one({"type": TYPE_GCP})
+                token = "gcp_credentials••••••••"
+                if gdoc and gdoc.get("created_at"):
+                    token_created_at = gdoc["created_at"]
+            elif len(provider.get("token") or "") > 0:
+                raw = ad.crypto.decrypt_token(provider["token"])
+                token = mask_secret_plaintext(raw)
+        else:
+            raw_tok = provider.get("token") or ""
+            if len(raw_tok) > 0:
+                token = mask_secret_plaintext(ad.crypto.decrypt_token(raw_tok))
+            else:
+                token = None
 
         llm_providers.append(LLMProvider(
             name=provider["name"],
@@ -703,7 +716,7 @@ async def list_llm_providers(
             litellm_models_chat_agent=provider.get("litellm_models_chat_agent", provider["litellm_models_enabled"]),
             enabled=provider["enabled"],
             token=token,
-            token_created_at=provider["token_created_at"]
+            token_created_at=token_created_at
         ))
     
     # Sort providers alphabetically by display_name
@@ -759,7 +772,13 @@ async def set_llm_provider_config(
     if request.enabled is not None:
         elem["enabled"] = request.enabled
     if request.token is not None:
-        if len(request.token) > 0:
+        if litellm_provider == "vertex_ai":
+            if len(request.token) > 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Vertex credentials are managed under Account → Development → GCP setup (cloud_config), not here.",
+                )
+        elif len(request.token) > 0:
             elem["token"] = ad.crypto.encrypt_token(request.token)
             elem["token_created_at"] = datetime.now(UTC)
         else:

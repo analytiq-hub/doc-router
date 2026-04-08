@@ -105,7 +105,7 @@ async def get_aws_client_sync(analytiq_client, region_name: str = "us-east-1") -
 
 async def get_aws_config(analytiq_client) -> dict:
     """
-    Get the AWS keys.
+    Get the AWS keys from ``cloud_config`` (type aws), with fallback to legacy ``aws_config``.
 
     Args:
         analytiq_client: The AnalytiqClient.
@@ -113,24 +113,9 @@ async def get_aws_config(analytiq_client) -> dict:
     Returns:
         The AWS keys.
     """
-    db_name = analytiq_client.env
-    db = analytiq_client.mongodb_async[db_name]
-    aws_config_collection = db["aws_config"]
+    from analytiq_data.cloud.cloud_config import get_aws_config_dict
 
-    aws_config = await aws_config_collection.find_one()
-    
-    # Parse the AWS keys
-    access_key_id = ""
-    secret_access_key = ""
-    if aws_config:
-        access_key_id = ad.crypto.decrypt_token(aws_config.get("access_key_id", ""))
-        secret_access_key = ad.crypto.decrypt_token(aws_config.get("secret_access_key", ""))
-
-    return {
-        "aws_access_key_id": access_key_id,
-        "aws_secret_access_key": secret_access_key,
-        "s3_bucket_name": aws_config.get("s3_bucket_name") if aws_config else None
-    }
+    return await get_aws_config_dict(analytiq_client)
 
 def get_assume_role_arn(user_arn: str) -> str:
     """

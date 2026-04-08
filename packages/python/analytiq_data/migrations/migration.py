@@ -2871,6 +2871,112 @@ class RenameAgentThreadsToChatThreads(Migration):
 
 
 # List of all migrations in order
+class MigrateAwsAndVertexToCloudConfig(Migration):
+    def __init__(self):
+        super().__init__(
+            description="Migrate aws_config and Vertex llm_providers token into cloud_config (type aws / gcp)"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            names = await db.list_collection_names()
+
+            # 1) aws_config -> cloud_config (type aws)
+            aws_count = await db.cloud_config.count_documents({"type": "aws"})
+            if aws_count == 0 and "aws_config" in names:
+                cursor = db.aws_config.find({})
+                async for doc in cursor:
+                    new_doc = {k: v for k, v in doc.items() if k != "_id"}
+                    new_doc["type"] = "aws"
+                    await db.cloud_config.insert_one(new_doc)
+                logger.info("Migrated aws_config documents to cloud_config (type aws)")
+
+            # 2) Vertex token -> cloud_config (type gcp), then remove legacy key from llm_providers
+            vertex = await db.llm_providers.find_one({"litellm_provider": "vertex_ai"})
+            if vertex and vertex.get("token"):
+                existing_gcp = await db.cloud_config.find_one({"type": "gcp"})
+                if not existing_gcp:
+                    aws_cloud = await db.cloud_config.find_one({"type": "aws"})
+                    user_id = aws_cloud.get("user_id") if aws_cloud else None
+                    if not user_id:
+                        admin_email = os.getenv("ADMIN_EMAIL")
+                        if admin_email:
+                            admin_u = await db.users.find_one({"email": admin_email})
+                            if admin_u:
+                                user_id = str(admin_u["_id"])
+                    await db.cloud_config.insert_one(
+                        {
+                            "type": "gcp",
+                            "user_id": user_id,
+                            "service_account_json": vertex["token"],
+                            "created_at": vertex.get("token_created_at"),
+                        }
+                    )
+                    logger.info("Migrated vertex_ai token to cloud_config (type gcp)")
+
+            # 3) Drop legacy aws_config collection (data now lives under cloud_config type aws)
+            names = await db.list_collection_names()
+            if "aws_config" in names:
+                await db.drop_collection("aws_config")
+                logger.info("Dropped legacy aws_config collection")
+
+            # 4) Remove legacy Vertex secret fields from llm_providers once stored in cloud_config
+            if await db.cloud_config.find_one({"type": "gcp"}):
+                await db.llm_providers.update_one(
+                    {"litellm_provider": "vertex_ai"},
+                    {"$unset": {"token": 1, "token_created_at": 1}},
+                )
+                logger.info("Removed legacy vertex_ai token fields from llm_providers")
+
+            return True
+        except Exception as e:
+            logger.error(f"MigrateAwsAndVertexToCloudConfig failed: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        """
+        Restore aws_config and llm_providers.vertex_ai.token from cloud_config, then drop cloud_config.
+        """
+        try:
+            names = await db.list_collection_names()
+            if "cloud_config" not in names:
+                logger.info("MigrateAwsAndVertexToCloudConfig down: cloud_config missing, nothing to do")
+                return True
+
+            # 1) Recreate aws_config from cloud_config documents with type aws (strip discriminator)
+            cursor = db.cloud_config.find({"type": "aws"})
+            aws_docs = await cursor.to_list(length=None)
+            for doc in aws_docs:
+                new_doc = {k: v for k, v in doc.items() if k not in ("_id", "type")}
+                await db.aws_config.insert_one(new_doc)
+            if aws_docs:
+                logger.info(
+                    "MigrateAwsAndVertexToCloudConfig down: restored %s document(s) to aws_config",
+                    len(aws_docs),
+                )
+
+            # 2) Restore Vertex secret on llm_providers from the first type gcp document
+            gcp = await db.cloud_config.find_one({"type": "gcp"})
+            if gcp and gcp.get("service_account_json"):
+                await db.llm_providers.update_one(
+                    {"litellm_provider": "vertex_ai"},
+                    {
+                        "$set": {
+                            "token": gcp["service_account_json"],
+                            "token_created_at": gcp.get("created_at"),
+                        }
+                    },
+                )
+                logger.info("MigrateAwsAndVertexToCloudConfig down: restored vertex_ai token from cloud_config gcp")
+
+            await db.drop_collection("cloud_config")
+            logger.info("MigrateAwsAndVertexToCloudConfig down: dropped cloud_config collection")
+            return True
+        except Exception as e:
+            logger.error(f"MigrateAwsAndVertexToCloudConfig down failed: {e}")
+            return False
+
+
 MIGRATIONS = [
     OcrKeyMigration(),
     LlmResultFieldsMigration(),
@@ -2909,6 +3015,7 @@ MIGRATIONS = [
     AddWebhookDeliveriesWebhookIdIndex(),
     AddAgentThreadsIndexes(),
     RenameAgentThreadsToChatThreads(),
+    MigrateAwsAndVertexToCloudConfig(),
     # Add more migrations here
 ]
 

@@ -25,6 +25,7 @@ import {
   UserUpdate,
   User,
   AWSConfig,
+  GCPConfig,
   // Invitation types
   InvitationResponse,
   CreateInvitationRequest,
@@ -212,6 +213,19 @@ export class DocRouterAccount {
 
   async deleteAWSConfig(): Promise<void> {
     return this.http.delete('/v0/account/aws_config');
+  }
+
+  // --------------- GCP (Vertex) ---------------
+  async createGCPConfig(config: GCPConfig): Promise<{ message: string }> {
+    return this.http.post('/v0/account/gcp_config', config);
+  }
+
+  async getGCPConfig(): Promise<GCPConfig> {
+    return this.http.get('/v0/account/gcp_config');
+  }
+
+  async deleteGCPConfig(): Promise<void> {
+    return this.http.delete('/v0/account/gcp_config');
   }
 
   // --------------- Invitations ---------------

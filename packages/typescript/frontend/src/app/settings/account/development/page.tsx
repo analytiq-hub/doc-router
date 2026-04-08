@@ -29,10 +29,26 @@ const DevelopmentSettingsPage: React.FC = () => {
           <div>
             <h2 className="text-xl font-semibold">AWS Setup</h2>
             <p className="text-gray-600 mb-2">
-              Configure your AWS setup.
+              Configure your AWS setup (S3, Textract, Bedrock IAM keys).
             </p>
           </div>
           <Link href="/settings/account/development/aws-config" passHref>
+            <Button variant="contained" color="primary">
+              Manage
+            </Button>
+          </Link>
+        </div>
+
+        <Divider />
+
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h2 className="text-xl font-semibold">GCP setup (Vertex AI)</h2>
+            <p className="text-gray-600 mb-2">
+              Upload the Google Cloud service account JSON key for Vertex models.
+            </p>
+          </div>
+          <Link href="/settings/account/development/gcp-config" passHref>
             <Button variant="contained" color="primary">
               Manage
             </Button>

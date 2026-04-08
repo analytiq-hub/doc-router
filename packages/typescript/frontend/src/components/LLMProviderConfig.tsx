@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link';
 import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
 import Switch from '@mui/material/Switch';
 import Button from '@mui/material/Button';
@@ -7,7 +8,6 @@ import { LLMProvider } from '@docrouter/sdk';
 import { LLMChatModel, LLMEmbeddingModel } from '@docrouter/sdk';
 import LLMTestModal from './LLMTestModal';
 import LLMEmbeddingTestModal from './LLMEmbeddingTestModal';
-import { formatLocalDate } from '@/utils/date';
 
 interface LLMProviderConfigProps {
   providerName: string;
@@ -20,13 +20,6 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
   const [embeddingModels, setEmbeddingModels] = useState<LLMEmbeddingModel[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  // Vertex AI service account credentials state
-  const [credentialJson, setCredentialJson] = useState('');
-  const [credentialFileName, setCredentialFileName] = useState('');
-  const [credentialSaving, setCredentialSaving] = useState(false);
-  const [credentialError, setCredentialError] = useState<string | null>(null);
-  const [credentialSuccess, setCredentialSuccess] = useState(false);
 
   // Test modal state
   const [testModalOpen, setTestModalOpen] = useState(false);
@@ -144,75 +137,6 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
     setSelectedEmbeddingModel('');
   };
 
-  const handleCredentialFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setCredentialFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const text = evt.target?.result as string;
-      try {
-        JSON.parse(text); // validate it's JSON
-        setCredentialJson(text);
-        setCredentialError(null);
-      } catch {
-        setCredentialError('Invalid JSON file. Please upload a valid service account key file.');
-        setCredentialJson('');
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  const handleClearCredential = async () => {
-    if (!provider) return;
-    try {
-      await docRouterAccountApi.setLLMProviderConfig(providerName, {
-        enabled: provider.enabled,
-        token: "",
-        litellm_models_enabled: provider.litellm_models_enabled,
-        litellm_models_chat_agent: provider.litellm_models_chat_agent ?? provider.litellm_models_enabled,
-      });
-      const response = await docRouterAccountApi.listLLMProviders();
-      const updated = response.providers.find(p => p.name === providerName);
-      if (updated) setProvider(updated);
-    } catch (err) {
-      console.error('Error clearing credentials:', err);
-      setCredentialError('Failed to clear credentials. Please try again.');
-    }
-  };
-
-  const handleSaveCredential = async () => {
-    if (!provider || !credentialJson) return;
-    setCredentialError(null);
-    setCredentialSuccess(false);
-    try {
-      JSON.parse(credentialJson);
-    } catch {
-      setCredentialError('Invalid JSON. Please provide a valid service account key.');
-      return;
-    }
-    setCredentialSaving(true);
-    try {
-      await docRouterAccountApi.setLLMProviderConfig(providerName, {
-        enabled: true,
-        token: credentialJson,
-        litellm_models_enabled: provider.litellm_models_enabled,
-        litellm_models_chat_agent: provider.litellm_models_chat_agent ?? provider.litellm_models_enabled,
-      });
-      const response = await docRouterAccountApi.listLLMProviders();
-      const updated = response.providers.find(p => p.name === providerName);
-      if (updated) setProvider(updated);
-      setCredentialJson('');
-      setCredentialFileName('');
-      setCredentialSuccess(true);
-    } catch (err) {
-      console.error('Error saving credentials:', err);
-      setCredentialError('Failed to save credentials. Please try again.');
-    } finally {
-      setCredentialSaving(false);
-    }
-  };
-
   // Chat models columns (with test button and chat agent toggle)
   const chatModelColumns: GridColDef[] = [
     { field: 'litellm_model', headerName: 'Model Name', flex: 1, minWidth: 150 },
@@ -326,64 +250,26 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
         )}
       </div>
 
-      {/* Vertex AI service account credentials */}
       {providerName === 'vertex_ai' && (
-        <div className="mb-6 p-4 border border-gray-200 rounded-lg">
-          <h3 className="text-lg font-semibold mb-1">Service Account Credentials</h3>
-          <p className="text-sm text-gray-600 mb-3">
-            Upload a Google Cloud service account JSON key file. The credentials are encrypted and stored securely.
+        <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+          <p className="text-sm text-gray-600 mb-2">
+            Vertex AI uses a GCP service account JSON configured under{' '}
+            <Link href="/settings/account/development/gcp-config" className="text-blue-600 underline font-medium">
+              Account → Development → GCP setup
+            </Link>
+            .
           </p>
-          <p className="mb-3">
-            <b>Status:</b>{' '}
-            {provider.token
-              ? <span className="text-green-600">Credentials set{provider.token_created_at ? ` (updated ${formatLocalDate(provider.token_created_at)})` : ''}</span>
-              : <span className="text-yellow-600">Not configured</span>
-            }
+          <p className="text-sm">
+            <b>Credentials:</b>{' '}
+            {provider.token ? (
+              <span className="text-green-600">Configured</span>
+            ) : (
+              <span className="text-yellow-600">Not configured</span>
+            )}
           </p>
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-3">
-              <label className="cursor-pointer bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded border border-gray-300 text-sm">
-                Choose JSON File
-                <input type="file" accept=".json,application/json" className="hidden" onChange={handleCredentialFileUpload} />
-              </label>
-              {credentialFileName && <span className="text-sm text-gray-600">{credentialFileName}</span>}
-            </div>
-            <textarea
-              className="w-full h-32 p-2 text-xs font-mono border border-gray-300 rounded resize-y"
-              placeholder="Or paste service account JSON here..."
-              value={credentialJson}
-              onChange={(e) => {
-                setCredentialJson(e.target.value);
-                setCredentialError(null);
-                setCredentialSuccess(false);
-              }}
-            />
-            {credentialError && <p className="text-red-500 text-sm">{credentialError}</p>}
-            {credentialSuccess && <p className="text-green-600 text-sm">Credentials saved successfully.</p>}
-            <div className="flex gap-2">
-              <Button
-                variant="contained"
-                size="small"
-                onClick={handleSaveCredential}
-                disabled={!credentialJson || credentialSaving}
-              >
-                {credentialSaving ? 'Saving...' : 'Save Credentials'}
-              </Button>
-              {provider.token && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  color="error"
-                  onClick={handleClearCredential}
-                >
-                  Clear Credentials
-                </Button>
-              )}
-            </div>
-          </div>
         </div>
       )}
-      
+
       {/* Chat Models Section */}
       {chatModelRows.length > 0 && (
         <div className="mb-6">

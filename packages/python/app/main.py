@@ -33,6 +33,7 @@ from app.routes.schemas import schemas_router
 from app.routes.tags import tags_router
 from app.routes.forms import forms_router
 from app.routes.aws import aws_router
+from app.routes.gcp import gcp_router
 from app.routes.token import token_router
 from app.routes.oauth import oauth_router
 from app.routes.orgs import orgs_router
@@ -153,6 +154,7 @@ app.include_router(tags_router)
 app.include_router(forms_router)
 app.include_router(token_router)
 app.include_router(aws_router)
+app.include_router(gcp_router)
 app.include_router(oauth_router)
 app.include_router(orgs_router)
 app.include_router(users_router)
