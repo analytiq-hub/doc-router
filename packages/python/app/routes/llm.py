@@ -690,16 +690,8 @@ async def list_llm_providers(
         litellm_provider = provider["litellm_provider"]
         token_created_at = provider.get("token_created_at")
 
-        if litellm_provider == "vertex_ai":
+        if litellm_provider in ["bedrock", "vertex_ai"]:
             token = None
-            if await gcp_credentials_configured(db):
-                gdoc = await db.cloud_config.find_one({"type": TYPE_GCP})
-                token = "gcp_credentials••••••••"
-                if gdoc and gdoc.get("created_at"):
-                    token_created_at = gdoc["created_at"]
-            elif len(provider.get("token") or "") > 0:
-                raw = ad.crypto.decrypt_token(provider["token"])
-                token = mask_secret_plaintext(raw)
         else:
             raw_tok = provider.get("token") or ""
             if len(raw_tok) > 0:

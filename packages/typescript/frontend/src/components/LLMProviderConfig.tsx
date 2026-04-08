@@ -245,7 +245,7 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
       <h2 className="text-2xl font-bold mb-4">Provider: {provider.display_name}{!provider.enabled && <span className="text-gray-500 italic"> (disabled)</span>}</h2>      
       <div className="mb-4">
         <p><b>Enabled:</b> {provider.enabled ? 'Yes' : 'No'}</p>
-        {providerName !== 'vertex_ai' && (
+        {providerName !== 'vertex_ai' && providerName !== 'bedrock' && (
           <p><b>Token:</b> {provider.token ? `${provider.token.slice(0, 16)}••••••••` : 'Not set'}</p>
         )}
       </div>
@@ -259,13 +259,17 @@ const LLMProviderConfig: React.FC<LLMProviderConfigProps> = ({ providerName }) =
             </Link>
             .
           </p>
-          <p className="text-sm">
-            <b>Credentials:</b>{' '}
-            {provider.token ? (
-              <span className="text-green-600">Configured</span>
-            ) : (
-              <span className="text-yellow-600">Not configured</span>
-            )}
+        </div>
+      )}
+
+      {providerName === 'bedrock' && (
+        <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
+          <p className="text-sm text-gray-600 mb-2">
+            AWS Bedrock uses the same IAM credentials as the rest of this deployment (S3, Textract). Configure them under{' '}
+            <Link href="/settings/account/development/aws-config" className="text-blue-600 underline font-medium">
+              Account → Development → AWS setup
+            </Link>
+            . There is no separate Bedrock API key here.
           </p>
         </div>
       )}
