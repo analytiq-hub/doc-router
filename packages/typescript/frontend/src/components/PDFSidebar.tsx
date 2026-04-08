@@ -12,22 +12,24 @@ const PDFFormSidebar = dynamic(() => import('./PDFFormSidebar'), {
 });
 
 import type { HighlightInfo } from '@/types/index';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 interface Props {
   organizationId: string;
   id: string;
+  /** Loaded PDF for embedded-text search when OCR blocks are missing or unmatched. */
+  pdfDocument?: PDFDocumentProxy | null;
   onHighlight: (highlight: HighlightInfo) => void;
-  onClearHighlight?: () => void;
 }
 
 type SidebarMode = 'extraction' | 'forms';
 
-const PDFSidebar = ({ organizationId, id, onHighlight, onClearHighlight }: Props) => {
+const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight }: Props) => {
   const [activeMode, setActiveMode] = useState<SidebarMode>('extraction');
 
   return (
     <div className="w-full h-full flex flex-col border-r border-black/10">
-      {/* Header with Extraction / Forms tabs only */}
+      {/* Header with Extraction / Forms tabs */}
       <div className="h-12 min-h-[48px] flex items-center px-4 bg-gray-100 text-black font-bold border-b border-black/10">
         <div className="flex bg-gray-200 rounded-md p-1">
             <button
@@ -59,15 +61,15 @@ const PDFSidebar = ({ organizationId, id, onHighlight, onClearHighlight }: Props
           <PDFExtractionSidebar
             organizationId={organizationId}
             id={id}
+            pdfDocument={pdfDocument}
             onHighlight={onHighlight}
-            onClearHighlight={onClearHighlight}
           />
         ) : (
           <PDFFormSidebar
             organizationId={organizationId}
             id={id}
+            pdfDocument={pdfDocument}
             onHighlight={onHighlight}
-            onClearHighlight={onClearHighlight}
           />
         )}
       </div>

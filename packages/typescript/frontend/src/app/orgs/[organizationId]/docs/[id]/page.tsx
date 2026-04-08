@@ -18,6 +18,8 @@ const AgentTab = dynamic(() => import('@/components/agent/AgentTab'), {
 });
 import type { HighlightInfo } from '@/types/index';
 import type { PDFViewerControlsType } from '@/components/Layout';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { EXTRACTION_HIGHLIGHT_AUTO_CLEAR_MS } from '@/constants/extractionHighlight';
 
 const PDFViewer = dynamic(() => import('@/components/PDFViewer'), {
   ssr: false,
@@ -38,6 +40,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
   const [showPdfPanel, setShowPdfPanel] = useState(true);
   const [showChatPanel, setShowChatPanel] = useState(true);
   const [highlightInfo, setHighlightInfo] = useState<HighlightInfo | undefined>();
+  const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
 
   useEffect(() => {
@@ -71,15 +74,40 @@ const PDFViewerPage = ({ params }: PageProps) => {
     };
   }, [showLeftPanel, showPdfPanel, showChatPanel, isSmallScreen]);
 
-  // Three panels: extraction (left) | PDF (center) | agent (right, optional)
-  const getDefaultSizes = () => {
-    if (!showLeftPanel && !showChatPanel) return { left: 0, main: 100, right: 0 };
-    if (!showLeftPanel) return { left: 0, main: 65, right: 35 };
-    if (!showChatPanel) return { left: 30, main: 70, right: 0 };
-    return { left: 25, main: 45, right: 30 };
-  };
+  useEffect(() => {
+    const has =
+      (highlightInfo?.blocks?.length ?? 0) > 0 ||
+      (highlightInfo?.pdfFallbackHits?.length ?? 0) > 0;
+    if (!has) return;
+    const timerId = window.setTimeout(() => {
+      setHighlightInfo(undefined);
+    }, EXTRACTION_HIGHLIGHT_AUTO_CLEAR_MS);
+    return () => window.clearTimeout(timerId);
+  }, [highlightInfo]);
 
-  const defaultSizes = getDefaultSizes();
+  useEffect(() => {
+    setHighlightInfo(undefined);
+  }, [id]);
+
+  // Sizes must sum to 100% for the panels that are actually mounted (react-resizable-panels).
+  // getDefaultSizes() previously ignored showPdfPanel, e.g. left+chat without PDF → 25+30=55% or 25+45=70%.
+  const panelDefaultSizes = (() => {
+    const L = showLeftPanel;
+    const P = showPdfPanel;
+    const C = showChatPanel;
+    if (L && P && C) return [25, 45, 30];
+    if (L && P && !C) return [30, 70];
+    if (L && !P && C) return [40, 60];
+    if (L && !P && !C) return [100];
+    if (!L && P && C) return [65, 35];
+    if (!L && P && !C) return [100];
+    if (!L && !P && C) return [100];
+    return [100];
+  })();
+  let pi = 0;
+  const leftPanelSize = showLeftPanel ? panelDefaultSizes[pi++] : undefined;
+  const mainPanelSize = showPdfPanel ? panelDefaultSizes[pi++] : undefined;
+  const rightPanelSize = showChatPanel ? panelDefaultSizes[pi++] : undefined;
 
   if (!id) return <div>No PDF ID provided</div>;
   const pdfId = Array.isArray(id) ? id[0] : id;
@@ -90,13 +118,13 @@ const PDFViewerPage = ({ params }: PageProps) => {
           <PanelGroup id={`doc-page-panels-${pdfId}`} direction="horizontal" style={{ width: '100%', height: '100%' }}>
             {showLeftPanel && (
               <>
-                <Panel defaultSize={defaultSizes.left} minSize={15} order={1}>
+                <Panel defaultSize={leftPanelSize!} minSize={15} order={1}>
                   <Box sx={{ height: '100%', overflow: 'auto' }}>
                     <PDFSidebar 
                       organizationId={organizationId} 
                       id={pdfId}
+                      pdfDocument={pdfDocument}
                       onHighlight={setHighlightInfo}
-                      onClearHighlight={() => setHighlightInfo(undefined)}
                     />
                   </Box>
                 </Panel>
@@ -105,13 +133,14 @@ const PDFViewerPage = ({ params }: PageProps) => {
             )}
 
             {showPdfPanel && (
-              <Panel defaultSize={defaultSizes.main} minSize={20} order={2}>
+              <Panel defaultSize={mainPanelSize!} minSize={20} order={2}>
                 <Box sx={{ height: '100%', overflow: 'hidden', minWidth: 0 }}>
                   <PDFViewer 
                     organizationId={organizationId} 
                     id={pdfId}
                     highlightInfo={highlightInfo}
                     initialShowBoundingBoxes={showBoundingBoxesFromUrl}
+                    onPdfDocumentReady={setPdfDocument}
                   />
                 </Box>
               </Panel>
@@ -120,7 +149,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
             {showChatPanel && (
               <>
                 <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
-                <Panel defaultSize={defaultSizes.right} minSize={20} order={3}>
+                <Panel defaultSize={rightPanelSize!} minSize={20} order={3}>
                   <Box sx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                     <AgentTab organizationId={organizationId} documentId={pdfId} />
                   </Box>

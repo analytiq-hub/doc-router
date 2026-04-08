@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { 
   ChevronDownIcon, 
   MagnifyingGlassIcon,
@@ -19,12 +19,13 @@ import { useOCRBlocks } from '@/hooks/useOCRBlocks';
 import type { GetLLMResultResponse } from '@docrouter/sdk';
 import type { HighlightInfo } from '@/hooks/useOCRBlocks';
 import DraggablePanel from '@/components/DraggablePanel';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 interface Props {
   organizationId: string;
   id: string;
+  pdfDocument?: PDFDocumentProxy | null;
   onHighlight: (highlight: HighlightInfo) => void;
-  onClearHighlight?: () => void;
 }
 
 interface EditingState {
@@ -47,7 +48,7 @@ const StyledMenuItem = styled(MenuItem)(({ theme }) => ({
   },
 }));
 
-const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
+const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighlight }: Props) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   const { loadOCRBlocks, findBlocksWithContext } = useOCRBlocks();
@@ -61,6 +62,8 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
   const [editMode, setEditMode] = useState<boolean>(false);
   const [documentState, setDocumentState] = useState<string | null>(null);
   const defaultLlmFetchStartedRef = React.useRef(false);
+  /** Cycle index for repeated Search on the same extraction (first click = 1st match, then next match). */
+  const extractionFindCycleRef = useRef<{ sig: string; index: number } | null>(null);
 
   const [documentName, setDocumentName] = useState<string | null>(null);
   const [organization, setOrganization] = useState<Organization | null>(null);
@@ -102,6 +105,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
 
   useEffect(() => {
     defaultLlmFetchStartedRef.current = false;
+    extractionFindCycleRef.current = null;
   }, [id]);
 
   // Fetch document metadata (state, name) then load prompts and default LLM result.
@@ -350,7 +354,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     }
   };
 
-  const handleFind = (promptId: string, key: string, value: string) => {
+  const handleFind = async (promptId: string, key: string, value: string) => {
     // Make sure value is not empty or null
     if (!value || value === 'null') return;
     
@@ -358,12 +362,35 @@ const PDFExtractionSidebarContent = ({ organizationId, id, onHighlight }: Props)
     const searchValue = value.trim();
     if (searchValue === '') return;
     
-    const highlightInfo = findBlocksWithContext(searchValue, promptId, key);
-    if (highlightInfo.blocks.length > 0) {
-      onHighlight(highlightInfo);
-    } else {
+    const full = await findBlocksWithContext(searchValue, promptId, key, pdfDocument);
+    const ocrCount = full.blocks.length;
+    const pdfHits = full.pdfFallbackHits ?? [];
+    const pdfCount = pdfHits.length;
+
+    if (ocrCount === 0 && pdfCount === 0) {
+      extractionFindCycleRef.current = null;
       console.log('No matches found for:', searchValue);
+      return;
     }
+
+    const sig = `${promptId}\0${key ?? ''}\0${searchValue}`;
+    const total = ocrCount > 0 ? ocrCount : pdfCount;
+
+    let idx: number;
+    const prev = extractionFindCycleRef.current;
+    if (!prev || prev.sig !== sig) {
+      idx = 0;
+    } else {
+      idx = (prev.index + 1) % total;
+    }
+    extractionFindCycleRef.current = { sig, index: idx };
+
+    const highlightInfo: HighlightInfo =
+      ocrCount > 0
+        ? { ...full, blocks: [full.blocks[idx]], pdfFallbackHits: undefined }
+        : { ...full, blocks: [], pdfFallbackHits: [pdfHits[idx]] };
+
+    onHighlight(highlightInfo);
   };
 
   const handleEdit = (promptId: string, key: string, value: string) => {

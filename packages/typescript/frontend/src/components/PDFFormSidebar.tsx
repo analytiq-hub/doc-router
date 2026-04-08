@@ -18,15 +18,16 @@ import { toast } from 'react-toastify';
 import { getApiErrorMsg } from '@/utils/api';
 import type { FormSubmission, FieldMapping, FieldMappingSource } from '@docrouter/sdk';
 import type { GetLLMResultResponse } from '@docrouter/sdk';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 interface Props {
   organizationId: string;
   id: string;
+  pdfDocument?: PDFDocumentProxy | null;
   onHighlight: (highlight: HighlightInfo) => void;
-  onClearHighlight?: () => void;
 }
 
-const PDFFormSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
+const PDFFormSidebarContent = ({ organizationId, id, pdfDocument, onHighlight }: Props) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const { loadOCRBlocks, findBlocksWithContext } = useOCRBlocks();
   
@@ -486,14 +487,14 @@ const PDFFormSidebarContent = ({ organizationId, id, onHighlight }: Props) => {
   };
 
   // Add this function to handle form field search
-  const handleFormFieldSearch = (fieldValue: string) => {
+  const handleFormFieldSearch = async (fieldValue: string) => {
     if (!fieldValue || typeof fieldValue !== 'string') {
       toast.info('No text to search');
       return;
     }
     
-    const highlightInfo = findBlocksWithContext(fieldValue, 'form', 'field');
-    if (highlightInfo.blocks.length > 0) {
+    const highlightInfo = await findBlocksWithContext(fieldValue, 'form', 'field', pdfDocument);
+    if (highlightInfo.blocks.length > 0 || (highlightInfo.pdfFallbackHits?.length ?? 0) > 0) {
       onHighlight(highlightInfo);
     } else {
       toast.info('No matching text found in document');

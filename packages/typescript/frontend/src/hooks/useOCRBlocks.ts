@@ -1,19 +1,28 @@
 import { useState, useCallback, useRef } from 'react';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { DocRouterOrgApi } from '@/utils/api';
 import type { OCRBlock } from '@docrouter/sdk';
 import { isOCRSupported, isOcrNotReadyError, normalizeOcrBlocksPayload } from '@/utils/ocr-utils';
+import { searchPdf, type PdfSearchHit } from '@/utils/pdfTextSearch';
 
 export interface HighlightInfo {
   blocks: OCRBlock[];
   promptId: string;
   key?: string;
   value: string;
+  /** When OCR blocks are missing or no Textract match, optional hits from PDF.js embedded text (same as viewer find). */
+  pdfFallbackHits?: PdfSearchHit[];
 }
 
 export interface UseOCRBlocksReturn {
   ocrBlocks: OCRBlock[] | null;
   loadOCRBlocks: (organizationId: string, documentId: string, fileName?: string) => Promise<void>;
-  findBlocksWithContext: (text: string, promptId: string, key?: string) => HighlightInfo;
+  findBlocksWithContext: (
+    text: string,
+    promptId: string,
+    key?: string,
+    pdf?: PDFDocumentProxy | null,
+  ) => Promise<HighlightInfo>;
   isLoading: boolean;
   error: string | null;
 }
@@ -61,11 +70,35 @@ export function useOCRBlocks(): UseOCRBlocksReturn {
     }
   }, []);
 
-  const findBlocksWithContext = useCallback((searchText: string, promptId: string, key?: string): HighlightInfo => {
-    if (ocrBlocks == null) return { blocks: [], promptId, key, value: searchText };
+  const findBlocksWithContext = useCallback(
+    async (
+      searchText: string,
+      promptId: string,
+      key?: string,
+      pdf?: PDFDocumentProxy | null,
+    ): Promise<HighlightInfo> => {
+    const baseMeta = { promptId, key, value: searchText };
+
+    const pdfTextFallback = async (): Promise<HighlightInfo> => {
+      if (!pdf) return { blocks: [], ...baseMeta };
+      const q = searchText.trim();
+      if (!q) return { blocks: [], ...baseMeta };
+      try {
+        const hits = await searchPdf(pdf, q, false);
+        return { blocks: [], ...baseMeta, pdfFallbackHits: hits };
+      } catch {
+        return { blocks: [], ...baseMeta };
+      }
+    };
+
+    if (ocrBlocks == null) {
+      return pdfTextFallback();
+    }
 
     const blockList = normalizeOcrBlocksPayload(ocrBlocks as unknown);
-    if (blockList.length === 0) return { blocks: [], promptId, key, value: searchText };
+    if (blockList.length === 0) {
+      return pdfTextFallback();
+    }
 
     // DEBUG: Log the search request
     console.log(`Searching for: "${searchText}"`);
@@ -402,6 +435,10 @@ export function useOCRBlocks(): UseOCRBlocksReturn {
       }
     }
     
+    if (foundBlocks.length === 0) {
+      return pdfTextFallback();
+    }
+
     return {
       blocks: foundBlocks,
       promptId,

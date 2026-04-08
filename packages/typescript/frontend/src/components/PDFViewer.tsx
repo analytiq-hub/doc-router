@@ -2,6 +2,7 @@
 "use client"
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { pdfjs, Document, Page } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { DocRouterOrgApi } from '@/utils/api';
@@ -111,9 +112,11 @@ interface PDFViewerProps {
   highlightInfo?: HighlightInfo;
   /** When true (e.g. from ?bbox), bounding boxes are shown and OCR blocks are loaded on mount. */
   initialShowBoundingBoxes?: boolean;
+  /** Fired when the PDF document is loaded (extraction search can use PDF.js text when OCR is missing). */
+  onPdfDocumentReady?: (pdf: PDFDocumentProxy) => void;
 }
 
-const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes }: PDFViewerProps) => {
+const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes, onPdfDocumentReady }: PDFViewerProps) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
@@ -328,6 +331,15 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     queueMicrotask(() => findInputRef.current?.focus());
   }, []);
 
+  const closeFindBar = useCallback(() => {
+    setFindBarOpen(false);
+    setSearchInput('');
+    setDebouncedSearch('');
+    setSearchHits([]);
+    setActiveMatchIndex(0);
+    setSearchBusy(false);
+  }, []);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       const isFindShortcut =
@@ -341,13 +353,13 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       }
       if (e.key === 'Escape' && findBarOpen) {
         e.preventDefault();
-        setFindBarOpen(false);
+        closeFindBar();
       }
     };
     // Capture phase: canvas / inner nodes may stop bubbling; we still see the shortcut first.
     document.addEventListener('keydown', onKeyDown, true);
     return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [fileUrl, loading, findBarOpen, openFindBar]);
+  }, [fileUrl, loading, findBarOpen, openFindBar, closeFindBar]);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchInput), 300);
@@ -429,6 +441,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
   const handleLoadSuccess = (pdf: pdfjs.PDFDocumentProxy) => {
     pdfDocRef.current = pdf;
+    onPdfDocumentReady?.(pdf);
     setPdfLoadVersion((v) => v + 1);
     setNumPages(pdf.numPages);
     setPageNumber(1);
@@ -977,7 +990,9 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
   // This is called once for each page
   const renderHighlights = useCallback((page: number) => {
-    if (!highlightInfo?.blocks.length) return null;
+    const blocks = highlightInfo?.blocks ?? [];
+    const pdfHits = highlightInfo?.pdfFallbackHits ?? [];
+    if (!blocks.length && !pdfHits.length) return null;
 
     // Define padding as a percentage of the container
     const PADDING_PERCENT = 1.0; // 1.0% padding
@@ -991,48 +1006,59 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
         left: 0,
         pointerEvents: 'none',
       }}>
-        {highlightInfo?.blocks.map((block: OCRBlock, index: number) => {
-          if (ocrBlockPageNum(block) !== page) return null;
+        {blocks.length > 0 &&
+          blocks.map((block: OCRBlock, index: number) => {
+            if (ocrBlockPageNum(block) !== page) return null;
 
-          const box = getTextractNormalizedBox(block);
-          if (!box) return null;
-          const { Width, Height, Left, Top } = box;
-          
-          return (
-            <div
-              key={index}
-              style={{
-                position: 'absolute',
-                left: `${(Left * 100) - PADDING_PERCENT}%`,
-                top: `${(Top * 100) - PADDING_PERCENT}%`,
-                width: `${(Width * 100) + (PADDING_PERCENT * 2)}%`,
-                height: `${(Height * 100) + (PADDING_PERCENT * 2)}%`,
-                //backgroundColor: 'rgba(255, 140, 50, 0.4)', // Orange
-                //backgroundColor: 'rgba(255, 127, 80, 0.4)', // Coral orange
-                backgroundColor: 'rgba(251, 192, 45, 0.4)',  // Soft amber
-                //backgroundColor: 'rgba(0, 188, 212, 0.35)',  // Teal accent
-                //backgroundColor: 'rgba(156, 39, 176, 0.25)',  // Royal purple
-                //backgroundColor: 'rgba(255, 64, 129, 0.3)',  // Deep rose
-                clipPath: `polygon(
-                  /* Left edge - slightly jagged */
+            const box = getTextractNormalizedBox(block);
+            if (!box) return null;
+            const { Width, Height, Left, Top } = box;
+            
+            return (
+              <div
+                key={`ocr-${index}`}
+                style={{
+                  position: 'absolute',
+                  left: `${(Left * 100) - PADDING_PERCENT}%`,
+                  top: `${(Top * 100) - PADDING_PERCENT}%`,
+                  width: `${(Width * 100) + (PADDING_PERCENT * 2)}%`,
+                  height: `${(Height * 100) + (PADDING_PERCENT * 2)}%`,
+                  backgroundColor: 'rgba(251, 192, 45, 0.4)',  // Soft amber
+                  clipPath: `polygon(
                   0% 35%, 2% 30%, 0% 25%, 3% 20%,
-                  /* Top edge - gentle wave */
                   3% 20%, 20% 15%, 40% 18%, 60% 15%, 80% 17%, 97% 20%,
-                  /* Right edge - slightly jagged */
                   97% 20%, 100% 25%, 98% 30%, 100% 35%,
-                  /* Bottom edge - gentle wave, moved even lower */
                   100% 85%, 80% 90%, 60% 87%, 40% 90%, 20% 88%, 3% 85%,
-                  /* Close back to start */
                   0% 85%, 2% 80%, 0% 75%, 2% 70%, 0% 65%, 2% 45%, 0% 35%
                 )`,
-                filter: 'blur(2px)',
-                pointerEvents: 'auto',
-                cursor: 'help',
-                zIndex: 1,
-              }}
-            />
-          );
-        })}
+                  filter: 'blur(2px)',
+                  pointerEvents: 'auto',
+                  cursor: 'help',
+                  zIndex: 1,
+                }}
+              />
+            );
+          })}
+        {!blocks.length &&
+          pdfHits.map((hit, idx) => {
+            if (hit.page !== page) return null;
+            return (
+              <div
+                key={`pdf-fallback-${idx}`}
+                style={{
+                  position: 'absolute',
+                  left: `${hit.left * 100}%`,
+                  top: `${hit.top * 100}%`,
+                  width: `${hit.width * 100}%`,
+                  height: `${hit.height * 100}%`,
+                  backgroundColor: 'rgba(251, 192, 45, 0.4)',
+                  pointerEvents: 'auto',
+                  cursor: 'help',
+                  zIndex: 1,
+                }}
+              />
+            );
+          })}
       </div>
     );
   }, [highlightInfo]);
@@ -1168,7 +1194,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
   // Update the useEffect for highlightInfo changes
   useEffect(() => {
-    if (highlightInfo?.blocks.length) {
+    if (highlightInfo?.blocks.length || highlightInfo?.pdfFallbackHits?.length) {
       // Check if this is the same search as before
       const isSameSearch = !!(lastSearch && 
         lastSearch.promptId === highlightInfo.promptId && 
@@ -1205,42 +1231,31 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
   // Modify findNextHighlightedPage to handle repeated searches
   const findNextHighlightedPage = useCallback((currentPage: number, isSameSearch: boolean = false): number | null => {
-    if (!highlightInfo?.blocks.length) return null;
+    const blocks = highlightInfo?.blocks ?? [];
+    const pdfHits = highlightInfo?.pdfFallbackHits ?? [];
+    if (!blocks.length && !pdfHits.length) return null;
 
-    //console.log('findNextHighlightedPage', currentPage, isSameSearch, highlightInfo.key, highlightInfo.value);
-
-    // For a repeated search, start looking from the next page
     const startPage = isSameSearch ? currentPage + 1 : currentPage;
 
-    // // Log all pages with highlights
-    // for (const block of highlightInfo.blocks) {
-    //   console.log('block', block.Page);
-    // }
+    if (blocks.length) {
+      const nextBlock = highlightInfo!.blocks
+        .filter((block) => ocrBlockPageNum(block) >= startPage)
+        .sort((a, b) => ocrBlockPageNum(a) - ocrBlockPageNum(b))[0];
 
-    // First look for highlights after the start page
-    const nextHighlightedPage = highlightInfo.blocks
-      .filter((block) => ocrBlockPageNum(block) >= startPage)
-      .sort((a, b) => ocrBlockPageNum(a) - ocrBlockPageNum(b))[0];
+      if (nextBlock) {
+        return ocrBlockPageNum(nextBlock);
+      }
 
-    if (nextHighlightedPage) {
-      const p = ocrBlockPageNum(nextHighlightedPage);
-      console.log('nextHighlightedPage', p);
-      return p;
+      const firstBlock = [...highlightInfo!.blocks].sort(
+        (a, b) => ocrBlockPageNum(a) - ocrBlockPageNum(b),
+      )[0];
+      return firstBlock ? ocrBlockPageNum(firstBlock) : null;
     }
 
-    // Look for highlights from the first page
-    const firstBlock = [...highlightInfo.blocks].sort(
-      (a, b) => ocrBlockPageNum(a) - ocrBlockPageNum(b),
-    )[0];
-    const firstHighlightedPage = firstBlock ? ocrBlockPageNum(firstBlock) : null;
-
-    // Only return first page if it's different from current page
-    if (firstHighlightedPage) {
-      console.log('firstHighlightedPage', firstHighlightedPage);
-      return firstHighlightedPage;
-    }
-
-    return null;
+    const pages = [...new Set(pdfHits.map((h) => h.page))].sort((a, b) => a - b);
+    const after = pages.find((p) => p >= startPage);
+    if (after !== undefined) return after;
+    return pages[0] ?? null;
   }, [highlightInfo]);
 
   useEffect(() => {
@@ -1650,7 +1665,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                     </Box>
                     <Tooltip title="Close (Esc)">
                       <IconButton
-                        onClick={() => setFindBarOpen(false)}
+                        onClick={closeFindBar}
                         size="small"
                         aria-label="Close find bar"
                         sx={{ flexShrink: 0, p: 0.375 }}
