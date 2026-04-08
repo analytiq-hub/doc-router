@@ -104,6 +104,18 @@ def test_max_reserved_with_pdf_bytes():
     assert r >= 1
 
 
+def test_max_reserved_pymupdf_zero():
+    cfg = merge_org_ocr_config({"mode": "pymupdf"})
+    assert max_reserved_spu_for_ocr_config(cfg) == 0
+    tiny = b"%PDF-1.4\n1 0 obj<<>>endobj trailer<<>>\n%%EOF"
+    assert max_reserved_spu_for_ocr_config(cfg, pdf_bytes=tiny) == 0
+
+
+def test_merge_pymupdf_mode():
+    cfg = merge_org_ocr_config({"mode": "pymupdf"})
+    assert cfg.mode == "pymupdf"
+
+
 @pytest.mark.asyncio
 async def test_ocr_settings_catalog_includes_mistral_flag(monkeypatch):
     async def mistral_on():
@@ -114,7 +126,7 @@ async def test_ocr_settings_catalog_includes_mistral_flag(monkeypatch):
         mistral_on,
     )
     cat = await ocr_settings_catalog()
-    assert cat["modes"] == ["textract", "mistral", "llm"]
+    assert cat["modes"] == ["textract", "mistral", "llm", "pymupdf"]
     assert cat["mistral_enabled"] is True
 
 
@@ -155,6 +167,12 @@ async def test_apply_allows_mistral_when_mistral_llm_configured(monkeypatch):
     )
     out = await apply_ocr_config_update(None, {"mode": "mistral"})
     assert out["mode"] == "mistral"
+
+
+@pytest.mark.asyncio
+async def test_apply_allows_pymupdf():
+    out = await apply_ocr_config_update(None, {"mode": "pymupdf"})
+    assert out["mode"] == "pymupdf"
 
 
 @pytest.mark.asyncio
@@ -212,6 +230,30 @@ async def test_gemini_only_stored_config_resets_to_defaults_then_textract_runs()
         await run_document_ocr(
             None, b"%PDF-1.4", org_id="o", document_id="d", cfg=cfg
         )
+
+
+@pytest.mark.asyncio
+async def test_run_document_ocr_pymupdf_mode():
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page()
+    page.insert_text((72, 72), "Hello PyMuPDF")
+    pdf_bytes = doc.tobytes()
+    doc.close()
+    cfg = merge_org_ocr_config({"mode": "pymupdf"})
+    with (
+        patch("analytiq_data.ocr.ocr_runners.ad.payments.check_spu_limits") as chk,
+        patch("analytiq_data.ocr.ocr_runners.ad.payments.record_spu_usage") as rec,
+    ):
+        out = await run_document_ocr(
+            object(), pdf_bytes, org_id="o", document_id="d", cfg=cfg
+        )
+    chk.assert_not_called()
+    rec.assert_not_called()
+    assert out["ocr_engine"] == "pymupdf"
+    assert len(out["pages"]) >= 1
+    assert "Hello" in (out["pages"][0].get("markdown") or "")
 
 
 def test_parse_llm_ocr_response_plain_json():

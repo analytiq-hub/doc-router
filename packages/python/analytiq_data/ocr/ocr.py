@@ -42,8 +42,10 @@ def is_pages_markdown_ocr(obj: Any) -> bool:
     return isinstance(first, dict) and "markdown" in first
 
 
-def infer_ocr_type(ocr_json: Any) -> Literal["textract", "mistral", "llm"]:
+def infer_ocr_type(ocr_json: Any) -> Literal["textract", "mistral", "llm", "pymupdf"]:
     """Infer engine from stored JSON when GridFS metadata is missing."""
+    if isinstance(ocr_json, dict) and ocr_json.get("ocr_engine") == "pymupdf":
+        return "pymupdf"
     if is_pages_markdown_ocr(ocr_json):
         if isinstance(ocr_json, dict) and ocr_json.get("provider") is not None:
             return "llm"
@@ -93,7 +95,7 @@ async def save_ocr_json(
     Save OCR payload to GridFS.
 
     New writes use UTF-8 JSON with ``metadata["ocr_type"]`` in
-    {``textract``, ``mistral``, ``llm``}. Legacy callers may use ``pickle``.
+    {``textract``, ``mistral``, ``llm``, ``pymupdf``}. Legacy callers may use ``pickle``.
     """
     key = f"{document_id}_json"
     if metadata is None:
@@ -187,16 +189,16 @@ async def save_ocr_text_from_json(
     metadata: dict = None,
     force: bool = False,
     org_id: str = None,
-    ocr_type: Optional[Literal["textract", "mistral", "llm"]] = None,
+    ocr_type: Optional[Literal["textract", "mistral", "llm", "pymupdf"]] = None,
 ):
     """
     Build and save per-page and full-document plain text from stored OCR JSON.
 
-    ``ocr_type`` selects Textract vs pages-markdown (Mistral / LLM). If omitted, inferred.
+    ``ocr_type`` selects Textract vs pages-markdown (Mistral / LLM / PyMuPDF). If omitted, inferred.
     """
     ot = ocr_type or infer_ocr_type(ocr_json)
 
-    if ot in ("mistral", "llm"):
+    if ot in ("mistral", "llm", "pymupdf"):
         if not isinstance(ocr_json, dict) or not is_pages_markdown_ocr(ocr_json):
             raise ValueError(
                 f"{org_id}/{document_id}: expected pages[].markdown OCR payload for ocr_type={ot}"

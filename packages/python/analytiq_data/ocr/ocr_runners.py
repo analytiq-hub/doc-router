@@ -1,7 +1,7 @@
 """
 Run OCR for a document PDF blob using organization OCR settings.
 
-``OrgOcrConfig.mode`` selects Textract, native Mistral OCR, or LLM OCR.
+``OrgOcrConfig.mode`` selects Textract, native Mistral OCR, LLM OCR, or PyMuPDF.
 """
 from __future__ import annotations
 
@@ -65,6 +65,7 @@ async def run_document_ocr(
     For ``textract``, the return value is Textract-shaped dict with ``Blocks``.
     For ``mistral``, the return value is Mistral ``OCRResponse`` JSON.
     For ``llm``, the return value is ``{ provider, model, pages: [{ index, markdown }] }`` JSON.
+    For ``pymupdf``, the return value is ``{ ocr_engine: \"pymupdf\", pages: [...] }`` (0 SPU).
     """
     reserved = max_reserved_spu_for_ocr_config(cfg, pdf_bytes=pdf_bytes)
     if reserved > 0:
@@ -178,6 +179,28 @@ async def run_document_ocr(
             document_id,
             n_pages,
             spus,
+        )
+        return payload
+
+    if cfg.mode == "pymupdf":
+        from analytiq_data.ocr.pymupdf_ocr import extract_pymupdf_pdf
+
+        try:
+            payload = extract_pymupdf_pdf(pdf_bytes)
+        except Exception as e:
+            logger.error(
+                "OCR engine pymupdf failed for org_id=%s document_id=%s: %s",
+                org_id,
+                document_id,
+                e,
+            )
+            raise
+        n_pages = _mistral_page_count(payload)
+        logger.info(
+            "OCR pymupdf finished org_id=%s document_id=%s pages=%s spus=0",
+            org_id,
+            document_id,
+            n_pages,
         )
         return payload
 

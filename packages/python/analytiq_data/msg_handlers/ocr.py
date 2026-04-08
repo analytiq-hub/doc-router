@@ -146,7 +146,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
                     )
                 return
 
-            # Run OCR (mode from org settings: textract, mistral, or llm)
+            # Run OCR (mode from org settings: textract, mistral, llm, or pymupdf)
             ocr_cfg = await ad.ocr.fetch_org_ocr_config(analytiq_client, org_id)
             ocr_json = await ad.ocr.run_document_ocr(
                 analytiq_client,

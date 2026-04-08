@@ -12,17 +12,20 @@ export interface OrgOcrTextractSettings {
 
 export type OrgOcrMistralSettings = Record<string, never>;
 
+export type OrgOcrPymupdfSettings = Record<string, never>;
+
 export interface OrgOcrLlmSettings {
   provider: string | null;
   model: string | null;
 }
 
-export type OcrMode = 'textract' | 'mistral' | 'llm';
+export type OcrMode = 'textract' | 'mistral' | 'llm' | 'pymupdf';
 
 export interface OrgOcrConfig {
   mode: OcrMode;
   textract: OrgOcrTextractSettings;
   mistral: OrgOcrMistralSettings;
+  pymupdf: OrgOcrPymupdfSettings;
   llm: OrgOcrLlmSettings;
 }
 

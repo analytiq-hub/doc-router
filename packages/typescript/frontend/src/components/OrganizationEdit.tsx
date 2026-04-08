@@ -29,16 +29,17 @@ interface OrganizationEditProps {
 
 const FALLBACK_TEXTRACT_FEATURES = ['LAYOUT', 'TABLES', 'FORMS', 'SIGNATURES'] as const
 
-const FALLBACK_OCR_MODES: OcrMode[] = ['textract', 'mistral', 'llm']
+const FALLBACK_OCR_MODES: OcrMode[] = ['textract', 'mistral', 'llm', 'pymupdf']
 
 const OCR_MODE_LABELS: Record<OcrMode, string> = {
   textract: 'AWS Textract',
   mistral: 'Mistral OCR',
   llm: 'LLM OCR',
+  pymupdf: 'PyMuPDF (embedded text)',
 }
 
 function isOcrMode(s: string): s is OcrMode {
-  return s === 'textract' || s === 'mistral' || s === 'llm'
+  return s === 'textract' || s === 'mistral' || s === 'llm' || s === 'pymupdf'
 }
 
 function normalizeOcrConfig(raw: OrgOcrConfig): OrgOcrConfig {
@@ -51,6 +52,7 @@ function normalizeOcrConfig(raw: OrgOcrConfig): OrgOcrConfig {
           : ['LAYOUT'],
     },
     mistral: raw.mistral ?? {},
+    pymupdf: raw.pymupdf ?? {},
     llm: {
       provider: raw.llm?.provider ?? null,
       model: raw.llm?.model ?? null,
@@ -680,6 +682,12 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                 <Alert severity="info" sx={{ mb: 2 }}>
                   Uses Mistral OCR (<code className="text-sm">mistral-ocr-latest</code>). The API key is
                   read from the Mistral LLM provider in account settings when a document is processed.
+                </Alert>
+              )}
+              {ocrConfig.mode === 'pymupdf' && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Extracts embedded text from PDFs locally (PyMuPDF). Scanned or image-only PDFs need AWS
+                  Textract, Mistral OCR, or LLM OCR. This mode uses 0 SPU.
                 </Alert>
               )}
               {ocrConfig.mode === 'llm' && (

@@ -228,7 +228,7 @@ export class DocRouterOrg {
   // ---------------- OCR ----------------
 
   /**
-   * Textract-oriented block list for search/bbox (WORD/LINE blocks). For Mistral/LLM payloads
+   * Textract-oriented block list for search/bbox (WORD/LINE blocks). For Mistral/LLM/PyMuPDF payloads
    * (`{ pages: [...] }`), the download/json API still returns that JSON, but this method
    * normalizes unknown shapes to `[]` — use {@link getOCRStoredPayload} for a faithful export.
    *

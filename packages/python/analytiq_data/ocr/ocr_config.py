@@ -1,8 +1,8 @@
 """
 Organization-level OCR configuration.
 
-``mode`` selects exactly one engine: Textract, native Mistral OCR, or LLM OCR.
-See :mod:`analytiq_data.ocr.ocr_runners`.
+``mode`` selects exactly one engine: Textract, native Mistral OCR, LLM OCR, or PyMuPDF
+embedded text. See :mod:`analytiq_data.ocr.ocr_runners`.
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 TEXTRACT_FEATURES = frozenset({"LAYOUT", "TABLES", "FORMS", "SIGNATURES"})
 
-OcrMode = Literal["textract", "mistral", "llm"]
+OcrMode = Literal["textract", "mistral", "llm", "pymupdf"]
 
 # Legacy export (tests); single-mode config replaces multi-engine order.
 OcrEngineId = Literal["textract"]
@@ -85,6 +85,12 @@ class OrgOcrMistralSettings(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class OrgOcrPymupdfSettings(BaseModel):
+    """Optional PyMuPDF OCR flags (extraction is local embedded text only)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class OrgOcrLlmSettings(BaseModel):
     """LLM OCR provider + model when ``mode == \"llm\"``."""
 
@@ -102,6 +108,7 @@ class OrgOcrConfig(BaseModel):
     mode: OcrMode = "textract"
     textract: OrgOcrTextractSettings = Field(default_factory=OrgOcrTextractSettings)
     mistral: OrgOcrMistralSettings = Field(default_factory=OrgOcrMistralSettings)
+    pymupdf: OrgOcrPymupdfSettings = Field(default_factory=OrgOcrPymupdfSettings)
     llm: OrgOcrLlmSettings = Field(default_factory=OrgOcrLlmSettings)
 
     @model_validator(mode="after")
@@ -123,7 +130,11 @@ def max_reserved_spu_for_ocr_config(
     Upper-bound SPUs to reserve before an OCR job (credit pre-check).
 
     Uses PDF page count when ``pdf_bytes`` is provided; otherwise a conservative default.
+
+    ``pymupdf`` mode bills **0** SPU — no reservation.
     """
+    if cfg.mode == "pymupdf":
+        return 0
     if pdf_bytes:
         from analytiq_data.common.pdf_pages import pdf_page_count
 
@@ -151,6 +162,8 @@ def _normalize_legacy_ocr_dict(raw: dict[str, Any]) -> dict[str, Any]:
         out["mistral"] = {}
     if "llm" not in out or not isinstance(out.get("llm"), dict):
         out["llm"] = {"provider": None, "model": None}
+    if "pymupdf" not in out or not isinstance(out.get("pymupdf"), dict):
+        out["pymupdf"] = {}
     return out
 
 
@@ -214,7 +227,7 @@ async def ocr_settings_catalog() -> dict[str, Any]:
 
     return {
         "textract_feature_types": sorted(TEXTRACT_FEATURES),
-        "modes": ["textract", "mistral", "llm"],
+        "modes": ["textract", "mistral", "llm", "pymupdf"],
         "mistral_enabled": await mistral_ocr_enabled_from_llm_providers(),
     }
 

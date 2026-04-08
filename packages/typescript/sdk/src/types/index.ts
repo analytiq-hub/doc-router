@@ -69,17 +69,21 @@ export interface OrgOcrTextractSettings {
 /** Reserved for future Mistral OCR options; server uses `mistral-ocr-latest`. */
 export type OrgOcrMistralSettings = Record<string, never>;
 
+/** Reserved for future PyMuPDF OCR options; extraction is local embedded text only. */
+export type OrgOcrPymupdfSettings = Record<string, never>;
+
 export interface OrgOcrLlmSettings {
   provider: string | null;
   model: string | null;
 }
 
-export type OcrMode = 'textract' | 'mistral' | 'llm';
+export type OcrMode = 'textract' | 'mistral' | 'llm' | 'pymupdf';
 
 export interface OrgOcrConfig {
   mode: OcrMode;
   textract: OrgOcrTextractSettings;
   mistral: OrgOcrMistralSettings;
+  pymupdf: OrgOcrPymupdfSettings;
   llm: OrgOcrLlmSettings;
 }
 
