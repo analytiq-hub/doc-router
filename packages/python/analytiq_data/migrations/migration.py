@@ -2977,6 +2977,77 @@ class MigrateAwsAndVertexToCloudConfig(Migration):
             return False
 
 
+class AddGridFSFilesBucketIndexes(Migration):
+    """
+    Standard GridFS indexes for document blobs (``files``) and OCR payloads (``ocr``).
+
+    Collections: ``{bucket}.files`` and ``{bucket}.chunks`` for each bucket.
+    Motor/PyMongo normally creates these on first upload; DBs restored without them only have
+    ``_id``. Without ``{files_id, n}`` on chunks, chunk reads can scan the whole collection.
+    """
+
+    CHUNKS_INDEX = "files_id_1_n_1"
+    FILES_INDEX = "filename_1_uploadDate_1"
+    BUCKETS = ("files", "ocr")
+
+    def __init__(self):
+        super().__init__(
+            description="Add standard GridFS indexes for files and ocr buckets (*.files, *.chunks)"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            names = await db.list_collection_names()
+            for bucket in self.BUCKETS:
+                files_ns = f"{bucket}.files"
+                chunks_ns = f"{bucket}.chunks"
+                if files_ns in names:
+                    await db[files_ns].create_index(
+                        [("filename", 1), ("uploadDate", 1)],
+                        name=self.FILES_INDEX,
+                        background=True,
+                    )
+                    logger.info("Created GridFS index %s on %s", self.FILES_INDEX, files_ns)
+                if chunks_ns in names:
+                    await db[chunks_ns].create_index(
+                        [("files_id", 1), ("n", 1)],
+                        name=self.CHUNKS_INDEX,
+                        unique=True,
+                        background=True,
+                    )
+                    logger.info(
+                        "Created GridFS unique index %s on %s",
+                        self.CHUNKS_INDEX,
+                        chunks_ns,
+                    )
+            return True
+        except Exception as e:
+            logger.error("AddGridFSFilesBucketIndexes failed: %s", e)
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            names = await db.list_collection_names()
+            for bucket in self.BUCKETS:
+                files_ns = f"{bucket}.files"
+                chunks_ns = f"{bucket}.chunks"
+                if files_ns in names:
+                    try:
+                        await db[files_ns].drop_index(self.FILES_INDEX)
+                    except Exception as ex:
+                        logger.warning("Drop %s on %s: %s", self.FILES_INDEX, files_ns, ex)
+                if chunks_ns in names:
+                    try:
+                        await db[chunks_ns].drop_index(self.CHUNKS_INDEX)
+                    except Exception as ex:
+                        logger.warning("Drop %s on %s: %s", self.CHUNKS_INDEX, chunks_ns, ex)
+            logger.info("Dropped GridFS files/ocr bucket indexes (if present)")
+            return True
+        except Exception as e:
+            logger.error("AddGridFSFilesBucketIndexes down failed: %s", e)
+            return False
+
+
 MIGRATIONS = [
     OcrKeyMigration(),
     LlmResultFieldsMigration(),
@@ -3016,6 +3087,7 @@ MIGRATIONS = [
     AddAgentThreadsIndexes(),
     RenameAgentThreadsToChatThreads(),
     MigrateAwsAndVertexToCloudConfig(),
+    AddGridFSFilesBucketIndexes(),
     # Add more migrations here
 ]
 
