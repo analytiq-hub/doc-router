@@ -210,32 +210,35 @@ async def is_organization_admin(org_id: str, user_id: str):
         True if the user is an org admin, False otherwise
     """
     db = ad.common.get_async_db()
-    org = await db.organizations.find_one({"_id": ObjectId(org_id)})
+    # Match in the query and project only _id so we do not load the full members array
+    # (large orgs were slowing every org-scoped endpoint, e.g. GET document PDF).
+    org = await db.organizations.find_one(
+        {
+            "_id": ObjectId(org_id),
+            "members": {"$elemMatch": {"user_id": user_id, "role": "admin"}},
+        },
+        projection={"_id": 1},
+    )
     if not org:
-        logger.info(f"Org not found for org_id: {org_id}")
+        logger.info(f"User is not an org admin (or org missing): org_id={org_id} user_id={user_id}")
         return False
 
-    for member in org.get("members", []):
-        if member.get("user_id") == user_id and member.get("role") == "admin":
-            return True
-
-    return False
+    return True
 
 async def is_organization_member(org_id: str, user_id: str):
     """
     Check if a user is a member of an organization
     """
     db = ad.common.get_async_db()
-    org = await db.organizations.find_one({"_id": ObjectId(org_id)})
+    org = await db.organizations.find_one(
+        {"_id": ObjectId(org_id), "members.user_id": user_id},
+        projection={"_id": 1},
+    )
     if not org:
-        logger.info(f"Org not found for org_id: {org_id}")
+        logger.info(f"User is not an org member (or org missing): org_id={org_id} user_id={user_id}")
         return False
-    
-    for member in org.get("members", []):
-        if member.get("user_id") == user_id:
-            return True
 
-    return False
+    return True
 
 async def get_org_user(
     organization_id: str,

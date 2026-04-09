@@ -33,16 +33,16 @@ async def get_blob_async(analytiq_client, bucket: str, key: str) -> dict:
     collection = db[f"{bucket}.files"]
 
     # Get the doc metadata
-    elem = await collection.find_one({"filename": key})
-    if elem is None:
+    file_doc = await collection.find_one({"filename": key})
+    if file_doc is None:
         return None
-    metadata = elem.get("metadata", None)
-    upload_date = elem.get("uploadDate", None)
+    metadata = file_doc.get("metadata", None)
+    upload_date = file_doc.get("uploadDate", None)
 
-    # Get the blob
+    # Download by file _id to avoid a second GridFS lookup by filename (extra round trip).
     fs_bucket = AsyncIOMotorGridFSBucket(db, bucket_name=bucket)
-    elem = await fs_bucket.open_download_stream_by_name(key)
-    blob = await elem.read()
+    stream = await fs_bucket.open_download_stream(file_doc["_id"])
+    blob = await stream.read()
 
     blob_dict = {
         "blob": blob,
