@@ -698,20 +698,9 @@ async def _generate_query_embedding_with_retry(
     Raises:
         Exception: If embedding generation fails after retries
     """
-    # Get provider using the standard method
-    provider = ad.llm.get_llm_model_provider(embedding_model)
-    if provider is None:
-        raise ValueError(f"Could not determine provider for model {embedding_model}")
-    
-    api_key = await ad.llm.get_llm_key(analytiq_client, provider)
-    
-    # Generate embedding via LiteLLM
+    # Generate embedding via LiteLLM (handles Bedrock/Vertex AI credentials automatically)
     # This will be retried automatically by stamina if it raises a retryable error
-    response = await litellm.aembedding(
-        model=embedding_model,
-        input=[query],
-        api_key=api_key
-    )
+    response = await ad.llm.aembedding(analytiq_client, embedding_model, [query])
     
     # Validate response
     if not response or not response.data or len(response.data) == 0:

@@ -468,24 +468,10 @@ async def generate_embeddings_batch(
     """
     if not texts:
         return [], 0.0
-    
-    # Get provider and API key using the standard method
-    provider = ad.llm.get_llm_model_provider(embedding_model)
-    if provider is None:
-        raise ValueError(f"Could not determine provider for model {embedding_model}")
-    
-    api_key = await ad.llm.get_llm_key(analytiq_client, provider)
-    
-    if not api_key:
-        raise ValueError(f"No API key found for provider {provider}")
-    
-    # Generate embeddings via LiteLLM
+
+    # Generate embeddings via LiteLLM (handles Bedrock/Vertex AI credentials automatically)
     # This will be retried automatically by stamina if it raises a retryable error
-    response = await litellm.aembedding(
-        model=embedding_model,
-        input=texts,
-        api_key=api_key
-    )
+    response = await ad.llm.aembedding(analytiq_client, embedding_model, texts)
     
     # Extract embeddings from response
     embeddings = [item["embedding"] for item in response.data]

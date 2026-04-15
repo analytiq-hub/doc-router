@@ -3,7 +3,6 @@
 # Standard library imports
 import json
 import logging
-import os
 from datetime import datetime, UTC
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
@@ -452,8 +451,6 @@ async def test_embedding_model(
     """
     Test embedding model with sample text (admin only) - Account level.
     """
-    import litellm
-    
     # Verify the model is an embedding model
     if not ad.llm.is_embedding_model(request.model):
         raise HTTPException(
@@ -476,59 +473,8 @@ async def test_embedding_model(
     
     try:
         analytiq_client = ad.common.get_analytiq_client()
-        
-        # Get provider using the standard method (same as run_llm_chat)
-        provider = ad.llm.get_llm_model_provider(request.model)
-        if provider is None:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Could not determine provider for model {request.model}"
-            )
-        
-        api_key = await ad.llm.get_llm_key(analytiq_client, provider)
 
-        # Bedrock uses AWS IAM; Vertex AI uses cloud_config credentials — neither uses an API key token
-        if not api_key and provider not in ("bedrock", "vertex_ai"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"No API key found for provider {provider}"
-            )
-
-        params = {
-            "model": request.model,
-            "input": [request.input],
-        }
-        if api_key:
-            params["api_key"] = api_key
-
-        # Inject AWS credentials for Bedrock
-        if provider == "bedrock":
-            aws_client = await ad.aws.get_aws_client_async(analytiq_client, region_name="us-east-1")
-            params["aws_access_key_id"] = aws_client.aws_access_key_id
-            params["aws_secret_access_key"] = aws_client.aws_secret_access_key
-            params["aws_region_name"] = aws_client.region_name
-            logger.info(f"Bedrock embedding config: region={aws_client.region_name}")
-
-        # Inject Vertex AI credentials (service account JSON stored in cloud_config)
-        if provider == "vertex_ai":
-            params.pop("api_key", None)
-            if api_key:
-                params["vertex_credentials"] = api_key
-                try:
-                    creds = json.loads(api_key)
-                    if creds.get("project_id"):
-                        params["vertex_project"] = creds["project_id"]
-                except Exception:
-                    pass
-            vertex_project, vertex_location = await ad.llm.get_vertex_ai_config(analytiq_client)
-            if vertex_project:
-                params["vertex_project"] = vertex_project
-            # Gemini embedding models require us-central1; default differs from chat ("global")
-            params["vertex_location"] = vertex_location or os.getenv("VERTEX_AI_LOCATION", "us-central1")
-            logger.info(f"Vertex AI embedding config: project={params.get('vertex_project')}, location={params['vertex_location']}")
-
-        # Generate embedding
-        response = await litellm.aembedding(**params)
+        response = await ad.llm.aembedding(analytiq_client, request.model, [request.input])
         
         if not response.data or len(response.data) == 0:
             raise HTTPException(

@@ -291,25 +291,13 @@ async def detect_embedding_dimensions(embedding_model: str, analytiq_client) -> 
         HTTPException: If embedding model is invalid or API call fails
     """
     try:
-        import litellm
-        
-        # Get provider and API key
-        provider = litellm.get_model_info(embedding_model).get("provider", "openai")
-        api_key = await ad.llm.get_llm_key(analytiq_client, provider)
-        
-        # Make test embedding call
-        response = await litellm.aembedding(
-            model=embedding_model,
-            input=["test"],
-            api_key=api_key
-        )
-        
+        response = await ad.llm.aembedding(analytiq_client, embedding_model, ["test"])
+
         if not response.data or len(response.data) == 0:
             raise HTTPException(status_code=400, detail="Invalid embedding model response")
-        
-        dimensions = len(response.data[0]["embedding"])
-        return dimensions
-        
+
+        return len(response.data[0]["embedding"])
+
     except Exception as e:
         logger.error(f"Failed to detect embedding dimensions for {embedding_model}: {e}")
         raise HTTPException(
