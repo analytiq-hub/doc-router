@@ -443,11 +443,15 @@ def get_llm_providers() -> dict:
                 "us.anthropic.claude-opus-4-5-20251101-v1:0",
                 "us.anthropic.claude-sonnet-4-6",
                 "us.anthropic.claude-opus-4-6-v1",
+                "cohere.embed-v4:0",
+                "amazon.titan-embed-text-v2:0"
             ],
             "litellm_models_enabled": [
                 "us.anthropic.claude-haiku-4-5-20251001-v1:0",
                 "us.anthropic.claude-sonnet-4-6",
                 "us.anthropic.claude-opus-4-6-v1",
+                "cohere.embed-v4:0",
+                "amazon.titan-embed-text-v2:0"
             ],
             "litellm_models_chat_agent": [
                 "us.anthropic.claude-sonnet-4-6",

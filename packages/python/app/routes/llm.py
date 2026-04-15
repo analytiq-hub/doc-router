@@ -485,19 +485,31 @@ async def test_embedding_model(
             )
         
         api_key = await ad.llm.get_llm_key(analytiq_client, provider)
-        
-        if not api_key:
+
+        # Bedrock uses AWS IAM credentials, not an API key — other providers require one
+        if not api_key and provider != "bedrock":
             raise HTTPException(
                 status_code=400,
                 detail=f"No API key found for provider {provider}"
             )
-        
+
+        params = {
+            "model": request.model,
+            "input": [request.input],
+        }
+        if api_key:
+            params["api_key"] = api_key
+
+        # Inject AWS credentials for Bedrock
+        if provider == "bedrock":
+            aws_client = await ad.aws.get_aws_client_async(analytiq_client, region_name="us-east-1")
+            params["aws_access_key_id"] = aws_client.aws_access_key_id
+            params["aws_secret_access_key"] = aws_client.aws_secret_access_key
+            params["aws_region_name"] = aws_client.region_name
+            logger.info(f"Bedrock embedding config: region={aws_client.region_name}")
+
         # Generate embedding
-        response = await litellm.aembedding(
-            model=request.model,
-            input=[request.input],
-            api_key=api_key
-        )
+        response = await litellm.aembedding(**params)
         
         if not response.data or len(response.data) == 0:
             raise HTTPException(
