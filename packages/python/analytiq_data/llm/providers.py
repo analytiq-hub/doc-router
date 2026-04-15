@@ -15,6 +15,18 @@ logger = logging.getLogger(__name__)
 # Add entries here when a model is available but litellm hasn't added it yet.
 # The "litellm_provider" key must match the models_by_provider key used in get_llm_providers().
 LITELLM_MODEL_PATCHES: dict = {
+    # gemini-embedding-001: litellm only knows "gemini-embedding-001" (vertex_ai-embedding-models provider).
+    # Register the vertex_ai/-prefixed name so our routing logic resolves it to the vertex_ai provider.
+    "vertex_ai/gemini-embedding-001": {
+        "litellm_provider": "vertex_ai",
+        "mode": "embedding",
+        "max_input_tokens": 2048,
+        "max_tokens": 2048,
+        "output_vector_size": 3072,
+        "input_cost_per_token": 1.5e-07,
+        "output_cost_per_token": 0,
+        "source": "https://cloud.google.com/vertex-ai/generative-ai/docs/learn/models",
+    },
     "vertex_ai/gemini-2.5-pro": {
         "cache_read_input_token_cost": 1.25e-07,
         "cache_read_input_token_cost_above_200k_tokens": 2.5e-07,
@@ -563,12 +575,14 @@ def get_llm_providers() -> dict:
                 "vertex_ai/gemini-2.5-pro",
                 "vertex_ai/gemini-3.1-flash-lite-preview",
                 "vertex_ai/gemini-3.1-pro-preview",
+                "vertex_ai/gemini-embedding-001",
             ],
             "litellm_models_enabled": [
                 "vertex_ai/gemini-2.5-flash",
                 "vertex_ai/gemini-2.5-pro",
                 "vertex_ai/gemini-3.1-flash-lite-preview",
                 "vertex_ai/gemini-3.1-pro-preview",
+                "vertex_ai/gemini-embedding-001",
             ],
             "litellm_models_chat_agent": [
                 "vertex_ai/gemini-3.1-flash-lite-preview",

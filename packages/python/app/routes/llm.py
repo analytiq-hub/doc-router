@@ -3,6 +3,7 @@
 # Standard library imports
 import json
 import logging
+import os
 from datetime import datetime, UTC
 from typing import Optional, List, Literal
 from pydantic import BaseModel, Field
@@ -486,8 +487,8 @@ async def test_embedding_model(
         
         api_key = await ad.llm.get_llm_key(analytiq_client, provider)
 
-        # Bedrock uses AWS IAM credentials, not an API key — other providers require one
-        if not api_key and provider != "bedrock":
+        # Bedrock uses AWS IAM; Vertex AI uses cloud_config credentials — neither uses an API key token
+        if not api_key and provider not in ("bedrock", "vertex_ai"):
             raise HTTPException(
                 status_code=400,
                 detail=f"No API key found for provider {provider}"
@@ -507,6 +508,24 @@ async def test_embedding_model(
             params["aws_secret_access_key"] = aws_client.aws_secret_access_key
             params["aws_region_name"] = aws_client.region_name
             logger.info(f"Bedrock embedding config: region={aws_client.region_name}")
+
+        # Inject Vertex AI credentials (service account JSON stored in cloud_config)
+        if provider == "vertex_ai":
+            params.pop("api_key", None)
+            if api_key:
+                params["vertex_credentials"] = api_key
+                try:
+                    creds = json.loads(api_key)
+                    if creds.get("project_id"):
+                        params["vertex_project"] = creds["project_id"]
+                except Exception:
+                    pass
+            vertex_project, vertex_location = await ad.llm.get_vertex_ai_config(analytiq_client)
+            if vertex_project:
+                params["vertex_project"] = vertex_project
+            # Gemini embedding models require us-central1; default differs from chat ("global")
+            params["vertex_location"] = vertex_location or os.getenv("VERTEX_AI_LOCATION", "us-central1")
+            logger.info(f"Vertex AI embedding config: project={params.get('vertex_project')}, location={params['vertex_location']}")
 
         # Generate embedding
         response = await litellm.aembedding(**params)
