@@ -43,7 +43,7 @@ const DevelopmentSettingsPage: React.FC = () => {
 
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-xl font-semibold">GCP setup (Vertex AI)</h2>
+            <h2 className="text-xl font-semibold">GCP Setup (Vertex AI)</h2>
             <p className="text-gray-600 mb-2">
               Upload the Google Cloud service account JSON key for Vertex models.
             </p>
