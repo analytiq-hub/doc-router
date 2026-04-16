@@ -3,13 +3,15 @@
 [![Backend Tests](https://github.com/analytiq-hub/doc-router/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/analytiq-hub/doc-router/actions/workflows/backend-tests.yml)
 
 The [Smart Document Router](https://docrouter.ai) is an open source document processing data layer. 
-* It ingests unstructured docs through REST APIs and integrations from faxes, emails, and ERPs.
+* It ingests unstructured docs through [REST APIs](https://docrouter.ai/docs/rest-api/) and integrations from faxes, emails, and ERPs.
 * It processes documents at scale with OCR and LLMs
-* And it chunks, embeds, and organizes documents into queriable knowledge bases
+* And it chunks, embeds, and organizes documents into queriable [knowledge bases](https://docrouter.ai/docs/knowledge-bases/)
 
 The Document Router is designed to work standalone or with a human-in-the-loop, and can process `medical, insurance, financial, supply chain, and legal documents`.
 
 It acts as a system of record for the `extraction schemas` and `prompts`, and it is portable over all major clouds and LLM providers.
+
+A [Document Agent](https://docrouter.ai/docs/document-agent/) is available to configure prompts and extractions, and to review processed results. 
 
 # Tech stack
 * NextJS, NextAuth, MaterialUI, TailwindCSS
