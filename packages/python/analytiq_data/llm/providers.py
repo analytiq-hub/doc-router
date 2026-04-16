@@ -247,9 +247,12 @@ async def setup_llm_providers(analytiq_client):
                 provider_config = {**config}
                 update = True
             else:
-                # Merge config fields into provider_config, but preserve the token and user-set chat agent models
+                # Merge config fields into provider_config, but preserve the token, user-set chat agent
+                # models, and whether the provider is enabled (defaults in code differ per provider;
+                # e.g. bedrock/vertex default to disabled while openai defaults to enabled — without this,
+                # startup merge would flip user-enabled providers back to the code default).
                 for key, value in config.items():
-                    if key not in ["token", "token_created_at", "litellm_models_chat_agent"]:
+                    if key not in ["token", "token_created_at", "litellm_models_chat_agent", "enabled"]:
                         if provider_config.get(key) != value:
                             provider_config[key] = value
                             update = True
