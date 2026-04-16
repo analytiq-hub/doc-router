@@ -24,11 +24,11 @@ A [Document Agent](https://docrouter.ai/docs/document-agent/) is available to co
 [PyData Boston DocRouter Slides](https://docs.google.com/presentation/d/14nAjSmZA1WGViqSk5IZuzggSuJZQPYrwTGsPjO6FPfU) (Feb '24) have more details about tech stack, and how Cursor AI was used to build the DocRouter.
 
 # User Experience
-![Smart Document Router](./docs/assets/files.png)
-![Smart Document Router](./docs/assets/extractions.png)
+![Smart Document Router](https://docrouter.ai/assets/images/files.png)
+![Smart Document Router](https://docrouter.ai/assets/images/extractions.png)
 
 # Example Deployment
-![Smart Document Router](./docs/assets/doc-router-arch.png)
+![Smart Document Router](https://docrouter.ai/assets/images/doc-router-arch.png)
 
 # Presentations
 * [Smart Document Router Slides](https://docs.google.com/presentation/d/1wU0jtcXnqCu5nxaRRCp7D37Q63i4gr-4ASdUhO__tM8) from Boston PyData, Spring 2025
