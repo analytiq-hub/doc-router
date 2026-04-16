@@ -1,6 +1,19 @@
 # Doc-Router Deployment Guide
 
-This directory contains deployment configurations for doc-router across multiple environments:
+Doc-Router is an AI-powered document processing platform that transforms unstructured documents (PDFs, scanned images, spreadsheets) into structured, actionable data. Key capabilities:
+
+- **Multi-provider LLM support** — OpenAI (GPT-4o, o1/o3), Anthropic Claude, Google Gemini/Vertex AI, Mistral, Groq, DeepSeek, xAI, AWS Bedrock; switching between providers requires no code changes (via LiteLLM)
+- **Embedding models & knowledge bases** — OpenAI and Cohere embeddings; vector + hybrid lexical search; RAG-powered extraction with configurable chunking strategies
+- **OCR engines** — AWS Textract, Mistral OCR, LLM-based vision OCR, PyMuPDF text extraction
+- **REST API & SDKs** — Python and TypeScript/JavaScript client libraries; interactive API docs at `/fastapi/docs`
+- **MCP server** (`@docrouter/mcp`) — integrate doc-router tools directly into Claude Code, Cursor, and other MCP-compatible AI assistants
+- **N8N integration** — community nodes package (`n8n-nodes-docrouter`) for visual no-code workflows
+- **Power Automate connector** — custom connector (`power-automate-docrouter`) for Microsoft ecosystem automation
+- **Temporal workflows** — durable orchestration for complex multi-stage document pipelines via webhooks and REST API
+- **Webhooks** — real-time push notifications on document and LLM processing events
+- **Stripe billing** — metered usage with Smart Processing Unit (SPU) credits
+
+This directory contains deployment configurations across multiple environments:
 - **Docker Compose**: Simple local development and single-node deployments
 - **Kubernetes (kind)**: Local Kubernetes testing and development
 - **AWS EKS**: Production Kubernetes deployments via Helm OCI charts
@@ -45,7 +58,34 @@ FRONTEND_IMAGE_REPO=<account>.dkr.ecr.us-east-1.amazonaws.com/doc-router-fronten
 BACKEND_IMAGE_REPO=<account>.dkr.ecr.us-east-1.amazonaws.com/doc-router-backend-test
 APP_HOST=test.docrouter.ai
 AWS_S3_BUCKET_NAME=docrouter-test
-# ... secrets (MONGODB_URI, NEXTAUTH_SECRET, API keys, etc.)
+
+# Database
+MONGODB_URI=mongodb+srv://...
+
+# Auth
+NEXTAUTH_SECRET=...
+AUTH_GITHUB_ID=...
+AUTH_GITHUB_SECRET=...
+AUTH_GOOGLE_ID=...
+AUTH_GOOGLE_SECRET=...
+
+# LLM providers (configure the ones you use; all are optional at deploy time
+# and can also be set later via the organization settings UI)
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=...          # Google Gemini direct API
+GROQ_API_KEY=...
+MISTRAL_API_KEY=...
+# AWS Bedrock uses the same AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY above
+# Google Vertex AI: set GOOGLE_APPLICATION_CREDENTIALS to a service-account JSON path
+
+# Email (AWS SES)
+SES_FROM_EMAIL=no-reply@example.com
+
+# Stripe billing (optional)
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_PUBLISHABLE_KEY=pk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
 `NEXTAUTH_URL` and `NEXT_PUBLIC_FASTAPI_FRONTEND_URL` are derived automatically from `APP_HOST`
@@ -127,7 +167,29 @@ APP_HOST=myapp.example.com
 LETSENCRYPT_EMAIL=admin@example.com
 REGION=us-east-1                               # AWS region for S3 document storage
 AWS_S3_BUCKET_NAME=my-docrouter-bucket
-# ... secrets (MONGODB_URI, NEXTAUTH_SECRET, AWS keys for S3, API keys, etc.)
+AWS_ACCESS_KEY_ID=...
+AWS_SECRET_ACCESS_KEY=...
+
+# Database
+MONGODB_URI=mongodb+srv://...
+
+# Auth
+NEXTAUTH_SECRET=...
+
+# LLM providers (configure the ones you use)
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=...
+GROQ_API_KEY=...
+MISTRAL_API_KEY=...
+
+# Email (AWS SES)
+SES_FROM_EMAIL=no-reply@example.com
+
+# Stripe billing (optional)
+STRIPE_SECRET_KEY=sk_live_...
+STRIPE_PUBLISHABLE_KEY=pk_live_...
+STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
 The same scripts are used as for EKS — `CLOUD_PROVIDER=do` switches the registry login from
@@ -214,6 +276,38 @@ kind delete cluster --name doc-router
 cd deploy/compose
 docker-compose -f docker-compose.embedded.yml up -d
 ```
+
+---
+
+## Post-Deploy: Integrations & Extensions
+
+### MCP Server (AI assistant integration)
+
+The `@docrouter/mcp` package exposes doc-router tools (document management, OCR, extraction, knowledge base search, etc.) directly inside MCP-compatible AI assistants such as Claude Code and Cursor:
+
+```bash
+npm install -g @docrouter/mcp
+```
+
+Configure with your API token and organization ID. See `packages/typescript/mcp/` for details.
+
+### n8n
+
+Install the community node package `n8n-nodes-docrouter` in your n8n instance to automate document workflows visually (e.g., Gmail → DocRouter → webhook to ERP). The node supports Documents, Tags, Prompts, Schemas, Knowledge Base, and Webhooks.
+
+### Power Automate
+
+Deploy the open-source `power-automate-docrouter` custom connector with the Power Platform CLI (`paconn`). This exposes the same organization-scoped REST API as n8n within Microsoft Power Automate flows.
+
+### Temporal
+
+For durable multi-stage pipelines (document classification, conditional routing, batch processing), connect Temporal workflows to doc-router via webhooks and the REST API. The webhook payload on `llm.completed` / `document.uploaded` can signal a Temporal workflow that then calls the REST API to retrieve results and drive subsequent steps.
+
+### REST API & SDKs
+
+- Interactive API docs: `https://<APP_HOST>/fastapi/docs`
+- Python SDK: `packages/python/sdk/`
+- TypeScript SDK: `packages/typescript/sdk/`
 
 ---
 

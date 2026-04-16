@@ -2,11 +2,14 @@
 
 [![Backend Tests](https://github.com/analytiq-hub/doc-router/actions/workflows/backend-tests.yml/badge.svg)](https://github.com/analytiq-hub/doc-router/actions/workflows/backend-tests.yml)
 
-The [Smart Document Router](https://docrouter.ai) is an open source Document Understanding and Data Extraction tool. It is like [LLamaCloud](https://docs.llamaindex.ai), but for Enterprises using ERP systems.
-* It ingests unstructured docs from faxes, email, and ERPs.
-* It selects streams of docs that can be processed autonomously with LLMs and NLP - reducing the need for time-consuming, expensive manual workflows.
+The [Smart Document Router](https://docrouter.ai) is an open source document processing data layer. 
+* It ingests unstructured docs through REST APIs and integrations from faxes, emails, and ERPs.
+* It processes documents at scale with OCR and LLMs
+* And it chunks, embeds, and organizes documents into queriable knowledge bases
 
-The Document Router is designed to work with a human-in-the-loop and can processes financial data correctly 'on the nose'. (We are not doing RAG!)
+The Document Router is designed to work standalone or with a human-in-the-loop, and can process `medical, insurance, financial, supply chain, and legal documents`.
+
+It acts as a system of record for the `extraction schemas` and `prompts`, and it is portable over all major clouds and LLM providers.
 
 # Tech stack
 * NextJS, NextAuth, MaterialUI, TailwindCSS
@@ -14,7 +17,7 @@ The Document Router is designed to work with a human-in-the-loop and can process
 * MongoDB
 * Pydantic
 * LiteLLM
-* OpenAI, Anthropic, Gemini, Groq/DeepSeek...
+* OpenAI, Anthropic, Gemini, Vertex AI for GCP, AWS Bedrock, xAI, OpenRouter...
 
 [PyData Boston DocRouter Slides](https://docs.google.com/presentation/d/14nAjSmZA1WGViqSk5IZuzggSuJZQPYrwTGsPjO6FPfU) (Feb '24) have more details about tech stack, and how Cursor AI was used to build the DocRouter.
 
