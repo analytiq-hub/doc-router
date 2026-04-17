@@ -438,7 +438,7 @@ def get_llm_providers() -> dict:
             "token_env": "AZURE_OPENAI_API_KEY",
         },
         "azure_ai": {
-            "display_name": "Azure AI Studio",
+            "display_name": "Microsoft Foundry",
             "litellm_provider": "azure_ai",
             "litellm_models_available": ["azure_ai/deepseek-v3"],
             "litellm_models_enabled": ["azure_ai/deepseek-v3"],
