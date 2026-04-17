@@ -77,8 +77,8 @@ async def aembedding(analytiq_client, model: str, texts: list) -> litellm.Embedd
         logger.debug(f"aembedding: Vertex AI project={params.get('vertex_project')}, location={params['vertex_location']}")
 
     if provider == "azure_ai":
-        from analytiq_data.llm.azure_foundry_auth import inject_azure_ai_litellm_entra_params
+        from analytiq_data.llm.llm_azure import add_azure_params
 
-        await inject_azure_ai_litellm_entra_params(params)
+        await add_azure_params(params)
 
     return await litellm.aembedding(**params)

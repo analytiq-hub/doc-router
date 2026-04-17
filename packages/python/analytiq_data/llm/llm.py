@@ -397,9 +397,9 @@ async def _litellm_acompletion_with_retry(
                 params["vertex_project"] = creds["project_id"]
         params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
     elif model.startswith("azure_ai/"):
-        from analytiq_data.llm.azure_foundry_auth import inject_azure_ai_litellm_entra_params
+        from analytiq_data.llm.llm_azure import add_azure_params
 
-        await inject_azure_ai_litellm_entra_params(params)
+        await add_azure_params(params)
     if tools:
         params["tools"] = tools
         params["tool_choice"] = tool_choice if tool_choice is not None else "auto"
@@ -485,9 +485,9 @@ async def agent_completion_stream(
                 params["vertex_project"] = creds["project_id"]
         params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
     elif model.startswith("azure_ai/"):
-        from analytiq_data.llm.azure_foundry_auth import inject_azure_ai_litellm_entra_params
+        from analytiq_data.llm.llm_azure import add_azure_params
 
-        await inject_azure_ai_litellm_entra_params(params)
+        await add_azure_params(params)
     if tools:
         params["tools"] = tools
         params["tool_choice"] = tool_choice if tool_choice is not None else "auto"
@@ -1711,9 +1711,9 @@ async def run_llm_chat(
             params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
 
         if llm_provider == "azure_ai":
-            from analytiq_data.llm.azure_foundry_auth import inject_azure_ai_litellm_entra_params
+            from analytiq_data.llm.llm_azure import add_azure_params
 
-            await inject_azure_ai_litellm_entra_params(params)
+            await add_azure_params(params)
 
         if request.stream:
             # Streaming response
