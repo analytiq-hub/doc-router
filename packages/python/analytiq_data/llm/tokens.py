@@ -9,6 +9,10 @@ async def get_llm_key(analytiq_client, llm_provider: str) -> str:
 
         return await get_gcp_service_account_json(analytiq_client)
 
+    if llm_provider == "azure_ai":
+        # Microsoft Foundry: Entra tokens come from cloud_config via azure_foundry_auth
+        return ""
+
     db = analytiq_client.mongodb_async[analytiq_client.env]
     provider_config = await db.llm_providers.find_one({"litellm_provider": llm_provider})
     if provider_config is None:

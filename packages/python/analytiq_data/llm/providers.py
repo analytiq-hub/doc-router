@@ -440,14 +440,14 @@ def get_llm_providers() -> dict:
         "azure_ai": {
             "display_name": "Microsoft Foundry",
             "litellm_provider": "azure_ai",
-            "litellm_models_available": ["azure_ai/deepseek-v3"],
-            "litellm_models_enabled": ["azure_ai/deepseek-v3"],
-            "litellm_models_chat_agent": ["azure_ai/deepseek-v3"],
+            "litellm_models_available": ["azure_ai/deepseek-v3-0324"],
+            "litellm_models_enabled": ["azure_ai/deepseek-v3-0324"],
+            "litellm_models_chat_agent": ["azure_ai/deepseek-v3-0324"],
             "litellm_models_ocr": [],
             "enabled": False,
             "token" : "",
             "token_created_at": None,
-            "token_env": "AZURE_AI_STUDIO_API_KEY",
+            "token_env": "NONE",
         },
         "bedrock": {
             "display_name": "AWS Bedrock",

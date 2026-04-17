@@ -396,6 +396,10 @@ async def _litellm_acompletion_with_retry(
             if creds.get("project_id"):
                 params["vertex_project"] = creds["project_id"]
         params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
+    elif model.startswith("azure_ai/"):
+        from analytiq_data.llm.azure_foundry_auth import inject_azure_ai_litellm_entra_params
+
+        await inject_azure_ai_litellm_entra_params(params)
     if tools:
         params["tools"] = tools
         params["tool_choice"] = tool_choice if tool_choice is not None else "auto"
@@ -480,6 +484,10 @@ async def agent_completion_stream(
             if creds.get("project_id"):
                 params["vertex_project"] = creds["project_id"]
         params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
+    elif model.startswith("azure_ai/"):
+        from analytiq_data.llm.azure_foundry_auth import inject_azure_ai_litellm_entra_params
+
+        await inject_azure_ai_litellm_entra_params(params)
     if tools:
         params["tools"] = tools
         params["tool_choice"] = tool_choice if tool_choice is not None else "auto"
@@ -986,8 +994,15 @@ async def run_llm(
         llm_provider = "openai"
         
     api_key = await ad.llm.get_llm_key(analytiq_client, llm_provider)
-    logger.info(f"{document_id}/{prompt_revid}: LLM model: {llm_model}, provider: {llm_provider}, api_key: {api_key[:16]}********")
-    
+    if api_key:
+        logger.info(
+            f"{document_id}/{prompt_revid}: LLM model: {llm_model}, provider: {llm_provider}, api_key: {api_key[:16]}********"
+        )
+    else:
+        logger.info(
+            f"{document_id}/{prompt_revid}: LLM model: {llm_model}, provider: {llm_provider}, api_key: (none — using provider-specific auth)"
+        )
+
     # Check if prompt has KB ID for RAG (do this early to modify system prompt if needed)
     kb_id = await ad.common.get_prompt_kb_id(analytiq_client, prompt_revid)
     
@@ -1694,6 +1709,11 @@ async def run_llm_chat(
                 if creds.get("project_id"):
                     params["vertex_project"] = creds["project_id"]
             params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
+
+        if llm_provider == "azure_ai":
+            from analytiq_data.llm.azure_foundry_auth import inject_azure_ai_litellm_entra_params
+
+            await inject_azure_ai_litellm_entra_params(params)
 
         if request.stream:
             # Streaming response

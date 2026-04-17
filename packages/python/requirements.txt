@@ -6,6 +6,7 @@ amazon-textract-textractor[pdfium]==1.9.2
 annotated-types==0.7.0
 anyio==4.12.1
 attrs==25.4.0
+azure-identity==1.25.3
 bcrypt==5.0.0
 certifi==2026.1.4
 chonkie==1.5.2

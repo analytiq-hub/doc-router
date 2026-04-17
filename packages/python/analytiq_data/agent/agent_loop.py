@@ -361,7 +361,7 @@ async def run_agent_turn(
 
     llm_provider = ad.llm.get_llm_model_provider(model)
     api_key = await ad.llm.get_llm_key(analytiq_client, llm_provider)
-    if not api_key:
+    if not api_key and llm_provider not in ("bedrock", "azure_ai"):
         return {"error": f"No API key for model {model}"}
     aws_access_key_id = aws_secret_access_key = aws_region_name = None
     if llm_provider == "bedrock":

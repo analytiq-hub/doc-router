@@ -120,7 +120,7 @@ async def run_kb_chat(
         
         # Get the API key for the provider
         api_key = await ad.llm.get_llm_key(analytiq_client, llm_provider)
-        if not api_key:
+        if not api_key and llm_provider not in ("bedrock", "azure_ai"):
             raise HTTPException(
                 status_code=400,
                 detail=f"No API key found for provider {llm_provider}"

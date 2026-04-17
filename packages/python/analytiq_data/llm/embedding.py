@@ -6,6 +6,7 @@ Handles:
   - Standard API-key providers  (OpenAI, Anthropic, etc.)
   - AWS Bedrock                  (AWS IAM – no API key token)
   - Google Vertex AI             (service-account JSON stored in cloud_config)
+  - Microsoft Foundry (azure_ai) (Entra service principal in cloud_config)
 """
 
 import json
@@ -41,7 +42,7 @@ async def aembedding(analytiq_client, model: str, texts: list) -> litellm.Embedd
 
     api_key = await ad.llm.get_llm_key(analytiq_client, provider)
 
-    if not api_key and provider not in ("bedrock", "vertex_ai"):
+    if not api_key and provider not in ("bedrock", "vertex_ai", "azure_ai"):
         raise ValueError(f"No API key found for provider {provider}")
 
     params: dict = {
@@ -74,5 +75,10 @@ async def aembedding(analytiq_client, model: str, texts: list) -> litellm.Embedd
         # Gemini embedding models are only available in us-central1
         params["vertex_location"] = vertex_location or os.getenv("VERTEX_AI_LOCATION", "us-central1")
         logger.debug(f"aembedding: Vertex AI project={params.get('vertex_project')}, location={params['vertex_location']}")
+
+    if provider == "azure_ai":
+        from analytiq_data.llm.azure_foundry_auth import inject_azure_ai_litellm_entra_params
+
+        await inject_azure_ai_litellm_entra_params(params)
 
     return await litellm.aembedding(**params)

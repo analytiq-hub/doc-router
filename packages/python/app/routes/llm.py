@@ -667,7 +667,7 @@ async def list_llm_providers(
         litellm_provider = provider["litellm_provider"]
         token_created_at = provider.get("token_created_at")
 
-        if litellm_provider in ["bedrock", "vertex_ai"]:
+        if litellm_provider in ["bedrock", "vertex_ai", "azure_ai"]:
             token = None
         else:
             raw_tok = provider.get("token") or ""
@@ -746,6 +746,12 @@ async def set_llm_provider_config(
                 raise HTTPException(
                     status_code=400,
                     detail="Vertex credentials are managed under Account → Development → GCP setup (cloud_config), not here.",
+                )
+        elif litellm_provider == "azure_ai":
+            if len(request.token) > 0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="Microsoft Foundry credentials are managed under Account → Development → Azure setup (cloud_config), not here.",
                 )
         elif len(request.token) > 0:
             elem["token"] = ad.crypto.encrypt_token(request.token)
