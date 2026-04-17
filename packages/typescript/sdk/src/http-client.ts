@@ -14,7 +14,7 @@ export class HttpClient {
     this.config = config;
     this.axios = axios.create({
       baseURL: config.baseURL,
-      timeout: config.timeout || 30000,
+      timeout: config.timeout || 60000,
       headers: {
         'Content-Type': 'application/json',
       },

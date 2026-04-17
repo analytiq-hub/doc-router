@@ -1257,7 +1257,21 @@ async def run_llm(
     resp_content1 = process_llm_resp_content(resp_content, llm_provider)
 
     # 9. Return the response
-    resp_dict = json.loads(resp_content1)
+    try:
+        resp_dict = json.loads(resp_content1)
+    except json.JSONDecodeError as e:
+        # Surface enough of the raw content to diagnose provider quirks
+        # (e.g. reasoning models that wrap output in <think> or markdown fences).
+        raw_preview = (resp_content or "")[:500]
+        cleaned_preview = (resp_content1 or "")[:500]
+        logger.error(
+            "%s/%s: Failed to parse LLM JSON response (provider=%s, model=%s): %s. "
+            "Raw content (first 500 chars): %r. Cleaned content (first 500 chars): %r",
+            document_id, prompt_revid, llm_provider, llm_model, e, raw_preview, cleaned_preview,
+        )
+        raise Exception(
+            f"LLM response was not valid JSON (provider={llm_provider}, model={llm_model}): {e}"
+        ) from e
 
     # If this is not the default prompt, reorder the response to match schema
     if prompt_revid != "default":
