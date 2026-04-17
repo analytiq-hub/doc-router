@@ -440,9 +440,9 @@ def get_llm_providers() -> dict:
         "azure_ai": {
             "display_name": "Microsoft Foundry",
             "litellm_provider": "azure_ai",
-            "litellm_models_available": ["azure_ai/deepseek-v3-0324"],
-            "litellm_models_enabled": ["azure_ai/deepseek-v3-0324"],
-            "litellm_models_chat_agent": ["azure_ai/deepseek-v3-0324"],
+            "litellm_models_available": ["azure_ai/deepseek-v3-0324", "azure_ai/kimi-k2.5"],
+            "litellm_models_enabled": ["azure_ai/deepseek-v3-0324", "azure_ai/kimi-k2.5"],
+            "litellm_models_chat_agent": ["azure_ai/deepseek-v3-0324", "azure_ai/kimi-k2.5"],
             "litellm_models_ocr": [],
             "enabled": False,
             "token" : "",
