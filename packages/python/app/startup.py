@@ -135,6 +135,45 @@ async def setup_api_creds(analytiq_client):
                 upsert=True,
             )
             logger.info("AWS configuration configured for admin user (cloud_config)")
-            
+
+        # Azure service principal (cloud_config type azure). Only store if not already saved from the UI.
+        azure_tenant_id = os.getenv("AZURE_TENANT_ID", "")
+        azure_client_id = os.getenv("AZURE_CLIENT_ID", "")
+        azure_client_secret = os.getenv("AZURE_CLIENT_SECRET", "")
+
+        existing_azure = await db.cloud_config.find_one(
+            {"type": ad.cloud.TYPE_AZURE, "user_id": admin_id}
+        )
+
+        if not existing_azure:
+            if len(azure_tenant_id.strip()) == 0:
+                logger.warning("AZURE_TENANT_ID environment variable not set")
+            if len(azure_client_id.strip()) == 0:
+                logger.warning("AZURE_CLIENT_ID environment variable not set")
+            if len(azure_client_secret.strip()) == 0:
+                logger.warning("AZURE_CLIENT_SECRET environment variable not set")
+
+            encrypted_tenant = ad.crypto.encrypt_token(azure_tenant_id)
+            encrypted_client = ad.crypto.encrypt_token(azure_client_id)
+            encrypted_secret = ad.crypto.encrypt_token(azure_client_secret)
+
+            azure_update = {
+                "type": ad.cloud.TYPE_AZURE,
+                "user_id": admin_id,
+                "tenant_id": encrypted_tenant,
+                "client_id": encrypted_client,
+                "client_secret": encrypted_secret,
+                "created_at": datetime.now(UTC),
+            }
+
+            await db.cloud_config.update_one(
+                {"type": ad.cloud.TYPE_AZURE, "user_id": admin_id},
+                {"$set": azure_update},
+                upsert=True,
+            )
+            logger.info(
+                "Azure service principal configured for admin user (cloud_config) from environment"
+            )
+
     except Exception as e:
         logger.error(f"Failed to set up API credentials: {e}")
