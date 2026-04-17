@@ -12,6 +12,7 @@ const AzureConfigManager: React.FC = () => {
   const [tenantId, setTenantId] = useState('');
   const [clientId, setClientId] = useState('');
   const [clientSecret, setClientSecret] = useState('');
+  const [apiBase, setApiBase] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -30,9 +31,10 @@ const AzureConfigManager: React.FC = () => {
   }, [docRouterAccountApi]);
 
   const handleOpenEdit = () => {
-    setTenantId('');
-    setClientId('');
+    setTenantId(config?.tenant_id?.trim() ?? '');
+    setClientId(config?.client_id?.trim() ?? '');
     setClientSecret('');
+    setApiBase(config?.api_base?.trim() ?? '');
     setError(null);
     setEditOpen(true);
   };
@@ -42,8 +44,13 @@ const AzureConfigManager: React.FC = () => {
     const t = tenantId.trim();
     const c = clientId.trim();
     const s = clientSecret.trim();
-    if (!t || !c || !s) {
-      setError('Tenant ID, Client ID, and Client secret are required.');
+    const b = apiBase.trim().replace(/\/+$/, '');
+    if (!t || !c || !s || !b) {
+      setError('Tenant ID, Client ID, Client secret, and API base URL are required.');
+      return;
+    }
+    if (!/^https:\/\//i.test(b)) {
+      setError('API base URL must start with https://');
       return;
     }
     try {
@@ -51,6 +58,7 @@ const AzureConfigManager: React.FC = () => {
         tenant_id: t,
         client_id: c,
         client_secret: s,
+        api_base: b,
       });
       setEditOpen(false);
       try {
@@ -90,8 +98,9 @@ const AzureConfigManager: React.FC = () => {
         </div>
         <p className="text-sm text-gray-600 mb-3">
           Application (client) credentials for Azure AI Foundry and LiteLLM (tenant ID, client ID, client secret from
-          your app registration). Stored encrypted server-side. Per-model endpoints are configured separately when LLM
-          routing supports them.
+          your app registration). Set the Foundry API base (HTTPS endpoint used as the LiteLLM api_base). Service
+          principal fields are encrypted server-side except API base (plaintext). Only the client secret is masked when
+          viewing saved configuration.
         </p>
         <p className="text-sm">
           <b>Status:</b>{' '}
@@ -111,6 +120,9 @@ const AzureConfigManager: React.FC = () => {
             </div>
             <div>
               <span className="text-gray-500">Client secret:</span> {config.client_secret}
+            </div>
+            <div className="break-all">
+              <span className="text-gray-500">API base:</span> {config.api_base}
             </div>
           </div>
         )}
@@ -188,6 +200,19 @@ const AzureConfigManager: React.FC = () => {
                 setError(null);
               }}
             />
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              API base URL (Foundry endpoint)
+            </label>
+            <input
+              type="url"
+              className="w-full mb-3 px-3 py-2 border border-gray-300 rounded text-sm font-mono"
+              placeholder="https://your-resource.services.ai.azure.com"
+              value={apiBase}
+              onChange={(e) => {
+                setApiBase(e.target.value);
+                setError(null);
+              }}
+            />
             {error && <p className="text-red-600 text-sm mt-2">{error}</p>}
             <div className="flex justify-end gap-2 mt-4">
               <button
@@ -200,7 +225,12 @@ const AzureConfigManager: React.FC = () => {
               <button
                 type="button"
                 onClick={handleSave}
-                disabled={!tenantId.trim() || !clientId.trim() || !clientSecret.trim()}
+                disabled={
+                  !tenantId.trim() ||
+                  !clientId.trim() ||
+                  !clientSecret.trim() ||
+                  !apiBase.trim()
+                }
                 className="px-4 py-2 text-sm text-white bg-blue-600 rounded hover:bg-blue-700 disabled:opacity-50"
               >
                 Save

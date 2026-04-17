@@ -1052,11 +1052,13 @@ export interface GCPConfig {
   service_account_json: string;
 }
 
-/** GET: masked tenant/client id and secret (POST supplies full values). */
+/** GET: ``client_secret`` masked; ``tenant_id``, ``client_id``, ``api_base`` returned in full. POST: all fields required in full. */
 export interface AzureServicePrincipalConfig {
   tenant_id: string;
   client_id: string;
   client_secret: string;
+  /** Foundry / Azure AI base URL (LiteLLM ``api_base``). Stored plaintext in DB. */
+  api_base: string;
 }
 
 // Knowledge Base types

@@ -3,7 +3,7 @@ Unified cloud credentials in ``cloud_config`` with ``type`` discriminator.
 
 - ``type: "aws"`` — same fields as legacy ``aws_config`` (encrypted keys, bucket, ``user_id``).
 - ``type: "gcp"`` — encrypted ``service_account_json`` (Vertex), ``user_id``.
-- ``type: "azure"`` — encrypted Microsoft Entra service principal (tenant, client id, client secret), ``user_id``.
+- ``type: "azure"`` — encrypted Microsoft Entra service principal (tenant, client id, client secret), plaintext ``api_base`` (Foundry endpoint URL), ``user_id``.
 """
 
 import json
@@ -99,12 +99,21 @@ async def get_azure_service_principal_dict(analytiq_client) -> dict:
     """
     Decrypted Microsoft Entra (Azure AD) service principal fields for Foundry / Azure AI, or empty strings.
 
-    Keys: ``tenant_id``, ``client_id``, ``client_secret``.
+    Keys: ``tenant_id``, ``client_id``, ``client_secret``, ``api_base``.
+
+    ``api_base`` is stored in MongoDB as plaintext (not encrypted). If unset in ``cloud_config``,
+    falls back to ``AZURE_API_BASE`` in the process environment.
     """
     db = analytiq_client.mongodb_async[analytiq_client.env]
     doc = await db.cloud_config.find_one({"type": TYPE_AZURE})
     if not doc:
-        return {"tenant_id": "", "client_id": "", "client_secret": ""}
+        api_base_fallback = (os.getenv("AZURE_API_BASE") or "").strip()
+        return {
+            "tenant_id": "",
+            "client_id": "",
+            "client_secret": "",
+            "api_base": api_base_fallback,
+        }
 
     def _dec(field: str) -> str:
         raw = doc.get(field) or ""
@@ -116,19 +125,26 @@ async def get_azure_service_principal_dict(analytiq_client) -> dict:
             logger.warning("Failed to decrypt Azure cloud_config field %s: %s", field, e)
             return ""
 
+    api_base = (doc.get("api_base") or "").strip()
+    if not api_base:
+        api_base = (os.getenv("AZURE_API_BASE") or "").strip()
+
     return {
         "tenant_id": _dec("tenant_id"),
         "client_id": _dec("client_id"),
         "client_secret": _dec("client_secret"),
+        "api_base": api_base,
     }
 
 
 async def azure_service_principal_configured(db) -> bool:
-    """True if non-empty Azure service principal credentials exist in ``cloud_config``."""
+    """True if non-empty Azure service principal credentials and ``api_base`` exist in ``cloud_config``."""
     doc = await db.cloud_config.find_one({"type": TYPE_AZURE})
     if not doc:
         return False
     for key in ("tenant_id", "client_id", "client_secret"):
         if not doc.get(key):
             return False
+    if not (doc.get("api_base") or "").strip():
+        return False
     return True

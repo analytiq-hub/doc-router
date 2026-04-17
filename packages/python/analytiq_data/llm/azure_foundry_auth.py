@@ -41,6 +41,13 @@ async def inject_azure_ai_litellm_entra_params(params: dict) -> None:
             "AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET."
         )
 
+    api_base = (creds.get("api_base") or "").strip()
+    if not api_base:
+        raise ValueError(
+            "Microsoft Foundry (azure_ai) requires api_base (Foundry endpoint URL). "
+            "Set AZURE_API_BASE or add API base in Account → Development → Azure setup."
+        )
+
     key = (tenant_id, client_id, client_secret)
     if _credential_key != key:
         if _credential is not None:
@@ -56,5 +63,4 @@ async def inject_azure_ai_litellm_entra_params(params: dict) -> None:
     token = (await _credential.get_token(FOUNDRY_DEFAULT_TOKEN_SCOPE)).token
     params["azure_ad_token_provider"] = lambda: token  # litellm requires a callable, not a string
     params["api_version"] = "2024-05-01-preview"
-    # TODO: replace with configuration
-    params["api_base"] = "https://docrouter-test2.services.ai.azure.com"
+    params["api_base"] = api_base

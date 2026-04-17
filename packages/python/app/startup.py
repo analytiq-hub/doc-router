@@ -140,6 +140,7 @@ async def setup_api_creds(analytiq_client):
         azure_tenant_id = os.getenv("AZURE_TENANT_ID", "")
         azure_client_id = os.getenv("AZURE_CLIENT_ID", "")
         azure_client_secret = os.getenv("AZURE_CLIENT_SECRET", "")
+        azure_api_base = (os.getenv("AZURE_API_BASE", "") or "").strip().rstrip("/")
 
         existing_azure = await db.cloud_config.find_one(
             {"type": ad.cloud.TYPE_AZURE, "user_id": admin_id}
@@ -152,6 +153,10 @@ async def setup_api_creds(analytiq_client):
                 logger.warning("AZURE_CLIENT_ID environment variable not set")
             if len(azure_client_secret.strip()) == 0:
                 logger.warning("AZURE_CLIENT_SECRET environment variable not set")
+            if not azure_api_base:
+                logger.warning(
+                    "AZURE_API_BASE environment variable not set (Foundry endpoint URL)"
+                )
 
             encrypted_tenant = ad.crypto.encrypt_token(azure_tenant_id)
             encrypted_client = ad.crypto.encrypt_token(azure_client_id)
@@ -163,6 +168,7 @@ async def setup_api_creds(analytiq_client):
                 "tenant_id": encrypted_tenant,
                 "client_id": encrypted_client,
                 "client_secret": encrypted_secret,
+                "api_base": azure_api_base,
                 "created_at": datetime.now(UTC),
             }
 

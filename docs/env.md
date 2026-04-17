@@ -139,6 +139,10 @@ The following environment variables are used for various LLM providers:
 - **Purpose**: Azure AI Studio API key
 - **Usage**: LLM provider configuration (`packages/python/analytiq_data/llm/providers.py`)
 
+### `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_API_BASE`
+- **Purpose**: Microsoft Entra service principal credentials and Foundry endpoint base URL for the `azure_ai` (Microsoft Foundry) LLM provider.
+- **`AZURE_API_BASE`**: HTTPS URL used as LiteLLM `api_base` (for example `https://<resource>.services.ai.azure.com`). Can be set here or persisted via **Account → Development → Azure setup** (`packages/python/analytiq_data/cloud/cloud_config.py`, `packages/python/app/routes/azure.py`, startup seed in `packages/python/app/startup.py`).
+
 ### `GEMINI_API_KEY`
 - **Purpose**: Google Gemini API key
 - **Usage**: LLM provider configuration (`packages/python/analytiq_data/llm/providers.py`)
