@@ -61,11 +61,12 @@ async def test_successful_completion_no_retry():
     
     with patch('analytiq_data.llm.llm.litellm.acompletion', return_value=mock_response) as mock_acompletion:
         result = await _litellm_acompletion_with_retry(
+            analytiq_client=None,
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": "test"}],
             api_key="test-key"
         )
-        
+
         # Verify the function was called once (no retry)
         assert mock_acompletion.call_count == 1
         assert result == mock_response
@@ -88,11 +89,12 @@ async def test_retryable_error_retries_and_succeeds():
         ]
         
         result = await _litellm_acompletion_with_retry(
+            analytiq_client=None,
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": "test"}],
             api_key="test-key"
         )
-        
+
         # Verify the function was called twice (retry happened)
         assert mock_acompletion.call_count == 2
         assert result == mock_success_response
@@ -106,6 +108,7 @@ async def test_non_retryable_error_no_retry():
         
         with pytest.raises(Exception, match="Invalid API key"):
             await _litellm_acompletion_with_retry(
+                None,
                 model="gpt-4o-mini",
                 messages=[{"role": "user", "content": "test"}],
                 api_key="test-key"
@@ -132,11 +135,12 @@ async def test_multiple_retryable_errors_eventually_succeeds():
         ]
         
         result = await _litellm_acompletion_with_retry(
+            analytiq_client=None,
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": "test"}],
             api_key="test-key"
         )
-        
+
         # Verify the function was called four times (3 retries)
         assert mock_acompletion.call_count == 4
         assert result == mock_success_response
@@ -144,23 +148,28 @@ async def test_multiple_retryable_errors_eventually_succeeds():
 
 @pytest.mark.asyncio
 async def test_retry_with_aws_parameters():
-    """Test that retry works with AWS parameters for Bedrock"""
+    """Test that retry works with AWS Bedrock — add_aws_params is called to inject credentials."""
     mock_response = AsyncMock()
     mock_response.choices = [AsyncMock()]
     mock_response.choices[0].message = AsyncMock()
     mock_response.choices[0].message.content = '{"result": "success"}'
-    
-    with patch('analytiq_data.llm.llm.litellm.acompletion', return_value=mock_response) as mock_acompletion:
+
+    mock_analytiq_client = AsyncMock()
+
+    async def fake_add_aws_params(analytiq_client, params):
+        params["aws_access_key_id"] = "test-access-key"
+        params["aws_secret_access_key"] = "test-secret-key"
+        params["aws_region_name"] = "us-east-1"
+
+    with patch('analytiq_data.llm.llm.litellm.acompletion', return_value=mock_response) as mock_acompletion, \
+         patch('analytiq_data.llm.llm_aws.add_aws_params', side_effect=fake_add_aws_params):
         result = await _litellm_acompletion_with_retry(
-            model="claude-3-sonnet-20240229-v1:0",
+            mock_analytiq_client,
+            model="bedrock/claude-3-sonnet-20240229-v1:0",
             messages=[{"role": "user", "content": "test"}],
             api_key="test-key",
-            aws_access_key_id="test-access-key",
-            aws_secret_access_key="test-secret-key",
-            aws_region_name="us-east-1"
         )
-        
-        # Verify the function was called with AWS parameters
+
         assert mock_acompletion.call_count == 1
         call_args = mock_acompletion.call_args
         assert call_args[1]['aws_access_key_id'] == "test-access-key"

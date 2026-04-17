@@ -53,30 +53,17 @@ async def aembedding(analytiq_client, model: str, texts: list) -> litellm.Embedd
         params["api_key"] = api_key
 
     if provider == "bedrock":
-        aws_client = await ad.aws.get_aws_client_async(analytiq_client, region_name="us-east-1")
-        params["aws_access_key_id"] = aws_client.aws_access_key_id
-        params["aws_secret_access_key"] = aws_client.aws_secret_access_key
-        params["aws_region_name"] = aws_client.region_name
-        logger.debug(f"aembedding: Bedrock region={aws_client.region_name}")
+        from analytiq_data.llm.llm_aws import add_aws_params
 
-    if provider == "vertex_ai":
-        params.pop("api_key", None)
-        if api_key:
-            params["vertex_credentials"] = api_key
-            try:
-                creds = json.loads(api_key)
-                if creds.get("project_id"):
-                    params["vertex_project"] = creds["project_id"]
-            except Exception:
-                pass
-        vertex_project, vertex_location = await ad.llm.get_vertex_ai_config(analytiq_client)
-        if vertex_project:
-            params["vertex_project"] = vertex_project
+        await add_aws_params(analytiq_client, params)
+
+    elif provider == "vertex_ai":
+        from analytiq_data.llm.llm_gcp import add_gcp_params
+
         # Gemini embedding models are only available in us-central1
-        params["vertex_location"] = vertex_location or os.getenv("VERTEX_AI_LOCATION", "us-central1")
-        logger.debug(f"aembedding: Vertex AI project={params.get('vertex_project')}, location={params['vertex_location']}")
+        await add_gcp_params(analytiq_client, params, api_key, default_location="us-central1")
 
-    if provider == "azure_ai":
+    elif provider == "azure_ai":
         from analytiq_data.llm.llm_azure import add_azure_params
 
         await add_azure_params(params)

@@ -150,6 +150,7 @@ async def test_llm_completion_with_timeout_success(mock_litellm):
     mock_litellm.return_value = Resp()
 
     resp = await llm_mod._litellm_acompletion_with_retry(
+        analytiq_client=None,
         model="gpt-4o-mini",
         messages=[{"role": "user", "content": "hi"}],
         api_key="test",

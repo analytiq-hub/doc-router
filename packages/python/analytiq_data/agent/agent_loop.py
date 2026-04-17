@@ -363,12 +363,6 @@ async def run_agent_turn(
     api_key = await ad.llm.get_llm_key(analytiq_client, llm_provider)
     if not api_key and llm_provider not in ("bedrock", "azure_ai"):
         return {"error": f"No API key for model {model}"}
-    aws_access_key_id = aws_secret_access_key = aws_region_name = None
-    if llm_provider == "bedrock":
-        aws = await ad.aws.get_aws_client_async(analytiq_client, region_name="us-east-1")
-        aws_access_key_id = aws.aws_access_key_id
-        aws_secret_access_key = aws.aws_secret_access_key
-        aws_region_name = aws.region_name
 
     iteration = 0
     executed_rounds: list[dict] = []
@@ -392,12 +386,10 @@ async def run_agent_turn(
             message = None
             usage_obj = None
             async for event_type, payload in ad.llm.agent_completion_stream(
+                analytiq_client,
                 model=model,
                 messages=llm_messages,
                 api_key=api_key,
-                aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key,
-                aws_region_name=aws_region_name,
                 tools=TOOL_DEFINITIONS,
                 tool_choice="auto",
                 thinking=thinking_param,
@@ -433,12 +425,10 @@ async def run_agent_turn(
             # Has tool_calls; fall through to existing tool handling (no done event yet)
         else:
             response = await ad.llm.agent_completion(
+                analytiq_client,
                 model=model,
                 messages=llm_messages,
                 api_key=api_key,
-                aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key,
-                aws_region_name=aws_region_name,
                 tools=TOOL_DEFINITIONS,
                 tool_choice="auto",
                 thinking=thinking_param,
@@ -558,12 +548,8 @@ async def run_agent_approve(
     executed_rounds: list[dict] = [{"thinking": None, "tool_calls": pending}]
     model = state["model"]
     llm_provider = ad.llm.get_llm_model_provider(model)
-    api_key = await ad.llm.get_llm_key(context["analytiq_client"], llm_provider)
-    aws_access_key_id = aws_secret_access_key = aws_region_name = None
-    if llm_provider == "bedrock":
-        aws = await ad.aws.get_aws_client_async(context["analytiq_client"], region_name="us-east-1")
-        aws_access_key_id, aws_secret_access_key = aws.aws_access_key_id, aws.aws_secret_access_key
-        aws_region_name = aws.region_name
+    analytiq_client = context["analytiq_client"]
+    api_key = await ad.llm.get_llm_key(analytiq_client, llm_provider)
 
     try:
         # Pre-check uses get_spu_cost (model-based lower bound). Actual charge may be higher.
@@ -578,12 +564,10 @@ async def run_agent_approve(
             thinking_param = {"type": "enabled", "budget_tokens": 4096}
 
     response = await ad.llm.agent_completion(
+        analytiq_client,
         model=model,
         messages=llm_messages,
         api_key=api_key,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region_name=aws_region_name,
         tools=TOOL_DEFINITIONS,
         tool_choice="auto",
         thinking=thinking_param,
@@ -657,12 +641,10 @@ async def run_agent_approve(
             thinking_param = {"type": "enabled", "budget_tokens": 4096}
 
     response = await ad.llm.agent_completion(
+        analytiq_client,
         model=model,
         messages=llm_messages,
         api_key=api_key,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region_name=aws_region_name,
         tools=TOOL_DEFINITIONS,
         tool_choice="auto",
         thinking=thinking_param,

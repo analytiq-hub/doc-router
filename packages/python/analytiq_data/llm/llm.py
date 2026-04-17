@@ -332,13 +332,11 @@ def _extract_thinking_from_response(message: Any) -> str | None:
 
 @stamina.retry(on=is_retryable_error)
 async def _litellm_acompletion_with_retry(
+    analytiq_client,
     model: str,
     messages: list,
     api_key: str,
     response_format: Optional[Dict] = None,
-    aws_access_key_id: Optional[str] = None,
-    aws_secret_access_key: Optional[str] = None,
-    aws_region_name: Optional[str] = None,
     tools: Optional[List[Dict]] = None,
     tool_choice: Optional[Union[str, Dict]] = None,
     thinking: Optional[Dict] = None,
@@ -347,24 +345,10 @@ async def _litellm_acompletion_with_retry(
 ):
     """
     Make an LLM call with stamina retry mechanism.
-    
-    Args:
-        model: The LLM model to use
-        messages: The messages to send
-        api_key: The API key
-        response_format: The response format
-        aws_access_key_id: AWS access key (for Bedrock)
-        aws_secret_access_key: AWS secret key (for Bedrock)
-        aws_region_name: AWS region (for Bedrock)
-        tools: Optional list of tools/functions for the model to call
-        tool_choice: Optional tool choice parameter ("auto", "none", or specific function)
-        use_prompt_caching: If True, apply prompt caching (agent only; not for document processing)
-        
-    Returns:
-        The LLM response
-        
-    Raises:
-        Exception: If the call fails after all retries
+
+    Provider-specific params (AWS credentials, GCP credentials, Azure Entra token)
+    are injected via add_aws_params / add_gcp_params / add_azure_params using
+    analytiq_client so each retry always gets fresh credentials.
     """
     temperature = get_temperature(model)
     if thinking is not None:
@@ -377,26 +361,24 @@ async def _litellm_acompletion_with_retry(
         "api_key": api_key,
         "temperature": temperature,
         "response_format": response_format,
-        "aws_access_key_id": aws_access_key_id,
-        "aws_secret_access_key": aws_secret_access_key,
-        "aws_region_name": aws_region_name,
         # litellm's timeout kwarg (overall request timeout in seconds)
         "timeout": LLM_REQUEST_TIMEOUT_SECS,
     }
     if max_tokens is not None:
         params["max_tokens"] = max_tokens
-    # Vertex AI uses vertex_credentials (service account JSON or file path) instead of api_key.
-    if model.startswith("vertex_ai/"):
-        params.pop("api_key", None)
-        if api_key:
-            if not _is_valid_json(api_key):
-                raise Exception(f"Vertex AI API key is not valid: {api_key}")
-            params["vertex_credentials"] = api_key
-            creds = json.loads(api_key)
-            if creds.get("project_id"):
-                params["vertex_project"] = creds["project_id"]
-        params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
-    elif model.startswith("azure_ai/"):
+    try:
+        _, provider, _, _ = litellm.get_llm_provider(model)
+    except Exception:
+        provider = None
+    if provider == "bedrock":
+        from analytiq_data.llm.llm_aws import add_aws_params
+
+        await add_aws_params(analytiq_client, params)
+    elif provider == "vertex_ai":
+        from analytiq_data.llm.llm_gcp import add_gcp_params
+
+        await add_gcp_params(analytiq_client, params, api_key)
+    elif provider == "azure_ai":
         from analytiq_data.llm.llm_azure import add_azure_params
 
         await add_azure_params(params)
@@ -410,13 +392,11 @@ async def _litellm_acompletion_with_retry(
 
 
 async def agent_completion(
+    analytiq_client,
     model: str,
     messages: list,
     api_key: str,
     response_format: Optional[Dict] = None,
-    aws_access_key_id: Optional[str] = None,
-    aws_secret_access_key: Optional[str] = None,
-    aws_region_name: Optional[str] = None,
     tools: Optional[List[Dict]] = None,
     tool_choice: Optional[Union[str, Dict]] = None,
     thinking: Optional[Dict] = None,
@@ -426,13 +406,11 @@ async def agent_completion(
     Each call checks SPU at the caller; this only performs the litellm call with retry.
     """
     return await _litellm_acompletion_with_retry(
+        analytiq_client,
         model=model,
         messages=messages,
         api_key=api_key,
         response_format=response_format,
-        aws_access_key_id=aws_access_key_id,
-        aws_secret_access_key=aws_secret_access_key,
-        aws_region_name=aws_region_name,
         tools=tools,
         tool_choice=tool_choice,
         thinking=thinking,
@@ -441,13 +419,11 @@ async def agent_completion(
 
 
 async def agent_completion_stream(
+    analytiq_client,
     model: str,
     messages: list,
     api_key: str,
     response_format: Optional[Dict] = None,
-    aws_access_key_id: Optional[str] = None,
-    aws_secret_access_key: Optional[str] = None,
-    aws_region_name: Optional[str] = None,
     tools: Optional[List[Dict]] = None,
     tool_choice: Optional[Union[str, Dict]] = None,
     thinking: Optional[Dict] = None,
@@ -467,24 +443,22 @@ async def agent_completion_stream(
         "api_key": api_key,
         "temperature": temperature,
         "response_format": response_format,
-        "aws_access_key_id": aws_access_key_id,
-        "aws_secret_access_key": aws_secret_access_key,
-        "aws_region_name": aws_region_name,
         "stream": True,
         "stream_options": {"include_usage": True},
     }
-    # Vertex AI uses vertex_credentials (service account JSON or file path) instead of api_key.
-    if model.startswith("vertex_ai/"):
-        params.pop("api_key", None)
-        if api_key:
-            if not _is_valid_json(api_key):
-                raise Exception(f"Vertex AI API key is not valid: {api_key}")
-            params["vertex_credentials"] = api_key
-            creds = json.loads(api_key)
-            if creds.get("project_id"):
-                params["vertex_project"] = creds["project_id"]
-        params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
-    elif model.startswith("azure_ai/"):
+    try:
+        _, provider, _, _ = litellm.get_llm_provider(model)
+    except Exception:
+        provider = None
+    if provider == "bedrock":
+        from analytiq_data.llm.llm_aws import add_aws_params
+
+        await add_aws_params(analytiq_client, params)
+    elif provider == "vertex_ai":
+        from analytiq_data.llm.llm_gcp import add_gcp_params
+
+        await add_gcp_params(analytiq_client, params, api_key)
+    elif provider == "azure_ai":
         from analytiq_data.llm.llm_azure import add_azure_params
 
         await add_azure_params(params)
@@ -1052,17 +1026,6 @@ async def run_llm(
     if response_format is None:
         logger.info(f"{document_id}/{prompt_revid}: No response format found for prompt")
 
-    # Bedrock models require aws_access_key_id, aws_secret_access_key, aws_region_name
-    if llm_provider == "bedrock":
-        aws_client = await ad.aws.get_aws_client_async(analytiq_client, region_name="us-east-1")
-        aws_access_key_id = aws_client.aws_access_key_id
-        aws_secret_access_key = aws_client.aws_secret_access_key
-        aws_region_name = aws_client.region_name
-    else:
-        aws_access_key_id = None
-        aws_secret_access_key = None
-        aws_region_name = None
-
     # Set up tools if KB is enabled (kb_id already retrieved above)
     tools = None
     max_iterations = 5  # Maximum number of tool call iterations
@@ -1124,13 +1087,11 @@ async def run_llm(
             logger.info(f"{document_id}/{prompt_revid}: LLM call iteration {iteration}/{max_iterations}")
             
             response = await _litellm_acompletion_with_retry(
+                analytiq_client,
                 model=llm_model,
                 messages=messages,
                 api_key=api_key,
                 response_format=response_format,
-                aws_access_key_id=aws_access_key_id,
-                aws_secret_access_key=aws_secret_access_key,
-                aws_region_name=aws_region_name,
                 tools=tools,
                 tool_choice="auto"  # Always allow tool calls in agentic mode
             )
@@ -1250,13 +1211,11 @@ async def run_llm(
     else:
         # No KB or tools - single LLM call
         response = await _litellm_acompletion_with_retry(
+            analytiq_client,
             model=llm_model,
             messages=messages,  # Use the vision-aware messages
             api_key=api_key,
             response_format=response_format,
-            aws_access_key_id=aws_access_key_id,
-            aws_secret_access_key=aws_secret_access_key,
-            aws_region_name=aws_region_name
         )
         
         # Get token usage for single call
@@ -1690,27 +1649,17 @@ async def run_llm_chat(
             params["api_key"] = api_key
             logger.info(f"Using API key for provider {llm_provider}: {api_key[:16]}********")
         
-        # Handle Bedrock-specific configuration
         if llm_provider == "bedrock":
-            aws_client = await ad.aws.get_aws_client_async(analytiq_client, region_name="us-east-1")
-            params["aws_access_key_id"] = aws_client.aws_access_key_id
-            params["aws_secret_access_key"] = aws_client.aws_secret_access_key
-            params["aws_region_name"] = aws_client.region_name
-            logger.info(f"Bedrock config: region={aws_client.region_name}")
+            from analytiq_data.llm.llm_aws import add_aws_params
 
-        # Vertex AI uses vertex_credentials (service account JSON or file path) instead of api_key.
-        if llm_provider == "vertex_ai":
-            params.pop("api_key", None)
-            if api_key:
-                if not _is_valid_json(api_key):
-                    raise Exception(f"Vertex AI API key is not valid: {api_key}")
-                params["vertex_credentials"] = api_key
-                creds = json.loads(api_key)
-                if creds.get("project_id"):
-                    params["vertex_project"] = creds["project_id"]
-            params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", "global")
+            await add_aws_params(analytiq_client, params)
 
-        if llm_provider == "azure_ai":
+        elif llm_provider == "vertex_ai":
+            from analytiq_data.llm.llm_gcp import add_gcp_params
+
+            await add_gcp_params(analytiq_client, params, api_key)
+
+        elif llm_provider == "azure_ai":
             from analytiq_data.llm.llm_azure import add_azure_params
 
             await add_azure_params(params)

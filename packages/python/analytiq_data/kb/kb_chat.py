@@ -126,15 +126,6 @@ async def run_kb_chat(
                 detail=f"No API key found for provider {llm_provider}"
             )
         
-        # Handle Bedrock-specific configuration
-        aws_access_key_id = None
-        aws_secret_access_key = None
-        aws_region_name = None
-        if llm_provider == "bedrock":
-            aws_client = await ad.aws.get_aws_client_async(analytiq_client, region_name="us-east-1")
-            aws_access_key_id = aws_client.aws_access_key_id
-            aws_secret_access_key = aws_client.aws_secret_access_key
-            aws_region_name = aws_client.region_name
         
         # Define the search_knowledge_base tool
         tools = [
@@ -201,20 +192,13 @@ async def run_kb_chat(
                     
                     if request.max_tokens:
                         params["max_tokens"] = request.max_tokens
-                    
-                    if aws_access_key_id:
-                        params["aws_access_key_id"] = aws_access_key_id
-                        params["aws_secret_access_key"] = aws_secret_access_key
-                        params["aws_region_name"] = aws_region_name
-                    
+
                     # Call LLM (non-streaming)
                     response = await _litellm_acompletion_with_retry(
+                        analytiq_client,
                         model=request.model,
                         messages=messages,
                         api_key=api_key,
-                        aws_access_key_id=aws_access_key_id,
-                        aws_secret_access_key=aws_secret_access_key,
-                        aws_region_name=aws_region_name,
                         tools=tools,
                         tool_choice="auto",
                         use_prompt_caching=True,
@@ -411,12 +395,10 @@ async def run_kb_chat(
                     iteration += 1
                     logger.info(f"KB chat iteration {iteration}/{max_iterations}")
                     response = await _litellm_acompletion_with_retry(
+                        analytiq_client,
                         model=request.model,
                         messages=messages,
                         api_key=api_key,
-                        aws_access_key_id=aws_access_key_id,
-                        aws_secret_access_key=aws_secret_access_key,
-                        aws_region_name=aws_region_name,
                         tools=tools,
                         tool_choice="auto",
                         use_prompt_caching=True,

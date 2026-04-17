@@ -104,7 +104,7 @@ async def _assert_llm_ocr_provider_and_model(
 ) -> tuple[str, str | None, str | None, str | None, str]:
     """
     Validate ``llm_providers`` (name, enabled, model list) and that ``model`` maps to the same
-    LiteLLM provider row. Returns (api_key, aws_id, aws_secret, aws_region).
+    LiteLLM provider row. Returns (api_key, row_litellm).
     """
     db = analytiq_client.mongodb_async[analytiq_client.env]
     doc = await db.llm_providers.find_one({"name": provider_name})
@@ -137,16 +137,7 @@ async def _assert_llm_ocr_provider_and_model(
             f"LLM provider {provider_name!r} has no stored API key or credentials for OCR"
         )
 
-    aws_access_key_id = None
-    aws_secret_access_key = None
-    aws_region_name = None
-    if row_litellm == "bedrock":
-        aws_client = await ad.aws.get_aws_client_async(analytiq_client, region_name="us-east-1")
-        aws_access_key_id = aws_client.aws_access_key_id
-        aws_secret_access_key = aws_client.aws_secret_access_key
-        aws_region_name = aws_client.region_name
-
-    return api_key, aws_access_key_id, aws_secret_access_key, aws_region_name, row_litellm
+    return api_key, row_litellm
 
 
 def _build_pdf_user_content(
@@ -192,7 +183,7 @@ async def run_llm_ocr_pdf(
     if not pdf_bytes:
         raise ValueError("LLM OCR requires non-empty PDF bytes")
 
-    api_key, aws_id, aws_secret, aws_region, row_litellm = await _assert_llm_ocr_provider_and_model(
+    api_key, row_litellm = await _assert_llm_ocr_provider_and_model(
         analytiq_client, provider_name, model
     )
 
@@ -222,13 +213,11 @@ async def run_llm_ocr_pdf(
     )
 
     response = await _litellm_acompletion_with_retry(
+        analytiq_client,
         model=model,
         messages=messages,
         api_key=api_key,
         response_format=response_format,
-        aws_access_key_id=aws_id,
-        aws_secret_access_key=aws_secret,
-        aws_region_name=aws_region,
         use_prompt_caching=False,
         max_tokens=_LLM_OCR_MAX_TOKENS,
     )
