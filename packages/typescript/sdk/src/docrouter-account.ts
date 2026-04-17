@@ -25,6 +25,7 @@ import {
   UserUpdate,
   User,
   AWSConfig,
+  AzureServicePrincipalConfig,
   GCPConfig,
   // Invitation types
   InvitationResponse,
@@ -226,6 +227,21 @@ export class DocRouterAccount {
 
   async deleteGCPConfig(): Promise<void> {
     return this.http.delete('/v0/account/gcp_config');
+  }
+
+  // --------------- Azure (Entra service principal) ---------------
+  async createAzureConfig(
+    config: AzureServicePrincipalConfig
+  ): Promise<{ message: string }> {
+    return this.http.post('/v0/account/azure_config', config);
+  }
+
+  async getAzureConfig(): Promise<AzureServicePrincipalConfig> {
+    return this.http.get('/v0/account/azure_config');
+  }
+
+  async deleteAzureConfig(): Promise<void> {
+    return this.http.delete('/v0/account/azure_config');
   }
 
   // --------------- Invitations ---------------

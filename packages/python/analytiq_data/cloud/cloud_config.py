@@ -3,6 +3,7 @@ Unified cloud credentials in ``cloud_config`` with ``type`` discriminator.
 
 - ``type: "aws"`` — same fields as legacy ``aws_config`` (encrypted keys, bucket, ``user_id``).
 - ``type: "gcp"`` — encrypted ``service_account_json`` (Vertex), ``user_id``.
+- ``type: "azure"`` — encrypted Microsoft Entra service principal (tenant, client id, client secret), ``user_id``.
 """
 
 import json
@@ -16,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 TYPE_AWS = "aws"
 TYPE_GCP = "gcp"
+TYPE_AZURE = "azure"
 
 
 async def get_aws_config_dict(analytiq_client) -> dict:
@@ -91,3 +93,42 @@ async def get_vertex_project_and_location(analytiq_client) -> tuple[str, str]:
     except Exception:
         vertex_project = ""
     return vertex_project, vertex_location
+
+
+async def get_azure_service_principal_dict(analytiq_client) -> dict:
+    """
+    Decrypted Microsoft Entra (Azure AD) service principal fields for Foundry / Azure AI, or empty strings.
+
+    Keys: ``tenant_id``, ``client_id``, ``client_secret``.
+    """
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    doc = await db.cloud_config.find_one({"type": TYPE_AZURE})
+    if not doc:
+        return {"tenant_id": "", "client_id": "", "client_secret": ""}
+
+    def _dec(field: str) -> str:
+        raw = doc.get(field) or ""
+        if not raw:
+            return ""
+        try:
+            return ad.crypto.decrypt_token(raw)
+        except Exception as e:
+            logger.warning("Failed to decrypt Azure cloud_config field %s: %s", field, e)
+            return ""
+
+    return {
+        "tenant_id": _dec("tenant_id"),
+        "client_id": _dec("client_id"),
+        "client_secret": _dec("client_secret"),
+    }
+
+
+async def azure_service_principal_configured(db) -> bool:
+    """True if non-empty Azure service principal credentials exist in ``cloud_config``."""
+    doc = await db.cloud_config.find_one({"type": TYPE_AZURE})
+    if not doc:
+        return False
+    for key in ("tenant_id", "client_id", "client_secret"):
+        if not doc.get(key):
+            return False
+    return True

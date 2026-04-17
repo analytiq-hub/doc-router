@@ -1052,6 +1052,13 @@ export interface GCPConfig {
   service_account_json: string;
 }
 
+/** GET: masked tenant/client id and secret (POST supplies full values). */
+export interface AzureServicePrincipalConfig {
+  tenant_id: string;
+  client_id: string;
+  client_secret: string;
+}
+
 // Knowledge Base types
 export type ChunkerType = "token" | "word" | "sentence" | "recursive";
 export type KBStatus = "indexing" | "active" | "error";

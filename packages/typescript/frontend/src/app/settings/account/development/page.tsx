@@ -43,12 +43,28 @@ const DevelopmentSettingsPage: React.FC = () => {
 
         <div className="flex justify-between items-center mb-4">
           <div>
-            <h2 className="text-xl font-semibold">GCP Setup (Vertex AI)</h2>
+            <h2 className="text-xl font-semibold">GCP Setup</h2>
             <p className="text-gray-600 mb-2">
-              Upload the Google Cloud service account JSON key for Vertex models.
+              Vertex AI: upload the Google Cloud service account JSON key.
             </p>
           </div>
           <Link href="/settings/account/development/gcp-config" passHref>
+            <Button variant="contained" color="primary">
+              Manage
+            </Button>
+          </Link>
+        </div>
+
+        <Divider />
+
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h2 className="text-xl font-semibold">Azure Setup</h2>
+            <p className="text-gray-600 mb-2">
+              Microsoft Entra service principal (tenant, client ID, client secret) for Azure AI Foundry.
+            </p>
+          </div>
+          <Link href="/settings/account/development/azure-config" passHref>
             <Button variant="contained" color="primary">
               Manage
             </Button>
