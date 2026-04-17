@@ -62,5 +62,4 @@ async def add_azure_params(params: dict) -> None:
 
     token = (await _credential.get_token(FOUNDRY_DEFAULT_TOKEN_SCOPE)).token
     params["azure_ad_token_provider"] = lambda: token  # litellm requires a callable, not a string
-    params["api_version"] = "2024-05-01-preview"
     params["api_base"] = api_base
