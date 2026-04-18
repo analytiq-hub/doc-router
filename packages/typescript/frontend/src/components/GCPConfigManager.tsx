@@ -90,7 +90,7 @@ const GCPConfigManager: React.FC = () => {
           </button>
         </div>
         <p className="text-sm text-gray-600 mb-3">
-          Service account JSON used for Vertex AI models. Stored encrypted server-side.
+          Service account JSON used for Vertex AI models.
         </p>
         <p className="text-sm">
           <b>Status:</b>{' '}
