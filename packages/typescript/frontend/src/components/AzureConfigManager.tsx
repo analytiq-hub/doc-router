@@ -97,10 +97,9 @@ const AzureConfigManager: React.FC = () => {
           </button>
         </div>
         <p className="text-sm text-gray-600 mb-3">
-          Application (client) credentials for Azure AI Foundry and LiteLLM (tenant ID, client ID, client secret from
-          your app registration). Set the Foundry API base (HTTPS endpoint used as the LiteLLM api_base). Service
-          principal fields are encrypted server-side except API base (plaintext). Only the client secret is masked when
-          viewing saved configuration.
+          Service principal credentials (tenant ID, client ID, client secret) and API base URL used to access
+          Microsoft Foundry models. The service principal must be assigned the <b>Cognitive Services User</b> role
+          on the Foundry resource. Stored encrypted server-side.
         </p>
         <p className="text-sm">
           <b>Status:</b>{' '}
