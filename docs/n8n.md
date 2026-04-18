@@ -286,17 +286,27 @@ Steps:
 
 ### Item data format
 
-Each item the engine passes between nodes is `INodeExecutionData`
-(`interfaces.ts:1456`):
+`INodeExecutionData` (`interfaces.ts:1456`) is the **only thing that crosses
+a node boundary**. A node receives an array of these items as input and
+returns arrays of them as output. Nothing else — not `runData`, not other
+nodes' outputs, not any shared mutable store — is accessible through the
+normal execution path.
 
 ```typescript
 interface INodeExecutionData {
-  json: IDataObject;         // the primary payload
-  binary?: IBinaryKeyData;   // optional file attachments
-  error?: NodeApiError | NodeOperationError;
-  pairedItem?: IPairedItemData | IPairedItemData[] | number;
+  json:        IDataObject;                      // primary payload: arbitrary key/value object
+  binary?:     IBinaryKeyData;                   // file attachments keyed by name (e.g. "data")
+  error?:      NodeApiError | NodeOperationError; // set when continueOnFail passes an error item
+  pairedItem?: IPairedItemData | IPairedItemData[] | number; // lineage back to input item(s)
 }
 ```
+
+`json` is what every node reads and writes in the common case.
+`binary` travels alongside `json` when the node produces or consumes file data
+(PDFs, images, etc.); each key is a named attachment with `mimeType`, `data`,
+and optional `fileName`. `pairedItem` records which input item(s) each output
+item was derived from, enabling the UI to draw lineage arrows and expressions
+like `$('NodeName').item` to resolve correctly.
 
 **doc-router note.** The engine's core pattern — a stack of ready work
 units, a waiting map for merge nodes, per-node `runData` as the persistent
