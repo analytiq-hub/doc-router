@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import Link from 'next/link';
 import { DocRouterAccountApi } from '@/utils/api';
 import { getApiErrorMsg } from '@/utils/api';
 
@@ -114,12 +113,10 @@ const GCPConfigManager: React.FC = () => {
         )}
       </div>
 
-      <div className="bg-blue-50 rounded-lg shadow p-4 text-sm text-blue-900">
-        For hosted deployments, keys are managed by the platform. For on-prem or VPC installs, configure
-        credentials here.{' '}
-        <Link href="/settings/account/development" className="underline font-medium">
-          Development settings
-        </Link>
+      <div className="bg-blue-50 rounded-lg shadow p-4">
+        <span className="list-decimal list-inside space-y-2 text-blue-900">
+          Change GCP Configuration for on-prem installs only. Contact Support for additional instructions.
+        </span>
       </div>
 
       {editOpen && (

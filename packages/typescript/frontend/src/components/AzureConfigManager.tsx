@@ -138,17 +138,10 @@ const AzureConfigManager: React.FC = () => {
         {error && !editOpen && <p className="text-red-600 text-sm mt-2">{error}</p>}
       </div>
 
-      <div className="bg-blue-50 rounded-lg shadow p-4 text-sm text-blue-900">
-        Assign your app registration access on the Foundry resource (RBAC) so Entra tokens can call inference. See{' '}
-        <a
-          href="https://learn.microsoft.com/en-us/azure/foundry/foundry-models/how-to/use-foundry-models-claude"
-          className="underline font-medium"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Microsoft Foundry — access and roles
-        </a>{' '}
-        for guidance.
+      <div className="bg-blue-50 rounded-lg shadow p-4">
+        <span className="list-decimal list-inside space-y-2 text-blue-900">
+          Change Azure Configuration for on-prem installs only. Contact Support for additional instructions.
+        </span>
       </div>
 
       {editOpen && (
