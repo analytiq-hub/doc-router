@@ -29,7 +29,7 @@ const DevelopmentSettingsPage: React.FC = () => {
           <div>
             <h2 className="text-xl font-semibold">AWS Setup</h2>
             <p className="text-gray-600 mb-2">
-              Configure your AWS setup (S3, Textract, Bedrock IAM keys).
+              Configure AWS access key ID, secret access key, and S3 bucket name.
             </p>
           </div>
           <Link href="/settings/account/development/aws-config" passHref>
@@ -45,7 +45,7 @@ const DevelopmentSettingsPage: React.FC = () => {
           <div>
             <h2 className="text-xl font-semibold">GCP Setup</h2>
             <p className="text-gray-600 mb-2">
-              Vertex AI: upload the Google Cloud service account JSON key.
+              Upload the Google Cloud service account JSON key for Vertex AI.
             </p>
           </div>
           <Link href="/settings/account/development/gcp-config" passHref>
@@ -61,7 +61,7 @@ const DevelopmentSettingsPage: React.FC = () => {
           <div>
             <h2 className="text-xl font-semibold">Azure Setup</h2>
             <p className="text-gray-600 mb-2">
-              Microsoft Entra service principal (tenant, client ID, client secret) for Azure AI Foundry.
+              Configure Microsoft Entra service principal (tenant, client ID, client secret) and Microsoft Foundry service API base.
             </p>
           </div>
           <Link href="/settings/account/development/azure-config" passHref>
