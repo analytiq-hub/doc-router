@@ -67,7 +67,15 @@ const AWSConfigManager: React.FC = () => {
             {config ? 'Edit Configuration' : 'Add Configuration'}
           </button>
         </div>
-        
+
+        <p className="text-sm text-gray-600 mb-3">
+          IAM user access keys and an S3 bucket used for document storage. The user needs{' '}
+          <code>bedrock:InvokeModel</code> and <code>sts:AssumeRole</code> on an app role granted{' '}
+          <b>AmazonTextractFullAccess</b>, <b>AmazonSESFullAccess</b>, and read/write access to the S3 bucket
+          (<code>s3:GetObject</code>, <code>s3:PutObject</code>, <code>s3:ListBucket</code>,{' '}
+          <code>s3:DeleteObject</code>).
+        </p>
+
         <div className="overflow-hidden border border-gray-200 rounded-lg">
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
