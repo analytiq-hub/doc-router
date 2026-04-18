@@ -207,6 +207,54 @@ class StepType:
     execute: Callable      # async fn(context, node, input_items) -> output_items
 ```
 
+### Item format
+
+`FlowItem` is the **only thing that crosses a step boundary**. A step receives
+a list of these items as input and returns lists of them as output. Nothing
+else — not `run_data`, not other steps' outputs, not any shared mutable store
+— is accessible through the normal execution path.
+
+```python
+@dataclass
+class FlowItem:
+    json:    dict                  # primary payload: arbitrary key/value data
+    binary:  dict[str, BinaryRef] # file attachments keyed by name, e.g. "data"
+    meta:    dict                  # lineage and routing hints (internal use)
+```
+
+`json` is what every step reads and writes in the common case. For doc-router
+steps it typically contains document-scoped fields such as `document_id`,
+`organization_id`, extraction results, tag lists, and any data produced by
+earlier steps.
+
+`binary` travels alongside `json` when a step produces or consumes file data.
+Each key is a named attachment:
+
+```python
+@dataclass
+class BinaryRef:
+    mime_type:  str        # e.g. "application/pdf"
+    file_name:  str | None # original filename
+    data:       bytes | None  # inline for small files
+    storage_id: str | None    # reference to MongoDB blob for large files
+```
+
+`meta` carries lineage back to the input item(s) that produced each output
+item (analogous to n8n's `pairedItem`). Used by the engine for fan-out
+tracking and by the canvas UI for data-flow visualisation in v2. Steps should
+not write to `meta` directly; the engine populates it.
+
+The `execute` signature in full:
+
+```python
+async def execute(
+    context: ExecutionContext,
+    node: dict,                         # the node instance from the flow revision
+    input_items: list[list[FlowItem]],  # one list per input slot
+) -> list[list[FlowItem]]:              # one list per output slot
+    ...
+```
+
 ### Initial step types
 
 | Key | Inputs | Outputs | What it does |
