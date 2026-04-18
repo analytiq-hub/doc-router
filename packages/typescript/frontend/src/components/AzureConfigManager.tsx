@@ -99,7 +99,7 @@ const AzureConfigManager: React.FC = () => {
         <p className="text-sm text-gray-600 mb-3">
           Service principal credentials (tenant ID, client ID, client secret) and API base URL used to access
           Microsoft Foundry models. The service principal must be assigned the <b>Cognitive Services User</b> role
-          on the Foundry resource. Stored encrypted server-side.
+          on the Foundry resource.
         </p>
         <p className="text-sm">
           <b>Status:</b>{' '}
@@ -139,7 +139,7 @@ const AzureConfigManager: React.FC = () => {
 
       <div className="bg-blue-50 rounded-lg shadow p-4">
         <span className="list-decimal list-inside space-y-2 text-blue-900">
-          Change Azure Configuration for on-prem installs only. Contact Support for additional instructions.
+          Change Azure Configuration for on-prem installs only.
         </span>
       </div>
 

@@ -90,7 +90,9 @@ const GCPConfigManager: React.FC = () => {
           </button>
         </div>
         <p className="text-sm text-gray-600 mb-3">
-          Service account JSON used for Vertex AI models.
+          Service account JSON used for Vertex AI models. The service account must be granted the{' '}
+          <b>Vertex AI User</b> role (<code>roles/aiplatform.user</code>) on the project, and the Vertex AI API
+          must be enabled.
         </p>
         <p className="text-sm">
           <b>Status:</b>{' '}
@@ -115,7 +117,7 @@ const GCPConfigManager: React.FC = () => {
 
       <div className="bg-blue-50 rounded-lg shadow p-4">
         <span className="list-decimal list-inside space-y-2 text-blue-900">
-          Change GCP Configuration for on-prem installs only. Contact Support for additional instructions.
+          Change GCP Configuration for on-prem installs only.
         </span>
       </div>
 

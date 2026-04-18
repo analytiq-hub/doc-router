@@ -115,7 +115,7 @@ const AWSConfigManager: React.FC = () => {
       {/* Help Section */}
       <div className="bg-blue-50 rounded-lg shadow p-4">
         <span className="list-decimal list-inside space-y-2 text-blue-900">
-          Change AWS Configuration for on-prem installs only. Contact Support for additional instructions.
+          Change AWS Configuration for on-prem installs only.
         </span>
       </div>
 
