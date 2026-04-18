@@ -306,7 +306,151 @@ remaining inputs still needed before enqueuing a merge node.
 
 ---
 
-## 4. HTTP surfaces
+## 4. Execution data flow
+
+### The unit of work: `IExecuteData`
+
+Everything the engine knows about a pending node execution is in one struct
+placed on `nodeExecutionStack` (`interfaces.ts:450`):
+
+```typescript
+interface IExecuteData {
+  node: INode;                               // which node to run
+  data: ITaskDataConnections;                // input items, ready to consume
+  source: ITaskDataConnectionsSource | null; // provenance: which node/output produced each input
+  runIndex?: number;
+}
+```
+
+`ITaskDataConnections` is the input bag (`interfaces.ts:2852`):
+
+```typescript
+// { [connectionType]: Array<items-per-input-slot | null> }
+{ "main": [ [item0, item1, …],    // input slot 0
+             [item0, item1, …] ] } // input slot 1 (multi-input merge node)
+```
+
+### How a node reads its input
+
+The node's `execute(this: IExecuteFunctions)` context exposes:
+
+- `getInputData(inputIndex?, connectionType?)` — returns `INodeExecutionData[]`
+  for one input slot. Most nodes call this with no arguments to get slot 0.
+- `getInputSourceData(inputIndex?)` — returns provenance: `previousNode`,
+  `previousNodeOutput`, `previousNodeRun`.
+
+Both read directly from `executionData.data` — the items the engine placed on
+the stack entry. The node never reads `runData` directly.
+
+### How a node writes its output
+
+`execute()` returns `INodeExecutionData[][]` — one inner array per output index:
+
+```typescript
+[
+  [out0_item0, out0_item1],  // output 0  (true branch, or single output)
+  [out1_item0],              // output 1  (false branch, or second output)
+]
+```
+
+After the node returns, the engine stores the result permanently in `runData`
+(`workflow-execute.ts:1949`):
+
+```typescript
+taskData.data = { main: nodeSuccessData };  // ITaskDataConnections
+runData[nodeName].push(taskData);           // ITaskData, indexed by runIndex
+```
+
+`runData` is the **permanent record** of every completed node for this
+execution. It is never modified after being written. Expressions (`$node`,
+`$json`) read from it via `WorkflowDataProxy`; the node itself never writes
+to it directly.
+
+### Branching
+
+A node with two outputs returns two inner arrays. After storing `taskData` the
+engine walks `connectionsBySourceNode[nodeName].main` (`workflow-execute.ts:2006`):
+
+```
+for outputIndex in connectionsBySourceNode[nodeName].main:
+  for each connectionData at that outputIndex:
+    if nodeSuccessData[outputIndex] is non-empty:
+      addNodeToBeExecuted(connectionData, outputIndex, nodeSuccessData, …)
+```
+
+- Non-empty output → successor is enqueued with those items.
+- Empty output array → `addNodeToBeExecuted` is not called; that branch does
+  not run.
+
+### Fan-out (one output → multiple nodes)
+
+`connectionsBySourceNode[nodeName].main[0]` can hold multiple `IConnection`
+entries. `addNodeToBeExecuted` is called once per connection, each time passing
+the same `nodeSuccessData[0]`. Each downstream node receives the same item
+array as its independent input and runs separately.
+
+### Merging (multiple inputs → one node)
+
+`addNodeToBeExecuted` (`workflow-execute.ts:408`) checks
+`connectionsByDestinationNode[node].main.length`. If greater than 1, the
+node requires data from multiple upstream nodes before it can run.
+
+The engine accumulates partial inputs in the **waiting map**:
+
+```
+waitingExecution[nodeName][runIndex].main[inputSlot] = items | null
+```
+
+Slots start as `null`. Each time an upstream finishes it fills one slot. The
+engine then checks whether all slots are non-null:
+
+- **Still null slots** — leave partial data in `waitingExecution`, do not
+  enqueue.
+- **All slots filled** — move the complete `ITaskDataConnections` from
+  `waitingExecution` onto `nodeExecutionStack` and delete the waiting entry.
+
+The merge node's `execute()` then receives all inputs simultaneously via
+`getInputData(0)`, `getInputData(1)`, etc.
+
+**Partial-data exception:** if `nodeExecutionStack` empties but
+`waitingExecution` is still non-empty, the engine checks each waiting node's
+`requiredInputs` (`workflow-execute.ts:2137`). If the node type does not
+require all inputs it is enqueued with whatever data is available.
+
+### Accessing previous nodes via expressions
+
+`WorkflowDataProxy` (`workflow-data-proxy.ts`) provides `$node['Name']` and
+`$json` by reading `runData[nodeName][runIndex].data.main[outputIndex][itemIndex].json`.
+This is a **read-only** view over completed nodes, separate from the live
+`executionData.data` on the stack. Getters are lazy — data is only
+materialised when an expression references it.
+
+### Summary
+
+```
+nodeExecutionStack (IExecuteData[])
+  └─ dequeue → node.execute(data.main[0])
+                  │
+                  └─ returns INodeExecutionData[][]
+                        │
+              ┌─────────┴──────────┐
+       store in runData        for each output[i]:
+       (permanent record)        for each connection at output[i]:
+                                   single-input target → enqueue directly
+                                   multi-input target  → fill waitingExecution slot
+                                                          └─ all slots full? → enqueue
+```
+
+**doc-router note.** Implement this with a `deque` of `(node_id, input_items_by_slot)`
+work units and a `dict[node_id, list[items | None]]` waiting map.
+A merge node's slot list is initialised to `[None] * num_inputs`; the node
+is enqueued when no `None` remains. The permanent output store is
+`run_data[node_id] = output_items_by_output_index`, written once and never
+mutated; steps that need to reference earlier outputs read from it directly.
+
+---
+
+## 5. HTTP surfaces
 
 ### Public API (external / API-key)
 
@@ -367,7 +511,7 @@ and automation clients:
 
 ---
 
-## 5. Expression evaluation
+## 6. Expression evaluation
 
 ### What expressions are
 
@@ -415,7 +559,7 @@ entirely and use literal parameter values only.
 
 ---
 
-## 6. Code node — JavaScript
+## 7. Code node — JavaScript
 
 ### Pipeline
 
@@ -448,7 +592,7 @@ restricted helper set; move to a subprocess sandbox in v2.
 
 ---
 
-## 7. Code node — Python
+## 8. Code node — Python
 
 1. Same `Code.node.ts`; language parameter selects Python.
 2. `PythonTaskRunnerSandbox`
@@ -467,7 +611,7 @@ and another version pin.
 
 ---
 
-## 8. Reference index
+## 9. Reference index
 
 | Concept | Location in n8n repo |
 |---------|----------------------|
