@@ -3048,6 +3048,64 @@ class AddGridFSFilesBucketIndexes(Migration):
             return False
 
 
+class BackfillOcrTextMetadataType(Migration):
+    """
+    OCR text blobs (``ocr`` bucket, ``*_text`` keys) written before ``ocr_type`` was stored in
+    GridFS metadata will have ``metadata.ocr_type`` missing or None. This migration sets it to
+    ``"textract"`` for any such blob, since Textract was the only engine available at that time.
+    """
+
+    def __init__(self):
+        super().__init__(
+            description="Backfill ocr_type=textract on OCR text blobs missing the field"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            fs = AsyncIOMotorGridFSBucket(db, bucket_name="ocr")
+            files_coll = db["ocr.files"]
+
+            if "ocr.files" not in await db.list_collection_names():
+                logger.info("BackfillOcrTextMetadataType: ocr.files missing, nothing to do")
+                return True
+
+            updated = 0
+            skipped = 0
+            file_docs = await files_coll.find({"filename": {"$regex": r"_text"}}).to_list(length=None)
+            for file_doc in file_docs:
+                meta = file_doc.get("metadata") or {}
+                if meta.get("ocr_type"):
+                    skipped += 1
+                    continue
+                meta["ocr_type"] = "textract"
+                await files_coll.update_one(
+                    {"_id": file_doc["_id"]},
+                    {"$set": {"metadata": meta}},
+                )
+                updated += 1
+
+            logger.info(
+                "BackfillOcrTextMetadataType: updated=%d skipped=%d", updated, skipped
+            )
+            return True
+        except Exception as e:
+            logger.error("BackfillOcrTextMetadataType up failed: %s", e)
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            files_coll = db["ocr.files"]
+            result = await files_coll.update_many(
+                {"filename": {"$regex": r"_text"}, "metadata.ocr_type": "textract"},
+                {"$unset": {"metadata.ocr_type": ""}},
+            )
+            logger.info("BackfillOcrTextMetadataType down: modified=%d", result.modified_count)
+            return True
+        except Exception as e:
+            logger.error("BackfillOcrTextMetadataType down failed: %s", e)
+            return False
+
+
 MIGRATIONS = [
     OcrKeyMigration(),
     LlmResultFieldsMigration(),
@@ -3088,6 +3146,7 @@ MIGRATIONS = [
     RenameAgentThreadsToChatThreads(),
     MigrateAwsAndVertexToCloudConfig(),
     AddGridFSFilesBucketIndexes(),
+    BackfillOcrTextMetadataType(),
     # Add more migrations here
 ]
 
