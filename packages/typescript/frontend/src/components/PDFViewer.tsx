@@ -288,6 +288,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const [documentProperties, setDocumentProperties] = useState<Record<string, string> | null>(null);
 
   const [ocrPanelKind, setOcrPanelKind] = useState<OcrPanelKind | null>(null);
+  const [ocrMetadataType, setOcrMetadataType] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState<string>('');
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
@@ -987,6 +988,17 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
     return undefined;
   }, [ocrPanelKind, id, docRouterOrgApi, fileName]);
+
+  useEffect(() => {
+    if (!ocrPanelKind) {
+      setOcrMetadataType(null);
+      return;
+    }
+    docRouterOrgApi.getOCRMetadata({ documentId: id })
+      .then((meta) => setOcrMetadataType(meta.ocr_type ?? null))
+      .catch(() => setOcrMetadataType(null));
+  }, [ocrPanelKind, id, docRouterOrgApi]);
+
 
   // This is called once for each page
   const renderHighlights = useCallback((page: number) => {
@@ -1697,7 +1709,12 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                 title={
                   <>
                     <ArticleIcon className="shrink-0 text-blue-600" fontSize="small" />
-                    <span className="truncate">OCR Output</span>
+                    {ocrMetadataType && (
+                      <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                        {ocrMetadataType}
+                      </span>
+                    )}
+                    <span className="truncate">{fileName || 'OCR Output'}</span>
                   </>
                 }
                 headerActions={

@@ -363,11 +363,9 @@ export interface GetOCRMetadataParams {
 }
 
 export interface GetOCRMetadataResponse {
-  document_id: string;
-  page_count: number;
-  processing_status: string;
-  created_at: string;
-  updated_at: string;
+  n_pages: number;
+  ocr_date: string;
+  ocr_type: string | null;
 }
 
 // LLM types

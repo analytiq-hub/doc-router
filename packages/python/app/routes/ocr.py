@@ -28,6 +28,7 @@ ocr_router = APIRouter(tags=["ocr"])
 class GetOCRMetadataResponse(BaseModel):
     n_pages: int
     ocr_date: str
+    ocr_type: Optional[str] = None
 
 @ocr_router.post("/v0/orgs/{organization_id}/ocr/run/{document_id}")
 async def run_ocr(
@@ -183,7 +184,8 @@ async def get_ocr_metadata(
     
     return GetOCRMetadataResponse(
         n_pages=metadata["n_pages"],
-        ocr_date=metadata["ocr_date"].isoformat()
+        ocr_date=metadata["ocr_date"].isoformat(),
+        ocr_type=metadata["ocr_type"],
     )
 
 

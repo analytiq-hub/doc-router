@@ -231,6 +231,7 @@ async def save_ocr_text_from_json(
     if metadata is None:
         metadata = {}
     metadata["n_pages"] = len(page_text_map)
+    metadata["ocr_type"] = ot
 
     for page_idx, page_text in sorted(page_text_map.items()):
         await save_ocr_text(analytiq_client, document_id, page_text, page_idx, metadata)
@@ -253,6 +254,7 @@ async def get_ocr_metadata(analytiq_client, document_id: str) -> dict:
     return {
         "n_pages": blob["metadata"].get("n_pages", 0),
         "ocr_date": blob.get("upload_date", None),
+        "ocr_type": blob["metadata"].get("ocr_type", None),
     }
 
 
