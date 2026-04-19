@@ -117,13 +117,13 @@ const GCPConfigManager: React.FC = () => {
               <span className="text-gray-500">Project ID:</span> {gcpConfig.project_id || '—'}
             </div>
             <div className="break-all">
-              <span className="text-gray-500">Private key ID:</span> {gcpConfig.private_key_id || '—'}
-            </div>
-            <div className="break-all">
               <span className="text-gray-500">Service account:</span> {gcpConfig.client_email || '—'}
             </div>
             <div className="break-all">
               <span className="text-gray-500">Client ID:</span> {gcpConfig.client_id || '—'}
+            </div>
+            <div className="break-all">
+              <span className="text-gray-500">Private key ID:</span> {gcpConfig.private_key_id || '—'}
             </div>
           </div>
         )}
