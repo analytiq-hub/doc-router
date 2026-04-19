@@ -1758,8 +1758,24 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                         ) : ocrMarkdownError ? (
                           <p className="py-4 text-sm text-red-600">{ocrMarkdownError}</p>
                         ) : (
-                          <div className="prose prose-sm max-w-none min-h-0 flex-1 overflow-auto rounded border bg-gray-50 p-3 text-gray-800 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          <div className="min-h-0 flex-1 overflow-auto rounded border bg-gray-50 p-3 text-gray-800 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                h1: ({children}) => <h1 className="text-2xl font-bold mt-4 mb-2">{children}</h1>,
+                                h2: ({children}) => <h2 className="text-xl font-bold mt-3 mb-2">{children}</h2>,
+                                h3: ({children}) => <h3 className="text-lg font-semibold mt-3 mb-1">{children}</h3>,
+                                h4: ({children}) => <h4 className="text-base font-semibold mt-2 mb-1">{children}</h4>,
+                                p: ({children}) => <p className="mb-2">{children}</p>,
+                                ul: ({children}) => <ul className="list-disc pl-5 mb-2">{children}</ul>,
+                                ol: ({children}) => <ol className="list-decimal pl-5 mb-2">{children}</ol>,
+                                li: ({children}) => <li className="mb-0.5">{children}</li>,
+                                table: ({children}) => <table className="border-collapse w-full mb-2 text-sm">{children}</table>,
+                                th: ({children}) => <th className="border border-gray-300 px-2 py-1 bg-gray-100 font-semibold text-left">{children}</th>,
+                                td: ({children}) => <td className="border border-gray-300 px-2 py-1">{children}</td>,
+                                code: ({children}) => <code className="bg-gray-200 rounded px-1 text-xs font-mono">{children}</code>,
+                              }}
+                            >
                               {ocrMarkdown || '*No content.*'}
                             </ReactMarkdown>
                           </div>
