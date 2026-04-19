@@ -1051,9 +1051,16 @@ export interface AWSConfig {
   created_at: string;
 }
 
-/** GET: masked JSON prefix (same rules as LLM token display). POST: full service account JSON. */
+/**
+ * POST: full service account JSON.
+ * GET: masked JSON prefix (same rules as LLM token display); other fields are non-secret metadata from the key.
+ */
 export interface GCPConfig {
   service_account_json: string;
+  project_id?: string;
+  private_key_id?: string;
+  client_email?: string;
+  client_id?: string;
 }
 
 /** GET: ``client_secret`` masked; ``tenant_id``, ``client_id``, ``api_base`` returned in full. POST: all fields required in full. */

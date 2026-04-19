@@ -1,35 +1,42 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import type { GCPConfig } from '@docrouter/sdk';
 import { DocRouterAccountApi } from '@/utils/api';
 import { getApiErrorMsg } from '@/utils/api';
-
-/** True if GET gcp_config succeeds (credentials present). */
-async function isGcpConfigured(api: DocRouterAccountApi): Promise<boolean> {
-  try {
-    await api.getGCPConfig();
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 const GCPConfigManager: React.FC = () => {
   const docRouterAccountApi = useMemo(() => new DocRouterAccountApi(), []);
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const [gcpConfig, setGcpConfig] = useState<GCPConfig | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [jsonText, setJsonText] = useState('');
   const [fileName, setFileName] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    setConfigured(await isGcpConfigured(docRouterAccountApi));
+    try {
+      const cfg = await docRouterAccountApi.getGCPConfig();
+      setGcpConfig(cfg);
+      setConfigured(true);
+    } catch {
+      setGcpConfig(null);
+      setConfigured(false);
+    }
   }, [docRouterAccountApi]);
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const ok = await isGcpConfigured(docRouterAccountApi);
-      if (!cancelled) {
-        setConfigured(ok);
+      try {
+        const cfg = await docRouterAccountApi.getGCPConfig();
+        if (!cancelled) {
+          setGcpConfig(cfg);
+          setConfigured(true);
+        }
+      } catch {
+        if (!cancelled) {
+          setGcpConfig(null);
+          setConfigured(false);
+        }
       }
     })();
     return () => {
@@ -104,6 +111,22 @@ const GCPConfigManager: React.FC = () => {
             <span className="text-yellow-600">Not configured</span>
           )}
         </p>
+        {configured && gcpConfig && (
+          <div className="mt-4 text-sm space-y-1 font-mono text-gray-800">
+            <div className="break-all">
+              <span className="text-gray-500">Project ID:</span> {gcpConfig.project_id || '—'}
+            </div>
+            <div className="break-all">
+              <span className="text-gray-500">Private key ID:</span> {gcpConfig.private_key_id || '—'}
+            </div>
+            <div className="break-all">
+              <span className="text-gray-500">Service account:</span> {gcpConfig.client_email || '—'}
+            </div>
+            <div className="break-all">
+              <span className="text-gray-500">Client ID:</span> {gcpConfig.client_id || '—'}
+            </div>
+          </div>
+        )}
         {configured && (
           <button
             type="button"
