@@ -64,10 +64,9 @@ async def create_aws_config(
 
     encrypted_access_key = ad.crypto.encrypt_token(config.access_key_id)
     encrypted_secret_key = ad.crypto.encrypt_token(config.secret_access_key)
-    
+
     update_data = {
         "type": "aws",
-        "user_id": current_user.user_id,
         "access_key_id": encrypted_access_key,
         "secret_access_key": encrypted_secret_key,
         "s3_bucket_name": config.s3_bucket_name,
@@ -75,8 +74,8 @@ async def create_aws_config(
     }
 
     await db.cloud_config.update_one(
-        {"type": "aws", "user_id": current_user.user_id},
-        {"$set": update_data},
+        {"type": "aws"},
+        {"$set": update_data, "$unset": {"user_id": ""}},
         upsert=True,
     )
     
@@ -86,9 +85,9 @@ async def create_aws_config(
 async def get_aws_config(current_user: User = Depends(get_admin_user)):
     """Get AWS configuration (admin only). Access Key ID is returned in full; secret is never returned."""
     db = ad.common.get_async_db()
-    config = await db.cloud_config.find_one({"type": "aws", "user_id": current_user.user_id})
+    config = await db.cloud_config.find_one({"type": "aws"})
     if not config:
-        config = await db.aws_config.find_one({"user_id": current_user.user_id})
+        config = await db.aws_config.find_one()
     if not config:
         raise HTTPException(status_code=404, detail="AWS configuration not found")
 
@@ -104,9 +103,13 @@ async def get_aws_config(current_user: User = Depends(get_admin_user)):
 async def delete_aws_config(current_user: User = Depends(get_admin_user)):
     """Delete AWS configuration (admin only)"""
     db = ad.common.get_async_db()
-    result = await db.cloud_config.delete_one({"type": "aws", "user_id": current_user.user_id})
-    if result.deleted_count == 0:
-        result = await db.aws_config.delete_one({"user_id": current_user.user_id})
-    if result.deleted_count == 0:
+    result = await db.cloud_config.delete_many({"type": "aws"})
+    deleted = result.deleted_count
+    if deleted == 0:
+        legacy = await db.aws_config.find_one()
+        if legacy:
+            await db.aws_config.delete_one({"_id": legacy["_id"]})
+            deleted = 1
+    if deleted == 0:
         raise HTTPException(status_code=404, detail="AWS configuration not found")
     return {"message": "AWS configuration deleted successfully"}

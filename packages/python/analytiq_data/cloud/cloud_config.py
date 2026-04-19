@@ -1,9 +1,11 @@
 """
-Unified cloud credentials in ``cloud_config`` with ``type`` discriminator.
+Unified **deployment-wide** cloud credentials in ``cloud_config`` with ``type`` discriminator.
 
-- ``type: "aws"`` — same fields as legacy ``aws_config`` (encrypted keys, bucket, ``user_id``).
-- ``type: "gcp"`` — encrypted ``service_account_json`` (Vertex), ``user_id``.
-- ``type: "azure"`` — encrypted Microsoft Entra service principal (tenant, client id, client secret), plaintext ``api_base`` (Foundry endpoint URL), ``user_id``.
+At most one active document per ``type`` for the whole site (not per end user).
+
+- ``type: "aws"`` — encrypted keys and ``s3_bucket_name`` (same shape as legacy ``aws_config``).
+- ``type: "gcp"`` — encrypted ``service_account_json`` (Vertex).
+- ``type: "azure"`` — encrypted Entra fields plus plaintext ``api_base`` (Foundry endpoint URL).
 """
 
 import json

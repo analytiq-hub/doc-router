@@ -78,7 +78,6 @@ async def create_azure_config(
     now = datetime.now(UTC)
     update_data = {
         "type": "azure",
-        "user_id": current_user.user_id,
         "tenant_id": ad.crypto.encrypt_token(tenant_id),
         "client_id": ad.crypto.encrypt_token(client_id),
         "client_secret": ad.crypto.encrypt_token(client_secret),
@@ -87,8 +86,8 @@ async def create_azure_config(
     }
 
     await db.cloud_config.update_one(
-        {"type": "azure", "user_id": current_user.user_id},
-        {"$set": update_data},
+        {"type": "azure"},
+        {"$set": update_data, "$unset": {"user_id": ""}},
         upsert=True,
     )
     return {"message": "Azure configuration saved successfully"}
@@ -102,9 +101,7 @@ async def create_azure_config(
 async def get_azure_config(current_user: User = Depends(get_admin_user)):
     """Get Azure config (admin only). Only ``client_secret`` is masked for display."""
     db = ad.common.get_async_db()
-    doc = await db.cloud_config.find_one({"type": "azure", "user_id": current_user.user_id})
-    if not doc or not doc.get("tenant_id"):
-        doc = await db.cloud_config.find_one({"type": "azure"})
+    doc = await db.cloud_config.find_one({"type": "azure"})
     if not doc or not doc.get("tenant_id"):
         raise HTTPException(status_code=404, detail="Azure configuration not found")
 
@@ -132,7 +129,7 @@ async def get_azure_config(current_user: User = Depends(get_admin_user)):
 async def delete_azure_config(current_user: User = Depends(get_admin_user)):
     """Delete Azure configuration (admin only)."""
     db = ad.common.get_async_db()
-    result = await db.cloud_config.delete_one({"type": "azure", "user_id": current_user.user_id})
+    result = await db.cloud_config.delete_many({"type": "azure"})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Azure configuration not found")
     return {"message": "Azure configuration deleted successfully"}

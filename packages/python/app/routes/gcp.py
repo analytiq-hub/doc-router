@@ -63,14 +63,13 @@ async def create_gcp_config(
     now = datetime.now(UTC)
     update_data = {
         "type": "gcp",
-        "user_id": current_user.user_id,
         "service_account_json": encrypted,
         "created_at": now,
     }
 
     await db.cloud_config.update_one(
-        {"type": "gcp", "user_id": current_user.user_id},
-        {"$set": update_data},
+        {"type": "gcp"},
+        {"$set": update_data, "$unset": {"user_id": ""}},
         upsert=True,
     )
     return {"message": "GCP configuration saved successfully"}
@@ -84,9 +83,7 @@ async def create_gcp_config(
 async def get_gcp_config(current_user: User = Depends(get_admin_user)):
     """Get GCP configuration (admin only). ``service_account_json`` in the response is masked."""
     db = ad.common.get_async_db()
-    doc = await db.cloud_config.find_one({"type": "gcp", "user_id": current_user.user_id})
-    if not doc or not doc.get("service_account_json"):
-        doc = await db.cloud_config.find_one({"type": "gcp"})
+    doc = await db.cloud_config.find_one({"type": "gcp"})
     if not doc or not doc.get("service_account_json"):
         raise HTTPException(status_code=404, detail="GCP configuration not found")
 
@@ -118,7 +115,7 @@ async def get_gcp_config(current_user: User = Depends(get_admin_user)):
 async def delete_gcp_config(current_user: User = Depends(get_admin_user)):
     """Delete GCP configuration (admin only)."""
     db = ad.common.get_async_db()
-    result = await db.cloud_config.delete_one({"type": "gcp", "user_id": current_user.user_id})
+    result = await db.cloud_config.delete_many({"type": "gcp"})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="GCP configuration not found")
     return {"message": "GCP configuration deleted successfully"}
