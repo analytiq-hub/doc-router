@@ -1,15 +1,18 @@
 # documents.py
+from __future__ import annotations
 
 # Standard library imports
 from datetime import datetime, UTC
 import os
+import json
 import base64
 import logging
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Annotated, Any
+
 from pydantic import BaseModel, Field, ConfigDict
 
 # Third-party imports
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, Form, UploadFile
 from bson import ObjectId
 
 # Local imports
@@ -100,6 +103,111 @@ def decode_base64_content(content: str) -> bytes:
             detail=f"Invalid base64 content: {str(e)}"
         )
 
+
+async def _validate_tag_ids_for_org(
+    organization_id: str,
+    all_tag_ids: set[str],
+    db,
+) -> None:
+    if not all_tag_ids:
+        return
+    tags_cursor = db.tags.find({
+        "_id": {"$in": [ObjectId(tag_id) for tag_id in all_tag_ids]},
+        "organization_id": organization_id
+    })
+    existing_tags = await tags_cursor.to_list(None)
+    existing_tag_ids = {str(tag["_id"]) for tag in existing_tags}
+    invalid_tags = all_tag_ids - existing_tag_ids
+    if invalid_tags:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid tag IDs: {list(invalid_tags)}"
+        )
+
+
+async def _save_single_uploaded_document(
+    analytiq_client,
+    organization_id: str,
+    current_user: User,
+    name: str,
+    content: bytes,
+    tag_ids: List[str],
+    metadata: Optional[Dict[str, str]],
+) -> Dict[str, Any]:
+    """Persist one decoded file (same storage path as JSON upload)."""
+    if metadata is None:
+        metadata = {}
+    try:
+        mime_type = get_mime_type(name)
+        ext = os.path.splitext(name)[1].lower()
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    document_id = ad.common.create_id()
+    mongo_file_name = f"{document_id}{ext}"
+
+    file_metadata = {
+        "document_id": document_id,
+        "type": mime_type,
+        "size": len(content),
+        "user_file_name": name
+    }
+
+    await ad.common.save_file_async(
+        analytiq_client,
+        file_name=mongo_file_name,
+        blob=content,
+        metadata=file_metadata,
+    )
+
+    if mime_type == "application/pdf":
+        pdf_id = document_id
+        pdf_file_name = mongo_file_name
+    else:
+        pdf_blob = ad.common.file.convert_to_pdf(content, ext)
+        pdf_id = ad.common.create_id()
+        pdf_file_name = f"{pdf_id}.pdf"
+        await ad.common.save_file_async(analytiq_client, pdf_file_name, pdf_blob, file_metadata)
+
+    document_metadata = {
+        "_id": ObjectId(document_id),
+        "user_file_name": name,
+        "mongo_file_name": mongo_file_name,
+        "document_id": document_id,
+        "pdf_id": pdf_id,
+        "pdf_file_name": pdf_file_name,
+        "upload_date": datetime.now(UTC),
+        "uploaded_by": current_user.user_name,
+        "state": ad.common.doc.DOCUMENT_STATE_UPLOADED,
+        "tag_ids": tag_ids,
+        "metadata": metadata,
+        "organization_id": organization_id
+    }
+
+    await ad.common.save_doc(analytiq_client, document_metadata)
+
+    logger.info(f"upload_document(): saved {organization_id}/{document_id} name {name}")
+
+    try:
+        await ad.webhooks.enqueue_event(
+            analytiq_client,
+            organization_id=organization_id,
+            event_type="document.uploaded",
+            document_id=document_id,
+        )
+    except Exception as e:
+        logger.warning(f"Webhook enqueue failed for uploaded doc {document_id}: {e}")
+
+    await ad.queue.send_msg(analytiq_client, "ocr", msg={"document_id": document_id})
+
+    return {
+        "document_name": name,
+        "document_id": document_id,
+        "tag_ids": tag_ids,
+        "metadata": metadata,
+    }
+
+
 @documents_router.post("/v0/orgs/{organization_id}/documents")
 async def upload_document(
     organization_id: str,
@@ -110,105 +218,136 @@ async def upload_document(
     logger.info(f"upload_document(): {organization_id}: uploading documents: {[doc.name for doc in documents_upload.documents]}")
     documents = []
 
-    # Validate all tag IDs first
     all_tag_ids = set()
     for document in documents_upload.documents:
         all_tag_ids.update(document.tag_ids)
 
     analytiq_client = ad.common.get_analytiq_client()
     db = ad.common.get_async_db(analytiq_client)
-    
-    if all_tag_ids:
-        # Check if all tags exist and belong to the organization
-        tags_cursor = db.tags.find({
-            "_id": {"$in": [ObjectId(tag_id) for tag_id in all_tag_ids]},
-            "organization_id": organization_id
-        })
-        existing_tags = await tags_cursor.to_list(None)
-        existing_tag_ids = {str(tag["_id"]) for tag in existing_tags}
-        
-        invalid_tags = all_tag_ids - existing_tag_ids
-        if invalid_tags:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Invalid tag IDs: {list(invalid_tags)}"
-            )
+    await _validate_tag_ids_for_org(organization_id, all_tag_ids, db)
 
     for document in documents_upload.documents:
-        try:
-            mime_type = get_mime_type(document.name)
-            ext = os.path.splitext(document.name)[1].lower()
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
-
         content = decode_base64_content(document.content)
-        document_id = ad.common.create_id()
-        mongo_file_name = f"{document_id}{ext}"
-
-        metadata = {
-            "document_id": document_id,
-            "type": mime_type,
-            "size": len(content),
-            "user_file_name": document.name
-        }
-
-        # Save the document to mongodb
-        await ad.common.save_file_async(analytiq_client,
-                                        file_name=mongo_file_name,
-                                        blob=content,
-                                        metadata=metadata)
-
-        if mime_type == "application/pdf":
-            pdf_id = document_id
-            pdf_file_name = mongo_file_name
-        else:
-            # Convert to PDF and save
-            pdf_blob = ad.common.file.convert_to_pdf(content, ext)  # You will implement this function
-            pdf_id = ad.common.create_id()
-            pdf_file_name = f"{pdf_id}.pdf"
-            await ad.common.save_file_async(analytiq_client, pdf_file_name, pdf_blob, metadata)
-
-        document_metadata = {
-            "_id": ObjectId(document_id),
-            "user_file_name": document.name,
-            "mongo_file_name": mongo_file_name,
-            "document_id": document_id,
-            "pdf_id": pdf_id,
-            "pdf_file_name": pdf_file_name,
-            "upload_date": datetime.now(UTC),
-            "uploaded_by": current_user.user_name,
-            "state": ad.common.doc.DOCUMENT_STATE_UPLOADED,
-            "tag_ids": document.tag_ids,
-            "metadata": document.metadata,
-            "organization_id": organization_id
-        }
-        
-        await ad.common.save_doc(analytiq_client, document_metadata)
-        documents.append({
-            "document_name": document.name,
-            "document_id": document_id,
-            "tag_ids": document.tag_ids,
-            "metadata": document.metadata
-        })
-
-        logger.info(f"upload_document(): saved {organization_id}/{document_id} name {document.name}")
-
-        # Optional per-org webhook: document uploaded
-        try:
-            await ad.webhooks.enqueue_event(
+        documents.append(
+            await _save_single_uploaded_document(
                 analytiq_client,
-                organization_id=organization_id,
-                event_type="document.uploaded",
-                document_id=document_id,
+                organization_id,
+                current_user,
+                document.name,
+                content,
+                document.tag_ids,
+                document.metadata,
             )
-        except Exception as e:
-            logger.warning(f"Webhook enqueue failed for uploaded doc {document_id}: {e}")
+        )
 
-        # Post a message to the ocr job queue
-        msg = {"document_id": document_id}
-        await ad.queue.send_msg(analytiq_client, "ocr", msg=msg)
-    
     return {"documents": documents}
+
+
+@documents_router.post("/v0/orgs/{organization_id}/documents/multipart")
+async def upload_document_multipart(
+    organization_id: str,
+    files: Annotated[
+        list[UploadFile],
+        File(description="Binary bodies; repeat form field name 'files' for multiple uploads."),
+    ],
+    manifest: Annotated[
+        Optional[str],
+        Form(
+            description=(
+                "Optional JSON array, one object per file in the same order as parts. "
+                "Each object may include: name (str), tag_ids (list[str]), metadata (object). "
+                "Omitted keys fall back to the part's filename and empty tag_ids/metadata."
+            )
+        ),
+    ] = None,
+    current_user: User = Depends(get_org_user),
+):
+    """
+    Upload one or more documents as raw multipart file parts (no base64, no giant JSON).
+
+    More efficient than POST /documents for large PDFs: avoids ~33% base64 expansion and
+    large JSON parse on the server.
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="At least one file is required")
+
+    if manifest is not None and manifest.strip():
+        try:
+            parsed = json.loads(manifest)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid manifest JSON: {e}")
+        if not isinstance(parsed, list):
+            raise HTTPException(status_code=400, detail="manifest must be a JSON array")
+        if len(parsed) != len(files):
+            raise HTTPException(
+                status_code=400,
+                detail=f"manifest length {len(parsed)} must match number of file parts {len(files)}",
+            )
+        entries: List[Any] = parsed
+    else:
+        entries = [{} for _ in files]
+
+    all_tag_ids: set[str] = set()
+    resolved: list[tuple[str, List[str], Dict[str, str]]] = []
+    for i, file in enumerate(files):
+        spec = entries[i]
+        if not isinstance(spec, dict):
+            raise HTTPException(
+                status_code=400,
+                detail=f"manifest[{i}] must be a JSON object if manifest is provided",
+            )
+        name = spec.get("name") or file.filename
+        if not name:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File part {i} needs a filename or manifest[{i}].name",
+            )
+        raw_tags = spec.get("tag_ids", [])
+        if raw_tags is None:
+            raw_tags = []
+        if not isinstance(raw_tags, list) or not all(isinstance(t, str) for t in raw_tags):
+            raise HTTPException(status_code=400, detail=f"manifest[{i}].tag_ids must be a list of strings")
+        raw_meta = spec.get("metadata", {})
+        if raw_meta is None:
+            raw_meta = {}
+        if not isinstance(raw_meta, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in raw_meta.items()
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail=f"manifest[{i}].metadata must be a string-to-string map",
+            )
+        all_tag_ids.update(raw_tags)
+        resolved.append((name, raw_tags, raw_meta))
+
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    await _validate_tag_ids_for_org(organization_id, all_tag_ids, db)
+
+    logger.info(
+        "upload_document_multipart(): %s: %s file(s): %s",
+        organization_id,
+        len(files),
+        [r[0] for r in resolved],
+    )
+
+    documents: List[Dict[str, Any]] = []
+    for file, (name, tag_ids, meta) in zip(files, resolved):
+        content = await file.read()
+        documents.append(
+            await _save_single_uploaded_document(
+                analytiq_client,
+                organization_id,
+                current_user,
+                name,
+                content,
+                tag_ids,
+                meta,
+            )
+        )
+
+    return {"documents": documents}
+
 
 @documents_router.put("/v0/orgs/{organization_id}/documents/{document_id}")
 async def update_document(

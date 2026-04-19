@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 import base64
+import json
 import os
 import sys
 import random
@@ -350,6 +351,93 @@ async def test_upload_document(test_db, pdf_fixture, request, mock_auth):
         pass  # mock_auth fixture handles cleanup
 
     logger.info(f"test_upload_document() end with {test_pdf['name']}")
+
+
+def _auth_headers_multipart() -> dict[str, str]:
+    """Multipart requests must not force application/json (let client set boundary)."""
+    return {"Authorization": "Bearer test_token"}
+
+
+@pytest.mark.asyncio
+async def test_upload_document_multipart_single_pdf(test_db, mock_auth, small_pdf):
+    """POST /documents/multipart accepts raw PDF bytes and matches JSON upload behavior."""
+    raw = base64.b64decode(small_pdf["content"].split(",", 1)[1])
+    meta = {"source": "multipart_unit"}
+    resp = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/multipart",
+        files=[("files", ("multipart_unit.pdf", raw, "application/pdf"))],
+        data={
+            "manifest": json.dumps(
+                [{"name": "multipart_unit.pdf", "tag_ids": [], "metadata": meta}]
+            )
+        },
+        headers=_auth_headers_multipart(),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert len(body["documents"]) == 1
+    assert body["documents"][0]["document_name"] == "multipart_unit.pdf"
+    assert body["documents"][0]["metadata"] == meta
+    document_id = body["documents"][0]["document_id"]
+
+    get_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
+        params={"file_type": "pdf"},
+        headers=get_auth_headers(),
+    )
+    assert get_response.status_code == 200
+    got = base64.b64decode(get_response.json()["content"])
+    assert got == raw
+
+    del_resp = client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
+        headers=get_auth_headers(),
+    )
+    assert del_resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_upload_document_multipart_two_files_manifest(test_db, mock_auth, small_pdf):
+    """Two file parts with manifest entries aligned by index."""
+    raw = base64.b64decode(small_pdf["content"].split(",", 1)[1])
+    manifest = [
+        {"name": "a.pdf", "metadata": {"n": "0"}},
+        {"name": "b.pdf", "metadata": {"n": "1"}},
+    ]
+    resp = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/multipart",
+        files=[
+            ("files", ("ignored_a.pdf", raw, "application/pdf")),
+            ("files", ("ignored_b.pdf", raw, "application/pdf")),
+        ],
+        data={"manifest": json.dumps(manifest)},
+        headers=_auth_headers_multipart(),
+    )
+    assert resp.status_code == 200, resp.text
+    docs = resp.json()["documents"]
+    assert len(docs) == 2
+    assert {d["document_name"] for d in docs} == {"a.pdf", "b.pdf"}
+    assert {d["metadata"]["n"] for d in docs} == {"0", "1"}
+    for d in docs:
+        client.delete(
+            f"/v0/orgs/{TEST_ORG_ID}/documents/{d['document_id']}",
+            headers=get_auth_headers(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_upload_document_multipart_manifest_wrong_length(test_db, mock_auth, small_pdf):
+    raw = base64.b64decode(small_pdf["content"].split(",", 1)[1])
+    resp = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/multipart",
+        files=[
+            ("files", ("one.pdf", raw, "application/pdf")),
+            ("files", ("two.pdf", raw, "application/pdf")),
+        ],
+        data={"manifest": json.dumps([{"name": "only_one.pdf"}])},
+        headers=_auth_headers_multipart(),
+    )
+    assert resp.status_code == 400
 
 
 @pytest.mark.asyncio
