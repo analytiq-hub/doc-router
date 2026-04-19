@@ -10,6 +10,12 @@ configurable multi-step graph.
 The design borrows concepts from [n8n.md](n8n.md) but is adapted to
 doc-router's Python/FastAPI/MongoDB stack.
 
+**Separation of concerns:** the flow engine (`analytiq_data/flows/`) is
+deliberately kept free of any doc-router domain logic. It knows nothing about
+documents, OCR, prompts, or schemas. Doc-router-specific node types are
+registered at application startup from `app/flows/`. This lets the engine be
+released or used independently.
+
 ---
 
 ## Layer 1 — Document model (storage)
@@ -193,19 +199,51 @@ connections: {
 
 ## Layer 2 — Node type registry
 
-A Python registry (`analytiq_data/flows/node_registry.py`) maps a type key to
-a descriptor:
+`analytiq_data/flows/node_registry.py` defines the `NodeType` Protocol and a
+module-level registry. The engine is only aware of the Protocol; all concrete
+node types are registered from outside by the application layer.
+
+### NodeType Protocol
 
 ```python
-@dataclass
-class NodeType:
-    key: str               # e.g. "docrouter.llm_extract"
+from typing import Protocol, runtime_checkable
+
+@runtime_checkable
+class NodeType(Protocol):
+    key: str               # unique type key, e.g. "flows.branch"
     label: str             # UI display name
-    inputs: int            # number of main inputs (0 = trigger/entry)
-    outputs: int           # number of main outputs
+    inputs: int            # number of main input slots (0 = trigger/entry)
+    outputs: int           # number of main output slots
     parameter_schema: dict # JSON Schema for the node "parameters" field
-    execute: Callable      # async fn(context, node, input_items) -> output_items
+
+    async def execute(
+        self,
+        context: "ExecutionContext",
+        node: dict,                        # node instance from the flow revision
+        input_items: list[list["FlowItem"]],
+    ) -> list[list["FlowItem"]]: ...
 ```
+
+### Registration
+
+```python
+# node_registry.py
+_registry: dict[str, NodeType] = {}
+
+def register(node_type: NodeType) -> None:
+    _registry[node_type.key] = node_type
+
+def get(key: str) -> NodeType:
+    if key not in _registry:
+        raise KeyError(f"Unknown node type: {key!r}")
+    return _registry[key]
+
+def list_all() -> list[NodeType]:
+    return list(_registry.values())
+```
+
+The engine calls `node_registry.get(node["type"])` at runtime. It never
+imports concrete node implementations directly.
 
 ### Item format
 
@@ -222,10 +260,7 @@ class FlowItem:
     meta:    dict                  # lineage and routing hints (internal use)
 ```
 
-`json` is what every node reads and writes in the common case. For doc-router
-nodes it typically contains document-scoped fields such as `document_id`,
-`organization_id`, extraction results, tag lists, and any data produced by
-earlier nodes.
+`json` is what every node reads and writes in the common case.
 
 `binary` travels alongside `json` when a node produces or consumes file data.
 Each key is a named attachment:
@@ -241,56 +276,78 @@ class BinaryRef:
 
 `meta` carries lineage back to the input item(s) that produced each output
 item (analogous to n8n's `pairedItem`). Used by the engine for fan-out
-tracking and by the canvas UI for data-flow visualisation in v2. Steps should
+tracking and by the canvas UI for data-flow visualisation in v2. Nodes should
 not write to `meta` directly; the engine populates it.
 
-The `execute` signature in full:
+### Engine-built-in node types
 
-```python
-async def execute(
-    context: ExecutionContext,
-    node: dict,                         # the node instance from the flow revision
-    input_items: list[list[FlowItem]],  # one list per input slot
-) -> list[list[FlowItem]]:              # one list per output slot
-    ...
-```
-
-### Built-in node types
+These generic nodes are registered automatically when `analytiq_data/flows` is
+imported. They have no dependency on doc-router domain logic.
 
 | Key | Inputs | Outputs | What it does |
 |-----|--------|---------|--------------|
-| `docrouter.trigger.manual` | 0 | 1 | Entry point for a manual run; emits the target document as a single item. |
-| `docrouter.trigger.upload` | 0 | 1 | Fires when a new document is uploaded (requires `active: true` on the flow). |
-| `docrouter.ocr` | 1 | 1 | Runs OCR on each input document. |
+| `flows.trigger.manual` | 0 | 1 | Entry point for a manual run; emits the seed item supplied by the caller. |
+| `flows.webhook` | 1 | 1 | POSTs each item as JSON to a configured URL. |
+| `flows.branch` | 1 | 2 | Routes items down output 0 or 1 based on a field equality condition. |
+| `flows.merge` | 2+ | 1 | Waits for all inputs, then combines items and continues. |
+| `flows.code` | 1 | 1 | Runs a small Python snippet (in-process, restricted helpers; no full sandbox in v1). |
+
+### Doc-router node types (registered externally)
+
+Doc-router-specific nodes live in `app/flows/nodes/` and are registered at
+application startup. They depend on `analytiq_client` carried in
+`ExecutionContext.services`.
+
+| Key | Inputs | Outputs | What it does |
+|-----|--------|---------|--------------|
+| `docrouter.trigger.manual` | 0 | 1 | Manual-run entry; emits the target document as a single item. |
+| `docrouter.trigger.upload` | 0 | 1 | Fires when a new document is uploaded (requires `active: true`). |
+| `docrouter.ocr` | 1 | 1 | Runs OCR (Textract) on each input document. |
 | `docrouter.llm_extract` | 1 | 1 | Runs LLM extraction with a linked prompt revision. |
 | `docrouter.set_tags` | 1 | 1 | Assigns a configured set of tags to each input document. |
-| `docrouter.webhook` | 1 | 1 | POSTs each item as JSON to a configured URL. |
-| `docrouter.branch` | 1 | 2 | Routes items down output 0 or 1 based on a condition (v1: field equality check). |
-| `docrouter.merge` | 2+ | 1 | Waits for all inputs then combines items and continues. |
-| `docrouter.code` | 1 | 1 | Runs a small Python snippet (in-process, restricted helpers, no full sandbox in v1). |
+| `docrouter.webhook` | 1 | 1 | POSTs each item via doc-router's webhook mechanism (signing, retries). |
+
+`docrouter.trigger.manual` overrides `flows.trigger.manual` when the caller
+supplies a `document_id`; it fetches the document and sets `document_id`,
+`organization_id`, and a `BinaryRef` on the seed item before emitting it.
+
+`docrouter.webhook` wraps the generic `flows.webhook` behaviour and integrates
+with doc-router's existing webhook infrastructure (HMAC signing, delivery
+retries, event log).
 
 ---
 
 ## Layer 3 — Execution engine
 
-**New module: `analytiq_data/flows/`**
+### Module layout
 
 ```
-analytiq_data/flows/
-  __init__.py
-  engine.py          # graph runner: topological order, fan-out, merge/wait
-  execution.py       # execution record CRUD (MongoDB: flow_executions)
-  node_registry.py   # type registry + built-in node implementations
-  context.py         # ExecutionContext dataclass
+analytiq_data/flows/            # standalone engine — no doc-router imports
+  __init__.py                   # imports node_registry; registers built-in nodes
+  engine.py                     # graph runner: topological BFS, fan-out, merge/wait
+  execution.py                  # flow_executions CRUD (MongoDB)
+  node_registry.py              # NodeType Protocol + register() / get() / list_all()
+  context.py                    # ExecutionContext, FlowItem, BinaryRef
+  nodes/                        # engine built-in node implementations
+    trigger_node.py             # flows.trigger.manual
+    webhook_node.py             # flows.webhook
+    branch_node.py              # flows.branch
+    merge_node.py               # flows.merge
+    code_node.py                # flows.code
+
+app/flows/                      # doc-router node package — registered at startup
+  __init__.py                   # calls node_registry.register() for each node below
   nodes/
-    ocr_node.py
-    llm_node.py
-    tag_node.py
-    webhook_node.py
-    branch_node.py
-    merge_node.py
-    code_node.py
+    manual_trigger_node.py      # docrouter.trigger.manual
+    upload_trigger_node.py      # docrouter.trigger.upload
+    ocr_node.py                 # docrouter.ocr
+    llm_node.py                 # docrouter.llm_extract
+    tag_node.py                 # docrouter.set_tags
+    webhook_node.py             # docrouter.webhook (wraps flows.webhook + signing)
 ```
+
+`app/main.py` imports `app/flows` so registration happens before the first
+request.
 
 ### Engine algorithm (`engine.py`)
 
@@ -298,10 +355,11 @@ analytiq_data/flows/
    `nodes_by_id`; invert `connections` to `inputs_by_destination` (same
    inversion as `mapConnectionsByDestination` in n8n — see
    [n8n.md § 3. Execution engine](n8n.md)).
-2. Find entry nodes: nodes with in-degree 0 or type `docrouter.trigger.*`.
+2. Find entry nodes: nodes with in-degree 0 or whose type key ends in
+   `.trigger.*`.
 3. Topological BFS: maintain a `ready_queue` and a `waiting` map
    (`node_id → remaining_input_count`).
-4. For each ready node: look up node type → call
+4. For each ready node: call `node_registry.get(node["type"])` → call
    `execute(context, node, input_items)` → `output_items`.
 5. Fan-out: for each output edge, deliver items to the destination; decrement
    its waiting counter; enqueue the destination when its counter reaches 0.
@@ -315,14 +373,18 @@ analytiq_data/flows/
 ```python
 @dataclass
 class ExecutionContext:
-    analytiq_client: Any
     organization_id: str
     execution_id: str
     flow_id: str
-    flow_revid: str          # the specific revision being executed
-    run_data: dict[str, Any] # node_id -> output items (mirrors n8n runData)
+    flow_revid: str           # the specific revision being executed
+    run_data: dict[str, Any]  # node_id -> output items (mirrors n8n runData)
+    services: Any             # opaque to the engine; node implementations cast as needed
     cancelled: bool = False
 ```
+
+`services` is intentionally typed `Any`. The engine never reads it. Each
+registered node type casts it to whatever its implementation requires (e.g.
+`analytiq_client` for doc-router nodes).
 
 ### Execution records (`flow_executions` collection)
 
@@ -360,7 +422,7 @@ automation clients use the same paths and DTOs (no internal/external split; see
 | `GET` | `/v0/orgs/{org_id}/flows/{flow_id}/executions` | List executions |
 | `GET` | `/v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}` | Get execution + per-node output |
 | `POST` | `/v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}/stop` | Cancel a running execution |
-| `GET` | `/v0/orgs/{org_id}/flows/node-types` | List available node type descriptors |
+| `GET` | `/v0/orgs/{org_id}/flows/node-types` | List all registered node type descriptors |
 
 Auth: same `get_org_user` dependency used across all other routes.
 
@@ -381,7 +443,8 @@ await ad.queue.send_msg(analytiq_client, "flow_run", {
 ```
 
 `worker.py` gains a `worker_flow_run()` coroutine alongside the existing
-`worker_ocr()` and `worker_llm()`. The engine runs inside this coroutine.
+`worker_ocr()` and `worker_llm()`. The engine runs inside this coroutine,
+with `ExecutionContext.services` set to the worker's `analytiq_client`.
 
 Real-time progress in v1: poll `GET .../executions/{exec_id}` every 2 s on the
 frontend. Upgrade to SSE (same pattern as the agent chat stream) in v2.
@@ -422,11 +485,12 @@ src/components/flows/
 
 ```
 1. analytiq_data/flows/   — engine + node registry (no API yet, unit-testable)
-2. app/routes/flows.py    — CRUD + run + execution endpoints
-3. worker flow_run handler — slow-run queue consumer
-4. Frontend list page + canvas editor
-5. Frontend run panel + execution status polling
+2. app/flows/             — doc-router node registrations
+3. app/routes/flows.py    — CRUD + run + execution endpoints
+4. worker flow_run handler — slow-run queue consumer
+5. Frontend list page + canvas editor
+6. Frontend run panel + execution status polling
 ```
 
-Steps 1–3 are backend-only and can be developed and tested independently of
+Steps 1–4 are backend-only and can be developed and tested independently of
 the frontend.
