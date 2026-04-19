@@ -42,7 +42,7 @@ def is_pages_markdown_ocr(obj: Any) -> bool:
     return isinstance(first, dict) and "markdown" in first
 
 
-def infer_ocr_type(ocr_json: Any) -> Literal["textract", "mistral", "llm", "pymupdf"]:
+def infer_ocr_type(ocr_json: Any) -> Literal["textract", "mistral", "mistral_vertex", "llm", "pymupdf"]:
     """Infer engine from stored JSON when GridFS metadata is missing."""
     if isinstance(ocr_json, dict) and ocr_json.get("ocr_engine") == "pymupdf":
         return "pymupdf"
@@ -201,7 +201,7 @@ async def save_ocr_text_from_json(
     """
     ot = ocr_type or infer_ocr_type(ocr_json)
 
-    if ot in ("mistral", "llm", "pymupdf"):
+    if ot in ("mistral", "mistral_vertex", "llm", "pymupdf"):
         if not isinstance(ocr_json, dict) or not is_pages_markdown_ocr(ocr_json):
             raise ValueError(
                 f"{org_id}/{document_id}: expected pages[].markdown OCR payload for ocr_type={ot}"
