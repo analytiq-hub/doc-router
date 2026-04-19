@@ -2,7 +2,6 @@
 
 # Standard library imports
 import re
-import logging
 from datetime import datetime, UTC
 from pydantic import BaseModel
 
@@ -13,12 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 import analytiq_data as ad
 from app.auth import get_admin_user
 from app.models import User
-from app.secret_mask import mask_secret_plaintext
 
-# Configure logger
-logger = logging.getLogger(__name__)
-
-# Initialize FastAPI router
 aws_router = APIRouter(tags=["account/aws"])
 
 # AWS models
@@ -90,7 +84,7 @@ async def create_aws_config(
 
 @aws_router.get("/v0/account/aws_config")
 async def get_aws_config(current_user: User = Depends(get_admin_user)):
-    """Get AWS configuration (admin only)"""
+    """Get AWS configuration (admin only). Access Key ID is returned in full; secret is never returned."""
     db = ad.common.get_async_db()
     config = await db.cloud_config.find_one({"type": "aws", "user_id": current_user.user_id})
     if not config:
@@ -99,10 +93,10 @@ async def get_aws_config(current_user: User = Depends(get_admin_user)):
         raise HTTPException(status_code=404, detail="AWS configuration not found")
 
     access_key = ad.crypto.decrypt_token(config["access_key_id"])
-    secret_key = ad.crypto.decrypt_token(config["secret_access_key"])
+    # Access Key ID is shown in full (admin UI). Do not decrypt or return the secret access key.
     return {
-        "access_key_id": mask_secret_plaintext(access_key) or "",
-        "secret_access_key": mask_secret_plaintext(secret_key) or "",
+        "access_key_id": access_key,
+        "secret_access_key": "•" * 40,
         "s3_bucket_name": config.get("s3_bucket_name"),
     }
 

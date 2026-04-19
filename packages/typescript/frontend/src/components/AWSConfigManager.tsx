@@ -91,7 +91,7 @@ const AWSConfigManager: React.FC = () => {
             </div>
             <div>
               <span className="text-gray-500">Secret Access Key:</span>{' '}
-              <span>••••••••••••••••••••••••••••••••••••••••</span>
+              <span>{config.secret_access_key || '•'.repeat(40)}</span>
             </div>
             <div className="break-all">
               <span className="text-gray-500">S3 Bucket Name:</span> {config.s3_bucket_name}

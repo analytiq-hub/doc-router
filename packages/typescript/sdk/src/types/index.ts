@@ -1043,7 +1043,7 @@ export interface UsageRangeResponse {
   total_spus: number;
 }
 
-// AWS Config types (GET returns masked keys; POST body expects full keys)
+// AWS Config types (GET: full access_key_id, secret_access_key redacted; POST: full keys)
 export interface AWSConfig {
   access_key_id: string;
   secret_access_key: string;
