@@ -69,6 +69,9 @@ export interface OrgOcrTextractSettings {
 /** Reserved for future Mistral OCR options; server uses `mistral-ocr-latest`. */
 export type OrgOcrMistralSettings = Record<string, never>;
 
+/** Mistral OCR via Vertex AI (region us-central1, model mistral-ocr-2505). Credentials from GCP cloud_config. */
+export type OrgOcrMistralVertexSettings = Record<string, never>;
+
 /** Reserved for future PyMuPDF OCR options; extraction is local embedded text only. */
 export type OrgOcrPymupdfSettings = Record<string, never>;
 
@@ -77,12 +80,13 @@ export interface OrgOcrLlmSettings {
   model: string | null;
 }
 
-export type OcrMode = 'textract' | 'mistral' | 'llm' | 'pymupdf';
+export type OcrMode = 'textract' | 'mistral' | 'mistral_vertex' | 'llm' | 'pymupdf';
 
 export interface OrgOcrConfig {
   mode: OcrMode;
   textract: OrgOcrTextractSettings;
   mistral: OrgOcrMistralSettings;
+  mistral_vertex: OrgOcrMistralVertexSettings;
   pymupdf: OrgOcrPymupdfSettings;
   llm: OrgOcrLlmSettings;
 }
@@ -93,6 +97,8 @@ export interface OrganizationOcrCatalog {
   modes: string[];
   /** False when Mistral OCR cannot run (Mistral provider off or no models enabled in llm_providers). */
   mistral_enabled?: boolean;
+  /** False when GCP credentials are not configured in cloud_config. */
+  mistral_vertex_enabled?: boolean;
 }
 
 export interface TokenOrganizationResponse {

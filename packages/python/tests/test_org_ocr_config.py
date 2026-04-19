@@ -121,13 +121,21 @@ async def test_ocr_settings_catalog_includes_mistral_flag(monkeypatch):
     async def mistral_on():
         return True
 
+    async def gcp_on(db):
+        return True
+
     monkeypatch.setattr(
         "analytiq_data.ocr.mistral_ocr_provider.mistral_ocr_enabled_from_llm_providers",
         mistral_on,
     )
+    monkeypatch.setattr(
+        "analytiq_data.cloud.cloud_config.gcp_credentials_configured",
+        gcp_on,
+    )
     cat = await ocr_settings_catalog()
-    assert cat["modes"] == ["textract", "mistral", "llm", "pymupdf"]
+    assert cat["modes"] == ["textract", "mistral", "mistral_vertex", "llm", "pymupdf"]
     assert cat["mistral_enabled"] is True
+    assert cat["mistral_vertex_enabled"] is True
 
 
 @pytest.mark.asyncio

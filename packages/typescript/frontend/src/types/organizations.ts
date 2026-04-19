@@ -12,6 +12,8 @@ export interface OrgOcrTextractSettings {
 
 export type OrgOcrMistralSettings = Record<string, never>;
 
+export type OrgOcrMistralVertexSettings = Record<string, never>;
+
 export type OrgOcrPymupdfSettings = Record<string, never>;
 
 export interface OrgOcrLlmSettings {
@@ -19,12 +21,13 @@ export interface OrgOcrLlmSettings {
   model: string | null;
 }
 
-export type OcrMode = 'textract' | 'mistral' | 'llm' | 'pymupdf';
+export type OcrMode = 'textract' | 'mistral' | 'mistral_vertex' | 'llm' | 'pymupdf';
 
 export interface OrgOcrConfig {
   mode: OcrMode;
   textract: OrgOcrTextractSettings;
   mistral: OrgOcrMistralSettings;
+  mistral_vertex: OrgOcrMistralVertexSettings;
   pymupdf: OrgOcrPymupdfSettings;
   llm: OrgOcrLlmSettings;
 }
@@ -34,6 +37,8 @@ export interface OrganizationOcrCatalog {
   modes: string[];
   /** False when Mistral provider is off or no models enabled in llm_providers. */
   mistral_enabled?: boolean;
+  /** False when GCP credentials are not configured in cloud_config. */
+  mistral_vertex_enabled?: boolean;
 }
 
 export interface Organization {

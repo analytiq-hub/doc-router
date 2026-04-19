@@ -145,6 +145,40 @@ async def run_document_ocr(
         )
         return payload
 
+    if cfg.mode == "mistral_vertex":
+        from analytiq_data.ocr.mistral_vertex_ocr import mistral_vertex_ocr_pdf
+        from analytiq_data.cloud.cloud_config import get_gcp_service_account_json
+
+        try:
+            service_account_json = await get_gcp_service_account_json(analytiq_client)
+            payload = await mistral_vertex_ocr_pdf(pdf_bytes, service_account_json=service_account_json)
+        except Exception as e:
+            logger.error(
+                "OCR engine mistral_vertex failed for org_id=%s document_id=%s: %s",
+                org_id,
+                document_id,
+                e,
+            )
+            raise
+        n_pages = _mistral_page_count(payload)
+        spus = spu_ocr_for_page_count(n_pages)
+        if spus > 0:
+            await ad.payments.record_spu_usage(
+                org_id=org_id,
+                spus=spus,
+                llm_provider="ocr",
+                llm_model="mistral-vertex-ocr",
+                operation="ocr",
+            )
+        logger.info(
+            "OCR mistral_vertex finished org_id=%s document_id=%s pages=%s spus=%s",
+            org_id,
+            document_id,
+            n_pages,
+            spus,
+        )
+        return payload
+
     if cfg.mode == "llm":
         from analytiq_data.ocr.llm_ocr import run_llm_ocr_pdf
 

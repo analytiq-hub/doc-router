@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 TEXTRACT_FEATURES = frozenset({"LAYOUT", "TABLES", "FORMS", "SIGNATURES"})
 
-OcrMode = Literal["textract", "mistral", "llm", "pymupdf"]
+OcrMode = Literal["textract", "mistral", "mistral_vertex", "llm", "pymupdf"]
 
 # Legacy export (tests); single-mode config replaces multi-engine order.
 OcrEngineId = Literal["textract"]
@@ -85,6 +85,13 @@ class OrgOcrMistralSettings(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
 
+class OrgOcrMistralVertexSettings(BaseModel):
+    """Mistral OCR via Vertex AI (region hardcoded to us-central1, model mistral-ocr-2505).
+    Credentials come from the GCP cloud_config service account JSON."""
+
+    model_config = ConfigDict(extra="ignore")
+
+
 class OrgOcrPymupdfSettings(BaseModel):
     """Optional PyMuPDF OCR flags (extraction is local embedded text only)."""
 
@@ -108,6 +115,7 @@ class OrgOcrConfig(BaseModel):
     mode: OcrMode = "textract"
     textract: OrgOcrTextractSettings = Field(default_factory=OrgOcrTextractSettings)
     mistral: OrgOcrMistralSettings = Field(default_factory=OrgOcrMistralSettings)
+    mistral_vertex: OrgOcrMistralVertexSettings = Field(default_factory=OrgOcrMistralVertexSettings)
     pymupdf: OrgOcrPymupdfSettings = Field(default_factory=OrgOcrPymupdfSettings)
     llm: OrgOcrLlmSettings = Field(default_factory=OrgOcrLlmSettings)
 
@@ -160,6 +168,8 @@ def _normalize_legacy_ocr_dict(raw: dict[str, Any]) -> dict[str, Any]:
         out["mode"] = "textract"
     if "mistral" not in out or not isinstance(out.get("mistral"), dict):
         out["mistral"] = {}
+    if "mistral_vertex" not in out or not isinstance(out.get("mistral_vertex"), dict):
+        out["mistral_vertex"] = {}
     if "llm" not in out or not isinstance(out.get("llm"), dict):
         out["llm"] = {"provider": None, "model": None}
     if "pymupdf" not in out or not isinstance(out.get("pymupdf"), dict):
@@ -205,8 +215,10 @@ async def apply_ocr_config_update(
 
     Mistral mode requires the Mistral LLM provider to be enabled with an API key in
     ``llm_providers`` (not a standalone env var).
+    Mistral Vertex mode requires GCP credentials in cloud_config.
     """
     from analytiq_data.ocr.mistral_ocr_provider import mistral_ocr_enabled_from_llm_providers
+    from analytiq_data.cloud.cloud_config import gcp_credentials_configured
 
     base = OrgOcrConfig().model_dump()
     merged_in = _normalize_legacy_ocr_dict(dict(incoming))
@@ -218,17 +230,28 @@ async def apply_ocr_config_update(
             "Mistral OCR is not available: enable the Mistral LLM provider and at least one model "
             "in account LLM settings"
         )
+    if cfg.mode == "mistral_vertex":
+        import analytiq_data as ad
+        db = ad.common.get_async_db()
+        if not await gcp_credentials_configured(db):
+            raise ValueError(
+                "Mistral Vertex OCR is not available: configure GCP credentials in account settings"
+            )
     return cfg.model_dump()
 
 
 async def ocr_settings_catalog() -> dict[str, Any]:
     """OCR UI / API discovery."""
     from analytiq_data.ocr.mistral_ocr_provider import mistral_ocr_enabled_from_llm_providers
+    from analytiq_data.cloud.cloud_config import gcp_credentials_configured
+    import analytiq_data as ad
 
+    db = ad.common.get_async_db()
     return {
         "textract_feature_types": sorted(TEXTRACT_FEATURES),
-        "modes": ["textract", "mistral", "llm", "pymupdf"],
+        "modes": ["textract", "mistral", "mistral_vertex", "llm", "pymupdf"],
         "mistral_enabled": await mistral_ocr_enabled_from_llm_providers(),
+        "mistral_vertex_enabled": await gcp_credentials_configured(db),
     }
 
 
