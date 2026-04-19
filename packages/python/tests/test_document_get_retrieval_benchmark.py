@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import base64
 import os
+import statistics
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -71,13 +72,29 @@ def _parallel_count() -> int:
     return max(1, n)
 
 
+def _min_median_max(values: list[float]) -> tuple[float, float, float]:
+    if not values:
+        raise ValueError("values must be non-empty")
+    s = sorted(values)
+    return s[0], statistics.median(s), s[-1]
+
+
+def _per_request_mib_per_s(latencies_s: list[float], mib: float) -> list[float]:
+    return [mib / max(t, 1e-18) for t in latencies_s]
+
+
+def _fmt_min_med_max(a: float, b: float, c: float, *, decimals: int) -> str:
+    return f"min={a:.{decimals}f} med={b:.{decimals}f} max={c:.{decimals}f}"
+
+
 @pytest.mark.doc_retrieval_benchmark
 def test_get_document_pdf_retrieval_speed(mock_auth, test_db, capsys) -> None:
     """
     For each size: POST upload(s), GET ?file_type=pdf, assert payload size, print timing row.
     When RUN_DOC_RETRIEVAL_BENCHMARK_PARALLEL > 1, uploads and GETs run concurrently (wall time
-    for the full batch); MiB/s is aggregate (parallel * file size) / wall seconds. Each worker's
-    POST and GET latency is printed on the following lines (seconds, index order 0..N-1).
+    for the full batch); MiB/s is aggregate (parallel * file size) / wall seconds. Per size, prints
+    min/median/max latency and per-request MiB/s for POST and GET; when parallel>1, also each
+    worker latency (seconds, index order 0..N-1).
     """
     rows: list[str] = []
     parallel = _parallel_count()
@@ -174,8 +191,22 @@ def test_get_document_pdf_retrieval_speed(mock_auth, test_db, capsys) -> None:
         get_mibs = total_mib / get_s if get_s > 0 else float("inf")
         par_note = f" x{parallel}" if parallel != 1 else ""
         row = (
-            f"{label:>8}{par_note}  upload={upload_s:8.3f}s ({up_mibs:6.2f} MiB/s)  "
-            f"get={get_s:8.3f}s ({get_mibs:6.2f} MiB/s)"
+            f"{label:>8}{par_note}  upload={upload_s:8.3f}s ({up_mibs:6.2f} MiB/s agg)  "
+            f"get={get_s:8.3f}s ({get_mibs:6.2f} MiB/s agg)"
+        )
+
+        up_lat_min, up_lat_med, up_lat_max = _min_median_max(upload_each_s)
+        get_lat_min, get_lat_med, get_lat_max = _min_median_max(get_each_s)
+        up_rates = _per_request_mib_per_s(upload_each_s, mib)
+        get_rates = _per_request_mib_per_s(get_each_s, mib)
+        up_bw_min, up_bw_med, up_bw_max = _min_median_max(up_rates)
+        get_bw_min, get_bw_med, get_bw_max = _min_median_max(get_rates)
+
+        row += (
+            f"\n      POST latency (s):  {_fmt_min_med_max(up_lat_min, up_lat_med, up_lat_max, decimals=3)}"
+            f"\n      POST MiB/s (file): {_fmt_min_med_max(up_bw_min, up_bw_med, up_bw_max, decimals=2)}"
+            f"\n      GET latency (s):   {_fmt_min_med_max(get_lat_min, get_lat_med, get_lat_max, decimals=3)}"
+            f"\n      GET MiB/s (file):  {_fmt_min_med_max(get_bw_min, get_bw_med, get_bw_max, decimals=2)}"
         )
         if parallel > 1:
             up_fmt = " ".join(f"{x:.3f}" for x in upload_each_s)
