@@ -1,8 +1,9 @@
 """Tests for organization OCR configuration merge and validation."""
 import pytest
 from pydantic import ValidationError
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+import analytiq_data as ad
 from analytiq_data.ocr.mistral_ocr_provider import provider_and_llm_enabled
 from analytiq_data.ocr.ocr_config import (
     OCR_ENGINE_RUN_ORDER,
@@ -303,3 +304,170 @@ async def test_run_document_ocr_llm_mode():
     assert out == payload
     rec.assert_called_once()
     assert rec.call_args.kwargs["spus"] == 1
+
+
+# ---------------------------------------------------------------------------
+# mistral_vertex mode
+# ---------------------------------------------------------------------------
+
+def test_merge_mistral_vertex_mode():
+    cfg = merge_org_ocr_config({"mode": "mistral_vertex"})
+    assert cfg.mode == "mistral_vertex"
+
+
+@pytest.mark.asyncio
+async def test_apply_rejects_mistral_vertex_when_gcp_not_configured(monkeypatch):
+    async def gcp_off(db):
+        return False
+
+    monkeypatch.setattr(
+        "analytiq_data.cloud.cloud_config.gcp_credentials_configured",
+        gcp_off,
+    )
+    with pytest.raises(ValueError, match="Mistral Vertex OCR is not available"):
+        await apply_ocr_config_update(None, {"mode": "mistral_vertex"})
+
+
+@pytest.mark.asyncio
+async def test_apply_allows_mistral_vertex_when_gcp_configured(monkeypatch):
+    async def gcp_on(db):
+        return True
+
+    monkeypatch.setattr(
+        "analytiq_data.cloud.cloud_config.gcp_credentials_configured",
+        gcp_on,
+    )
+    out = await apply_ocr_config_update(None, {"mode": "mistral_vertex"})
+    assert out["mode"] == "mistral_vertex"
+
+
+@pytest.mark.asyncio
+async def test_run_document_ocr_mistral_vertex_mode():
+    cfg = merge_org_ocr_config({"mode": "mistral_vertex"})
+    payload = {"pages": [{"index": 0, "markdown": "vertex text"}], "model": "mistral-ocr-2505"}
+    with (
+        patch(
+            "analytiq_data.ocr.mistral_vertex_ocr.mistral_vertex_ocr_pdf",
+            new=AsyncMock(return_value=payload),
+        ),
+        patch(
+            "analytiq_data.cloud.cloud_config.get_gcp_service_account_json",
+            new=AsyncMock(return_value='{"project_id":"test"}'),
+        ),
+        patch("analytiq_data.ocr.ocr_runners.ad.payments.check_spu_limits"),
+        patch("analytiq_data.ocr.ocr_runners.ad.payments.record_spu_usage") as rec,
+    ):
+        out = await run_document_ocr(
+            object(), b"%PDF-1.4", org_id="o", document_id="d", cfg=cfg
+        )
+    assert out == payload
+    rec.assert_called_once()
+    assert rec.call_args.kwargs["llm_model"] == "mistral-vertex-ocr"
+
+
+@pytest.mark.asyncio
+async def test_ocr_settings_catalog_mistral_vertex_disabled_when_no_gcp(monkeypatch):
+    async def mistral_off():
+        return False
+
+    async def gcp_off(db):
+        return False
+
+    monkeypatch.setattr(
+        "analytiq_data.ocr.mistral_ocr_provider.mistral_ocr_enabled_from_llm_providers",
+        mistral_off,
+    )
+    monkeypatch.setattr(
+        "analytiq_data.cloud.cloud_config.gcp_credentials_configured",
+        gcp_off,
+    )
+    cat = await ocr_settings_catalog()
+    assert cat["mistral_vertex_enabled"] is False
+
+
+# ---------------------------------------------------------------------------
+# ocr_type stored in blob metadata by save_ocr_text_from_json
+# ---------------------------------------------------------------------------
+
+@pytest.mark.asyncio
+async def test_save_ocr_text_from_json_stores_ocr_type(test_db):
+    """save_ocr_text_from_json must write ocr_type into the blob metadata."""
+    analytiq_client = ad.common.get_analytiq_client()
+
+    ocr_json = {
+        "Blocks": [],
+        "DocumentMetadata": {"Pages": 1},
+        "AnalyzeDocumentModelVersion": None,
+        "DetectDocumentTextModelVersion": None,
+    }
+
+    fake_doc = MagicMock()
+    fake_doc.pages = []
+
+    doc_id = "test_ocr_type_meta"
+    with patch(
+        "analytiq_data.aws.textract.open_textract_document_from_ocr_json",
+        return_value=fake_doc,
+    ):
+        await ad.ocr.save_ocr_text_from_json(
+            analytiq_client,
+            doc_id,
+            ocr_json,
+            force=True,
+            org_id="test_org",
+            ocr_type="textract",
+        )
+
+    metadata = await ad.ocr.get_ocr_metadata(analytiq_client, doc_id)
+    assert metadata is not None
+    assert metadata["ocr_type"] == "textract"
+
+
+@pytest.mark.asyncio
+async def test_save_ocr_text_from_json_stores_ocr_type_mistral(test_db):
+    """save_ocr_text_from_json stores the correct ocr_type for mistral payloads."""
+    analytiq_client = ad.common.get_analytiq_client()
+
+    ocr_json = {
+        "pages": [{"index": 0, "markdown": "# Hello\nworld"}],
+        "model": "mistral-ocr-latest",
+    }
+
+    doc_id = "test_ocr_type_meta_mistral"
+    await ad.ocr.save_ocr_text_from_json(
+        analytiq_client,
+        doc_id,
+        ocr_json,
+        force=True,
+        org_id="test_org",
+        ocr_type="mistral",
+    )
+
+    metadata = await ad.ocr.get_ocr_metadata(analytiq_client, doc_id)
+    assert metadata is not None
+    assert metadata["ocr_type"] == "mistral"
+
+
+@pytest.mark.asyncio
+async def test_save_ocr_text_from_json_stores_ocr_type_mistral_vertex(test_db):
+    """save_ocr_text_from_json stores mistral_vertex as ocr_type."""
+    analytiq_client = ad.common.get_analytiq_client()
+
+    ocr_json = {
+        "pages": [{"index": 0, "markdown": "vertex content"}],
+        "model": "mistral-ocr-2505",
+    }
+
+    doc_id = "test_ocr_type_meta_vertex"
+    await ad.ocr.save_ocr_text_from_json(
+        analytiq_client,
+        doc_id,
+        ocr_json,
+        force=True,
+        org_id="test_org",
+        ocr_type="mistral_vertex",
+    )
+
+    metadata = await ad.ocr.get_ocr_metadata(analytiq_client, doc_id)
+    assert metadata is not None
+    assert metadata["ocr_type"] == "mistral_vertex"
