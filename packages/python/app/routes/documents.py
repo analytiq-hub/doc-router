@@ -107,7 +107,7 @@ async def upload_document(
     current_user: User = Depends(get_org_user)
 ):
     """Upload one or more documents"""
-    logger.debug(f"upload_document(): documents: {[doc.name for doc in documents_upload.documents]}")
+    logger.info(f"upload_document(): {organization_id}: uploading documents: {[doc.name for doc in documents_upload.documents]}")
     documents = []
 
     # Validate all tag IDs first
@@ -190,6 +190,8 @@ async def upload_document(
             "tag_ids": document.tag_ids,
             "metadata": document.metadata
         })
+
+        logger.info(f"upload_document(): saved {organization_id}/{document_id} name {document.name}")
 
         # Optional per-org webhook: document uploaded
         try:
