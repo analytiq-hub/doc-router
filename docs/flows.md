@@ -1,7 +1,7 @@
 # doc-router flows — implementation plan
 
-A **flow** is a saved, reusable processing pipeline: a directed graph of **step
-nodes** (OCR, LLM extraction, tag assignment, webhook call, schema validation,
+A **flow** is a saved, reusable processing pipeline: a directed graph of
+**nodes** (OCR, LLM extraction, tag assignment, webhook call, schema validation,
 branch/merge) connected by **edges**. A user draws it once on a canvas, saves
 it, and can run it on demand against a document or a batch. This fills the gap
 between the current single-document linear pipeline (upload → OCR → LLM) and a
@@ -65,10 +65,10 @@ One document per saved version of the graph. The `_id` of each row is the
 | `_id` | `flow_revid`. Identifies this specific revision. |
 | `flow_id` | FK → `flows._id`. |
 | `flow_version` | Version number at the time this revision was saved. |
-| `nodes` | Array of step instances (see node shape below). |
+| `nodes` | Array of node instances (see node shape below). |
 | `connections` | Source-keyed adjacency map (see connection shape below). |
 | `settings` | Flow-level execution policy (timeout, error handling, etc.). |
-| `static_data` | Persistent cross-run state written by steps (see below). `null` in v1. |
+| `static_data` | Persistent cross-run state written by nodes (see below). `null` in v1. |
 | `pin_data` | Per-node output overrides used for canvas testing (see below). `null` in v1. |
 | `created_at` | Timestamp when this revision was saved. |
 | `created_by` | `user_id` of the author. |
@@ -137,23 +137,23 @@ These three fields are reserved now so the storage schema and export format do
 not need a breaking change when they are activated. They are stored as `null`
 and ignored by the engine in v1.
 
-**`static_data`** — persistent key/value state that a step can read and write
+**`static_data`** — persistent key/value state that a node can read and write
 across executions of the same flow. Analogous to n8n's `staticData`
 (`IWorkflowBase.staticData: IDataObject`), which is updated in-place on the
 `WorkflowEntity` row after each execution. In doc-router this will live on the
 `flow_revision` (or a dedicated `flow_static_data` side-collection if write
-frequency justifies it). Intended use: a webhook-trigger step that stores a
+frequency justifies it). Intended use: a webhook-trigger node that stores a
 cursor or last-seen timestamp so it only fetches new documents on each run.
 
 **`pin_data`** — per-node output overrides keyed by node `id`. When a node has
 pinned data the engine substitutes it for the real execution output, letting
-authors iterate on downstream steps without re-running expensive upstream nodes
+authors iterate on downstream nodes without re-running expensive upstream nodes
 (OCR, LLM). Analogous to n8n's `pinData` (`IPinData: { [nodeName]:
 INodeExecutionData[] }`). In the canvas UI this corresponds to the "pin output"
 action on a node after a test run.
 
 
-### Node shape (step instance)
+### Node shape
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -170,7 +170,7 @@ Key decisions diverging from n8n:
 
 - **Edges keyed by node `id`** (UUID), not `name`. Nodes can be freely
   renamed; id-keyed edges are stable.
-- **No `typeVersion` per node in v1** — step types are versioned in the type
+- **No `typeVersion` per node in v1** — node types are versioned in the type
   registry, not stored per node instance.
 - **`active` flag lives on the stable header**, not in a revision, so
   activate/deactivate never creates a new revision.
@@ -191,14 +191,14 @@ connections: {
 
 ---
 
-## Layer 2 — Step type registry
+## Layer 2 — Node type registry
 
-A Python registry (`analytiq_data/flows/step_registry.py`) maps a type key to
+A Python registry (`analytiq_data/flows/node_registry.py`) maps a type key to
 a descriptor:
 
 ```python
 @dataclass
-class StepType:
+class NodeType:
     key: str               # e.g. "docrouter.llm_extract"
     label: str             # UI display name
     inputs: int            # number of main inputs (0 = trigger/entry)
@@ -209,9 +209,9 @@ class StepType:
 
 ### Item format
 
-`FlowItem` is the **only thing that crosses a step boundary**. A step receives
+`FlowItem` is the **only thing that crosses a node boundary**. A node receives
 a list of these items as input and returns lists of them as output. Nothing
-else — not `run_data`, not other steps' outputs, not any shared mutable store
+else — not `run_data`, not other nodes' outputs, not any shared mutable store
 — is accessible through the normal execution path.
 
 ```python
@@ -222,12 +222,12 @@ class FlowItem:
     meta:    dict                  # lineage and routing hints (internal use)
 ```
 
-`json` is what every step reads and writes in the common case. For doc-router
-steps it typically contains document-scoped fields such as `document_id`,
+`json` is what every node reads and writes in the common case. For doc-router
+nodes it typically contains document-scoped fields such as `document_id`,
 `organization_id`, extraction results, tag lists, and any data produced by
-earlier steps.
+earlier nodes.
 
-`binary` travels alongside `json` when a step produces or consumes file data.
+`binary` travels alongside `json` when a node produces or consumes file data.
 Each key is a named attachment:
 
 ```python
@@ -255,7 +255,7 @@ async def execute(
     ...
 ```
 
-### Initial step types
+### Built-in node types
 
 | Key | Inputs | Outputs | What it does |
 |-----|--------|---------|--------------|
@@ -280,16 +280,16 @@ analytiq_data/flows/
   __init__.py
   engine.py          # graph runner: topological order, fan-out, merge/wait
   execution.py       # execution record CRUD (MongoDB: flow_executions)
-  step_registry.py   # type registry + built-in step implementations
+  node_registry.py   # type registry + built-in node implementations
   context.py         # ExecutionContext dataclass
-  steps/
-    ocr_step.py
-    llm_step.py
-    tag_step.py
-    webhook_step.py
-    branch_step.py
-    merge_step.py
-    code_step.py
+  nodes/
+    ocr_node.py
+    llm_node.py
+    tag_node.py
+    webhook_node.py
+    branch_node.py
+    merge_node.py
+    code_node.py
 ```
 
 ### Engine algorithm (`engine.py`)
@@ -301,7 +301,7 @@ analytiq_data/flows/
 2. Find entry nodes: nodes with in-degree 0 or type `docrouter.trigger.*`.
 3. Topological BFS: maintain a `ready_queue` and a `waiting` map
    (`node_id → remaining_input_count`).
-4. For each ready node: look up step type → call
+4. For each ready node: look up node type → call
    `execute(context, node, input_items)` → `output_items`.
 5. Fan-out: for each output edge, deliver items to the destination; decrement
    its waiting counter; enqueue the destination when its counter reaches 0.
@@ -360,7 +360,7 @@ automation clients use the same paths and DTOs (no internal/external split; see
 | `GET` | `/v0/orgs/{org_id}/flows/{flow_id}/executions` | List executions |
 | `GET` | `/v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}` | Get execution + per-node output |
 | `POST` | `/v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}/stop` | Cancel a running execution |
-| `GET` | `/v0/orgs/{org_id}/flows/step-types` | List available step type descriptors |
+| `GET` | `/v0/orgs/{org_id}/flows/node-types` | List available node type descriptors |
 
 Auth: same `get_org_user` dependency used across all other routes.
 
@@ -368,7 +368,7 @@ Auth: same `get_org_user` dependency used across all other routes.
 
 ## Layer 5 — Worker integration
 
-A manual run that includes slow steps (multi-doc OCR, large LLM calls) is
+A manual run that includes slow nodes (multi-doc OCR, large LLM calls) is
 dispatched via the existing queue rather than blocking the HTTP response:
 
 ```python
@@ -398,7 +398,7 @@ src/app/orgs/[orgId]/flows/              ← flow list page
 src/app/orgs/[orgId]/flows/[flowId]/     ← canvas editor + run panel
 src/components/flows/
   FlowCanvas.tsx          ← ReactFlow canvas, node drag/drop, edge drawing
-  FlowNodeTypes.tsx        ← custom node renderers per step type
+  FlowNodeTypes.tsx        ← custom node renderers per node type
   FlowParameterPanel.tsx   ← right panel for editing selected node parameters
   FlowRunPanel.tsx         ← run button, execution history, per-node status
   useFlowEditor.ts         ← save/load, auto-save with debounce
@@ -421,7 +421,7 @@ src/components/flows/
 ## Implementation order
 
 ```
-1. analytiq_data/flows/   — engine + step registry (no API yet, unit-testable)
+1. analytiq_data/flows/   — engine + node registry (no API yet, unit-testable)
 2. app/routes/flows.py    — CRUD + run + execution endpoints
 3. worker flow_run handler — slow-run queue consumer
 4. Frontend list page + canvas editor
