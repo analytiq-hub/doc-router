@@ -107,6 +107,130 @@ describe('SDK Client Unit Tests', () => {
       expect(typeof client.retryWebhookDelivery).toBe('function');
     });
 
+    test('uploadDocuments posts JSON to documents endpoint', async () => {
+      const mockPost = jest.fn().mockResolvedValue({ documents: [] });
+      const client = new DocRouterOrg({
+        baseURL: 'https://api.example.com',
+        orgToken: 'org-token',
+        organizationId: 'org-123',
+      });
+      (client as unknown as { http: { post: jest.Mock } }).http.post = mockPost;
+
+      await client.uploadDocuments({
+        documents: [{ name: 'x.pdf', content: 'Ym9keQ==' }],
+      });
+      expect(mockPost).toHaveBeenCalledWith('/v0/orgs/org-123/documents', {
+        documents: [{ name: 'x.pdf', content: 'Ym9keQ==' }],
+      });
+    });
+
+    test('uploadDocuments strips data URL prefix from content', async () => {
+      const mockPost = jest.fn().mockResolvedValue({ documents: [] });
+      const client = new DocRouterOrg({
+        baseURL: 'https://api.example.com',
+        orgToken: 'org-token',
+        organizationId: 'org-123',
+      });
+      (client as unknown as { http: { post: jest.Mock } }).http.post = mockPost;
+
+      await client.uploadDocuments({
+        documents: [
+          {
+            name: 'y.pdf',
+            content: 'data:application/pdf;base64,Ym9keTI=',
+          },
+        ],
+      });
+      expect(mockPost).toHaveBeenCalledWith('/v0/orgs/org-123/documents', {
+        documents: [{ name: 'y.pdf', content: 'Ym9keTI=' }],
+      });
+    });
+
+    test('uploadDocumentsMultipart rejects empty documents', async () => {
+      const mockPostFormData = jest.fn();
+      const client = new DocRouterOrg({
+        baseURL: 'https://api.example.com',
+        orgToken: 'org-token',
+        organizationId: 'org-123',
+      });
+      (client as unknown as { http: { postFormData: jest.Mock } }).http.postFormData =
+        mockPostFormData;
+
+      await expect(
+        client.uploadDocumentsMultipart({ documents: [] }),
+      ).rejects.toThrow('uploadDocumentsMultipart requires at least one document');
+      expect(mockPostFormData).not.toHaveBeenCalled();
+    });
+
+    test('uploadDocumentsMultipart calls postFormData with URL and manifest', async () => {
+      const mockPostFormData = jest.fn().mockResolvedValue({ documents: [] });
+      const client = new DocRouterOrg({
+        baseURL: 'https://api.example.com',
+        orgToken: 'org-token',
+        organizationId: 'org-123',
+      });
+      (client as unknown as { http: { postFormData: jest.Mock } }).http.postFormData =
+        mockPostFormData;
+
+      const file = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
+      await client.uploadDocumentsMultipart({
+        documents: [
+          {
+            name: 'one.pdf',
+            file,
+            tag_ids: ['tag_a'],
+            metadata: { source: 'unit' },
+          },
+        ],
+      });
+
+      expect(mockPostFormData).toHaveBeenCalledTimes(1);
+      const [url, form] = mockPostFormData.mock.calls[0] as [
+        string,
+        FormData,
+      ];
+      expect(url).toBe('/v0/orgs/org-123/documents/multipart');
+      const manifest = JSON.parse(form.get('manifest') as string);
+      expect(manifest).toEqual([
+        {
+          name: 'one.pdf',
+          tag_ids: ['tag_a'],
+          metadata: { source: 'unit' },
+        },
+      ]);
+      const files = form.getAll('files');
+      expect(files).toHaveLength(1);
+      expect(files[0]).toBeInstanceOf(Blob);
+    });
+
+    test('uploadDocumentsMultipart builds manifest defaults and multiple files', async () => {
+      const mockPostFormData = jest.fn().mockResolvedValue({ documents: [] });
+      const client = new DocRouterOrg({
+        baseURL: 'https://api.example.com',
+        orgToken: 'org-token',
+        organizationId: 'org-99',
+      });
+      (client as unknown as { http: { postFormData: jest.Mock } }).http.postFormData =
+        mockPostFormData;
+
+      const a = new Blob(['a'], { type: 'application/pdf' });
+      const b = new Blob(['b'], { type: 'application/pdf' });
+      await client.uploadDocumentsMultipart({
+        documents: [
+          { name: 'first.pdf', file: a },
+          { name: 'second.pdf', file: b },
+        ],
+      });
+
+      const [, form] = mockPostFormData.mock.calls[0] as [string, FormData];
+      const manifest = JSON.parse(form.get('manifest') as string);
+      expect(manifest).toEqual([
+        { name: 'first.pdf', tag_ids: [], metadata: {} },
+        { name: 'second.pdf', tag_ids: [], metadata: {} },
+      ]);
+      expect(form.getAll('files')).toHaveLength(2);
+    });
+
     test('getOCRBlocks accepts format param and requests gzip by default', async () => {
       const mockGet = jest.fn().mockResolvedValue([]);
       const client = new DocRouterOrg({
