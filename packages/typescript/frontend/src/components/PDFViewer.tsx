@@ -142,20 +142,8 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     }
   }, []);
 
-  const setUrlFromBlob = useCallback((blob: Blob | null, name: string | null, state: string | null) => {
-    revokeCurrentUrl();
-    if (!blob) {
-      setFileUrl(null);
-      setDocumentState(state);
-      return;
-    }
-    const url = URL.createObjectURL(blob);
-    fileUrlRef.current = url;
-    setFileUrl(url);
-    setDocumentState(state);
-  }, [revokeCurrentUrl]);
-
-  // Single load: fetch PDF once per document id; create blob URL and pass to Document. Cleanup revokes URL.
+  // Single load: fetch metadata, then get a short-lived stream URL and pass it directly to Document.
+  // PDF.js will use HTTP range requests against that URL, enabling progressive rendering.
   useEffect(() => {
     if (loadedIdRef.current === id && fileUrlRef.current) {
       return;
@@ -167,25 +155,22 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     setFileUrl(null);
     let cancelled = false;
 
+    const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi';
     const load = async () => {
       try {
-        const response = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
+        const meta = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf', includeContent: false });
         if (cancelled) return;
-        const content = response.content ?? null;
-        const name = response.document_name ?? null;
-        const state = response.state ?? null;
+        const name = meta.document_name ?? null;
+        const state = meta.state ?? null;
         setDocumentState(state);
-        const hasContent = content != null;
+        setFileName(name ?? '');
         const stillProcessing = ['ocr_processing', 'llm_processing'].includes(state ?? '');
-        if (hasContent) {
-          const blob = new Blob([content], { type: 'application/pdf' });
-          setUrlFromBlob(blob, name, state);
-          setFileName(name ?? '');
-          setFileSize(blob.size);
-        } else {
-          setFileUrl(null);
-        }
-        if (hasContent || !stillProcessing) {
+        if (!stillProcessing) {
+          const { token } = await docRouterOrgApi.getDocumentDownloadToken({ documentId: id });
+          if (cancelled) return;
+          const streamUrl = `${fastapiUrl}/v0/orgs/${organizationId}/documents/${id}/stream?token=${encodeURIComponent(token)}`;
+          fileUrlRef.current = streamUrl;
+          setFileUrl(streamUrl);
           setLoading(false);
         }
       } catch (e) {
@@ -194,7 +179,6 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
         setDocumentState(null);
         setFileUrl(null);
         setFileName('');
-        setFileSize(0);
         setLoading(false);
       }
     };
@@ -205,7 +189,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       revokeCurrentUrl();
       setFileUrl(null);
     };
-  }, [id, docRouterOrgApi, revokeCurrentUrl, setUrlFromBlob]);
+  }, [id, organizationId, docRouterOrgApi, revokeCurrentUrl]);
 
   // Poll metadata when processing. When completed and we still have no URL, do one full fetch and set blob URL.
   useEffect(() => {
@@ -231,14 +215,11 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
           }
           setDocumentState(meta.state ?? null);
           if (fileUrlRef.current == null) {
-            const response = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
-            const content = response.content ?? null;
-            if (content) {
-              const blob = new Blob([content], { type: 'application/pdf' });
-              setUrlFromBlob(blob, response.document_name ?? null, response.state ?? null);
-              setFileName(response.document_name ?? '');
-              setFileSize(blob.size);
-            }
+            const fastapiUrl = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi';
+            const { token } = await docRouterOrgApi.getDocumentDownloadToken({ documentId: id });
+            const streamUrl = `${fastapiUrl}/v0/orgs/${organizationId}/documents/${id}/stream?token=${encodeURIComponent(token)}`;
+            fileUrlRef.current = streamUrl;
+            setFileUrl(streamUrl);
             setLoading(false);
           }
         }
@@ -253,7 +234,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       }
       completionFetchStartedRef.current = false;
     };
-  }, [documentState, id, docRouterOrgApi, setUrlFromBlob]);
+  }, [documentState, id, organizationId, docRouterOrgApi]);
 
   // Fetch errors vs react-pdf parse/display errors
   const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);

@@ -6,6 +6,8 @@ import {
   UploadDocumentsResponse,
   ListDocumentsResponse,
   GetDocumentResponse,
+  GetDocumentDownloadTokenParams,
+  GetDocumentDownloadTokenResponse,
   GetOCRMetadataResponse,
   RunLLMResponse,
   GetLLMResultResponse,
@@ -237,6 +239,13 @@ export class DocRouterOrg {
       metadata: response.metadata,
       content
     };
+  }
+
+  async getDocumentDownloadToken(params: GetDocumentDownloadTokenParams): Promise<GetDocumentDownloadTokenResponse> {
+    const { documentId } = params;
+    return this.http.get<GetDocumentDownloadTokenResponse>(
+      `/v0/orgs/${this.organizationId}/documents/${documentId}/download-token`
+    );
   }
 
   async updateDocument(params: { documentId: string; documentName?: string; tagIds?: string[]; metadata?: Record<string, string>; }) {

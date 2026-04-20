@@ -308,6 +308,14 @@ export interface GetDocumentResponse {
   content: ArrayBuffer | null;
 }
 
+export interface GetDocumentDownloadTokenParams {
+  documentId: string;
+}
+
+export interface GetDocumentDownloadTokenResponse {
+  token: string;
+}
+
 export interface UpdateDocumentParams {
   documentId: string;
   documentName?: string;

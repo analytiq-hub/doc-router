@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 # Standard library imports
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
 import os
+import re
 import json
 import base64
 import logging
@@ -12,13 +13,15 @@ from typing import Optional, List, Dict, Annotated, Any
 from pydantic import BaseModel, Field, ConfigDict
 
 # Third-party imports
-from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, Form, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, Form, UploadFile, Request
+from fastapi.responses import Response
+from jose import jwt, JWTError
 from bson import ObjectId
 
 # Local imports
 import analytiq_data as ad
 from analytiq_data.common.doc import get_mime_type
-from app.auth import get_org_user
+from app.auth import get_org_user, NEXTAUTH_SECRET, ALGORITHM
 from app.models import User
 
 # Configure logger
@@ -635,3 +638,100 @@ async def delete_document(
     await ad.common.delete_doc(analytiq_client, document_id, organization_id)
     
     return {"message": "Document deleted successfully"}
+
+# Download token TTL: generous enough that PDF.js range requests complete within the session.
+_DOWNLOAD_TOKEN_TTL_SECONDS = 3600
+
+@documents_router.get("/v0/orgs/{organization_id}/documents/{document_id}/download-token")
+async def get_document_download_token(
+    organization_id: str,
+    document_id: str,
+    current_user: User = Depends(get_org_user),
+):
+    """Issue a short-lived signed token that authorises streaming the PDF for this document."""
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    document = await db.docs.find_one({
+        "_id": ObjectId(document_id),
+        "organization_id": organization_id,
+    })
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    payload = {
+        "sub": current_user.user_id,
+        "org": organization_id,
+        "doc": document_id,
+        "exp": datetime.now(UTC) + timedelta(seconds=_DOWNLOAD_TOKEN_TTL_SECONDS),
+    }
+    token = jwt.encode(payload, NEXTAUTH_SECRET, algorithm=ALGORITHM)
+    return {"token": token}
+
+
+@documents_router.get("/v0/orgs/{organization_id}/documents/{document_id}/stream")
+async def stream_document(
+    organization_id: str,
+    document_id: str,
+    token: str = Query(..., description="Short-lived signed download token"),
+    request: Request = None,
+):
+    """Stream a document PDF with HTTP range-request support.
+
+    Accepts a token issued by /download-token instead of a Bearer header so that
+    react-pdf / PDF.js can fetch ranges directly without custom request headers.
+    """
+    try:
+        payload = jwt.decode(token, NEXTAUTH_SECRET, algorithms=[ALGORITHM])
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired download token")
+
+    if payload.get("org") != organization_id or payload.get("doc") != document_id:
+        raise HTTPException(status_code=403, detail="Token does not match requested resource")
+
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+    document = await db.docs.find_one({
+        "_id": ObjectId(document_id),
+        "organization_id": organization_id,
+    })
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    file_name = document.get("pdf_file_name", document.get("mongo_file_name"))
+    file = await ad.common.get_file_async(analytiq_client, file_name)
+    if file is None:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    data: bytes = file["blob"]
+    total = len(data)
+
+    range_header = request.headers.get("Range") if request else None
+    if range_header:
+        match = re.match(r"bytes=(\d+)-(\d*)", range_header)
+        if match:
+            start = int(match.group(1))
+            end = int(match.group(2)) if match.group(2) else total - 1
+            end = min(end, total - 1)
+            if start > end or start >= total:
+                raise HTTPException(status_code=416, detail="Range Not Satisfiable")
+            chunk = data[start : end + 1]
+            return Response(
+                content=chunk,
+                status_code=206,
+                media_type="application/pdf",
+                headers={
+                    "Content-Range": f"bytes {start}-{end}/{total}",
+                    "Accept-Ranges": "bytes",
+                    "Content-Length": str(len(chunk)),
+                },
+            )
+
+    return Response(
+        content=data,
+        status_code=200,
+        media_type="application/pdf",
+        headers={
+            "Accept-Ranges": "bytes",
+            "Content-Length": str(total),
+        },
+    )
