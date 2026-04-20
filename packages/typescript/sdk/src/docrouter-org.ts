@@ -2,6 +2,7 @@ import { HttpClient } from './http-client';
 import { normalizeOcrBlocksPayload } from './ocr-blocks';
 import {
   DocRouterOrgConfig,
+  UploadDocumentMultipartPart,
   UploadDocumentsResponse,
   ListDocumentsResponse,
   GetDocumentResponse,
@@ -150,6 +151,33 @@ export class DocRouterOrg {
     return this.http.post<UploadDocumentsResponse>(
       `/v0/orgs/${this.organizationId}/documents`,
       { documents: documentsPayload }
+    );
+  }
+
+  /**
+   * Upload documents via multipart/form-data (efficient for browser file blobs).
+   * Same response shape as uploadDocuments().
+   */
+  async uploadDocumentsMultipart(params: {
+    documents: UploadDocumentMultipartPart[];
+  }): Promise<UploadDocumentsResponse> {
+    const { documents } = params;
+    if (documents.length === 0) {
+      throw new Error('uploadDocumentsMultipart requires at least one document');
+    }
+    const form = new FormData();
+    const manifest = documents.map((doc) => ({
+      name: doc.name,
+      tag_ids: doc.tag_ids ?? [],
+      metadata: doc.metadata ?? {},
+    }));
+    for (const doc of documents) {
+      form.append('files', doc.file, doc.name);
+    }
+    form.append('manifest', JSON.stringify(manifest));
+    return this.http.postFormData<UploadDocumentsResponse>(
+      `/v0/orgs/${this.organizationId}/documents/multipart`,
+      form
     );
   }
 

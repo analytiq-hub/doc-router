@@ -146,6 +146,22 @@ export class HttpClient {
     return response.data;
   }
 
+  /** POST multipart/form-data (e.g. file uploads). Strips JSON Content-Type so the boundary is set correctly. */
+  async postFormData<T = unknown>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<T> {
+    const response: AxiosResponse<T> = await this.axios.post(url, formData, {
+      ...config,
+      transformRequest: [
+        (data, headers) => {
+          if (data instanceof FormData) {
+            delete headers['Content-Type'];
+          }
+          return data as FormData;
+        },
+      ],
+    });
+    return response.data;
+  }
+
   async put<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     const response: AxiosResponse<T> = await this.axios.put(url, data, config);
     return response.data;

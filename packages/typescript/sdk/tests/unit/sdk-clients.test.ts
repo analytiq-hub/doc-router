@@ -65,6 +65,7 @@ describe('SDK Client Unit Tests', () => {
       expect(client.organizationId).toBe('org-123');
       // flattened API surface
       expect(typeof client.uploadDocuments).toBe('function');
+      expect(typeof client.uploadDocumentsMultipart).toBe('function');
       expect(typeof client.listDocuments).toBe('function');
       expect(typeof client.getDocument).toBe('function');
       expect(typeof client.updateDocument).toBe('function');

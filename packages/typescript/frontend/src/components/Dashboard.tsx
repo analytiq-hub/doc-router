@@ -85,23 +85,14 @@ const Dashboard: React.FC<DashboardProps> = ({ organizationId }) => {
     setDashboardUploadError(null);
     setDashboardUploading(true);
     try {
-      const documents = await Promise.all(
-        acceptedFiles.map(
-          (file) =>
-            new Promise<{ name: string; content: string; tag_ids: string[]; metadata: Record<string, string> }>((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = () => resolve({
-                name: file.name,
-                content: reader.result as string,
-                tag_ids: [],
-                metadata: {}
-              });
-              reader.onerror = () => reject(reader.error);
-              reader.readAsDataURL(file);
-            })
-        )
-      );
-      const response = await docRouterOrgApi.uploadDocuments({ documents });
+      const response = await docRouterOrgApi.uploadDocumentsMultipart({
+        documents: acceptedFiles.map((file) => ({
+          name: file.name,
+          file,
+          tag_ids: [],
+          metadata: {},
+        })),
+      });
       const firstId = response.documents[0]?.document_id;
       if (firstId) {
         router.push(`/orgs/${organizationId}/docs/${firstId}?bbox`);

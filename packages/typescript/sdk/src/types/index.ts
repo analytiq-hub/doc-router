@@ -260,6 +260,14 @@ export interface UploadDocument {
   metadata?: Record<string, string>;
 }
 
+/** One file for POST .../documents/multipart (raw bytes, no base64). */
+export interface UploadDocumentMultipartPart {
+  name: string;
+  file: Blob;
+  tag_ids?: string[];
+  metadata?: Record<string, string>;
+}
+
 export interface UploadDocumentsParams {
   documents: UploadDocument[];
 }
