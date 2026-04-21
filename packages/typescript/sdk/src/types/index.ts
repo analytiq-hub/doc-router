@@ -775,6 +775,11 @@ export interface ListFormsParams {
   skip?: number;
   limit?: number;
   tag_ids?: string;
+  name_search?: string;
+  /** JSON-encoded MUI DataGrid sortModel (array). */
+  sort?: string;
+  /** JSON-encoded MUI DataGrid filterModel (object). */
+  filters?: string;
 }
 
 export interface ListFormsResponse {

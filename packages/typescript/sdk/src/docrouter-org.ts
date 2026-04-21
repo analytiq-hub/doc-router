@@ -505,10 +505,17 @@ export class DocRouterOrg {
     return this.http.post<Form>(`/v0/orgs/${this.organizationId}/forms`, { name, response_format });
   }
 
-  async listForms(params?: Omit<ListFormsParams, 'organizationId'>): Promise<ListFormsResponse> {
-    const { skip, limit, tag_ids } = params || {};
+  async listForms(params?: ListFormsParams): Promise<ListFormsResponse> {
+    const { skip, limit, tag_ids, name_search, sort, filters } = params || {};
     return this.http.get<ListFormsResponse>(`/v0/orgs/${this.organizationId}/forms`, {
-      params: { skip: skip || 0, limit: limit || 10, tag_ids }
+      params: {
+        skip: skip ?? 0,
+        limit: limit ?? 10,
+        tag_ids,
+        name_search,
+        sort,
+        filters,
+      },
     });
   }
 
