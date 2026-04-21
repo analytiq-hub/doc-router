@@ -282,12 +282,12 @@ async def list_prompts(
     if sort:
         try:
             sort_model = json.loads(sort)
-        except Exception:
+        except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid sort JSON")
     if filters:
         try:
             filter_model = json.loads(filters)
-        except Exception:
+        except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid filters JSON")
 
     logger.info(

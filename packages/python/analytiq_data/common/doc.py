@@ -157,6 +157,18 @@ async def delete_doc(analytiq_client, document_id: str, organization_id: str):
     logger.info(f"Document {document_id} has been deleted with all LLM, OCR, and KB results.")
 
 
+_LIST_DOCS_FIELD_MAP: dict[str, str | None] = {
+    "document_name": "user_file_name",
+    "documentName": "user_file_name",
+    "uploaded_by": "uploaded_by",
+    "uploadedBy": "uploaded_by",
+    "state": "state",
+    "upload_date": "upload_date",
+    "uploadDate": "upload_date",
+    "tag_ids": "tag_ids",
+}
+
+
 async def list_docs(
     analytiq_client,
     organization_id: str,
@@ -195,17 +207,6 @@ async def list_docs(
         tuple[list, int]
             List of documents and total count
     """
-    _FIELD_MAP: dict[str, str | None] = {
-        "document_name": "user_file_name",
-        "documentName": "user_file_name",
-        "uploaded_by": "uploaded_by",
-        "uploadedBy": "uploaded_by",
-        "state": "state",
-        "upload_date": "upload_date",
-        "uploadDate": "upload_date",
-        "tag_ids": "tag_ids",
-    }
-
     db_name = analytiq_client.env
     db = analytiq_client.mongodb_async[db_name]
     collection = db["docs"]
@@ -220,7 +221,7 @@ async def list_docs(
             query[f"metadata.{key}"] = value
 
     grid_match = await build_filter_match(
-        filter_model, _FIELD_MAP,
+        filter_model, _LIST_DOCS_FIELD_MAP,
         db=db, organization_id=organization_id,
         datetime_fields={"upload_date"},
         tag_id_fields={"tag_ids"},
@@ -232,7 +233,7 @@ async def list_docs(
     total_count = await collection.count_documents(query)
 
     sort_spec = build_sort_spec(
-        sort_model, _FIELD_MAP,
+        sort_model, _LIST_DOCS_FIELD_MAP,
         default_sort=[("upload_date", -1)],
         tiebreaker="upload_date",
     )

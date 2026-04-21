@@ -178,12 +178,12 @@ async def list_forms(
     if sort:
         try:
             sort_model = json.loads(sort)
-        except Exception:
+        except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid sort JSON")
     if filters:
         try:
             filter_model = json.loads(filters)
-        except Exception:
+        except json.JSONDecodeError:
             raise HTTPException(status_code=400, detail="Invalid filters JSON")
 
     filter_tag_ids: list[str] | None = None
