@@ -436,6 +436,9 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
       field: 'actions',
       headerName: 'Actions',
       width: 100,
+      sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
       renderCell: (params) => (
         <div className="flex gap-2">
           <IconButton
