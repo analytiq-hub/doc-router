@@ -411,6 +411,8 @@ async def list_documents(
     tag_ids: str = Query(None, description="Comma-separated list of tag IDs"),
     name_search: str = Query(None, description="Search term for document names"),
     metadata_search: str = Query(None, description="Metadata search as key=value pairs, comma-separated (e.g., 'author=John,type=invoice'). Special characters in keys/values are URL-encoded automatically."),
+    sort: str = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
+    filters: str = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
     current_user: User = Depends(get_org_user)
 ):
     """List documents within an organization"""
@@ -435,6 +437,28 @@ async def list_documents(
                 # Strip whitespace from key but preserve value as-is
                 metadata_search_dict[key.strip()] = value
     
+    sort_model = None
+    filter_model = None
+    if sort:
+        try:
+            sort_model = json.loads(sort)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid sort JSON")
+    if filters:
+        try:
+            filter_model = json.loads(filters)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid filters JSON")
+
+    logger.info(
+        "list_documents(): org=%s skip=%s limit=%s sort_model=%s filter_model=%s",
+        organization_id,
+        skip,
+        limit,
+        sort_model,
+        filter_model,
+    )
+
     docs, total_count = await ad.common.list_docs(
         analytiq_client,
         organization_id=organization_id,
@@ -442,7 +466,9 @@ async def list_documents(
         limit=limit,
         tag_ids=tag_id_list,
         name_search=name_search,
-        metadata_search=metadata_search_dict
+        metadata_search=metadata_search_dict,
+        sort_model=sort_model,
+        filter_model=filter_model,
     )
     
     return ListDocumentsResponse(

@@ -181,7 +181,15 @@ export class DocRouterOrg {
     return { documents: results.map((r) => r.document) };
   }
 
-  async listDocuments(params?: { skip?: number; limit?: number; tagIds?: string; nameSearch?: string; metadataSearch?: string; }): Promise<ListDocumentsResponse> {
+  async listDocuments(params?: {
+    skip?: number;
+    limit?: number;
+    tagIds?: string;
+    nameSearch?: string;
+    metadataSearch?: string;
+    sort?: string;
+    filters?: string;
+  }): Promise<ListDocumentsResponse> {
     const queryParams: Record<string, string | number | undefined> = {
       skip: params?.skip || 0,
       limit: params?.limit || 10,
@@ -189,6 +197,15 @@ export class DocRouterOrg {
     if (params?.tagIds) queryParams.tag_ids = params.tagIds;
     if (params?.nameSearch) queryParams.name_search = params.nameSearch;
     if (params?.metadataSearch) queryParams.metadata_search = params.metadataSearch;
+    if (params?.sort) queryParams.sort = params.sort;
+    if (params?.filters) queryParams.filters = params.filters;
+
+    // Debug aid: helps verify sort/filters reach the HTTP layer.
+    // Safe in prod (no secrets), but noisy; can be removed once stable.
+    if (typeof window !== 'undefined') {
+      // eslint-disable-next-line no-console
+      console.debug('DocRouterOrg.listDocuments params', queryParams);
+    }
 
     return this.http.get<ListDocumentsResponse>(`/v0/orgs/${this.organizationId}/documents`, {
       params: queryParams

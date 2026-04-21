@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { DataGrid, GridColDef, GridRenderCellParams } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridRenderCellParams, GridFilterModel, GridSortModel } from '@mui/x-data-grid';
 import { Box, IconButton, TextField, InputAdornment, Autocomplete, Menu, MenuItem, Tooltip } from '@mui/material';
 import { isAxiosError } from 'axios';
 // All API calls now use docRouterOrgApi
@@ -69,6 +69,8 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTagFilters, setSelectedTagFilters] = useState<Tag[]>([]);
   const [metadataSearch, setMetadataSearch] = useState('');
+  const [sortModel, setSortModel] = useState<GridSortModel>([]);
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
 
   // Add state for menu
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -81,42 +83,21 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
   const [isBulkUpdateOpen, setIsBulkUpdateOpen] = useState(false);
 
   const fetchFiles = useCallback(async () => {
+    const requestParams = {
+      skip: paginationModel.page * paginationModel.pageSize,
+      limit: paginationModel.pageSize,
+      nameSearch: searchTerm.trim() || undefined,
+      tagIds: selectedTagFilters.length > 0 ? selectedTagFilters.map(tag => tag.id).join(',') : undefined,
+      metadataSearch: metadataSearch.trim() ? parseAndEncodeMetadataSearch(metadataSearch.trim()) || undefined : undefined,
+      sort: sortModel.length ? JSON.stringify(sortModel) : undefined,
+      filters: filterModel.items.length ? JSON.stringify(filterModel) : undefined,
+    };
+
     try {
       setIsLoading(true);
-      console.log('Fetching documents...', paginationModel);
-      
-      // Build query parameters for filtering
-      const queryParams: Record<string, string | number | undefined> = {
-        skip: paginationModel.page * paginationModel.pageSize,
-        limit: paginationModel.pageSize
-      };
-      
-      // Add search term if provided
-      if (searchTerm.trim()) {
-        queryParams.nameSearch = searchTerm.trim();
-      }
-      
-      // Add tag filters if provided
-      if (selectedTagFilters.length > 0) {
-        queryParams.tagIds = selectedTagFilters.map(tag => tag.id).join(',');
-      }
-      
-      // Add metadata search if provided
-      if (metadataSearch.trim()) {
-        // Parse and URL-encode metadata search to handle special characters
-        const encodedMetadataSearch = parseAndEncodeMetadataSearch(metadataSearch.trim());
-        if (encodedMetadataSearch) {
-          queryParams.metadataSearch = encodedMetadataSearch;
-        }
-      }
-      
-      const response = await docRouterOrgApi.listDocuments({
-        skip: paginationModel.page * paginationModel.pageSize,
-        limit: paginationModel.pageSize,
-        nameSearch: searchTerm.trim() || undefined,
-        tagIds: selectedTagFilters.length > 0 ? selectedTagFilters.map(tag => tag.id).join(',') : undefined,
-        metadataSearch: metadataSearch.trim() ? parseAndEncodeMetadataSearch(metadataSearch.trim()) || undefined : undefined,
-      });
+      console.log('Fetching documents...', { paginationModel, requestParams });
+
+      const response = await docRouterOrgApi.listDocuments(requestParams);
       
       console.log('Documents response:', response);
       setDocuments(response.documents);
@@ -128,10 +109,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
         console.log('Unauthorized, waiting for token and retrying...');
         await new Promise(resolve => setTimeout(resolve, 1000));
         try {
-          const retryResponse = await docRouterOrgApi.listDocuments({
-            skip: paginationModel.page * paginationModel.pageSize,
-            limit: paginationModel.pageSize
-          }); 
+          const retryResponse = await docRouterOrgApi.listDocuments(requestParams);
           setDocuments(retryResponse.documents);  // Changed from pdfs
           setTotalRows(retryResponse.total_count);
         } catch (retryError) {
@@ -146,7 +124,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
     } finally {
       setIsLoading(false);
     }
-  }, [paginationModel, searchTerm, selectedTagFilters, metadataSearch, docRouterOrgApi]);
+  }, [paginationModel, searchTerm, selectedTagFilters, metadataSearch, sortModel, filterModel, docRouterOrgApi]);
 
   useEffect(() => {
     console.log('FileList component mounted or pagination changed');
@@ -488,7 +466,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
           variant="outlined"
           placeholder="Search documents..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => { setSearchTerm(e.target.value); setPaginationModel(prev => ({ ...prev, page: 0 })); }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -501,7 +479,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
           multiple
           options={tags}
           value={selectedTagFilters}
-          onChange={(_, newValue) => setSelectedTagFilters(newValue)}
+          onChange={(_, newValue) => { setSelectedTagFilters(newValue); setPaginationModel(prev => ({ ...prev, page: 0 })); }}
           getOptionLabel={(tag) => tag.name}
           renderInput={(params) => (
             <TextField
@@ -556,7 +534,7 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
           variant="outlined"
           placeholder="Search metadata (author=John Smith,type=invoice)..."
           value={metadataSearch}
-          onChange={(e) => setMetadataSearch(e.target.value)}
+          onChange={(e) => { setMetadataSearch(e.target.value); setPaginationModel(prev => ({ ...prev, page: 0 })); }}
           title="Format: key=value,key2=value2. Commas and equals in values are automatically handled."
           InputProps={{
             startAdornment: (
@@ -580,6 +558,20 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
           loading={isLoading}
           rows={documents}
           columns={columns}
+          sortingMode="server"
+          sortModel={sortModel}
+          onSortModelChange={(newModel) => {
+            console.log('sortModel changed', newModel);
+            setSortModel(newModel);
+            setPaginationModel(prev => ({ ...prev, page: 0 }));
+          }}
+          filterMode="server"
+          filterModel={filterModel}
+          onFilterModelChange={(newModel) => {
+            console.log('filterModel changed', newModel);
+            setFilterModel(newModel);
+            setPaginationModel(prev => ({ ...prev, page: 0 }));
+          }}
           paginationModel={paginationModel}
           onPaginationModelChange={(newModel) => {
             setPaginationModel(newModel);
