@@ -198,6 +198,7 @@ async def list_docs(
     db_name = analytiq_client.env
     db = analytiq_client.mongodb_async[db_name]
     collection = db["docs"]
+    tags_collection = db["tags"]
     
     # Add organization filter
     query = {"organization_id": organization_id}
@@ -312,11 +313,41 @@ async def list_docs(
 
             # Tag operators beyond "isAnyOf": treat scalar value as "any-of-one".
             if mf == "tag_ids" and str_value.strip():
-                if op in ("contains", "equals", "startsWith", "endsWith"):
-                    clauses.append({mf: {"$in": [str_value]}})
-                    continue
-                if op in ("doesNotContain", "does not contain", "doesNotEqual", "does not equal"):
-                    clauses.append({mf: {"$nin": [str_value]}})
+                # Grid UI provides text operators, but docs store tag IDs not tag names.
+                # Interpret these operators as tag *name* search scoped to the org, then
+                # filter documents by the matching tag IDs.
+                name_query: dict[str, Any] | None = None
+                if op == "contains":
+                    name_query = {"$regex": re.escape(str_value), "$options": "i"}
+                elif op in ("startsWith", "starts with"):
+                    name_query = {"$regex": f"^{re.escape(str_value)}", "$options": "i"}
+                elif op in ("endsWith", "ends with"):
+                    name_query = {"$regex": f"{re.escape(str_value)}$", "$options": "i"}
+                elif op == "equals":
+                    name_query = str_value
+                elif op in ("doesNotContain", "does not contain"):
+                    name_query = {"$regex": re.escape(str_value), "$options": "i"}
+                elif op in ("doesNotEqual", "does not equal"):
+                    name_query = str_value
+
+                if name_query is not None:
+                    # Cap results to avoid runaway $in lists.
+                    tag_docs = await tags_collection.find(
+                        {"organization_id": organization_id, "name": name_query},
+                        {"_id": 1},
+                    ).limit(200).to_list(length=200)
+                    tag_id_strs = [str(t["_id"]) for t in tag_docs]
+                    if not tag_id_strs:
+                        # No matching tags => contains/equals yields no docs; negations yield all docs.
+                        if op in ("doesNotContain", "does not contain", "doesNotEqual", "does not equal"):
+                            continue
+                        clauses.append({"_id": {"$exists": False}})
+                        continue
+
+                    if op in ("doesNotContain", "does not contain", "doesNotEqual", "does not equal"):
+                        clauses.append({mf: {"$nin": tag_id_strs}})
+                    else:
+                        clauses.append({mf: {"$in": tag_id_strs}})
                     continue
 
             # String-ish operators
