@@ -10,7 +10,6 @@ import {
   GetOCRMetadataResponse,
   RunLLMResponse,
   GetLLMResultResponse,
-  ListTagsParams,
   ListTagsResponse,
   JsonValue,
   Tag,
@@ -428,19 +427,15 @@ export class DocRouterOrg {
   }
 
   async listPrompts(params?: Omit<ListPromptsParams, 'organizationId'>): Promise<ListPromptsResponse> {
-    const { skip, limit, document_id, tag_ids, nameSearch, sort, filters } = params || {};
-    const queryParams: Record<string, string | number | undefined> = {
-      skip: skip || 0,
-      limit: limit || 10,
-    };
-    if (document_id) queryParams.document_id = document_id;
-    if (tag_ids) queryParams.tag_ids = tag_ids;
-    if (nameSearch) queryParams.name_search = nameSearch;
-    if (sort) queryParams.sort = sort;
-    if (filters) queryParams.filters = filters;
-
+    const { skip, limit, document_id, tag_ids, nameSearch } = params || {};
     return this.http.get<ListPromptsResponse>(`/v0/orgs/${this.organizationId}/prompts`, {
-      params: queryParams,
+      params: {
+        skip: skip || 0,
+        limit: limit || 10,
+        document_id,
+        tag_ids,
+        name_search: nameSearch
+      }
     });
   }
 
@@ -475,16 +470,10 @@ export class DocRouterOrg {
     return this.http.get<Tag>(`/v0/orgs/${this.organizationId}/tags/${tagId}`);
   }
 
-  async listTags(params?: ListTagsParams): Promise<ListTagsResponse> {
-    const { skip, limit, nameSearch, sort, filters } = params || {};
+  async listTags(params?: { skip?: number; limit?: number; nameSearch?: string; }): Promise<ListTagsResponse> {
+    const { skip, limit, nameSearch } = params || {};
     return this.http.get<ListTagsResponse>(`/v0/orgs/${this.organizationId}/tags`, {
-      params: {
-        skip: skip ?? 0,
-        limit: limit ?? 10,
-        name_search: nameSearch,
-        sort,
-        filters,
-      },
+      params: { skip: skip || 0, limit: limit || 10, name_search: nameSearch }
     });
   }
 
@@ -505,17 +494,10 @@ export class DocRouterOrg {
     return this.http.post<Form>(`/v0/orgs/${this.organizationId}/forms`, { name, response_format });
   }
 
-  async listForms(params?: ListFormsParams): Promise<ListFormsResponse> {
-    const { skip, limit, tag_ids, name_search, sort, filters } = params || {};
+  async listForms(params?: Omit<ListFormsParams, 'organizationId'>): Promise<ListFormsResponse> {
+    const { skip, limit, tag_ids } = params || {};
     return this.http.get<ListFormsResponse>(`/v0/orgs/${this.organizationId}/forms`, {
-      params: {
-        skip: skip ?? 0,
-        limit: limit ?? 10,
-        tag_ids,
-        name_search,
-        sort,
-        filters,
-      },
+      params: { skip: skip || 0, limit: limit || 10, tag_ids }
     });
   }
 
@@ -566,15 +548,9 @@ export class DocRouterOrg {
   }
 
   async listSchemas(params: Omit<ListSchemasParams, 'organizationId'>): Promise<ListSchemasResponse> {
-    const { skip, limit, nameSearch, sort, filters } = params || {};
+    const { skip, limit, nameSearch } = params || {};
     return this.http.get<ListSchemasResponse>(`/v0/orgs/${this.organizationId}/schemas`, {
-      params: {
-        skip: skip ?? 0,
-        limit: limit ?? 10,
-        name_search: nameSearch,
-        sort,
-        filters,
-      }
+      params: { skip: skip || 0, limit: limit || 10, name_search: nameSearch }
     });
   }
 
@@ -610,16 +586,14 @@ export class DocRouterOrg {
     return this.http.post<KnowledgeBase>(`/v0/orgs/${this.organizationId}/knowledge-bases`, kb);
   }
 
-  async listKnowledgeBases(params?: ListKnowledgeBasesParams): Promise<ListKnowledgeBasesResponse> {
-    const { skip, limit, name_search, sort, filters } = params || {};
+  async listKnowledgeBases(params?: Omit<ListKnowledgeBasesParams, 'organizationId'>): Promise<ListKnowledgeBasesResponse> {
+    const { skip, limit, name_search } = params || {};
     return this.http.get<ListKnowledgeBasesResponse>(`/v0/orgs/${this.organizationId}/knowledge-bases`, {
       params: {
-        skip: skip ?? 0,
-        limit: limit ?? 10,
-        name_search: name_search,
-        sort,
-        filters,
-      },
+        skip: skip || 0,
+        limit: limit || 10,
+        name_search: name_search
+      }
     });
   }
 
