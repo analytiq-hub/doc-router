@@ -712,6 +712,7 @@ async def stream_document(
             start = int(match.group(1))
             end = int(match.group(2)) if match.group(2) else total - 1
             end = min(end, total - 1)
+            logger.info(f"stream_document() range request: document_id={document_id} bytes={start}-{end}/{total}")
             if start > end or start >= total:
                 raise HTTPException(status_code=416, detail="Range Not Satisfiable")
             chunk = data[start : end + 1]
@@ -726,6 +727,7 @@ async def stream_document(
                 },
             )
 
+    logger.info(f"stream_document() full request: document_id={document_id} total={total}")
     return Response(
         content=data,
         status_code=200,
