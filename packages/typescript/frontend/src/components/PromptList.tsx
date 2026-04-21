@@ -294,6 +294,9 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       field: 'prompt_version',
       headerName: 'Version',
       width: 100,
+      sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
       headerAlign: 'left',
       align: 'left',
       renderCell: (params) => (
@@ -414,6 +417,8 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       headerAlign: 'left',
       align: 'left',
       sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
       renderCell: (params) => (
         <div className="flex gap-2 items-center h-full">
           <IconButton
