@@ -1,6 +1,7 @@
 # tags.py
 
 # Standard library imports
+import json
 import logging
 from datetime import datetime, UTC
 from typing import Optional, List
@@ -12,6 +13,7 @@ from bson import ObjectId
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.common.tag_list import list_tags_for_org
 from app.auth import get_org_user
 from app.models import User
 
@@ -83,38 +85,40 @@ async def list_tags(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     name_search: str = Query(None, description="Search term for tag names"),
+    sort: str = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
+    filters: str = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
     current_user: User = Depends(get_org_user)
 ):
     """List tags"""
-    db = ad.common.get_async_db()
-    # Get total count
-    total_count = await db.tags.count_documents({"organization_id": organization_id})
-    
-    # Build base query with optional name search
-    tags_query = {"organization_id": organization_id}
-    if name_search:
-        tags_query["name"] = {"$regex": name_search, "$options": "i"}
+    sort_model = None
+    filter_model = None
+    if sort:
+        try:
+            sort_model = json.loads(sort)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid sort JSON")
+    if filters:
+        try:
+            filter_model = json.loads(filters)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid filters JSON")
 
-    # Get paginated tags with sorting by _id in descending order
-    cursor = db.tags.find(tags_query).sort("_id", -1).skip(skip).limit(limit)
-    
-    tags = await cursor.to_list(length=None)
-    
-    return ListTagsResponse(
-        tags=[
-            {
-                "id": str(tag["_id"]),
-                "name": tag["name"],
-                "color": tag.get("color"),
-                "description": tag.get("description"),
-                "created_at": tag["created_at"],
-                "created_by": tag["created_by"]
-            }
-            for tag in tags
-        ],
-        total_count=total_count,
-        skip=skip
+    logger.info(
+        f"list_tags(): org={organization_id} skip={skip} limit={limit} "
+        f"name_search={name_search} sort_model={sort_model} filter_model={filter_model}"
     )
+    db = ad.common.get_async_db()
+    tags, total_count = await list_tags_for_org(
+        db,
+        organization_id,
+        skip=skip,
+        limit=limit,
+        name_search=name_search,
+        sort_model=sort_model,
+        filter_model=filter_model,
+    )
+
+    return ListTagsResponse(tags=tags, total_count=total_count, skip=skip)
 
 @tags_router.delete("/v0/orgs/{organization_id}/tags/{tag_id}")
 async def delete_tag(

@@ -403,13 +403,15 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "list_tags",
-            "description": "List tags with optional skip, limit, name_search.",
+            "description": "List tags with optional skip, limit, name_search, and optional MUI DataGrid sort/filters (JSON strings).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "skip": {"type": "integer", "default": 0},
                     "limit": {"type": "integer", "default": 10},
                     "name_search": {"type": "string"},
+                    "sort": {"type": "string", "description": "JSON-encoded MUI sortModel array"},
+                    "filters": {"type": "string", "description": "JSON-encoded MUI filterModel object"},
                 },
                 "additionalProperties": False,
             },

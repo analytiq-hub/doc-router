@@ -680,6 +680,10 @@ export interface ListTagsParams {
   skip?: number;
   limit?: number;
   nameSearch?: string;
+  /** JSON-encoded MUI DataGrid sortModel (array). */
+  sort?: string;
+  /** JSON-encoded MUI DataGrid filterModel (object). */
+  filters?: string;
 }
 
 export interface ListTagsResponse {

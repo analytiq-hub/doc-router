@@ -10,6 +10,7 @@ import {
   GetOCRMetadataResponse,
   RunLLMResponse,
   GetLLMResultResponse,
+  ListTagsParams,
   ListTagsResponse,
   JsonValue,
   Tag,
@@ -474,10 +475,16 @@ export class DocRouterOrg {
     return this.http.get<Tag>(`/v0/orgs/${this.organizationId}/tags/${tagId}`);
   }
 
-  async listTags(params?: { skip?: number; limit?: number; nameSearch?: string; }): Promise<ListTagsResponse> {
-    const { skip, limit, nameSearch } = params || {};
+  async listTags(params?: ListTagsParams): Promise<ListTagsResponse> {
+    const { skip, limit, nameSearch, sort, filters } = params || {};
     return this.http.get<ListTagsResponse>(`/v0/orgs/${this.organizationId}/tags`, {
-      params: { skip: skip || 0, limit: limit || 10, name_search: nameSearch }
+      params: {
+        skip: skip ?? 0,
+        limit: limit ?? 10,
+        name_search: nameSearch,
+        sort,
+        filters,
+      },
     });
   }
 
