@@ -521,5 +521,5 @@ async def execute_tool(name: str, context: dict, arguments: str | dict) -> str:
         result = await handler(context, params)
         return json.dumps(result, default=_json_serial_default)
     except Exception as e:
-        logger.exception("Tool %s failed", name)
+        logger.exception(f"Tool {name} failed")
         return json.dumps({"error": str(e)})

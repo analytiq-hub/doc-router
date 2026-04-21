@@ -631,9 +631,7 @@ async def get_extracted_indexing_text(
             )
         except (ValueError, RuntimeError) as e:
             logger.warning(
-                "%s: textractor open failed for indexing: %s; falling back to plain OCR text",
-                document_id,
-                e,
+                f"{document_id}: textractor open failed for indexing: {e}; falling back to plain OCR text"
             )
             text = await ad.ocr.get_ocr_text(analytiq_client, document_id)
             if isinstance(text, str) and text.strip():

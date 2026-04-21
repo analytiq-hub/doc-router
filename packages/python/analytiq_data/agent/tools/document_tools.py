@@ -109,7 +109,7 @@ async def delete_document(context: dict, params: dict) -> dict[str, Any]:
             context["analytiq_client"], file_name=pdf_file_name
         )
     await ad.common.delete_doc(context["analytiq_client"], document_id, org_id)
-    logger.info("Deleted document %s", document_id)
+    logger.info(f"Deleted document {document_id}")
     return {"message": "Document deleted successfully", "document_id": document_id}
 
 
@@ -183,7 +183,7 @@ async def update_document(context: dict, params: dict) -> dict[str, Any]:
         old_set = set(old_tag_ids)
         if new_set != old_set:
             await ad.queue.send_msg(context["analytiq_client"], "kb_index", msg={"document_id": document_id})
-            logger.info("Queued KB indexing for document %s due to tag changes", document_id)
+            logger.info(f"Queued KB indexing for document {document_id} due to tag changes")
             if old_set - new_set:
                 try:
                     await ad.kb.reconciliation.reconcile_knowledge_base(
@@ -192,9 +192,9 @@ async def update_document(context: dict, params: dict) -> dict[str, Any]:
                         doc_id=document_id,
                         dry_run=False,
                     )
-                    logger.info("Auto-reconciled document %s after tag removal", document_id)
+                    logger.info(f"Auto-reconciled document {document_id} after tag removal")
                 except Exception as e:
-                    logger.error("Error auto-reconciling document %s: %s", document_id, e)
+                    logger.error(f"Error auto-reconciling document {document_id}: {e}")
 
     return {
         "message": "Document updated successfully",

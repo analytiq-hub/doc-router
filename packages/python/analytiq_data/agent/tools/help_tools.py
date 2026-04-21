@@ -10,6 +10,23 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_SCHEMAS_FALLBACK = (
+    "DocRouter Schema Guidelines:\n"
+    "- Use OpenAI Structured Outputs JSON Schema format: type 'json_schema', json_schema.name, json_schema.schema (Draft 7).\n"
+    "- Set json_schema.strict: true. All properties must be in 'required'; use additionalProperties: false at every level.\n"
+    "- Field types: string, integer, number, boolean, array, object. Use 'description' for each property.\n"
+    "- For missing data use empty string, zero, false, or empty array/object.\n"
+    "- See full docs in docs/knowledge_base/schemas.md."
+)
+
+_PROMPTS_FALLBACK = (
+    "DocRouter Prompt Guidelines:\n"
+    "- Prompt has: name, content (instruction text), optional schema_id/schema_version, optional model (default gpt-4o-mini), optional tag_ids.\n"
+    "- Content should be clear and specific; reference schema fields when a schema is linked.\n"
+    "- Linking a schema ensures structured output and validation.\n"
+    "- See full docs in docs/knowledge_base/prompts.md."
+)
+
 # Try repo root: from packages/python/analytiq_data/agent/tools -> 6 levels up
 def _knowledge_base_path(filename: str) -> Path | None:
     base = Path(__file__).resolve().parent
@@ -29,18 +46,10 @@ async def help_schemas(context: dict, params: dict) -> dict[str, Any]:
             text = path.read_text(encoding="utf-8")
             return {"content": text}
         except Exception as e:
-            logger.warning("Could not read schemas.md: %s", e)
-    logger.error(f"Could not read schemas.md: {e}")
-    return {
-        "content": (
-            "DocRouter Schema Guidelines:\n"
-            "- Use OpenAI Structured Outputs JSON Schema format: type 'json_schema', json_schema.name, json_schema.schema (Draft 7).\n"
-            "- Set json_schema.strict: true. All properties must be in 'required'; use additionalProperties: false at every level.\n"
-            "- Field types: string, integer, number, boolean, array, object. Use 'description' for each property.\n"
-            "- For missing data use empty string, zero, false, or empty array/object.\n"
-            "- See full docs in docs/knowledge_base/schemas.md."
-        )
-    }
+            logger.error(f"Could not read schemas.md: {e}")
+    else:
+        logger.error("Could not read schemas.md: knowledge_base file not found")
+    return {"content": _SCHEMAS_FALLBACK}
 
 
 async def help_prompts(context: dict, params: dict) -> dict[str, Any]:
@@ -51,14 +60,7 @@ async def help_prompts(context: dict, params: dict) -> dict[str, Any]:
             text = path.read_text(encoding="utf-8")
             return {"content": text}
         except Exception as e:
-            logger.warning("Could not read prompts.md: %s", e)
-    logger.error(f"Could not read prompts.md: {e}")
-    return {
-        "content": (
-            "DocRouter Prompt Guidelines:\n"
-            "- Prompt has: name, content (instruction text), optional schema_id/schema_version, optional model (default gpt-4o-mini), optional tag_ids.\n"
-            "- Content should be clear and specific; reference schema fields when a schema is linked.\n"
-            "- Linking a schema ensures structured output and validation.\n"
-            "- See full docs in docs/knowledge_base/prompts.md."
-        )
-    }
+            logger.error(f"Could not read prompts.md: {e}")
+    else:
+        logger.error("Could not read prompts.md: knowledge_base file not found")
+    return {"content": _PROMPTS_FALLBACK}

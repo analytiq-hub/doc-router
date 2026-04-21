@@ -128,11 +128,8 @@ async def recv_msg(analytiq_client, queue_name: str) -> Optional[Dict[str, Any]]
 
     if msg_data:
         logger.info(
-            "Claimed message %s from %s (attempt %s, status=%s)",
-            msg_data.get("_id"),
-            queue_name,
-            msg_data.get("attempts"),
-            msg_data.get("status"),
+            f"Claimed message {msg_data.get('_id')} from {queue_name} "
+            f"(attempt {msg_data.get('attempts')}, status={msg_data.get('status')})"
         )
 
     return msg_data
@@ -188,10 +185,8 @@ async def recover_stale_messages(analytiq_client, queue_name: str) -> int:
     recovered = getattr(result, "modified_count", 0)
     if recovered:
         logger.info(
-            "Recovered %s stale messages in %s (visibility_timeout=%ss)",
-            recovered,
-            queue_name,
-            QUEUE_VISIBILITY_TIMEOUT_SECS,
+            f"Recovered {recovered} stale messages in {queue_name} "
+            f"(visibility_timeout={QUEUE_VISIBILITY_TIMEOUT_SECS}s)"
         )
     return recovered
 
@@ -215,4 +210,4 @@ async def move_to_dlq(analytiq_client, queue_name: str, msg_id: str, error: str)
             }
         },
     )
-    logger.warning("Message %s moved to dead letter in %s: %s", msg_id, queue_name, error)
+    logger.warning(f"Message {msg_id} moved to dead letter in {queue_name}: {error}")

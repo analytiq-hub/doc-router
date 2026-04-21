@@ -82,10 +82,7 @@ async def run_document_ocr(
             )
         except Exception as e:
             logger.error(
-                "OCR engine textract failed for org_id=%s document_id=%s: %s",
-                org_id,
-                document_id,
-                e,
+                f"OCR engine textract failed for org_id={org_id} document_id={document_id}: {e}"
             )
             raise
         if not isinstance(tr, dict) or not tr:
@@ -103,11 +100,7 @@ async def run_document_ocr(
                 operation="ocr",
             )
         logger.info(
-            "OCR textract finished org_id=%s document_id=%s pages=%s spus=%s",
-            org_id,
-            document_id,
-            n_pages,
-            spus,
+            f"OCR textract finished org_id={org_id} document_id={document_id} pages={n_pages} spus={spus}"
         )
         return tr
 
@@ -120,10 +113,7 @@ async def run_document_ocr(
             payload = await mistral_ocr_pdf(pdf_bytes, api_key=api_key)
         except Exception as e:
             logger.error(
-                "OCR engine mistral failed for org_id=%s document_id=%s: %s",
-                org_id,
-                document_id,
-                e,
+                f"OCR engine mistral failed for org_id={org_id} document_id={document_id}: {e}"
             )
             raise
         n_pages = _mistral_page_count(payload)
@@ -137,11 +127,7 @@ async def run_document_ocr(
                 operation="ocr",
             )
         logger.info(
-            "OCR mistral finished org_id=%s document_id=%s pages=%s spus=%s",
-            org_id,
-            document_id,
-            n_pages,
-            spus,
+            f"OCR mistral finished org_id={org_id} document_id={document_id} pages={n_pages} spus={spus}"
         )
         return payload
 
@@ -154,10 +140,7 @@ async def run_document_ocr(
             payload = await mistral_vertex_ocr_pdf(pdf_bytes, service_account_json=service_account_json)
         except Exception as e:
             logger.error(
-                "OCR engine mistral_vertex failed for org_id=%s document_id=%s: %s",
-                org_id,
-                document_id,
-                e,
+                f"OCR engine mistral_vertex failed for org_id={org_id} document_id={document_id}: {e}"
             )
             raise
         n_pages = _mistral_page_count(payload)
@@ -171,11 +154,7 @@ async def run_document_ocr(
                 operation="ocr",
             )
         logger.info(
-            "OCR mistral_vertex finished org_id=%s document_id=%s pages=%s spus=%s",
-            org_id,
-            document_id,
-            n_pages,
-            spus,
+            f"OCR mistral_vertex finished org_id={org_id} document_id={document_id} pages={n_pages} spus={spus}"
         )
         return payload
 
@@ -191,10 +170,7 @@ async def run_document_ocr(
             )
         except Exception as e:
             logger.error(
-                "OCR engine llm failed for org_id=%s document_id=%s: %s",
-                org_id,
-                document_id,
-                e,
+                f"OCR engine llm failed for org_id={org_id} document_id={document_id}: {e}"
             )
             raise
         n_pages = _llm_page_count(payload, pdf_bytes)
@@ -208,11 +184,7 @@ async def run_document_ocr(
                 operation="ocr",
             )
         logger.info(
-            "OCR llm finished org_id=%s document_id=%s pages=%s spus=%s",
-            org_id,
-            document_id,
-            n_pages,
-            spus,
+            f"OCR llm finished org_id={org_id} document_id={document_id} pages={n_pages} spus={spus}"
         )
         return payload
 
@@ -223,18 +195,12 @@ async def run_document_ocr(
             payload = extract_pymupdf_pdf(pdf_bytes)
         except Exception as e:
             logger.error(
-                "OCR engine pymupdf failed for org_id=%s document_id=%s: %s",
-                org_id,
-                document_id,
-                e,
+                f"OCR engine pymupdf failed for org_id={org_id} document_id={document_id}: {e}"
             )
             raise
         n_pages = _mistral_page_count(payload)
         logger.info(
-            "OCR pymupdf finished org_id=%s document_id=%s pages=%s spus=0",
-            org_id,
-            document_id,
-            n_pages,
+            f"OCR pymupdf finished org_id={org_id} document_id={document_id} pages={n_pages} spus=0"
         )
         return payload
 

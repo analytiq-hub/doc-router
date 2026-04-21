@@ -60,7 +60,7 @@ async def get_gcp_service_account_json(analytiq_client) -> str:
         try:
             return ad.crypto.decrypt_token(doc["service_account_json"])
         except Exception as e:
-            logger.warning("Failed to decrypt GCP service_account_json: %s", e)
+            logger.warning(f"Failed to decrypt GCP service_account_json: {e}")
             return ""
 
     provider = await db.llm_providers.find_one({"litellm_provider": "vertex_ai"})
@@ -68,7 +68,7 @@ async def get_gcp_service_account_json(analytiq_client) -> str:
         try:
             return ad.crypto.decrypt_token(provider["token"])
         except Exception as e:
-            logger.warning("Failed to decrypt legacy vertex_ai llm_providers token: %s", e)
+            logger.warning(f"Failed to decrypt legacy vertex_ai llm_providers token: {e}")
             return ""
 
     return ""
@@ -124,7 +124,7 @@ async def get_azure_service_principal_dict(analytiq_client) -> dict:
         try:
             return ad.crypto.decrypt_token(raw)
         except Exception as e:
-            logger.warning("Failed to decrypt Azure cloud_config field %s: %s", field, e)
+            logger.warning(f"Failed to decrypt Azure cloud_config field {field}: {e}")
             return ""
 
     api_base = (doc.get("api_base") or "").strip()

@@ -528,8 +528,7 @@ async def search_knowledge_base(
         except Exception as e:
             if _rank_fusion_likely_unsupported(e):
                 logger.warning(
-                    "Hybrid rank fusion failed; falling back to vector search: %s",
-                    e,
+                    f"Hybrid rank fusion failed; falling back to vector search: {e}"
                 )
                 use_hybrid = False
             else:

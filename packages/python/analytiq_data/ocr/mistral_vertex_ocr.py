@@ -118,10 +118,7 @@ async def mistral_vertex_ocr_pdf(
         result = await _post_vertex_ocr(client, url, token, body)
 
     logger.info(
-        "mistral_vertex_ocr_pdf: project=%s region=%s model=%s pages=%s",
-        project_id,
-        region,
-        MISTRAL_VERTEX_MODEL,
-        len((result.get("pages") or [])),
+        f"mistral_vertex_ocr_pdf: project={project_id} region={region} model={MISTRAL_VERTEX_MODEL} "
+        f"pages={len((result.get('pages') or []))}"
     )
     return result

@@ -317,10 +317,8 @@ async def list_prompts(
                 default_prompt_enabled = org.get("default_prompt_enabled", True)
         except Exception as e:
             logger.warning(
-                "Could not load organization %s for default_prompt_enabled while listing prompts; "
-                "falling back to enabled. Error: %s",
-                organization_id,
-                e,
+                f"Could not load organization {organization_id} for default_prompt_enabled while listing prompts; "
+                f"falling back to enabled. Error: {e}"
             )
 
         document_tag_ids = document.get("tag_ids", [])

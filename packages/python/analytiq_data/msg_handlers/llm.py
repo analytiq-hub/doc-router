@@ -54,16 +54,14 @@ async def process_llm_msg(analytiq_client, msg, force: bool = False):
             prompt_revids.insert(0, "default")
 
         logger.info(
-            "Running LLM for document %s with prompt id list: %s",
-            document_id,
-            prompt_revids,
+            f"Running LLM for document {document_id} with prompt id list: {prompt_revids}"
         )
 
         # Run the LLM for the document for all prompts concurrently
         results = await ad.llm.run_llm_for_prompt_revids(analytiq_client, document_id, prompt_revids, force=force)
 
         if not results:
-            logger.info("No LLM prompts executed for document %s; marking as completed", document_id)
+            logger.info(f"No LLM prompts executed for document {document_id}; marking as completed")
             await ad.common.doc.update_doc_state(
                 analytiq_client,
                 document_id,
@@ -83,17 +81,13 @@ async def process_llm_msg(analytiq_client, msg, force: bool = False):
                 document_id,
                 ad.common.doc.DOCUMENT_STATE_LLM_COMPLETED,
             )
-            logger.info("LLM run completed for %s (all %d prompts succeeded)", document_id, n_total)
+            logger.info(f"LLM run completed for {document_id} (all {n_total} prompts succeeded)")
             await ad.queue.delete_msg(analytiq_client, "llm", msg_id)
         elif n_errors == n_total:
             # All prompts failed
             error_summary = "; ".join(str(e) for e in errors)
             logger.error(
-                "All LLM prompts failed for %s (attempts=%d/%d): %s",
-                document_id,
-                attempts,
-                MAX_QUEUE_ATTEMPTS,
-                error_summary,
+                f"All LLM prompts failed for {document_id} (attempts={attempts}/{MAX_QUEUE_ATTEMPTS}): {error_summary}"
             )
             await ad.common.doc.update_doc_state(
                 analytiq_client,
@@ -124,20 +118,13 @@ async def process_llm_msg(analytiq_client, msg, force: bool = False):
                 )
             else:
                 logger.info(
-                    "Leaving LLM message %s in processing for retry (attempt %d of %d)",
-                    msg_id,
-                    attempts,
-                    MAX_QUEUE_ATTEMPTS,
+                    f"Leaving LLM message {msg_id} in processing for retry (attempt {attempts} of {MAX_QUEUE_ATTEMPTS})"
                 )
         else:
             # Partial failure: some prompts succeeded, some failed
             error_summary = "; ".join(str(e) for e in errors)
             logger.warning(
-                "Partial LLM failure for %s: %d/%d prompts failed: %s",
-                document_id,
-                n_errors,
-                n_total,
-                error_summary,
+                f"Partial LLM failure for {document_id}: {n_errors}/{n_total} prompts failed: {error_summary}"
             )
             await ad.common.doc.update_doc_state(
                 analytiq_client,
@@ -180,8 +167,6 @@ async def process_llm_msg(analytiq_client, msg, force: bool = False):
             )
         else:
             logger.info(
-                "Leaving LLM message %s in processing for retry after handler error (attempt %d of %d)",
-                msg_id,
-                attempts,
-                MAX_QUEUE_ATTEMPTS,
+                f"Leaving LLM message {msg_id} in processing for retry after handler error "
+                f"(attempt {attempts} of {MAX_QUEUE_ATTEMPTS})"
             )

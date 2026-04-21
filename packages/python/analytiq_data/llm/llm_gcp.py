@@ -51,7 +51,5 @@ async def add_gcp_params(
         params["vertex_location"] = os.getenv("VERTEX_AI_LOCATION", default_location)
 
     logger.debug(
-        "add_gcp_params: project=%s location=%s",
-        params.get("vertex_project"),
-        params.get("vertex_location"),
+        f"add_gcp_params: project={params.get('vertex_project')} location={params.get('vertex_location')}"
     )

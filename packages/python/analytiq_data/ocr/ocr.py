@@ -27,7 +27,7 @@ def markdown_to_plain_text(md: str) -> str:
         text = re.sub(r"\s+", " ", text).strip()
         return text
     except Exception as e:
-        logger.warning("markdown_to_plain_text fallback: %s", e)
+        logger.warning(f"markdown_to_plain_text fallback: {e}")
         return re.sub(r"[#*_`\[\]()]", "", md)
 
 
@@ -104,8 +104,7 @@ async def save_ocr_json(
     if encoding == "json":
         if "ocr_type" not in metadata:
             logger.warning(
-                "save_ocr_json missing ocr_type in metadata for document_id=%s",
-                document_id,
+                f"save_ocr_json missing ocr_type in metadata for document_id={document_id}"
             )
         body = await asyncio.to_thread(
             lambda: json.dumps(ocr_json, ensure_ascii=False, default=str).encode("utf-8")
@@ -114,11 +113,8 @@ async def save_ocr_json(
         body = await asyncio.to_thread(pickle.dumps, ocr_json)
     size_mb = len(body) / 1024 / 1024
     logger.info(
-        "Saving OCR json for %s with metadata: %s size: %.2fMB encoding=%s",
-        document_id,
-        metadata,
-        size_mb,
-        encoding,
+        f"Saving OCR json for {document_id} with metadata: {metadata} "
+        f"size: {size_mb:.2f}MB encoding={encoding}"
     )
     await ad.mongodb.save_blob_async(
         analytiq_client, bucket=OCR_BUCKET, key=key, blob=body, metadata=metadata

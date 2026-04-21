@@ -205,11 +205,8 @@ async def run_llm_ocr_pdf(
         response_format = None
 
     logger.info(
-        "LLM OCR start provider_name=%s model=%s litellm_provider=%s json_mode=%s",
-        provider_name,
-        model,
-        row_litellm,
-        bool(response_format),
+        f"LLM OCR start provider_name={provider_name} model={model} litellm_provider={row_litellm} "
+        f"json_mode={bool(response_format)}"
     )
 
     response = await _litellm_acompletion_with_retry(

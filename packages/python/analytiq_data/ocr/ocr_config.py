@@ -202,7 +202,7 @@ def merge_org_ocr_config(raw: dict[str, Any] | None) -> OrgOcrConfig:
     try:
         return OrgOcrConfig.model_validate(merged)
     except Exception as e:
-        logger.warning("Invalid ocr_config document, using defaults: %s", e)
+        logger.warning(f"Invalid ocr_config document, using defaults: {e}")
         return OrgOcrConfig()
 
 
@@ -263,7 +263,7 @@ async def fetch_org_ocr_config(analytiq_client, org_id: str) -> OrgOcrConfig:
     try:
         oid = ObjectId(org_id)
     except Exception:
-        logger.warning("Invalid org_id for OCR config: %s", org_id)
+        logger.warning(f"Invalid org_id for OCR config: {org_id}")
         return OrgOcrConfig()
     org = await db.organizations.find_one({"_id": oid})
     raw = (org or {}).get("ocr_config")

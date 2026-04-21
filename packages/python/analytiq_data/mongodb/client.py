@@ -31,10 +31,10 @@ def _getenv_positive_int(name: str, default: int | None = None) -> int | None:
     try:
         v = int(raw)
     except ValueError:
-        logger.warning("Invalid %s=%r; using default=%r", name, raw, default)
+        logger.warning(f"Invalid {name}={raw!r}; using default={default!r}")
         return default
     if v < 0:
-        logger.warning("Invalid %s=%r (negative); using default=%r", name, raw, default)
+        logger.warning(f"Invalid {name}={raw!r} (negative); using default={default!r}")
         return default
     return v
 

@@ -113,4 +113,4 @@ async def mistral_ocr_pdf(
                 )
                 rd.raise_for_status()
             except Exception as e:
-                logger.warning("Mistral file delete failed file_id=%s: %s", file_id, e)
+                logger.warning(f"Mistral file delete failed file_id={file_id}: {e}")

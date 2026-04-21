@@ -2109,7 +2109,7 @@ class BackfillWebhookEndpointsFromOrganizations(Migration):
                 )
                 total_inserted += 1
 
-            logger.info("BackfillWebhookEndpointsFromOrganizations inserted %d endpoints", total_inserted)
+            logger.info(f"BackfillWebhookEndpointsFromOrganizations inserted {total_inserted} endpoints")
             return True
         except Exception as e:
             logger.error(f"Failed to backfill webhook_endpoints from organizations: {e}")
@@ -2177,7 +2177,7 @@ class AddQueueAndCollectionIndexes(Migration):
                     name="status_created_at_idx",
                     background=True,
                 )
-            logger.info("Created queue indexes for %s", queue_collections)
+            logger.info(f"Created queue indexes for {queue_collections}")
 
             # 2. document_index: compound unique index on {kb_id, document_id}
             #    Used by upserts, deletes, find_one lookups
@@ -2343,7 +2343,7 @@ class AddQueueVisibilityTimeoutIndexes(Migration):
                     name="status_processing_attempts_idx",
                     background=True,
                 )
-            logger.info("Created queue visibility timeout indexes for %s", queue_collections)
+            logger.info(f"Created queue visibility timeout indexes for {queue_collections}")
 
             return True
         except Exception as e:
@@ -2410,10 +2410,10 @@ class FixLegacyProcessingQueueMessages(Migration):
                 )
                 fixed = result.modified_count + result2.modified_count
                 if fixed > 0:
-                    logger.info("Fixed %d legacy processing messages in %s", fixed, coll_name)
+                    logger.info(f"Fixed {fixed} legacy processing messages in {coll_name}")
                     total_fixed += fixed
             if total_fixed > 0:
-                logger.info("Total legacy processing messages fixed: %d", total_fixed)
+                logger.info(f"Total legacy processing messages fixed: {total_fixed}")
 
             # Delete completed messages that accumulated before delete_msg was changed
             # to actually delete messages instead of marking them as completed.
@@ -2422,10 +2422,10 @@ class FixLegacyProcessingQueueMessages(Migration):
                 result = await db[coll_name].delete_many({"status": "completed"})
                 deleted = result.deleted_count
                 if deleted > 0:
-                    logger.info("Deleted %d completed messages from %s", deleted, coll_name)
+                    logger.info(f"Deleted {deleted} completed messages from {coll_name}")
                     total_deleted += deleted
             if total_deleted > 0:
-                logger.info("Total completed messages deleted: %d", total_deleted)
+                logger.info(f"Total completed messages deleted: {total_deleted}")
 
             # Drop legacy error queue collections (ocr_err, llm_err) that are no longer used.
             # These were replaced by the dead letter pattern (move_to_dlq).
@@ -2433,7 +2433,7 @@ class FixLegacyProcessingQueueMessages(Migration):
             for coll_name in legacy_err_queues:
                 if coll_name in all_collections:
                     await db[coll_name].drop()
-                    logger.info("Dropped legacy error queue collection: %s", coll_name)
+                    logger.info(f"Dropped legacy error queue collection: {coll_name}")
 
             return True
         except Exception as e:
@@ -2525,7 +2525,7 @@ class OcrPayloadTextractEnvelopeMigration(Migration):
                     raw = await stream.read()
                     obj = pickle.loads(raw)
                 except Exception as e:
-                    logger.warning("OCR migration: skip unreadable %s: %s", filename, e)
+                    logger.warning(f"OCR migration: skip unreadable {filename}: {e}")
                     skipped_json += 1
                     continue
 
@@ -2534,9 +2534,7 @@ class OcrPayloadTextractEnvelopeMigration(Migration):
                     continue
                 if not isinstance(obj, list):
                     logger.warning(
-                        "OCR migration: skip %s: expected list or dict-with-Blocks, got %s",
-                        filename,
-                        type(obj),
+                        f"OCR migration: skip {filename}: expected list or dict-with-Blocks, got {type(obj)}"
                     )
                     skipped_json += 1
                     continue
@@ -2547,7 +2545,7 @@ class OcrPayloadTextractEnvelopeMigration(Migration):
                 await fs.delete(file_doc["_id"])
                 await fs.upload_from_stream(filename=filename, source=new_bytes, metadata=meta)
                 upgraded_json += 1
-                logger.info("OCR migration: upgraded %s to Textract envelope", filename)
+                logger.info(f"OCR migration: upgraded {filename} to Textract envelope")
                 # Same document may still have a legacy *_list blob (e.g. duplicate row); remove it
                 # so GridFS does not keep an orphan that confuses rollback / storage accounting.
                 if filename.endswith("_json"):
@@ -2556,9 +2554,7 @@ class OcrPayloadTextractEnvelopeMigration(Migration):
                     if list_doc:
                         await fs.delete(list_doc["_id"])
                         logger.info(
-                            "OCR migration: removed legacy %s after upgrading %s",
-                            f"{base}_list",
-                            filename,
+                            f"OCR migration: removed legacy {base}_list after upgrading {filename}"
                         )
 
             legacy_list_docs = await files_coll.find({"filename": {"$regex": r"_list$"}}).to_list(
@@ -2574,20 +2570,18 @@ class OcrPayloadTextractEnvelopeMigration(Migration):
                 has_json = await files_coll.find_one({"filename": json_filename})
                 if has_json:
                     await fs.delete(file_doc["_id"])
-                    logger.info("OCR migration: removed orphan %s ( %s exists)", filename, json_filename)
+                    logger.info(f"OCR migration: removed orphan {filename} ( {json_filename} exists)")
                     continue
                 try:
                     stream = await fs.open_download_stream(file_doc["_id"])
                     raw = await stream.read()
                     obj = pickle.loads(raw)
                 except Exception as e:
-                    logger.warning("OCR migration: skip unreadable %s: %s", filename, e)
+                    logger.warning(f"OCR migration: skip unreadable {filename}: {e}")
                     continue
                 if not isinstance(obj, list):
                     logger.warning(
-                        "OCR migration: skip %s: expected list in legacy _list file, got %s",
-                        filename,
-                        type(obj),
+                        f"OCR migration: skip {filename}: expected list in legacy _list file, got {type(obj)}"
                     )
                     continue
                 new_obj = self._wrap_list_blocks(obj)
@@ -2599,20 +2593,15 @@ class OcrPayloadTextractEnvelopeMigration(Migration):
                 await fs.delete(list_gridfs_id)
                 upgraded_list += 1
                 logger.info(
-                    "OCR migration: migrated %s -> %s (Textract envelope); removed legacy _list",
-                    filename,
-                    json_filename,
+                    f"OCR migration: migrated {filename} -> {json_filename} (Textract envelope); removed legacy _list"
                 )
 
             logger.info(
-                "OCR migration: _json upgraded=%d skipped=%d; _list migrated=%d",
-                upgraded_json,
-                skipped_json,
-                upgraded_list,
+                f"OCR migration: _json upgraded={upgraded_json} skipped={skipped_json}; _list migrated={upgraded_list}"
             )
             return True
         except Exception as e:
-            logger.error("OCR payload migration failed: %s", e)
+            logger.error(f"OCR payload migration failed: {e}")
             return False
 
     async def down(self, db) -> bool:
@@ -2635,7 +2624,7 @@ class OcrPayloadTextractEnvelopeMigration(Migration):
                     raw = await stream.read()
                     obj = pickle.loads(raw)
                 except Exception as e:
-                    logger.warning("OCR migration down: skip unreadable %s: %s", filename, e)
+                    logger.warning(f"OCR migration down: skip unreadable {filename}: {e}")
                     skipped += 1
                     continue
                 if not self._is_reversible_envelope(obj):
@@ -2647,12 +2636,12 @@ class OcrPayloadTextractEnvelopeMigration(Migration):
                 await fs.delete(file_doc["_id"])
                 await fs.upload_from_stream(filename=filename, source=new_bytes, metadata=meta)
                 reverted += 1
-                logger.info("OCR migration down: reverted %s to flat block list", filename)
+                logger.info(f"OCR migration down: reverted {filename} to flat block list")
 
-            logger.info("OCR migration down: reverted=%d skipped=%d", reverted, skipped)
+            logger.info(f"OCR migration down: reverted={reverted} skipped={skipped}")
             return True
         except Exception as e:
-            logger.error("OCR payload migration revert failed: %s", e)
+            logger.error(f"OCR payload migration revert failed: {e}")
             return False
 
 
@@ -2680,8 +2669,7 @@ class AddKbLexicalSearchIndexes(Migration):
                         "indexes": [lexical_def],
                     })
                     logger.info(
-                        "Created lexical search index kb_lexical_index on %s",
-                        coll_name,
+                        f"Created lexical search index kb_lexical_index on {coll_name}"
                     )
                 except Exception as e:
                     err = str(e).lower()
@@ -2691,20 +2679,16 @@ class AddKbLexicalSearchIndexes(Migration):
                         or "index already exists" in err
                     ):
                         logger.info(
-                            "Lexical search index already present on %s: %s",
-                            coll_name,
-                            str(e)[:200],
+                            f"Lexical search index already present on {coll_name}: {str(e)[:200]}"
                         )
                         continue
                     logger.error(
-                        "Failed to create lexical search index on %s: %s",
-                        coll_name,
-                        e,
+                        f"Failed to create lexical search index on {coll_name}: {e}"
                     )
                     return False
             return True
         except Exception as e:
-            logger.error("AddKbLexicalSearchIndexes failed: %s", e)
+            logger.error(f"AddKbLexicalSearchIndexes failed: {e}")
             return False
 
     async def down(self, db) -> bool:
@@ -2721,16 +2705,14 @@ class AddKbLexicalSearchIndexes(Migration):
                         "dropSearchIndex": coll_name,
                         "name": "kb_lexical_index",
                     })
-                    logger.info("Dropped lexical search index on %s", coll_name)
+                    logger.info(f"Dropped lexical search index on {coll_name}")
                 except Exception as e:
                     logger.warning(
-                        "Could not drop lexical search index on %s: %s",
-                        coll_name,
-                        e,
+                        f"Could not drop lexical search index on {coll_name}: {e}"
                     )
             return True
         except Exception as e:
-            logger.error("AddKbLexicalSearchIndexes down failed: %s", e)
+            logger.error(f"AddKbLexicalSearchIndexes down failed: {e}")
             return False
 
 
@@ -2757,7 +2739,7 @@ class AddAgentThreadsIndexes(Migration):
             logger.info("Created agent_threads list indexes")
             return True
         except Exception as e:
-            logger.error("AddAgentThreadsIndexes up failed: %s", e)
+            logger.error(f"AddAgentThreadsIndexes up failed: {e}")
             return False
 
     async def down(self, db) -> bool:
@@ -2767,7 +2749,7 @@ class AddAgentThreadsIndexes(Migration):
             logger.info("Dropped agent_threads list indexes")
             return True
         except Exception as e:
-            logger.error("AddAgentThreadsIndexes down failed: %s", e)
+            logger.error(f"AddAgentThreadsIndexes down failed: {e}")
             return False
 
 
@@ -2853,7 +2835,7 @@ class RenameAgentThreadsToChatThreads(Migration):
             logger.info("RenameAgentThreadsToChatThreads: unset model and trimmed long message arrays")
             return True
         except Exception as e:
-            logger.error("RenameAgentThreadsToChatThreads up failed: %s", e)
+            logger.error(f"RenameAgentThreadsToChatThreads up failed: {e}")
             return False
 
     async def down(self, db) -> bool:
@@ -2866,7 +2848,7 @@ class RenameAgentThreadsToChatThreads(Migration):
                 logger.info("Reverted: chat_threads → agent_threads (copy + drop), recreated list indexes")
             return True
         except Exception as e:
-            logger.error("RenameAgentThreadsToChatThreads down failed: %s", e)
+            logger.error(f"RenameAgentThreadsToChatThreads down failed: {e}")
             return False
 
 
@@ -2951,8 +2933,7 @@ class MigrateAwsAndVertexToCloudConfig(Migration):
                 await db.aws_config.insert_one(new_doc)
             if aws_docs:
                 logger.info(
-                    "MigrateAwsAndVertexToCloudConfig down: restored %s document(s) to aws_config",
-                    len(aws_docs),
+                    f"MigrateAwsAndVertexToCloudConfig down: restored {len(aws_docs)} document(s) to aws_config"
                 )
 
             # 2) Restore Vertex secret on llm_providers from the first type gcp document
@@ -3007,7 +2988,7 @@ class AddGridFSFilesBucketIndexes(Migration):
                         name=self.FILES_INDEX,
                         background=True,
                     )
-                    logger.info("Created GridFS index %s on %s", self.FILES_INDEX, files_ns)
+                    logger.info(f"Created GridFS index {self.FILES_INDEX} on {files_ns}")
                 if chunks_ns in names:
                     await db[chunks_ns].create_index(
                         [("files_id", 1), ("n", 1)],
@@ -3016,13 +2997,11 @@ class AddGridFSFilesBucketIndexes(Migration):
                         background=True,
                     )
                     logger.info(
-                        "Created GridFS unique index %s on %s",
-                        self.CHUNKS_INDEX,
-                        chunks_ns,
+                        f"Created GridFS unique index {self.CHUNKS_INDEX} on {chunks_ns}"
                     )
             return True
         except Exception as e:
-            logger.error("AddGridFSFilesBucketIndexes failed: %s", e)
+            logger.error(f"AddGridFSFilesBucketIndexes failed: {e}")
             return False
 
     async def down(self, db) -> bool:
@@ -3035,16 +3014,16 @@ class AddGridFSFilesBucketIndexes(Migration):
                     try:
                         await db[files_ns].drop_index(self.FILES_INDEX)
                     except Exception as ex:
-                        logger.warning("Drop %s on %s: %s", self.FILES_INDEX, files_ns, ex)
+                        logger.warning(f"Drop {self.FILES_INDEX} on {files_ns}: {ex}")
                 if chunks_ns in names:
                     try:
                         await db[chunks_ns].drop_index(self.CHUNKS_INDEX)
                     except Exception as ex:
-                        logger.warning("Drop %s on %s: %s", self.CHUNKS_INDEX, chunks_ns, ex)
+                        logger.warning(f"Drop {self.CHUNKS_INDEX} on {chunks_ns}: {ex}")
             logger.info("Dropped GridFS files/ocr bucket indexes (if present)")
             return True
         except Exception as e:
-            logger.error("AddGridFSFilesBucketIndexes down failed: %s", e)
+            logger.error(f"AddGridFSFilesBucketIndexes down failed: {e}")
             return False
 
 
@@ -3085,11 +3064,11 @@ class BackfillOcrTextMetadataType(Migration):
                 updated += 1
 
             logger.info(
-                "BackfillOcrTextMetadataType: updated=%d skipped=%d", updated, skipped
+                f"BackfillOcrTextMetadataType: updated={updated} skipped={skipped}"
             )
             return True
         except Exception as e:
-            logger.error("BackfillOcrTextMetadataType up failed: %s", e)
+            logger.error(f"BackfillOcrTextMetadataType up failed: {e}")
             return False
 
     async def down(self, db) -> bool:
@@ -3099,10 +3078,10 @@ class BackfillOcrTextMetadataType(Migration):
                 {"filename": {"$regex": r"_text"}, "metadata.ocr_type": "textract"},
                 {"$unset": {"metadata.ocr_type": ""}},
             )
-            logger.info("BackfillOcrTextMetadataType down: modified=%d", result.modified_count)
+            logger.info(f"BackfillOcrTextMetadataType down: modified={result.modified_count}")
             return True
         except Exception as e:
-            logger.error("BackfillOcrTextMetadataType down failed: %s", e)
+            logger.error(f"BackfillOcrTextMetadataType down failed: {e}")
             return False
 
 

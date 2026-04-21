@@ -24,4 +24,4 @@ async def add_aws_params(analytiq_client, params: dict) -> None:
     params["aws_access_key_id"] = aws_client.aws_access_key_id
     params["aws_secret_access_key"] = aws_client.aws_secret_access_key
     params["aws_region_name"] = aws_client.region_name
-    logger.debug("add_aws_params: region=%s", aws_client.region_name)
+    logger.debug(f"add_aws_params: region={aws_client.region_name}")

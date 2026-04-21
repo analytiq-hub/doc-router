@@ -342,24 +342,21 @@ async def wait_for_vector_index_ready(
                 queryable = indexes[0].get("queryable", False)
                 if queryable:
                     logger.info(
-                        "Vector index for KB %s is queryable (status=%s) after %.1fs",
-                        kb_id, last_status, i * poll_interval,
+                        f"Vector index for KB {kb_id} is queryable (status={last_status}) after {i * poll_interval:.1f}s"
                     )
                     return
                 logger.debug(
-                    "Vector index for KB %s not ready: status=%s queryable=%s (attempt %d/%d)",
-                    kb_id, last_status, queryable, i + 1, max_attempts,
+                    f"Vector index for KB {kb_id} not ready: status={last_status} queryable={queryable} "
+                    f"(attempt {i + 1}/{max_attempts})"
                 )
             else:
                 last_status = "NOT_FOUND"
                 logger.debug(
-                    "Vector index for KB %s not yet visible (attempt %d/%d)",
-                    kb_id, i + 1, max_attempts,
+                    f"Vector index for KB {kb_id} not yet visible (attempt {i + 1}/{max_attempts})"
                 )
         except Exception as e:
             logger.warning(
-                "Error polling vector index status for KB %s (attempt %d/%d): %s",
-                kb_id, i + 1, max_attempts, e,
+                f"Error polling vector index status for KB {kb_id} (attempt {i + 1}/{max_attempts}): {e}"
             )
 
         if i < max_attempts - 1:
@@ -459,8 +456,7 @@ async def create_vector_search_index(
             embedding_dimensions=embedding_dimensions,
         )
         logger.info(
-            "Vector index for KB %s became queryable in %.1fs",
-            kb_id, time.monotonic() - t0,
+            f"Vector index for KB {kb_id} became queryable in {time.monotonic() - t0:.1f}s"
         )
     except HTTPException:
         raise
@@ -529,13 +525,11 @@ async def _finalize_knowledge_base_creation(
             {"_id": ObjectId(kb_id), "organization_id": organization_id}
         )
         if not doc:
-            logger.info("KB finalize skipped: %s not found", kb_id)
+            logger.info(f"KB finalize skipped: {kb_id} not found")
             return
         if doc.get("status") != "indexing":
             logger.info(
-                "KB finalize skipped: %s status=%s (expected indexing)",
-                kb_id,
-                doc.get("status"),
+                f"KB finalize skipped: {kb_id} status={doc.get('status')} (expected indexing)"
             )
             return
 
@@ -550,7 +544,7 @@ async def _finalize_knowledge_base_creation(
             {"$set": {"status": "active", "updated_at": datetime.now(UTC)}},
         )
     except Exception as e:
-        logger.exception("KB %s search index setup failed: %s", kb_id, e)
+        logger.exception(f"KB {kb_id} search index setup failed: {e}")
         try:
             analytiq_client = ad.common.get_analytiq_client()
             db = ad.common.get_async_db(analytiq_client)
@@ -559,7 +553,7 @@ async def _finalize_knowledge_base_creation(
                 {"$set": {"status": "error", "updated_at": datetime.now(UTC)}},
             )
         except Exception:
-            logger.exception("Failed to mark KB %s as error", kb_id)
+            logger.exception(f"Failed to mark KB {kb_id} as error")
         try:
             db = ad.common.get_async_db(ad.common.get_analytiq_client())
             await db[f"kb_vectors_{kb_id}"].drop()
@@ -575,9 +569,9 @@ async def _finalize_knowledge_base_creation(
             kb_id=kb_id,
             dry_run=False,
         )
-        logger.info("Reconciliation finished for newly created KB %s", kb_id)
+        logger.info(f"Reconciliation finished for newly created KB {kb_id}")
     except Exception as e:
-        logger.error("Error reconciling newly created KB %s: %s", kb_id, e)
+        logger.error(f"Error reconciling newly created KB {kb_id}: {e}")
 
 
 # API Endpoints

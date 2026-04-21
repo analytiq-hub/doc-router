@@ -283,7 +283,7 @@ async def upload_document_multipart(
     if parsed_tag_ids:
         await _validate_tag_ids_for_org(organization_id, set(parsed_tag_ids), db)
 
-    logger.info("upload_document_multipart(): %s: %s", organization_id, file_name)
+    logger.info(f"upload_document_multipart(): {organization_id}: {file_name}")
 
     content = await file.read()
     doc = await _save_single_uploaded_document(
@@ -451,12 +451,8 @@ async def list_documents(
             raise HTTPException(status_code=400, detail="Invalid filters JSON")
 
     logger.info(
-        "list_documents(): org=%s skip=%s limit=%s sort_model=%s filter_model=%s",
-        organization_id,
-        skip,
-        limit,
-        sort_model,
-        filter_model,
+        f"list_documents(): org={organization_id} skip={skip} limit={limit} "
+        f"sort_model={sort_model} filter_model={filter_model}"
     )
 
     docs, total_count = await ad.common.list_docs(
