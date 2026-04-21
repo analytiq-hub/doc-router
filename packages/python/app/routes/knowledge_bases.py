@@ -2,6 +2,7 @@
 
 # Standard library imports
 import asyncio
+import json
 import logging
 import hashlib
 import time
@@ -15,6 +16,7 @@ from bson import ObjectId
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.common.kb_list import list_knowledge_base_docs_for_org
 from analytiq_data.kb.chunking_config import (
     ChunkingPreprocessConfig,
     ChunkingPresetName,
@@ -664,23 +666,40 @@ async def list_knowledge_bases(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     name_search: Optional[str] = Query(None),
+    sort: Optional[str] = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
+    filters: Optional[str] = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
     current_user: User = Depends(get_org_user)
 ):
     """List knowledge bases for an organization"""
+    sort_model = None
+    filter_model = None
+    if sort:
+        try:
+            sort_model = json.loads(sort)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid sort JSON")
+    if filters:
+        try:
+            filter_model = json.loads(filters)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid filters JSON")
+
+    logger.info(
+        f"list_knowledge_bases(): org={organization_id} skip={skip} limit={limit} "
+        f"name_search={name_search} sort_model={sort_model} filter_model={filter_model}"
+    )
     analytiq_client = ad.common.get_analytiq_client()
     db = ad.common.get_async_db(analytiq_client)
-    
-    # Build query
-    query = {"organization_id": organization_id}
-    if name_search:
-        query["name"] = {"$regex": name_search, "$options": "i"}
-    
-    # Get total count
-    total_count = await db.knowledge_bases.count_documents(query)
-    
-    # Get KBs with pagination
-    cursor = db.knowledge_bases.find(query).skip(skip).limit(limit).sort("created_at", -1)
-    kbs = await cursor.to_list(length=limit)
+
+    kbs, total_count = await list_knowledge_base_docs_for_org(
+        db,
+        organization_id,
+        skip=skip,
+        limit=limit,
+        name_search=name_search,
+        sort_model=sort_model,
+        filter_model=filter_model,
+    )
     
     knowledge_bases = []
     for kb in kbs:

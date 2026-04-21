@@ -603,14 +603,16 @@ export class DocRouterOrg {
     return this.http.post<KnowledgeBase>(`/v0/orgs/${this.organizationId}/knowledge-bases`, kb);
   }
 
-  async listKnowledgeBases(params?: Omit<ListKnowledgeBasesParams, 'organizationId'>): Promise<ListKnowledgeBasesResponse> {
-    const { skip, limit, name_search } = params || {};
+  async listKnowledgeBases(params?: ListKnowledgeBasesParams): Promise<ListKnowledgeBasesResponse> {
+    const { skip, limit, name_search, sort, filters } = params || {};
     return this.http.get<ListKnowledgeBasesResponse>(`/v0/orgs/${this.organizationId}/knowledge-bases`, {
       params: {
-        skip: skip || 0,
-        limit: limit || 10,
-        name_search: name_search
-      }
+        skip: skip ?? 0,
+        limit: limit ?? 10,
+        name_search: name_search,
+        sort,
+        filters,
+      },
     });
   }
 

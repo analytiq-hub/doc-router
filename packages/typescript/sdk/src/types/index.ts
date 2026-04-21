@@ -1187,6 +1187,10 @@ export interface ListKnowledgeBasesParams {
   skip?: number;
   limit?: number;
   name_search?: string;
+  /** JSON-encoded MUI DataGrid sortModel (array). */
+  sort?: string;
+  /** JSON-encoded MUI DataGrid filterModel (object). */
+  filters?: string;
 }
 
 export interface ListKnowledgeBasesResponse {

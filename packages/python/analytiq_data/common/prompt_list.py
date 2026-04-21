@@ -11,6 +11,8 @@ from typing import Any
 
 from bson import ObjectId
 
+from analytiq_data.common.tag_grid_filters import resolve_tag_filter_values_to_ids
+
 logger = logging.getLogger(__name__)
 
 
@@ -127,7 +129,11 @@ async def _match_from_filter_model(
             if not values:
                 continue
             if mf == "tag_ids":
-                clauses.append({mf: {"$in": values}})
+                tag_id_strs = await resolve_tag_filter_values_to_ids(db, organization_id, values)
+                if not tag_id_strs:
+                    clauses.append({"_id": {"$exists": False}})
+                    continue
+                clauses.append({mf: {"$in": tag_id_strs}})
             else:
                 clauses.append({mf: {"$in": values}})
             continue
@@ -156,8 +162,8 @@ async def _match_from_filter_model(
                 name_query = {"$regex": f"^{re.escape(str_value)}", "$options": "i"}
             elif op in ("endsWith", "ends with"):
                 name_query = {"$regex": f"{re.escape(str_value)}$", "$options": "i"}
-            elif op == "equals":
-                name_query = str_value
+            elif op in ("equals", "=", "is"):
+                name_query = {"$regex": f"^{re.escape(str_value)}$", "$options": "i"}
             elif op in ("doesNotContain", "does not contain"):
                 name_query = {"$regex": re.escape(str_value), "$options": "i"}
             elif op in ("doesNotEqual", "does not equal"):
