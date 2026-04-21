@@ -291,16 +291,9 @@ async def list_prompts(
             raise HTTPException(status_code=400, detail="Invalid filters JSON")
 
     logger.info(
-        "list_prompts(): org=%s skip=%s limit=%s document_id=%s tag_ids=%s "
-        "name_search=%s sort_model=%s filter_model=%s",
-        organization_id,
-        skip,
-        limit,
-        document_id,
-        tag_ids,
-        name_search,
-        sort_model,
-        filter_model,
+        f"list_prompts(): org={organization_id} skip={skip} limit={limit} "
+        f"document_id={document_id} tag_ids={tag_ids} name_search={name_search} "
+        f"sort_model={sort_model} filter_model={filter_model}"
     )
     db = ad.common.get_async_db()
 

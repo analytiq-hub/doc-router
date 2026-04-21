@@ -184,8 +184,8 @@ async def _execute_tool_calls(
         except json.JSONDecodeError:
             args_preview = (args_raw[:400] + "…") if len(args_raw) > 400 else (args_raw or "{}")
         logger.info(
-            "tool_call document_id=%s round=%s name=%s call_id=%s arguments=%s",
-            doc_id, round_index, name, call_id, args_preview,
+            f"tool_call document_id={doc_id} round={round_index} name={name} "
+            f"call_id={call_id} arguments={args_preview}"
         )
         approved = approvals is None or approvals.get(call_id, False)
         if approved:

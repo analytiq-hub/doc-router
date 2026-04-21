@@ -36,9 +36,7 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   const [availableSchemas, setAvailableSchemas] = useState<Schema[]>([]);
   const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 5 });
   const [total, setTotal] = useState(0);
-  const [sortModel, setSortModel] = useState<GridSortModel>([
-    { field: 'prompt_revid', sort: 'desc' },
-  ]);
+  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'name', sort: 'asc' }]);
   const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
   
   // Add state for menu
@@ -52,13 +50,18 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   const loadPrompts = useCallback(async () => {
     try {
       setIsLoading(true);
+      const sortForApi = sortModel.filter((s) => s.field !== 'prompt_version');
+      const filterForApi: GridFilterModel = {
+        ...filterModel,
+        items: filterModel.items.filter((i) => i.field !== 'prompt_version'),
+      };
       const response = await docRouterOrgApi.listPrompts({
         skip: paginationModel.page * paginationModel.pageSize,
         limit: paginationModel.pageSize,
         nameSearch: searchTerm || undefined,
         tag_ids: selectedTagIds.length ? selectedTagIds.join(',') : undefined,
-        sort: sortModel.length ? jsonStringifyForQuery(sortModel) : undefined,
-        filters: filterModel.items.length ? jsonStringifyForQuery(filterModel) : undefined,
+        sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
+        filters: filterForApi.items.length ? jsonStringifyForQuery(filterForApi) : undefined,
       });
       setPrompts(response.prompts);
       setTotal(response.total_count);
@@ -289,21 +292,6 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
           onClick={() => handleEdit(params.row)}
         >
           {params.row.name}
-        </div>
-      ),
-    },
-    {
-      field: 'prompt_version',
-      headerName: 'Version',
-      width: 100,
-      sortable: false,
-      filterable: false,
-      disableColumnMenu: true,
-      headerAlign: 'left',
-      align: 'left',
-      renderCell: (params) => (
-        <div className="text-gray-600 flex items-center h-full">
-          v{params.row.prompt_version}
         </div>
       ),
     },
@@ -539,13 +527,16 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
           sortingMode="server"
           sortModel={sortModel}
           onSortModelChange={(newModel) => {
-            setSortModel(newModel);
+            setSortModel(newModel.filter((s) => s.field !== 'prompt_version'));
             setPaginationModel((prev) => ({ ...prev, page: 0 }));
           }}
           filterMode="server"
           filterModel={filterModel}
           onFilterModelChange={(newModel) => {
-            setFilterModel(newModel);
+            setFilterModel({
+              ...newModel,
+              items: newModel.items.filter((i) => i.field !== 'prompt_version'),
+            });
             setPaginationModel((prev) => ({ ...prev, page: 0 }));
           }}
           pageSizeOptions={[5, 10, 20]}

@@ -113,3 +113,6 @@ The Smart Document Router is a full-stack document processing platform with huma
 - Test database isolation and cleanup
 - API endpoint testing with authentication
 - Frontend testing not currently configured
+
+### Other
+- Use f-strings for python logs
