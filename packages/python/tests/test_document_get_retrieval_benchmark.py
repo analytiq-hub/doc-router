@@ -1,40 +1,49 @@
 """
-Benchmark GET /v0/orgs/{org}/documents/{id}?file_type=pdf (full JSON + base64 body).
+Benchmark upload and GET /v0/orgs/{org}/documents/{id}.
 
-Uploads synthetic PDF-shaped blobs, then measures wall-clock time for one retrieval per size.
+Three tests, all using synthetic PDF-shaped blobs (and optionally a real PDF):
+  1. JSON upload (base64 body)  + JSON GET (base64 response)
+  2. Multipart upload (raw bytes) + JSON GET (base64 response)
+  3. Multipart upload (raw bytes) + binary GET (/file endpoint)
 
-Default run: 0.1 MiB, 1 MiB, and 10 MiB (CI still exercises a large JSON+base64 upload).
-100 MiB: set RUN_DOC_RETRIEVAL_BENCHMARK_LARGE=1 (high memory; ~133 MiB JSON for upload at 100 MiB).
+Run (benchmark results only, no log noise):
+  pytest -s packages/python/tests/test_document_get_retrieval_benchmark.py
 
-Parallel uploads (and matching parallel GETs): RUN_DOC_RETRIEVAL_BENCHMARK_PARALLEL (default 1), e.g. 32.
-The JSON benchmark uses POST /documents (base64). A second test uses POST /documents/multipart for the same
-sizes and parallelism so you can compare aggregate and per-request timings side by side.
-
-Show timings: pytest -s packages/python/tests/test_document_get_retrieval_benchmark.py
-
-Real PDF round-trip (optional): place the file at the default path below or set BENCHMARK_REAL_PDF_PATH.
-If the file is missing, the test is skipped (CI-friendly).
+Modes (env vars):
+  RUN_DOC_RETRIEVAL_BENCHMARK_LARGE=1          add 100 MiB size
+  RUN_DOC_RETRIEVAL_BENCHMARK_PARALLEL=<N>     concurrent uploads+GETs per size (default 1)
+  BENCHMARK_REAL_PDF_PATH=/path/to/file.pdf    use a real PDF (third test skips if missing)
 """
 
 from __future__ import annotations
 
 import base64
-import json
+import logging
 import os
 import statistics
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from typing import Any
 
 import pytest
 
 from tests.conftest_utils import TEST_ORG_ID, client, get_auth_headers
 
-# Default: same document as file:///Users/andrei/Downloads/WAX_2026_02_13_8254081_10582781282_KLUTH_GEORGE%20H-1.PDF
 _DEFAULT_REAL_PDF = Path(
     "/Users/andrei/Downloads/"
     "WAX_2026_02_13_8254081_10582781282_KLUTH_GEORGE H-1.PDF"
 )
+
+
+@pytest.fixture(autouse=True)
+def _suppress_logs():
+    """Silence application logs so only benchmark results appear with -s."""
+    prev = logging.root.manager.disable
+    logging.disable(logging.WARNING)
+    yield
+    logging.disable(prev)
 
 
 def _real_pdf_path() -> Path:
@@ -42,7 +51,6 @@ def _real_pdf_path() -> Path:
     return Path(raw) if raw else _DEFAULT_REAL_PDF
 
 
-# Minimal PDF header so uploads are treated as PDF; remainder is padding.
 _PDF_PREFIX = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
 
 
@@ -52,32 +60,25 @@ def _synthetic_pdf_bytes(size_bytes: int) -> bytes:
     return _PDF_PREFIX + b"\x00" * (size_bytes - len(_PDF_PREFIX))
 
 
-def _benchmark_sizes():
-    """(size_bytes, label) in order."""
+def _benchmark_sizes() -> list[tuple[int, str]]:
     sizes: list[tuple[int, str]] = [
         (max(1, int(0.1 * 1024 * 1024)), "0.1MiB"),
         (1 * 1024 * 1024, "1MiB"),
         (10 * 1024 * 1024, "10MiB"),
     ]
-    env = os.environ.get("RUN_DOC_RETRIEVAL_BENCHMARK_LARGE", "").strip().lower()
-    if env in ("1", "true", "yes", "all"):
+    if os.environ.get("RUN_DOC_RETRIEVAL_BENCHMARK_LARGE", "").strip().lower() in ("1", "true", "yes"):
         sizes.append((100 * 1024 * 1024, "100MiB"))
     return sizes
 
 
 def _parallel_count() -> int:
-    """Concurrent upload/GET requests per size (default 1)."""
-    raw = os.environ.get("RUN_DOC_RETRIEVAL_BENCHMARK_PARALLEL", "1").strip()
     try:
-        n = int(raw)
+        return max(1, int(os.environ.get("RUN_DOC_RETRIEVAL_BENCHMARK_PARALLEL", "1").strip()))
     except ValueError:
         return 1
-    return max(1, n)
 
 
 def _min_median_max(values: list[float]) -> tuple[float, float, float]:
-    if not values:
-        raise ValueError("values must be non-empty")
     s = sorted(values)
     return s[0], statistics.median(s), s[-1]
 
@@ -86,345 +87,238 @@ def _per_request_mib_per_s(latencies_s: list[float], mib: float) -> list[float]:
     return [mib / max(t, 1e-18) for t in latencies_s]
 
 
-def _fmt_min_med_max(a: float, b: float, c: float, *, decimals: int) -> str:
-    return f"min={a:.{decimals}f} med={b:.{decimals}f} max={c:.{decimals}f}"
+def _fmt_mmm(a: float, b: float, c: float, *, d: int) -> str:
+    return f"min={a:.{d}f} med={b:.{d}f} max={c:.{d}f}"
 
 
-@pytest.mark.doc_retrieval_benchmark
-def test_get_document_pdf_retrieval_speed(mock_auth, test_db, capsys) -> None:
-    """
-    For each size: POST upload(s), GET ?file_type=pdf, assert payload size, print timing row.
-    When RUN_DOC_RETRIEVAL_BENCHMARK_PARALLEL > 1, uploads and GETs run concurrently (wall time
-    for the full batch); MiB/s is aggregate (parallel * file size) / wall seconds. Per size, prints
-    min/median/max latency and per-request MiB/s for POST and GET; when parallel>1, also each
-    worker latency (seconds, index order 0..N-1).
-    """
+# UploadFn: (index, blob, label) -> (index, response, elapsed_s)
+UploadFn = Callable[[int, bytes, str], tuple[int, Any, float]]
+# GetFn: (index, doc_id) -> (index, response, elapsed_s)
+GetFn = Callable[[tuple[int, str]], tuple[int, Any, float]]
+
+
+def _run_benchmark(
+    upload_fn: UploadFn,
+    get_fn: GetFn,
+    validate_get: Callable[[Any, int, int, str], None],
+    capsys: Any,
+    header: str,
+    footer: str = "",
+) -> None:
     rows: list[str] = []
     parallel = _parallel_count()
-    upload_url = f"/v0/orgs/{TEST_ORG_ID}/documents"
-    auth_headers = get_auth_headers()
 
     for size_bytes, label in _benchmark_sizes():
         blob = _synthetic_pdf_bytes(size_bytes)
-        assert len(blob) == size_bytes
-
-        b64 = base64.b64encode(blob).decode("ascii")
-
-        def _upload_payload(i: int) -> dict:
-            return {
-                "documents": [
-                    {
-                        "name": (
-                            f"bench-{label}.pdf"
-                            if parallel == 1
-                            else f"bench-{label}-{i}.pdf"
-                        ),
-                        "content": b64,
-                        "tag_ids": [],
-                        "metadata": {"benchmark": "doc_get_pdf"},
-                    }
-                ]
-            }
-
-        def _upload_one(i: int) -> tuple[int, object, float]:
-            t0 = time.perf_counter()
-            r = client.post(
-                upload_url,
-                json=_upload_payload(i),
-                headers=auth_headers,
-            )
-            return i, r, time.perf_counter() - t0
-
-        def _get_one(idx_doc: tuple[int, str]) -> tuple[int, object, float]:
-            idx, doc_id = idx_doc
-            t0 = time.perf_counter()
-            r = client.get(
-                f"/v0/orgs/{TEST_ORG_ID}/documents/{doc_id}",
-                params={"file_type": "pdf"},
-                headers=auth_headers,
-            )
-            return idx, r, time.perf_counter() - t0
 
         t_up0 = time.perf_counter()
         if parallel == 1:
-            i0, up, upload_lat0 = _upload_one(0)
-            assert i0 == 0
-            upload_responses = [up]
-            upload_each_s: list[float] = [upload_lat0]
+            _, up, lat0 = upload_fn(0, blob, label)
+            upload_responses, upload_each_s = [up], [lat0]
         else:
             with ThreadPoolExecutor(max_workers=parallel) as pool:
-                upload_parts = list(pool.map(_upload_one, range(parallel)))
-            upload_responses = [r for _, r, _ in upload_parts]
-            upload_each_s = [dt for _, _, dt in upload_parts]
+                parts = list(pool.map(lambda i: upload_fn(i, blob, label), range(parallel)))
+            upload_responses = [r for _, r, _ in parts]
+            upload_each_s = [dt for _, _, dt in parts]
         upload_s = time.perf_counter() - t_up0
 
         for idx, up in enumerate(upload_responses):
-            assert up.status_code == 200, (
-                f"upload failed ({label}) #{idx}: {up.status_code} {up.text}"
-            )
-        doc_ids = [up.json()["documents"][0]["document_id"] for up in upload_responses]
+            assert up.status_code == 200, f"upload failed ({label}) #{idx}: {up.status_code} {up.text}"
+
+        doc_ids = [_extract_doc_id(up) for up in upload_responses]
 
         t_get0 = time.perf_counter()
         if parallel == 1:
-            i0, resp, get_lat0 = _get_one((0, doc_ids[0]))
-            assert i0 == 0
-            get_responses = [resp]
-            get_each_s: list[float] = [get_lat0]
+            _, resp, lat0 = get_fn((0, doc_ids[0]))
+            get_responses, get_each_s = [resp], [lat0]
         else:
             with ThreadPoolExecutor(max_workers=parallel) as pool:
-                get_parts = list(pool.map(_get_one, enumerate(doc_ids)))
-            get_responses = [r for _, r, _ in get_parts]
-            get_each_s = [dt for _, _, dt in get_parts]
+                parts = list(pool.map(get_fn, enumerate(doc_ids)))
+            get_responses = [r for _, r, _ in parts]
+            get_each_s = [dt for _, _, dt in parts]
         get_s = time.perf_counter() - t_get0
 
         for idx, resp in enumerate(get_responses):
-            assert resp.status_code == 200, (
-                f"get failed ({label}) #{idx}: {resp.status_code} {resp.text}"
-            )
-            content_b64 = resp.json().get("content")
-            assert content_b64 is not None
-            got = base64.b64decode(content_b64)
-            assert len(got) == size_bytes, (
-                f"size mismatch {label} #{idx}: expected {size_bytes}, got {len(got)}"
-            )
+            assert resp.status_code == 200, f"get failed ({label}) #{idx}: {resp.status_code} {resp.text}"
+            validate_get(resp, idx, size_bytes, label)
 
         mib = size_bytes / (1024 * 1024)
         total_mib = mib * parallel
-        up_mibs = total_mib / upload_s if upload_s > 0 else float("inf")
-        get_mibs = total_mib / get_s if get_s > 0 else float("inf")
         par_note = f" x{parallel}" if parallel != 1 else ""
         row = (
-            f"{label:>8}{par_note}  upload={upload_s:8.3f}s ({up_mibs:6.2f} MiB/s agg)  "
-            f"get={get_s:8.3f}s ({get_mibs:6.2f} MiB/s agg)"
+            f"{label:>8}{par_note}  upload={upload_s:8.3f}s ({total_mib/upload_s:6.2f} MiB/s agg)  "
+            f"get={get_s:8.3f}s ({total_mib/get_s:6.2f} MiB/s agg)"
         )
 
-        up_lat_min, up_lat_med, up_lat_max = _min_median_max(upload_each_s)
-        get_lat_min, get_lat_med, get_lat_max = _min_median_max(get_each_s)
-        up_rates = _per_request_mib_per_s(upload_each_s, mib)
-        get_rates = _per_request_mib_per_s(get_each_s, mib)
-        up_bw_min, up_bw_med, up_bw_max = _min_median_max(up_rates)
-        get_bw_min, get_bw_med, get_bw_max = _min_median_max(get_rates)
-
+        up_min, up_med, up_max = _min_median_max(upload_each_s)
+        get_min, get_med, get_max = _min_median_max(get_each_s)
+        up_bw = _per_request_mib_per_s(upload_each_s, mib)
+        get_bw = _per_request_mib_per_s(get_each_s, mib)
         row += (
-            f"\n      POST latency (s):  {_fmt_min_med_max(up_lat_min, up_lat_med, up_lat_max, decimals=3)}"
-            f"\n      POST MiB/s (file): {_fmt_min_med_max(up_bw_min, up_bw_med, up_bw_max, decimals=2)}"
-            f"\n      GET latency (s):   {_fmt_min_med_max(get_lat_min, get_lat_med, get_lat_max, decimals=3)}"
-            f"\n      GET MiB/s (file):  {_fmt_min_med_max(get_bw_min, get_bw_med, get_bw_max, decimals=2)}"
+            f"\n      POST latency (s):  {_fmt_mmm(up_min, up_med, up_max, d=3)}"
+            f"\n      POST MiB/s (file): {_fmt_mmm(*_min_median_max(up_bw), d=2)}"
+            f"\n      GET latency (s):   {_fmt_mmm(get_min, get_med, get_max, d=3)}"
+            f"\n      GET MiB/s (file):  {_fmt_mmm(*_min_median_max(get_bw), d=2)}"
         )
         if parallel > 1:
-            up_fmt = " ".join(f"{x:.3f}" for x in upload_each_s)
-            get_fmt = " ".join(f"{x:.3f}" for x in get_each_s)
             row += (
-                f"\n      POST each (s): [{up_fmt}]"
-                f"\n      GET each (s):  [{get_fmt}]"
+                f"\n      POST each (s): [{' '.join(f'{x:.3f}' for x in upload_each_s)}]"
+                f"\n      GET each (s):  [{' '.join(f'{x:.3f}' for x in get_each_s)}]"
             )
         rows.append(row)
 
-    table = (
-        "\n  doc GET ?file_type=pdf - JSON POST .../documents (base64 body)\n"
-        "  " + "\n  ".join(rows)
-        + "\n  (100MiB: RUN_DOC_RETRIEVAL_BENCHMARK_LARGE=1)\n"
-        + "  (parallel: RUN_DOC_RETRIEVAL_BENCHMARK_PARALLEL, default 1)\n"
-        + "  (multipart parallel benchmark: second test in this file)\n"
+    table = f"\n  {header}\n  " + "\n  ".join(rows) + "\n"
+    if footer:
+        table += f"  {footer}\n"
+    table += (
+        "  (100MiB: RUN_DOC_RETRIEVAL_BENCHMARK_LARGE=1)\n"
+        "  (parallel: RUN_DOC_RETRIEVAL_BENCHMARK_PARALLEL=<N>)\n"
     )
     with capsys.disabled():
         print(table)
 
 
-def _auth_headers_multipart() -> dict[str, str]:
-    """Do not set Content-Type; TestClient sets multipart boundary."""
-    return {"Authorization": "Bearer test_token"}
+def _extract_doc_id(response: Any) -> str:
+    body = response.json()
+    if "document" in body:
+        return body["document"]["document_id"]
+    return body["documents"][0]["document_id"]
 
 
-@pytest.mark.doc_retrieval_benchmark
-def test_get_document_pdf_retrieval_speed_multipart(mock_auth, test_db, capsys) -> None:
-    """
-    Same synthetic sizes and RUN_DOC_RETRIEVAL_BENCHMARK_PARALLEL as test_get_document_pdf_retrieval_speed,
-    but each upload is POST .../documents/multipart (one file part per request, raw bytes).
+# ---------------------------------------------------------------------------
+# Upload helpers
+# ---------------------------------------------------------------------------
 
-    Compare printed rows to the JSON/base64 benchmark for upload latency and MiB/s.
-    """
-    rows: list[str] = []
-    parallel = _parallel_count()
-    upload_url = f"/v0/orgs/{TEST_ORG_ID}/documents/multipart"
-    auth_get = get_auth_headers()
-    auth_mp = _auth_headers_multipart()
-
-    for size_bytes, label in _benchmark_sizes():
-        blob = _synthetic_pdf_bytes(size_bytes)
-        assert len(blob) == size_bytes
-
-        def _fname(i: int) -> str:
-            return f"bench-{label}.pdf" if parallel == 1 else f"bench-{label}-{i}.pdf"
-
-        def _upload_multipart_one(i: int) -> tuple[int, object, float]:
-            fname = _fname(i)
-            t0 = time.perf_counter()
-            r = client.post(
-                upload_url,
-                files=[("file", (fname, blob, "application/pdf"))],
-                data={
-                    "name": fname,
-                    "tag_ids": "[]",
-                    "metadata": '{"benchmark":"doc_get_pdf_multipart"}',
-                },
-                headers=auth_mp,
-            )
-            return i, r, time.perf_counter() - t0
-
-        def _get_one(idx_doc: tuple[int, str]) -> tuple[int, object, float]:
-            idx, doc_id = idx_doc
-            t0 = time.perf_counter()
-            r = client.get(
-                f"/v0/orgs/{TEST_ORG_ID}/documents/{doc_id}",
-                params={"file_type": "pdf"},
-                headers=auth_get,
-            )
-            return idx, r, time.perf_counter() - t0
-
-        t_up0 = time.perf_counter()
-        if parallel == 1:
-            i0, up, upload_lat0 = _upload_multipart_one(0)
-            assert i0 == 0
-            upload_responses = [up]
-            upload_each_s = [upload_lat0]
-        else:
-            with ThreadPoolExecutor(max_workers=parallel) as pool:
-                upload_parts = list(pool.map(_upload_multipart_one, range(parallel)))
-            upload_responses = [r for _, r, _ in upload_parts]
-            upload_each_s = [dt for _, _, dt in upload_parts]
-        upload_s = time.perf_counter() - t_up0
-
-        for idx, up in enumerate(upload_responses):
-            assert up.status_code == 200, (
-                f"multipart upload failed ({label}) #{idx}: {up.status_code} {up.text}"
-            )
-        doc_ids = [up.json()["document"]["document_id"] for up in upload_responses]
-
-        t_get0 = time.perf_counter()
-        if parallel == 1:
-            i0, resp, get_lat0 = _get_one((0, doc_ids[0]))
-            assert i0 == 0
-            get_responses = [resp]
-            get_each_s = [get_lat0]
-        else:
-            with ThreadPoolExecutor(max_workers=parallel) as pool:
-                get_parts = list(pool.map(_get_one, enumerate(doc_ids)))
-            get_responses = [r for _, r, _ in get_parts]
-            get_each_s = [dt for _, _, dt in get_parts]
-        get_s = time.perf_counter() - t_get0
-
-        for idx, resp in enumerate(get_responses):
-            assert resp.status_code == 200, (
-                f"get failed ({label}) #{idx}: {resp.status_code} {resp.text}"
-            )
-            content_b64 = resp.json().get("content")
-            assert content_b64 is not None
-            got = base64.b64decode(content_b64)
-            assert len(got) == size_bytes, (
-                f"size mismatch {label} #{idx}: expected {size_bytes}, got {len(got)}"
-            )
-
-        mib = size_bytes / (1024 * 1024)
-        total_mib = mib * parallel
-        up_mibs = total_mib / upload_s if upload_s > 0 else float("inf")
-        get_mibs = total_mib / get_s if get_s > 0 else float("inf")
-        par_note = f" x{parallel}" if parallel != 1 else ""
-        row = (
-            f"{label:>8}{par_note}  upload={upload_s:8.3f}s ({up_mibs:6.2f} MiB/s agg)  "
-            f"get={get_s:8.3f}s ({get_mibs:6.2f} MiB/s agg)"
-        )
-
-        up_lat_min, up_lat_med, up_lat_max = _min_median_max(upload_each_s)
-        get_lat_min, get_lat_med, get_lat_max = _min_median_max(get_each_s)
-        up_rates = _per_request_mib_per_s(upload_each_s, mib)
-        get_rates = _per_request_mib_per_s(get_each_s, mib)
-        up_bw_min, up_bw_med, up_bw_max = _min_median_max(up_rates)
-        get_bw_min, get_bw_med, get_bw_max = _min_median_max(get_rates)
-
-        row += (
-            f"\n      POST latency (s):  {_fmt_min_med_max(up_lat_min, up_lat_med, up_lat_max, decimals=3)}"
-            f"\n      POST MiB/s (file): {_fmt_min_med_max(up_bw_min, up_bw_med, up_bw_max, decimals=2)}"
-            f"\n      GET latency (s):   {_fmt_min_med_max(get_lat_min, get_lat_med, get_lat_max, decimals=3)}"
-            f"\n      GET MiB/s (file):  {_fmt_min_med_max(get_bw_min, get_bw_med, get_bw_max, decimals=2)}"
-        )
-        if parallel > 1:
-            up_fmt = " ".join(f"{x:.3f}" for x in upload_each_s)
-            get_fmt = " ".join(f"{x:.3f}" for x in get_each_s)
-            row += (
-                f"\n      POST each (s): [{up_fmt}]"
-                f"\n      GET each (s):  [{get_fmt}]"
-            )
-        rows.append(row)
-
-    table = (
-        "\n  doc GET ?file_type=pdf - multipart POST .../documents/multipart (compare to JSON test above)\n"
-        "  " + "\n  ".join(rows)
-        + "\n  (same RUN_DOC_RETRIEVAL_BENCHMARK_PARALLEL and size env vars as JSON benchmark)\n"
+def _upload_json(i: int, blob: bytes, label: str) -> tuple[int, Any, float]:
+    b64 = base64.b64encode(blob).decode("ascii")
+    fname = f"bench-{label}.pdf" if _parallel_count() == 1 else f"bench-{label}-{i}.pdf"
+    t0 = time.perf_counter()
+    r = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents",
+        json={"documents": [{"name": fname, "content": b64, "tag_ids": [], "metadata": {"benchmark": "json"}}]},
+        headers=get_auth_headers(),
     )
-    with capsys.disabled():
-        print(table)
+    return i, r, time.perf_counter() - t0
+
+
+def _upload_multipart(i: int, blob: bytes, label: str) -> tuple[int, Any, float]:
+    fname = f"bench-{label}.pdf" if _parallel_count() == 1 else f"bench-{label}-{i}.pdf"
+    t0 = time.perf_counter()
+    r = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/multipart",
+        files=[("file", (fname, blob, "application/pdf"))],
+        data={"name": fname, "tag_ids": "[]", "metadata": '{"benchmark":"multipart"}'},
+        headers={"Authorization": "Bearer test_token"},
+    )
+    return i, r, time.perf_counter() - t0
+
+
+# ---------------------------------------------------------------------------
+# GET helpers + validators
+# ---------------------------------------------------------------------------
+
+def _get_json(idx_doc: tuple[int, str]) -> tuple[int, Any, float]:
+    idx, doc_id = idx_doc
+    t0 = time.perf_counter()
+    r = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{doc_id}",
+        params={"file_type": "pdf"},
+        headers=get_auth_headers(),
+    )
+    return idx, r, time.perf_counter() - t0
+
+
+def _get_file(idx_doc: tuple[int, str]) -> tuple[int, Any, float]:
+    idx, doc_id = idx_doc
+    t0 = time.perf_counter()
+    r = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{doc_id}/file",
+        params={"file_type": "pdf"},
+        headers=get_auth_headers(),
+    )
+    return idx, r, time.perf_counter() - t0
+
+
+def _validate_json_get(resp: Any, idx: int, size_bytes: int, label: str) -> None:
+    content_b64 = resp.json().get("content")
+    assert content_b64 is not None
+    got = base64.b64decode(content_b64)
+    assert len(got) == size_bytes, f"size mismatch {label} #{idx}: expected {size_bytes}, got {len(got)}"
+
+
+def _validate_binary_get(resp: Any, idx: int, size_bytes: int, label: str) -> None:
+    assert len(resp.content) == size_bytes, f"size mismatch {label} #{idx}: expected {size_bytes}, got {len(resp.content)}"
+
+
+# ---------------------------------------------------------------------------
+# Benchmark tests
+# ---------------------------------------------------------------------------
+
+@pytest.mark.doc_retrieval_benchmark
+def test_upload_json_get_json(mock_auth, test_db, capsys) -> None:
+    """Upload: POST /documents (base64 JSON).  GET: /documents/{id}?file_type=pdf (base64 JSON)."""
+    _run_benchmark(
+        _upload_json, _get_json, _validate_json_get, capsys,
+        header="upload=JSON/base64  get=JSON/base64",
+    )
 
 
 @pytest.mark.doc_retrieval_benchmark
-def test_get_document_pdf_roundtrip_real_wax_file(mock_auth, test_db, capsys) -> None:
-    """
-    Upload a specific real PDF from disk, GET ?file_type=pdf, assert bytes round-trip.
+def test_upload_multipart_get_json(mock_auth, test_db, capsys) -> None:
+    """Upload: POST /documents/multipart (raw bytes).  GET: /documents/{id}?file_type=pdf (base64 JSON)."""
+    _run_benchmark(
+        _upload_multipart, _get_json, _validate_json_get, capsys,
+        header="upload=multipart  get=JSON/base64",
+    )
 
-    Path: default is ~/Downloads WAX_… KLUTH_GEORGE H-1.PDF; override with BENCHMARK_REAL_PDF_PATH.
-    Skips if the file does not exist (e.g. CI).
+
+@pytest.mark.doc_retrieval_benchmark
+def test_upload_multipart_get_file(mock_auth, test_db, capsys) -> None:
+    """Upload: POST /documents/multipart (raw bytes).  GET: /documents/{id}/file (raw binary)."""
+    _run_benchmark(
+        _upload_multipart, _get_file, _validate_binary_get, capsys,
+        header="upload=multipart  get=/file (binary)",
+    )
+
+
+@pytest.mark.doc_retrieval_benchmark
+def test_get_document_pdf_roundtrip_real_file(mock_auth, test_db, capsys) -> None:
+    """
+    Upload a real PDF from disk via multipart, GET /file, assert byte-exact round-trip.
+    Skips if the file does not exist. Override path with BENCHMARK_REAL_PDF_PATH.
     """
     pdf_path = _real_pdf_path()
     if not pdf_path.is_file():
-        pytest.skip(
-            f"Real PDF not found: {pdf_path} "
-            "(copy the file there or set BENCHMARK_REAL_PDF_PATH to an existing .pdf)"
-        )
+        pytest.skip(f"Real PDF not found: {pdf_path} (set BENCHMARK_REAL_PDF_PATH)")
 
     raw = pdf_path.read_bytes()
     assert raw.startswith(b"%PDF"), f"Not a PDF: {pdf_path}"
 
-    b64 = base64.b64encode(raw).decode("ascii")
-    upload_data = {
-        "documents": [
-            {
-                "name": pdf_path.name,
-                "content": b64,
-                "tag_ids": [],
-                "metadata": {"benchmark": "doc_get_pdf_real_file"},
-            }
-        ]
-    }
-
     t_up0 = time.perf_counter()
     up = client.post(
-        f"/v0/orgs/{TEST_ORG_ID}/documents",
-        json=upload_data,
-        headers=get_auth_headers(),
+        f"/v0/orgs/{TEST_ORG_ID}/documents/multipart",
+        files=[("file", (pdf_path.name, raw, "application/pdf"))],
+        data={"name": pdf_path.name, "tag_ids": "[]", "metadata": "{}"},
+        headers={"Authorization": "Bearer test_token"},
     )
     upload_s = time.perf_counter() - t_up0
     assert up.status_code == 200, f"upload failed: {up.status_code} {up.text}"
-    doc_id = up.json()["documents"][0]["document_id"]
+    doc_id = up.json()["document"]["document_id"]
 
     t_get0 = time.perf_counter()
     resp = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/documents/{doc_id}",
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{doc_id}/file",
         params={"file_type": "pdf"},
         headers=get_auth_headers(),
     )
     get_s = time.perf_counter() - t_get0
 
     assert resp.status_code == 200, f"get failed: {resp.status_code} {resp.text}"
-    content_b64 = resp.json().get("content")
-    assert content_b64 is not None
-    got = base64.b64decode(content_b64)
-    assert got == raw, f"round-trip mismatch: expected {len(raw)} bytes, got {len(got)}"
+    assert resp.content == raw, f"round-trip mismatch: expected {len(raw)} bytes, got {len(resp.content)}"
 
     mib = len(raw) / (1024 * 1024)
-    line = (
-        f"  real PDF {pdf_path.name!r} ({mib:.2f} MiB)  "
-        f"upload={upload_s:.3f}s  get={get_s:.3f}s  "
-        f"doc_id={doc_id}"
-    )
     with capsys.disabled():
-        print(f"\n  doc GET ?file_type=pdf (real file)\n{line}\n")
+        print(
+            f"\n  real PDF {pdf_path.name!r} ({mib:.2f} MiB)"
+            f"  upload={upload_s:.3f}s  get={get_s:.3f}s  doc_id={doc_id}\n"
+        )
