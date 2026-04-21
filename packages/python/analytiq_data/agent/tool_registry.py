@@ -211,13 +211,15 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "list_schemas",
-            "description": "List schemas in the organization with optional skip, limit, name_search.",
+            "description": "List schemas in the organization with optional skip, limit, name_search, and optional MUI DataGrid sort/filters (JSON strings).",
             "parameters": {
                 "type": "object",
                 "properties": {
                     "skip": {"type": "integer", "description": "Number to skip", "default": 0},
                     "limit": {"type": "integer", "description": "Max to return", "default": 10},
                     "name_search": {"type": "string", "description": "Filter by name"},
+                    "sort": {"type": "string", "description": "JSON-encoded MUI sortModel array"},
+                    "filters": {"type": "string", "description": "JSON-encoded MUI filterModel object"},
                 },
                 "additionalProperties": False,
             },

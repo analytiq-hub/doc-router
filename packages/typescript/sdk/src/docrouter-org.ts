@@ -552,9 +552,15 @@ export class DocRouterOrg {
   }
 
   async listSchemas(params: Omit<ListSchemasParams, 'organizationId'>): Promise<ListSchemasResponse> {
-    const { skip, limit, nameSearch } = params || {};
+    const { skip, limit, nameSearch, sort, filters } = params || {};
     return this.http.get<ListSchemasResponse>(`/v0/orgs/${this.organizationId}/schemas`, {
-      params: { skip: skip || 0, limit: limit || 10, name_search: nameSearch }
+      params: {
+        skip: skip ?? 0,
+        limit: limit ?? 10,
+        name_search: nameSearch,
+        sort,
+        filters,
+      }
     });
   }
 
