@@ -24,6 +24,9 @@ import { DocumentBulkUpdate } from './DocumentBulkUpdate';
 import { DocRouterOrgApi } from '@/utils/api';
 import DocumentInfoModal from './DocumentInfoModal';
 
+const jsonStringifyForQuery = (value: unknown): string =>
+  JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
+
 // Helper function to parse and URL-encode metadata search
 const parseAndEncodeMetadataSearch = (searchStr: string): string | null => {
   try {
@@ -89,8 +92,8 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
       nameSearch: searchTerm.trim() || undefined,
       tagIds: selectedTagFilters.length > 0 ? selectedTagFilters.map(tag => tag.id).join(',') : undefined,
       metadataSearch: metadataSearch.trim() ? parseAndEncodeMetadataSearch(metadataSearch.trim()) || undefined : undefined,
-      sort: sortModel.length ? JSON.stringify(sortModel) : undefined,
-      filters: filterModel.items.length ? JSON.stringify(filterModel) : undefined,
+      sort: sortModel.length ? jsonStringifyForQuery(sortModel) : undefined,
+      filters: filterModel.items.length ? jsonStringifyForQuery(filterModel) : undefined,
     };
 
     try {
@@ -319,14 +322,28 @@ const DocumentList: React.FC<{ organizationId: string }> = ({ organizationId }) 
     {
       field: 'upload_date',
       headerName: 'Upload Date', // Renamed column
+      type: 'dateTime',
       flex: .65, // Slightly wider than before
+      valueGetter: (params: GridRenderCellParams) => {
+        // DataGrid calls valueGetter from multiple contexts; `row` may be undefined.
+        const anyParams = params as unknown as { row?: { upload_date?: unknown }, value?: unknown };
+        const v = (anyParams.row?.upload_date ?? anyParams.value) as string | Date | null | undefined;
+        if (!v) return null;
+        if (v instanceof Date) return v;
+        const d = new Date(v);
+        return Number.isNaN(d.getTime()) ? null : d;
+      },
       valueFormatter: (params: GridRenderCellParams) => {
-        if (!params.value) return '';
-        return formatLocalDate(params.value as string);
+        const p = params as unknown as { value?: unknown } | null;
+        if (!p?.value) return '';
+        const v = p.value as Date | string;
+        const iso = v instanceof Date ? v.toISOString() : String(v);
+        return formatLocalDate(iso);
       },
       renderCell: (params: GridRenderCellParams) => {
-        if (!params.value) return '';
-        const formattedDate = formatLocalDate(params.value as string);
+        const anyParams = params as unknown as { row?: { upload_date?: unknown } };
+        if (!anyParams?.row?.upload_date) return '';
+        const formattedDate = formatLocalDate(anyParams.row.upload_date as string);
         const tooltip = formattedDate;
         return (
           <div title={tooltip}>

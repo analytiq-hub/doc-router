@@ -235,6 +235,26 @@ async def list_docs(
                 return [p.strip() for p in s.split(",") if p.strip()]
             return [s.strip()] if s.strip() else []
 
+        def parse_dt(v: Any) -> datetime | None:
+            if v is None:
+                return None
+            if isinstance(v, datetime):
+                return v
+            s = str(v).strip()
+            if not s:
+                return None
+            # Accept ISO strings; tolerate trailing Z.
+            if s.endswith("Z"):
+                s = s[:-1] + "+00:00"
+            try:
+                return datetime.fromisoformat(s)
+            except Exception:
+                # If user provides date-only, treat as midnight UTC.
+                try:
+                    return datetime.fromisoformat(s + "T00:00:00+00:00")
+                except Exception:
+                    return None
+
         clauses: list[dict[str, Any]] = []
         for item in items:
             if not isinstance(item, dict):
@@ -270,10 +290,34 @@ async def list_docs(
                     clauses.append({mf: {"$in": values}})
                 continue
 
-            # Note: upload_date is stored as datetime. We can extend this later with proper
-            # date operators once the grid is configured as a date column with consistent values.
             if mf == "upload_date":
+                dt = parse_dt(value)
+                if op in ("is", "equals") and dt:
+                    clauses.append({mf: dt})
+                elif op in ("not", "doesNotEqual", "does not equal") and dt:
+                    clauses.append({mf: {"$ne": dt}})
+                elif op in ("after",) and dt:
+                    clauses.append({mf: {"$gt": dt}})
+                elif op in ("onOrAfter", "on or after") and dt:
+                    clauses.append({mf: {"$gte": dt}})
+                elif op in ("before",) and dt:
+                    clauses.append({mf: {"$lt": dt}})
+                elif op in ("onOrBefore", "on or before") and dt:
+                    clauses.append({mf: {"$lte": dt}})
+                elif op in ("isEmpty", "is empty"):
+                    clauses.append({"$or": [{mf: None}, {mf: {"$exists": False}}]})
+                elif op in ("isNotEmpty", "is not empty"):
+                    clauses.append({mf: {"$and": [{mf: {"$exists": True}}, {mf: {"$ne": None}}]}})
                 continue
+
+            # Tag operators beyond "isAnyOf": treat scalar value as "any-of-one".
+            if mf == "tag_ids" and str_value.strip():
+                if op in ("contains", "equals", "startsWith", "endsWith"):
+                    clauses.append({mf: {"$in": [str_value]}})
+                    continue
+                if op in ("doesNotContain", "does not contain", "doesNotEqual", "does not equal"):
+                    clauses.append({mf: {"$nin": [str_value]}})
+                    continue
 
             # String-ish operators
             if op in ("contains",):
