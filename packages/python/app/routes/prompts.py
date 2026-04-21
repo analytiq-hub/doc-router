@@ -1,6 +1,7 @@
 # prompts.py
 
 # Standard library imports
+import json
 import logging
 from datetime import datetime, UTC
 from typing import Optional, List, Literal, Dict
@@ -12,6 +13,7 @@ from bson import ObjectId
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.common.prompt_list import list_prompts_for_org
 from app.auth import get_org_user
 from app.models import User
 
@@ -270,121 +272,95 @@ async def list_prompts(
     document_id: str = Query(None, description="Filter prompts by document's tags"),
     tag_ids: str = Query(None, description="Comma-separated list of tag IDs"),
     name_search: str = Query(None, description="Search term for prompt names"),
+    sort: str = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
+    filters: str = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
     current_user: User = Depends(get_org_user)
 ):
     """List prompts within an organization"""
-    logger.info(f"list_prompts() start: organization_id: {organization_id}, skip: {skip}, limit: {limit}, document_id: {document_id}, tag_ids: {tag_ids}")
+    sort_model = None
+    filter_model = None
+    if sort:
+        try:
+            sort_model = json.loads(sort)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid sort JSON")
+    if filters:
+        try:
+            filter_model = json.loads(filters)
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid filters JSON")
+
+    logger.info(
+        "list_prompts(): org=%s skip=%s limit=%s document_id=%s tag_ids=%s "
+        "name_search=%s sort_model=%s filter_model=%s",
+        organization_id,
+        skip,
+        limit,
+        document_id,
+        tag_ids,
+        name_search,
+        sort_model,
+        filter_model,
+    )
     db = ad.common.get_async_db()
-    
-    # First, get prompts that belong to the organization (project only _id and name to reduce data and latency)
-    prompts_query = {"organization_id": organization_id}
-    if name_search:
-        prompts_query["name"] = {"$regex": name_search, "$options": "i"}
-    prompts_projection = {"_id": 1, "name": 1}
 
-    org_prompts = await db.prompts.find(prompts_query, prompts_projection).to_list(None)
-    
-    if not org_prompts:
-        return ListPromptsResponse(prompts=[], total_count=0, skip=skip)
-    
-    # Extract prompt IDs
-    prompt_ids = [prompt["_id"] for prompt in org_prompts]
-    prompt_id_to_name = {str(prompt["_id"]): prompt["name"] for prompt in org_prompts}
-    
-    # Build pipeline for prompt_revisions
-    pipeline = [
-        {
-            "$match": {"prompt_id": {"$in": [str(pid) for pid in prompt_ids]}}
-        }
-    ]
+    tag_id_list = [tid.strip() for tid in tag_ids.split(",")] if tag_ids else None
 
-    pipeline.extend([
-        {
-            "$sort": {"_id": -1}
-        },
-        {
-            "$group": {
-                "_id": "$prompt_id",
-                "doc": {"$first": "$$ROOT"}
-            }
-        },
-        {
-            "$replaceRoot": {"newRoot": "$doc"}
-        },
-        {
-            "$sort": {"_id": -1}
-        }
-    ])
-
-    # Add document tag filtering if document_id is provided
+    pre_grid_stages: list[dict] = []
     if document_id:
-        document = await db.docs.find_one({
-            "_id": ObjectId(document_id),
-            "organization_id": organization_id  # Ensure document belongs to org
-        })
+        document = await db.docs.find_one(
+            {
+                "_id": ObjectId(document_id),
+                "organization_id": organization_id,
+            }
+        )
         if not document:
             raise HTTPException(status_code=404, detail="Document not found")
 
-        # Load organization to determine whether default prompts are enabled
         default_prompt_enabled = True
         try:
             org = await db.organizations.find_one({"_id": ObjectId(organization_id)})
             if org is not None:
                 default_prompt_enabled = org.get("default_prompt_enabled", True)
         except Exception as e:
-            # If we cannot load the organization, fall back to enabled behavior
             logger.warning(
-                f"Could not load organization {organization_id} for default_prompt_enabled "
-                f"while listing prompts; falling back to enabled. Error: {e}"
+                "Could not load organization %s for default_prompt_enabled while listing prompts; "
+                "falling back to enabled. Error: %s",
+                organization_id,
+                e,
             )
 
         document_tag_ids = document.get("tag_ids", [])
         if document_tag_ids:
-            pipeline.append({
-                "$match": {"tag_ids": {"$in": document_tag_ids}}
-            })
+            pre_grid_stages.append({"$match": {"tag_ids": {"$in": document_tag_ids}}})
         else:
-            # Only return the default prompt if no tags and default prompts are enabled;
-            # if disabled, match nothing (return empty result)
-            pipeline.append({
-                "$match": {"name": "Default Prompt"} if default_prompt_enabled else {"_id": {"$exists": False}}
-            })
-    # Add direct tag filtering if tag_ids are provided
-    if tag_ids:
-        document_tag_ids = [tid.strip() for tid in tag_ids.split(",")]
-        pipeline.append({
-            "$match": {"tag_ids": {"$all": document_tag_ids}}
-        })
+            pre_grid_stages.append(
+                {
+                    "$match": (
+                        {"name": "Default Prompt"}
+                        if default_prompt_enabled
+                        else {"_id": {"$exists": False}}
+                    )
+                }
+            )
 
-    pipeline.extend([
-        {
-            "$facet": {
-                "total": [{"$count": "count"}],
-                "prompts": [
-                    {"$skip": skip},
-                    {"$limit": limit}
-                ]
-            }
-        }
-    ])
-    
-    result = await db.prompt_revisions.aggregate(pipeline).to_list(length=1)
-    result = result[0]
-    
-    total_count = result["total"][0]["count"] if result["total"] else 0
-    prompts = result["prompts"]
+    prompts, total_count = await list_prompts_for_org(
+        db,
+        organization_id,
+        skip=skip,
+        limit=limit,
+        name_search=name_search,
+        tag_ids_param=tag_id_list,
+        sort_model=sort_model,
+        filter_model=filter_model,
+        pre_grid_stages=pre_grid_stages or None,
+    )
 
-    # Convert _id to id in each prompt and add name from prompts collection
-    for prompt in prompts:
-        prompt['prompt_revid'] = str(prompt.pop('_id'))
-        prompt['name'] = prompt_id_to_name.get(prompt['prompt_id'], "Unknown")
-    
-    ret = ListPromptsResponse(
+    return ListPromptsResponse(
         prompts=prompts,
         total_count=total_count,
-        skip=skip
+        skip=skip,
     )
-    return ret
 
 @prompts_router.get("/v0/orgs/{organization_id}/prompts/{prompt_revid}", response_model=Prompt)
 async def get_prompt(

@@ -427,15 +427,19 @@ export class DocRouterOrg {
   }
 
   async listPrompts(params?: Omit<ListPromptsParams, 'organizationId'>): Promise<ListPromptsResponse> {
-    const { skip, limit, document_id, tag_ids, nameSearch } = params || {};
+    const { skip, limit, document_id, tag_ids, nameSearch, sort, filters } = params || {};
+    const queryParams: Record<string, string | number | undefined> = {
+      skip: skip || 0,
+      limit: limit || 10,
+    };
+    if (document_id) queryParams.document_id = document_id;
+    if (tag_ids) queryParams.tag_ids = tag_ids;
+    if (nameSearch) queryParams.name_search = nameSearch;
+    if (sort) queryParams.sort = sort;
+    if (filters) queryParams.filters = filters;
+
     return this.http.get<ListPromptsResponse>(`/v0/orgs/${this.organizationId}/prompts`, {
-      params: {
-        skip: skip || 0,
-        limit: limit || 10,
-        document_id,
-        tag_ids,
-        name_search: nameSearch
-      }
+      params: queryParams,
     });
   }
 

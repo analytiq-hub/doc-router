@@ -860,6 +860,10 @@ export interface ListPromptsParams {
   document_id?: string;
   tag_ids?: string;
   nameSearch?: string;
+  /** JSON-encoded MUI DataGrid sortModel (array). */
+  sort?: string;
+  /** JSON-encoded MUI DataGrid filterModel (object). */
+  filters?: string;
 }
 
 export interface ListPromptsResponse {

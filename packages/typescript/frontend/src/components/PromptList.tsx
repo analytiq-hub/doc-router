@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi } from '@/utils/api';
 import { Tag, Prompt, Schema } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridFilterModel, GridSortModel } from '@mui/x-data-grid';
 import { TextField, InputAdornment, IconButton, Menu, MenuItem, Autocomplete, Tooltip, Box } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
@@ -22,6 +22,9 @@ import PromptInfoModal from './PromptInfoModal';
 // Define default model constant
 const DEFAULT_LLM_MODEL = 'gemini-2.0-flash';
 
+const jsonStringifyForQuery = (value: unknown): string =>
+  JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
+
 const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
@@ -31,9 +34,12 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   const [searchTerm, setSearchTerm] = useState('');
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   const [availableSchemas, setAvailableSchemas] = useState<Schema[]>([]);
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(5);
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 5 });
   const [total, setTotal] = useState(0);
+  const [sortModel, setSortModel] = useState<GridSortModel>([
+    { field: 'prompt_revid', sort: 'desc' },
+  ]);
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
   
   // Add state for menu
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
@@ -47,10 +53,12 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
     try {
       setIsLoading(true);
       const response = await docRouterOrgApi.listPrompts({
-        skip: page * pageSize,
-        limit: pageSize,
+        skip: paginationModel.page * paginationModel.pageSize,
+        limit: paginationModel.pageSize,
         nameSearch: searchTerm || undefined,
-        tag_ids: selectedTagIds.length ? selectedTagIds.join(',') : undefined
+        tag_ids: selectedTagIds.length ? selectedTagIds.join(',') : undefined,
+        sort: sortModel.length ? jsonStringifyForQuery(sortModel) : undefined,
+        filters: filterModel.items.length ? jsonStringifyForQuery(filterModel) : undefined,
       });
       setPrompts(response.prompts);
       setTotal(response.total_count);
@@ -60,41 +68,35 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
     } finally {
       setIsLoading(false);
     }
-  }, [page, pageSize, docRouterOrgApi, searchTerm, selectedTagIds]);
-
-  const loadTags = useCallback(async () => {
-    try {
-      const response = await docRouterOrgApi.listTags({ limit: 100 });
-      setAvailableTags(response.tags);
-    } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading tags';
-      setMessage('Error: ' + errorMsg);
-    }
-  }, [docRouterOrgApi]);
-
-  const loadSchemas = useCallback(async () => {
-    try {
-      const response = await docRouterOrgApi.listSchemas({ limit: 100 });
-      setAvailableSchemas(response.schemas);
-    } catch (error) {
-      const errorMsg = getApiErrorMsg(error) || 'Error loading schemas';
-      setMessage('Error: ' + errorMsg);
-    }
-  }, [docRouterOrgApi]);
+  }, [
+    paginationModel,
+    docRouterOrgApi,
+    searchTerm,
+    selectedTagIds,
+    sortModel,
+    filterModel,
+  ]);
 
   useEffect(() => {
-    // Load all required data at once
-    const loadData = async () => {
-      setIsLoading(true);
+    void loadPrompts();
+  }, [loadPrompts]);
+
+  useEffect(() => {
+    const loadTagsAndSchemas = async () => {
       try {
-        await Promise.all([loadPrompts(), loadTags(), loadSchemas()]);
-      } finally {
-        setIsLoading(false);
+        const [tagsRes, schemasRes] = await Promise.all([
+          docRouterOrgApi.listTags({ limit: 100 }),
+          docRouterOrgApi.listSchemas({ limit: 100 }),
+        ]);
+        setAvailableTags(tagsRes.tags);
+        setAvailableSchemas(schemasRes.schemas);
+      } catch (error) {
+        const errorMsg = getApiErrorMsg(error) || 'Error loading tags or schemas';
+        setMessage('Error: ' + errorMsg);
       }
     };
-    
-    loadData();
-  }, [loadPrompts, loadTags, loadSchemas]);
+    void loadTagsAndSchemas();
+  }, [docRouterOrgApi]);
 
   // Menu handlers
   const handleMenuOpen = (event: React.MouseEvent<HTMLElement>, prompt: Prompt) => {
@@ -452,7 +454,10 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
             variant="outlined"
             placeholder="Search prompts..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+            }}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -470,7 +475,10 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
             disableCloseOnSelect
             getOptionLabel={(option) => option.name}
             value={availableTags.filter(tag => selectedTagIds.includes(tag.id))}
-            onChange={(_, value) => setSelectedTagIds(value.map(tag => tag.id))}
+            onChange={(_, value) => {
+              setSelectedTagIds(value.map((tag) => tag.id));
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+            }}
             renderInput={(params) => (
               <TextField
                 {...params}
@@ -528,23 +536,25 @@ const PromptList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
           rows={filteredPrompts}
           columns={columns}
           getRowId={(row) => row.prompt_revid}
-          initialState={{
-            pagination: {
-              paginationModel: { pageSize: 5 }
-            },
-            sorting: {
-              sortModel: [{ field: 'prompt_revid', sort: 'desc' }]  // Sort by prompt_revid descending by default
-            }
+          sortingMode="server"
+          sortModel={sortModel}
+          onSortModelChange={(newModel) => {
+            setSortModel(newModel);
+            setPaginationModel((prev) => ({ ...prev, page: 0 }));
+          }}
+          filterMode="server"
+          filterModel={filterModel}
+          onFilterModelChange={(newModel) => {
+            setFilterModel(newModel);
+            setPaginationModel((prev) => ({ ...prev, page: 0 }));
           }}
           pageSizeOptions={[5, 10, 20]}
           disableRowSelectionOnClick
           loading={isLoading}
           paginationMode="server"
-          rowCount={total}  // Add this to show total count
-          onPaginationModelChange={(model) => {
-            setPage(model.page);
-            setPageSize(model.pageSize);
-          }}
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
+          rowCount={total}
           sx={{
             '& .MuiDataGrid-cell': {
               padding: '8px',
