@@ -141,6 +141,11 @@ export class HttpClient {
     return response.data;
   }
 
+  async getBinary(url: string): Promise<ArrayBuffer> {
+    const response = await this.axios.get<ArrayBuffer>(url, { responseType: 'arraybuffer' });
+    return response.data;
+  }
+
   async post<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     const response: AxiosResponse<T> = await this.axios.post(url, data, config);
     return response.data;

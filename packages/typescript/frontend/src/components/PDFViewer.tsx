@@ -169,23 +169,20 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
     const load = async () => {
       try {
-        const response = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
+        // Fetch metadata and binary in parallel; skip binary if still processing.
+        const meta = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf', includeContent: false });
         if (cancelled) return;
-        const content = response.content ?? null;
-        const name = response.document_name ?? null;
-        const state = response.state ?? null;
+        const state = meta.state ?? null;
+        const name = meta.document_name ?? null;
         setDocumentState(state);
-        const hasContent = content != null;
         const stillProcessing = ['ocr_processing', 'llm_processing'].includes(state ?? '');
-        if (hasContent) {
-          const blob = new Blob([content], { type: 'application/pdf' });
+        if (!stillProcessing) {
+          const buffer = await docRouterOrgApi.getDocumentFile({ documentId: id, fileType: 'pdf' });
+          if (cancelled) return;
+          const blob = new Blob([buffer], { type: 'application/pdf' });
           setUrlFromBlob(blob, name, state);
           setFileName(name ?? '');
           setFileSize(blob.size);
-        } else {
-          setFileUrl(null);
-        }
-        if (hasContent || !stillProcessing) {
           setLoading(false);
         }
       } catch (e) {
@@ -207,7 +204,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     };
   }, [id, docRouterOrgApi, revokeCurrentUrl, setUrlFromBlob]);
 
-  // Poll metadata when processing. When completed and we still have no URL, do one full fetch and set blob URL.
+  // Poll metadata when processing. When completed and we still have no URL, fetch binary and set blob URL.
   useEffect(() => {
     if (documentState !== 'ocr_processing' && documentState !== 'llm_processing') {
       if (pollRef.current) {
@@ -231,14 +228,11 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
           }
           setDocumentState(meta.state ?? null);
           if (fileUrlRef.current == null) {
-            const response = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
-            const content = response.content ?? null;
-            if (content) {
-              const blob = new Blob([content], { type: 'application/pdf' });
-              setUrlFromBlob(blob, response.document_name ?? null, response.state ?? null);
-              setFileName(response.document_name ?? '');
-              setFileSize(blob.size);
-            }
+            const buffer = await docRouterOrgApi.getDocumentFile({ documentId: id, fileType: 'pdf' });
+            const blob = new Blob([buffer], { type: 'application/pdf' });
+            setUrlFromBlob(blob, meta.document_name ?? null, meta.state ?? null);
+            setFileName(meta.document_name ?? '');
+            setFileSize(blob.size);
             setLoading(false);
           }
         }

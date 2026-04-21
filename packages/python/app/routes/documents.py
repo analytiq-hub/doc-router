@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, ConfigDict
 
 # Third-party imports
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, File, Form, UploadFile
+from fastapi.responses import Response
 from bson import ObjectId
 
 # Local imports
@@ -598,6 +599,43 @@ async def get_document(
         metadata=document.get("metadata", {}),
         content=base64.b64encode(file["blob"]).decode("utf-8"),
     )
+
+@documents_router.get("/v0/orgs/{organization_id}/documents/{document_id}/file")
+async def get_document_file(
+    organization_id: str,
+    document_id: str,
+    file_type: str = Query(default="pdf", enum=["original", "pdf"]),
+    current_user: User = Depends(get_org_user)
+):
+    """Return the raw binary of the document file (no base64). Use file_type=pdf for the PDF version."""
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+
+    document = await db.docs.find_one({
+        "_id": ObjectId(document_id),
+        "organization_id": organization_id
+    })
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    if file_type == "pdf":
+        file_name = document.get("pdf_file_name", document.get("mongo_file_name"))
+    else:
+        file_name = document.get("mongo_file_name")
+
+    file = await ad.common.get_file_async(analytiq_client, file_name)
+    if file is None:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    try:
+        media_type = file["metadata"].get("type") or "application/octet-stream"
+    except Exception:
+        media_type = "application/octet-stream"
+
+    user_file_name = document.get("user_file_name", file_name)
+    headers = {"Content-Disposition": f'attachment; filename="{user_file_name}"'}
+    return Response(content=file["blob"], media_type=media_type, headers=headers)
+
 
 @documents_router.delete("/v0/orgs/{organization_id}/documents/{document_id}")
 async def delete_document(

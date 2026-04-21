@@ -239,6 +239,13 @@ export class DocRouterOrg {
     };
   }
 
+  async getDocumentFile(params: { documentId: string; fileType?: string }): Promise<ArrayBuffer> {
+    const { documentId, fileType = 'pdf' } = params;
+    return this.http.getBinary(
+      `/v0/orgs/${this.organizationId}/documents/${documentId}/file?file_type=${fileType}`
+    );
+  }
+
   async updateDocument(params: { documentId: string; documentName?: string; tagIds?: string[]; metadata?: Record<string, string>; }) {
     const { documentId, documentName, tagIds, metadata } = params;
     const updateData: { tag_ids?: string[]; document_name?: string; metadata?: Record<string, string> } = {};
