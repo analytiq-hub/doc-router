@@ -360,25 +360,24 @@ def _auth_headers_multipart() -> dict[str, str]:
 
 @pytest.mark.asyncio
 async def test_upload_document_multipart_single_pdf(test_db, mock_auth, small_pdf):
-    """POST /documents/multipart accepts raw PDF bytes and matches JSON upload behavior."""
+    """POST /documents/multipart uploads a single file with flat form fields."""
     raw = base64.b64decode(small_pdf["content"].split(",", 1)[1])
     meta = {"source": "multipart_unit"}
     resp = client.post(
         f"/v0/orgs/{TEST_ORG_ID}/documents/multipart",
-        files=[("files", ("multipart_unit.pdf", raw, "application/pdf"))],
+        files=[("file", ("multipart_unit.pdf", raw, "application/pdf"))],
         data={
-            "manifest": json.dumps(
-                [{"name": "multipart_unit.pdf", "tag_ids": [], "metadata": meta}]
-            )
+            "name": "multipart_unit.pdf",
+            "tag_ids": json.dumps([]),
+            "metadata": json.dumps(meta),
         },
         headers=_auth_headers_multipart(),
     )
     assert resp.status_code == 200, resp.text
     body = resp.json()
-    assert len(body["documents"]) == 1
-    assert body["documents"][0]["document_name"] == "multipart_unit.pdf"
-    assert body["documents"][0]["metadata"] == meta
-    document_id = body["documents"][0]["document_id"]
+    assert body["document"]["document_name"] == "multipart_unit.pdf"
+    assert body["document"]["metadata"] == meta
+    document_id = body["document"]["document_id"]
 
     get_response = client.get(
         f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
@@ -397,47 +396,49 @@ async def test_upload_document_multipart_single_pdf(test_db, mock_auth, small_pd
 
 
 @pytest.mark.asyncio
-async def test_upload_document_multipart_two_files_manifest(test_db, mock_auth, small_pdf):
-    """Two file parts with manifest entries aligned by index."""
+async def test_upload_document_multipart_uses_part_filename(test_db, mock_auth, small_pdf):
+    """When 'name' form field is omitted, the part's filename is used."""
     raw = base64.b64decode(small_pdf["content"].split(",", 1)[1])
-    manifest = [
-        {"name": "a.pdf", "metadata": {"n": "0"}},
-        {"name": "b.pdf", "metadata": {"n": "1"}},
-    ]
     resp = client.post(
         f"/v0/orgs/{TEST_ORG_ID}/documents/multipart",
-        files=[
-            ("files", ("ignored_a.pdf", raw, "application/pdf")),
-            ("files", ("ignored_b.pdf", raw, "application/pdf")),
-        ],
-        data={"manifest": json.dumps(manifest)},
+        files=[("file", ("from_part.pdf", raw, "application/pdf"))],
         headers=_auth_headers_multipart(),
     )
     assert resp.status_code == 200, resp.text
-    docs = resp.json()["documents"]
-    assert len(docs) == 2
-    assert {d["document_name"] for d in docs} == {"a.pdf", "b.pdf"}
-    assert {d["metadata"]["n"] for d in docs} == {"0", "1"}
-    for d in docs:
-        client.delete(
-            f"/v0/orgs/{TEST_ORG_ID}/documents/{d['document_id']}",
-            headers=get_auth_headers(),
-        )
+    doc = resp.json()["document"]
+    assert doc["document_name"] == "from_part.pdf"
+    client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{doc['document_id']}",
+        headers=get_auth_headers(),
+    )
 
 
 @pytest.mark.asyncio
-async def test_upload_document_multipart_manifest_wrong_length(test_db, mock_auth, small_pdf):
+async def test_get_document_file(test_db, mock_auth, small_pdf):
+    """GET /documents/{id}/file returns raw binary matching the uploaded bytes."""
     raw = base64.b64decode(small_pdf["content"].split(",", 1)[1])
-    resp = client.post(
+    upload_resp = client.post(
         f"/v0/orgs/{TEST_ORG_ID}/documents/multipart",
-        files=[
-            ("files", ("one.pdf", raw, "application/pdf")),
-            ("files", ("two.pdf", raw, "application/pdf")),
-        ],
-        data={"manifest": json.dumps([{"name": "only_one.pdf"}])},
+        files=[("file", ("binary_test.pdf", raw, "application/pdf"))],
         headers=_auth_headers_multipart(),
     )
-    assert resp.status_code == 400
+    assert upload_resp.status_code == 200, upload_resp.text
+    document_id = upload_resp.json()["document"]["document_id"]
+
+    try:
+        file_resp = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}/file",
+            params={"file_type": "pdf"},
+            headers=get_auth_headers(),
+        )
+        assert file_resp.status_code == 200, file_resp.text
+        assert file_resp.content == raw
+        assert "application/pdf" in file_resp.headers.get("content-type", "")
+    finally:
+        client.delete(
+            f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
+            headers=get_auth_headers(),
+        )
 
 
 @pytest.mark.asyncio

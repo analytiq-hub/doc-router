@@ -162,8 +162,8 @@ describe('SDK Client Unit Tests', () => {
       expect(mockPostFormData).not.toHaveBeenCalled();
     });
 
-    test('uploadDocumentsMultipart calls postFormData with URL and manifest', async () => {
-      const mockPostFormData = jest.fn().mockResolvedValue({ documents: [] });
+    test('uploadDocumentMultipart posts file, tag_ids and metadata as form fields', async () => {
+      const mockPostFormData = jest.fn().mockResolvedValue({ document: { document_id: 'doc-1', document_name: 'one.pdf', upload_date: '', uploaded_by: '', state: '', tag_ids: [], metadata: {} } });
       const client = new DocRouterOrg({
         baseURL: 'https://api.example.com',
         orgToken: 'org-token',
@@ -173,38 +173,18 @@ describe('SDK Client Unit Tests', () => {
         mockPostFormData;
 
       const file = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
-      await client.uploadDocumentsMultipart({
-        documents: [
-          {
-            name: 'one.pdf',
-            file,
-            tag_ids: ['tag_a'],
-            metadata: { source: 'unit' },
-          },
-        ],
-      });
+      await client.uploadDocumentMultipart({ name: 'one.pdf', file, tag_ids: ['tag_a'], metadata: { source: 'unit' } });
 
       expect(mockPostFormData).toHaveBeenCalledTimes(1);
-      const [url, form] = mockPostFormData.mock.calls[0] as [
-        string,
-        FormData,
-      ];
+      const [url, form] = mockPostFormData.mock.calls[0] as [string, FormData];
       expect(url).toBe('/v0/orgs/org-123/documents/multipart');
-      const manifest = JSON.parse(form.get('manifest') as string);
-      expect(manifest).toEqual([
-        {
-          name: 'one.pdf',
-          tag_ids: ['tag_a'],
-          metadata: { source: 'unit' },
-        },
-      ]);
-      const files = form.getAll('files');
-      expect(files).toHaveLength(1);
-      expect(files[0]).toBeInstanceOf(Blob);
+      expect(form.get('file')).toBeInstanceOf(Blob);
+      expect(JSON.parse(form.get('tag_ids') as string)).toEqual(['tag_a']);
+      expect(JSON.parse(form.get('metadata') as string)).toEqual({ source: 'unit' });
     });
 
-    test('uploadDocumentsMultipart builds manifest defaults and multiple files', async () => {
-      const mockPostFormData = jest.fn().mockResolvedValue({ documents: [] });
+    test('uploadDocumentsMultipart calls uploadDocumentMultipart once per file', async () => {
+      const mockPostFormData = jest.fn().mockResolvedValue({ document: { document_id: 'doc-x', document_name: 'x.pdf', upload_date: '', uploaded_by: '', state: '', tag_ids: [], metadata: {} } });
       const client = new DocRouterOrg({
         baseURL: 'https://api.example.com',
         orgToken: 'org-token',
@@ -215,20 +195,15 @@ describe('SDK Client Unit Tests', () => {
 
       const a = new Blob(['a'], { type: 'application/pdf' });
       const b = new Blob(['b'], { type: 'application/pdf' });
-      await client.uploadDocumentsMultipart({
+      const result = await client.uploadDocumentsMultipart({
         documents: [
           { name: 'first.pdf', file: a },
           { name: 'second.pdf', file: b },
         ],
       });
 
-      const [, form] = mockPostFormData.mock.calls[0] as [string, FormData];
-      const manifest = JSON.parse(form.get('manifest') as string);
-      expect(manifest).toEqual([
-        { name: 'first.pdf', tag_ids: [], metadata: {} },
-        { name: 'second.pdf', tag_ids: [], metadata: {} },
-      ]);
-      expect(form.getAll('files')).toHaveLength(2);
+      expect(mockPostFormData).toHaveBeenCalledTimes(2);
+      expect(result.documents).toHaveLength(2);
     });
 
     test('getOCRBlocks accepts format param and requests gzip by default', async () => {

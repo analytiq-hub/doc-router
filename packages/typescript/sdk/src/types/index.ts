@@ -283,6 +283,10 @@ export interface UploadedDocument {
   metadata: Record<string, string>;
 }
 
+export interface UploadDocumentResponse {
+  document: UploadedDocument;
+}
+
 export interface UploadDocumentsResponse {
   documents: UploadedDocument[];
 }

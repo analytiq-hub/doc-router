@@ -3,6 +3,7 @@ import { normalizeOcrBlocksPayload } from './ocr-blocks';
 import {
   DocRouterOrgConfig,
   UploadDocumentMultipartPart,
+  UploadDocumentResponse,
   UploadDocumentsResponse,
   ListDocumentsResponse,
   GetDocumentResponse,
@@ -155,9 +156,20 @@ export class DocRouterOrg {
   }
 
   /**
-   * Upload documents via multipart/form-data (efficient for browser file blobs).
-   * Same response shape as uploadDocuments().
+   * Upload a single document via multipart/form-data (no base64).
    */
+  async uploadDocumentMultipart(params: UploadDocumentMultipartPart): Promise<UploadDocumentResponse> {
+    const form = new FormData();
+    form.append('file', params.file, params.name);
+    if (params.tag_ids?.length) form.append('tag_ids', JSON.stringify(params.tag_ids));
+    if (params.metadata && Object.keys(params.metadata).length) form.append('metadata', JSON.stringify(params.metadata));
+    return this.http.postFormData<UploadDocumentResponse>(
+      `/v0/orgs/${this.organizationId}/documents/multipart`,
+      form
+    );
+  }
+
+  /** Upload multiple documents one at a time. */
   async uploadDocumentsMultipart(params: {
     documents: UploadDocumentMultipartPart[];
   }): Promise<UploadDocumentsResponse> {
@@ -165,20 +177,8 @@ export class DocRouterOrg {
     if (documents.length === 0) {
       throw new Error('uploadDocumentsMultipart requires at least one document');
     }
-    const form = new FormData();
-    const manifest = documents.map((doc) => ({
-      name: doc.name,
-      tag_ids: doc.tag_ids ?? [],
-      metadata: doc.metadata ?? {},
-    }));
-    for (const doc of documents) {
-      form.append('files', doc.file, doc.name);
-    }
-    form.append('manifest', JSON.stringify(manifest));
-    return this.http.postFormData<UploadDocumentsResponse>(
-      `/v0/orgs/${this.organizationId}/documents/multipart`,
-      form
-    );
+    const results = await Promise.all(documents.map((doc) => this.uploadDocumentMultipart(doc)));
+    return { documents: results.map((r) => r.document) };
   }
 
   async listDocuments(params?: { skip?: number; limit?: number; tagIds?: string; nameSearch?: string; metadataSearch?: string; }): Promise<ListDocumentsResponse> {

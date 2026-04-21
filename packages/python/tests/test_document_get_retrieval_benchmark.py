@@ -259,20 +259,15 @@ def test_get_document_pdf_retrieval_speed_multipart(mock_auth, test_db, capsys) 
 
         def _upload_multipart_one(i: int) -> tuple[int, object, float]:
             fname = _fname(i)
-            manifest = json.dumps(
-                [
-                    {
-                        "name": fname,
-                        "tag_ids": [],
-                        "metadata": {"benchmark": "doc_get_pdf_multipart"},
-                    }
-                ]
-            )
             t0 = time.perf_counter()
             r = client.post(
                 upload_url,
-                files=[("files", (fname, blob, "application/pdf"))],
-                data={"manifest": manifest},
+                files=[("file", (fname, blob, "application/pdf"))],
+                data={
+                    "name": fname,
+                    "tag_ids": "[]",
+                    "metadata": '{"benchmark":"doc_get_pdf_multipart"}',
+                },
                 headers=auth_mp,
             )
             return i, r, time.perf_counter() - t0
@@ -304,7 +299,7 @@ def test_get_document_pdf_retrieval_speed_multipart(mock_auth, test_db, capsys) 
             assert up.status_code == 200, (
                 f"multipart upload failed ({label}) #{idx}: {up.status_code} {up.text}"
             )
-        doc_ids = [up.json()["documents"][0]["document_id"] for up in upload_responses]
+        doc_ids = [up.json()["document"]["document_id"] for up in upload_responses]
 
         t_get0 = time.perf_counter()
         if parallel == 1:

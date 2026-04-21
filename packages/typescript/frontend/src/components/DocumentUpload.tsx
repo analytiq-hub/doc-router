@@ -96,25 +96,26 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
     setUploadStatus(null);
 
     try {
-      const response = await docRouterOrgApi.uploadDocumentsMultipart({
-        documents: files.map(({ file }) => ({
-          name: file.name,
-          file,
-          tag_ids: selectedTags,
-          metadata,
-        })),
-      });
-      
-      // Create a more detailed success message
+      await Promise.all(
+        files.map(({ file }) =>
+          docRouterOrgApi.uploadDocumentMultipart({
+            name: file.name,
+            file,
+            tag_ids: selectedTags,
+            metadata,
+          })
+        )
+      );
+
       const fileNames = files.map((row) => row.file.name).join(', ');
-      const tagNames = selectedTags.length > 0 
+      const tagNames = selectedTags.length > 0
         ? availableTags
             .filter(tag => selectedTags.includes(tag.id))
             .map(tag => tag.name)
             .join(", ")
         : "no tags";
-      
-      setUploadStatus(`Successfully uploaded ${response.documents.length} file(s): ${fileNames} with ${tagNames}`);
+
+      setUploadStatus(`Successfully uploaded ${files.length} file(s): ${fileNames} with ${tagNames}`);
       
       setFiles([]);
       setSelectedTags([]); // Reset selected tags after successful upload

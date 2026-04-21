@@ -247,107 +247,55 @@ async def upload_document(
 @documents_router.post("/v0/orgs/{organization_id}/documents/multipart")
 async def upload_document_multipart(
     organization_id: str,
-    files: Annotated[
-        list[UploadFile],
-        File(description="Binary bodies; repeat form field name 'files' for multiple uploads."),
-    ],
-    manifest: Annotated[
-        Optional[str],
-        Form(
-            description=(
-                "Optional JSON array, one object per file in the same order as parts. "
-                "Each object may include: name (str), tag_ids (list[str]), metadata (object). "
-                "Omitted keys fall back to the part's filename and empty tag_ids/metadata."
-            )
-        ),
-    ] = None,
+    file: Annotated[UploadFile, File(description="Binary file content.")],
+    name: Annotated[Optional[str], Form(description="Override filename.")] = None,
+    tag_ids: Annotated[Optional[str], Form(description='JSON array of tag IDs, e.g. ["id1","id2"].')] = None,
+    metadata: Annotated[Optional[str], Form(description='JSON object of string key-value pairs.')] = None,
     current_user: User = Depends(get_org_user),
 ):
-    """
-    Upload one or more documents as raw multipart file parts (no base64, no giant JSON).
+    """Upload a single document as raw multipart/form-data (no base64)."""
+    file_name = name or file.filename
+    if not file_name:
+        raise HTTPException(status_code=400, detail="File name is required")
 
-    More efficient than POST /documents for large PDFs: avoids ~33% base64 expansion and
-    large JSON parse on the server.
-    """
-    if not files:
-        raise HTTPException(status_code=400, detail="At least one file is required")
-
-    if manifest is not None and manifest.strip():
+    parsed_tag_ids: List[str] = []
+    if tag_ids is not None and tag_ids.strip():
         try:
-            parsed = json.loads(manifest)
+            parsed_tag_ids = json.loads(tag_ids)
         except json.JSONDecodeError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid manifest JSON: {e}")
-        if not isinstance(parsed, list):
-            raise HTTPException(status_code=400, detail="manifest must be a JSON array")
-        if len(parsed) != len(files):
-            raise HTTPException(
-                status_code=400,
-                detail=f"manifest length {len(parsed)} must match number of file parts {len(files)}",
-            )
-        entries: List[Any] = parsed
-    else:
-        entries = [{} for _ in files]
+            raise HTTPException(status_code=400, detail=f"Invalid tag_ids JSON: {e}")
+        if not isinstance(parsed_tag_ids, list) or not all(isinstance(t, str) for t in parsed_tag_ids):
+            raise HTTPException(status_code=400, detail="tag_ids must be a JSON array of strings")
 
-    all_tag_ids: set[str] = set()
-    resolved: list[tuple[str, List[str], Dict[str, str]]] = []
-    for i, file in enumerate(files):
-        spec = entries[i]
-        if not isinstance(spec, dict):
-            raise HTTPException(
-                status_code=400,
-                detail=f"manifest[{i}] must be a JSON object if manifest is provided",
-            )
-        name = spec.get("name") or file.filename
-        if not name:
-            raise HTTPException(
-                status_code=400,
-                detail=f"File part {i} needs a filename or manifest[{i}].name",
-            )
-        raw_tags = spec.get("tag_ids", [])
-        if raw_tags is None:
-            raw_tags = []
-        if not isinstance(raw_tags, list) or not all(isinstance(t, str) for t in raw_tags):
-            raise HTTPException(status_code=400, detail=f"manifest[{i}].tag_ids must be a list of strings")
-        raw_meta = spec.get("metadata", {})
-        if raw_meta is None:
-            raw_meta = {}
-        if not isinstance(raw_meta, dict) or not all(
-            isinstance(k, str) and isinstance(v, str) for k, v in raw_meta.items()
+    parsed_metadata: Dict[str, str] = {}
+    if metadata is not None and metadata.strip():
+        try:
+            parsed_metadata = json.loads(metadata)
+        except json.JSONDecodeError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid metadata JSON: {e}")
+        if not isinstance(parsed_metadata, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in parsed_metadata.items()
         ):
-            raise HTTPException(
-                status_code=400,
-                detail=f"manifest[{i}].metadata must be a string-to-string map",
-            )
-        all_tag_ids.update(raw_tags)
-        resolved.append((name, raw_tags, raw_meta))
+            raise HTTPException(status_code=400, detail="metadata must be a JSON object with string values")
 
     analytiq_client = ad.common.get_analytiq_client()
     db = ad.common.get_async_db(analytiq_client)
-    await _validate_tag_ids_for_org(organization_id, all_tag_ids, db)
+    if parsed_tag_ids:
+        await _validate_tag_ids_for_org(organization_id, set(parsed_tag_ids), db)
 
-    logger.info(
-        "upload_document_multipart(): %s: %s file(s): %s",
+    logger.info("upload_document_multipart(): %s: %s", organization_id, file_name)
+
+    content = await file.read()
+    doc = await _save_single_uploaded_document(
+        analytiq_client,
         organization_id,
-        len(files),
-        [r[0] for r in resolved],
+        current_user,
+        file_name,
+        content,
+        parsed_tag_ids,
+        parsed_metadata,
     )
-
-    documents: List[Dict[str, Any]] = []
-    for file, (name, tag_ids, meta) in zip(files, resolved):
-        content = await file.read()
-        documents.append(
-            await _save_single_uploaded_document(
-                analytiq_client,
-                organization_id,
-                current_user,
-                name,
-                content,
-                tag_ids,
-                meta,
-            )
-        )
-
-    return {"documents": documents}
+    return {"document": doc}
 
 
 @documents_router.put("/v0/orgs/{organization_id}/documents/{document_id}")
