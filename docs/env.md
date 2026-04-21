@@ -32,12 +32,12 @@ The DocRouter project uses a single `.env` file at the project root that is shar
 
 ### `MONGODB_MAX_POOL_SIZE`
 - **Purpose**: Optional cap on connections in the Motor client pool for the Python backend and workers (one shared pool per process).
-- **Default**: Motor/PyMongo default (typically 100) when unset.
+- **Default**: `200` when unset.
 - **Usage**: Set in production when the cluster connection limit must be shared across many app/worker processes. Parsed in `packages/python/analytiq_data/mongodb/client.py`.
 
 ### `MONGODB_MIN_POOL_SIZE`
 - **Purpose**: Optional minimum connections kept in the shared Motor pool.
-- **Default**: Motor/PyMongo default when unset.
+- **Default**: `20` when unset.
 - **Usage**: Same module as `MONGODB_MAX_POOL_SIZE`.
 
 ### `MONGODB_MAX_IDLE_TIME_MS`
