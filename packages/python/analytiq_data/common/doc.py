@@ -3,11 +3,10 @@ from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
-import re
 from typing import Any
 
 import analytiq_data as ad
-from analytiq_data.common.tag_grid_filters import resolve_tag_filter_values_to_ids
+from analytiq_data.common.grid_filter import build_filter_match, build_sort_spec
 
 logger = logging.getLogger(__name__)
 
@@ -196,225 +195,47 @@ async def list_docs(
         tuple[list, int]
             List of documents and total count
     """
+    _FIELD_MAP: dict[str, str | None] = {
+        "document_name": "user_file_name",
+        "documentName": "user_file_name",
+        "uploaded_by": "uploaded_by",
+        "uploadedBy": "uploaded_by",
+        "state": "state",
+        "upload_date": "upload_date",
+        "uploadDate": "upload_date",
+        "tag_ids": "tag_ids",
+    }
+
     db_name = analytiq_client.env
     db = analytiq_client.mongodb_async[db_name]
     collection = db["docs"]
-    tags_collection = db["tags"]
-    
-    # Add organization filter
+
     query = {"organization_id": organization_id}
     if tag_ids:
         query["tag_ids"] = {"$all": tag_ids}
     if name_search:
-        # Search in user_file_name (case-insensitive)
         query["user_file_name"] = {"$regex": name_search, "$options": "i"}
     if metadata_search:
-        # Search in metadata key-value pairs (all pairs must match)
         for key, value in metadata_search.items():
             query[f"metadata.{key}"] = value
-    # Apply grid-style filters (MUI DataGrid filterModel)
-    if filter_model and isinstance(filter_model, dict):
-        items = filter_model.get("items") or []
-        logic = (filter_model.get("logicOperator") or "and").lower()
 
-        def mongo_field(field: str) -> str | None:
-            return {
-                "document_name": "user_file_name",
-                "uploaded_by": "uploaded_by",
-                "state": "state",
-                "upload_date": "upload_date",
-                "tag_ids": "tag_ids",
-            }.get(field)
+    grid_match = await build_filter_match(
+        filter_model, _FIELD_MAP,
+        db=db, organization_id=organization_id,
+        datetime_fields={"upload_date"},
+        tag_id_fields={"tag_ids"},
+        id_field=None,
+    )
+    if grid_match:
+        query = {"$and": [query, grid_match]}
 
-        def as_list_value(v: Any) -> list[str]:
-            if v is None:
-                return []
-            if isinstance(v, list):
-                return [str(x) for x in v if str(x).strip()]
-            # DataGrid sometimes passes a comma-separated string
-            s = str(v)
-            if "," in s:
-                return [p.strip() for p in s.split(",") if p.strip()]
-            return [s.strip()] if s.strip() else []
-
-        def parse_dt(v: Any) -> datetime | None:
-            if v is None:
-                return None
-            if isinstance(v, datetime):
-                return v
-            s = str(v).strip()
-            if not s:
-                return None
-            # Accept ISO strings; tolerate trailing Z.
-            if s.endswith("Z"):
-                s = s[:-1] + "+00:00"
-            try:
-                return datetime.fromisoformat(s)
-            except Exception:
-                # If user provides date-only, treat as midnight UTC.
-                try:
-                    return datetime.fromisoformat(s + "T00:00:00+00:00")
-                except Exception:
-                    return None
-
-        clauses: list[dict[str, Any]] = []
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            field = item.get("field")
-            op = item.get("operator") or item.get("operatorValue")
-            value = item.get("value")
-            if not field or not op:
-                continue
-
-            mf = mongo_field(str(field))
-            if not mf:
-                continue
-
-            op = str(op)
-            str_value = "" if value is None else str(value)
-
-            if op in ("isEmpty", "is empty"):
-                clauses.append({"$or": [{mf: ""}, {mf: None}, {mf: {"$exists": False}}]})
-                continue
-            if op in ("isNotEmpty", "is not empty"):
-                clauses.append({"$and": [{mf: {"$exists": True}}, {mf: {"$nin": ["", None]}}]})
-                continue
-
-            if op in ("isAnyOf", "is any of"):
-                values = as_list_value(value)
-                if not values:
-                    continue
-                if mf == "tag_ids":
-                    tag_id_strs = await resolve_tag_filter_values_to_ids(db, organization_id, values)
-                    if not tag_id_strs:
-                        clauses.append({"_id": {"$exists": False}})
-                        continue
-                    clauses.append({mf: {"$in": tag_id_strs}})
-                else:
-                    clauses.append({mf: {"$in": values}})
-                continue
-
-            if mf == "upload_date":
-                dt = parse_dt(value)
-                if op in ("is", "equals") and dt:
-                    clauses.append({mf: dt})
-                elif op in ("not", "doesNotEqual", "does not equal") and dt:
-                    clauses.append({mf: {"$ne": dt}})
-                elif op in ("after",) and dt:
-                    clauses.append({mf: {"$gt": dt}})
-                elif op in ("onOrAfter", "on or after") and dt:
-                    clauses.append({mf: {"$gte": dt}})
-                elif op in ("before",) and dt:
-                    clauses.append({mf: {"$lt": dt}})
-                elif op in ("onOrBefore", "on or before") and dt:
-                    clauses.append({mf: {"$lte": dt}})
-                elif op in ("isEmpty", "is empty"):
-                    clauses.append({"$or": [{mf: None}, {mf: {"$exists": False}}]})
-                elif op in ("isNotEmpty", "is not empty"):
-                    clauses.append({mf: {"$and": [{mf: {"$exists": True}}, {mf: {"$ne": None}}]}})
-                continue
-
-            # Tag operators beyond "isAnyOf": treat scalar value as "any-of-one".
-            if mf == "tag_ids" and str_value.strip():
-                # Grid UI provides text operators, but docs store tag IDs not tag names.
-                # Interpret these operators as tag *name* search scoped to the org, then
-                # filter documents by the matching tag IDs.
-                name_query: dict[str, Any] | None = None
-                if op == "contains":
-                    name_query = {"$regex": re.escape(str_value), "$options": "i"}
-                elif op in ("startsWith", "starts with"):
-                    name_query = {"$regex": f"^{re.escape(str_value)}", "$options": "i"}
-                elif op in ("endsWith", "ends with"):
-                    name_query = {"$regex": f"{re.escape(str_value)}$", "$options": "i"}
-                elif op in ("equals", "=", "is"):
-                    name_query = {"$regex": f"^{re.escape(str_value)}$", "$options": "i"}
-                elif op in ("doesNotContain", "does not contain"):
-                    name_query = {"$regex": re.escape(str_value), "$options": "i"}
-                elif op in ("doesNotEqual", "does not equal"):
-                    name_query = str_value
-
-                if name_query is not None:
-                    # Cap results to avoid runaway $in lists.
-                    tag_docs = await tags_collection.find(
-                        {"organization_id": organization_id, "name": name_query},
-                        {"_id": 1},
-                    ).limit(200).to_list(length=200)
-                    tag_id_strs = [str(t["_id"]) for t in tag_docs]
-                    if not tag_id_strs:
-                        # No matching tags => contains/equals yields no docs; negations yield all docs.
-                        if op in ("doesNotContain", "does not contain", "doesNotEqual", "does not equal"):
-                            continue
-                        clauses.append({"_id": {"$exists": False}})
-                        continue
-
-                    if op in ("doesNotContain", "does not contain", "doesNotEqual", "does not equal"):
-                        clauses.append({mf: {"$nin": tag_id_strs}})
-                    else:
-                        clauses.append({mf: {"$in": tag_id_strs}})
-                    continue
-
-            # String-ish operators
-            if op in ("contains",):
-                if not str_value.strip():
-                    continue
-                clauses.append({mf: {"$regex": re.escape(str_value), "$options": "i"}})
-                continue
-            if op in ("doesNotContain", "does not contain"):
-                if not str_value.strip():
-                    continue
-                clauses.append({mf: {"$not": {"$regex": re.escape(str_value), "$options": "i"}}})
-                continue
-            if op in ("equals",):
-                clauses.append({mf: str_value})
-                continue
-            if op in ("doesNotEqual", "does not equal"):
-                clauses.append({mf: {"$ne": str_value}})
-                continue
-            if op in ("startsWith", "starts with"):
-                if not str_value.strip():
-                    continue
-                clauses.append({mf: {"$regex": f"^{re.escape(str_value)}", "$options": "i"}})
-                continue
-            if op in ("endsWith", "ends with"):
-                if not str_value.strip():
-                    continue
-                clauses.append({mf: {"$regex": f"{re.escape(str_value)}$", "$options": "i"}})
-                continue
-
-        if clauses:
-            if logic == "or":
-                query = {"$and": [query, {"$or": clauses}]}
-            else:
-                query = {"$and": [query, *clauses]}
-    
     total_count = await collection.count_documents(query)
 
-    def map_sort_field(field: str | None) -> str:
-        return {
-            None: "upload_date",
-            "upload_date": "upload_date",
-            "uploadDate": "upload_date",
-            "document_name": "user_file_name",
-            "documentName": "user_file_name",
-            "uploaded_by": "uploaded_by",
-            "uploadedBy": "uploaded_by",
-            "state": "state",
-        }.get(field, "upload_date")
-
-    sort_spec: list[tuple[str, int]] = []
-    if sort_model and isinstance(sort_model, list):
-        for s in sort_model:
-            if not isinstance(s, dict):
-                continue
-            field = map_sort_field(s.get("field"))
-            direction = 1 if str(s.get("sort", "")).lower() == "asc" else -1
-            sort_spec.append((field, direction))
-
-    # Stable ordering: always tie-break by upload_date desc.
-    if not any(f == "upload_date" for f, _ in sort_spec):
-        sort_spec.append(("upload_date", -1))
-
+    sort_spec = build_sort_spec(
+        sort_model, _FIELD_MAP,
+        default_sort=[("upload_date", -1)],
+        tiebreaker="upload_date",
+    )
     cursor = collection.find(query).sort(sort_spec).skip(skip).limit(limit)
     documents = await cursor.to_list(length=limit)
     return documents, total_count
