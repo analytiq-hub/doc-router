@@ -7,6 +7,9 @@ import os
 import analytiq_data as ad
 from typing import List, Optional, Union
 
+import stamina
+from botocore.exceptions import ClientError
+
 from textractor.entities.document import Document
 
 logger = logging.getLogger(__name__)
@@ -20,6 +23,36 @@ def _get_int_env(name: str, default: int) -> int:
 
 
 OCR_TIMEOUT_SECS = _get_int_env("OCR_TIMEOUT_SECS", 600)  # 10 min
+
+
+def _aws_error_code(exc: BaseException) -> str | None:
+    if not isinstance(exc, ClientError):
+        return None
+    try:
+        err = exc.response.get("Error") or {}
+        code = err.get("Code")
+        return str(code) if code is not None else None
+    except Exception:
+        return None
+
+
+def _is_textract_provisioned_throughput_exceeded(exc: BaseException) -> bool:
+    """
+    Textract (via botocore) raises ClientError with response Error.Code.
+    We only retry the specific throughput error requested.
+    """
+    return _aws_error_code(exc) == "ProvisionedThroughputExceededException"
+
+
+@stamina.retry(
+    on=_is_textract_provisioned_throughput_exceeded,
+    attempts=5,
+    wait_initial=1.0,
+    wait_max=20.0,
+    timeout=120.0,
+)
+async def _call_textract_with_retry(fn, **kwargs):
+    return await fn(**kwargs)
 
 
 def _safe_block_page_int(block: object) -> Optional[int]:
@@ -130,7 +163,8 @@ async def run_textract(analytiq_client,
         async with aws_client.client('textract') as textract_client:
             if query_list is not None and len(query_list) > 0:
                 query_list = [{'Text': '{}'.format(q)} for q in query_list]
-                response = await textract_client.start_document_analysis(
+                response = await _call_textract_with_retry(
+                    textract_client.start_document_analysis,
                     DocumentLocation={
                         'S3Object': {
                             'Bucket': s3_bucket_name,
@@ -142,7 +176,8 @@ async def run_textract(analytiq_client,
                 )
                 get_completion_func = textract_client.get_document_analysis
             elif len(feature_types) > 0:
-                response = await textract_client.start_document_analysis(
+                response = await _call_textract_with_retry(
+                    textract_client.start_document_analysis,
                     DocumentLocation={
                         'S3Object': {
                             'Bucket': s3_bucket_name,
@@ -153,7 +188,8 @@ async def run_textract(analytiq_client,
                 )
                 get_completion_func = textract_client.get_document_analysis
             else:
-                response = await textract_client.start_document_text_detection(
+                response = await _call_textract_with_retry(
+                    textract_client.start_document_text_detection,
                     DocumentLocation={
                         'S3Object': {
                             'Bucket': s3_bucket_name,
@@ -185,7 +221,9 @@ async def run_textract(analytiq_client,
                         f"Textract job {job_id} timed out after {OCR_TIMEOUT_SECS}s"
                     )
 
-                status_response = await get_completion_func(JobId=job_id)
+                status_response = await _call_textract_with_retry(
+                    get_completion_func, JobId=job_id
+                )
                 status = status_response['JobStatus']
                 prefix_part = f"{log_prefix}: " if log_prefix else ""
                 logger.info(f"{analytiq_client.name}: {prefix_part}step {idx}: {status}")
@@ -210,9 +248,13 @@ async def run_textract(analytiq_client,
                 while True:
                     # Get results with pagination
                     if next_token:
-                        response = await get_completion_func(JobId=job_id, NextToken=next_token)
+                        response = await _call_textract_with_retry(
+                            get_completion_func, JobId=job_id, NextToken=next_token
+                        )
                     else:
-                        response = await get_completion_func(JobId=job_id)
+                        response = await _call_textract_with_retry(
+                            get_completion_func, JobId=job_id
+                        )
 
                     if first_result_page:
                         document_metadata = response.get("DocumentMetadata")
