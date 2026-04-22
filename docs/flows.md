@@ -1184,8 +1184,11 @@ include **executing** revisions (via `run_flow`) that exercise **branch**,
   `ad.flows.run_flow`
 
 **Tests**
-- End-to-end HTTP/queue tests for this phase are not yet checked in; follow the
-  same `TestClient` + MongoDB patterns as `packages/python/tests/` when added.
+- `packages/python/tests/test_flows_e2e.py` — `TestClient` + per-test Mongo (`test_db`):
+  create/save a revision, `POST /run` (queued execution + `queues.flow_run` message), then
+  `process_flow_run_msg` with the in-process app client (the background `flow_run` worker is
+  stubbed in that module to avoid a stale-`ENV` database mismatch; production uses
+  `worker_flow_run` → the same handler). Asserts on `flow_executions` and `GET .../executions/...`.
 
 ---
 

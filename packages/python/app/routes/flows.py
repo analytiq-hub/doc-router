@@ -117,8 +117,8 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-@flows_router.get("/v0/orgs/{org_id}/flows/node-types")
-async def list_node_types(org_id: str, current_user: User = Depends(get_org_user)):
+@flows_router.get("/v0/orgs/{organization_id}/flows/node-types")
+async def list_node_types(organization_id: str, current_user: User = Depends(get_org_user)):
     # Node types are global; org is for auth scoping and future filtering.
     items = []
     for nt in ad.flows.list_all():
@@ -139,21 +139,21 @@ async def list_node_types(org_id: str, current_user: User = Depends(get_org_user
     return {"items": items, "total": len(items)}
 
 
-@flows_router.post("/v0/orgs/{org_id}/flows", response_model=CreateFlowResponse)
-async def create_flow(org_id: str, req: CreateFlowRequest, current_user: User = Depends(get_org_user)):
+@flows_router.post("/v0/orgs/{organization_id}/flows", response_model=CreateFlowResponse)
+async def create_flow(organization_id: str, req: CreateFlowRequest, current_user: User = Depends(get_org_user)):
     db = await _get_db()
     created_at = _now()
     res = await db.flows.insert_one(
         {
-            "organization_id": org_id,
+            "organization_id": organization_id,
             "name": req.name,
             "active": False,
             "active_flow_revid": None,
             "flow_version": 0,
             "created_at": created_at,
-            "created_by": current_user.id,
+            "created_by": current_user.user_id,
             "updated_at": created_at,
-            "updated_by": current_user.id,
+            "updated_by": current_user.user_id,
         }
     )
     flow_id = str(res.inserted_id)
@@ -161,16 +161,16 @@ async def create_flow(org_id: str, req: CreateFlowRequest, current_user: User = 
     return {"flow": FlowHeader(flow_id=flow_id, **{k: header[k] for k in header if k != "_id"})}
 
 
-@flows_router.get("/v0/orgs/{org_id}/flows", response_model=ListFlowsResponse)
+@flows_router.get("/v0/orgs/{organization_id}/flows", response_model=ListFlowsResponse)
 async def list_flows(
-    org_id: str,
+    organization_id: str,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_org_user),
 ):
     db = await _get_db()
-    total = await db.flows.count_documents({"organization_id": org_id})
-    headers = await db.flows.find({"organization_id": org_id}).sort([("updated_at", -1)]).skip(offset).limit(limit).to_list(limit)
+    total = await db.flows.count_documents({"organization_id": organization_id})
+    headers = await db.flows.find({"organization_id": organization_id}).sort([("updated_at", -1)]).skip(offset).limit(limit).to_list(limit)
     items: list[dict[str, Any]] = []
     for h in headers:
         fid = str(h["_id"])
@@ -195,10 +195,10 @@ async def list_flows(
     return {"items": items, "total": total}
 
 
-@flows_router.get("/v0/orgs/{org_id}/flows/{flow_id}")
-async def get_flow(org_id: str, flow_id: str, current_user: User = Depends(get_org_user)):
+@flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}")
+async def get_flow(organization_id: str, flow_id: str, current_user: User = Depends(get_org_user)):
     db = await _get_db()
-    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": org_id})
+    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not h:
         raise HTTPException(status_code=404, detail="Flow not found")
     latest = await db.flow_revisions.find_one({"flow_id": flow_id}, sort=[("flow_version", -1)])
@@ -219,28 +219,28 @@ async def get_flow(org_id: str, flow_id: str, current_user: User = Depends(get_o
     }
 
 
-@flows_router.patch("/v0/orgs/{org_id}/flows/{flow_id}")
-async def patch_flow_name(org_id: str, flow_id: str, req: PatchFlowRequest, current_user: User = Depends(get_org_user)):
+@flows_router.patch("/v0/orgs/{organization_id}/flows/{flow_id}")
+async def patch_flow_name(organization_id: str, flow_id: str, req: PatchFlowRequest, current_user: User = Depends(get_org_user)):
     db = await _get_db()
     res = await db.flows.update_one(
-        {"_id": ObjectId(flow_id), "organization_id": org_id},
-        {"$set": {"name": req.name, "updated_at": _now(), "updated_by": current_user.id}},
+        {"_id": ObjectId(flow_id), "organization_id": organization_id},
+        {"$set": {"name": req.name, "updated_at": _now(), "updated_by": current_user.user_id}},
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Flow not found")
-    return await get_flow(org_id, flow_id, current_user)
+    return await get_flow(organization_id, flow_id, current_user)
 
 
-@flows_router.get("/v0/orgs/{org_id}/flows/{flow_id}/revisions")
+@flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}/revisions")
 async def list_revisions(
-    org_id: str,
+    organization_id: str,
     flow_id: str,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_org_user),
 ):
     db = await _get_db()
-    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": org_id})
+    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not h:
         raise HTTPException(status_code=404, detail="Flow not found")
     total = await db.flow_revisions.count_documents({"flow_id": flow_id})
@@ -251,10 +251,10 @@ async def list_revisions(
     return {"items": items, "total": total}
 
 
-@flows_router.get("/v0/orgs/{org_id}/flows/{flow_id}/revisions/{flow_revid}")
-async def get_revision(org_id: str, flow_id: str, flow_revid: str, current_user: User = Depends(get_org_user)):
+@flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}/revisions/{flow_revid}")
+async def get_revision(organization_id: str, flow_id: str, flow_revid: str, current_user: User = Depends(get_org_user)):
     db = await _get_db()
-    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": org_id})
+    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not h:
         raise HTTPException(status_code=404, detail="Flow not found")
     r = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
@@ -264,10 +264,10 @@ async def get_revision(org_id: str, flow_id: str, flow_revid: str, current_user:
     return r
 
 
-@flows_router.put("/v0/orgs/{org_id}/flows/{flow_id}", response_model=SaveFlowResponse)
-async def save_revision(org_id: str, flow_id: str, req: SaveFlowRequest, current_user: User = Depends(get_org_user)):
+@flows_router.put("/v0/orgs/{organization_id}/flows/{flow_id}", response_model=SaveFlowResponse)
+async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest, current_user: User = Depends(get_org_user)):
     db = await _get_db()
-    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": org_id})
+    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not h:
         raise HTTPException(status_code=404, detail="Flow not found")
 
@@ -275,39 +275,11 @@ async def save_revision(org_id: str, flow_id: str, req: SaveFlowRequest, current
     if latest and str(latest["_id"]) != req.base_flow_revid:
         raise HTTPException(status_code=409, detail="base_flow_revid is not the latest revision")
 
-    # Coerce connections into NodeConnection dataclasses for validation and storage.
-    def _coerce_connections(raw: dict[str, Any]) -> "ad.flows.Connections":
-        out: "ad.flows.Connections" = {}
-        for src, typed in (raw or {}).items():
-            out[src] = {}
-            main_slots = (typed or {}).get("main") or []
-            slots = []
-            for slot in main_slots:
-                if slot is None:
-                    slots.append(None)
-                    continue
-                conns = []
-                for c in slot:
-                    # Accept both keys for backward compatibility; canonical key is `connection_type`.
-                    ct = c.get("connection_type") or c.get("type") or "main"
-                    dest_node_id = c.get("dest_node_id") or c.get("node_id") or c.get("node")
-                    if not dest_node_id:
-                        raise HTTPException(
-                            status_code=400, detail="Connection missing dest_node_id"
-                        )
-                    conns.append(
-                        ad.flows.NodeConnection(
-                            dest_node_id=dest_node_id,
-                            connection_type=ct,
-                            index=int(c["index"]),
-                        )
-                    )
-                slots.append(conns)
-            out[src]["main"] = slots
-        return out
-
     nodes = req.nodes
-    connections = _coerce_connections(req.connections)
+    try:
+        connections = ad.flows.coerce_json_connections_to_dataclasses(req.connections)
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid connections: {e}") from e
     settings = req.settings or {}
     pin_data = req.pin_data
 
@@ -322,7 +294,7 @@ async def save_revision(org_id: str, flow_id: str, req: SaveFlowRequest, current
     if latest and latest.get("graph_hash") == ghash and req.name != h.get("name"):
         await db.flows.update_one(
             {"_id": ObjectId(flow_id)},
-            {"$set": {"name": req.name, "updated_at": _now(), "updated_by": current_user.id}},
+            {"$set": {"name": req.name, "updated_at": _now(), "updated_by": current_user.user_id}},
         )
         h2 = await db.flows.find_one({"_id": ObjectId(flow_id)})
         return {
@@ -343,7 +315,7 @@ async def save_revision(org_id: str, flow_id: str, req: SaveFlowRequest, current
             "graph_hash": ghash,
             "engine_version": 1,
             "created_at": created_at,
-            "created_by": current_user.id,
+            "created_by": current_user.user_id,
         }
     )
     flow_revid = str(res.inserted_id)
@@ -354,7 +326,7 @@ async def save_revision(org_id: str, flow_id: str, req: SaveFlowRequest, current
                 "name": req.name,
                 "flow_version": next_version,
                 "updated_at": created_at,
-                "updated_by": current_user.id,
+                "updated_by": current_user.user_id,
             }
         },
     )
@@ -376,10 +348,10 @@ async def save_revision(org_id: str, flow_id: str, req: SaveFlowRequest, current
     return {"flow": FlowHeader(flow_id=flow_id, **{k: h2[k] for k in h2 if k != "_id"}), "revision": rev}
 
 
-@flows_router.post("/v0/orgs/{org_id}/flows/{flow_id}/activate")
-async def activate_flow(org_id: str, flow_id: str, req: ActivateFlowRequest = Body(default={}), current_user: User = Depends(get_org_user)):
+@flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/activate")
+async def activate_flow(organization_id: str, flow_id: str, req: ActivateFlowRequest = Body(default={}), current_user: User = Depends(get_org_user)):
     db = await _get_db()
-    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": org_id})
+    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not h:
         raise HTTPException(status_code=404, detail="Flow not found")
     target = req.flow_revid
@@ -393,27 +365,27 @@ async def activate_flow(org_id: str, flow_id: str, req: ActivateFlowRequest = Bo
         raise HTTPException(status_code=404, detail="Revision not found")
     await db.flows.update_one(
         {"_id": ObjectId(flow_id)},
-        {"$set": {"active": True, "active_flow_revid": target, "updated_at": _now(), "updated_by": current_user.id}},
+        {"$set": {"active": True, "active_flow_revid": target, "updated_at": _now(), "updated_by": current_user.user_id}},
     )
-    return await get_flow(org_id, flow_id, current_user)
+    return await get_flow(organization_id, flow_id, current_user)
 
 
-@flows_router.post("/v0/orgs/{org_id}/flows/{flow_id}/deactivate")
-async def deactivate_flow(org_id: str, flow_id: str, current_user: User = Depends(get_org_user)):
+@flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/deactivate")
+async def deactivate_flow(organization_id: str, flow_id: str, current_user: User = Depends(get_org_user)):
     db = await _get_db()
     res = await db.flows.update_one(
-        {"_id": ObjectId(flow_id), "organization_id": org_id},
-        {"$set": {"active": False, "active_flow_revid": None, "updated_at": _now(), "updated_by": current_user.id}},
+        {"_id": ObjectId(flow_id), "organization_id": organization_id},
+        {"$set": {"active": False, "active_flow_revid": None, "updated_at": _now(), "updated_by": current_user.user_id}},
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Flow not found")
-    return await get_flow(org_id, flow_id, current_user)
+    return await get_flow(organization_id, flow_id, current_user)
 
 
-@flows_router.post("/v0/orgs/{org_id}/flows/{flow_id}/run")
-async def run_flow(org_id: str, flow_id: str, req: RunFlowRequest, current_user: User = Depends(get_org_user)):
+@flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/run")
+async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, current_user: User = Depends(get_org_user)):
     db = await _get_db()
-    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": org_id})
+    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not h:
         raise HTTPException(status_code=404, detail="Flow not found")
     flow_revid = req.flow_revid
@@ -426,12 +398,12 @@ async def run_flow(org_id: str, flow_id: str, req: RunFlowRequest, current_user:
     exec_doc = {
         "flow_id": flow_id,
         "flow_revid": flow_revid,
-        "organization_id": org_id,
+        "organization_id": organization_id,
         "mode": "manual",
-        "status": "running",
+        "status": "queued",
         "started_at": _now(),
         "finished_at": None,
-        "last_heartbeat_at": _now(),
+        "last_heartbeat_at": None,
         "stop_requested": False,
         "last_node_executed": None,
         "wait_till": None,
@@ -448,23 +420,23 @@ async def run_flow(org_id: str, flow_id: str, req: RunFlowRequest, current_user:
         "flow_id": flow_id,
         "flow_revid": flow_revid,
         "execution_id": exec_id,
-        "organization_id": org_id,
+        "organization_id": organization_id,
         "trigger": exec_doc["trigger"],
     })
     return {"execution_id": exec_id}
 
 
-@flows_router.get("/v0/orgs/{org_id}/flows/{flow_id}/executions", response_model=ListExecutionsResponse)
+@flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}/executions", response_model=ListExecutionsResponse)
 async def list_executions(
-    org_id: str,
+    organization_id: str,
     flow_id: str,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_org_user),
 ):
     db = await _get_db()
-    total = await db.flow_executions.count_documents({"flow_id": flow_id, "organization_id": org_id})
-    docs = await db.flow_executions.find({"flow_id": flow_id, "organization_id": org_id}).sort([("started_at", -1)]).skip(offset).limit(limit).to_list(limit)
+    total = await db.flow_executions.count_documents({"flow_id": flow_id, "organization_id": organization_id})
+    docs = await db.flow_executions.find({"flow_id": flow_id, "organization_id": organization_id}).sort([("started_at", -1)]).skip(offset).limit(limit).to_list(limit)
     items = []
     for d in docs:
         items.append(
@@ -488,10 +460,10 @@ async def list_executions(
     return {"items": items, "total": total}
 
 
-@flows_router.get("/v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}", response_model=FlowExecution)
-async def get_execution(org_id: str, flow_id: str, exec_id: str, current_user: User = Depends(get_org_user)):
+@flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}/executions/{exec_id}", response_model=FlowExecution)
+async def get_execution(organization_id: str, flow_id: str, exec_id: str, current_user: User = Depends(get_org_user)):
     db = await _get_db()
-    d = await db.flow_executions.find_one({"_id": ObjectId(exec_id), "flow_id": flow_id, "organization_id": org_id})
+    d = await db.flow_executions.find_one({"_id": ObjectId(exec_id), "flow_id": flow_id, "organization_id": organization_id})
     if not d:
         raise HTTPException(status_code=404, detail="Execution not found")
     return FlowExecution(
@@ -512,11 +484,11 @@ async def get_execution(org_id: str, flow_id: str, exec_id: str, current_user: U
     )
 
 
-@flows_router.post("/v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}/stop")
-async def stop_execution(org_id: str, flow_id: str, exec_id: str, current_user: User = Depends(get_org_user)):
+@flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/executions/{exec_id}/stop")
+async def stop_execution(organization_id: str, flow_id: str, exec_id: str, current_user: User = Depends(get_org_user)):
     db = await _get_db()
     res = await db.flow_executions.update_one(
-        {"_id": ObjectId(exec_id), "flow_id": flow_id, "organization_id": org_id},
+        {"_id": ObjectId(exec_id), "flow_id": flow_id, "organization_id": organization_id},
         {"$set": {"stop_requested": True}},
     )
     if res.matched_count == 0:
@@ -541,10 +513,10 @@ async def inbound_webhook(webhook_id: str, request: Request):
         "flow_revid": route["flow_revid"],
         "organization_id": route["organization_id"],
         "mode": "webhook",
-        "status": "running",
+        "status": "queued",
         "started_at": _now(),
         "finished_at": None,
-        "last_heartbeat_at": _now(),
+        "last_heartbeat_at": None,
         "stop_requested": False,
         "last_node_executed": None,
         "wait_till": None,

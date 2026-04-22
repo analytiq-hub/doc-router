@@ -219,6 +219,34 @@ class _WorkItem:
     inputs: list[list["ad.flows.FlowItem"]]
 
 
+def _bson_serialize_value(obj: Any) -> Any:
+    """Recursively turn `FlowItem` / `BinaryRef` (and containers) into BSON-safe data."""
+
+    if isinstance(obj, ad.flows.FlowItem):
+        return {
+            "json": obj.json,
+            "binary": {k: _bson_serialize_value(v) for k, v in obj.binary.items()},
+            "meta": obj.meta,
+            "paired_item": obj.paired_item,
+        }
+    if isinstance(obj, ad.flows.BinaryRef):
+        return {
+            "mime_type": obj.mime_type,
+            "file_name": obj.file_name,
+            "data": obj.data,
+            "storage_id": obj.storage_id,
+        }
+    if isinstance(obj, list):
+        return [_bson_serialize_value(x) for x in obj]
+    if isinstance(obj, dict):
+        return {k: _bson_serialize_value(v) for k, v in obj.items()}
+    return obj
+
+
+def _bson_serialize_run_data(run_data: dict[str, Any]) -> dict[str, Any]:
+    return {k: _bson_serialize_value(v) for k, v in run_data.items()}
+
+
 async def persist_run_data(context: "ad.flows.ExecutionContext", run_data: dict[str, Any]) -> None:
     """Persist full `run_data` for a flow execution (used for incremental progress)."""
 
@@ -227,11 +255,12 @@ async def persist_run_data(context: "ad.flows.ExecutionContext", run_data: dict[
         return
 
     db = ad.common.get_async_db(context.analytiq_client)
+    stored = _bson_serialize_run_data(run_data)
     await db.flow_executions.update_one(
         {"_id": ObjectId(context.execution_id)},
         {
             "$set": {
-                "run_data": run_data,
+                "run_data": stored,
                 "last_heartbeat_at": datetime.now(UTC),
             }
         },
@@ -385,7 +414,9 @@ async def run_flow(*, context: "ad.flows.ExecutionContext", revision: dict[str, 
     """
 
     nodes: list[dict[str, Any]] = revision.get("nodes") or []
-    connections: "ad.flows.Connections" = revision.get("connections") or {}
+    connections: "ad.flows.Connections" = ad.flows.coerce_json_connections_to_dataclasses(
+        revision.get("connections")
+    )
     settings: dict[str, Any] = revision.get("settings") or {}
     pin_data: dict[str, Any] | None = revision.get("pin_data")
 
