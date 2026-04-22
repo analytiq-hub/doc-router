@@ -23,6 +23,7 @@ class FlowsCodeNode:
     description = "Runs a small Python snippet to transform items."
     category = "Generic"
     is_trigger = False
+    is_merge = False
     min_inputs = 1
     max_inputs = 1
     outputs = 1

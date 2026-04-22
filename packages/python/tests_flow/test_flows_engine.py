@@ -17,6 +17,7 @@ class _PassThroughNode:
     description = "Test-only passthrough node."
     category = "Test"
     is_trigger = False
+    is_merge = False
     min_inputs = 1
     max_inputs = 1
     outputs = 1

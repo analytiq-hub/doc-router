@@ -8,6 +8,7 @@ revisions as specified in `docs/flows.md`.
 """
 
 import asyncio
+import collections
 import hashlib
 import json
 import time
@@ -56,10 +57,10 @@ def _toposort(nodes: list[dict[str, Any]], connections: "ad.flows.Connections") 
                     adj[src].append(conn.dest_node_id)
                     indeg[conn.dest_node_id] += 1
 
-    q = [nid for nid, d in indeg.items() if d == 0]
+    q: collections.deque[str] = collections.deque(nid for nid, d in indeg.items() if d == 0)
     out: list[str] = []
     while q:
-        nid = q.pop(0)
+        nid = q.popleft()
         out.append(nid)
         for dst in adj[nid]:
             indeg[dst] -= 1
@@ -99,7 +100,10 @@ def validate_revision(
     # Exactly one trigger node.
     trigger_nodes = []
     for n in nodes:
-        nt = ad.flows.get(n["type"])
+        try:
+            nt = ad.flows.get(n["type"])
+        except KeyError:
+            raise FlowValidationError(f"Unknown node type: {n['type']}") from None
         if nt.is_trigger:
             trigger_nodes.append(n)
     if len(trigger_nodes) != 1:
@@ -130,7 +134,10 @@ def validate_revision(
     for src, typed in (connections or {}).items():
         if src not in nodes_by_id:
             raise FlowValidationError(f"Connection source node id does not exist: {src}")
-        src_type = ad.flows.get(nodes_by_id[src]["type"])
+        try:
+            src_type = ad.flows.get(nodes_by_id[src]["type"])
+        except KeyError:
+            raise FlowValidationError(f"Unknown node type: {nodes_by_id[src]['type']}") from None
         main_slots = (typed or {}).get("main") or []
         if len(main_slots) > src_type.outputs:
             raise FlowValidationError(f"Source node {src} has connection slot beyond outputs")
@@ -144,7 +151,10 @@ def validate_revision(
                     raise FlowValidationError(
                         f"Connection destination node id does not exist: {conn.dest_node_id}"
                     )
-                dst_type = ad.flows.get(nodes_by_id[conn.dest_node_id]["type"])
+                try:
+                    dst_type = ad.flows.get(nodes_by_id[conn.dest_node_id]["type"])
+                except KeyError:
+                    raise FlowValidationError(f"Unknown node type: {nodes_by_id[conn.dest_node_id]['type']}") from None
                 if conn.index < 0:
                     raise FlowValidationError("Connection destination index must be >= 0")
                 if dst_type.max_inputs is not None and conn.index >= dst_type.max_inputs:
@@ -163,7 +173,10 @@ def validate_revision(
 
     # Parameter validation.
     for n in nodes:
-        nt = ad.flows.get(n["type"])
+        try:
+            nt = ad.flows.get(n["type"])
+        except KeyError:
+            raise FlowValidationError(f"Unknown node type: {n['type']}") from None
         params = n.get("parameters") or {}
         try:
             Draft7Validator(nt.parameter_schema).validate(params)
@@ -261,7 +274,7 @@ async def run_flow(*, context: "ad.flows.ExecutionContext", revision: dict[str, 
     trigger_id = trigger["id"]
 
     merge_waiting: dict[str, list[list["ad.flows.FlowItem"] | None]] = {}
-    work: list[_WorkItem] = [_WorkItem(node_id=trigger_id, inputs=[])]
+    work: collections.deque[_WorkItem] = collections.deque([_WorkItem(node_id=trigger_id, inputs=[])])
 
     timeout = settings.get("execution_timeout_seconds")
 
@@ -282,12 +295,13 @@ async def run_flow(*, context: "ad.flows.ExecutionContext", revision: dict[str, 
                     work.append(_WorkItem(node_id=node["id"], inputs=ready_inputs))
                     merge_waiting.pop(node_id, None)
 
-            wi = work.pop(0)
+            wi = work.popleft()
             node = nodes_by_id[wi.node_id]
             node_type = ad.flows.get(node["type"])
             outputs_count = node_type.outputs
 
             start = time.time()
+            start_datetime = datetime.now(UTC)
             status = "success"
             error_env = None
 
@@ -326,7 +340,7 @@ async def run_flow(*, context: "ad.flows.ExecutionContext", revision: dict[str, 
                         else:
                             context.run_data[node["id"]] = {
                                 "status": "error",
-                                "start_time": datetime.now(UTC).isoformat(),
+                                "start_time": start_datetime.isoformat(),
                                 "execution_time_ms": int((time.time() - start) * 1000),
                                 "data": {"main": []},
                                 "error": error_env,
@@ -336,7 +350,7 @@ async def run_flow(*, context: "ad.flows.ExecutionContext", revision: dict[str, 
 
             context.run_data[node["id"]] = {
                 "status": status,
-                "start_time": datetime.now(UTC).isoformat(),
+                "start_time": start_datetime.isoformat(),
                 "execution_time_ms": int((time.time() - start) * 1000),
                 "data": {"main": out_lists},
                 "error": error_env,
@@ -361,13 +375,13 @@ async def run_flow(*, context: "ad.flows.ExecutionContext", revision: dict[str, 
                     else:
                         in_slots_count = max(conn.index + 1, dst_type.min_inputs)
 
-                    if dst_type.key == "flows.merge":
+                    if dst_type.is_merge:
                         waiting = merge_waiting.get(dst["id"])
-                        if waiting is None or len(waiting) < in_slots_count:
-                            waiting = [None for _ in range(in_slots_count)]
+                        if waiting is None:
+                            waiting = [None] * in_slots_count
                             merge_waiting[dst["id"]] = waiting
                         if conn.index >= len(waiting):
-                            waiting.extend([None for _ in range(conn.index - len(waiting) + 1)])
+                            waiting.extend([None] * (conn.index - len(waiting) + 1))
                         waiting[conn.index] = items
                         if all(x is not None for x in waiting[: max(dst_type.min_inputs, 1)]):
                             ready_inputs = [(x or []) for x in waiting]
@@ -381,6 +395,6 @@ async def run_flow(*, context: "ad.flows.ExecutionContext", revision: dict[str, 
         return {"status": "success"}
 
     if timeout:
-        return await asyncio.wait_for(_run_inner(), timeout=int(timeout))
+        return await asyncio.wait_for(_run_inner(), timeout=float(timeout))
     return await _run_inner()
 

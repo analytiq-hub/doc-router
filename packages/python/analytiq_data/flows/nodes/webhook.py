@@ -15,6 +15,7 @@ class FlowsWebhookNode:
     description = "POSTs item JSON to a configured URL."
     category = "Generic"
     is_trigger = False
+    is_merge = False
     min_inputs = 1
     max_inputs = 1
     outputs = 1

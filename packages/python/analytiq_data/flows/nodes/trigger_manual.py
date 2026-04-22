@@ -15,6 +15,7 @@ class FlowsManualTriggerNode:
     description = "Emits the manual-run seed item."
     category = "Generic"
     is_trigger = True
+    is_merge = False
     min_inputs = 0
     max_inputs = 0
     outputs = 1

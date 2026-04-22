@@ -63,10 +63,14 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
     )
 
     try:
-        await db.flow_executions.update_one(
-            {"_id": ObjectId(exec_id)},
+        claim = await db.flow_executions.update_one(
+            {"_id": ObjectId(exec_id), "status": "queued"},
             {"$set": {"status": "running", "last_heartbeat_at": datetime.now(UTC)}},
         )
+        if claim.matched_count == 0:
+            # Already claimed or completed by another worker; drop the message.
+            await ad.queue.delete_msg(analytiq_client, "flow_run", msg_id)
+            return
         result = await ad.flows.run_flow(context=context, revision=revision)
         status = result.get("status") or "success"
         await db.flow_executions.update_one(

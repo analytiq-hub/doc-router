@@ -159,14 +159,13 @@ async def run_python_code(
         proc.kill()
         raise CodeExecutionError("Code execution timed out") from None
 
-    if stderr:
-        # Runner should not emit to stderr; treat as failure.
-        raise CodeExecutionError(f"Runner stderr: {stderr.decode('utf-8', errors='replace')}")
-
     try:
         resp = json.loads(stdout.decode("utf-8") if stdout else "{}")
     except Exception as e:
-        raise CodeExecutionError(f"Runner returned invalid JSON: {e}") from e
+        stderr_text = stderr.decode("utf-8", errors="replace") if stderr else ""
+        raise CodeExecutionError(
+            f"Runner returned invalid JSON: {e}" + (f"\nstderr: {stderr_text}" if stderr_text else "")
+        ) from e
 
     if not resp.get("ok"):
         msg = ((resp.get("error") or {}) or {}).get("message") or "Unknown error"

@@ -21,6 +21,7 @@ class NodeType(Protocol):
     description: str
     category: str
     is_trigger: bool
+    is_merge: bool
     min_inputs: int
     max_inputs: int | None
     outputs: int

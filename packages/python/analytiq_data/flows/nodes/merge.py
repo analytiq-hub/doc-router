@@ -15,6 +15,7 @@ class FlowsMergeNode:
     description = "Waits for all inputs, then concatenates them."
     category = "Generic"
     is_trigger = False
+    is_merge = True
     min_inputs = 2
     max_inputs = None
     outputs = 1

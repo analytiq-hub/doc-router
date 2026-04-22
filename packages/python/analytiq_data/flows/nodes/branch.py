@@ -15,6 +15,7 @@ class FlowsBranchNode:
     description = "Routes items to true/false outputs based on a condition."
     category = "Generic"
     is_trigger = False
+    is_merge = False
     min_inputs = 1
     max_inputs = 1
     outputs = 2
