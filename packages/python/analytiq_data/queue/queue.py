@@ -287,17 +287,10 @@ async def release_all_in_flight_queue_claims(db) -> int:
         )
         n = getattr(result, "modified_count", 0)
         if n:
-            logger.info(
-                "release_all_in_flight_queue_claims: %s modified=%s",
-                coll_name,
-                n,
-            )
+            logger.info(f"release_all_in_flight_queue_claims: {coll_name} modified={n}")
             total_modified += n
     if total_modified:
-        logger.info(
-            "release_all_in_flight_queue_claims: total_modified=%s",
-            total_modified,
-        )
+        logger.info(f"release_all_in_flight_queue_claims: total_modified={total_modified}")
     return total_modified
 
 

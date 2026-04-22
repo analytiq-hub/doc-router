@@ -78,6 +78,10 @@ async def run_migrations(analytiq_client, target_version: int = None) -> None:
     if target_version is None:
         target_version = len(MIGRATIONS)
 
+    # Release any jobs stuck in ``processing`` from a previous deploy, before running
+    # schema migrations or returning. Runs on every deploy regardless of schema delta.
+    await ad.queue.release_all_in_flight_queue_claims(db)
+
     # Fast path: skip lock acquisition if already up-to-date
     current_version = await get_current_version(db)
     if current_version >= target_version:
@@ -140,11 +144,6 @@ async def run_migrations(analytiq_client, target_version: int = None) -> None:
                     )
                 else:
                     raise Exception(f"Migration revert {migration.version} failed")
-
-        # Not a versioned migration: release abandoned queue claims so jobs stuck in
-        # ``processing`` (e.g. worker killed mid-job during a deploy restart) become
-        # pending again. Runs on every deploy, regardless of schema delta.
-        await ad.queue.release_all_in_flight_queue_claims(db)
 
     except Exception as e:
         logger.error(f"Migration failed: {e}")
