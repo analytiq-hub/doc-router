@@ -46,16 +46,22 @@ class FlowsWebhookNode:
 
         url = (node.get("parameters") or {}).get("url")
         headers = (node.get("parameters") or {}).get("headers") or {}
+        import httpx
+
         out: list["ad.flows.FlowItem"] = []
-        for it in inputs[0]:
-            resp = await context.services.send_webhook(url=url, payload=it.json, headers=headers)
-            out.append(
-                ad.flows.FlowItem(
-                    json={"request": it.json, "response": resp},
-                    binary={},
-                    meta=it.meta,
-                    paired_item=it.paired_item,
+        async with httpx.AsyncClient(timeout=30) as client:
+            for it in inputs[0]:
+                resp = await client.post(url, json=it.json, headers=headers or {})
+                out.append(
+                    ad.flows.FlowItem(
+                        json={
+                            "request": it.json,
+                            "response": {"status_code": resp.status_code, "body": resp.text},
+                        },
+                        binary={},
+                        meta=it.meta,
+                        paired_item=it.paired_item,
+                    )
                 )
-            )
         return [out]
 

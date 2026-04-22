@@ -6,6 +6,8 @@ from typing import Any
 
 import analytiq_data as ad
 
+from app.flows import services as flow_services
+
 
 class DocRouterOcrNode:
     """Run organization-configured OCR for each input document item."""
@@ -39,7 +41,7 @@ class DocRouterOcrNode:
             doc_id = it.json.get("document_id") or (it.json.get("document") or {}).get("_id")
             if not doc_id:
                 raise ValueError("Input item missing document_id")
-            result = await context.services.run_ocr(context.organization_id, doc_id)
+            result = await flow_services.run_ocr(context.analytiq_client, context.organization_id, doc_id)
             merged = dict(it.json)
             merged["ocr"] = result
             out.append(

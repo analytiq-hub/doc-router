@@ -6,6 +6,8 @@ from typing import Any
 
 import analytiq_data as ad
 
+from app.flows import services as flow_services
+
 
 class DocRouterSetTagsNode:
     """Apply a configured list of tag ids to each input document item."""
@@ -47,7 +49,7 @@ class DocRouterSetTagsNode:
             doc_id = it.json.get("document_id") or (it.json.get("document") or {}).get("_id")
             if not doc_id:
                 raise ValueError("Input item missing document_id")
-            await context.services.set_tags(context.organization_id, doc_id, tag_ids)
+            await flow_services.set_tags(context.analytiq_client, context.organization_id, doc_id, tag_ids)
             merged = dict(it.json)
             merged["tag_ids"] = tag_ids
             out.append(

@@ -1,36 +1,17 @@
 from __future__ import annotations
 
 """
-Execution context and service interface for flow runs.
+Execution context for flow runs.
 
-The engine is kept DocRouter-independent by accessing integrations only through
-the `FlowServices` protocol.
+The engine is kept DocRouter-independent; DocRouter-specific nodes can call into
+the `app/flows/services.py` module using the `analytiq_client` stored on the
+context.
 """
 
 from dataclasses import dataclass
-from typing import Any, Literal, Protocol
+from typing import Any, Literal
 
 ExecutionMode = Literal["manual", "trigger", "webhook", "schedule", "error"]
-
-
-class FlowServices(Protocol):
-    """Services required by DocRouter-aware nodes during execution."""
-
-    async def get_document(self, org_id: str, doc_id: str) -> dict: ...
-
-    async def run_ocr(self, org_id: str, doc_id: str) -> dict: ...
-
-    async def run_llm_extract(
-        self, org_id: str, doc_id: str, prompt_id: str, schema_id: str
-    ) -> dict: ...
-
-    async def set_tags(self, org_id: str, doc_id: str, tags: list[str]) -> None: ...
-
-    async def send_webhook(self, url: str, payload: dict, headers: dict) -> dict: ...
-
-    async def get_runtime_state(self, flow_id: str, node_id: str) -> dict: ...
-
-    async def set_runtime_state(self, flow_id: str, node_id: str, data: dict) -> None: ...
 
 
 @dataclass
@@ -39,7 +20,7 @@ class ExecutionContext:
     Per-execution context passed to every node.
 
     Contains identifiers, trigger metadata, the accumulated `run_data` map, a
-    `FlowServices` implementation, and cooperative stop state.
+    process-wide `analytiq_client`, and cooperative stop state.
     """
 
     organization_id: str
@@ -49,7 +30,7 @@ class ExecutionContext:
     mode: ExecutionMode
     trigger_data: dict[str, Any]
     run_data: dict[str, Any]
-    services: FlowServices
+    analytiq_client: Any
     stop_requested: bool = False
     logger: Any | None = None
 

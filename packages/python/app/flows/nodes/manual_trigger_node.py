@@ -6,6 +6,8 @@ from typing import Any
 
 import analytiq_data as ad
 
+from app.flows import services as flow_services
+
 
 class DocRouterManualTriggerNode:
     """Trigger node that emits a single item containing the target document payload."""
@@ -44,7 +46,7 @@ class DocRouterManualTriggerNode:
         doc_id = (node.get("parameters") or {}).get("document_id") or context.trigger_data.get("document_id")
         if not doc_id:
             raise ValueError("document_id required for docrouter.trigger.manual")
-        doc = await context.services.get_document(context.organization_id, doc_id)
+        doc = await flow_services.get_document(context.analytiq_client, context.organization_id, doc_id)
         return [
             [
                 ad.flows.FlowItem(

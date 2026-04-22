@@ -64,10 +64,6 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
         await ad.queue.delete_msg(analytiq_client, "flow_run", msg_id)
         return
 
-    # Late-import to avoid circular deps: app layer provides services + node registrations.
-    from app.flows.services import FlowServicesImpl
-
-    services = FlowServicesImpl(analytiq_client)
     context = ad.flows.ExecutionContext(
         organization_id=org_id,
         execution_id=exec_id,
@@ -76,7 +72,7 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
         mode=exec_doc.get("mode") or "manual",
         trigger_data=trigger,
         run_data=exec_doc.get("run_data") or {},
-        services=services,
+        analytiq_client=analytiq_client,
         stop_requested=bool(exec_doc.get("stop_requested")),
         logger=logger,
     )

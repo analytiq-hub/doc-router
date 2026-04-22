@@ -6,6 +6,8 @@ from typing import Any
 
 import analytiq_data as ad
 
+from app.flows import services as flow_services
+
 
 class DocRouterLlmExtractNode:
     """Execute a configured prompt+schema extraction for each input document item."""
@@ -55,7 +57,13 @@ class DocRouterLlmExtractNode:
             doc_id = it.json.get("document_id") or (it.json.get("document") or {}).get("_id")
             if not doc_id:
                 raise ValueError("Input item missing document_id")
-            res = await context.services.run_llm_extract(context.organization_id, doc_id, prompt_id, schema_id)
+            res = await flow_services.run_llm_extract(
+                context.analytiq_client,
+                context.organization_id,
+                doc_id,
+                prompt_id,
+                schema_id,
+            )
             merged = dict(it.json)
             merged["llm_extract"] = res
             out.append(
