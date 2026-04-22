@@ -2,15 +2,17 @@
 End-to-end / integration tests for flow HTTP + `flow_run` queue (Phase 2 in `docs/flows.md`).
 
 Uses TestClient, real test Mongo, and a direct `process_flow_run_msg` call (the same as
-`worker_flow_run` uses). The completion test chains **`flows.code`** → **`flows.webhook`**;
-outbound HTTP is **mocked** (`httpx.AsyncClient`) so the run stays offline while we assert POST
-payload and stored `request` / `response` on the webhook node. The in-app `flow_run` worker is
+`worker_flow_run` uses). The completion test chains a test seed node (JSON array + binaries) →
+**`flows.code`** → **`flows.webhook`** (`body_format: json_with_binary`); outbound HTTP is
+**mocked** (`httpx.AsyncClient`) so the run stays offline while we assert POST payload matches
+`run_data.request` on the webhook node. The in-app `flow_run` worker is
 prevented from taking messages in this module (see fixture) because it would otherwise read a
 different `ENV`/database than per-test `test_db` fixtures.
 """
 
 from __future__ import annotations
 
+import base64
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -72,9 +74,65 @@ _CODE_SNIPPET = (
     "    for it in items:\n"
     "        d = dict(it)\n"
     "        d['e2e'] = context.get('trigger', {}).get('type')\n"
+    "        d['org_id_echo'] = context.get('organization_id')\n"
+    "        d['execution_id_echo'] = context.get('execution_id')\n"
+    "        d['flow_id_echo'] = context.get('flow_id')\n"
+    "        d['flow_revid_echo'] = context.get('flow_revid')\n"
+    "        d['mode_echo'] = context.get('mode')\n"
     "        out.append(d)\n"
     "    return out\n"
 )
+
+
+class _E2eContextSeedNode:
+    """Test-only node: JSON array field + two named binaries for webhook `json_with_binary`."""
+
+    key = "tests.e2e_context_seed"
+    label = "E2E context seed"
+    description = "Adds context_ids array and binary attachments for e2e."
+    category = "Test"
+    is_trigger = False
+    is_merge = False
+    min_inputs = 1
+    max_inputs = 1
+    outputs = 1
+    output_labels = ["output"]
+    parameter_schema: dict = {"type": "object", "properties": {}, "additionalProperties": False}
+
+    def validate_parameters(self, params: dict) -> list[str]:
+        return []
+
+    async def execute(self, context, node, inputs):
+        out: list[ad.flows.FlowItem] = []
+        for it in inputs[0]:
+            j = {**it.json, "context_ids": ["a", "b", "c"]}
+            binary = {
+                "alpha": ad.flows.BinaryRef(
+                    mime_type="application/octet-stream",
+                    file_name="alpha.bin",
+                    data=b"hello-alpha",
+                ),
+                "beta": ad.flows.BinaryRef(
+                    mime_type="text/plain",
+                    file_name="beta.txt",
+                    data=b"beta-bytes",
+                ),
+            }
+            out.append(
+                ad.flows.FlowItem(
+                    json=j,
+                    binary=binary,
+                    meta={**it.meta, "source_node_id": node["id"]},
+                    paired_item=it.paired_item,
+                )
+            )
+        return [out]
+
+
+@pytest.fixture(autouse=True)
+def _register_e2e_context_seed_node():
+    ad.flows.register(_E2eContextSeedNode())
+    yield
 
 
 @pytest.mark.asyncio
@@ -166,9 +224,13 @@ async def test_process_flow_run_msg_completes_http_triggered_run(test_db, mock_a
     """
     `POST /run` + queue message + `process_flow_run_msg` (same as `worker_flow_run`).
 
-    Graph: manual trigger → `flows.code` → **`flows.webhook`**. Outbound HTTP is mocked via
-    `httpx.AsyncClient` so no real network call runs; we assert POSTed JSON and stored
-    `request` / `response` on the webhook node's `run_data`.
+    Graph: manual trigger → **`tests.e2e_context_seed`** (JSON array + binary map) →
+    `flows.code` (echoes execution context into item JSON; binaries pass through) →
+    **`flows.webhook`** with `body_format: json_with_binary` so the POST body is
+    `{"json": ..., "binary": ...}` matching wire + `run_data.request`.
+
+    Outbound HTTP is mocked via `httpx.AsyncClient`; we assert the mock received the same
+    structure as stored on the webhook node.
 
     The background consumer is disabled for `flow_run` in this file (see
     `_stop_flow_run_worker_consuming_stale_env_db`) so the handler uses a client that matches
@@ -186,6 +248,7 @@ async def test_process_flow_run_msg_completes_http_triggered_run(test_db, mock_a
 
     nodes = [
         _std_node("t1", "Start", "flows.trigger.manual", 0),
+        _std_node("s1", "Seed ctx", "tests.e2e_context_seed", 100, {}),
         _std_node(
             "c1",
             "Code",
@@ -198,11 +261,20 @@ async def test_process_flow_run_msg_completes_http_triggered_run(test_db, mock_a
             "Outbound hook",
             "flows.webhook",
             400,
-            {"url": "https://example.invalid/flow-e2e-webhook", "headers": {}},
+            {
+                "url": "https://example.invalid/flow-e2e-webhook",
+                "headers": {},
+                "body_format": "json_with_binary",
+            },
         ),
     ]
     conns = {
         "t1": {
+            "main": [
+                [{"dest_node_id": "s1", "connection_type": "main", "index": 0}],
+            ],
+        },
+        "s1": {
             "main": [
                 [{"dest_node_id": "c1", "connection_type": "main", "index": 0}],
             ],
@@ -249,22 +321,44 @@ async def test_process_flow_run_msg_completes_http_triggered_run(test_db, mock_a
 
     assert _MockWebhookHttpClient.last_post is not None
     assert _MockWebhookHttpClient.last_post["url"] == "https://example.invalid/flow-e2e-webhook"
-    assert _MockWebhookHttpClient.last_post["json"].get("e2e") == "manual"
+    posted = _MockWebhookHttpClient.last_post["json"]
+    assert isinstance(posted, dict) and "json" in posted and "binary" in posted
+    body_json = posted["json"]
+    body_bin = posted["binary"]
+    assert body_json.get("e2e") == "manual"
+    assert body_json.get("context_ids") == ["a", "b", "c"]
+    assert body_json.get("org_id_echo") == TEST_ORG_ID
+    assert body_json.get("execution_id_echo") == exec_id
+    assert body_json.get("flow_id_echo") == flow_id
+    assert body_json.get("flow_revid_echo") == flow_revid
+    assert body_json.get("mode_echo") == "manual"
+    assert base64.standard_b64decode(body_bin["alpha"]["data_b64"]) == b"hello-alpha"
+    assert base64.standard_b64decode(body_bin["beta"]["data_b64"]) == b"beta-bytes"
+    assert body_bin["alpha"]["mime_type"] == "application/octet-stream"
+    assert body_bin["beta"]["mime_type"] == "text/plain"
 
     last = await db.flow_executions.find_one({"_id": ObjectId(exec_id)})
     assert last is not None, "execution not found"
     assert last.get("status") == "success", f"status={last.get('status')!r} err={last.get('error')!r}"
     run_data = last.get("run_data") or {}
+    s1 = run_data.get("s1")
+    assert s1 and s1.get("status") == "success"
+    seed_item = s1["data"]["main"][0][0]
+    assert seed_item["json"].get("context_ids") == ["a", "b", "c"]
+    assert set(seed_item.get("binary") or {}) == {"alpha", "beta"}
+
     c1 = run_data.get("c1")
     assert c1 and c1.get("status") == "success"
     first_item = c1["data"]["main"][0][0]
     assert first_item["json"].get("e2e") == "manual"
+    assert first_item["json"].get("context_ids") == ["a", "b", "c"]
+    assert set(first_item.get("binary") or {}) == {"alpha", "beta"}
     assert "json" in first_item
 
     w1 = run_data.get("w1")
     assert w1 and w1.get("status") == "success"
     hook_out = w1["data"]["main"][0][0]
-    assert hook_out["json"]["request"].get("e2e") == "manual"
+    assert hook_out["json"]["request"] == posted
     assert hook_out["json"]["response"]["status_code"] == 201
     assert hook_out["json"]["response"]["body"] == '{"echo": true, "from_server": "e2e-webhook-mock"}'
 
@@ -276,6 +370,8 @@ async def test_process_flow_run_msg_completes_http_triggered_run(test_db, mock_a
     ex = r3.json()
     assert ex["status"] == "success"
     assert ex["run_data"]["c1"]["data"]["main"][0][0]["json"]["e2e"] == "manual"
+    assert ex["run_data"]["c1"]["data"]["main"][0][0]["json"]["context_ids"] == ["a", "b", "c"]
     w1_api = ex["run_data"]["w1"]["data"]["main"][0][0]
+    assert w1_api["json"]["request"] == posted
     assert w1_api["json"]["response"]["status_code"] == 201
     assert "e2e-webhook-mock" in w1_api["json"]["response"]["body"]

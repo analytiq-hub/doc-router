@@ -72,6 +72,10 @@ class FlowsCodeNode:
             "trigger": context.trigger_data,
             "node_id": node.get("id"),
             "mode": context.mode,
+            "organization_id": context.organization_id,
+            "execution_id": context.execution_id,
+            "flow_id": context.flow_id,
+            "flow_revid": context.flow_revid,
         }
 
         out_json_items = await ad.flows.run_python_code(
@@ -83,10 +87,14 @@ class FlowsCodeNode:
 
         out: list["ad.flows.FlowItem"] = []
         for idx, j in enumerate(out_json_items):
+            src = None
+            if in_items:
+                src = in_items[min(idx, len(in_items) - 1)]
+            merged_bin = dict(src.binary) if src is not None else {}
             out.append(
                 ad.flows.FlowItem(
                     json=j,
-                    binary={},
+                    binary=merged_bin,
                     meta={"source_node_id": node["id"], "item_index": idx},
                     paired_item=None,
                 )
