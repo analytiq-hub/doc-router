@@ -2,12 +2,16 @@
 End-to-end / integration tests for flow HTTP + `flow_run` queue (Phase 2 in `docs/flows.md`).
 
 Uses TestClient, real test Mongo, and a direct `process_flow_run_msg` call (the same as
-`worker_flow_run` uses). The in-app `flow_run` worker is prevented from taking messages in this
-module (see fixture) because it would otherwise read a different `ENV`/database than
-per-test `test_db` fixtures.
+`worker_flow_run` uses). The completion test chains **`flows.code`** → **`flows.webhook`**;
+outbound HTTP is **mocked** (`httpx.AsyncClient`) so the run stays offline while we assert POST
+payload and stored `request` / `response` on the webhook node. The in-app `flow_run` worker is
+prevented from taking messages in this module (see fixture) because it would otherwise read a
+different `ENV`/database than per-test `test_db` fixtures.
 """
 
 from __future__ import annotations
+
+from unittest.mock import MagicMock, patch
 
 import pytest
 from bson import ObjectId
@@ -135,15 +139,43 @@ async def test_post_run_enqueues_queued_flow_run_message(test_db, mock_auth):
     assert qdocs[0]["msg"]["flow_id"] == flow_id
 
 
+class _MockWebhookHttpClient:
+    """Async context manager returned as `httpx.AsyncClient` for `flows.webhook` in the e2e test."""
+
+    last_post: dict | None = None
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+    async def post(self, url: str, json=None, headers=None):
+        _MockWebhookHttpClient.last_post = {"url": url, "json": json, "headers": headers or {}}
+        resp = MagicMock()
+        resp.status_code = 201
+        resp.text = '{"echo": true, "from_server": "e2e-webhook-mock"}'
+        return resp
+
+
 @pytest.mark.asyncio
 async def test_process_flow_run_msg_completes_http_triggered_run(test_db, mock_auth):
     """
     `POST /run` + queue message + `process_flow_run_msg` (same as `worker_flow_run`).
 
+    Graph: manual trigger → `flows.code` → **`flows.webhook`**. Outbound HTTP is mocked via
+    `httpx.AsyncClient` so no real network call runs; we assert POSTed JSON and stored
+    `request` / `response` on the webhook node's `run_data`.
+
     The background consumer is disabled for `flow_run` in this file (see
     `_stop_flow_run_worker_consuming_stale_env_db`) so the handler uses a client that matches
     the per-test `ENV` and Mongo database.
     """
+    _MockWebhookHttpClient.last_post = None
+
     r0 = client.post(
         f"/v0/orgs/{TEST_ORG_ID}/flows",
         json={"name": "E2E flow run"},
@@ -161,13 +193,25 @@ async def test_process_flow_run_msg_completes_http_triggered_run(test_db, mock_a
             200,
             {"python_code": _CODE_SNIPPET, "timeout_seconds": 5},
         ),
+        _std_node(
+            "w1",
+            "Outbound hook",
+            "flows.webhook",
+            400,
+            {"url": "https://example.invalid/flow-e2e-webhook", "headers": {}},
+        ),
     ]
     conns = {
         "t1": {
             "main": [
                 [{"dest_node_id": "c1", "connection_type": "main", "index": 0}],
             ],
-        }
+        },
+        "c1": {
+            "main": [
+                [{"dest_node_id": "w1", "connection_type": "main", "index": 0}],
+            ],
+        },
     }
     r1 = client.put(
         f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
@@ -198,9 +242,14 @@ async def test_process_flow_run_msg_completes_http_triggered_run(test_db, mock_a
     assert q0["msg"]["flow_revid"] == flow_revid
 
     aclient = ad.common.get_analytiq_client()
-    await process_flow_run_msg(aclient, q0)
+    with patch("httpx.AsyncClient", _MockWebhookHttpClient):
+        await process_flow_run_msg(aclient, q0)
 
     assert await db["queues.flow_run"].count_documents({}) == 0
+
+    assert _MockWebhookHttpClient.last_post is not None
+    assert _MockWebhookHttpClient.last_post["url"] == "https://example.invalid/flow-e2e-webhook"
+    assert _MockWebhookHttpClient.last_post["json"].get("e2e") == "manual"
 
     last = await db.flow_executions.find_one({"_id": ObjectId(exec_id)})
     assert last is not None, "execution not found"
@@ -212,6 +261,13 @@ async def test_process_flow_run_msg_completes_http_triggered_run(test_db, mock_a
     assert first_item["json"].get("e2e") == "manual"
     assert "json" in first_item
 
+    w1 = run_data.get("w1")
+    assert w1 and w1.get("status") == "success"
+    hook_out = w1["data"]["main"][0][0]
+    assert hook_out["json"]["request"].get("e2e") == "manual"
+    assert hook_out["json"]["response"]["status_code"] == 201
+    assert hook_out["json"]["response"]["body"] == '{"echo": true, "from_server": "e2e-webhook-mock"}'
+
     r3 = client.get(
         f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}/executions/{exec_id}",
         headers=get_auth_headers(),
@@ -220,3 +276,6 @@ async def test_process_flow_run_msg_completes_http_triggered_run(test_db, mock_a
     ex = r3.json()
     assert ex["status"] == "success"
     assert ex["run_data"]["c1"]["data"]["main"][0][0]["json"]["e2e"] == "manual"
+    w1_api = ex["run_data"]["w1"]["data"]["main"][0][0]
+    assert w1_api["json"]["response"]["status_code"] == 201
+    assert "e2e-webhook-mock" in w1_api["json"]["response"]["body"]
