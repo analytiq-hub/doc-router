@@ -327,7 +327,7 @@ async def recover_all_queues(analytiq_client) -> None:
     This function is idempotent and safe to call repeatedly. It only touches
     messages that:
     - Are in "processing" status
-    - Have processing_started_at older than visibility timeout
+    - Have processing_started_at older than the visibility timeout
 
     For each recovered message, ``attempts`` is decremented by 1 (floored at 0)
     so an unfinished claim (e.g. killed worker) does not permanently burn a try.

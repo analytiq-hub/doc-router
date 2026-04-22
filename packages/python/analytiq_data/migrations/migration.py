@@ -66,7 +66,13 @@ async def _release_migration_lock(db, holder: str) -> None:
 
 
 async def run_migrations(analytiq_client, target_version: int = None) -> None:
-    """Run all pending migrations, protected by a distributed blocking MongoDB lock."""
+    """
+    Run all pending migrations, protected by a distributed blocking MongoDB lock.
+
+    After migrations finish (regardless of schema delta), in-flight job queue claims are
+    released via ``ad.queue.queue.release_all_in_flight_queue_claims``; that step is not
+    a versioned migration and does not advance ``schema_version``.
+    """
     db = analytiq_client.mongodb_async[analytiq_client.env]
 
     if target_version is None:
@@ -134,6 +140,11 @@ async def run_migrations(analytiq_client, target_version: int = None) -> None:
                     )
                 else:
                     raise Exception(f"Migration revert {migration.version} failed")
+
+        # Not a versioned migration: release abandoned queue claims so jobs stuck in
+        # ``processing`` (e.g. worker killed mid-job during a deploy restart) become
+        # pending again. Runs on every deploy, regardless of schema delta.
+        await ad.queue.release_all_in_flight_queue_claims(db)
 
     except Exception as e:
         logger.error(f"Migration failed: {e}")

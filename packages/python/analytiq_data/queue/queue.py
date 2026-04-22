@@ -241,6 +241,66 @@ async def recover_stale_messages(analytiq_client, queue_name: str) -> int:
     return recovered
 
 
+_RELEASE_IN_FLIGHT_PIPELINE = [
+    {
+        "$set": {
+            "status": "pending",
+            "attempts": {
+                "$max": [
+                    0,
+                    {
+                        "$subtract": [
+                            {"$ifNull": ["$attempts", 0]},
+                            1,
+                        ]
+                    },
+                ]
+            },
+        }
+    },
+    {"$unset": "processing_started_at"},
+]
+
+
+async def release_all_in_flight_queue_claims(db) -> int:
+    """
+    Reset every ``processing`` job queue document to ``pending``, decrement ``attempts``
+    by 1 (floored at 0), and clear ``processing_started_at``.
+
+    Invoked from ``run_migrations`` on every deploy (not a versioned migration itself),
+    so jobs stuck in ``processing`` due to a worker killed mid-job during a restart are
+    recovered automatically.
+    """
+    queue_collections = ["queues.ocr", "queues.llm", "queues.webhook", "queues.kb_index"]
+    all_collections = await db.list_collection_names()
+    for coll_name in all_collections:
+        if coll_name.startswith("queues.kb_index_") and coll_name not in queue_collections:
+            queue_collections.append(coll_name)
+
+    total_modified = 0
+    for coll_name in queue_collections:
+        if coll_name not in all_collections:
+            continue
+        result = await db[coll_name].update_many(
+            {"status": "processing"},
+            _RELEASE_IN_FLIGHT_PIPELINE,
+        )
+        n = getattr(result, "modified_count", 0)
+        if n:
+            logger.info(
+                "release_all_in_flight_queue_claims: %s modified=%s",
+                coll_name,
+                n,
+            )
+            total_modified += n
+    if total_modified:
+        logger.info(
+            "release_all_in_flight_queue_claims: total_modified=%s",
+            total_modified,
+        )
+    return total_modified
+
+
 async def move_to_dlq(analytiq_client, queue_name: str, msg_id: str, error: str) -> None:
     """
     Move a failed message to dead letter state after max attempts.
