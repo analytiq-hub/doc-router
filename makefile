@@ -45,6 +45,7 @@ help:
 	@echo ""
 	@echo "Testing:"
 	@echo "  make tests                   - Run Python unit tests (fast, excludes kb_slow)"
+	@echo "  make tests-flow              - Run flow engine tests only"
 	@echo "  make tests-kb                - Run slow KB integration tests (real search indexes)"
 	@echo "  make tests-scale             - Run Python scale tests"
 	@echo "  make tests-all               - Run all Python tests"
@@ -224,6 +225,9 @@ destroy-kind:
 
 tests: setup-python
 	. .venv/bin/activate && pytest -n auto -m "not kb_slow" packages/python/tests/
+
+tests-flow: setup-python
+	. .venv/bin/activate && pytest -q packages/python/tests_flow/
 
 tests-kb: setup-python
 	. .venv/bin/activate && pytest -v -m "kb_slow" packages/python/tests/

@@ -1,0 +1,51 @@
+from __future__ import annotations
+
+from typing import Any
+
+from ..context import ExecutionContext
+from ..items import FlowItem
+
+
+class FlowsBranchNode:
+    key = "flows.branch"
+    label = "Branch"
+    description = "Routes items to true/false outputs based on a condition."
+    category = "Generic"
+    is_trigger = False
+    min_inputs = 1
+    max_inputs = 1
+    outputs = 2
+    output_labels = ["true", "false"]
+    parameter_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "field": {"type": "string"},
+            "equals": {},
+        },
+        "required": ["field", "equals"],
+        "additionalProperties": False,
+    }
+
+    def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        # Keep v1 simple; JSON Schema handles requiredness.
+        if not isinstance(params.get("field"), str) or not params["field"]:
+            return ["parameters.field must be a non-empty string"]
+        return []
+
+    async def execute(
+        self,
+        context: ExecutionContext,
+        node: dict[str, Any],
+        inputs: list[list[FlowItem]],
+    ) -> list[list[FlowItem]]:
+        field = node.get("parameters", {}).get("field")
+        equals = node.get("parameters", {}).get("equals")
+        true_items: list[FlowItem] = []
+        false_items: list[FlowItem] = []
+        for it in inputs[0]:
+            if it.json.get(field) == equals:
+                true_items.append(it)
+            else:
+                false_items.append(it)
+        return [true_items, false_items]
+

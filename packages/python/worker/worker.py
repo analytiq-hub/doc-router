@@ -320,6 +320,43 @@ async def worker_webhook(worker_id: str) -> None:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
 
+
+async def worker_flow_run(worker_id: str) -> None:
+    """
+    Worker for flow executions.
+    """
+    ENV = os.getenv("ENV", "dev")
+    analytiq_client = ad.common.get_analytiq_client(env=ENV, name=worker_id)
+    logger.info(f"Starting worker {worker_id}")
+
+    last_heartbeat = datetime.now(UTC)
+
+    while True:
+        try:
+            now = datetime.now(UTC)
+            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
+                logger.info(f"Worker {worker_id} heartbeat")
+                last_heartbeat = now
+
+            msg = await ad.queue.recv_msg(analytiq_client, "flow_run")
+            if msg:
+                _queue_idle_sleep["flow_run"] = POLL_MIN_SLEEP
+                try:
+                    await ad.msg_handlers.process_flow_run_msg(analytiq_client, msg)
+                except asyncio.CancelledError:
+                    logger.warning(
+                        f"Worker {worker_id} cancelled mid-flight on flow_run msg {msg.get('_id')}; "
+                        f"message will be recovered via visibility timeout"
+                    )
+                    raise
+            else:
+                sleep = _queue_idle_sleep.get("flow_run", POLL_MIN_SLEEP)
+                await asyncio.sleep(sleep)
+                _queue_idle_sleep["flow_run"] = min(sleep * 2, POLL_MAX_SLEEP)
+        except Exception as e:
+            logger.error(f"Worker {worker_id} encountered error: {str(e)}")
+            await asyncio.sleep(1)
+
 async def recover_all_queues(analytiq_client) -> None:
     """
     Recover stale messages across all queues at worker startup.
@@ -352,6 +389,7 @@ def start_workers(n_workers: int) -> list[asyncio.Task]:
         tasks.append(asyncio.create_task(worker_llm(f"llm_{i}"),            name=f"llm_{i}"))
         tasks.append(asyncio.create_task(worker_kb_index(f"kb_index_{i}"),  name=f"kb_index_{i}"))
         tasks.append(asyncio.create_task(worker_webhook(f"webhook_{i}"),    name=f"webhook_{i}"))
+        tasks.append(asyncio.create_task(worker_flow_run(f"flow_run_{i}"),  name=f"flow_run_{i}"))
     tasks.append(asyncio.create_task(worker_kb_reconcile("kb_reconcile_0"), name="kb_reconcile_0"))
     logger.info(f"Started {len(tasks)} worker tasks (n_workers={n_workers})")
     return tasks

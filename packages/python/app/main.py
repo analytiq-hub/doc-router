@@ -44,6 +44,8 @@ from app.routes.redirect import redirect_router
 from app.routes.webhooks import webhooks_router
 from app.routes.knowledge_bases import knowledge_bases_router
 from app.routes.agent import agent_router
+from app.routes.flows import flows_router
+from app.flows import register_docrouter_nodes
 import analytiq_data as ad
 from worker.worker import start_workers
 
@@ -164,3 +166,9 @@ app.include_router(emails_router)
 app.include_router(webhooks_router)
 app.include_router(knowledge_bases_router)
 app.include_router(agent_router)
+app.include_router(flows_router)
+
+# Flow node registrations (global registry).
+# Register once at import time; idempotent overwrites are fine.
+ad.flows.register_builtin_nodes()
+register_docrouter_nodes()

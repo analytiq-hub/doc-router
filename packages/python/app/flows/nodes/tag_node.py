@@ -1,0 +1,43 @@
+from __future__ import annotations
+
+from typing import Any
+
+from analytiq_data.flows.context import ExecutionContext
+from analytiq_data.flows.items import FlowItem
+
+
+class DocRouterSetTagsNode:
+    key = "docrouter.set_tags"
+    label = "Set tags"
+    description = "Applies configured tags."
+    category = "DocRouter"
+    is_trigger = False
+    min_inputs = 1
+    max_inputs = 1
+    outputs = 1
+    output_labels = ["output"]
+    parameter_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {"tag_ids": {"type": "array", "items": {"type": "string"}}},
+        "required": ["tag_ids"],
+        "additionalProperties": False,
+    }
+
+    def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        if not isinstance(params.get("tag_ids"), list):
+            return ["parameters.tag_ids must be a list of strings"]
+        return []
+
+    async def execute(self, context: ExecutionContext, node: dict[str, Any], inputs: list[list[FlowItem]]):
+        tag_ids: list[str] = (node.get("parameters") or {}).get("tag_ids") or []
+        out: list[FlowItem] = []
+        for it in inputs[0]:
+            doc_id = it.json.get("document_id") or (it.json.get("document") or {}).get("_id")
+            if not doc_id:
+                raise ValueError("Input item missing document_id")
+            await context.services.set_tags(context.organization_id, doc_id, tag_ids)
+            merged = dict(it.json)
+            merged["tag_ids"] = tag_ids
+            out.append(FlowItem(json=merged, binary=it.binary, meta=it.meta, paired_item=it.paired_item))
+        return [out]
+
