@@ -444,6 +444,38 @@ Canonical access path (read as “execution → node → run → lane → port�
 
 `runExecutionData.resultData.runData[nodeName][runIndex].data?.[connectionType]?.[portIndex]`
 
+### How the stack and waiting maps work (`executionData`)
+
+While an execution is running (or when it is resumed), `IRunExecutionData.executionData`
+acts as the engine’s **scheduler state**.
+
+- **`nodeExecutionStack: IExecuteData[]`**: despite the name, this is not a strict
+  “stack” abstraction. It’s just an array/list of **ready-to-run** node executions.
+  In the main engine loop it is typically consumed as a **queue** (FIFO) via
+  `shift()`, and items can also be re-prioritized by pushing back onto the end
+  or unshifting onto the front. Each `IExecuteData` already contains the node
+  plus its fully prepared input bag (`data: ITaskDataConnections`) and provenance
+  (`source`).
+
+- **`waitingExecution: IWaitingForExecution`**: a holding map for **not-yet-runnable**
+  node executions, keyed by destination node name and run index:
+  `{ [nodeName]: { [runIndex]: ITaskDataConnections } }`.
+  It stores *partially assembled* input bags for nodes that need multiple inputs
+  (for example, merge-style nodes) when some input ports have not received data yet.
+
+- **`waitingExecutionSource: IWaitingForExecutionSource`**: mirrors `waitingExecution`,
+  but stores `ISourceData` per input port so lineage can be reconstructed later.
+
+Typical flow:
+
+1. A node finishes and produces outputs (`ITaskData.data`).
+2. The engine routes those items along `connections` and writes them into the
+   destination node’s input bag.
+3. If the destination node has all required input ports filled, the engine
+   enqueues an `IExecuteData` in `nodeExecutionStack`.
+4. If not, the engine parks the partial input bag in `waitingExecution` until
+   the remaining inputs arrive, then moves it to `nodeExecutionStack`.
+
 ### Item data format
 
 `INodeExecutionData` (`interfaces.ts:1456`) is the **only thing that crosses
