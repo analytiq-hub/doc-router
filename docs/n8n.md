@@ -426,6 +426,24 @@ Steps:
 | `IWaitingForExecution` | same file:2860 | `{ [nodeName]: { [runIndex]: ITaskDataConnections } }` — inputs for nodes waiting on multi-input merge. |
 | `nodeExecutionStack` | inside `executionData` | Stack of `IExecuteData` — nodes ready to run with their input data. |
 
+### How these types nest (execution → node → run → lane → port)
+
+These four types are the “spine” of execution results. They nest from
+coarsest to finest granularity:
+
+- **`IRunExecutionData`**: one workflow execution. Think “everything needed to
+  finish or resume an execution”.
+- **`IRunData`**: inside `IRunExecutionData.resultData.runData`, a per-node map.
+- **`ITaskData`**: one entry in `runData[nodeName]` (a node can have multiple
+  runs, so it’s an array).
+- **`ITaskDataConnections`**: the actual payload of items, keyed by
+  **connection type** (`main`, `ai_tool`, `ai_document`, …) and indexed by
+  **port index** (`0`, `1`, …).
+
+Canonical access path (read as “execution → node → run → lane → port”):
+
+`runExecutionData.resultData.runData[nodeName][runIndex].data?.[connectionType]?.[portIndex]`
+
 ### Item data format
 
 `INodeExecutionData` (`interfaces.ts:1456`) is the **only thing that crosses
