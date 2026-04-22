@@ -1142,7 +1142,8 @@ Run: `make tests-flow` (installs test deps, runs pytest on `tests_flow` only).
 **DocRouter nodes + registration**
 - `analytiq_data/docrouter_flows/nodes/{manual_trigger_node,ocr_node,llm_node,tag_node}.py`
 - `analytiq_data/docrouter_flows/register.py` — `register_docrouter_nodes()` (also
-  re-exported as `ad.flows.register_docrouter_nodes` for convenience)
+  available as `ad.flows.register_docrouter_nodes`, a thin wrapper in
+  `analytiq_data/flows/__init__.py`)
 
 **Queue worker**
 - `worker/worker.py` — `worker_flow_run` consumes `flow_run` messages

@@ -12,5 +12,12 @@ from .node_registry import *
 from .engine import *
 from .nodes import *
 from .register_builtin import *
-from .register_docrouter import *
+
+
+def register_docrouter_nodes() -> None:
+    """Register DocRouter nodes on the global engine registry (`docrouter_flows.register`)."""
+
+    from analytiq_data.docrouter_flows.register import register_docrouter_nodes as _register
+
+    _register()
 
