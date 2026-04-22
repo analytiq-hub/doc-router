@@ -13,12 +13,8 @@ class NodeConnection:
     connection_type: str
     index: int
 
-
-NodeOutputSlots = list[list[NodeConnection] | None]
-
-
 class NodeConnections(TypedDict, total=False):
-    main: NodeOutputSlots
+    main: list[list[NodeConnection] | None]
 
 
 Connections = dict[str, NodeConnections]
