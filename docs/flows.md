@@ -35,7 +35,9 @@ state that is **not** versioned:
   "name": "Invoice processing",
   "active": false,
   "active_flow_revid": "<flow_revid|null>",
-  "flow_version": 3
+  "flow_version": 3,
+  "updated_at": "...",
+  "updated_by": "<user_id>"
 }
 ```
 
@@ -47,6 +49,8 @@ state that is **not** versioned:
 | `active` | Whether trigger-based auto-runs are enabled. |
 | `active_flow_revid` | Pins the exact revision used for trigger-based runs. `null` when inactive. |
 | `flow_version` | Monotonic counter; incremented by `find_one_and_update($inc)` each time a content revision is created. |
+| `updated_at` | Timestamp of last stable-header update. |
+| `updated_by` | `user_id` of last updater. |
 
 Clarifications:
 
@@ -100,7 +104,7 @@ Clarifications:
 aggregation used by prompts and schemas). **Get** takes a `flow_revid`.
 **Update** inserts a new revision row and increments `flow_version`; a
 name-only change updates `flows.name` in-place without creating a new revision.
-**Delete** removes all revision rows and the stable header.
+**Delete** removes all revision rows, the stable header, and associated runtime state rows.
 
 ### `flow_runtime_state` collection (persistent cross-run state)
 
@@ -440,6 +444,23 @@ request.
 - `continueOnFail = true` converts a node failure into an output item with an error envelope in `json._error`, and downstream execution continues.
 - `continueOnFail = false` fails the execution.
 
+Error envelope for `continueOnFail`:
+
+When `continueOnFail = true`, a node that errors emits one output item:
+
+```json
+{
+  "json": {
+    "_error": {
+      "node_id": "<node_id>",
+      "message": "..."
+    }
+  },
+  "binary": {},
+  "meta": {}
+}
+```
+
 ### ExecutionContext (`context.py`)
 
 ```python
@@ -526,7 +547,7 @@ automation clients use the same paths and DTOs (no internal/external split; see
 | `GET` | `/v0/orgs/{org_id}/flows/{flow_id}/versions` | List all revisions for a flow |
 | `POST` | `/v0/orgs/{org_id}/flows/{flow_id}/activate` | Set `active: true` and pin `active_flow_revid` (no new revision) |
 | `POST` | `/v0/orgs/{org_id}/flows/{flow_id}/deactivate` | Set `active: false` (no new revision) |
-| `POST` | `/v0/orgs/{org_id}/flows/{flow_id}/run` | Manual run against latest revision (body: `{ document_id? }`) |
+| `POST` | `/v0/orgs/{org_id}/flows/{flow_id}/run` | Manual run against latest revision by default (body can include `{ flow_revid?, document_id? }`) |
 | `GET` | `/v0/orgs/{org_id}/flows/{flow_id}/executions` | List executions |
 | `GET` | `/v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}` | Get execution + per-node output |
 | `POST` | `/v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}/stop` | Cancel a running execution |
@@ -627,6 +648,19 @@ UI constraints:
 - The activation UI should show both the latest saved revision and the currently active revision (`active_flow_revid`).
 
 ---
+
+## Trigger dispatch notes
+
+For trigger-based flows (for example `docrouter.trigger.upload`), the application
+needs an activation lookup path from an incoming event to the set of active flows
+that should run. This can be:
+
+- a direct MongoDB query,
+- an in-memory index refreshed on activation/deactivation, or
+- a small trigger-dispatch helper keyed by `(organization_id, trigger_type)`.
+
+`active = true` alone is not sufficient; dispatch must resolve the specific
+`active_flow_revid` to execute for each active flow.
 
 ## Out of scope for v1
 
