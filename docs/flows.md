@@ -23,24 +23,35 @@ This closes the gap between DocRouter's current linear pipeline
 
 ### Goals for v1
 
+- **Python backend only** (API, engine, workers, persistence). **No in-product
+  editor UI** in v1; clients may drive flows via HTTP/API and tests.
 - Add a reusable flow engine that is independent of DocRouter-specific logic.
-- Support versioned flow definitions.
-- Support manual runs and trigger-based runs (upload, webhook, schedule).
-- Support a small set of built-in generic nodes plus DocRouter nodes.
+- Support versioned flow definitions, manual runs, and durable execution
+  (`flow_run` queue + `run_data`).
+- Support built-in generic nodes (including **branch**, **merge**, and
+  **`flows.code` — in-process code execution** with explicit, test-covered
+  semantics) plus DocRouter nodes where needed.
+- **Unit tests** (see §18) covering **code execution**, **branch**, and **merge**
+  behavior in the engine, without MongoDB/HTTP in the default flow test target.
 - Persist execution state and execution history.
-- Support a React Flow canvas editor.
 - Keep runtime semantics simple and deterministic.
 
 ### Non-goals for v1
 
+- In-app / React Flow (or any) **graph editor** — deferred to a **later
+  product version** (see §17).
 - Expression language (`={{ $json.field }}`)
 - Looping / cycles / re-entrant execution
 - Multi-trigger flows
 - Sub-flows
-- Sandboxed user code
-- SSE streaming for execution progress (frontend polls every 2 s)
+- **Strong sandboxing** of code in `flows.code` (e.g. seccomp, WASM, separate
+  OS process per node) — v1 may run snippets **in-process** with size/time
+  limits; hard isolation is a later concern.
+- SSE streaming for execution progress
 - Full n8n compatibility
 - Execution pause / resume (Wait nodes) — schema fields are reserved
+- **Trigger-based automation** (upload / inbound webhook / schedule) may ship
+  after v1 core backend; see §18 Phase 3
 
 ---
 
@@ -93,7 +104,9 @@ The following are explicit v1 decisions.
    revision, in a separate collection.
 7. Execution history stores **storage-safe** outputs only; large binary payloads
    are referenced, not embedded.
-8. `flows.code` is internal/admin-only in v1 and disabled by default.
+8. `flows.code` is part of **v1 backend** (implemented and covered by unit
+   tests), with **restricted semantics** (e.g. in-process, admin/trusted
+   parameter surface); it is not a full multi-tenant sandbox.
 9. Branch skipping: a node that emits an **empty list** on an output port causes
    all nodes connected to that port to be skipped for this execution.
 10. Error-output routing (`on_error = 'continue_error_output'`) is reserved in the
@@ -632,7 +645,7 @@ class BinaryRef:
 | `flows.webhook` | ✗ | 1 | 1 | `["output"]` | POSTs item JSON to a configured URL. |
 | `flows.branch` | ✗ | 1 | 2 | `["true", "false"]` | Routes items to one of two outputs based on a condition. |
 | `flows.merge` | ✗ | 2+ | 1 | `["output"]` | Waits for all inputs, then concatenates them into one output list. |
-| `flows.code` | ✗ | 1 | 1 | `["output"]` | Runs a small Python snippet. Internal/admin-only in v1. |
+| `flows.code` | ✗ | 1 | 1 | `["output"]` | Runs a small Python snippet (v1 backend; in-process, test-covered; not a hard sandbox). |
 
 ### 11.2 DocRouter nodes
 
@@ -1048,16 +1061,20 @@ await ad.queue.send_msg(analytiq_client, "flow_run", {
 - On completion (success or error), set `finished_at` and final `status`.
 - On startup, sweep for stale executions (see §5.4 stale-execution recovery).
 
-### Progress model (v1)
+### Progress model (v1 backend)
 
-Frontend polls `GET /v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}` every 2 seconds.
+Any client (tests, scripts, or a **future** UI) may poll
+`GET /v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}`.
 Incremental `run_data` written after each node provides per-node progress.
 
 ---
 
-## 17. Frontend canvas
+## 17. Frontend canvas (deferred past v1)
 
-React Flow is already installed and will be used for the editor.
+**v1 does not include** an in-product flow editor. The following targets a
+**later version** once the backend and `flows.code` tests are stable.
+
+React Flow is a likely choice for the editor when UI work starts.
 
 ### Proposed structure
 
@@ -1110,8 +1127,18 @@ Files: `engine.py`, `execution.py`, `context.py`
 
 **Step 1.4 — Built-in generic nodes + registration**
 Files: `register_builtin.py`, `nodes/{trigger_manual,webhook,branch,merge}.py`
+(and **`nodes/code.py`** for `flows.code` once implemented)
 - `register_builtin_nodes()` registers the generic trigger, outbound webhook,
-  branch, and merge types.
+  branch, merge, and **code** types.
+
+**Step 1.5 — `flows.code` (v1)**
+File: `nodes/code.py` (name TBD)
+- Node type `flows.code`: execute a **small Python snippet** in-process against
+  `FlowItem` / `context` with **documented limits** (e.g. timeout, no network
+  unless explicitly allowed later).
+- Register in `register_builtin.py`.
+- Must be covered by **unit tests** that run `run_flow` on tiny revisions (no
+  real Mongo if tests use in-memory / stub `analytiq_client` patterns).
 
 **Tests: `packages/python/tests_flow/` (optional suite; not part of default
 `make tests`)**
@@ -1119,10 +1146,16 @@ Files: `register_builtin.py`, `nodes/{trigger_manual,webhook,branch,merge}.py`
 ```
 tests_flow/
   conftest.py           Ensures `packages/python` is on `sys.path`
-  test_flows_engine.py  Engine validation + graph invariants
+  test_flows_engine.py  Validation + graph invariants
+  (add)                 run_flow tests: branch routing, merge + skip flush,
+                        flows.code snippet output
 ```
 
 Run: `make tests-flow` (installs test deps, runs pytest on `tests_flow` only).
+
+**v1 test bar:** before calling the v1 backend “complete”, `tests_flow` should
+include **executing** revisions (via `run_flow`) that exercise **branch**,
+**merge**, and **`flows.code`**, not validation-only cases.
 
 ---
 
@@ -1156,19 +1189,19 @@ Run: `make tests-flow` (installs test deps, runs pytest on `tests_flow` only).
 
 ---
 
-### Phase 3 — Deferred to later
+### Phase 3 — Deferred (post–v1 backend)
 
+- **Frontend / React Flow canvas** and in-app editor UX (see §17).
 - `flows.trigger.webhook` (inbound webhook route, routing table)
 - `flows.trigger.schedule` (cron registration)
 - `docrouter.trigger.upload` (upload event dispatch)
-- Frontend canvas
 
 ---
 
 ### Implementation order within phases
 
-Phase 1: `1.1 → 1.2 → 1.3 → 1.4` — validate with `make tests-flow` when
-touching the engine.
+Phase 1: `1.1 → 1.2 → 1.3 → 1.4 → 1.5` — keep `make tests-flow` green; expand
+`tests_flow` until branch, merge, and `flows.code` execution are covered.
 
 Phase 2: register DocRouter node types and services before relying on
 production routes; keep `process_flow_run_msg` and `run_flow` in sync when
