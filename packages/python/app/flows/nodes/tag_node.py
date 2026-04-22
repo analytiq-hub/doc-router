@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+"""DocRouter node implementation that applies tags to documents."""
+
 from typing import Any
 
 import analytiq_data as ad
 
 
 class DocRouterSetTagsNode:
+    """Apply a configured list of tag ids to each input document item."""
+
     key = "docrouter.set_tags"
     label = "Set tags"
     description = "Applies configured tags."
@@ -23,6 +27,8 @@ class DocRouterSetTagsNode:
     }
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        """Require `tag_ids` to be a list."""
+
         if not isinstance(params.get("tag_ids"), list):
             return ["parameters.tag_ids must be a list of strings"]
         return []
@@ -33,6 +39,8 @@ class DocRouterSetTagsNode:
         node: dict[str, Any],
         inputs: list[list["ad.flows.FlowItem"]],
     ):
+        """Update tags in storage and reflect them in the outgoing item JSON."""
+
         tag_ids: list[str] = (node.get("parameters") or {}).get("tag_ids") or []
         out: list["ad.flows.FlowItem"] = []
         for it in inputs[0]:

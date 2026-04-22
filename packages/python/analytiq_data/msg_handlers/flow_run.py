@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Queue consumer for `flow_run` messages (executes flow revisions asynchronously)."""
+
 import asyncio
 import logging
 from datetime import datetime, UTC
@@ -16,6 +18,13 @@ HEARTBEAT_INTERVAL_SECS = 5
 
 
 async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
+    """
+    Execute a single queued flow run.
+
+    Reads the flow revision and execution document from MongoDB, runs the generic
+    engine, persists incremental `run_data`, and updates execution status.
+    """
+
     msg_id = str(msg["_id"])
     payload = msg.get("msg") or {}
     flow_id = payload["flow_id"]

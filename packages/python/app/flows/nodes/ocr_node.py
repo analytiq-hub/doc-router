@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+"""DocRouter node implementation that runs OCR for document items."""
+
 from typing import Any
 
 import analytiq_data as ad
 
 
 class DocRouterOcrNode:
+    """Run organization-configured OCR for each input document item."""
+
     key = "docrouter.ocr"
     label = "Run OCR"
     description = "Runs OCR on the input document(s)."
@@ -18,6 +22,8 @@ class DocRouterOcrNode:
     parameter_schema: dict[str, Any] = {"type": "object", "properties": {}, "additionalProperties": False}
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        """No extra parameters for v1 OCR node."""
+
         return []
 
     async def execute(
@@ -26,6 +32,8 @@ class DocRouterOcrNode:
         node: dict[str, Any],
         inputs: list[list["ad.flows.FlowItem"]],
     ):
+        """Ensure OCR exists for each document and attach the OCR result under `json.ocr`."""
+
         out: list["ad.flows.FlowItem"] = []
         for it in inputs[0]:
             doc_id = it.json.get("document_id") or (it.json.get("document") or {}).get("_id")

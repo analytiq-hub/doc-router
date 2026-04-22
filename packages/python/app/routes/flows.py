@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Flow CRUD + execution routes (v1 scaffolding) as defined in `docs/flows.md`."""
+
 import logging
 from datetime import datetime, UTC
 from typing import Any, Optional, List, Literal

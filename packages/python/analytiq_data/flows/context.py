@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""
+Execution context and service interface for flow runs.
+
+The engine is kept DocRouter-independent by accessing integrations only through
+the `FlowServices` protocol.
+"""
+
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol
 
@@ -7,6 +14,8 @@ ExecutionMode = Literal["manual", "trigger", "webhook", "schedule", "error"]
 
 
 class FlowServices(Protocol):
+    """Services required by DocRouter-aware nodes during execution."""
+
     async def get_document(self, org_id: str, doc_id: str) -> dict: ...
 
     async def run_ocr(self, org_id: str, doc_id: str) -> dict: ...
@@ -26,6 +35,13 @@ class FlowServices(Protocol):
 
 @dataclass
 class ExecutionContext:
+    """
+    Per-execution context passed to every node.
+
+    Contains identifiers, trigger metadata, the accumulated `run_data` map, a
+    `FlowServices` implementation, and cooperative stop state.
+    """
+
     organization_id: str
     execution_id: str
     flow_id: str

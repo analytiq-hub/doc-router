@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+"""Generic branching node implementation (`flows.branch`)."""
+
 from typing import Any
 
 import analytiq_data as ad
 
 
 class FlowsBranchNode:
+    """Route each input item to either the `true` or `false` output slot."""
+
     key = "flows.branch"
     label = "Branch"
     description = "Routes items to true/false outputs based on a condition."
@@ -26,6 +30,8 @@ class FlowsBranchNode:
     }
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        """Validate the configured `field` parameter is usable."""
+
         # Keep v1 simple; JSON Schema handles requiredness.
         if not isinstance(params.get("field"), str) or not params["field"]:
             return ["parameters.field must be a non-empty string"]
@@ -37,6 +43,8 @@ class FlowsBranchNode:
         node: dict[str, Any],
         inputs: list[list["ad.flows.FlowItem"]],
     ) -> list[list["ad.flows.FlowItem"]]:
+        """Split items by `json[field] == equals`."""
+
         field = node.get("parameters", {}).get("field")
         equals = node.get("parameters", {}).get("equals")
         true_items: list["ad.flows.FlowItem"] = []

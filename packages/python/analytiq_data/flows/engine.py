@@ -1,5 +1,12 @@
 from __future__ import annotations
 
+"""
+Core flow engine implementation.
+
+This module is the DocRouter-independent execution and validation layer for flow
+revisions as specified in `docs/flows.md`.
+"""
+
 import asyncio
 import hashlib
 import json
@@ -14,18 +21,24 @@ import analytiq_data as ad
 
 
 class FlowValidationError(ValueError):
+    """Raised when a flow revision fails validation (schema, graph, or registry rules)."""
+
     pass
 
 
 def canonical_graph_hash(
     nodes: list[dict[str, Any]], connections: "ad.flows.Connections", settings: dict[str, Any]
 ) -> str:
+    """Return a stable SHA-256 hash of the flow graph for dedup/version checks."""
+
     payload = {"nodes": nodes, "connections": connections, "settings": settings}
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
 def _toposort(nodes: list[dict[str, Any]], connections: "ad.flows.Connections") -> list[str]:
+    """Topologically sort node ids or raise `FlowValidationError` if a cycle exists."""
+
     node_ids = {n["id"] for n in nodes}
     indeg: dict[str, int] = {nid: 0 for nid in node_ids}
     adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
@@ -63,6 +76,14 @@ def validate_revision(
     settings: dict[str, Any] | None,
     pin_data: dict[str, Any] | None,
 ) -> None:
+    """
+    Validate a flow revision against v1 rules.
+
+    Enforces uniqueness (ids/names), existence of referenced nodes, port index
+    bounds, DAG constraint, exactly one trigger, reachability, and JSON-schema
+    parameter validation via the registered node types.
+    """
+
     settings = settings or {}
     node_ids = [n.get("id") for n in nodes]
     if len(node_ids) != len(set(node_ids)):
@@ -162,10 +183,14 @@ def validate_revision(
 
 
 def _empty_outputs(outputs: int) -> list[list["ad.flows.FlowItem"]]:
+    """Return `outputs` empty output-slot lists (branch-skipping / disabled behavior)."""
+
     return [[] for _ in range(outputs)]
 
 
 def _error_item(node_id: str, node_name: str, message: str) -> "ad.flows.FlowItem":
+    """Create a single-item error envelope suitable for `on_error="continue"`."""
+
     return ad.flows.FlowItem(
         json={"_error": {"node_id": node_id, "node_name": node_name, "message": message}},
         binary={},
@@ -176,17 +201,36 @@ def _error_item(node_id: str, node_name: str, message: str) -> "ad.flows.FlowIte
 
 @dataclass
 class _WorkItem:
+    """Internal queue item pairing a node id with its input slots."""
+
     node_id: str
     inputs: list[list["ad.flows.FlowItem"]]
 
 
 class FlowEngine:
+    """
+    Execute a validated flow revision deterministically.
+
+    The engine executes nodes in a breadth-first queue, persists incremental
+    `run_data` via the provided callback, and supports cooperative cancellation
+    via `read_stop_requested`.
+    """
+
     def __init__(
         self,
         *,
         persist_run_data: Callable[[str, dict[str, Any]], Any] | None = None,
         read_stop_requested: Callable[[str], Any] | None = None,
     ) -> None:
+        """
+        Create a flow engine.
+
+        - `persist_run_data(execution_id, run_data)` is called after each node to
+          write execution progress.
+        - `read_stop_requested(execution_id)` is polled between nodes to support
+          cooperative stop requests.
+        """
+
         self._persist_run_data = persist_run_data
         self._read_stop_requested = read_stop_requested
 
@@ -196,6 +240,12 @@ class FlowEngine:
         context: "ad.flows.ExecutionContext",
         revision: dict[str, Any],
     ) -> dict[str, Any]:
+        """
+        Run a single flow execution for a specific immutable revision snapshot.
+
+        Returns a small status dict (e.g. `{"status": "success" | "stopped"}`).
+        """
+
         nodes: list[dict[str, Any]] = revision.get("nodes") or []
         connections: "ad.flows.Connections" = revision.get("connections") or {}
         settings: dict[str, Any] = revision.get("settings") or {}

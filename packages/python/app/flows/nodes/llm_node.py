@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+"""DocRouter node implementation that runs a prompt-based LLM extraction."""
+
 from typing import Any
 
 import analytiq_data as ad
 
 
 class DocRouterLlmExtractNode:
+    """Execute a configured prompt+schema extraction for each input document item."""
+
     key = "docrouter.llm_extract"
     label = "LLM extract"
     description = "Runs linked prompt-based extraction."
@@ -26,6 +30,8 @@ class DocRouterLlmExtractNode:
     }
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        """Require both `prompt_id` and `schema_id` parameters for v1 extraction."""
+
         errs = []
         if not isinstance(params.get("prompt_id"), str) or not params["prompt_id"]:
             errs.append("parameters.prompt_id is required")
@@ -39,6 +45,8 @@ class DocRouterLlmExtractNode:
         node: dict[str, Any],
         inputs: list[list["ad.flows.FlowItem"]],
     ):
+        """Run extraction and attach results under `json.llm_extract`."""
+
         params = node.get("parameters") or {}
         prompt_id = params["prompt_id"]
         schema_id = params["schema_id"]

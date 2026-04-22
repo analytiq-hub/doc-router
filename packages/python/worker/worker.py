@@ -323,7 +323,7 @@ async def worker_webhook(worker_id: str) -> None:
 
 async def worker_flow_run(worker_id: str) -> None:
     """
-    Worker for flow executions.
+    Worker for `flow_run` queue messages (runs flow executions).
     """
     ENV = os.getenv("ENV", "dev")
     analytiq_client = ad.common.get_analytiq_client(env=ENV, name=worker_id)

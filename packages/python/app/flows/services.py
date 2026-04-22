@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""DocRouter implementation of the flow engine `FlowServices` integration layer."""
+
 import logging
 from datetime import datetime, UTC
 from typing import Any
@@ -13,10 +15,21 @@ logger = logging.getLogger(__name__)
 
 
 class FlowServicesImpl:
+    """
+    Concrete implementation of `ad.flows.FlowServices` for DocRouter.
+
+    This is the boundary between the generic flow engine and DocRouter-specific
+    operations like document fetch, OCR, LLM extraction, tagging, and HTTP.
+    """
+
     def __init__(self, analytiq_client):
+        """Create services bound to a specific `AnalytiqClient` (db + config)."""
+
         self.analytiq_client = analytiq_client
 
     async def get_document(self, org_id: str, doc_id: str) -> dict:
+        """Load a document and verify it belongs to `org_id`."""
+
         doc = await ad.common.doc.get_doc(self.analytiq_client, doc_id)
         if not doc:
             raise ValueError(f"Document not found: {doc_id}")
@@ -26,6 +39,13 @@ class FlowServicesImpl:
         return doc
 
     async def run_ocr(self, org_id: str, doc_id: str) -> dict:
+        """
+        Ensure OCR exists for the document and return a small status payload.
+
+        This runs organization-configured OCR (Textract/Mistral/LLM/PyMuPDF) and
+        persists OCR JSON + derived text using existing DocRouter helpers.
+        """
+
         # If OCR already exists, return it.
         existing = await ad.ocr.get_ocr_json(self.analytiq_client, doc_id)
         if existing is not None:
@@ -66,6 +86,13 @@ class FlowServicesImpl:
         return {"document_id": doc_id, "ocr": "completed", "mode": cfg.mode}
 
     async def run_llm_extract(self, org_id: str, doc_id: str, prompt_id: str, schema_id: str) -> dict:
+        """
+        Run a prompt-based extraction for a document.
+
+        Currently resolves the latest prompt revision for `prompt_id` and uses
+        the existing LLM runner (`run_llm_for_prompt_revids`) to execute it.
+        """
+
         db = ad.common.get_async_db(self.analytiq_client)
         # Resolve latest prompt revision by prompt_id.
         pr = await db.prompt_revisions.find_one({"prompt_id": prompt_id}, sort=[("prompt_version", -1)])
@@ -89,6 +116,8 @@ class FlowServicesImpl:
         return {"document_id": doc_id, "prompt_id": prompt_id, "result": r0}
 
     async def set_tags(self, org_id: str, doc_id: str, tags: list[str]) -> None:
+        """Replace the document tag list after validating tag ids belong to `org_id`."""
+
         db = ad.common.get_async_db(self.analytiq_client)
         # Validate tags exist for org.
         if tags:
@@ -104,6 +133,8 @@ class FlowServicesImpl:
         )
 
     async def send_webhook(self, url: str, payload: dict, headers: dict) -> dict:
+        """Send a best-effort HTTP POST webhook and return status code + response body."""
+
         # Reuse outbound webhook infra by enqueuing an event-like delivery.
         # For v1 flows, a direct HTTP call is acceptable.
         import httpx
@@ -113,11 +144,15 @@ class FlowServicesImpl:
             return {"status_code": resp.status_code, "body": resp.text}
 
     async def get_runtime_state(self, flow_id: str, node_id: str) -> dict:
+        """Fetch cross-run state for a `(flow_id, node_id)` pair (empty dict if missing)."""
+
         db = ad.common.get_async_db(self.analytiq_client)
         doc = await db.flow_runtime_state.find_one({"flow_id": flow_id, "node_id": node_id})
         return (doc or {}).get("data") or {}
 
     async def set_runtime_state(self, flow_id: str, node_id: str, data: dict) -> None:
+        """Upsert cross-run state for a `(flow_id, node_id)` pair."""
+
         db = ad.common.get_async_db(self.analytiq_client)
         await db.flow_runtime_state.update_one(
             {"flow_id": flow_id, "node_id": node_id},

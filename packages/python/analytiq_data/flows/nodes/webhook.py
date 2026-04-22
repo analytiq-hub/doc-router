@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+"""Generic outbound webhook node implementation (`flows.webhook`)."""
+
 from typing import Any
 
 import analytiq_data as ad
 
 
 class FlowsWebhookNode:
+    """POST each input item JSON to a configured URL and emit request/response."""
+
     key = "flows.webhook"
     label = "Webhook (generic)"
     description = "POSTs item JSON to a configured URL."
@@ -26,6 +30,8 @@ class FlowsWebhookNode:
     }
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        """Validate the configured URL is present and non-empty."""
+
         if not isinstance(params.get("url"), str) or not params["url"].strip():
             return ["parameters.url must be a non-empty string"]
         return []
@@ -36,6 +42,8 @@ class FlowsWebhookNode:
         node: dict[str, Any],
         inputs: list[list["ad.flows.FlowItem"]],
     ) -> list[list["ad.flows.FlowItem"]]:
+        """POST each input item to the configured URL and collect responses."""
+
         url = (node.get("parameters") or {}).get("url")
         headers = (node.get("parameters") or {}).get("headers") or {}
         out: list["ad.flows.FlowItem"] = []

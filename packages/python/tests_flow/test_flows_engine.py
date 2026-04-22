@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""Minimal unit tests for the flow engine's revision validation rules."""
+
 from typing import Any
 
 import pytest
@@ -8,6 +10,8 @@ import analytiq_data as ad
 
 
 class _PassThroughNode:
+    """Test-only node used to validate registry/graph rules without DocRouter deps."""
+
     key = "tests.passthrough"
     label = "Passthrough"
     description = "Test-only passthrough node."
@@ -24,6 +28,8 @@ class _PassThroughNode:
     }
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        """No additional validation for test node."""
+
         return []
 
     async def execute(
@@ -37,12 +43,16 @@ class _PassThroughNode:
 
 @pytest.fixture(autouse=True)
 def _register_nodes() -> None:
+    """Register built-ins and the test node for each test."""
+
     # Overwrite-safe: register() replaces by key.
     ad.flows.register_builtin_nodes()
     ad.flows.register(_PassThroughNode())
 
 
 def test_validate_revision_accepts_simple_dag() -> None:
+    """A 2-node DAG (trigger -> node) is accepted."""
+
     nodes = [
         {
             "id": "t1",
@@ -84,6 +94,8 @@ def test_validate_revision_accepts_simple_dag() -> None:
 
 
 def test_validate_revision_rejects_cycle() -> None:
+    """A cycle among non-trigger nodes is rejected."""
+
     nodes = [
         {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
         {"id": "a1", "name": "A", "type": "tests.passthrough", "position": [200, 0], "parameters": {}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
