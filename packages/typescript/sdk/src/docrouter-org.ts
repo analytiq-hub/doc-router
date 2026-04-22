@@ -2,12 +2,15 @@ import { HttpClient } from './http-client';
 import { normalizeOcrBlocksPayload } from './ocr-blocks';
 import {
   DocRouterOrgConfig,
+  UploadDocumentMultipartPart,
+  UploadDocumentResponse,
   UploadDocumentsResponse,
   ListDocumentsResponse,
   GetDocumentResponse,
   GetOCRMetadataResponse,
   RunLLMResponse,
   GetLLMResultResponse,
+  ListTagsParams,
   ListTagsResponse,
   JsonValue,
   Tag,
@@ -153,7 +156,41 @@ export class DocRouterOrg {
     );
   }
 
-  async listDocuments(params?: { skip?: number; limit?: number; tagIds?: string; nameSearch?: string; metadataSearch?: string; }): Promise<ListDocumentsResponse> {
+  /**
+   * Upload a single document via multipart/form-data (no base64).
+   */
+  async uploadDocumentMultipart(params: UploadDocumentMultipartPart): Promise<UploadDocumentResponse> {
+    const form = new FormData();
+    form.append('file', params.file, params.name);
+    if (params.tag_ids?.length) form.append('tag_ids', JSON.stringify(params.tag_ids));
+    if (params.metadata && Object.keys(params.metadata).length) form.append('metadata', JSON.stringify(params.metadata));
+    return this.http.postFormData<UploadDocumentResponse>(
+      `/v0/orgs/${this.organizationId}/documents/multipart`,
+      form
+    );
+  }
+
+  /** Upload multiple documents one at a time. */
+  async uploadDocumentsMultipart(params: {
+    documents: UploadDocumentMultipartPart[];
+  }): Promise<UploadDocumentsResponse> {
+    const { documents } = params;
+    if (documents.length === 0) {
+      throw new Error('uploadDocumentsMultipart requires at least one document');
+    }
+    const results = await Promise.all(documents.map((doc) => this.uploadDocumentMultipart(doc)));
+    return { documents: results.map((r) => r.document) };
+  }
+
+  async listDocuments(params?: {
+    skip?: number;
+    limit?: number;
+    tagIds?: string;
+    nameSearch?: string;
+    metadataSearch?: string;
+    sort?: string;
+    filters?: string;
+  }): Promise<ListDocumentsResponse> {
     const queryParams: Record<string, string | number | undefined> = {
       skip: params?.skip || 0,
       limit: params?.limit || 10,
@@ -161,6 +198,15 @@ export class DocRouterOrg {
     if (params?.tagIds) queryParams.tag_ids = params.tagIds;
     if (params?.nameSearch) queryParams.name_search = params.nameSearch;
     if (params?.metadataSearch) queryParams.metadata_search = params.metadataSearch;
+    if (params?.sort) queryParams.sort = params.sort;
+    if (params?.filters) queryParams.filters = params.filters;
+
+    // Debug aid: helps verify sort/filters reach the HTTP layer.
+    // Safe in prod (no secrets), but noisy; can be removed once stable.
+    if (typeof window !== 'undefined') {
+      // eslint-disable-next-line no-console
+      console.debug('DocRouterOrg.listDocuments params', queryParams);
+    }
 
     return this.http.get<ListDocumentsResponse>(`/v0/orgs/${this.organizationId}/documents`, {
       params: queryParams
@@ -209,6 +255,13 @@ export class DocRouterOrg {
       metadata: response.metadata,
       content
     };
+  }
+
+  async getDocumentFile(params: { documentId: string; fileType?: string }): Promise<ArrayBuffer> {
+    const { documentId, fileType = 'pdf' } = params;
+    return this.http.getBinary(
+      `/v0/orgs/${this.organizationId}/documents/${documentId}/file?file_type=${fileType}`
+    );
   }
 
   async updateDocument(params: { documentId: string; documentName?: string; tagIds?: string[]; metadata?: Record<string, string>; }) {
@@ -418,10 +471,17 @@ export class DocRouterOrg {
     return this.http.get<Tag>(`/v0/orgs/${this.organizationId}/tags/${tagId}`);
   }
 
-  async listTags(params?: { skip?: number; limit?: number; nameSearch?: string; }): Promise<ListTagsResponse> {
-    const { skip, limit, nameSearch } = params || {};
+  async listTags(params?: ListTagsParams): Promise<ListTagsResponse> {
+    const queryParams: Record<string, string | number | undefined> = {
+      skip: params?.skip || 0,
+      limit: params?.limit || 10,
+    };
+    if (params?.nameSearch) queryParams.name_search = params.nameSearch;
+    if (params?.sort) queryParams.sort = params.sort;
+    if (params?.filters) queryParams.filters = params.filters;
+
     return this.http.get<ListTagsResponse>(`/v0/orgs/${this.organizationId}/tags`, {
-      params: { skip: skip || 0, limit: limit || 10, name_search: nameSearch }
+      params: queryParams,
     });
   }
 

@@ -27,7 +27,7 @@ def markdown_to_plain_text(md: str) -> str:
         text = re.sub(r"\s+", " ", text).strip()
         return text
     except Exception as e:
-        logger.warning("markdown_to_plain_text fallback: %s", e)
+        logger.warning(f"markdown_to_plain_text fallback: {e}")
         return re.sub(r"[#*_`\[\]()]", "", md)
 
 
@@ -42,7 +42,7 @@ def is_pages_markdown_ocr(obj: Any) -> bool:
     return isinstance(first, dict) and "markdown" in first
 
 
-def infer_ocr_type(ocr_json: Any) -> Literal["textract", "mistral", "llm", "pymupdf"]:
+def infer_ocr_type(ocr_json: Any) -> Literal["textract", "mistral", "mistral_vertex", "llm", "pymupdf"]:
     """Infer engine from stored JSON when GridFS metadata is missing."""
     if isinstance(ocr_json, dict) and ocr_json.get("ocr_engine") == "pymupdf":
         return "pymupdf"
@@ -80,7 +80,8 @@ async def get_ocr_json(
     if ocr_blob is None:
         return None
 
-    return decode_ocr_blob_bytes(ocr_blob["blob"])
+    blob_bytes = ocr_blob["blob"]
+    return await asyncio.to_thread(decode_ocr_blob_bytes, blob_bytes)
 
 
 async def save_ocr_json(
@@ -103,19 +104,17 @@ async def save_ocr_json(
     if encoding == "json":
         if "ocr_type" not in metadata:
             logger.warning(
-                "save_ocr_json missing ocr_type in metadata for document_id=%s",
-                document_id,
+                f"save_ocr_json missing ocr_type in metadata for document_id={document_id}"
             )
-        body = json.dumps(ocr_json, ensure_ascii=False, default=str).encode("utf-8")
+        body = await asyncio.to_thread(
+            lambda: json.dumps(ocr_json, ensure_ascii=False, default=str).encode("utf-8")
+        )
     else:
-        body = pickle.dumps(ocr_json)
+        body = await asyncio.to_thread(pickle.dumps, ocr_json)
     size_mb = len(body) / 1024 / 1024
     logger.info(
-        "Saving OCR json for %s with metadata: %s size: %.2fMB encoding=%s",
-        document_id,
-        metadata,
-        size_mb,
-        encoding,
+        f"Saving OCR json for {document_id} with metadata: {metadata} "
+        f"size: {size_mb:.2f}MB encoding={encoding}"
     )
     await ad.mongodb.save_blob_async(
         analytiq_client, bucket=OCR_BUCKET, key=key, blob=body, metadata=metadata
@@ -198,17 +197,20 @@ async def save_ocr_text_from_json(
     """
     ot = ocr_type or infer_ocr_type(ocr_json)
 
-    if ot in ("mistral", "llm", "pymupdf"):
+    if ot in ("mistral", "mistral_vertex", "llm", "pymupdf"):
         if not isinstance(ocr_json, dict) or not is_pages_markdown_ocr(ocr_json):
             raise ValueError(
                 f"{org_id}/{document_id}: expected pages[].markdown OCR payload for ocr_type={ot}"
             )
         page_text_map = _page_text_map_from_pages_markdown(ocr_json)
     else:
-        doc = ad.aws.textract.open_textract_document_from_ocr_json(
-            ocr_json, document_id=document_id, org_id=org_id
-        )
-        page_text_map = ad.aws.textract.page_text_map_from_ocr_document(doc)
+        def _parse_textract():
+            doc = ad.aws.textract.open_textract_document_from_ocr_json(
+                ocr_json, document_id=document_id, org_id=org_id
+            )
+            return ad.aws.textract.page_text_map_from_ocr_document(doc)
+
+        page_text_map = await asyncio.to_thread(_parse_textract)
 
     if not force:
         ocr_text = await get_ocr_text(analytiq_client, document_id)
@@ -225,6 +227,7 @@ async def save_ocr_text_from_json(
     if metadata is None:
         metadata = {}
     metadata["n_pages"] = len(page_text_map)
+    metadata["ocr_type"] = ot
 
     for page_idx, page_text in sorted(page_text_map.items()):
         await save_ocr_text(analytiq_client, document_id, page_text, page_idx, metadata)
@@ -247,6 +250,7 @@ async def get_ocr_metadata(analytiq_client, document_id: str) -> dict:
     return {
         "n_pages": blob["metadata"].get("n_pages", 0),
         "ocr_date": blob.get("upload_date", None),
+        "ocr_type": blob["metadata"].get("ocr_type", None),
     }
 
 

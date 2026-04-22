@@ -1,7 +1,6 @@
 # gcp.py — Vertex / GCP service account in cloud_config (type gcp)
 
 import json
-import logging
 from datetime import datetime, UTC
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,9 +11,12 @@ from app.auth import get_admin_user
 from app.models import User
 from app.secret_mask import mask_secret_plaintext
 
-logger = logging.getLogger(__name__)
-
 gcp_router = APIRouter(tags=["account/gcp"])
+
+
+def _json_str_field(obj: dict, key: str) -> str | None:
+    v = obj.get(key)
+    return v if isinstance(v, str) and v else None
 
 
 class GCPConfigRequest(BaseModel):
@@ -22,9 +24,13 @@ class GCPConfigRequest(BaseModel):
 
 
 class GCPConfigResponse(BaseModel):
-    """Masked service account JSON (never full key material)."""
+    """GET: masked credential blob plus non-secret fields from the service account key JSON."""
 
     service_account_json: str
+    project_id: str | None = None
+    private_key_id: str | None = None
+    client_email: str | None = None
+    client_id: str | None = None
 
 
 @gcp_router.post("/v0/account/gcp_config")
@@ -57,14 +63,13 @@ async def create_gcp_config(
     now = datetime.now(UTC)
     update_data = {
         "type": "gcp",
-        "user_id": current_user.user_id,
         "service_account_json": encrypted,
         "created_at": now,
     }
 
     await db.cloud_config.update_one(
-        {"type": "gcp", "user_id": current_user.user_id},
-        {"$set": update_data},
+        {"type": "gcp"},
+        {"$set": update_data, "$unset": {"user_id": ""}},
         upsert=True,
     )
     return {"message": "GCP configuration saved successfully"}
@@ -76,24 +81,41 @@ async def create_gcp_config(
     response_model_exclude_none=True,
 )
 async def get_gcp_config(current_user: User = Depends(get_admin_user)):
-    """Get GCP configuration status (admin only). Secret JSON is masked; full key is never returned."""
+    """Get GCP configuration (admin only). ``service_account_json`` in the response is masked."""
     db = ad.common.get_async_db()
-    doc = await db.cloud_config.find_one({"type": "gcp", "user_id": current_user.user_id})
-    if not doc or not doc.get("service_account_json"):
-        doc = await db.cloud_config.find_one({"type": "gcp"})
+    doc = await db.cloud_config.find_one({"type": "gcp"})
     if not doc or not doc.get("service_account_json"):
         raise HTTPException(status_code=404, detail="GCP configuration not found")
 
     raw_json = ad.crypto.decrypt_token(doc["service_account_json"])
+    project_id: str | None = None
+    private_key_id: str | None = None
+    client_email: str | None = None
+    client_id: str | None = None
+    try:
+        parsed = json.loads(raw_json)
+        if isinstance(parsed, dict):
+            project_id = _json_str_field(parsed, "project_id")
+            private_key_id = _json_str_field(parsed, "private_key_id")
+            client_email = _json_str_field(parsed, "client_email")
+            client_id = _json_str_field(parsed, "client_id")
+    except json.JSONDecodeError:
+        pass
     masked = mask_secret_plaintext(raw_json) or ""
-    return GCPConfigResponse(service_account_json=masked)
+    return GCPConfigResponse(
+        service_account_json=masked,
+        project_id=project_id,
+        private_key_id=private_key_id,
+        client_email=client_email,
+        client_id=client_id,
+    )
 
 
 @gcp_router.delete("/v0/account/gcp_config")
 async def delete_gcp_config(current_user: User = Depends(get_admin_user)):
     """Delete GCP configuration (admin only)."""
     db = ad.common.get_async_db()
-    result = await db.cloud_config.delete_one({"type": "gcp", "user_id": current_user.user_id})
+    result = await db.cloud_config.delete_many({"type": "gcp"})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="GCP configuration not found")
     return {"message": "GCP configuration deleted successfully"}

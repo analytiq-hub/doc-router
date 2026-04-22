@@ -69,6 +69,9 @@ export interface OrgOcrTextractSettings {
 /** Reserved for future Mistral OCR options; server uses `mistral-ocr-latest`. */
 export type OrgOcrMistralSettings = Record<string, never>;
 
+/** Mistral OCR via Vertex AI (region us-central1, model mistral-ocr-2505). Credentials from GCP cloud_config. */
+export type OrgOcrMistralVertexSettings = Record<string, never>;
+
 /** Reserved for future PyMuPDF OCR options; extraction is local embedded text only. */
 export type OrgOcrPymupdfSettings = Record<string, never>;
 
@@ -77,12 +80,13 @@ export interface OrgOcrLlmSettings {
   model: string | null;
 }
 
-export type OcrMode = 'textract' | 'mistral' | 'llm' | 'pymupdf';
+export type OcrMode = 'textract' | 'mistral' | 'mistral_vertex' | 'llm' | 'pymupdf';
 
 export interface OrgOcrConfig {
   mode: OcrMode;
   textract: OrgOcrTextractSettings;
   mistral: OrgOcrMistralSettings;
+  mistral_vertex: OrgOcrMistralVertexSettings;
   pymupdf: OrgOcrPymupdfSettings;
   llm: OrgOcrLlmSettings;
 }
@@ -93,6 +97,8 @@ export interface OrganizationOcrCatalog {
   modes: string[];
   /** False when Mistral OCR cannot run (Mistral provider off or no models enabled in llm_providers). */
   mistral_enabled?: boolean;
+  /** False when GCP credentials are not configured in cloud_config. */
+  mistral_vertex_enabled?: boolean;
 }
 
 export interface TokenOrganizationResponse {
@@ -254,6 +260,14 @@ export interface UploadDocument {
   metadata?: Record<string, string>;
 }
 
+/** One file for POST .../documents/multipart (raw bytes, no base64). */
+export interface UploadDocumentMultipartPart {
+  name: string;
+  file: Blob;
+  tag_ids?: string[];
+  metadata?: Record<string, string>;
+}
+
 export interface UploadDocumentsParams {
   documents: UploadDocument[];
 }
@@ -267,6 +281,10 @@ export interface UploadedDocument {
   tag_ids: string[];
   type?: string;
   metadata: Record<string, string>;
+}
+
+export interface UploadDocumentResponse {
+  document: UploadedDocument;
 }
 
 export interface UploadDocumentsResponse {
@@ -311,6 +329,10 @@ export interface ListDocumentsParams {
   tagIds?: string;
   nameSearch?: string;
   metadataSearch?: string;
+  /** JSON-encoded MUI DataGrid sortModel (array). */
+  sort?: string;
+  /** JSON-encoded MUI DataGrid filterModel (object). */
+  filters?: string;
 }
 
 export interface ListDocumentsResponse {
@@ -357,11 +379,9 @@ export interface GetOCRMetadataParams {
 }
 
 export interface GetOCRMetadataResponse {
-  document_id: string;
-  page_count: number;
-  processing_status: string;
-  created_at: string;
-  updated_at: string;
+  n_pages: number;
+  ocr_date: string;
+  ocr_type: string | null;
 }
 
 // LLM types
@@ -660,6 +680,10 @@ export interface ListTagsParams {
   skip?: number;
   limit?: number;
   nameSearch?: string;
+  /** JSON-encoded MUI DataGrid sortModel (array). */
+  sort?: string;
+  /** JSON-encoded MUI DataGrid filterModel (object). */
+  filters?: string;
 }
 
 export interface ListTagsResponse {
@@ -751,6 +775,11 @@ export interface ListFormsParams {
   skip?: number;
   limit?: number;
   tag_ids?: string;
+  name_search?: string;
+  /** JSON-encoded MUI DataGrid sortModel (array). */
+  sort?: string;
+  /** JSON-encoded MUI DataGrid filterModel (object). */
+  filters?: string;
 }
 
 export interface ListFormsResponse {
@@ -840,6 +869,10 @@ export interface ListPromptsParams {
   document_id?: string;
   tag_ids?: string;
   nameSearch?: string;
+  /** JSON-encoded MUI DataGrid sortModel (array). */
+  sort?: string;
+  /** JSON-encoded MUI DataGrid filterModel (object). */
+  filters?: string;
 }
 
 export interface ListPromptsResponse {
@@ -915,6 +948,10 @@ export interface ListSchemasParams {
   skip?: number;
   limit?: number;
   nameSearch?: string;
+  /** JSON-encoded MUI DataGrid sortModel (array). */
+  sort?: string;
+  /** JSON-encoded MUI DataGrid filterModel (object). */
+  filters?: string;
 }
 
 export interface ListSchemasResponse {
@@ -1039,7 +1076,7 @@ export interface UsageRangeResponse {
   total_spus: number;
 }
 
-// AWS Config types (GET returns masked keys; POST body expects full keys)
+// AWS Config types (GET: full access_key_id, secret_access_key redacted; POST: full keys)
 export interface AWSConfig {
   access_key_id: string;
   secret_access_key: string;
@@ -1047,9 +1084,16 @@ export interface AWSConfig {
   created_at: string;
 }
 
-/** GET: masked JSON prefix (same rules as LLM token display). POST: full service account JSON. */
+/**
+ * POST: full service account JSON.
+ * GET: masked JSON prefix (same rules as LLM token display); other fields are non-secret metadata from the key.
+ */
 export interface GCPConfig {
   service_account_json: string;
+  project_id?: string;
+  private_key_id?: string;
+  client_email?: string;
+  client_id?: string;
 }
 
 /** GET: ``client_secret`` masked; ``tenant_id``, ``client_id``, ``api_base`` returned in full. POST: all fields required in full. */
@@ -1148,6 +1192,10 @@ export interface ListKnowledgeBasesParams {
   skip?: number;
   limit?: number;
   name_search?: string;
+  /** JSON-encoded MUI DataGrid sortModel (array). */
+  sort?: string;
+  /** JSON-encoded MUI DataGrid filterModel (object). */
+  filters?: string;
 }
 
 export interface ListKnowledgeBasesResponse {

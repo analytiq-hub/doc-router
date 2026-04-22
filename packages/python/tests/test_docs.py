@@ -1,6 +1,7 @@
 import pytest
 import pytest_asyncio
 import base64
+import json
 import os
 import sys
 import random
@@ -350,6 +351,94 @@ async def test_upload_document(test_db, pdf_fixture, request, mock_auth):
         pass  # mock_auth fixture handles cleanup
 
     logger.info(f"test_upload_document() end with {test_pdf['name']}")
+
+
+def _auth_headers_multipart() -> dict[str, str]:
+    """Multipart requests must not force application/json (let client set boundary)."""
+    return {"Authorization": "Bearer test_token"}
+
+
+@pytest.mark.asyncio
+async def test_upload_document_multipart_single_pdf(test_db, mock_auth, small_pdf):
+    """POST /documents/multipart uploads a single file with flat form fields."""
+    raw = base64.b64decode(small_pdf["content"].split(",", 1)[1])
+    meta = {"source": "multipart_unit"}
+    resp = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/multipart",
+        files=[("file", ("multipart_unit.pdf", raw, "application/pdf"))],
+        data={
+            "name": "multipart_unit.pdf",
+            "tag_ids": json.dumps([]),
+            "metadata": json.dumps(meta),
+        },
+        headers=_auth_headers_multipart(),
+    )
+    assert resp.status_code == 200, resp.text
+    body = resp.json()
+    assert body["document"]["document_name"] == "multipart_unit.pdf"
+    assert body["document"]["metadata"] == meta
+    document_id = body["document"]["document_id"]
+
+    get_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
+        params={"file_type": "pdf"},
+        headers=get_auth_headers(),
+    )
+    assert get_response.status_code == 200
+    got = base64.b64decode(get_response.json()["content"])
+    assert got == raw
+
+    del_resp = client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
+        headers=get_auth_headers(),
+    )
+    assert del_resp.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_upload_document_multipart_uses_part_filename(test_db, mock_auth, small_pdf):
+    """When 'name' form field is omitted, the part's filename is used."""
+    raw = base64.b64decode(small_pdf["content"].split(",", 1)[1])
+    resp = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/multipart",
+        files=[("file", ("from_part.pdf", raw, "application/pdf"))],
+        headers=_auth_headers_multipart(),
+    )
+    assert resp.status_code == 200, resp.text
+    doc = resp.json()["document"]
+    assert doc["document_name"] == "from_part.pdf"
+    client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{doc['document_id']}",
+        headers=get_auth_headers(),
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_document_file(test_db, mock_auth, small_pdf):
+    """GET /documents/{id}/file returns raw binary matching the uploaded bytes."""
+    raw = base64.b64decode(small_pdf["content"].split(",", 1)[1])
+    upload_resp = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/multipart",
+        files=[("file", ("binary_test.pdf", raw, "application/pdf"))],
+        headers=_auth_headers_multipart(),
+    )
+    assert upload_resp.status_code == 200, upload_resp.text
+    document_id = upload_resp.json()["document"]["document_id"]
+
+    try:
+        file_resp = client.get(
+            f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}/file",
+            params={"file_type": "pdf"},
+            headers=get_auth_headers(),
+        )
+        assert file_resp.status_code == 200, file_resp.text
+        assert file_resp.content == raw
+        assert "application/pdf" in file_resp.headers.get("content-type", "")
+    finally:
+        client.delete(
+            f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}",
+            headers=get_auth_headers(),
+        )
 
 
 @pytest.mark.asyncio

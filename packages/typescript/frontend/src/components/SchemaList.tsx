@@ -3,7 +3,7 @@ import { DocRouterOrgApi } from '@/utils/api';
 import { Schema, SchemaResponseFormat, SchemaProperty } from '@docrouter/sdk';
 import { SchemaField } from '@/types/ui';
 import { getApiErrorMsg } from '@/utils/api';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridFilterModel, GridRenderCellParams, GridSortModel } from '@mui/x-data-grid';
 import { TextField, InputAdornment, IconButton, Menu, MenuItem } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
@@ -17,8 +17,12 @@ import colors from 'tailwindcss/colors';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'react-toastify';
+import { formatLocalDate } from '@/utils/date';
 import SchemaNameModal from './SchemaNameModal';
 import SchemaInfoModal from './SchemaInfoModal';
+
+const jsonStringifyForQuery = (value: unknown): string =>
+  JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
 
 const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const router = useRouter();
@@ -27,9 +31,10 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(5);
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 5 });
   const [total, setTotal] = useState(0);
+  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'schema_revid', sort: 'desc' }]);
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [selectedSchema, setSelectedSchema] = useState<Schema | null>(null);
   const [isNameModalOpen, setIsNameModalOpen] = useState(false);
@@ -39,10 +44,21 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   const loadSchemas = useCallback(async () => {
     try {
       setIsLoading(true);
+      const sortForApi = sortModel.filter(
+        (s) => s.field !== 'schema_version' && s.field !== 'fields'
+      );
+      const filterForApi: GridFilterModel = {
+        ...filterModel,
+        items: filterModel.items.filter(
+          (i) => i.field !== 'schema_version' && i.field !== 'fields'
+        ),
+      };
       const response = await docRouterOrgApi.listSchemas({
-        skip: page * pageSize,
-        limit: pageSize,
-        nameSearch: searchTerm || undefined
+        skip: paginationModel.page * paginationModel.pageSize,
+        limit: paginationModel.pageSize,
+        nameSearch: searchTerm || undefined,
+        sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
+        filters: filterForApi.items.length ? jsonStringifyForQuery(filterForApi) : undefined,
       });
       setSchemas(response.schemas);
       setTotal(response.total_count);
@@ -52,7 +68,7 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
     } finally {
       setIsLoading(false);
     }
-  }, [page, pageSize, docRouterOrgApi, searchTerm]);
+  }, [paginationModel, docRouterOrgApi, searchTerm, sortModel, filterModel]);
 
   const handleDelete = async (schemaId: string) => {
     try {
@@ -226,6 +242,7 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       field: 'name',
       headerName: 'Schema Name',
       flex: 1,
+      minWidth: 140,
       headerAlign: 'left',
       align: 'left',
       renderCell: (params) => (
@@ -241,6 +258,9 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       field: 'fields',
       headerName: 'Fields',
       flex: 2,
+      sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
       headerAlign: 'left',
       align: 'left',
       renderCell: (params) => {
@@ -258,9 +278,40 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       },
     },
     {
+      field: 'created_at',
+      headerName: 'Created',
+      type: 'dateTime',
+      width: 200,
+      headerAlign: 'left',
+      align: 'left',
+      valueGetter: (params: GridRenderCellParams) => {
+        const anyParams = params as unknown as { row?: { created_at?: unknown }; value?: unknown };
+        const v = (anyParams.row?.created_at ?? anyParams.value) as string | Date | null | undefined;
+        if (!v) return null;
+        if (v instanceof Date) return v;
+        const d = new Date(v);
+        return Number.isNaN(d.getTime()) ? null : d;
+      },
+      valueFormatter: (params: GridRenderCellParams) => {
+        const p = params as unknown as { value?: unknown } | null;
+        if (!p?.value) return '';
+        const v = p.value as Date | string;
+        const iso = v instanceof Date ? v.toISOString() : String(v);
+        return formatLocalDate(iso);
+      },
+      renderCell: (params: GridRenderCellParams) => {
+        const anyParams = params as unknown as { row?: { created_at?: unknown } };
+        if (!anyParams?.row?.created_at) return '';
+        return <div className="text-gray-600">{formatLocalDate(anyParams.row.created_at as string)}</div>;
+      },
+    },
+    {
       field: 'schema_version',
       headerName: 'Version',
-      width: 150,
+      width: 120,
+      sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
       headerAlign: 'left',
       align: 'left',
       renderCell: (params) => (
@@ -276,6 +327,8 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
       headerAlign: 'center',
       align: 'center',
       sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
       renderCell: (params) => (
         <div className="flex gap-2 items-center h-full">
           <IconButton
@@ -306,7 +359,10 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
           variant="outlined"
           placeholder="Search schemas..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            setSearchTerm(e.target.value);
+            setPaginationModel((prev) => ({ ...prev, page: 0 }));
+          }}
           InputProps={{
             startAdornment: (
               <InputAdornment position="start">
@@ -332,23 +388,32 @@ const SchemaList: React.FC<{ organizationId: string }> = ({ organizationId }) =>
           rows={filteredSchemas}
           columns={columns}
           getRowId={(row) => row.schema_revid}
-          initialState={{
-            pagination: {
-              paginationModel: { pageSize: 5 }
-            },
-            sorting: {
-              sortModel: [{ field: 'schema_revid', sort: 'desc' }]
-            }
+          sortingMode="server"
+          sortModel={sortModel}
+          onSortModelChange={(model) => {
+            setSortModel(
+              model.filter((s) => s.field !== 'schema_version' && s.field !== 'fields')
+            );
+            setPaginationModel((prev) => ({ ...prev, page: 0 }));
+          }}
+          filterMode="server"
+          filterModel={filterModel}
+          onFilterModelChange={(model) => {
+            setFilterModel({
+              ...model,
+              items: model.items.filter(
+                (i) => i.field !== 'schema_version' && i.field !== 'fields'
+              ),
+            });
+            setPaginationModel((prev) => ({ ...prev, page: 0 }));
           }}
           pageSizeOptions={[5, 10, 20]}
           disableRowSelectionOnClick
           loading={isLoading}
           paginationMode="server"
+          paginationModel={paginationModel}
+          onPaginationModelChange={setPaginationModel}
           rowCount={total}
-          onPaginationModelChange={(model) => {
-            setPage(model.page);
-            setPageSize(model.pageSize);
-          }}
           getRowHeight={({ model }) => {
             const fields = jsonSchemaToFields(model.response_format);
             const numFields = fields.length;

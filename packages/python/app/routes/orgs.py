@@ -61,6 +61,7 @@ class OrganizationOcrCatalog(BaseModel):
     textract_feature_types: list[str]
     modes: list[str]
     mistral_enabled: bool
+    mistral_vertex_enabled: bool = False
 
 
 class Organization(BaseModel):
@@ -81,6 +82,7 @@ async def _organization_ocr_catalog() -> OrganizationOcrCatalog:
         textract_feature_types=cat["textract_feature_types"],
         modes=cat["modes"],
         mistral_enabled=cat["mistral_enabled"],
+        mistral_vertex_enabled=cat.get("mistral_vertex_enabled", False),
     )
 
 

@@ -63,7 +63,7 @@ async def build_system_message(
             parts.append("## Document text")
             parts.append("(No extracted text available for this document.)")
     except Exception as e:
-        logger.warning("Failed to get OCR text for system prompt: %s", e)
+        logger.warning(f"Failed to get OCR text for system prompt: {e}")
         parts.append("## Document text")
         parts.append("(Could not load document text.)")
     parts.append("")

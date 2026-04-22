@@ -169,23 +169,20 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
     const load = async () => {
       try {
-        const response = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
+        // Fetch metadata and binary in parallel; skip binary if still processing.
+        const meta = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf', includeContent: false });
         if (cancelled) return;
-        const content = response.content ?? null;
-        const name = response.document_name ?? null;
-        const state = response.state ?? null;
+        const state = meta.state ?? null;
+        const name = meta.document_name ?? null;
         setDocumentState(state);
-        const hasContent = content != null;
         const stillProcessing = ['ocr_processing', 'llm_processing'].includes(state ?? '');
-        if (hasContent) {
-          const blob = new Blob([content], { type: 'application/pdf' });
+        if (!stillProcessing) {
+          const buffer = await docRouterOrgApi.getDocumentFile({ documentId: id, fileType: 'pdf' });
+          if (cancelled) return;
+          const blob = new Blob([buffer], { type: 'application/pdf' });
           setUrlFromBlob(blob, name, state);
           setFileName(name ?? '');
           setFileSize(blob.size);
-        } else {
-          setFileUrl(null);
-        }
-        if (hasContent || !stillProcessing) {
           setLoading(false);
         }
       } catch (e) {
@@ -207,7 +204,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     };
   }, [id, docRouterOrgApi, revokeCurrentUrl, setUrlFromBlob]);
 
-  // Poll metadata when processing. When completed and we still have no URL, do one full fetch and set blob URL.
+  // Poll metadata when processing. When completed and we still have no URL, fetch binary and set blob URL.
   useEffect(() => {
     if (documentState !== 'ocr_processing' && documentState !== 'llm_processing') {
       if (pollRef.current) {
@@ -231,14 +228,11 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
           }
           setDocumentState(meta.state ?? null);
           if (fileUrlRef.current == null) {
-            const response = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf' });
-            const content = response.content ?? null;
-            if (content) {
-              const blob = new Blob([content], { type: 'application/pdf' });
-              setUrlFromBlob(blob, response.document_name ?? null, response.state ?? null);
-              setFileName(response.document_name ?? '');
-              setFileSize(blob.size);
-            }
+            const buffer = await docRouterOrgApi.getDocumentFile({ documentId: id, fileType: 'pdf' });
+            const blob = new Blob([buffer], { type: 'application/pdf' });
+            setUrlFromBlob(blob, meta.document_name ?? null, meta.state ?? null);
+            setFileName(meta.document_name ?? '');
+            setFileSize(blob.size);
             setLoading(false);
           }
         }
@@ -288,6 +282,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
   const [documentProperties, setDocumentProperties] = useState<Record<string, string> | null>(null);
 
   const [ocrPanelKind, setOcrPanelKind] = useState<OcrPanelKind | null>(null);
+  const [ocrMetadataType, setOcrMetadataType] = useState<string | null>(null);
   const [ocrText, setOcrText] = useState<string>('');
   const [ocrLoading, setOcrLoading] = useState(false);
   const [ocrError, setOcrError] = useState<string | null>(null);
@@ -987,6 +982,17 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
     return undefined;
   }, [ocrPanelKind, id, docRouterOrgApi, fileName]);
+
+  useEffect(() => {
+    if (!ocrPanelKind) {
+      setOcrMetadataType(null);
+      return;
+    }
+    docRouterOrgApi.getOCRMetadata({ documentId: id })
+      .then((meta) => setOcrMetadataType(meta.ocr_type ?? null))
+      .catch(() => setOcrMetadataType(null));
+  }, [ocrPanelKind, id, docRouterOrgApi]);
+
 
   // This is called once for each page
   const renderHighlights = useCallback((page: number) => {
@@ -1697,7 +1703,12 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                 title={
                   <>
                     <ArticleIcon className="shrink-0 text-blue-600" fontSize="small" />
-                    <span className="truncate">OCR Output</span>
+                    {ocrMetadataType && (
+                      <span className="shrink-0 rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700">
+                        {ocrMetadataType}
+                      </span>
+                    )}
+                    <span className="truncate">{fileName || 'OCR Output'}</span>
                   </>
                 }
                 headerActions={
@@ -1758,8 +1769,24 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                         ) : ocrMarkdownError ? (
                           <p className="py-4 text-sm text-red-600">{ocrMarkdownError}</p>
                         ) : (
-                          <div className="prose prose-sm max-w-none min-h-0 flex-1 overflow-auto rounded border bg-gray-50 p-3 text-gray-800 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          <div className="min-h-0 flex-1 overflow-auto rounded border bg-gray-50 p-3 text-gray-800 [&::-webkit-scrollbar]:w-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300">
+                            <ReactMarkdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                h1: ({children}) => <h1 className="text-2xl font-bold mt-4 mb-2">{children}</h1>,
+                                h2: ({children}) => <h2 className="text-xl font-bold mt-3 mb-2">{children}</h2>,
+                                h3: ({children}) => <h3 className="text-lg font-semibold mt-3 mb-1">{children}</h3>,
+                                h4: ({children}) => <h4 className="text-base font-semibold mt-2 mb-1">{children}</h4>,
+                                p: ({children}) => <p className="mb-2">{children}</p>,
+                                ul: ({children}) => <ul className="list-disc pl-5 mb-2">{children}</ul>,
+                                ol: ({children}) => <ol className="list-decimal pl-5 mb-2">{children}</ol>,
+                                li: ({children}) => <li className="mb-0.5">{children}</li>,
+                                table: ({children}) => <table className="border-collapse w-full mb-2 text-sm">{children}</table>,
+                                th: ({children}) => <th className="border border-gray-300 px-2 py-1 bg-gray-100 font-semibold text-left">{children}</th>,
+                                td: ({children}) => <td className="border border-gray-300 px-2 py-1">{children}</td>,
+                                code: ({children}) => <code className="bg-gray-200 rounded px-1 text-xs font-mono">{children}</code>,
+                              }}
+                            >
                               {ocrMarkdown || '*No content.*'}
                             </ReactMarkdown>
                           </div>

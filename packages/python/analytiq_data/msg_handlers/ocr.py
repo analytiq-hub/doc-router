@@ -194,11 +194,8 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
     except Exception as e:
         if isinstance(e, SPUCreditException):
             logger.warning(
-                "OCR skipped: insufficient SPU credits document_id=%s org_id=%s required=%s available=%s",
-                document_id,
-                org_id,
-                getattr(e, "required_spus", None),
-                getattr(e, "available_spus", None),
+                f"OCR skipped: insufficient SPU credits document_id={document_id} org_id={org_id} "
+                f"required={getattr(e, 'required_spus', None)} available={getattr(e, 'available_spus', None)}"
             )
             if document_id:
                 await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_FAILED)
@@ -244,9 +241,15 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
                 analytiq_client,
                 "ocr",
                 msg_id_str,
-                f"OCR handler error after {attempts} attempts: {e}",
+                str(e),
             )
         else:
+            await ad.queue.report_last_error(
+                analytiq_client,
+                "ocr",
+                msg_id_str,
+                str(e),
+            )
             logger.info(
                 f"Leaving OCR message {msg_id_str} in processing for retry after handler error (document_id={document_id}, org_id={org_id}, attempt {attempts} of {MAX_QUEUE_ATTEMPTS})"
             )

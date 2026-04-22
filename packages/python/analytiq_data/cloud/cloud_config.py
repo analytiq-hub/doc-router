@@ -1,9 +1,11 @@
 """
-Unified cloud credentials in ``cloud_config`` with ``type`` discriminator.
+Unified **deployment-wide** cloud credentials in ``cloud_config`` with ``type`` discriminator.
 
-- ``type: "aws"`` — same fields as legacy ``aws_config`` (encrypted keys, bucket, ``user_id``).
-- ``type: "gcp"`` — encrypted ``service_account_json`` (Vertex), ``user_id``.
-- ``type: "azure"`` — encrypted Microsoft Entra service principal (tenant, client id, client secret), plaintext ``api_base`` (Foundry endpoint URL), ``user_id``.
+At most one active document per ``type`` for the whole site (not per end user).
+
+- ``type: "aws"`` — encrypted keys and ``s3_bucket_name`` (same shape as legacy ``aws_config``).
+- ``type: "gcp"`` — encrypted ``service_account_json`` (Vertex).
+- ``type: "azure"`` — encrypted Entra fields plus plaintext ``api_base`` (Foundry endpoint URL).
 """
 
 import json
@@ -58,7 +60,7 @@ async def get_gcp_service_account_json(analytiq_client) -> str:
         try:
             return ad.crypto.decrypt_token(doc["service_account_json"])
         except Exception as e:
-            logger.warning("Failed to decrypt GCP service_account_json: %s", e)
+            logger.warning(f"Failed to decrypt GCP service_account_json: {e}")
             return ""
 
     provider = await db.llm_providers.find_one({"litellm_provider": "vertex_ai"})
@@ -66,7 +68,7 @@ async def get_gcp_service_account_json(analytiq_client) -> str:
         try:
             return ad.crypto.decrypt_token(provider["token"])
         except Exception as e:
-            logger.warning("Failed to decrypt legacy vertex_ai llm_providers token: %s", e)
+            logger.warning(f"Failed to decrypt legacy vertex_ai llm_providers token: {e}")
             return ""
 
     return ""
@@ -122,7 +124,7 @@ async def get_azure_service_principal_dict(analytiq_client) -> dict:
         try:
             return ad.crypto.decrypt_token(raw)
         except Exception as e:
-            logger.warning("Failed to decrypt Azure cloud_config field %s: %s", field, e)
+            logger.warning(f"Failed to decrypt Azure cloud_config field {field}: {e}")
             return ""
 
     api_base = (doc.get("api_base") or "").strip()

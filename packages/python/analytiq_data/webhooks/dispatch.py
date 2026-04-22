@@ -249,12 +249,7 @@ async def enqueue_event(
         )
 
         logger.info(
-            "Webhook enqueued: %s %s org=%s doc=%s webhook_id=%s",
-            delivery_id,
-            event_type,
-            organization_id,
-            document_id,
-            webhook_id_str,
+            f"Webhook enqueued: {delivery_id} {event_type} org={organization_id} doc={document_id} webhook_id={webhook_id_str}"
         )
 
         if first_delivery_id is None:

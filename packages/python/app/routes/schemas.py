@@ -14,6 +14,7 @@ from jsonschema import Draft7Validator
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.common.schema_list import list_schemas_for_org
 from app.auth import get_org_user
 from app.models import User
 
@@ -204,74 +205,44 @@ async def list_schemas(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     name_search: str = Query(None, description="Search term for schema names"),
+    sort: str = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
+    filters: str = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
     current_user: User = Depends(get_org_user)
 ):
     """List latest schema revisions within an organization"""
-    logger.info(f"list_schemas() start: organization_id: {organization_id}, skip: {skip}, limit: {limit}")
-    db = ad.common.get_async_db()
-    
-    # First, get schemas that belong to the organization
-    # Build base query for schemas in org
-    schemas_query = {"organization_id": organization_id}
-    # Optional name search (case-insensitive)
-    if name_search:
-        schemas_query["name"] = {"$regex": name_search, "$options": "i"}
+    sort_model = None
+    filter_model = None
+    if sort:
+        try:
+            sort_model = json.loads(sort)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid sort JSON")
+    if filters:
+        try:
+            filter_model = json.loads(filters)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid filters JSON")
 
-    org_schemas = await db.schemas.find(schemas_query).to_list(None)
-    
-    if not org_schemas:
-        return ListSchemasResponse(schemas=[], total_count=0, skip=skip)
-    
-    # Extract schema IDs (restricted to name_search if provided)
-    schema_ids = [schema["_id"] for schema in org_schemas]
-    schema_id_to_name = {str(schema["_id"]): schema["name"] for schema in org_schemas}
-    
-    # Build pipeline for schema_revisions
-    pipeline = [
-        {
-            "$match": {"schema_id": {"$in": [str(sid) for sid in schema_ids]}}
-        },
-        {
-            "$sort": {"_id": -1}
-        },
-        {
-            "$group": {
-                "_id": "$schema_id",
-                "doc": {"$first": "$$ROOT"}
-            }
-        },
-        {
-            "$replaceRoot": {"newRoot": "$doc"}
-        },
-        {
-            "$sort": {"_id": -1}
-        },
-        {
-            "$facet": {
-                "total": [{"$count": "count"}],
-                "schemas": [
-                    {"$skip": skip},
-                    {"$limit": limit}
-                ]
-            }
-        }
-    ]
-    
-    result = await db.schema_revisions.aggregate(pipeline).to_list(length=1)
-    result = result[0]
-    
-    total_count = result["total"][0]["count"] if result["total"] else 0
-    schemas = result["schemas"]
-    
-    # Convert _id to id in each schema and add name from schemas collection
-    for schema in schemas:
-        schema['schema_revid'] = str(schema.pop('_id'))
-        schema['name'] = schema_id_to_name.get(schema['schema_id'], "Unknown")
-    
+    logger.info(
+        f"list_schemas(): org={organization_id} skip={skip} limit={limit} "
+        f"name_search={name_search} sort_model={sort_model} filter_model={filter_model}"
+    )
+    db = ad.common.get_async_db()
+
+    schemas, total_count = await list_schemas_for_org(
+        db,
+        organization_id,
+        skip=skip,
+        limit=limit,
+        name_search=name_search,
+        sort_model=sort_model,
+        filter_model=filter_model,
+    )
+
     return ListSchemasResponse(
         schemas=schemas,
         total_count=total_count,
-        skip=skip
+        skip=skip,
     )
 
 @schemas_router.get("/v0/orgs/{organization_id}/schemas/{schema_revid}", response_model=Schema)

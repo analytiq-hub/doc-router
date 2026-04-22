@@ -89,23 +89,19 @@ async def setup_api_creds(analytiq_client):
         env = analytiq_client.env
         db = analytiq_client.mongodb_async[env]
         
-        # Get system admin user
+        # Require configured admin email so we only seed after initial admin bootstrap.
         admin_email = os.getenv("ADMIN_EMAIL")
         if not admin_email:
             return
-            
-        admin_user = await db.users.find_one({"email": admin_email})
-        if not admin_user:
+        if not await db.users.find_one({"email": admin_email}):
             return
-            
-        admin_id = str(admin_user["_id"])
-        
-        # AWS Configuration. Only store configuration if it doesn't already exist.
+
+        # AWS Configuration. Only store global deployment config if it doesn't already exist.
         aws_access_key = os.getenv("AWS_ACCESS_KEY_ID", "")
         aws_secret_key = os.getenv("AWS_SECRET_ACCESS_KEY", "")
         aws_s3_bucket = os.getenv("AWS_S3_BUCKET_NAME", "")
-        
-        existing_aws = await db.cloud_config.find_one({"type": "aws", "user_id": admin_id})
+
+        existing_aws = await db.cloud_config.find_one({"type": "aws"})
 
         if not existing_aws:
             # Check if .env has all the required AWS configuration
@@ -122,7 +118,6 @@ async def setup_api_creds(analytiq_client):
 
             update_data = {
                 "type": "aws",
-                "user_id": admin_id,
                 "access_key_id": encrypted_access_key,
                 "secret_access_key": encrypted_secret_key,
                 "s3_bucket_name": aws_s3_bucket,
@@ -130,11 +125,11 @@ async def setup_api_creds(analytiq_client):
             }
 
             await db.cloud_config.update_one(
-                {"type": "aws", "user_id": admin_id},
-                {"$set": update_data},
+                {"type": "aws"},
+                {"$set": update_data, "$unset": {"user_id": ""}},
                 upsert=True,
             )
-            logger.info("AWS configuration configured for admin user (cloud_config)")
+            logger.info("AWS global configuration stored in cloud_config from environment")
 
         # Azure service principal (cloud_config type azure). Only store if not already saved from the UI.
         azure_tenant_id = os.getenv("AZURE_TENANT_ID", "")
@@ -142,9 +137,7 @@ async def setup_api_creds(analytiq_client):
         azure_client_secret = os.getenv("AZURE_CLIENT_SECRET", "")
         azure_api_base = (os.getenv("AZURE_API_BASE", "") or "").strip().rstrip("/")
 
-        existing_azure = await db.cloud_config.find_one(
-            {"type": ad.cloud.TYPE_AZURE, "user_id": admin_id}
-        )
+        existing_azure = await db.cloud_config.find_one({"type": ad.cloud.TYPE_AZURE})
 
         if not existing_azure:
             if len(azure_tenant_id.strip()) == 0:
@@ -164,7 +157,6 @@ async def setup_api_creds(analytiq_client):
 
             azure_update = {
                 "type": ad.cloud.TYPE_AZURE,
-                "user_id": admin_id,
                 "tenant_id": encrypted_tenant,
                 "client_id": encrypted_client,
                 "client_secret": encrypted_secret,
@@ -173,12 +165,12 @@ async def setup_api_creds(analytiq_client):
             }
 
             await db.cloud_config.update_one(
-                {"type": ad.cloud.TYPE_AZURE, "user_id": admin_id},
-                {"$set": azure_update},
+                {"type": ad.cloud.TYPE_AZURE},
+                {"$set": azure_update, "$unset": {"user_id": ""}},
                 upsert=True,
             )
             logger.info(
-                "Azure service principal configured for admin user (cloud_config) from environment"
+                "Azure global service principal stored in cloud_config from environment"
             )
 
     except Exception as e:

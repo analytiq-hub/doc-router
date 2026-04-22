@@ -2,6 +2,7 @@
 
 # Standard library imports
 import asyncio
+import json
 import logging
 import hashlib
 import time
@@ -15,6 +16,7 @@ from bson import ObjectId
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.common.kb_list import list_knowledge_base_docs_for_org
 from analytiq_data.kb.chunking_config import (
     ChunkingPreprocessConfig,
     ChunkingPresetName,
@@ -342,24 +344,21 @@ async def wait_for_vector_index_ready(
                 queryable = indexes[0].get("queryable", False)
                 if queryable:
                     logger.info(
-                        "Vector index for KB %s is queryable (status=%s) after %.1fs",
-                        kb_id, last_status, i * poll_interval,
+                        f"Vector index for KB {kb_id} is queryable (status={last_status}) after {i * poll_interval:.1f}s"
                     )
                     return
                 logger.debug(
-                    "Vector index for KB %s not ready: status=%s queryable=%s (attempt %d/%d)",
-                    kb_id, last_status, queryable, i + 1, max_attempts,
+                    f"Vector index for KB {kb_id} not ready: status={last_status} queryable={queryable} "
+                    f"(attempt {i + 1}/{max_attempts})"
                 )
             else:
                 last_status = "NOT_FOUND"
                 logger.debug(
-                    "Vector index for KB %s not yet visible (attempt %d/%d)",
-                    kb_id, i + 1, max_attempts,
+                    f"Vector index for KB {kb_id} not yet visible (attempt {i + 1}/{max_attempts})"
                 )
         except Exception as e:
             logger.warning(
-                "Error polling vector index status for KB %s (attempt %d/%d): %s",
-                kb_id, i + 1, max_attempts, e,
+                f"Error polling vector index status for KB {kb_id} (attempt {i + 1}/{max_attempts}): {e}"
             )
 
         if i < max_attempts - 1:
@@ -459,8 +458,7 @@ async def create_vector_search_index(
             embedding_dimensions=embedding_dimensions,
         )
         logger.info(
-            "Vector index for KB %s became queryable in %.1fs",
-            kb_id, time.monotonic() - t0,
+            f"Vector index for KB {kb_id} became queryable in {time.monotonic() - t0:.1f}s"
         )
     except HTTPException:
         raise
@@ -529,13 +527,11 @@ async def _finalize_knowledge_base_creation(
             {"_id": ObjectId(kb_id), "organization_id": organization_id}
         )
         if not doc:
-            logger.info("KB finalize skipped: %s not found", kb_id)
+            logger.info(f"KB finalize skipped: {kb_id} not found")
             return
         if doc.get("status") != "indexing":
             logger.info(
-                "KB finalize skipped: %s status=%s (expected indexing)",
-                kb_id,
-                doc.get("status"),
+                f"KB finalize skipped: {kb_id} status={doc.get('status')} (expected indexing)"
             )
             return
 
@@ -550,7 +546,7 @@ async def _finalize_knowledge_base_creation(
             {"$set": {"status": "active", "updated_at": datetime.now(UTC)}},
         )
     except Exception as e:
-        logger.exception("KB %s search index setup failed: %s", kb_id, e)
+        logger.exception(f"KB {kb_id} search index setup failed: {e}")
         try:
             analytiq_client = ad.common.get_analytiq_client()
             db = ad.common.get_async_db(analytiq_client)
@@ -559,7 +555,7 @@ async def _finalize_knowledge_base_creation(
                 {"$set": {"status": "error", "updated_at": datetime.now(UTC)}},
             )
         except Exception:
-            logger.exception("Failed to mark KB %s as error", kb_id)
+            logger.exception(f"Failed to mark KB {kb_id} as error")
         try:
             db = ad.common.get_async_db(ad.common.get_analytiq_client())
             await db[f"kb_vectors_{kb_id}"].drop()
@@ -575,9 +571,9 @@ async def _finalize_knowledge_base_creation(
             kb_id=kb_id,
             dry_run=False,
         )
-        logger.info("Reconciliation finished for newly created KB %s", kb_id)
+        logger.info(f"Reconciliation finished for newly created KB {kb_id}")
     except Exception as e:
-        logger.error("Error reconciling newly created KB %s: %s", kb_id, e)
+        logger.error(f"Error reconciling newly created KB {kb_id}: {e}")
 
 
 # API Endpoints
@@ -670,23 +666,40 @@ async def list_knowledge_bases(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     name_search: Optional[str] = Query(None),
+    sort: Optional[str] = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
+    filters: Optional[str] = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
     current_user: User = Depends(get_org_user)
 ):
     """List knowledge bases for an organization"""
+    sort_model = None
+    filter_model = None
+    if sort:
+        try:
+            sort_model = json.loads(sort)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid sort JSON")
+    if filters:
+        try:
+            filter_model = json.loads(filters)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid filters JSON")
+
+    logger.info(
+        f"list_knowledge_bases(): org={organization_id} skip={skip} limit={limit} "
+        f"name_search={name_search} sort_model={sort_model} filter_model={filter_model}"
+    )
     analytiq_client = ad.common.get_analytiq_client()
     db = ad.common.get_async_db(analytiq_client)
-    
-    # Build query
-    query = {"organization_id": organization_id}
-    if name_search:
-        query["name"] = {"$regex": name_search, "$options": "i"}
-    
-    # Get total count
-    total_count = await db.knowledge_bases.count_documents(query)
-    
-    # Get KBs with pagination
-    cursor = db.knowledge_bases.find(query).skip(skip).limit(limit).sort("created_at", -1)
-    kbs = await cursor.to_list(length=limit)
+
+    kbs, total_count = await list_knowledge_base_docs_for_org(
+        db,
+        organization_id,
+        skip=skip,
+        limit=limit,
+        name_search=name_search,
+        sort_model=sort_model,
+        filter_model=filter_model,
+    )
     
     knowledge_bases = []
     for kb in kbs:

@@ -119,7 +119,16 @@ export class HttpClient {
 
   private createApiError(error: unknown): ApiError {
     if (isAxiosError(error)) {
-      const message = error.response?.data?.detail || error.message || 'Request failed';
+      const data = error.response?.data as any;
+      const detail = data?.detail;
+      const message =
+        (typeof detail === 'string' && detail) ||
+        (detail != null && typeof detail !== 'string' ? this.safeJsonStringify(detail) : '') ||
+        (typeof data === 'string' && data) ||
+        (data != null && typeof data === 'object' ? this.safeJsonStringify(data) : '') ||
+        error.message ||
+        'Request failed';
+
       const apiError: ApiError = new Error(message);
       apiError.status = error.response?.status;
       apiError.code = error.code;
@@ -135,14 +144,43 @@ export class HttpClient {
     return new Error('Unknown error occurred');
   }
 
+  private safeJsonStringify(value: unknown): string {
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return String(value);
+    }
+  }
+
   // Public methods
   async get<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
     const response: AxiosResponse<T> = await this.axios.get(url, config);
     return response.data;
   }
 
+  async getBinary(url: string): Promise<ArrayBuffer> {
+    const response = await this.axios.get<ArrayBuffer>(url, { responseType: 'arraybuffer' });
+    return response.data;
+  }
+
   async post<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
     const response: AxiosResponse<T> = await this.axios.post(url, data, config);
+    return response.data;
+  }
+
+  /** POST multipart/form-data (e.g. file uploads). Strips JSON Content-Type so the boundary is set correctly. */
+  async postFormData<T = unknown>(url: string, formData: FormData, config?: AxiosRequestConfig): Promise<T> {
+    const response: AxiosResponse<T> = await this.axios.post(url, formData, {
+      ...config,
+      transformRequest: [
+        (data, headers) => {
+          if (data instanceof FormData) {
+            delete headers['Content-Type'];
+          }
+          return data as FormData;
+        },
+      ],
+    });
     return response.data;
   }
 

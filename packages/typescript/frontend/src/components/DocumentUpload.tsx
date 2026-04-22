@@ -15,7 +15,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import { 
   DocRouterOrgApi
 } from '@/utils/api';
-import { UploadDocument, Tag } from '@docrouter/sdk';
+import { Tag } from '@docrouter/sdk';
 import { isColorLight } from '@/utils/colors';
 import InfoTooltip from '@/components/InfoTooltip';
 import TagSelector from './TagSelector';
@@ -24,9 +24,15 @@ interface DocumentUploadProps {
   organizationId: string;
 }
 
+/** Local file row (multipart upload; avoid base64 in memory). */
+interface PendingUploadFile {
+  id: string;
+  file: File;
+}
+
 const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const [files, setFiles] = useState<UploadDocument[]>([]);
+  const [files, setFiles] = useState<PendingUploadFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<string | null>(null);
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
@@ -49,29 +55,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
   }, [organizationId, docRouterOrgApi]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
-    const readFiles = acceptedFiles.map(file => 
-      new Promise<UploadDocument>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = () => {
-          resolve({
-            name: file.name,
-            content: reader.result as string,
-            tag_ids: selectedTags, // Include selected tags with each file
-            metadata: Object.fromEntries(
-              metadataFields
-                .filter(field => field.key.trim() !== '')
-                .map(field => [field.key, field.value])
-            ) // Include metadata with each file
-          });
-        };
-        reader.readAsDataURL(file);
-      })
-    );
-
-    Promise.all(readFiles).then(newFiles => {
-      setFiles(prevFiles => [...prevFiles, ...newFiles]);
-    });
-  }, [selectedTags, metadataFields]); // Add selectedTags and metadataFields as dependencies
+    const newRows: PendingUploadFile[] = acceptedFiles.map((file) => ({
+      id: crypto.randomUUID(),
+      file,
+    }));
+    setFiles((prev) => [...prev, ...newRows]);
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -97,36 +86,36 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
   const handleUpload = async () => {
     if (files.length === 0) return;
 
-    // Add selected tags and metadata to each file before upload
-    const filesWithTagsAndMetadata = files.map(file => ({
-      name: file.name,
-      content: file.content, // SDK now accepts base64 strings directly (including data URLs)
-      tag_ids: selectedTags, // SDK now supports tag_ids directly
-      metadata: Object.fromEntries(
-        metadataFields
-          .filter(field => field.key.trim() !== '')
-          .map(field => [field.key, field.value])
-      )
-    }));
+    const metadata = Object.fromEntries(
+      metadataFields
+        .filter((field) => field.key.trim() !== '')
+        .map((field) => [field.key, field.value])
+    );
 
     setUploading(true);
     setUploadStatus(null);
 
     try {
-      const response = await docRouterOrgApi.uploadDocuments({
-        documents: filesWithTagsAndMetadata
-      });
-      
-      // Create a more detailed success message
-      const fileNames = files.map(file => file.name).join(", ");
-      const tagNames = selectedTags.length > 0 
+      await Promise.all(
+        files.map(({ file }) =>
+          docRouterOrgApi.uploadDocumentMultipart({
+            name: file.name,
+            file,
+            tag_ids: selectedTags,
+            metadata,
+          })
+        )
+      );
+
+      const fileNames = files.map((row) => row.file.name).join(', ');
+      const tagNames = selectedTags.length > 0
         ? availableTags
             .filter(tag => selectedTags.includes(tag.id))
             .map(tag => tag.name)
             .join(", ")
         : "no tags";
-      
-      setUploadStatus(`Successfully uploaded ${response.documents.length} file(s): ${fileNames} with ${tagNames}`);
+
+      setUploadStatus(`Successfully uploaded ${files.length} file(s): ${fileNames} with ${tagNames}`);
       
       setFiles([]);
       setSelectedTags([]); // Reset selected tags after successful upload
@@ -202,9 +191,9 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
     setValidationError(null)
   }, [uploadStatus]);
 
-  const handleDeleteFile = useCallback((fileName: string) => {
-    setFiles(prevFiles => prevFiles.filter(file => file.name !== fileName));
-    
+  const handleDeleteFile = useCallback((id: string) => {
+    setFiles((prevFiles) => prevFiles.filter((row) => row.id !== id));
+
     // If no files left, go back to step 1
     if (files.length === 1) {
       setActiveStep(0);
@@ -324,12 +313,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
               <div className="mt-4">
                 <Typography variant="subtitle1" className="text-left mb-2">Selected files:</Typography>
                 <div className="max-h-40 overflow-y-auto border rounded-md">
-                  {files.map((file) => (
-                    <div key={file.name} className="text-left py-1 px-2 odd:bg-gray-50 flex justify-between items-center">
-                      <span>{file.name}</span>
+                  {files.map((row) => (
+                    <div key={row.id} className="text-left py-1 px-2 odd:bg-gray-50 flex justify-between items-center">
+                      <span>{row.file.name}</span>
                       <IconButton 
                         size="small" 
-                        onClick={() => handleDeleteFile(file.name)}
+                        onClick={() => handleDeleteFile(row.id)}
                         className="text-red-500 hover:bg-red-50"
                       >
                         <DeleteOutlineIcon fontSize="small" />
@@ -361,12 +350,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
             <div className="mb-6 bg-gray-50 p-3 rounded-lg">
               <h4 className="font-medium mb-2">Selected Files:</h4>
               <div className="max-h-32 overflow-y-auto text-sm text-gray-600">
-                {files.map((file) => (
-                  <div key={file.name} className="mb-1 flex justify-between items-center">
-                    <span>{file.name}</span>
+                {files.map((row) => (
+                  <div key={row.id} className="mb-1 flex justify-between items-center">
+                    <span>{row.file.name}</span>
                     <IconButton 
                       size="small" 
-                      onClick={() => handleDeleteFile(file.name)}
+                      onClick={() => handleDeleteFile(row.id)}
                       className="text-red-500 hover:bg-red-50"
                     >
                       <DeleteOutlineIcon fontSize="small" />
@@ -474,12 +463,12 @@ const DocumentUpload: React.FC<DocumentUploadProps> = ({ organizationId }) => {
               <div className="mb-4">
                 <h4 className="font-medium mb-2">Selected Files:</h4>
                 <div className="text-sm text-gray-600">
-                  {files.map((file) => (
-                    <div key={file.name} className="mb-1 flex justify-between items-center">
-                      <span>{file.name}</span>
+                  {files.map((row) => (
+                    <div key={row.id} className="mb-1 flex justify-between items-center">
+                      <span>{row.file.name}</span>
                       <IconButton 
                         size="small" 
-                        onClick={() => handleDeleteFile(file.name)}
+                        onClick={() => handleDeleteFile(row.id)}
                         className="text-red-500 hover:bg-red-50"
                       >
                         <DeleteOutlineIcon fontSize="small" />

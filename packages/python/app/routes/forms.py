@@ -13,6 +13,7 @@ from bson import ObjectId
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.common.form_list import list_forms_for_org
 from app.auth import get_org_user
 from app.models import User
 
@@ -166,86 +167,47 @@ async def list_forms(
     skip: int = Query(0, ge=0),
     limit: int = Query(10, ge=1, le=100),
     tag_ids: str = Query(None, description="Comma-separated list of tag IDs to filter by"),
+    name_search: Optional[str] = Query(None, description="Search term for form names"),
+    sort: Optional[str] = Query(None, description="JSON-encoded MUI DataGrid sortModel (array)."),
+    filters: Optional[str] = Query(None, description="JSON-encoded MUI DataGrid filterModel (object)."),
     current_user: User = Depends(get_org_user)
 ):
     """List latest form revisions within an organization, optionally filtered by tags"""
-    logger.info(f"list_forms() start: organization_id: {organization_id}, skip: {skip}, limit: {limit}, tag_ids: {tag_ids}")
-    db = ad.common.get_async_db()
-    
-    # Parse tag IDs if provided
-    filter_tag_ids = []
-    if tag_ids:
-        filter_tag_ids = [tag_id.strip() for tag_id in tag_ids.split(',') if tag_id.strip()]
-    
-    # Get all forms that belong to the organization
-    org_forms = await db.forms.find({"organization_id": organization_id}).to_list(None)
-    
-    if not org_forms:
-        return ListFormsResponse(forms=[], total_count=0, skip=skip)
+    sort_model = None
+    filter_model = None
+    if sort:
+        try:
+            sort_model = json.loads(sort)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid sort JSON")
+    if filters:
+        try:
+            filter_model = json.loads(filters)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid filters JSON")
 
-    logger.info(f"list_forms() org_forms: {org_forms}")
-    
-    # Extract form IDs
-    form_ids = [form["_id"] for form in org_forms]
-    form_id_to_name = {str(form["_id"]): form["name"] for form in org_forms}
-    
-    # Build pipeline for form_revisions with tag filtering
-    pipeline = [
-        {
-            "$match": {"form_id": {"$in": [str(fid) for fid in form_ids]}}
-        }
-    ]
-    
-    # Add tag filtering if tag_ids are provided
-    if filter_tag_ids:
-        pipeline.append({
-            "$match": {"tag_ids": {"$in": filter_tag_ids}}
-        })
-    
-    # Continue with the rest of the pipeline
-    pipeline.extend([
-        {
-            "$sort": {"_id": -1}
-        },
-        {
-            "$group": {
-                "_id": "$form_id",
-                "doc": {"$first": "$$ROOT"}
-            }
-        },
-        {
-            "$replaceRoot": {"newRoot": "$doc"}
-        },
-        {
-            "$sort": {"_id": -1}
-        },
-        {
-            "$facet": {
-                "total": [{"$count": "count"}],
-                "forms": [
-                    {"$skip": skip},
-                    {"$limit": limit}
-                ]
-            }
-        }
-    ])
-    
-    result = await db.form_revisions.aggregate(pipeline).to_list(length=1)
-    result = result[0]
-    
-    total_count = result["total"][0]["count"] if result["total"] else 0
-    forms = result["forms"]
-    
-    # Convert _id to id in each form and add name from forms collection
-    for form in forms:
-        form['form_revid'] = str(form.pop('_id'))
-        form['name'] = form_id_to_name.get(form['form_id'], "Unknown")
-    
-    return ListFormsResponse(
-        forms=forms,
-        total_count=total_count,
-        skip=skip
+    filter_tag_ids: list[str] | None = None
+    if tag_ids:
+        filter_tag_ids = [tag_id.strip() for tag_id in tag_ids.split(",") if tag_id.strip()]
+
+    logger.info(
+        f"list_forms(): org={organization_id} skip={skip} limit={limit} tag_ids={tag_ids} "
+        f"name_search={name_search} sort_model={sort_model} filter_model={filter_model}"
     )
+    db = ad.common.get_async_db()
+
+    forms, total_count = await list_forms_for_org(
+        db,
+        organization_id,
+        skip=skip,
+        limit=limit,
+        name_search=name_search,
+        filter_tag_ids=filter_tag_ids,
+        sort_model=sort_model,
+        filter_model=filter_model,
+    )
+
+    return ListFormsResponse(forms=forms, total_count=total_count, skip=skip)
 
 @forms_router.get("/v0/orgs/{organization_id}/forms/{form_revid}", response_model=Form)
 async def get_form(

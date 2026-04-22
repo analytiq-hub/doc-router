@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { DocRouterOrgApi, getApiErrorMsg } from '@/utils/api';
 import { KnowledgeBase, Tag } from '@docrouter/sdk';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import { DataGrid, GridColDef, GridFilterModel, GridRenderCellParams, GridSortModel } from '@mui/x-data-grid';
 import type { ChipProps } from '@mui/material';
 import { TextField, InputAdornment, IconButton, Menu, MenuItem, Chip, Tooltip, Box } from '@mui/material';
 import SearchIcon from '@mui/icons-material/Search';
@@ -20,6 +20,12 @@ import { toast } from 'react-toastify';
 import Link from 'next/link';
 import KnowledgeBaseInfoModal from '@/components/KnowledgeBaseInfoModal';
 import { isColorLight } from '@/utils/colors';
+import { formatLocalDate } from '@/utils/date';
+
+const jsonStringifyForQuery = (value: unknown): string =>
+  JSON.stringify(value, (_key, v) => (v instanceof Date ? v.toISOString() : v));
+
+const GRID_NON_SORT_FILTER_FIELDS = new Set(['document_count', 'chunk_count', 'actions']);
 
 /** Poll while the current page has KBs not yet active; faster while any row is still indexing. */
 const KB_POLL_MS_INDEXING = 5_000;
@@ -32,9 +38,10 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [page, setPage] = useState(0);
-  const [pageSize, setPageSize] = useState(10);
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
   const [total, setTotal] = useState(0);
+  const [sortModel, setSortModel] = useState<GridSortModel>([{ field: 'created_at', sort: 'desc' }]);
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] });
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
   
   // Add state for menu
@@ -48,10 +55,17 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       if (!silent) {
         setIsLoading(true);
       }
+      const sortForApi = sortModel.filter((s) => !GRID_NON_SORT_FILTER_FIELDS.has(s.field));
+      const filterForApi: GridFilterModel = {
+        ...filterModel,
+        items: filterModel.items.filter((i) => !GRID_NON_SORT_FILTER_FIELDS.has(i.field)),
+      };
       const response = await docRouterOrgApi.listKnowledgeBases({
-        skip: page * pageSize,
-        limit: pageSize,
+        skip: paginationModel.page * paginationModel.pageSize,
+        limit: paginationModel.pageSize,
         name_search: searchTerm || undefined,
+        sort: sortForApi.length ? jsonStringifyForQuery(sortForApi) : undefined,
+        filters: filterForApi.items.length ? jsonStringifyForQuery(filterForApi) : undefined,
       });
       setKnowledgeBases(response.knowledge_bases);
       setTotal(response.total_count);
@@ -68,7 +82,7 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
         setIsLoading(false);
       }
     }
-  }, [docRouterOrgApi, page, pageSize, searchTerm]);
+  }, [docRouterOrgApi, paginationModel, searchTerm, sortModel, filterModel]);
 
   const loadTags = useCallback(async () => {
     try {
@@ -238,6 +252,9 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       field: 'document_count',
       headerName: 'Documents',
       width: 100,
+      sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
       renderCell: (params) => (
         <div className="flex items-center h-full w-full">
           {params.row.document_count}
@@ -248,6 +265,9 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       field: 'chunk_count',
       headerName: 'Chunks',
       width: 100,
+      sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
       renderCell: (params) => (
         <div className="flex items-center h-full w-full">
           {params.row.chunk_count.toLocaleString()}
@@ -340,10 +360,40 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
       },
     },
     {
+      field: 'created_at',
+      headerName: 'Created',
+      type: 'dateTime',
+      width: 200,
+      headerAlign: 'left',
+      align: 'left',
+      valueGetter: (params: GridRenderCellParams) => {
+        const anyParams = params as unknown as { row?: { created_at?: unknown }; value?: unknown };
+        const v = (anyParams.row?.created_at ?? anyParams.value) as string | Date | null | undefined;
+        if (!v) return null;
+        if (v instanceof Date) return v;
+        const d = new Date(v);
+        return Number.isNaN(d.getTime()) ? null : d;
+      },
+      valueFormatter: (params: GridRenderCellParams) => {
+        const p = params as unknown as { value?: unknown } | null;
+        if (!p?.value) return '';
+        const v = p.value as Date | string;
+        const iso = v instanceof Date ? v.toISOString() : String(v);
+        return formatLocalDate(iso);
+      },
+      renderCell: (params: GridRenderCellParams) => {
+        const anyParams = params as unknown as { row?: { created_at?: unknown } };
+        if (!anyParams?.row?.created_at) return '';
+        return <div className="text-gray-600">{formatLocalDate(anyParams.row.created_at as string)}</div>;
+      },
+    },
+    {
       field: 'actions',
       headerName: 'Actions',
       width: 100,
       sortable: false,
+      filterable: false,
+      disableColumnMenu: true,
       renderCell: (params) => (
         <div className="flex gap-2 items-center h-full">
           <IconButton
@@ -376,7 +426,10 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
             variant="outlined"
             placeholder="Search knowledge bases..."
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+            }}
             InputProps={{
               startAdornment: (
                 <InputAdornment position="start">
@@ -401,24 +454,29 @@ const KnowledgeBaseList: React.FC<{ organizationId: string }> = ({ organizationI
           <DataGrid
             rows={knowledgeBases}
             columns={columns}
-            initialState={{
-              pagination: {
-                paginationModel: { pageSize: 10 }
-              },
-              sorting: {
-                sortModel: [{ field: 'created_at', sort: 'desc' }]
-              }
-            }}
             pageSizeOptions={[5, 10, 20, 50]}
             disableRowSelectionOnClick
             loading={isLoading}
             getRowId={(row) => row.kb_id}
-            paginationMode="server"
-            rowCount={total}
-            onPaginationModelChange={(model) => {
-              setPage(model.page);
-              setPageSize(model.pageSize);
+            sortingMode="server"
+            sortModel={sortModel}
+            onSortModelChange={(model) => {
+              setSortModel(model.filter((s) => !GRID_NON_SORT_FILTER_FIELDS.has(s.field)));
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
             }}
+            filterMode="server"
+            filterModel={filterModel}
+            onFilterModelChange={(model) => {
+              setFilterModel({
+                ...model,
+                items: model.items.filter((i) => !GRID_NON_SORT_FILTER_FIELDS.has(i.field)),
+              });
+              setPaginationModel((prev) => ({ ...prev, page: 0 }));
+            }}
+            paginationMode="server"
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            rowCount={total}
             sx={{
               '& .MuiDataGrid-cell': {
                 padding: '8px',

@@ -184,8 +184,8 @@ async def _execute_tool_calls(
         except json.JSONDecodeError:
             args_preview = (args_raw[:400] + "…") if len(args_raw) > 400 else (args_raw or "{}")
         logger.info(
-            "tool_call document_id=%s round=%s name=%s call_id=%s arguments=%s",
-            doc_id, round_index, name, call_id, args_preview,
+            f"tool_call document_id={doc_id} round={round_index} name={name} "
+            f"call_id={call_id} arguments={args_preview}"
         )
         approved = approvals is None or approvals.get(call_id, False)
         if approved:
@@ -449,8 +449,8 @@ async def run_agent_turn(
         # tool_calls, text, thinking_text already set in the if/else branches above
         pending = [_tool_call_to_dict(tc) for tc in tool_calls]
         logger.info(
-            "agent_loop document_id=%s round=%s tool_calls=%s",
-            document_id, iteration, [p.get("name") for p in pending],
+            f"agent_loop document_id={document_id} round={iteration} "
+            f"tool_calls={[p.get('name') for p in pending]}"
         )
         needs_approval = _any_tool_needs_approval(pending, auto_approve, auto_approved_tools)
         if needs_approval:
@@ -585,8 +585,8 @@ async def run_agent_approve(
 
     pending = [_tool_call_to_dict(tc) for tc in tool_calls]
     logger.info(
-        "agent_loop document_id=%s approve_round tool_calls=%s",
-        state["document_id"], [p.get("name") for p in pending],
+        f"agent_loop document_id={state['document_id']} approve_round "
+        f"tool_calls={[p.get('name') for p in pending]}"
     )
     auto_approve = state.get("auto_approve", False)
     auto_approved_list = state.get("auto_approved_tools")
@@ -668,8 +668,8 @@ async def run_agent_approve(
     # LLM returned more tool_calls; apply same approval logic.
     pending = [_tool_call_to_dict(tc) for tc in tool_calls]
     logger.info(
-        "agent_loop document_id=%s approve_continue_round tool_calls=%s",
-        state["document_id"], [p.get("name") for p in pending],
+        f"agent_loop document_id={state['document_id']} approve_continue_round "
+        f"tool_calls={[p.get('name') for p in pending]}"
     )
     needs_approval = _any_tool_needs_approval(pending, auto_approve, auto_approved_tools)
     if needs_approval:

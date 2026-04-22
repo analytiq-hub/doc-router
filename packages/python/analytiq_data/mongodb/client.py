@@ -24,18 +24,18 @@ _clients_by_loop: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, AsyncIOMo
 _shared_client_no_loop: AsyncIOMotorClient | None = None
 
 
-def _parse_optional_positive_int(name: str) -> int | None:
+def _getenv_positive_int(name: str, default: int | None = None) -> int | None:
     raw = os.getenv(name)
     if raw is None or str(raw).strip() == "":
-        return None
+        return default
     try:
         v = int(raw)
     except ValueError:
-        logger.warning("Invalid %s=%r; ignoring", name, raw)
-        return None
+        logger.warning(f"Invalid {name}={raw!r}; using default={default!r}")
+        return default
     if v < 0:
-        logger.warning("Invalid %s=%r (negative); ignoring", name, raw)
-        return None
+        logger.warning(f"Invalid {name}={raw!r} (negative); using default={default!r}")
+        return default
     return v
 
 
@@ -47,13 +47,16 @@ def _motor_client_kwargs() -> dict:
         # Do not set readPreference to secondaryPreferred on the shared client:
         # PyMongo transactions require primary; KB and other code use transactions.
     }
-    max_pool = _parse_optional_positive_int("MONGODB_MAX_POOL_SIZE")
-    if max_pool is not None:
-        kwargs["maxPoolSize"] = max_pool
-    min_pool = _parse_optional_positive_int("MONGODB_MIN_POOL_SIZE")
-    if min_pool is not None:
-        kwargs["minPoolSize"] = min_pool
-    max_idle = _parse_optional_positive_int("MONGODB_MAX_IDLE_TIME_MS")
+
+    # Pool tuning.
+    #
+    # We set non-trivial defaults to improve throughput for concurrent requests and worker queues.
+    # Ops can override via env to respect Mongo cluster connection limits.
+    kwargs["maxPoolSize"] = _getenv_positive_int("MONGODB_MAX_POOL_SIZE", 200)
+
+    kwargs["minPoolSize"] = _getenv_positive_int("MONGODB_MIN_POOL_SIZE", 20)
+
+    max_idle = _getenv_positive_int("MONGODB_MAX_IDLE_TIME_MS", None)
     if max_idle is not None:
         kwargs["maxIdleTimeMS"] = max_idle
     return kwargs

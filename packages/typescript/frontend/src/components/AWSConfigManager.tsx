@@ -52,7 +52,7 @@ const AWSConfigManager: React.FC = () => {
     }
   };
 
-
+  const configured = Boolean(config?.access_key_id);
 
   return (
     <div className="space-y-4">
@@ -76,48 +76,28 @@ const AWSConfigManager: React.FC = () => {
           <code>s3:DeleteObject</code>).
         </p>
 
-        <div className="overflow-hidden border border-gray-200 rounded-lg">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Setting
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Value
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              <tr className="bg-white hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  Access Key ID
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {config?.access_key_id || 'Not configured'}
-                </td>
-              </tr>
-              
-              <tr className="bg-gray-50 hover:bg-gray-100">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  Secret Access Key
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {config?.access_key_id ? '••••••••••••••••••••••••••••••••••••••••' : 'Not configured'}
-                </td>
-              </tr>
-              
-              <tr className="bg-white hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  S3 Bucket Name
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {config?.s3_bucket_name || 'Not configured'}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <p className="text-sm">
+          <b>Status:</b>{' '}
+          {configured ? (
+            <span className="text-green-600">Configured</span>
+          ) : (
+            <span className="text-yellow-600">Not configured</span>
+          )}
+        </p>
+        {configured && config && (
+          <div className="mt-4 text-sm space-y-1 font-mono text-gray-800">
+            <div className="break-all">
+              <span className="text-gray-500">Access Key ID:</span> {config.access_key_id}
+            </div>
+            <div>
+              <span className="text-gray-500">Secret Access Key:</span>{' '}
+              <span>{config.secret_access_key || '•'.repeat(40)}</span>
+            </div>
+            <div className="break-all">
+              <span className="text-gray-500">S3 Bucket Name:</span> {config.s3_bucket_name}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Help Section */}

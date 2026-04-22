@@ -128,10 +128,7 @@ async def get_extracted_llm_text(analytiq_client, document_id: str) -> str | Non
             except Exception as e:
                 last_err = e
                 logger.debug(
-                    "get_ocr_text failed (step %s/%s) for document_id=%s; will retry",
-                    step + 1,
-                    max_steps,
-                    document_id,
+                    f"get_ocr_text failed (step {step + 1}/{max_steps}) for document_id={document_id}; will retry",
                     exc_info=True,
                 )
 
@@ -140,9 +137,7 @@ async def get_extracted_llm_text(analytiq_client, document_id: str) -> str | Non
 
         if last_err is not None:
             logger.info(
-                "OCR/text not available after polling for document_id=%s (last error: %s)",
-                document_id,
-                last_err,
+                f"OCR/text not available after polling for document_id={document_id} (last error: {last_err})"
             )
         return None
 
@@ -475,12 +470,12 @@ async def agent_completion_stream(
     usage_obj: Any = None
     chunk_count = 0
 
-    logger.info("agent_completion_stream start model=%s stream=True", model)
+    logger.info(f"agent_completion_stream start model={model} stream=True")
     response = await litellm.acompletion(**params)
     async for chunk in response:
         chunk_count += 1
         if chunk_count == 1 and isinstance(chunk, dict):
-            logger.debug("agent_completion_stream first chunk keys: %s", list(chunk.keys()))
+            logger.debug(f"agent_completion_stream first chunk keys: {list(chunk.keys())}")
         choices = chunk.get("choices", []) if isinstance(chunk, dict) else getattr(chunk, "choices", None) or []
         if not chunk or not choices or len(choices) == 0:
             # Usage-only chunk (include_usage)
@@ -539,8 +534,8 @@ async def agent_completion_stream(
     full_content = "".join(content_parts)
     full_thinking = "".join(thinking_parts).strip() or None
     logger.info(
-        "agent_completion_stream done model=%s chunks=%d content_parts=%d thinking_parts=%d full_content_len=%d",
-        model, chunk_count, len(content_parts), len(thinking_parts), len(full_content),
+        f"agent_completion_stream done model={model} chunks={chunk_count} content_parts={len(content_parts)} "
+        f"thinking_parts={len(thinking_parts)} full_content_len={len(full_content)}"
     )
     # When provider sends full response in one (or zero) content chunks, simulate streaming so UI shows progressive output
     if full_content and len(content_parts) <= 1:
@@ -917,7 +912,7 @@ async def run_llm(
     """
     # Normalize invalid prompt_revid (e.g. non-ObjectId from agent) to avoid ObjectId errors downstream
     if prompt_revid != "default" and not ad.common.is_valid_object_id(prompt_revid):
-        logger.info("prompt_revid %r is not a valid ObjectId, using default prompt", prompt_revid)
+        logger.info(f"prompt_revid {prompt_revid!r} is not a valid ObjectId, using default prompt")
         prompt_revid = "default"
 
     # Check for existing result unless force is True
@@ -1265,9 +1260,8 @@ async def run_llm(
         raw_preview = (resp_content or "")[:500]
         cleaned_preview = (resp_content1 or "")[:500]
         logger.error(
-            "%s/%s: Failed to parse LLM JSON response (provider=%s, model=%s): %s. "
-            "Raw content (first 500 chars): %r. Cleaned content (first 500 chars): %r",
-            document_id, prompt_revid, llm_provider, llm_model, e, raw_preview, cleaned_preview,
+            f"{document_id}/{prompt_revid}: Failed to parse LLM JSON response (provider={llm_provider}, model={llm_model}): {e}. "
+            f"Raw content (first 500 chars): {raw_preview!r}. Cleaned content (first 500 chars): {cleaned_preview!r}"
         )
         raise Exception(
             f"LLM response was not valid JSON (provider={llm_provider}, model={llm_model}): {e}"
@@ -1527,11 +1521,9 @@ async def run_llm_for_prompt_revids(analytiq_client, document_id: str, prompt_re
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     logger.info(
-        "LLM run completed for %s with %d prompts (successes=%d, failures=%d)",
-        document_id,
-        n_prompts,
-        sum(1 for r in results if not isinstance(r, Exception)),
-        sum(1 for r in results if isinstance(r, Exception)),
+        f"LLM run completed for {document_id} with {n_prompts} prompts "
+        f"(successes={sum(1 for r in results if not isinstance(r, Exception))}, "
+        f"failures={sum(1 for r in results if isinstance(r, Exception))})"
     )
 
     return results

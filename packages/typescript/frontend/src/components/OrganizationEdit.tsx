@@ -29,17 +29,18 @@ interface OrganizationEditProps {
 
 const FALLBACK_TEXTRACT_FEATURES = ['LAYOUT', 'TABLES', 'FORMS', 'SIGNATURES'] as const
 
-const FALLBACK_OCR_MODES: OcrMode[] = ['textract', 'mistral', 'llm', 'pymupdf']
+const FALLBACK_OCR_MODES: OcrMode[] = ['textract', 'mistral', 'mistral_vertex', 'llm', 'pymupdf']
 
 const OCR_MODE_LABELS: Record<OcrMode, string> = {
   textract: 'AWS Textract',
   mistral: 'Mistral OCR',
+  mistral_vertex: 'Mistral OCR (Vertex AI)',
   llm: 'LLM OCR',
   pymupdf: 'PyMuPDF (embedded text)',
 }
 
 function isOcrMode(s: string): s is OcrMode {
-  return s === 'textract' || s === 'mistral' || s === 'llm' || s === 'pymupdf'
+  return s === 'textract' || s === 'mistral' || s === 'mistral_vertex' || s === 'llm' || s === 'pymupdf'
 }
 
 function normalizeOcrConfig(raw: OrgOcrConfig): OrgOcrConfig {
@@ -52,6 +53,7 @@ function normalizeOcrConfig(raw: OrgOcrConfig): OrgOcrConfig {
           : ['LAYOUT'],
     },
     mistral: raw.mistral ?? {},
+    mistral_vertex: raw.mistral_vertex ?? {},
     pymupdf: raw.pymupdf ?? {},
     llm: {
       provider: raw.llm?.provider ?? null,
@@ -113,6 +115,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const [ocrLlmCatalogError, setOcrLlmCatalogError] = useState<string | null>(null)
 
   const mistralEnabled = organization?.ocr_catalog?.mistral_enabled !== false
+  const mistralVertexEnabled = organization?.ocr_catalog?.mistral_vertex_enabled === true
 
   // Filter current organization members
   const filteredMembers = members.filter(member => {
@@ -233,6 +236,12 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       if (ocrConfig.mode === 'mistral' && !mistralEnabled) {
         toast.error(
           'Mistral OCR is not available: enable the Mistral LLM provider and at least one model in account LLM settings, then try again.'
+        );
+        return;
+      }
+      if (ocrConfig.mode === 'mistral_vertex' && !mistralVertexEnabled) {
+        toast.error(
+          'Mistral Vertex OCR is not available: configure GCP credentials in account settings, then try again.'
         );
         return;
       }
@@ -652,17 +661,16 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                   onChange={(e) => setOcrMode(e.target.value as OcrMode)}
                   className="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                 >
-                  {ocrModeOptions.map((m) => (
-                    <option
-                      key={m}
-                      value={m}
-                      disabled={m === 'mistral' && !mistralEnabled}
-                    >
-                      {m === 'mistral' && !mistralEnabled
-                        ? `${OCR_MODE_LABELS[m]} (unavailable)`
-                        : OCR_MODE_LABELS[m]}
-                    </option>
-                  ))}
+                  {ocrModeOptions.map((m) => {
+                    const unavailable =
+                      (m === 'mistral' && !mistralEnabled) ||
+                      (m === 'mistral_vertex' && !mistralVertexEnabled)
+                    return (
+                      <option key={m} value={m} disabled={unavailable}>
+                        {unavailable ? `${OCR_MODE_LABELS[m]} (unavailable)` : OCR_MODE_LABELS[m]}
+                      </option>
+                    )
+                  })}
                 </select>
               </div>
 
@@ -670,6 +678,13 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                 <Alert severity="warning" sx={{ mb: 2 }}>
                   Mistral OCR is unavailable because the Mistral provider is off or no models are enabled
                   in account LLM settings. Select another engine before you can save.
+                </Alert>
+              )}
+
+              {!mistralVertexEnabled && ocrConfig.mode === 'mistral_vertex' && (
+                <Alert severity="warning" sx={{ mb: 2 }}>
+                  Mistral Vertex OCR is unavailable because GCP credentials are not configured in account
+                  settings. Select another engine before you can save.
                 </Alert>
               )}
 
@@ -682,6 +697,13 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                 <Alert severity="info" sx={{ mb: 2 }}>
                   Uses Mistral OCR (<code className="text-sm">mistral-ocr-latest</code>). The API key is
                   read from the Mistral LLM provider in account settings when a document is processed.
+                </Alert>
+              )}
+              {ocrConfig.mode === 'mistral_vertex' && mistralVertexEnabled && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                  Uses Mistral OCR (<code className="text-sm">mistral-ocr-2505</code>) via Google Cloud
+                  Vertex AI (region: <code className="text-sm">us-central1</code>). Credentials are read
+                  from the GCP service account configured in account settings.
                 </Alert>
               )}
               {ocrConfig.mode === 'pymupdf' && (

@@ -3,8 +3,10 @@ from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+from typing import Any
 
 import analytiq_data as ad
+from analytiq_data.common.grid_filter import build_filter_match, build_sort_spec
 
 logger = logging.getLogger(__name__)
 
@@ -155,6 +157,18 @@ async def delete_doc(analytiq_client, document_id: str, organization_id: str):
     logger.info(f"Document {document_id} has been deleted with all LLM, OCR, and KB results.")
 
 
+_LIST_DOCS_FIELD_MAP: dict[str, str | None] = {
+    "document_name": "user_file_name",
+    "documentName": "user_file_name",
+    "uploaded_by": "uploaded_by",
+    "uploadedBy": "uploaded_by",
+    "state": "state",
+    "upload_date": "upload_date",
+    "uploadDate": "upload_date",
+    "tag_ids": "tag_ids",
+}
+
+
 async def list_docs(
     analytiq_client,
     organization_id: str,
@@ -162,11 +176,13 @@ async def list_docs(
     limit: int = 10,
     tag_ids: list[str] = None,
     name_search: str = None,
-    metadata_search: dict[str, str] = None
+    metadata_search: dict[str, str] = None,
+    sort_model: list[dict[str, Any]] | None = None,
+    filter_model: dict[str, Any] | None = None,
 ) -> tuple[list, int]:
     """
     List documents with pagination within an organization
-    
+
     Args:
         analytiq_client: AnalytiqClient
             The analytiq client
@@ -182,6 +198,10 @@ async def list_docs(
             Search term for document names (case-insensitive)
         metadata_search: dict[str, str], optional
             Key-value pairs to search in metadata (all pairs must match)
+        sort_model: list[dict], optional
+            MUI DataGrid sortModel (array).
+        filter_model: dict, optional
+            MUI DataGrid filterModel (object). Applied in addition to explicit filters.
 
     Returns:
         tuple[list, int]
@@ -190,21 +210,34 @@ async def list_docs(
     db_name = analytiq_client.env
     db = analytiq_client.mongodb_async[db_name]
     collection = db["docs"]
-    
-    # Add organization filter
+
     query = {"organization_id": organization_id}
     if tag_ids:
         query["tag_ids"] = {"$all": tag_ids}
     if name_search:
-        # Search in user_file_name (case-insensitive)
         query["user_file_name"] = {"$regex": name_search, "$options": "i"}
     if metadata_search:
-        # Search in metadata key-value pairs (all pairs must match)
         for key, value in metadata_search.items():
             query[f"metadata.{key}"] = value
-    
+
+    grid_match = await build_filter_match(
+        filter_model, _LIST_DOCS_FIELD_MAP,
+        db=db, organization_id=organization_id,
+        datetime_fields={"upload_date"},
+        tag_id_fields={"tag_ids"},
+        id_field=None,
+    )
+    if grid_match:
+        query = {"$and": [query, grid_match]}
+
     total_count = await collection.count_documents(query)
-    cursor = collection.find(query).sort("upload_date", -1).skip(skip).limit(limit)
+
+    sort_spec = build_sort_spec(
+        sort_model, _LIST_DOCS_FIELD_MAP,
+        default_sort=[("upload_date", -1)],
+        tiebreaker="upload_date",
+    )
+    cursor = collection.find(query).sort(sort_spec).skip(skip).limit(limit)
     documents = await cursor.to_list(length=limit)
     return documents, total_count
 

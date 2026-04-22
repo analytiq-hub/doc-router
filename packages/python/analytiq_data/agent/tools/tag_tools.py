@@ -4,6 +4,7 @@ Uses get_async_db(analytiq_client) for all DB access.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import datetime, UTC
@@ -12,6 +13,7 @@ from typing import Any
 from bson import ObjectId
 
 import analytiq_data as ad
+from analytiq_data.common.tag_list import list_tags_for_org
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +79,7 @@ async def get_tag(context: dict, params: dict) -> dict[str, Any]:
 
 
 async def list_tags(context: dict, params: dict) -> dict[str, Any]:
-    """Lists tags in the org with optional skip, limit, name_search."""
+    """Lists tags in the org with optional skip, limit, name_search, MUI grid sort/filters."""
     org_id = context.get("organization_id")
     if not org_id:
         return {"error": "No organization context"}
@@ -85,28 +87,31 @@ async def list_tags(context: dict, params: dict) -> dict[str, Any]:
     limit = int(params.get("limit", 10))
     limit = min(max(limit, 1), 100)
     name_search = params.get("name_search")
+    sort_model = None
+    filter_model = None
+    if params.get("sort"):
+        try:
+            sort_model = json.loads(params["sort"]) if isinstance(params["sort"], str) else params["sort"]
+        except Exception:
+            return {"error": "Invalid sort JSON"}
+    if params.get("filters"):
+        try:
+            filter_model = (
+                json.loads(params["filters"]) if isinstance(params["filters"], str) else params["filters"]
+            )
+        except Exception:
+            return {"error": "Invalid filters JSON"}
     db = _db(context)
-    query = {"organization_id": org_id}
-    if name_search:
-        query["name"] = {"$regex": re.escape(name_search), "$options": "i"}
-    total = await db.tags.count_documents(query)
-    cursor = db.tags.find(query).sort("_id", -1).skip(skip).limit(limit)
-    tags = await cursor.to_list(length=None)
-    return {
-        "tags": [
-            {
-                "id": str(t["_id"]),
-                "name": t["name"],
-                "color": t.get("color"),
-                "description": t.get("description"),
-                "created_at": t["created_at"],
-                "created_by": t["created_by"],
-            }
-            for t in tags
-        ],
-        "total_count": total,
-        "skip": skip,
-    }
+    tags, total = await list_tags_for_org(
+        db,
+        org_id,
+        skip=skip,
+        limit=limit,
+        name_search=name_search,
+        sort_model=sort_model,
+        filter_model=filter_model,
+    )
+    return {"tags": tags, "total_count": total, "skip": skip}
 
 
 async def update_tag(context: dict, params: dict) -> dict[str, Any]:

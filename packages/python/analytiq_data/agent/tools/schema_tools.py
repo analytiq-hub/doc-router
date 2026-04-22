@@ -14,6 +14,7 @@ from bson import ObjectId
 from jsonschema import Draft7Validator
 
 import analytiq_data as ad
+from analytiq_data.common.schema_list import list_schemas_for_org
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +122,7 @@ async def get_schema(context: dict, params: dict) -> dict[str, Any]:
 
 
 async def list_schemas(context: dict, params: dict) -> dict[str, Any]:
-    """Lists schemas in the org with optional skip, limit, name_search."""
+    """Lists schemas in the org with optional skip, limit, name_search, MUI grid sort/filters."""
     org_id = context.get("organization_id")
     if not org_id:
         return {"error": "No organization context"}
@@ -129,29 +130,30 @@ async def list_schemas(context: dict, params: dict) -> dict[str, Any]:
     limit = int(params.get("limit", 10))
     limit = min(max(limit, 1), 100)
     name_search = params.get("name_search")
+    sort_model = None
+    filter_model = None
+    if params.get("sort"):
+        try:
+            sort_model = json.loads(params["sort"]) if isinstance(params["sort"], str) else params["sort"]
+        except Exception:
+            return {"error": "Invalid sort JSON"}
+    if params.get("filters"):
+        try:
+            filter_model = (
+                json.loads(params["filters"]) if isinstance(params["filters"], str) else params["filters"]
+            )
+        except Exception:
+            return {"error": "Invalid filters JSON"}
     db = _db(context)
-    query = {"organization_id": org_id}
-    if name_search:
-        query["name"] = {"$regex": re.escape(name_search), "$options": "i"}
-    org_schemas = await db.schemas.find(query).to_list(None)
-    if not org_schemas:
-        return {"schemas": [], "total_count": 0, "skip": skip}
-    schema_ids = [str(s["_id"]) for s in org_schemas]
-    id_to_name = {str(s["_id"]): s["name"] for s in org_schemas}
-    pipeline = [
-        {"$match": {"schema_id": {"$in": schema_ids}}},
-        {"$sort": {"_id": -1}},
-        {"$group": {"_id": "$schema_id", "doc": {"$first": "$$ROOT"}}},
-        {"$replaceRoot": {"newRoot": "$doc"}},
-        {"$sort": {"_id": -1}},
-        {"$facet": {"total": [{"$count": "count"}], "schemas": [{"$skip": skip}, {"$limit": limit}]}},
-    ]
-    result = (await db.schema_revisions.aggregate(pipeline).to_list(length=1))[0]
-    total = result["total"][0]["count"] if result["total"] else 0
-    schemas = result["schemas"]
-    for s in schemas:
-        s["schema_revid"] = str(s.pop("_id"))
-        s["name"] = id_to_name.get(s["schema_id"], "Unknown")
+    schemas, total = await list_schemas_for_org(
+        db,
+        org_id,
+        skip=skip,
+        limit=limit,
+        name_search=name_search,
+        sort_model=sort_model,
+        filter_model=filter_model,
+    )
     return {"schemas": schemas, "total_count": total, "skip": skip}
 
 

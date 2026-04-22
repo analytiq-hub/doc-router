@@ -104,6 +104,7 @@ async def insert_minimal_kb(
     tag_ids: list,
     *,
     name: str = "Direct KB",
+    description: str = "",
     chunk_size: int = 50,
     chunk_overlap: int = 10,
     embedding_model: str = "text-embedding-3-small",
@@ -118,7 +119,7 @@ async def insert_minimal_kb(
     kb_doc = {
         "organization_id": TEST_ORG_ID,
         "name": name,
-        "description": "",
+        "description": description,
         "system_prompt": "",
         "tag_ids": tag_ids,
         "chunker_type": "recursive",

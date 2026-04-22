@@ -56,9 +56,8 @@ async def worker_ocr(worker_id: str) -> None:
                     await ad.msg_handlers.process_ocr_msg(analytiq_client, msg, force=force, ocr_only=ocr_only)
                 except asyncio.CancelledError:
                     logger.warning(
-                        "Worker %s cancelled mid-flight on OCR msg %s; message will be recovered via visibility timeout",
-                        worker_id,
-                        msg.get("_id"),
+                        f"Worker {worker_id} cancelled mid-flight on OCR msg {msg.get('_id')}; "
+                        f"message will be recovered via visibility timeout"
                     )
                     raise
                 except Exception as e:
@@ -106,9 +105,8 @@ async def worker_llm(worker_id: str) -> None:
                     await ad.msg_handlers.process_llm_msg(analytiq_client, msg, force=force)
                 except asyncio.CancelledError:
                     logger.warning(
-                        "Worker %s cancelled mid-flight on LLM msg %s; message will be recovered via visibility timeout",
-                        worker_id,
-                        msg.get("_id"),
+                        f"Worker {worker_id} cancelled mid-flight on LLM msg {msg.get('_id')}; "
+                        f"message will be recovered via visibility timeout"
                     )
                     raise
             else:
@@ -151,9 +149,8 @@ async def worker_kb_index(worker_id: str) -> None:
                     await ad.msg_handlers.process_kb_index_msg(analytiq_client, msg)
                 except asyncio.CancelledError:
                     logger.warning(
-                        "Worker %s cancelled mid-flight on KB index msg %s; message will be recovered via visibility timeout",
-                        worker_id,
-                        msg.get("_id"),
+                        f"Worker {worker_id} cancelled mid-flight on KB index msg {msg.get('_id')}; "
+                        f"message will be recovered via visibility timeout"
                     )
                     raise
                 except Exception as e:
@@ -330,18 +327,16 @@ async def recover_all_queues(analytiq_client) -> None:
     This function is idempotent and safe to call repeatedly. It only touches
     messages that:
     - Are in "processing" status
-    - Have processing_started_at older than visibility timeout
-    - Have attempts < MAX_QUEUE_ATTEMPTS
+    - Have processing_started_at older than the visibility timeout
+
+    For each recovered message, ``attempts`` is decremented by 1 (floored at 0)
+    so an unfinished claim (e.g. killed worker) does not permanently burn a try.
     """
     queues = ["ocr", "llm", "kb_index", "webhook"]
     for queue_name in queues:
         try:
             recovered = await ad.queue.recover_stale_messages(analytiq_client, queue_name)
-            logger.info(
-                "Startup recovery: queue=%s recovered=%s",
-                queue_name,
-                recovered,
-            )
+            logger.info(f"Startup recovery: queue={queue_name} recovered={recovered}")
         except Exception as e:
             logger.error(f"Error recovering queue {queue_name} at startup: {e}")
 

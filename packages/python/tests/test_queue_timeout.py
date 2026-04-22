@@ -304,21 +304,27 @@ async def test_concurrent_recv_msg_no_duplicate_claims(mock_analytiq_client):
 
 
 @pytest.mark.asyncio
-async def test_recover_stale_messages_skips_max_attempts(mock_analytiq_client):
-    """recover_stale_messages does NOT reset messages that exceeded max attempts."""
+async def test_recover_stale_messages_resets_even_at_max_attempts(mock_analytiq_client):
+    """Stale processing is reset to pending and attempts decremented, including at max attempts."""
     coll = MagicMock()
     mock_analytiq_client.mongodb_async.__getitem__.return_value = {"queues.llm": coll}
     coll.update_many = AsyncMock()
-    coll.update_many.return_value.modified_count = 0
+    coll.update_many.return_value.modified_count = 1
 
     recovered = await queue_mod.recover_stale_messages(mock_analytiq_client, "llm")
 
-    assert recovered == 0
+    assert recovered == 1
     coll.update_many.assert_awaited()
     args, kwargs = coll.update_many.call_args
     query = args[0]
-    # Verify the query includes attempts < MAX_QUEUE_ATTEMPTS filter
-    assert query["attempts"]["$lt"] == queue_mod.MAX_QUEUE_ATTEMPTS
+    pipeline = args[1]
+    assert query["status"] == "processing"
+    assert "processing_started_at" in query
+    assert "attempts" not in query
+    assert isinstance(pipeline, list)
+    assert "$set" in pipeline[0]
+    assert pipeline[0]["$set"]["status"] == "pending"
+    assert "$max" in pipeline[0]["$set"]["attempts"]
 
 
 @pytest.mark.asyncio
