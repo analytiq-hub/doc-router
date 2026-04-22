@@ -328,7 +328,9 @@ async def recover_all_queues(analytiq_client) -> None:
     messages that:
     - Are in "processing" status
     - Have processing_started_at older than visibility timeout
-    - Have attempts < MAX_QUEUE_ATTEMPTS
+
+    For each recovered message, ``attempts`` is decremented by 1 (floored at 0)
+    so an unfinished claim (e.g. killed worker) does not permanently burn a try.
     """
     queues = ["ocr", "llm", "kb_index", "webhook"]
     for queue_name in queues:

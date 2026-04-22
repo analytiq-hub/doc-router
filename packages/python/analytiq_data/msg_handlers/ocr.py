@@ -241,9 +241,15 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
                 analytiq_client,
                 "ocr",
                 msg_id_str,
-                f"OCR handler error after {attempts} attempts: {e}",
+                str(e),
             )
         else:
+            await ad.queue.report_last_error(
+                analytiq_client,
+                "ocr",
+                msg_id_str,
+                str(e),
+            )
             logger.info(
                 f"Leaving OCR message {msg_id_str} in processing for retry after handler error (document_id={document_id}, org_id={org_id}, attempt {attempts} of {MAX_QUEUE_ATTEMPTS})"
             )

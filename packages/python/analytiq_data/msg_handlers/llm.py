@@ -114,9 +114,15 @@ async def process_llm_msg(analytiq_client, msg, force: bool = False):
                     analytiq_client,
                     "llm",
                     msg_id,
-                    f"All LLM prompts failed after {attempts} attempts: {error_summary}",
+                    str(errors[0]),
                 )
             else:
+                await ad.queue.report_last_error(
+                    analytiq_client,
+                    "llm",
+                    msg_id,
+                    str(errors[0]),
+                )
                 logger.info(
                     f"Leaving LLM message {msg_id} in processing for retry (attempt {attempts} of {MAX_QUEUE_ATTEMPTS})"
                 )
@@ -166,6 +172,12 @@ async def process_llm_msg(analytiq_client, msg, force: bool = False):
                 f"Unhandled LLM handler error after {attempts} attempts: {e}",
             )
         else:
+            await ad.queue.report_last_error(
+                analytiq_client,
+                "llm",
+                msg_id,
+                str(e),
+            )
             logger.info(
                 f"Leaving LLM message {msg_id} in processing for retry after handler error "
                 f"(attempt {attempts} of {MAX_QUEUE_ATTEMPTS})"

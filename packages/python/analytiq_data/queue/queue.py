@@ -152,15 +152,50 @@ async def delete_msg(analytiq_client, queue_name: str, msg_id: str):
     logger.info(f"Deleted message {msg_id} from {queue_name}") 
 
 
+async def report_last_error(
+    analytiq_client,
+    queue_name: str,
+    msg_id: str,
+    error: str,
+) -> None:
+    """
+    Unified non-terminal error reporting: sets last_error / failed_at on the queue doc.
+
+    Pass the same string you would surface in logs (e.g. ``str(exc)``).
+    """
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    collection = db[get_queue_collection_name(queue_name)]
+    try:
+        await collection.update_one(
+            {"_id": ObjectId(msg_id)},
+            {
+                "$set": {
+                    "last_error": error,
+                    "last_error_at": datetime.now(UTC),
+                }
+            },
+        )
+    except Exception as e:
+        logger.warning(
+            "report_last_error failed queue=%s msg_id=%s: %s",
+            queue_name,
+            msg_id,
+            e,
+        )
+
+
 async def recover_stale_messages(analytiq_client, queue_name: str) -> int:
     """
     Recover stale processing messages for a queue by resetting them to pending.
 
     This function is idempotent and safe to call repeatedly. It only touches
     messages that:
-    - Are in "processing" status
+    - Are in "processing" status (not dead_letter)
     - Have processing_started_at older than the visibility timeout
-    - Have attempts < MAX_QUEUE_ATTEMPTS
+
+    For each recovered message, ``attempts`` is decremented by 1 (floored at 0)
+    so a claim that never finished (e.g. process killed) does not permanently
+    consume a retry. Stuck rows with attempts == MAX_QUEUE_ATTEMPTS are included.
     """
     db_name = analytiq_client.env
     db = analytiq_client.mongodb_async[db_name]
@@ -170,23 +205,38 @@ async def recover_stale_messages(analytiq_client, queue_name: str) -> int:
     now = datetime.now(UTC)
     lease_cutoff = now - timedelta(seconds=QUEUE_VISIBILITY_TIMEOUT_SECS)
 
+    # Aggregation pipeline update: pending + refund one claim + drop lease timestamp
     result = await queue_collection.update_many(
         {
             "status": "processing",
             "processing_started_at": {"$lte": lease_cutoff},
-            "attempts": {"$lt": MAX_QUEUE_ATTEMPTS},
         },
-        {
-            "$set": {"status": "pending"},
-            "$unset": {"processing_started_at": ""},
-        },
+        [
+            {
+                "$set": {
+                    "status": "pending",
+                    "attempts": {
+                        "$max": [
+                            0,
+                            {
+                                "$subtract": [
+                                    {"$ifNull": ["$attempts", 0]},
+                                    1,
+                                ]
+                            },
+                        ]
+                    },
+                }
+            },
+            {"$unset": "processing_started_at"},
+        ],
     )
 
     recovered = getattr(result, "modified_count", 0)
     if recovered:
         logger.info(
             f"Recovered {recovered} stale messages in {queue_name} "
-            f"(visibility_timeout={QUEUE_VISIBILITY_TIMEOUT_SECS}s)"
+            f"(visibility_timeout={QUEUE_VISIBILITY_TIMEOUT_SECS}s, attempts decremented)"
         )
     return recovered
 
