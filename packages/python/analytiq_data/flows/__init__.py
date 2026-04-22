@@ -12,4 +12,5 @@ from .node_registry import *
 from .engine import *
 from .nodes import *
 from .register_builtin import *
+from .register_docrouter import *
 

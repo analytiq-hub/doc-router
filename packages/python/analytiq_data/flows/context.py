@@ -4,8 +4,8 @@ from __future__ import annotations
 Execution context for flow runs.
 
 The engine is kept DocRouter-independent; DocRouter-specific nodes can call into
-the `app/flows/services.py` module using the `analytiq_client` stored on the
-context.
+`analytiq_data.docrouter_flows.services` using the `analytiq_client` stored on
+the context.
 """
 
 from dataclasses import dataclass

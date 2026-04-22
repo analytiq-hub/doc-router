@@ -14,6 +14,12 @@ ad.common.setup()
 
 logger = logging.getLogger(__name__)
 
+# Flow node registrations (process-local global registry).
+# This module is used both as a standalone worker entrypoint and as an import
+# from the FastAPI app. Registering is idempotent (overwrites by key).
+ad.flows.register_builtin_nodes()
+ad.flows.register_docrouter_nodes()
+
 HEARTBEAT_INTERVAL_SECS = 600  # seconds
 POLL_MIN_SLEEP = 0.2   # seconds — first idle sleep
 POLL_MAX_SLEEP = 5.0   # seconds — cap for exponential backoff

@@ -56,23 +56,24 @@ Responsibilities:
 
 - flow validation
 - node registry
-- graph execution
-- execution persistence helpers
+- graph execution (`run_flow` in `engine.py`)
+- incremental `run_data` persistence and cooperative stop (`persist_run_data`, `read_stop` in `engine.py`, using `analytiq_client` on the context)
 - built-in generic nodes
 
 This package must not import DocRouter-specific code.
 
 ### 3.2 DocRouter integration layer
 
-Package: `app/flows/`
+Package: `analytiq_data/docrouter_flows/` (DocRouter nodes + service helpers; not
+under `app/` so queue workers can import it without loading FastAPI).
 
 Responsibilities:
 
-- registering DocRouter node types
-- document fetch / OCR / LLM / tagging integrations
-- trigger dispatch integration
-- FastAPI routes
-- worker integration
+- registering DocRouter node types (`register_docrouter_nodes`)
+- document fetch / OCR / LLM / tagging integrations (`services.py`)
+
+HTTP routes and queue wiring stay in `app/` (`app/routes/flows.py`, worker
+startup), but DocRouter flow *implementations* live next to the generic engine.
 
 This separation keeps the engine reusable and easy to test.
 
@@ -414,15 +415,17 @@ ConnectionType = Literal["main"]
 ```python
 @dataclass
 class NodeConnection:
-    node:  str             # destination node id
-    type:  ConnectionType  # connection lane
-    index: int             # destination input slot index
+    dest_node_id:   str
+    connection_type: ConnectionType  # v1: always "main" (per-output-lane)
+    index: int                       # destination input slot index
 ```
 
 #### Adjacency map
 
-Connections are keyed by **source node id** (not name). The destination `node`
-field also refers to the destination node id. This makes the graph rename-safe.
+Connections are keyed by **source node id** (not name). The destination
+`dest_node_id` is the target node id. The save API also accepts legacy keys
+`node` / `node_id` and `type` instead of `dest_node_id` / `connection_type` for
+the same fields (coerced in `app/routes/flows.py`).
 
 ```
 NodeOutputSlots  = list[list[NodeConnection] | None]
@@ -443,8 +446,8 @@ Example — one source, two output branches:
 {
   "a1b2c3": {
     "main": [
-      [{ "node": "d4e5f6", "type": "main", "index": 0 }],
-      [{ "node": "g7h8i9", "type": "main", "index": 0 }]
+      [{ "dest_node_id": "d4e5f6", "connection_type": "main", "index": 0 }],
+      [{ "dest_node_id": "g7h8i9", "connection_type": "main", "index": 0 }]
     ]
   }
 }
@@ -457,8 +460,8 @@ Example — fan-out from one output to two nodes:
   "a1b2c3": {
     "main": [
       [
-        { "node": "d4e5f6", "type": "main", "index": 0 },
-        { "node": "g7h8i9", "type": "main", "index": 0 }
+        { "dest_node_id": "d4e5f6", "connection_type": "main", "index": 0 },
+        { "dest_node_id": "g7h8i9", "connection_type": "main", "index": 0 }
       ]
     ]
   }
@@ -508,7 +511,7 @@ A flow revision is valid only if all of the following hold.
 1. `nodes[].id` is unique within the revision.
 2. `nodes[].name` is unique within the revision.
 3. Every connection source node id exists in `nodes`.
-4. Every connection destination `node` id exists in `nodes`.
+4. Every connection destination `dest_node_id` exists in `nodes`.
 5. Every connection destination `index` is within the declared input count of
    the destination node type.
 6. Every connection source output slot index is within the declared output count
@@ -682,31 +685,32 @@ calls `trigger_dispatch` at each firing time (see §15).
 ```text
 analytiq_data/flows/
   __init__.py
-  context.py          ExecutionContext, ExecutionMode, FlowServices
-  engine.py           FlowEngine (main execution loop)
-  execution.py        NodeRunData, NodeOutputData, run_data helpers
-  items.py            FlowItem, BinaryRef
-  connections.py      NodeConnection, ConnectionType, Connections types
-  node_registry.py    NodeType protocol, register(), get(), list_all()
+  context.py            ExecutionContext, ExecutionMode
+  engine.py             run_flow, validate_revision, FlowValidationError,
+                        persist_run_data, read_stop, canonical_graph_hash
+  execution.py          NodeRunData, run_data helpers
+  items.py              FlowItem, BinaryRef
+  connections.py        NodeConnection, connection_type literal, Connections
+  node_registry.py      NodeType protocol, register(), get(), list_all()
+  register_builtin.py   register_builtin_nodes()
   nodes/
-    trigger_node.py
-    webhook_node.py
-    branch_node.py
-    merge_node.py
-    code_node.py
+    trigger_manual.py
+    webhook.py
+    branch.py
+    merge.py
 
-app/flows/
+analytiq_data/msg_handlers/
+  flow_run.py           process_flow_run_msg → ad.flows.run_flow
+
+analytiq_data/docrouter_flows/
   __init__.py
-  services.py         FlowServicesImpl (implements FlowServices)
+  register.py           register_docrouter_nodes()
+  services.py           module-level async helpers (see §12.3)
   nodes/
     manual_trigger_node.py
-    upload_trigger_node.py
-    webhook_trigger_node.py
-    schedule_trigger_node.py
     ocr_node.py
     llm_node.py
     tag_node.py
-    webhook_node.py
 ```
 
 ### 12.2 `ExecutionMode`
@@ -715,44 +719,26 @@ app/flows/
 ExecutionMode = Literal["manual", "trigger", "webhook", "schedule", "error"]
 ```
 
-### 12.3 `FlowServices` protocol
+### 12.3 DocRouter integration surface (`analytiq_data/docrouter_flows/services.py`)
 
-`FlowServices` is the interface that DocRouter node implementations depend on.
-The engine never calls it directly; it is passed through `ExecutionContext.services`.
+The generic engine does **not** know about documents, OCR, or tags. DocRouter
+node implementations import **module-level async functions** from
+`analytiq_data.docrouter_flows.services`. The first argument is always the
+`analytiq_client` (typically `context.analytiq_client`); there is no
+`FlowServices` protocol object on the context.
 
-```python
-class FlowServices(Protocol):
-    async def get_document(
-        self, org_id: str, doc_id: str
-    ) -> dict: ...
+Current helpers include:
 
-    async def run_ocr(
-        self, org_id: str, doc_id: str
-    ) -> dict: ...
+- `get_document`, `run_ocr`, `run_llm_extract`, `set_tags`
+- `get_runtime_state`, `set_runtime_state` (§5.3)
 
-    async def run_llm_extract(
-        self, org_id: str, doc_id: str, prompt_id: str, schema_id: str
-    ) -> dict: ...
+Outbound HTTP for generic `flows.call_webhook`–style behavior is implemented in
+`analytiq_data/flows` (e.g. `nodes/webhook.py` via `httpx`), not through this
+module.
 
-    async def set_tags(
-        self, org_id: str, doc_id: str, tags: list[str]
-    ) -> None: ...
-
-    async def send_webhook(
-        self, url: str, payload: dict, headers: dict
-    ) -> dict: ...
-
-    async def get_runtime_state(
-        self, flow_id: str, node_id: str
-    ) -> dict: ...
-
-    async def set_runtime_state(
-        self, flow_id: str, node_id: str, data: dict
-    ) -> None: ...
-```
-
-Node implementations receive `context.services` typed as `FlowServices`, making
-them fully testable with a mock implementation.
+Node implementations are tested by stubbing or monkeypatching these functions
+or by passing a test `analytiq_client` / mock database layer, depending on the
+test style.
 
 ### 12.4 `ExecutionContext`
 
@@ -766,7 +752,7 @@ class ExecutionContext:
     mode:             ExecutionMode
     trigger_data:     dict                    # typed trigger origin (§5.4.3)
     run_data:         dict[str, Any]          # accumulated NodeRunData, written incrementally
-    services:         FlowServices
+    analytiq_client:  Any                     # process client; used by engine + services
     stop_requested:   bool = False
     logger:           Any | None = None
 ```
@@ -781,23 +767,31 @@ from the trigger node.
 2. Validate the revision.
 3. Build the adjacency maps (source-indexed and destination-indexed).
 4. Seed the work queue: create one `(trigger_node, input_slots=[])` work item.
-5. **Main loop** — while the work queue is non-empty:
-   a. Dequeue `(node, input_slots)`.
-   b. Check `stop_requested`; if set, mark execution `stopped` and exit.
-   c. If `node.disabled`, emit empty output on all ports and continue.
-   d. If `pin_data[node.id]` is set, use pinned items as output; skip execution.
-   e. If all input slots are empty lists (skipped inputs), mark node `"skipped"`,
+5. **Main loop** — while the work queue is non-empty **or** the merge-waiting map
+   is non-empty (see §12.7):
+   a. Poll MongoDB for a cooperative stop via `read_stop(context)`; update
+      `context.stop_requested`. If set, return `status = "stopped"`.
+   b. If the work queue is empty but merge nodes are still waiting, flush those
+      merges: enqueue one work item per waiting merge, treating any still-`None`
+      slots as empty lists (skipped upstream branches).
+   c. Dequeue `(node, input_slots)`.
+   d. If `node.disabled`, emit empty output on all ports and continue.
+   e. If `pin_data[node.id]` is set, use pinned items as output; skip execution.
+   f. If all input slots are empty lists (skipped inputs), mark node `"skipped"`,
       emit empty output on all ports, continue. (Branch-skipping rule.)
-   f. Call `node_type.execute(context, node, input_slots)`.
-   g. On error: apply `node.on_error` policy (stop, continue, or continue_error_output).
-   h. Write `NodeRunData` to `context.run_data[node.id]` and persist incrementally.
-   i. For each output slot `i`:
+   g. Call `node_type.execute(context, node, input_slots)`.
+   h. On error: apply `node.on_error` policy (stop, continue, or continue_error_output).
+   i. Write `NodeRunData` to `context.run_data[node.id]` and call
+      `persist_run_data(context, run_data)` (incremental Mongo `flow_executions`
+      update).
+   j. For each output slot `i`:
       - If the output list is non-empty: enqueue all nodes connected to slot `i`
         with the corresponding items as their input.
       - If the output list is empty: do **not** enqueue connected nodes.
         (This is the branch-skipping rule — see §4 decision 9.)
-   j. For merge nodes: accumulate inputs in a waiting map; enqueue only when all
-      input slots have been filled.
+   k. For merge nodes: accumulate inputs in a waiting map; enqueue when the
+      prefix covering at least the merge type’s `min_inputs` has no `None` left
+      (see §12.7). Otherwise leave the merge in the waiting map.
 6. Mark execution `success` (or `error` if any node failed with `on_error = "stop"`).
 
 ### 12.6 Fan-out semantics
@@ -809,17 +803,20 @@ breadth-first by connection order.
 
 ### 12.7 Merge semantics
 
-`flows.merge` waits for all declared input slots to receive data before running.
-It concatenates all input-slot item lists into one output list. The order is by
+`flows.merge` runs after each input slot has a defined list of items. It
+concatenates all input-slot item lists into one output list. The order is by
 input slot index ascending.
 
 The merge waiting map is analogous to n8n's `waitingExecution`:
 `dict[node_id, list[list[FlowItem] | None]]`. A slot is `None` until data
-arrives. The node is enqueued when no `None` remains.
+arrives. The node is enqueued as soon as every slot in the **prefix** checked
+by the engine (length `max(node_type.min_inputs, 1)`) is non-`None` (the built-in
+merge has `min_inputs = 2`).
 
-If the work queue empties before all merge inputs are filled (because some
-upstream branches were skipped), the merge node is enqueued with whatever
-non-None inputs are available, treating missing slots as empty lists.
+If the work queue would otherwise be empty and merge nodes are still waiting
+(typically after skipped upstream branches that never send into every slot), the
+engine **flushes** them: the merge is enqueued with any remaining `None` slots
+treated as empty lists, then executed under the normal rules.
 
 ### 12.8 Error handling
 
@@ -854,15 +851,17 @@ Error envelope item:
 
 - Stop is cooperative, not preemptive.
 - The stop endpoint sets `flow_executions.stop_requested = true`.
-- The worker checks `stop_requested` at step 5b of the main loop (before each
-  node execution).
+- Before each dequeued node, `read_stop` reloads the execution document and
+  updates `context.stop_requested` (see §12.5 step 5a). If set, `run_flow`
+  returns with `status = "stopped"`.
 - v1 does not attempt to hard-kill in-flight node code.
 
 ### 12.10 Execution timeout
 
-If `settings.execution_timeout_seconds` is set, the worker wraps the entire
-execution in `asyncio.wait_for(run_flow(...), timeout=N)`. On timeout, the
-execution is marked `status = "error"` with `error.message = "Execution timed out"`.
+If `settings.execution_timeout_seconds` is set, the worker wraps
+`analytiq_data.flows.run_flow(...)` in `asyncio.wait_for(..., timeout=N)`. On
+timeout, the execution is marked `status = "error"` with
+`error.message = "Execution timed out"`.
 
 ---
 
@@ -1031,14 +1030,21 @@ await ad.queue.send_msg(analytiq_client, "flow_run", {
     "flow_revid":      flow_revid,
     "execution_id":    exec_id,
     "organization_id": org_id,
+    "trigger":         {"type": "manual", "document_id": "..."},
 })
 ```
 
+(`trigger` matches `flow_executions.trigger` and is copied into
+`ExecutionContext.trigger_data` by the handler.)
+
 ### Worker rules
 
+- Handler: `analytiq_data.msg_handlers.process_flow_run_msg` loads the
+  revision, builds an `ExecutionContext` (including `analytiq_client`), and
+  runs `analytiq_data.flows.run_flow`.
 - Execute the exact `flow_revid` from the queue message. Never re-resolve "latest".
 - Update `last_heartbeat_at` every ~5 seconds while running.
-- Check `stop_requested` between node executions.
+- Cooperative stop: `read_stop` between node executions (see §12.9).
 - On completion (success or error), set `finished_at` and final `status`.
 - On startup, sweep for stale executions (see §5.4 stale-execution recovery).
 
@@ -1086,80 +1092,66 @@ src/components/flows/
 **Step 1.1 — Types and items**
 Files: `items.py`, `connections.py`
 - `FlowItem`, `BinaryRef` dataclasses
-- `ConnectionType`, `NodeConnection`, adjacency map type aliases
+- `NodeConnection` (`dest_node_id`, `connection_type: Literal["main"]`, `index`), `Connections` map type
 
 **Step 1.2 — Node registry**
 File: `node_registry.py`
 - `NodeType` Protocol
 - `register()`, `get()`, `list_all()`
 
-**Step 1.3 — Validation**
-File: `validation.py`
-- All 11 validation rules from §8
-- Returns a list of error strings; no side effects
+**Step 1.3 — Validation + engine**
+Files: `engine.py`, `execution.py`, `context.py`
+- `validate_revision` / `FlowValidationError` in `engine.py` (graph rules aligned
+  with §8; raises on failure)
+- `run_flow` — main loop; `persist_run_data` + `read_stop` for
+  `flow_executions` updates via `analytiq_client`
+- `ExecutionContext` in `context.py` (includes `analytiq_client`, not a
+  DocRouter `services` object)
 
-**Step 1.4 — Engine**
-Files: `engine.py`, `execution.py`
-- `ExecutionContext` dataclass
-- `FlowEngine.run(context, revision)` — the main loop
-- Fan-out, merge waiting map, branch-skipping rule, `on_error` handling
+**Step 1.4 — Built-in generic nodes + registration**
+Files: `register_builtin.py`, `nodes/{trigger_manual,webhook,branch,merge}.py`
+- `register_builtin_nodes()` registers the generic trigger, outbound webhook,
+  branch, and merge types.
 
-**Step 1.5 — Built-in generic nodes**
-Files: `nodes/trigger_manual.py`, `nodes/branch_node.py`, `nodes/merge_node.py`,
-`nodes/webhook_node.py`
-
-**Tests: `packages/python/tests/flows/`**
+**Tests: `packages/python/tests_flow/` (optional suite; not part of default
+`make tests`)**
 
 ```
-tests/flows/
-  __init__.py
-  conftest.py          MockServices, sample revision fixtures, FlowItem factory
-  test_items.py        FlowItem serialization, BinaryRef
-  test_connections.py  NodeConnection, adjacency map helpers
-  test_validation.py   All 11 rules — pass and fail cases
-  test_engine.py       Linear chain, fan-out, merge, branch-skip, on_error, disabled node
-  test_nodes.py        Built-in node execute() behavior
+tests_flow/
+  conftest.py           Ensures `packages/python` is on `sys.path`
+  test_flows_engine.py  Engine validation + graph invariants
 ```
 
-All Phase 1 tests are pure unit tests — no MongoDB, no HTTP, no real services.
-`FlowServices` is replaced by a `MockServices` fixture defined in
-`tests/flows/conftest.py`.
+Run: `make tests-flow` (installs test deps, runs pytest on `tests_flow` only).
 
 ---
 
-### Phase 2 — DocRouter integration (`app/flows/`)
+### Phase 2 — DocRouter integration (implemented: routes, services, nodes, worker)
 
-**Step 2.1 — DB helpers**
-File: `app/flows/db.py`
-- CRUD for `flows`, `flow_revisions`, `flow_executions`, `flow_runtime_state`
+**Collections / persistence**
+- Flow CRUD, revisions, and executions: Motor queries in `app/routes/flows.py`
+  (no separate `app/flows/db.py`).
 
-**Step 2.2 — Routes**
-File: `app/routes/flows.py`
-- All endpoints from §14.1 except inbound webhook and schedule trigger
+**Routes**
+- `app/routes/flows.py` — HTTP API from §14 (as wired in `app/main.py`).
 
-**Step 2.3 — Services**
-File: `app/flows/services.py`
-- `FlowServicesImpl` wiring real DocRouter clients into the `FlowServices` interface
+**Services**
+- `analytiq_data/docrouter_flows/services.py` — module-level async helpers using
+  `analytiq_client` (see §12.3).
 
-**Step 2.4 — DocRouter nodes**
-Files: `app/flows/nodes/*.py` — one file per node type
+**DocRouter nodes + registration**
+- `analytiq_data/docrouter_flows/nodes/{manual_trigger_node,ocr_node,llm_node,tag_node}.py`
+- `analytiq_data/docrouter_flows/register.py` — `register_docrouter_nodes()` (also
+  re-exported as `ad.flows.register_docrouter_nodes` for convenience)
 
-**Step 2.5 — Worker handler**
-In `worker/worker.py`: add `worker_flow_run()` alongside the existing OCR/LLM
-workers; handles `flow_run` queue messages
+**Queue worker**
+- `worker/worker.py` — `worker_flow_run` consumes `flow_run` messages
+- `analytiq_data/msg_handlers/flow_run.py` — `process_flow_run_msg` →
+  `ad.flows.run_flow`
 
-**Tests: `packages/python/tests/flows/`**
-
-```
-tests/flows/
-  test_flow_crud.py        Create, save revision, list, get, delete via HTTP
-  test_flow_activate.py    Activate/deactivate, revision pinning
-  test_flow_run.py         Manual run end-to-end (enqueue + worker executes)
-  test_flow_executions.py  Execution status polling, stop request
-```
-
-Phase 2 tests are integration tests using the existing `TestClient` + real
-MongoDB pattern from the project's `conftest.py`.
+**Tests**
+- End-to-end HTTP/queue tests for this phase are not yet checked in; follow the
+  same `TestClient` + MongoDB patterns as `packages/python/tests/` when added.
 
 ---
 
@@ -1174,18 +1166,19 @@ MongoDB pattern from the project's `conftest.py`.
 
 ### Implementation order within phases
 
-Phase 1: `1.1 → 1.2 → 1.3 → 1.4 → 1.5` — each step's tests pass before the next step begins.
+Phase 1: `1.1 → 1.2 → 1.3 → 1.4` — validate with `make tests-flow` when
+touching the engine.
 
-Phase 2: `2.1 → 2.2 → 2.3 → 2.4 → 2.5` — DB helpers and routes first so
-integration tests can be written against real endpoints early; services and
-DocRouter nodes fill in as needed.
+Phase 2: register DocRouter node types and services before relying on
+production routes; keep `process_flow_run_msg` and `run_flow` in sync when
+execution semantics change.
 
 ---
 
 ## 19. Main improvements from v3
 
-- Added `ConnectionType` literal and `NodeConnection` typed dataclass; adjacency
-  map types fully specified.
+- Added `ConnectionType` literal and `NodeConnection` (`dest_node_id`,
+  `connection_type`, `index`); adjacency map types fully specified.
 - Defined `run_data` shape (`NodeRunData` with status, timing, items, error).
 - Typed `flow_revisions.settings` with `execution_timeout_seconds`,
   `error_flow_id`, `save_execution_data`.
@@ -1197,7 +1190,11 @@ DocRouter nodes fill in as needed.
 - Defined `disabled` node semantics explicitly (emit empty output, skip branches).
 - Defined branch-skipping rule explicitly: empty output → skip connected nodes.
 - Added `paired_item` to `FlowItem` for lineage tracking.
-- Defined `FlowServices` Protocol; added `mode` and `trigger_data` to `ExecutionContext`.
+- `ExecutionContext` uses `analytiq_client` and `mode` + `trigger_data` (no
+  `FlowServices` object; DocRouter helpers live in
+  `analytiq_data/docrouter_flows/services.py`).
+- Engine entry points: `run_flow`, `persist_run_data`, `read_stop` in
+  `analytiq_data/flows/engine.py`.
 - Added `is_trigger`, `output_labels`, `description`, `category`,
   `validate_parameters` to `NodeType` protocol.
 - Added `webhook_id` to node shape; added `flows.trigger.webhook` and
