@@ -40,21 +40,6 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
         await ad.queue.delete_msg(analytiq_client, "flow_run", msg_id)
         return
 
-    async def persist_run_data(execution_id: str, run_data: dict) -> None:
-        await db.flow_executions.update_one(
-            {"_id": ObjectId(execution_id)},
-            {
-                "$set": {
-                    "run_data": run_data,
-                    "last_heartbeat_at": datetime.now(UTC),
-                }
-            },
-        )
-
-    async def read_stop(execution_id: str) -> bool:
-        d = await db.flow_executions.find_one({"_id": ObjectId(execution_id)}, {"stop_requested": 1})
-        return bool((d or {}).get("stop_requested"))
-
     revision = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
     if not revision:
         await db.flow_executions.update_one(
@@ -77,14 +62,12 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
         logger=logger,
     )
 
-    engine = ad.flows.FlowEngine(persist_run_data=persist_run_data, read_stop_requested=read_stop)
-
     try:
         await db.flow_executions.update_one(
             {"_id": ObjectId(exec_id)},
             {"$set": {"status": "running", "last_heartbeat_at": datetime.now(UTC)}},
         )
-        result = await engine.run(context=context, revision=revision)
+        result = await ad.flows.run_flow(context=context, revision=revision)
         status = result.get("status") or "success"
         await db.flow_executions.update_one(
             {"_id": ObjectId(exec_id)},
