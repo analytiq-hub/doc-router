@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from analytiq_data.flows.context import ExecutionContext
-from analytiq_data.flows.items import FlowItem
+import analytiq_data as ad
 
 
 class DocRouterSetTagsNode:
@@ -28,9 +27,14 @@ class DocRouterSetTagsNode:
             return ["parameters.tag_ids must be a list of strings"]
         return []
 
-    async def execute(self, context: ExecutionContext, node: dict[str, Any], inputs: list[list[FlowItem]]):
+    async def execute(
+        self,
+        context: "ad.flows.ExecutionContext",
+        node: dict[str, Any],
+        inputs: list[list["ad.flows.FlowItem"]],
+    ):
         tag_ids: list[str] = (node.get("parameters") or {}).get("tag_ids") or []
-        out: list[FlowItem] = []
+        out: list["ad.flows.FlowItem"] = []
         for it in inputs[0]:
             doc_id = it.json.get("document_id") or (it.json.get("document") or {}).get("_id")
             if not doc_id:
@@ -38,6 +42,10 @@ class DocRouterSetTagsNode:
             await context.services.set_tags(context.organization_id, doc_id, tag_ids)
             merged = dict(it.json)
             merged["tag_ids"] = tag_ids
-            out.append(FlowItem(json=merged, binary=it.binary, meta=it.meta, paired_item=it.paired_item))
+            out.append(
+                ad.flows.FlowItem(
+                    json=merged, binary=it.binary, meta=it.meta, paired_item=it.paired_item
+                )
+            )
         return [out]
 

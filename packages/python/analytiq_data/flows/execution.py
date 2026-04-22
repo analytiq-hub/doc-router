@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Literal
 
-from .items import FlowItem
+import analytiq_data as ad
 
 NodeStatus = Literal["success", "error", "skipped"]
 
@@ -12,7 +12,7 @@ NodeStatus = Literal["success", "error", "skipped"]
 @dataclass
 class NodeOutputData:
     # Matches spec: { "main": [ [FlowItem...], [FlowItem...] ] }
-    main: list[list[FlowItem]]
+    main: list[list["ad.flows.FlowItem"]]
 
 
 @dataclass

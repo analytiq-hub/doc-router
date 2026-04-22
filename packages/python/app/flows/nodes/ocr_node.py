@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from analytiq_data.flows.context import ExecutionContext
-from analytiq_data.flows.items import FlowItem
+import analytiq_data as ad
 
 
 class DocRouterOcrNode:
@@ -21,8 +20,13 @@ class DocRouterOcrNode:
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
         return []
 
-    async def execute(self, context: ExecutionContext, node: dict[str, Any], inputs: list[list[FlowItem]]):
-        out: list[FlowItem] = []
+    async def execute(
+        self,
+        context: "ad.flows.ExecutionContext",
+        node: dict[str, Any],
+        inputs: list[list["ad.flows.FlowItem"]],
+    ):
+        out: list["ad.flows.FlowItem"] = []
         for it in inputs[0]:
             doc_id = it.json.get("document_id") or (it.json.get("document") or {}).get("_id")
             if not doc_id:
@@ -31,7 +35,9 @@ class DocRouterOcrNode:
             merged = dict(it.json)
             merged["ocr"] = result
             out.append(
-                FlowItem(json=merged, binary=it.binary, meta=it.meta, paired_item=it.paired_item)
+                ad.flows.FlowItem(
+                    json=merged, binary=it.binary, meta=it.meta, paired_item=it.paired_item
+                )
             )
         return [out]
 

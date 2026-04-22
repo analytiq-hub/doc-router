@@ -4,12 +4,7 @@ from typing import Any
 
 import pytest
 
-from analytiq_data.flows.engine import validate_revision, FlowValidationError
-from analytiq_data.flows.connections import NodeConnection
-from analytiq_data.flows.node_registry import register
-from analytiq_data.flows.register_builtin import register_builtin_nodes
-from analytiq_data.flows.context import ExecutionContext
-from analytiq_data.flows.items import FlowItem
+import analytiq_data as ad
 
 
 class _PassThroughNode:
@@ -32,16 +27,19 @@ class _PassThroughNode:
         return []
 
     async def execute(
-        self, context: ExecutionContext, node: dict[str, Any], inputs: list[list[FlowItem]]
-    ) -> list[list[FlowItem]]:
+        self,
+        context: "ad.flows.ExecutionContext",
+        node: dict[str, Any],
+        inputs: list[list["ad.flows.FlowItem"]],
+    ) -> list[list["ad.flows.FlowItem"]]:
         return [inputs[0]]
 
 
 @pytest.fixture(autouse=True)
 def _register_nodes() -> None:
     # Overwrite-safe: register() replaces by key.
-    register_builtin_nodes()
-    register(_PassThroughNode())
+    ad.flows.register_builtin_nodes()
+    ad.flows.register(_PassThroughNode())
 
 
 def test_validate_revision_accepts_simple_dag() -> None:
@@ -78,11 +76,11 @@ def test_validate_revision_accepts_simple_dag() -> None:
     connections = {
         "t1": {
             "main": [
-                [NodeConnection(dest_node_id="n1", connection_type="main", index=0)],
+                [ad.flows.NodeConnection(dest_node_id="n1", connection_type="main", index=0)],
             ]
         }
     }
-    validate_revision(nodes, connections, settings={}, pin_data=None)
+    ad.flows.validate_revision(nodes, connections, settings={}, pin_data=None)
 
 
 def test_validate_revision_rejects_cycle() -> None:
@@ -92,10 +90,10 @@ def test_validate_revision_rejects_cycle() -> None:
         {"id": "b1", "name": "B", "type": "tests.passthrough", "position": [400, 0], "parameters": {}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
     ]
     connections = {
-        "t1": {"main": [[NodeConnection(dest_node_id="a1", connection_type="main", index=0)]]},
-        "a1": {"main": [[NodeConnection(dest_node_id="b1", connection_type="main", index=0)]]},
-        "b1": {"main": [[NodeConnection(dest_node_id="a1", connection_type="main", index=0)]]},
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="a1", connection_type="main", index=0)]]},
+        "a1": {"main": [[ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0)]]},
+        "b1": {"main": [[ad.flows.NodeConnection(dest_node_id="a1", connection_type="main", index=0)]]},
     }
-    with pytest.raises(FlowValidationError, match="cycle|DAG"):
-        validate_revision(nodes, connections, settings={}, pin_data=None)
+    with pytest.raises(ad.flows.FlowValidationError, match="cycle|DAG"):
+        ad.flows.validate_revision(nodes, connections, settings={}, pin_data=None)
 

@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from analytiq_data.flows.context import ExecutionContext
-from analytiq_data.flows.items import FlowItem
+import analytiq_data as ad
 
 
 class DocRouterManualTriggerNode:
@@ -28,14 +27,19 @@ class DocRouterManualTriggerNode:
             return ["parameters.document_id is required"]
         return []
 
-    async def execute(self, context: ExecutionContext, node: dict[str, Any], inputs: list[list[FlowItem]]):
+    async def execute(
+        self,
+        context: "ad.flows.ExecutionContext",
+        node: dict[str, Any],
+        inputs: list[list["ad.flows.FlowItem"]],
+    ):
         doc_id = (node.get("parameters") or {}).get("document_id") or context.trigger_data.get("document_id")
         if not doc_id:
             raise ValueError("document_id required for docrouter.trigger.manual")
         doc = await context.services.get_document(context.organization_id, doc_id)
         return [
             [
-                FlowItem(
+                ad.flows.FlowItem(
                     json={"document": doc, "document_id": doc_id},
                     binary={},
                     meta={"source_node_id": node["id"], "item_index": 0},

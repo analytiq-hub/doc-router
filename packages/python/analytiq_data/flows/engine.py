@@ -10,23 +10,22 @@ from typing import Any, Callable
 
 from jsonschema import Draft7Validator
 
-from .connections import Connections, NodeConnection
-from .context import ExecutionContext
-from .items import FlowItem
-from .node_registry import get as get_node_type
+import analytiq_data as ad
 
 
 class FlowValidationError(ValueError):
     pass
 
 
-def canonical_graph_hash(nodes: list[dict[str, Any]], connections: Connections, settings: dict[str, Any]) -> str:
+def canonical_graph_hash(
+    nodes: list[dict[str, Any]], connections: "ad.flows.Connections", settings: dict[str, Any]
+) -> str:
     payload = {"nodes": nodes, "connections": connections, "settings": settings}
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
 
-def _toposort(nodes: list[dict[str, Any]], connections: Connections) -> list[str]:
+def _toposort(nodes: list[dict[str, Any]], connections: "ad.flows.Connections") -> list[str]:
     node_ids = {n["id"] for n in nodes}
     indeg: dict[str, int] = {nid: 0 for nid in node_ids}
     adj: dict[str, list[str]] = {nid: [] for nid in node_ids}
@@ -60,7 +59,7 @@ def _toposort(nodes: list[dict[str, Any]], connections: Connections) -> list[str
 
 def validate_revision(
     nodes: list[dict[str, Any]],
-    connections: Connections,
+    connections: "ad.flows.Connections",
     settings: dict[str, Any] | None,
     pin_data: dict[str, Any] | None,
 ) -> None:
@@ -78,7 +77,7 @@ def validate_revision(
     # Exactly one trigger node.
     trigger_nodes = []
     for n in nodes:
-        nt = get_node_type(n["type"])
+        nt = ad.flows.get(n["type"])
         if nt.is_trigger:
             trigger_nodes.append(n)
     if len(trigger_nodes) != 1:
@@ -109,7 +108,7 @@ def validate_revision(
     for src, typed in (connections or {}).items():
         if src not in nodes_by_id:
             raise FlowValidationError(f"Connection source node id does not exist: {src}")
-        src_type = get_node_type(nodes_by_id[src]["type"])
+        src_type = ad.flows.get(nodes_by_id[src]["type"])
         main_slots = (typed or {}).get("main") or []
         if len(main_slots) > src_type.outputs:
             raise FlowValidationError(f"Source node {src} has connection slot beyond outputs")
@@ -123,7 +122,7 @@ def validate_revision(
                     raise FlowValidationError(
                         f"Connection destination node id does not exist: {conn.dest_node_id}"
                     )
-                dst_type = get_node_type(nodes_by_id[conn.dest_node_id]["type"])
+                dst_type = ad.flows.get(nodes_by_id[conn.dest_node_id]["type"])
                 if conn.index < 0:
                     raise FlowValidationError("Connection destination index must be >= 0")
                 if dst_type.max_inputs is not None and conn.index >= dst_type.max_inputs:
@@ -142,7 +141,7 @@ def validate_revision(
 
     # Parameter validation.
     for n in nodes:
-        nt = get_node_type(n["type"])
+        nt = ad.flows.get(n["type"])
         params = n.get("parameters") or {}
         try:
             Draft7Validator(nt.parameter_schema).validate(params)
@@ -162,12 +161,12 @@ def validate_revision(
                 raise FlowValidationError(f"pin_data references unknown node id: {node_id}")
 
 
-def _empty_outputs(outputs: int) -> list[list[FlowItem]]:
+def _empty_outputs(outputs: int) -> list[list["ad.flows.FlowItem"]]:
     return [[] for _ in range(outputs)]
 
 
-def _error_item(node_id: str, node_name: str, message: str) -> FlowItem:
-    return FlowItem(
+def _error_item(node_id: str, node_name: str, message: str) -> "ad.flows.FlowItem":
+    return ad.flows.FlowItem(
         json={"_error": {"node_id": node_id, "node_name": node_name, "message": message}},
         binary={},
         meta={},
@@ -178,7 +177,7 @@ def _error_item(node_id: str, node_name: str, message: str) -> FlowItem:
 @dataclass
 class _WorkItem:
     node_id: str
-    inputs: list[list[FlowItem]]
+    inputs: list[list["ad.flows.FlowItem"]]
 
 
 class FlowEngine:
@@ -194,21 +193,21 @@ class FlowEngine:
     async def run(
         self,
         *,
-        context: ExecutionContext,
+        context: "ad.flows.ExecutionContext",
         revision: dict[str, Any],
     ) -> dict[str, Any]:
         nodes: list[dict[str, Any]] = revision.get("nodes") or []
-        connections: Connections = revision.get("connections") or {}
+        connections: "ad.flows.Connections" = revision.get("connections") or {}
         settings: dict[str, Any] = revision.get("settings") or {}
         pin_data: dict[str, Any] | None = revision.get("pin_data")
 
         validate_revision(nodes, connections, settings, pin_data)
 
         nodes_by_id = {n["id"]: n for n in nodes}
-        trigger = next(n for n in nodes if get_node_type(n["type"]).is_trigger)
+        trigger = next(n for n in nodes if ad.flows.get(n["type"]).is_trigger)
         trigger_id = trigger["id"]
 
-        merge_waiting: dict[str, list[list[FlowItem] | None]] = {}
+        merge_waiting: dict[str, list[list["ad.flows.FlowItem"] | None]] = {}
         work: list[_WorkItem] = [_WorkItem(node_id=trigger_id, inputs=[])]
 
         timeout = settings.get("execution_timeout_seconds")
@@ -226,7 +225,7 @@ class FlowEngine:
 
                 wi = work.pop(0)
                 node = nodes_by_id[wi.node_id]
-                node_type = get_node_type(node["type"])
+                node_type = ad.flows.get(node["type"])
                 outputs_count = node_type.outputs
 
                 start = time.time()
@@ -296,7 +295,7 @@ class FlowEngine:
                         continue
                     for conn in slot_conns:
                         dst = nodes_by_id[conn.dest_node_id]
-                        dst_type = get_node_type(dst["type"])
+                        dst_type = ad.flows.get(dst["type"])
                         # Determine current input-slot count to allocate.
                         if dst_type.max_inputs is not None:
                             in_slots_count = dst_type.max_inputs
@@ -323,7 +322,7 @@ class FlowEngine:
             # Drain merge nodes waiting map (skipped-branch rule).
             for node_id, slots in list(merge_waiting.items()):
                 dst = nodes_by_id[node_id]
-                dst_type = get_node_type(dst["type"])
+                dst_type = ad.flows.get(dst["type"])
                 in_slots_count = len(slots)
                 ready_inputs = [(x or []) for x in slots]
                 work.append(_WorkItem(node_id=dst["id"], inputs=ready_inputs))

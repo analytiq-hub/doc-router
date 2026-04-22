@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from analytiq_data.flows.context import ExecutionContext
-from analytiq_data.flows.items import FlowItem
+import analytiq_data as ad
 
 
 class DocRouterLlmExtractNode:
@@ -34,11 +33,16 @@ class DocRouterLlmExtractNode:
             errs.append("parameters.schema_id is required")
         return errs
 
-    async def execute(self, context: ExecutionContext, node: dict[str, Any], inputs: list[list[FlowItem]]):
+    async def execute(
+        self,
+        context: "ad.flows.ExecutionContext",
+        node: dict[str, Any],
+        inputs: list[list["ad.flows.FlowItem"]],
+    ):
         params = node.get("parameters") or {}
         prompt_id = params["prompt_id"]
         schema_id = params["schema_id"]
-        out: list[FlowItem] = []
+        out: list["ad.flows.FlowItem"] = []
         for it in inputs[0]:
             doc_id = it.json.get("document_id") or (it.json.get("document") or {}).get("_id")
             if not doc_id:
@@ -46,6 +50,10 @@ class DocRouterLlmExtractNode:
             res = await context.services.run_llm_extract(context.organization_id, doc_id, prompt_id, schema_id)
             merged = dict(it.json)
             merged["llm_extract"] = res
-            out.append(FlowItem(json=merged, binary=it.binary, meta=it.meta, paired_item=it.paired_item))
+            out.append(
+                ad.flows.FlowItem(
+                    json=merged, binary=it.binary, meta=it.meta, paired_item=it.paired_item
+                )
+            )
         return [out]
 

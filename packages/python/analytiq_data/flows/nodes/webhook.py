@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..context import ExecutionContext
-from ..items import FlowItem
+import analytiq_data as ad
 
 
 class FlowsWebhookNode:
@@ -33,17 +32,17 @@ class FlowsWebhookNode:
 
     async def execute(
         self,
-        context: ExecutionContext,
+        context: "ad.flows.ExecutionContext",
         node: dict[str, Any],
-        inputs: list[list[FlowItem]],
-    ) -> list[list[FlowItem]]:
+        inputs: list[list["ad.flows.FlowItem"]],
+    ) -> list[list["ad.flows.FlowItem"]]:
         url = (node.get("parameters") or {}).get("url")
         headers = (node.get("parameters") or {}).get("headers") or {}
-        out: list[FlowItem] = []
+        out: list["ad.flows.FlowItem"] = []
         for it in inputs[0]:
             resp = await context.services.send_webhook(url=url, payload=it.json, headers=headers)
             out.append(
-                FlowItem(
+                ad.flows.FlowItem(
                     json={"request": it.json, "response": resp},
                     binary={},
                     meta=it.meta,

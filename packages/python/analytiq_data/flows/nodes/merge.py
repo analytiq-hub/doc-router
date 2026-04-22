@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..context import ExecutionContext
-from ..items import FlowItem
+import analytiq_data as ad
 
 
 class FlowsMergeNode:
@@ -23,11 +22,11 @@ class FlowsMergeNode:
 
     async def execute(
         self,
-        context: ExecutionContext,
+        context: "ad.flows.ExecutionContext",
         node: dict[str, Any],
-        inputs: list[list[FlowItem]],
-    ) -> list[list[FlowItem]]:
-        merged: list[FlowItem] = []
+        inputs: list[list["ad.flows.FlowItem"]],
+    ) -> list[list["ad.flows.FlowItem"]]:
+        merged: list["ad.flows.FlowItem"] = []
         for slot_items in inputs:
             merged.extend(slot_items)
         return [merged]

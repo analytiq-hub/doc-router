@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from .node_registry import register
-from .nodes import FlowsManualTriggerNode, FlowsWebhookNode, FlowsBranchNode, FlowsMergeNode
+import analytiq_data as ad
 
 
 def register_builtin_nodes() -> None:
-    register(FlowsManualTriggerNode())
-    register(FlowsWebhookNode())
-    register(FlowsBranchNode())
-    register(FlowsMergeNode())
+    ad.flows.register(ad.flows.FlowsManualTriggerNode())
+    ad.flows.register(ad.flows.FlowsWebhookNode())
+    ad.flows.register(ad.flows.FlowsBranchNode())
+    ad.flows.register(ad.flows.FlowsMergeNode())
 

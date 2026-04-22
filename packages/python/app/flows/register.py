@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from analytiq_data.flows.node_registry import register
+import analytiq_data as ad
 
 from .nodes import (
     DocRouterManualTriggerNode,
@@ -11,8 +11,8 @@ from .nodes import (
 
 
 def register_docrouter_nodes() -> None:
-    register(DocRouterManualTriggerNode())
-    register(DocRouterOcrNode())
-    register(DocRouterLlmExtractNode())
-    register(DocRouterSetTagsNode())
+    ad.flows.register(DocRouterManualTriggerNode())
+    ad.flows.register(DocRouterOcrNode())
+    ad.flows.register(DocRouterLlmExtractNode())
+    ad.flows.register(DocRouterSetTagsNode())
 

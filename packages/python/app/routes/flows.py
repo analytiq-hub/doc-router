@@ -9,10 +9,6 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
 from pydantic import BaseModel, Field, ConfigDict
 
 import analytiq_data as ad
-from analytiq_data.flows.engine import canonical_graph_hash, validate_revision, FlowValidationError
-from analytiq_data.flows.connections import Connections, NodeConnection
-from analytiq_data.flows.context import ExecutionContext
-from analytiq_data.flows.engine import FlowEngine
 
 from app.auth import get_org_user
 from app.models import User
@@ -279,8 +275,8 @@ async def save_revision(org_id: str, flow_id: str, req: SaveFlowRequest, current
         raise HTTPException(status_code=409, detail="base_flow_revid is not the latest revision")
 
     # Coerce connections into NodeConnection dataclasses for validation and storage.
-    def _coerce_connections(raw: dict[str, Any]) -> Connections:
-        out: Connections = {}
+    def _coerce_connections(raw: dict[str, Any]) -> "ad.flows.Connections":
+        out: "ad.flows.Connections" = {}
         for src, typed in (raw or {}).items():
             out[src] = {}
             main_slots = (typed or {}).get("main") or []
@@ -299,7 +295,7 @@ async def save_revision(org_id: str, flow_id: str, req: SaveFlowRequest, current
                             status_code=400, detail="Connection missing dest_node_id"
                         )
                     conns.append(
-                        NodeConnection(
+                        ad.flows.NodeConnection(
                             dest_node_id=dest_node_id,
                             connection_type=ct,
                             index=int(c["index"]),
@@ -315,11 +311,11 @@ async def save_revision(org_id: str, flow_id: str, req: SaveFlowRequest, current
     pin_data = req.pin_data
 
     try:
-        validate_revision(nodes, connections, settings, pin_data)
-    except FlowValidationError as e:
+        ad.flows.validate_revision(nodes, connections, settings, pin_data)
+    except ad.flows.FlowValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-    ghash = canonical_graph_hash(nodes, req.connections, settings)
+    ghash = ad.flows.canonical_graph_hash(nodes, req.connections, settings)
 
     # Name-only update if graph unchanged.
     if latest and latest.get("graph_hash") == ghash and req.name != h.get("name"):

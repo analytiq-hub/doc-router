@@ -7,8 +7,6 @@ from datetime import datetime, UTC
 from bson import ObjectId
 
 import analytiq_data as ad
-from analytiq_data.flows.context import ExecutionContext
-from analytiq_data.flows.engine import FlowEngine, FlowValidationError
 
 
 logger = logging.getLogger(__name__)
@@ -61,7 +59,7 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
     from app.flows.services import FlowServicesImpl
 
     services = FlowServicesImpl(analytiq_client)
-    context = ExecutionContext(
+    context = ad.flows.ExecutionContext(
         organization_id=org_id,
         execution_id=exec_id,
         flow_id=flow_id,
@@ -74,7 +72,7 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
         logger=logger,
     )
 
-    engine = FlowEngine(persist_run_data=persist_run_data, read_stop_requested=read_stop)
+    engine = ad.flows.FlowEngine(persist_run_data=persist_run_data, read_stop_requested=read_stop)
 
     try:
         await db.flow_executions.update_one(

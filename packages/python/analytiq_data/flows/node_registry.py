@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
-from .context import ExecutionContext
-from .items import FlowItem
+import analytiq_data as ad
 
 
 @runtime_checkable
@@ -21,10 +20,10 @@ class NodeType(Protocol):
 
     async def execute(
         self,
-        context: ExecutionContext,
+        context: "ad.flows.ExecutionContext",
         node: dict[str, Any],
-        inputs: list[list[FlowItem]],
-    ) -> list[list[FlowItem]]: ...
+        inputs: list[list["ad.flows.FlowItem"]],
+    ) -> list[list["ad.flows.FlowItem"]]: ...
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]: ...
 
