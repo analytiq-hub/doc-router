@@ -107,18 +107,10 @@ sys.stdout.flush()
 
 
 def _minimal_env() -> dict[str, str]:
-    """
-    Return a minimal environment for the child interpreter.
-
-    We keep PATH so the interpreter can start normally on some systems, but we
-    scrub most other variables (including secrets). `-I` also ignores PYTHON* env.
-    """
-
+    # -I ignores PYTHON* vars; PATH is kept so the interpreter can locate itself.
     env: dict[str, str] = {}
     if "PATH" in os.environ:
         env["PATH"] = os.environ["PATH"]
-    env["LANG"] = os.environ.get("LANG", "C.UTF-8")
-    env["LC_ALL"] = os.environ.get("LC_ALL", env["LANG"])
     return env
 
 

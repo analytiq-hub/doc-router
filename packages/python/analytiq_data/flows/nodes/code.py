@@ -69,14 +69,9 @@ class FlowsCodeNode:
         in_items = inputs[0]
         payload_items = [it.json for it in in_items]
         ctx = {
-            "organization_id": context.organization_id,
-            "execution_id": context.execution_id,
-            "flow_id": context.flow_id,
-            "flow_revid": context.flow_revid,
-            "mode": context.mode,
             "trigger": context.trigger_data,
             "node_id": node.get("id"),
-            "node_type": node.get("type"),
+            "mode": context.mode,
         }
 
         out_json_items = await ad.flows.run_python_code(

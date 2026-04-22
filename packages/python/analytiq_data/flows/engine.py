@@ -139,8 +139,6 @@ def validate_revision(
         except KeyError:
             raise FlowValidationError(f"Unknown node type: {nodes_by_id[src]['type']}") from None
         main_slots = (typed or {}).get("main") or []
-        if len(main_slots) > src_type.outputs:
-            raise FlowValidationError(f"Source node {src} has connection slot beyond outputs")
         for out_idx, slot in enumerate(main_slots):
             if out_idx >= src_type.outputs:
                 raise FlowValidationError(f"Source node {src} output index out of range: {out_idx}")
@@ -255,6 +253,130 @@ async def read_stop(context: "ad.flows.ExecutionContext") -> bool:
     return bool((doc or {}).get("stop_requested"))
 
 
+async def _execute_loop(
+    context: "ad.flows.ExecutionContext",
+    nodes_by_id: dict[str, Any],
+    connections: "ad.flows.Connections",
+    pin_data: dict[str, Any] | None,
+    work: "collections.deque[_WorkItem]",
+    merge_waiting: "dict[str, list[list[ad.flows.FlowItem] | None]]",
+) -> dict[str, Any]:
+    """Inner BFS execution loop shared by `run_flow` and `asyncio.wait_for`."""
+
+    while work or merge_waiting:
+        try:
+            context.stop_requested = bool(await read_stop(context))
+        except Exception:
+            pass
+        if context.stop_requested:
+            return {"status": "stopped"}
+
+        if not work and merge_waiting:
+            for node_id, slots in list(merge_waiting.items()):
+                node = nodes_by_id[node_id]
+                ready_inputs = [(x or []) for x in slots]
+                work.append(_WorkItem(node_id=node["id"], inputs=ready_inputs))
+                merge_waiting.pop(node_id, None)
+
+        wi = work.popleft()
+        node = nodes_by_id[wi.node_id]
+        node_type = ad.flows.get(node["type"])
+        outputs_count = node_type.outputs
+
+        start = time.time()
+        start_datetime = datetime.now(UTC)
+        status = "success"
+        error_env = None
+
+        if node.get("disabled"):
+            out_lists = _empty_outputs(outputs_count)
+            status = "skipped"
+        elif pin_data and node["id"] in pin_data:
+            pinned = pin_data[node["id"]] or []
+            out_lists = [pinned] + [[] for _ in range(outputs_count - 1)]
+        else:
+            # Branch-skipping rule.
+            if wi.inputs and all(len(slot) == 0 for slot in wi.inputs):
+                out_lists = _empty_outputs(outputs_count)
+                status = "skipped"
+            else:
+                try:
+                    out_lists = await node_type.execute(context, node, wi.inputs)
+                    if len(out_lists) != outputs_count:
+                        raise RuntimeError(
+                            f"Node {node['id']} returned {len(out_lists)} output slots, expected {outputs_count}"
+                        )
+                except Exception as e:
+                    on_error = node.get("on_error") or "stop"
+                    msg = str(e)
+                    error_env = {
+                        "message": msg,
+                        "node_id": node["id"],
+                        "node_name": node.get("name") or node_type.label,
+                        "stack": None,
+                    }
+                    if on_error == "continue":
+                        out_lists = [
+                            [_error_item(node["id"], node.get("name") or node_type.label, msg)]
+                        ] + _empty_outputs(outputs_count - 1)
+                        status = "error"
+                    else:
+                        context.run_data[node["id"]] = {
+                            "status": "error",
+                            "start_time": start_datetime.isoformat(),
+                            "execution_time_ms": int((time.time() - start) * 1000),
+                            "data": {"main": []},
+                            "error": error_env,
+                        }
+                        await persist_run_data(context, context.run_data)
+                        raise
+
+        context.run_data[node["id"]] = {
+            "status": status,
+            "start_time": start_datetime.isoformat(),
+            "execution_time_ms": int((time.time() - start) * 1000),
+            "data": {"main": out_lists},
+            "error": error_env,
+        }
+        await persist_run_data(context, context.run_data)
+
+        typed = (connections or {}).get(node["id"]) or {}
+        main_slots = typed.get("main") or []
+
+        for out_idx, items in enumerate(out_lists):
+            if not items:
+                continue
+            slot_conns = main_slots[out_idx] if out_idx < len(main_slots) else None
+            if not slot_conns:
+                continue
+            for conn in slot_conns:
+                dst = nodes_by_id[conn.dest_node_id]
+                dst_type = ad.flows.get(dst["type"])
+                if dst_type.max_inputs is not None:
+                    in_slots_count = dst_type.max_inputs
+                else:
+                    in_slots_count = max(conn.index + 1, dst_type.min_inputs)
+
+                if dst_type.is_merge:
+                    waiting = merge_waiting.get(dst["id"])
+                    if waiting is None:
+                        waiting = [None] * in_slots_count
+                        merge_waiting[dst["id"]] = waiting
+                    if conn.index >= len(waiting):
+                        waiting.extend([None] * (conn.index - len(waiting) + 1))
+                    waiting[conn.index] = items
+                    if all(x is not None for x in waiting[: max(dst_type.min_inputs, 1)]):
+                        ready_inputs = [(x or []) for x in waiting]
+                        work.append(_WorkItem(node_id=dst["id"], inputs=ready_inputs))
+                        merge_waiting.pop(dst["id"], None)
+                else:
+                    inp = [[] for _ in range(in_slots_count)]
+                    inp[conn.index] = items
+                    work.append(_WorkItem(node_id=dst["id"], inputs=inp))
+
+    return {"status": "success"}
+
+
 async def run_flow(*, context: "ad.flows.ExecutionContext", revision: dict[str, Any]) -> dict[str, Any]:
     """
     Run a single flow execution for a specific immutable revision snapshot.
@@ -271,130 +393,13 @@ async def run_flow(*, context: "ad.flows.ExecutionContext", revision: dict[str, 
 
     nodes_by_id = {n["id"]: n for n in nodes}
     trigger = next(n for n in nodes if ad.flows.get(n["type"]).is_trigger)
-    trigger_id = trigger["id"]
 
     merge_waiting: dict[str, list[list["ad.flows.FlowItem"] | None]] = {}
-    work: collections.deque[_WorkItem] = collections.deque([_WorkItem(node_id=trigger_id, inputs=[])])
+    work: collections.deque[_WorkItem] = collections.deque([_WorkItem(node_id=trigger["id"], inputs=[])])
 
     timeout = settings.get("execution_timeout_seconds")
-
-    async def _run_inner() -> dict[str, Any]:
-        while work or merge_waiting:
-            try:
-                context.stop_requested = bool(await read_stop(context))
-            except Exception:
-                # best-effort; stop still checked via context flag.
-                pass
-            if context.stop_requested:
-                return {"status": "stopped"}
-
-            if not work and merge_waiting:
-                for node_id, slots in list(merge_waiting.items()):
-                    node = nodes_by_id[node_id]
-                    ready_inputs = [(x or []) for x in slots]
-                    work.append(_WorkItem(node_id=node["id"], inputs=ready_inputs))
-                    merge_waiting.pop(node_id, None)
-
-            wi = work.popleft()
-            node = nodes_by_id[wi.node_id]
-            node_type = ad.flows.get(node["type"])
-            outputs_count = node_type.outputs
-
-            start = time.time()
-            start_datetime = datetime.now(UTC)
-            status = "success"
-            error_env = None
-
-            if node.get("disabled"):
-                out_lists = _empty_outputs(outputs_count)
-                status = "skipped"
-            elif pin_data and node["id"] in pin_data:
-                pinned = pin_data[node["id"]] or []
-                out_lists = [pinned] + [[] for _ in range(outputs_count - 1)]
-            else:
-                # Branch-skipping rule.
-                if wi.inputs and all(len(slot) == 0 for slot in wi.inputs):
-                    out_lists = _empty_outputs(outputs_count)
-                    status = "skipped"
-                else:
-                    try:
-                        out_lists = await node_type.execute(context, node, wi.inputs)
-                        if len(out_lists) != outputs_count:
-                            raise RuntimeError(
-                                f"Node {node['id']} returned {len(out_lists)} output slots, expected {outputs_count}"
-                            )
-                    except Exception as e:
-                        on_error = node.get("on_error") or "stop"
-                        msg = str(e)
-                        error_env = {
-                            "message": msg,
-                            "node_id": node["id"],
-                            "node_name": node.get("name") or node_type.label,
-                            "stack": None,
-                        }
-                        if on_error == "continue":
-                            out_lists = [
-                                [_error_item(node["id"], node.get("name") or node_type.label, msg)]
-                            ] + _empty_outputs(outputs_count - 1)
-                            status = "error"
-                        else:
-                            context.run_data[node["id"]] = {
-                                "status": "error",
-                                "start_time": start_datetime.isoformat(),
-                                "execution_time_ms": int((time.time() - start) * 1000),
-                                "data": {"main": []},
-                                "error": error_env,
-                            }
-                            await persist_run_data(context, context.run_data)
-                            raise
-
-            context.run_data[node["id"]] = {
-                "status": status,
-                "start_time": start_datetime.isoformat(),
-                "execution_time_ms": int((time.time() - start) * 1000),
-                "data": {"main": out_lists},
-                "error": error_env,
-            }
-            await persist_run_data(context, context.run_data)
-
-            typed = (connections or {}).get(node["id"]) or {}
-            main_slots = typed.get("main") or []
-
-            for out_idx, items in enumerate(out_lists):
-                if not items:
-                    continue
-                slot_conns = main_slots[out_idx] if out_idx < len(main_slots) else None
-                if not slot_conns:
-                    continue
-                for conn in slot_conns:
-                    dst = nodes_by_id[conn.dest_node_id]
-                    dst_type = ad.flows.get(dst["type"])
-                    # Determine current input-slot count to allocate.
-                    if dst_type.max_inputs is not None:
-                        in_slots_count = dst_type.max_inputs
-                    else:
-                        in_slots_count = max(conn.index + 1, dst_type.min_inputs)
-
-                    if dst_type.is_merge:
-                        waiting = merge_waiting.get(dst["id"])
-                        if waiting is None:
-                            waiting = [None] * in_slots_count
-                            merge_waiting[dst["id"]] = waiting
-                        if conn.index >= len(waiting):
-                            waiting.extend([None] * (conn.index - len(waiting) + 1))
-                        waiting[conn.index] = items
-                        if all(x is not None for x in waiting[: max(dst_type.min_inputs, 1)]):
-                            ready_inputs = [(x or []) for x in waiting]
-                            work.append(_WorkItem(node_id=dst["id"], inputs=ready_inputs))
-                            merge_waiting.pop(dst["id"], None)
-                    else:
-                        inp = [[] for _ in range(in_slots_count)]
-                        inp[conn.index] = items
-                        work.append(_WorkItem(node_id=dst["id"], inputs=inp))
-
-        return {"status": "success"}
-
+    coro = _execute_loop(context, nodes_by_id, connections, pin_data, work, merge_waiting)
     if timeout:
-        return await asyncio.wait_for(_run_inner(), timeout=float(timeout))
-    return await _run_inner()
+        return await asyncio.wait_for(coro, timeout=float(timeout))
+    return await coro
 
