@@ -32,6 +32,35 @@ adjacency maps from the stored `connections` object.
 | `Workflow` (class) | `packages/workflow/src/workflow.ts:59` | Runtime object: builds `connectionsBySourceNode` and `connectionsByDestinationNode` on construction; holds `nodes: INodes` (keyed by name). |
 | `WorkflowParameters` | same file:47 | Constructor bag: `id`, `name`, `nodes[]`, `connections`, `active`, `nodeTypes`, `staticData`, `settings`, `pinData`. |
 
+### Why n8n separates `IConnection`, `NodeInputConnections`, and `IConnections`
+
+n8n models workflow edges at **three different levels** because each level has
+a distinct job and data shape:
+
+- **`IConnection` (atomic edge endpoint)**: one destination reference from a
+  particular output port to a particular input port — `{ node, type, index }`.
+  In stored workflow JSON this is the *leaf* object.
+
+- **`NodeInputConnections` (port-indexed adjacency list for one node/type)**:
+  `Array<IConnection[] | null>`, where the outer array index is a **port index**
+  and each inner array is the set of adjacent nodes for that port.
+  - In the persisted, **source-indexed** `connections` document, the port index
+    is an **output index** and the inner array is **fan-out** from that output.
+  - In the derived, **destination-indexed** map (`connectionsByDestinationNode`),
+    the port index is an **input index** and the inner array is **fan-in** to
+    that input.
+
+  `null`/gaps preserve sparse indices (for example, a switch node with multiple
+  outputs where some are unconnected). This mirrors how execution data is
+  indexed by output/input number.
+
+- **`INodeConnections` / `IConnections` (workflow adjacency map)**: dictionary
+  layers that make the whole graph serializable and addressable:
+  `{ [sourceNodeName]: { [connectionType]: NodeInputConnections } }`.
+  n8n persists this canonical map **by source node** in the workflow document,
+  then builds additional indexes at runtime (notably a destination-indexed map)
+  for fast parent lookups during execution.
+
 ### INode fields
 
 | Field | Type | Notes |
@@ -90,6 +119,48 @@ Example — fan-out from a single output to two nodes:
       [
         { "node": "Code",   "type": "main", "index": 0 },
         { "node": "Logger", "type": "main", "index": 0 }
+      ]
+    ]
+  }
+}
+```
+
+### Connection patterns (fan-in, fan-out, multi-port, sparse)
+
+The same `NodeInputConnections` shape shows different “patterns” depending on
+whether you’re looking at the **source-indexed** persisted `connections` map
+or the **destination-indexed** inverted map (`connectionsByDestinationNode`).
+
+- **Chain (A → B → C)**: a single entry in `A.main[0]` pointing at `B`, and a
+  single entry in `B.main[0]` pointing at `C`.
+- **Fan-out (B → C1, C2, C3)**: one source output index contains multiple
+  `IConnection` targets (inner array length \(>1\)).
+- **Fan-in (A1, A2, A3 → B)**: multiple source nodes each contain an
+  `IConnection` targeting the same destination input; in the **destination-indexed**
+  map these appear together under `B.main[inputIndex]`.
+- **Multiple input indices (… → B input 0 vs input 1)**: the destination input
+  is encoded as `IConnection.index` on the source side; after inversion it
+  becomes the outer array index under the destination node.
+- **Sparse ports (`null` gaps)**: `NodeInputConnections` can contain `null`
+  entries to preserve output/input indices even when some ports are unconnected.
+
+Minimal example covering the above (assume all `type: "main"`):
+
+```json
+{
+  "A1": { "main": [ [ { "node": "B", "type": "main", "index": 0 } ] ] },
+  "A2": { "main": [ [ { "node": "B", "type": "main", "index": 0 } ] ] },
+  "X":  { "main": [ [ { "node": "B", "type": "main", "index": 1 } ] ] },
+
+  "B": {
+    "main": [
+      [
+        { "node": "C1", "type": "main", "index": 0 },
+        { "node": "C2", "type": "main", "index": 0 }
+      ],
+      null,
+      [
+        { "node": "D", "type": "main", "index": 0 }
       ]
     ]
   }
