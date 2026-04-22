@@ -1044,7 +1044,7 @@ await ad.queue.send_msg(analytiq_client, "flow_run", {
 
 ### Progress model (v1)
 
-Frontend polls `GET /flow/{flow_id}/executions/{exec_id}` every 2 seconds.
+Frontend polls `GET /v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}` every 2 seconds.
 Incremental `run_data` written after each node provides per-node progress.
 
 ---
@@ -1079,18 +1079,106 @@ src/components/flows/
 
 ---
 
-## 18. Implementation order
+## 18. Implementation plan
 
-1. `analytiq_data/flows/` — types, validation, registry, engine
-2. `app/flows/` — DocRouter node registrations, `FlowServicesImpl`
-3. `app/routes/flows.py` — CRUD, activate, run, execution endpoints
-4. Worker `flow_run` handler + heartbeat + stale-execution sweep
-5. Webhook routing table + `POST /v0/webhooks/{webhook_id}` route
-6. Frontend list page + canvas editor
-7. Frontend run panel + polling
+### Phase 1 — Core engine (`analytiq_data/flows/`)
 
-Steps 1 to 5 are backend-only and should be fully unit/integration tested before
-frontend work depends on them.
+**Step 1.1 — Types and items**
+Files: `items.py`, `connections.py`
+- `FlowItem`, `BinaryRef` dataclasses
+- `ConnectionType`, `NodeConnection`, adjacency map type aliases
+
+**Step 1.2 — Node registry**
+File: `node_registry.py`
+- `NodeType` Protocol
+- `register()`, `get()`, `list_all()`
+
+**Step 1.3 — Validation**
+File: `validation.py`
+- All 11 validation rules from §8
+- Returns a list of error strings; no side effects
+
+**Step 1.4 — Engine**
+Files: `engine.py`, `execution.py`
+- `ExecutionContext` dataclass
+- `FlowEngine.run(context, revision)` — the main loop
+- Fan-out, merge waiting map, branch-skipping rule, `on_error` handling
+
+**Step 1.5 — Built-in generic nodes**
+Files: `nodes/trigger_manual.py`, `nodes/branch_node.py`, `nodes/merge_node.py`,
+`nodes/webhook_node.py`
+
+**Tests: `packages/python/tests/flows/`**
+
+```
+tests/flows/
+  __init__.py
+  conftest.py          MockServices, sample revision fixtures, FlowItem factory
+  test_items.py        FlowItem serialization, BinaryRef
+  test_connections.py  NodeConnection, adjacency map helpers
+  test_validation.py   All 11 rules — pass and fail cases
+  test_engine.py       Linear chain, fan-out, merge, branch-skip, on_error, disabled node
+  test_nodes.py        Built-in node execute() behavior
+```
+
+All Phase 1 tests are pure unit tests — no MongoDB, no HTTP, no real services.
+`FlowServices` is replaced by a `MockServices` fixture defined in
+`tests/flows/conftest.py`.
+
+---
+
+### Phase 2 — DocRouter integration (`app/flows/`)
+
+**Step 2.1 — DB helpers**
+File: `app/flows/db.py`
+- CRUD for `flows`, `flow_revisions`, `flow_executions`, `flow_runtime_state`
+
+**Step 2.2 — Routes**
+File: `app/routes/flows.py`
+- All endpoints from §14.1 except inbound webhook and schedule trigger
+
+**Step 2.3 — Services**
+File: `app/flows/services.py`
+- `FlowServicesImpl` wiring real DocRouter clients into the `FlowServices` interface
+
+**Step 2.4 — DocRouter nodes**
+Files: `app/flows/nodes/*.py` — one file per node type
+
+**Step 2.5 — Worker handler**
+In `worker/worker.py`: add `worker_flow_run()` alongside the existing OCR/LLM
+workers; handles `flow_run` queue messages
+
+**Tests: `packages/python/tests/flows/`**
+
+```
+tests/flows/
+  test_flow_crud.py        Create, save revision, list, get, delete via HTTP
+  test_flow_activate.py    Activate/deactivate, revision pinning
+  test_flow_run.py         Manual run end-to-end (enqueue + worker executes)
+  test_flow_executions.py  Execution status polling, stop request
+```
+
+Phase 2 tests are integration tests using the existing `TestClient` + real
+MongoDB pattern from the project's `conftest.py`.
+
+---
+
+### Phase 3 — Deferred to later
+
+- `flows.trigger.webhook` (inbound webhook route, routing table)
+- `flows.trigger.schedule` (cron registration)
+- `docrouter.trigger.upload` (upload event dispatch)
+- Frontend canvas
+
+---
+
+### Implementation order within phases
+
+Phase 1: `1.1 → 1.2 → 1.3 → 1.4 → 1.5` — each step's tests pass before the next step begins.
+
+Phase 2: `2.1 → 2.2 → 2.3 → 2.4 → 2.5` — DB helpers and routes first so
+integration tests can be written against real endpoints early; services and
+DocRouter nodes fill in as needed.
 
 ---
 
