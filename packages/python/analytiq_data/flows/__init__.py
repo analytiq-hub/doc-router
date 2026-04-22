@@ -10,6 +10,7 @@ from .context import *
 from .execution import *
 from .node_registry import *
 from .engine import *
+from .code_runner import *
 from .nodes import *
 from .register_builtin import *
 

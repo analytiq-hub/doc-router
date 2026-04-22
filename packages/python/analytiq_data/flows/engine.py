@@ -211,6 +211,10 @@ class _WorkItem:
 async def persist_run_data(context: "ad.flows.ExecutionContext", run_data: dict[str, Any]) -> None:
     """Persist full `run_data` for a flow execution (used for incremental progress)."""
 
+    # Allow pure unit tests to execute flows without a Mongo-backed client.
+    if context.analytiq_client is None:
+        return
+
     db = ad.common.get_async_db(context.analytiq_client)
     await db.flow_executions.update_one(
         {"_id": ObjectId(context.execution_id)},
@@ -225,6 +229,10 @@ async def persist_run_data(context: "ad.flows.ExecutionContext", run_data: dict[
 
 async def read_stop(context: "ad.flows.ExecutionContext") -> bool:
     """Return whether cooperative stop was requested for this execution."""
+
+    # Allow pure unit tests to execute flows without a Mongo-backed client.
+    if context.analytiq_client is None:
+        return False
 
     db = ad.common.get_async_db(context.analytiq_client)
     doc = await db.flow_executions.find_one(

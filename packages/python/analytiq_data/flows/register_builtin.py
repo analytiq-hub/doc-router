@@ -8,4 +8,5 @@ def register_builtin_nodes() -> None:
     ad.flows.register(ad.flows.FlowsWebhookNode())
     ad.flows.register(ad.flows.FlowsBranchNode())
     ad.flows.register(ad.flows.FlowsMergeNode())
+    ad.flows.register(ad.flows.FlowsCodeNode())
 
