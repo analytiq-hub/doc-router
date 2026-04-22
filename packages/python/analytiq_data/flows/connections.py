@@ -8,7 +8,7 @@ describes a fan-out edge to a *destination* node input port.
 """
 
 from dataclasses import dataclass
-from typing import TypedDict
+from typing import Literal, TypedDict
 
 # Allowed values (v1): "main"
 # Future (reserved): "error_output", ...
@@ -19,7 +19,7 @@ class NodeConnection:
     """One edge from a source output slot to a destination input slot."""
 
     dest_node_id: str
-    connection_type: str
+    connection_type: Literal["main"]
     index: int
 
 class NodeConnections(TypedDict, total=False):
