@@ -291,7 +291,15 @@ async def save_revision(org_id: str, flow_id: str, req: SaveFlowRequest, current
                     continue
                 conns = []
                 for c in slot:
-                    conns.append(NodeConnection(node=c["node"], type=c.get("type") or "main", index=int(c["index"])))
+                    # Accept both keys for backward compatibility; canonical key is `connection_type`.
+                    ct = c.get("connection_type") or c.get("type") or "main"
+                    conns.append(
+                        NodeConnection(
+                            node=c["node"],
+                            connection_type=ct,
+                            index=int(c["index"]),
+                        )
+                    )
                 slots.append(conns)
             out[src]["main"] = slots
         return out

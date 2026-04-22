@@ -10,7 +10,7 @@ from typing import TypedDict
 @dataclass
 class NodeConnection:
     node: str
-    type: str
+    connection_type: str
     index: int
 
 

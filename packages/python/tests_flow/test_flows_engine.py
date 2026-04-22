@@ -78,7 +78,7 @@ def test_validate_revision_accepts_simple_dag() -> None:
     connections = {
         "t1": {
             "main": [
-                [NodeConnection(node="n1", type="main", index=0)],
+                [NodeConnection(node="n1", connection_type="main", index=0)],
             ]
         }
     }
@@ -92,9 +92,9 @@ def test_validate_revision_rejects_cycle() -> None:
         {"id": "b1", "name": "B", "type": "tests.passthrough", "position": [400, 0], "parameters": {}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
     ]
     connections = {
-        "t1": {"main": [[NodeConnection(node="a1", type="main", index=0)]]},
-        "a1": {"main": [[NodeConnection(node="b1", type="main", index=0)]]},
-        "b1": {"main": [[NodeConnection(node="a1", type="main", index=0)]]},
+        "t1": {"main": [[NodeConnection(node="a1", connection_type="main", index=0)]]},
+        "a1": {"main": [[NodeConnection(node="b1", connection_type="main", index=0)]]},
+        "b1": {"main": [[NodeConnection(node="a1", connection_type="main", index=0)]]},
     }
     with pytest.raises(FlowValidationError, match="cycle|DAG"):
         validate_revision(nodes, connections, settings={}, pin_data=None)
