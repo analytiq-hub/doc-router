@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, TypedDict
+from typing import TypedDict
 
-ConnectionType = Literal["main"]
+# Allowed values (v1): "main"
+# Future (reserved): "error_output", ...
 
 
 @dataclass
 class NodeConnection:
     node: str
-    type: ConnectionType
+    type: str
     index: int
 
 
