@@ -1,2 +1,3 @@
-from .register import register_docrouter_nodes
+from .register import *
+from .services import *
 
