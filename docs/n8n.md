@@ -167,6 +167,77 @@ Minimal example covering the above (assume all `type: "main"`):
 }
 ```
 
+### Connection types (`main` vs `ai_*`)
+
+The `type` string in `IConnection` is a **connection lane**. It lets n8n keep
+different categories of wiring separate even though they share the same
+`connections` JSON shape.
+
+**`main`** (`NodeConnectionType.Main`) is the default lane for normal workflow
+execution: items (`INodeExecutionData[]`) flow from node outputs to node inputs
+through `main`.
+
+The `ai_*` lanes are used by the LangChain/AI nodes to wire **capabilities and
+artifacts** (models, tools, documents, embeddings, vector stores, …) without
+treating them like ordinary `main` item streams.
+
+Examples (typical wiring patterns):
+
+- **`ai_tool`**: connects “tool” nodes to an agent/chain so the AI can call them.
+  Example: a Sheets tool connected into an agent:
+
+```json
+{
+  "Google Sheets1": {
+    "ai_tool": [
+      [{ "node": "Agent", "type": "ai_tool", "index": 0 }]
+    ]
+  }
+}
+```
+
+- **`ai_document`**: connects document loader/splitter outputs into downstream
+  nodes (summarization, vector-store insert, retrievers). Example:
+
+```json
+{
+  "Document Loader": {
+    "ai_document": [
+      [{ "node": "Vector Store Insert", "type": "ai_document", "index": 0 }]
+    ]
+  }
+}
+```
+
+- **`ai_embedding`**: connects an embedding model/provider into nodes that need
+  embeddings (often vector-store insert or retrieval). Example:
+
+```json
+{
+  "Embeddings Model": {
+    "ai_embedding": [
+      [{ "node": "Vector Store Insert", "type": "ai_embedding", "index": 0 }]
+    ]
+  }
+}
+```
+
+- **`ai_vectorStore`**: connects a vector store “resource” into nodes that
+  query or use it (for example a retriever / QA chain). Example:
+
+```json
+{
+  "Vector Store": {
+    "ai_vectorStore": [
+      [{ "node": "Retriever", "type": "ai_vectorStore", "index": 0 }]
+    ]
+  }
+}
+```
+
+**doc-router note.** If doc-router needs AI-style wiring, model it as explicit
+typed lanes (like `main` vs `ai_*`) rather than overloading a single edge type.
+
 ### Graph traversal utilities
 
 `packages/workflow/src/common/` exports helpers used throughout the engine:
