@@ -1,4 +1,4 @@
-# DocRouter Flows — Technical Design Spec (v3)
+# DocRouter Flows — Technical Design Spec (v4)
 
 ## 1. Purpose
 
@@ -25,7 +25,7 @@ This closes the gap between DocRouter's current linear pipeline
 
 - Add a reusable flow engine that is independent of DocRouter-specific logic.
 - Support versioned flow definitions.
-- Support manual runs and trigger-based runs.
+- Support manual runs and trigger-based runs (upload, webhook, schedule).
 - Support a small set of built-in generic nodes plus DocRouter nodes.
 - Persist execution state and execution history.
 - Support a React Flow canvas editor.
@@ -38,8 +38,9 @@ This closes the gap between DocRouter's current linear pipeline
 - Multi-trigger flows
 - Sub-flows
 - Sandboxed user code
-- SSE streaming for execution progress
+- SSE streaming for execution progress (frontend polls every 2 s)
 - Full n8n compatibility
+- Execution pause / resume (Wait nodes) — schema fields are reserved
 
 ---
 
@@ -92,6 +93,10 @@ The following are explicit v1 decisions.
 7. Execution history stores **storage-safe** outputs only; large binary payloads
    are referenced, not embedded.
 8. `flows.code` is internal/admin-only in v1 and disabled by default.
+9. Branch skipping: a node that emits an **empty list** on an output port causes
+   all nodes connected to that port to be skipped for this execution.
+10. Error-output routing (`on_error = 'continue_error_output'`) is reserved in the
+    schema but not required to be implemented in v1 node types.
 
 ---
 
@@ -112,6 +117,8 @@ One document per logical flow.
   "active": false,
   "active_flow_revid": null,
   "flow_version": 3,
+  "created_at": "2026-04-22T00:00:00Z",
+  "created_by": "<user_id>",
   "updated_at": "2026-04-22T00:00:00Z",
   "updated_by": "<user_id>"
 }
@@ -124,8 +131,9 @@ One document per logical flow.
 - `name`: display name
 - `active`: whether trigger-based auto-runs are enabled
 - `active_flow_revid`: exact revision currently deployed for trigger-based runs
-- `flow_version`: monotonic version counter
-- `updated_at`, `updated_by`: audit fields
+- `flow_version`: monotonic version counter, incremented on every revision save
+- `created_at`, `created_by`: immutable audit fields set at creation
+- `updated_at`, `updated_by`: updated on every header or revision change
 
 #### Rules
 
@@ -134,7 +142,9 @@ One document per logical flow.
 - Trigger-based runs must use `active_flow_revid`.
 - Saving a new revision does not change `active_flow_revid`.
 - Activating a flow sets both `active = true` and `active_flow_revid`.
-- Deactivating a flow clears `active_flow_revid`.
+- Deactivating a flow sets `active = false` and clears `active_flow_revid`.
+- Name-only changes update the header only; they do not create a new revision
+  and do not change `flow_version`.
 
 ### 5.2 `flow_revisions` collection (immutable graph snapshots)
 
@@ -147,7 +157,11 @@ One document per saved graph revision.
   "flow_version": 3,
   "nodes": [],
   "connections": {},
-  "settings": {},
+  "settings": {
+    "execution_timeout_seconds": null,
+    "error_flow_id": null,
+    "save_execution_data": "all"
+  },
   "pin_data": null,
   "graph_hash": "<sha256>",
   "engine_version": 1,
@@ -161,25 +175,50 @@ One document per saved graph revision.
 - `_id`: revision id (`flow_revid`)
 - `flow_id`: parent flow id
 - `flow_version`: snapshot version number
-- `nodes`: node definitions
-- `connections`: adjacency map
-- `settings`: flow-level execution settings
-- `pin_data`: optional authoring/debug state
-- `graph_hash`: canonical hash of `{nodes, connections, settings}`
-- `engine_version`: flow-engine semantics version
+- `nodes`: node definitions (see §6.1)
+- `connections`: typed adjacency map (see §6.2)
+- `settings`: flow-level execution settings (see §5.2.1)
+- `pin_data`: optional per-node output overrides keyed by node id (see §5.2.2)
+- `graph_hash`: canonical SHA-256 of `{nodes, connections, settings}` for
+  deduplication
+- `engine_version`: flow-engine semantics version; allows future engine changes
+  without breaking old revisions
 - `created_at`, `created_by`: audit fields
 
 #### Rules
 
-- Flow revisions are immutable.
+- Flow revisions are immutable once created.
 - Old revisions remain runnable by `flow_revid`.
 - Name-only updates do not create a new revision.
-- `pin_data` belongs to the revision because it is tied to a specific graph.
+
+#### 5.2.1 `settings` fields
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `execution_timeout_seconds` | `int \| null` | `null` | Hard timeout for the entire execution. `null` = no limit. |
+| `error_flow_id` | `str \| null` | `null` | Flow ID to trigger automatically when this flow fails (see §13). |
+| `save_execution_data` | `"all" \| "none"` | `"all"` | Whether to persist node output in `run_data`. |
+
+#### 5.2.2 `pin_data` semantics
+
+`pin_data` is a per-node output override used for authoring and debug:
+
+```json
+{
+  "<node_id>": [
+    { "json": { "invoice_total": 42.00 }, "binary": {}, "meta": {}, "paired_item": null }
+  ]
+}
+```
+
+When `pin_data[node_id]` is set, the engine **substitutes the pinned items for
+the node's live output** and skips actual execution of that node. This lets
+authors iterate on downstream nodes without re-running expensive upstream steps.
+`pin_data` belongs to the revision because it is tied to a specific graph.
 
 ### 5.3 `flow_runtime_state` collection (cross-run persistent state)
 
-Use a separate collection for state that must survive across runs and across
-revisions.
+State that must survive across runs and across revisions.
 
 ```json
 {
@@ -198,7 +237,6 @@ revisions.
 - poll cursors
 - last-seen timestamps
 - trigger watermarks
-- future `static_data`
 
 #### Rules
 
@@ -215,10 +253,16 @@ One document per execution.
   "flow_id": "<flow_id>",
   "flow_revid": "<flow_revid>",
   "organization_id": "<org_id>",
+  "mode": "manual",
   "status": "running",
   "started_at": "2026-04-22T00:00:00Z",
   "finished_at": null,
+  "last_heartbeat_at": "2026-04-22T00:00:05Z",
   "stop_requested": false,
+  "last_node_executed": null,
+  "wait_till": null,
+  "retry_of": null,
+  "parent_execution_id": null,
   "run_data": {},
   "error": null,
   "trigger": {
@@ -228,19 +272,81 @@ One document per execution.
 }
 ```
 
-#### Meaning
+#### Field meanings
 
-- `status`: `running | success | error | stopped`
-- `stop_requested`: cooperative cancellation flag
-- `run_data`: per-node outputs in storage-safe form
-- `trigger`: origin metadata
+| Field | Type | Notes |
+|-------|------|-------|
+| `mode` | `ExecutionMode` | `"manual" \| "trigger" \| "webhook" \| "error" \| "schedule"` |
+| `status` | string | `"running" \| "success" \| "error" \| "stopped"` |
+| `last_heartbeat_at` | datetime | Updated by the worker every ~5 s. Used for stale-execution detection. |
+| `stop_requested` | bool | Cooperative cancellation flag set by the stop endpoint. |
+| `last_node_executed` | str? | Node id of the most recently completed node. For debugging. |
+| `wait_till` | datetime? | Reserved for future pause/resume. Always `null` in v1. |
+| `retry_of` | str? | Reserved: execution id this is a retry of. |
+| `parent_execution_id` | str? | Reserved: for future sub-flow calls. |
+| `run_data` | dict | Per-node outputs (see §5.4.1). |
+| `error` | dict? | Structured error envelope (see §5.4.2). |
+| `trigger` | dict | Typed trigger origin (see §5.4.3). |
 
-#### Storage rules
+#### 5.4.1 `run_data` shape
 
-- Large binary data must not be stored inline in `run_data`.
-- Persist binary references (`storage_id`) instead.
-- JSON payloads may be truncated or capped by policy.
-- `error` may be a string in v1 and a structured object in v2.
+`run_data` maps node id to a `NodeRunData` record:
+
+```json
+{
+  "<node_id>": {
+    "status": "success",
+    "start_time": "2026-04-22T00:00:01Z",
+    "execution_time_ms": 312,
+    "data": {
+      "main": [
+        [
+          { "json": {}, "binary": {}, "meta": {}, "paired_item": null }
+        ]
+      ]
+    },
+    "error": null
+  }
+}
+```
+
+`data` mirrors the `NodeOutputData` structure: `{ "main": list_of_output_slots }`.
+Each output slot is a list of `FlowItem` objects. Slot index corresponds to the
+output port index declared by the node type.
+
+`status` is one of `"success" | "error" | "skipped"`. A node is `"skipped"` when
+all of its input ports received empty lists (see §12.3 branch-skipping rule).
+
+#### 5.4.2 `error` envelope
+
+```json
+{
+  "message": "OCR service returned 503",
+  "node_id": "<node_id>",
+  "node_name": "Run OCR",
+  "stack": "Traceback ..."
+}
+```
+
+Always a structured object — never a bare string. Set when `status = "error"`.
+
+#### 5.4.3 `trigger` discriminated union
+
+```json
+{ "type": "manual",   "document_id": "<doc_id>" }
+{ "type": "upload",   "document_id": "<doc_id>", "upload_event_id": "<evt_id>" }
+{ "type": "webhook",  "webhook_id": "<wh_id>", "method": "POST",
+                      "headers": {}, "body": {} }
+{ "type": "schedule", "scheduled_at": "2026-04-22T00:00:00Z" }
+{ "type": "error",    "failed_execution_id": "<exec_id>" }
+```
+
+#### Stale-execution recovery
+
+At worker startup, and periodically during operation, sweep
+`flow_executions` for documents where `status = "running"` and
+`last_heartbeat_at < now - 2 × heartbeat_interval`. Mark each such execution
+`status = "error"` with `error.message = "Worker crashed or lost heartbeat"`.
 
 ---
 
@@ -255,38 +361,109 @@ One document per execution.
   "type": "docrouter.ocr",
   "position": [240, 300],
   "parameters": {},
+  "webhook_id": null,
   "disabled": false,
-  "continueOnFail": false,
+  "on_error": "stop",
+  "retry_on_fail": false,
+  "max_tries": 1,
+  "wait_between_tries_ms": 1000,
   "notes": "optional"
 }
 ```
 
-### Node field meanings
+#### Node field meanings
 
-- `id`: stable UUID within the flow
-- `name`: human-readable label, unique within the flow
-- `type`: node type registry key
-- `position`: canvas coordinates (editor-only)
-- `parameters`: type-specific config
-- `disabled`: skip this node at runtime
-- `continueOnFail`: convert node failure into data and continue
-- `notes`: editor-only annotation
+| Field | Type | Notes |
+|-------|------|-------|
+| `id` | string | Stable UUID within the flow. Set at node creation; never changes. |
+| `name` | string | Human-readable label, unique within the flow. |
+| `type` | string | Node type registry key. |
+| `position` | `[int, int]` | Canvas `[x, y]` coordinates. Editor-only; ignored by engine. |
+| `parameters` | dict | Type-specific config, validated against the node type's `parameter_schema`. |
+| `webhook_id` | `str \| null` | Stable UUID for webhook-trigger nodes. Set at creation; persists across revisions. `null` for all other node types. |
+| `disabled` | bool | If `true`, the engine **skips this node and emits empty output on all its ports**, causing all downstream branches to be skipped. |
+| `on_error` | `OnError` | Error handling policy (see below). Default `"stop"`. |
+| `retry_on_fail` | bool | Retry on failure. Default `false`. |
+| `max_tries` | int | Maximum attempts including the first. Default `1`. |
+| `wait_between_tries_ms` | int | Delay between retries in ms. Default `1000`. |
+| `notes` | `str \| null` | Editor-only annotation; ignored by engine. |
 
-### 6.2 Connection shape
+#### `OnError` enum
 
-Connections follow an n8n-style adjacency map, keyed by **source node id**.
+```python
+OnError = Literal["stop", "continue", "continue_error_output"]
+```
 
-```text
-connections: {
-  [sourceNodeId: string]: {
-    "main": Array<Array<{ node: string, type: "main", index: number }>>
+| Value | Behaviour |
+|-------|-----------|
+| `"stop"` | Node failure ends the execution with `status = "error"`. |
+| `"continue"` | Emit a single error-envelope item on output port 0 and continue. |
+| `"continue_error_output"` | Reserved. Emit error item on the dedicated error output port (requires node type to declare it). Not required in v1 implementations. |
+
+### 6.2 Connection types and shape
+
+#### `ConnectionType`
+
+```python
+ConnectionType = Literal["main"]
+# Extend here as needed, e.g. "error_output" in future.
+```
+
+#### `NodeConnection`
+
+```python
+@dataclass
+class NodeConnection:
+    node:  str             # destination node id
+    type:  ConnectionType  # connection lane
+    index: int             # destination input slot index
+```
+
+#### Adjacency map
+
+Connections are keyed by **source node id** (not name). The destination `node`
+field also refers to the destination node id. This makes the graph rename-safe.
+
+```
+NodeOutputSlots  = list[list[NodeConnection] | None]
+# Outer index = output slot index.
+# Inner list  = fan-out targets from that slot (may be empty).
+# None        = slot exists but has no connections (preserves sparse indices).
+
+NodeConnections  = dict[ConnectionType, NodeOutputSlots]
+# Usually just {"main": [...]}.
+
+Connections      = dict[str, NodeConnections]
+# Top-level map keyed by source node id.
+```
+
+Example — one source, two output branches:
+
+```json
+{
+  "a1b2c3": {
+    "main": [
+      [{ "node": "d4e5f6", "type": "main", "index": 0 }],
+      [{ "node": "g7h8i9", "type": "main", "index": 0 }]
+    ]
   }
 }
 ```
 
-- `node` refers to the destination node id.
-- Edges are keyed by node **id**, not node **name**.
-- This makes the graph rename-safe.
+Example — fan-out from one output to two nodes:
+
+```json
+{
+  "a1b2c3": {
+    "main": [
+      [
+        { "node": "d4e5f6", "type": "main", "index": 0 },
+        { "node": "g7h8i9", "type": "main", "index": 0 }
+      ]
+    ]
+  }
+}
+```
 
 ---
 
@@ -318,6 +495,9 @@ A flow export is self-contained and includes the flow name for readability.
   flow header and remap `flow_id`.
 - If imported node ids collide within the destination flow, remap them and
   rewrite `connections` accordingly.
+- `webhook_id` values are preserved on import to maintain existing webhook URLs.
+  If a `webhook_id` is already registered to a different flow in this org,
+  generate a new one and record the remap.
 
 ---
 
@@ -325,50 +505,61 @@ A flow export is self-contained and includes the flow name for readability.
 
 A flow revision is valid only if all of the following hold.
 
-1. `nodes[].id` is unique.
-2. `nodes[].name` is unique.
-3. Every edge source exists.
-4. Every edge destination exists.
-5. Every edge output slot is valid for the source node type.
-6. Every edge input slot is valid for the destination node type.
-7. The graph is acyclic.
-8. The flow contains exactly one trigger node.
-9. Every node's `parameters` validate against its JSON schema.
-10. Disconnected subgraphs are rejected in v1.
+1. `nodes[].id` is unique within the revision.
+2. `nodes[].name` is unique within the revision.
+3. Every connection source node id exists in `nodes`.
+4. Every connection destination `node` id exists in `nodes`.
+5. Every connection destination `index` is within the declared input count of
+   the destination node type.
+6. Every connection source output slot index is within the declared output count
+   of the source node type.
+7. The graph is acyclic (topological sort succeeds).
+8. The revision contains **exactly one** trigger node
+   (a node whose type has `is_trigger = True`).
+9. Every non-trigger node is reachable from the trigger node by following edges
+   in the `connections` map.
+10. Every node's `parameters` validate against its type's `parameter_schema`.
+11. `pin_data` keys, if present, refer to node ids that exist in `nodes`.
 
-Validation should run on:
-
-- create
-- update
-- import
-- activate
-- execution startup
+Validation runs on: create, update, import, activate, and execution startup.
 
 ---
 
 ## 9. Node registry
 
-### 9.1 Protocol
+### 9.1 `NodeType` protocol
 
 ```python
 from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class NodeType(Protocol):
-    key: str
-    label: str
-    min_inputs: int
-    max_inputs: int | None
-    outputs: int
-    parameter_schema: dict
+    key:              str           # registry key, e.g. "docrouter.ocr"
+    label:            str           # display name, e.g. "Run OCR"
+    description:      str           # one-line description for UI palette
+    category:         str           # palette grouping, e.g. "DocRouter", "Generic"
+    is_trigger:       bool          # True for trigger nodes (min_inputs == 0, seeds execution)
+    min_inputs:       int           # minimum required input slots (0 for triggers)
+    max_inputs:       int | None    # None = unbounded
+    outputs:          int           # number of output slots
+    output_labels:    list[str]     # human-readable label per output slot, len == outputs
+    parameter_schema: dict          # JSON Schema for parameters
 
     async def execute(
         self,
         context: "ExecutionContext",
-        node: dict,
-        input_items: list[list["FlowItem"]],
-    ) -> list[list["FlowItem"]]: ...
+        node:    dict,
+        inputs:  list[list["FlowItem"]],  # one list per input slot
+    ) -> list[list["FlowItem"]]: ...      # one list per output slot
+
+    def validate_parameters(self, params: dict) -> list[str]:
+        # Optional cross-field validation beyond JSON Schema.
+        # Return a list of error messages; empty list = valid.
+        ...
 ```
+
+`output_labels` example for `flows.branch`: `["true", "false"]`.
+`output_labels` example for `docrouter.ocr`: `["output"]`.
 
 ### 9.2 Registry API
 
@@ -398,9 +589,10 @@ The engine knows only the registry interface.
 ```python
 @dataclass
 class FlowItem:
-    json: dict
-    binary: dict[str, "BinaryRef"]
-    meta: dict
+    json:        dict
+    binary:      dict[str, "BinaryRef"]
+    meta:        dict
+    paired_item: int | list[int] | None = None
 ```
 
 ### `BinaryRef`
@@ -408,18 +600,20 @@ class FlowItem:
 ```python
 @dataclass
 class BinaryRef:
-    mime_type: str
-    file_name: str | None
-    data: bytes | None
-    storage_id: str | None
+    mime_type:  str
+    file_name:  str | None
+    data:       bytes | None    # in-memory, not persisted inline in run_data
+    storage_id: str | None      # reference for large/persisted payloads
 ```
 
-### Semantics
+### Field semantics
 
-- `json` is the main payload.
-- `binary` carries file references.
-- `meta` carries lineage and routing metadata.
-- Nodes should treat `meta` as engine-managed data.
+| Field | Notes |
+|-------|-------|
+| `json` | Primary payload. Every node reads and writes this. |
+| `binary` | Named file attachments. Keyed by attachment name (e.g. `"data"`). |
+| `meta` | Engine-managed metadata: `source_node_id`, `item_index`, routing hints. Nodes should not mutate `meta`. |
+| `paired_item` | Lineage: the index (or indices) of the input item this output item was derived from. Used by future expression support and UI lineage arrows. Nodes should set this when the mapping is 1-to-1 or 1-to-many. |
 
 ---
 
@@ -427,30 +621,57 @@ class BinaryRef:
 
 ### 11.1 Built-in generic nodes
 
-| Key | Inputs | Outputs | Description |
-|-----|--------|---------|-------------|
-| `flows.trigger.manual` | 0 | 1 | Emits the manual-run seed item. |
-| `flows.webhook` | 1 | 1 | POSTs item JSON to a configured URL. |
-| `flows.branch` | 1 | 2 | Routes items to one of two outputs based on a condition. |
-| `flows.merge` | 2+ | 1 | Waits for all inputs, then concatenates them into one output list. |
-| `flows.code` | 1 | 1 | Runs a small Python snippet. Internal/admin-only in v1. |
+| Key | `is_trigger` | Inputs | Outputs | Output labels | Description |
+|-----|-------------|--------|---------|---------------|-------------|
+| `flows.trigger.manual` | ✓ | 0 | 1 | `["output"]` | Emits the manual-run seed item. |
+| `flows.trigger.webhook` | ✓ | 0 | 1 | `["output"]` | Starts a run when an HTTP request arrives on the registered webhook URL. |
+| `flows.trigger.schedule` | ✓ | 0 | 1 | `["output"]` | Starts a run on a cron schedule. |
+| `flows.webhook` | ✗ | 1 | 1 | `["output"]` | POSTs item JSON to a configured URL. |
+| `flows.branch` | ✗ | 1 | 2 | `["true", "false"]` | Routes items to one of two outputs based on a condition. |
+| `flows.merge` | ✗ | 2+ | 1 | `["output"]` | Waits for all inputs, then concatenates them into one output list. |
+| `flows.code` | ✗ | 1 | 1 | `["output"]` | Runs a small Python snippet. Internal/admin-only in v1. |
 
 ### 11.2 DocRouter nodes
 
-| Key | Inputs | Outputs | Description |
-|-----|--------|---------|-------------|
-| `docrouter.trigger.manual` | 0 | 1 | Emits the target document as one item. |
-| `docrouter.trigger.upload` | 0 | 1 | Fires when a document is uploaded and the flow is active. |
-| `docrouter.ocr` | 1 | 1 | Runs OCR on the input document(s). |
-| `docrouter.llm_extract` | 1 | 1 | Runs linked prompt-based extraction. |
-| `docrouter.set_tags` | 1 | 1 | Applies configured tags. |
-| `docrouter.webhook` | 1 | 1 | Sends data through DocRouter's webhook infrastructure. |
+| Key | `is_trigger` | Inputs | Outputs | Output labels | Description |
+|-----|-------------|--------|---------|---------------|-------------|
+| `docrouter.trigger.manual` | ✓ | 0 | 1 | `["output"]` | Emits the target document as one item. |
+| `docrouter.trigger.upload` | ✓ | 0 | 1 | `["output"]` | Fires when a document is uploaded and the flow is active. |
+| `docrouter.ocr` | ✗ | 1 | 1 | `["output"]` | Runs OCR on the input document(s). |
+| `docrouter.llm_extract` | ✗ | 1 | 1 | `["output"]` | Runs linked prompt-based extraction. |
+| `docrouter.set_tags` | ✗ | 1 | 1 | `["output"]` | Applies configured tags. |
+| `docrouter.webhook` | ✗ | 1 | 1 | `["output"]` | Sends data through DocRouter's webhook infrastructure. |
 
 ### Note on manual trigger nodes
 
-DocRouter flows should use `docrouter.trigger.manual` explicitly when they need
-document-aware manual runs. Avoid framing this as an engine-level "override" of
-`flows.trigger.manual`; they are separate node types with separate semantics.
+`docrouter.trigger.manual` is a separate node type from `flows.trigger.manual`
+with separate semantics: it requires a `document_id` parameter and emits a
+document item. Use it explicitly in flows that need document-aware manual runs.
+
+### `flows.trigger.webhook` registration
+
+When a flow containing a `flows.trigger.webhook` node is activated:
+
+1. The engine calls the webhook node's registration hook.
+2. A webhook routing record is inserted (see §15).
+3. The public URL is `POST /v0/webhooks/{node.webhook_id}`.
+4. On deactivation, the routing record is removed.
+
+`node.webhook_id` is set at node creation time and **never changes**, even when
+the flow is saved as a new revision or imported. This ensures the webhook URL
+remains stable across edits.
+
+### `flows.trigger.schedule` parameters
+
+```json
+{
+  "cron": "0 2 * * *",
+  "timezone": "UTC"
+}
+```
+
+At activation, the schedule is registered with the scheduler. The scheduler
+calls `trigger_dispatch` at each firing time (see §15).
 
 ---
 
@@ -461,10 +682,12 @@ document-aware manual runs. Avoid framing this as an engine-level "override" of
 ```text
 analytiq_data/flows/
   __init__.py
-  context.py
-  engine.py
-  execution.py
-  node_registry.py
+  context.py          ExecutionContext, ExecutionMode, FlowServices
+  engine.py           FlowEngine (main execution loop)
+  execution.py        NodeRunData, NodeOutputData, run_data helpers
+  items.py            FlowItem, BinaryRef
+  connections.py      NodeConnection, ConnectionType, Connections types
+  node_registry.py    NodeType protocol, register(), get(), list_all()
   nodes/
     trigger_node.py
     webhook_node.py
@@ -474,103 +697,205 @@ analytiq_data/flows/
 
 app/flows/
   __init__.py
+  services.py         FlowServicesImpl (implements FlowServices)
   nodes/
     manual_trigger_node.py
     upload_trigger_node.py
+    webhook_trigger_node.py
+    schedule_trigger_node.py
     ocr_node.py
     llm_node.py
     tag_node.py
     webhook_node.py
 ```
 
-### 12.2 ExecutionContext
+### 12.2 `ExecutionMode`
+
+```python
+ExecutionMode = Literal["manual", "trigger", "webhook", "schedule", "error"]
+```
+
+### 12.3 `FlowServices` protocol
+
+`FlowServices` is the interface that DocRouter node implementations depend on.
+The engine never calls it directly; it is passed through `ExecutionContext.services`.
+
+```python
+class FlowServices(Protocol):
+    async def get_document(
+        self, org_id: str, doc_id: str
+    ) -> dict: ...
+
+    async def run_ocr(
+        self, org_id: str, doc_id: str
+    ) -> dict: ...
+
+    async def run_llm_extract(
+        self, org_id: str, doc_id: str, prompt_id: str, schema_id: str
+    ) -> dict: ...
+
+    async def set_tags(
+        self, org_id: str, doc_id: str, tags: list[str]
+    ) -> None: ...
+
+    async def send_webhook(
+        self, url: str, payload: dict, headers: dict
+    ) -> dict: ...
+
+    async def get_runtime_state(
+        self, flow_id: str, node_id: str
+    ) -> dict: ...
+
+    async def set_runtime_state(
+        self, flow_id: str, node_id: str, data: dict
+    ) -> None: ...
+```
+
+Node implementations receive `context.services` typed as `FlowServices`, making
+them fully testable with a mock implementation.
+
+### 12.4 `ExecutionContext`
 
 ```python
 @dataclass
 class ExecutionContext:
-    organization_id: str
-    execution_id: str
-    flow_id: str
-    flow_revid: str
-    run_data: dict[str, Any]
-    services: Any
-    stop_requested: bool = False
-    logger: Any | None = None
+    organization_id:  str
+    execution_id:     str
+    flow_id:          str
+    flow_revid:       str
+    mode:             ExecutionMode
+    trigger_data:     dict                    # typed trigger origin (§5.4.3)
+    run_data:         dict[str, Any]          # accumulated NodeRunData, written incrementally
+    services:         FlowServices
+    stop_requested:   bool = False
+    logger:           Any | None = None
 ```
 
-`services` is intentionally opaque to the engine.
+`trigger_data` makes the trigger origin (document id, webhook body, scheduled
+time) available to all downstream nodes without requiring them to read `run_data`
+from the trigger node.
 
-### 12.3 Core execution model
+### 12.5 Core execution model
 
-- Load the exact `flow_revid` to execute.
-- Validate the revision.
-- Build a topological order.
-- Seed the trigger node.
-- Execute nodes once, in topological order.
-- Each node receives one item list per input slot.
-- Each node returns one item list per output slot.
-- Downstream input buffers accumulate upstream outputs.
-- A node becomes runnable when all required inputs are present.
-- Persist execution progress incrementally.
-- Before each node, check `stop_requested`.
+1. Load the exact `flow_revid` to execute.
+2. Validate the revision.
+3. Build the adjacency maps (source-indexed and destination-indexed).
+4. Seed the work queue: create one `(trigger_node, input_slots=[])` work item.
+5. **Main loop** — while the work queue is non-empty:
+   a. Dequeue `(node, input_slots)`.
+   b. Check `stop_requested`; if set, mark execution `stopped` and exit.
+   c. If `node.disabled`, emit empty output on all ports and continue.
+   d. If `pin_data[node.id]` is set, use pinned items as output; skip execution.
+   e. If all input slots are empty lists (skipped inputs), mark node `"skipped"`,
+      emit empty output on all ports, continue. (Branch-skipping rule.)
+   f. Call `node_type.execute(context, node, input_slots)`.
+   g. On error: apply `node.on_error` policy (stop, continue, or continue_error_output).
+   h. Write `NodeRunData` to `context.run_data[node.id]` and persist incrementally.
+   i. For each output slot `i`:
+      - If the output list is non-empty: enqueue all nodes connected to slot `i`
+        with the corresponding items as their input.
+      - If the output list is empty: do **not** enqueue connected nodes.
+        (This is the branch-skipping rule — see §4 decision 9.)
+   j. For merge nodes: accumulate inputs in a waiting map; enqueue only when all
+      input slots have been filled.
+6. Mark execution `success` (or `error` if any node failed with `on_error = "stop"`).
 
-### 12.4 Merge semantics
+### 12.6 Fan-out semantics
 
-In v1, `flows.merge` does exactly one thing:
+When output slot `i` has multiple connections (fan-out), each downstream node
+receives the **same item list** as its own independent input. Downstream nodes
+run sequentially (not in parallel) in v1. The order of processing is
+breadth-first by connection order.
 
-- concatenate all input-slot item lists into one output list
+### 12.7 Merge semantics
 
-This is intentionally simple and deterministic.
+`flows.merge` waits for all declared input slots to receive data before running.
+It concatenates all input-slot item lists into one output list. The order is by
+input slot index ascending.
 
-### 12.5 Error handling
+The merge waiting map is analogous to n8n's `waitingExecution`:
+`dict[node_id, list[list[FlowItem] | None]]`. A slot is `None` until data
+arrives. The node is enqueued when no `None` remains.
 
-If `continueOnFail = false`:
+If the work queue empties before all merge inputs are filled (because some
+upstream branches were skipped), the merge node is enqueued with whatever
+non-None inputs are available, treating missing slots as empty lists.
 
-- node failure ends the execution with `status = error`
+### 12.8 Error handling
 
-If `continueOnFail = true`:
+If `on_error = "stop"` (default):
 
-- emit a single output item with an error envelope
-- continue downstream execution
+- Node failure ends the execution with `status = "error"`.
+- `flow_executions.error` is populated with the structured error envelope.
 
-Example error envelope:
+If `on_error = "continue"`:
+
+- Emit a single error-envelope item on output port 0.
+- Continue downstream execution.
+
+Error envelope item:
 
 ```json
 {
   "json": {
     "_error": {
       "node_id": "<node_id>",
+      "node_name": "Run OCR",
       "message": "..."
     }
   },
   "binary": {},
-  "meta": {}
+  "meta": {},
+  "paired_item": null
 }
 ```
 
-### 12.6 Stop semantics
+### 12.9 Stop semantics
 
 - Stop is cooperative, not preemptive.
 - The stop endpoint sets `flow_executions.stop_requested = true`.
-- The worker checks for stop between node executions.
+- The worker checks `stop_requested` at step 5b of the main loop (before each
+  node execution).
 - v1 does not attempt to hard-kill in-flight node code.
+
+### 12.10 Execution timeout
+
+If `settings.execution_timeout_seconds` is set, the worker wraps the entire
+execution in `asyncio.wait_for(run_flow(...), timeout=N)`. On timeout, the
+execution is marked `status = "error"` with `error.message = "Execution timed out"`.
 
 ---
 
-## 13. API design
+## 13. Error flow triggering
+
+When `flow_executions.status` transitions to `"error"` and
+`settings.error_flow_id` is set:
+
+1. Check that `error_flow_id` ≠ current `flow_id` (loop protection).
+2. Check that current `mode` ≠ `"error"` (loop protection).
+3. Enqueue a new execution of `error_flow_id` with `mode = "error"` and
+   `trigger = { "type": "error", "failed_execution_id": "<exec_id>" }`.
+4. The trigger node of the error flow receives the failed execution's error
+   envelope as its seed item.
+
+---
+
+## 14. API design
 
 FastAPI route file: `app/routes/flows.py`
 
-### 13.1 Routes
+### 14.1 Routes
 
 | Method | Path | Purpose |
 |--------|------|---------|
 | `POST` | `/v0/orgs/{org_id}/flows` | Create a flow |
-| `GET` | `/v0/orgs/{org_id}/flows` | List latest revisions |
-| `GET` | `/v0/orgs/{org_id}/flows/{flow_id}/revisions/{flow_revid}` | Get a specific revision |
+| `GET` | `/v0/orgs/{org_id}/flows` | List flows (latest revision per flow) |
+| `GET` | `/v0/orgs/{org_id}/flows/{flow_id}` | Get one flow header + active revision info |
+| `PATCH` | `/v0/orgs/{org_id}/flows/{flow_id}` | Update name only (no new revision) |
 | `PUT` | `/v0/orgs/{org_id}/flows/{flow_id}` | Save a new revision |
-| `DELETE` | `/v0/orgs/{org_id}/flows/{flow_id}` | Delete flow + revisions + runtime state |
-| `GET` | `/v0/orgs/{org_id}/flows/{flow_id}/versions` | List revisions |
+| `DELETE` | `/v0/orgs/{org_id}/flows/{flow_id}` | Delete flow + revisions + runtime state + executions |
+| `GET` | `/v0/orgs/{org_id}/flows/{flow_id}/revisions` | List revisions |
+| `GET` | `/v0/orgs/{org_id}/flows/{flow_id}/revisions/{flow_revid}` | Get a specific revision |
 | `POST` | `/v0/orgs/{org_id}/flows/{flow_id}/activate` | Activate a revision |
 | `POST` | `/v0/orgs/{org_id}/flows/{flow_id}/deactivate` | Deactivate the flow |
 | `POST` | `/v0/orgs/{org_id}/flows/{flow_id}/run` | Start a manual run |
@@ -578,8 +903,20 @@ FastAPI route file: `app/routes/flows.py`
 | `GET` | `/v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}` | Get execution detail |
 | `POST` | `/v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}/stop` | Request stop |
 | `GET` | `/v0/orgs/{org_id}/flows/node-types` | List node type descriptors |
+| `POST` | `/v0/webhooks/{webhook_id}` | Inbound webhook trigger (outside org path) |
 
-### 13.2 Save request
+### 14.2 Pagination
+
+All list endpoints accept:
+
+| Query param | Default | Notes |
+|-------------|---------|-------|
+| `limit` | `50` | Max items per page. |
+| `offset` | `0` | Skip this many items. |
+
+Response includes `{ "items": [...], "total": N }`.
+
+### 14.3 Save request (`PUT`)
 
 ```json
 {
@@ -594,23 +931,32 @@ FastAPI route file: `app/routes/flows.py`
 #### Save rules
 
 - `base_flow_revid` is required.
-- If `base_flow_revid` is stale, return `409 Conflict`.
-- If only the name changes and `graph_hash` is unchanged, update the stable
-  header only.
+- If `base_flow_revid` is not the current latest revision, return `409 Conflict`.
+- If only the name changes and `graph_hash` is unchanged, treat as a name-only
+  update (update header only; do not create a revision; return `200` not `201`).
+- Otherwise create a new revision, increment `flow_version`, return `201`.
 
-### 13.3 Activate request
-
-Optional request body:
+### 14.4 Name-only update (`PATCH`)
 
 ```json
-{
-  "flow_revid": "<optional>"
-}
+{ "name": "New name" }
 ```
 
-If omitted, activate the latest revision.
+Updates `flows.name`, `flows.updated_at`, `flows.updated_by`. Does not create a
+revision. Returns `200`.
 
-### 13.4 Run request
+### 14.5 Activate request
+
+Optional body:
+
+```json
+{ "flow_revid": "<optional>" }
+```
+
+If omitted, activates the latest revision. Validates the target revision before
+activating. Registers webhooks and schedules.
+
+### 14.6 Run request
 
 ```json
 {
@@ -619,52 +965,91 @@ If omitted, activate the latest revision.
 }
 ```
 
+`flow_revid` defaults to the latest revision for manual runs. `document_id` is
+passed as `trigger_data.document_id` and made available to trigger nodes.
+
 ---
 
-## 14. Worker integration
+## 15. Trigger dispatch and webhook routing
 
-Queue-dispatched runs should use the existing worker infrastructure.
+### Trigger dispatch
+
+On a trigger event (upload, schedule, webhook), the dispatcher must:
+
+1. Query `flows` for all documents where `active = true` and `organization_id`
+   matches (and trigger type matches).
+2. For each match, read `active_flow_revid`.
+3. Enqueue a `flow_run` worker message.
+
+Implementation choices for the active-flow index:
+
+- Direct MongoDB query (simple; acceptable for v1).
+- In-memory index refreshed on activate/deactivate (faster; add later if needed).
+
+Regardless of implementation, dispatch must resolve the exact `active_flow_revid`.
+
+### Webhook routing table
+
+The webhook routing table maps `webhook_id → (flow_id, active_flow_revid)`.
+
+- Populated at activation; cleared at deactivation.
+- Stored in MongoDB (collection `flow_webhook_routes`) **and** cached in memory.
+- Cache is invalidated on activate/deactivate.
+
+Schema:
+
+```json
+{
+  "_id": "<webhook_id>",
+  "flow_id": "<flow_id>",
+  "organization_id": "<org_id>",
+  "flow_revid": "<flow_revid>",
+  "node_id": "<node_id>",
+  "method": "POST",
+  "created_at": "2026-04-22T00:00:00Z"
+}
+```
+
+The inbound route `POST /v0/webhooks/{webhook_id}`:
+
+1. Look up `webhook_id` in cache → `flow_id`, `flow_revid`, `node_id`.
+2. Build trigger data from request (method, headers, body).
+3. Enqueue `flow_run` worker message.
+4. Return `200 { "execution_id": "..." }` immediately (async).
+
+---
+
+## 16. Worker integration
+
+Queue-dispatched runs use the existing worker infrastructure.
 
 ### Queue payload
 
 ```python
 await ad.queue.send_msg(analytiq_client, "flow_run", {
-    "flow_id": flow_id,
-    "flow_revid": flow_revid,
-    "execution_id": exec_id,
+    "flow_id":         flow_id,
+    "flow_revid":      flow_revid,
+    "execution_id":    exec_id,
     "organization_id": org_id,
 })
 ```
 
 ### Worker rules
 
-- The worker must execute the exact `flow_revid` from the queue message.
-- It must never re-resolve "latest" at runtime.
-- It must check `stop_requested` between node executions.
-- Once enqueued, the run is immutable with respect to flow content.
+- Execute the exact `flow_revid` from the queue message. Never re-resolve "latest".
+- Update `last_heartbeat_at` every ~5 seconds while running.
+- Check `stop_requested` between node executions.
+- On completion (success or error), set `finished_at` and final `status`.
+- On startup, sweep for stale executions (see §5.4 stale-execution recovery).
 
-### v1 progress model
+### Progress model (v1)
 
-Frontend polls execution status every 2 seconds.
-
----
-
-## 15. Trigger dispatch
-
-Trigger-based execution needs a way to resolve active flows for a given event.
-
-Possible implementation choices:
-
-- direct MongoDB query
-- in-memory index refreshed on activate/deactivate
-- small helper keyed by `(organization_id, trigger_type)`
-
-Regardless of implementation, dispatch must resolve the exact
-`active_flow_revid` for each matching flow.
+Frontend polls `GET /flow/{flow_id}/executions/{exec_id}` every 2 seconds.
+Incremental `run_data` written after each node provides per-node progress.
 
 ---
 
-## 16. Frontend canvas
+## 17. Frontend canvas
 
 React Flow is already installed and will be used for the editor.
 
@@ -684,37 +1069,56 @@ src/components/flows/
 
 ### UI requirements
 
-- prevent obviously invalid saves where possible
-- show backend validation errors clearly
-- show stale-editor conflicts (`409 Conflict`)
-- show both latest revision and active revision
-- show execution history and per-node output/status
+- Prevent obviously invalid saves where possible (client-side validation).
+- Show backend validation errors clearly.
+- Show stale-editor conflicts (`409 Conflict`).
+- Show both latest revision and active revision.
+- Show execution history and per-node output/status.
+- Label output wires with `output_labels` from the node type descriptor.
+- Display `on_error` setting per node in the parameter panel.
 
 ---
 
-## 17. Implementation order
+## 18. Implementation order
 
-1. `analytiq_data/flows/` — validation, registry, engine
-2. `app/flows/` — DocRouter node registrations
+1. `analytiq_data/flows/` — types, validation, registry, engine
+2. `app/flows/` — DocRouter node registrations, `FlowServicesImpl`
 3. `app/routes/flows.py` — CRUD, activate, run, execution endpoints
-4. worker `flow_run` handler
-5. frontend list page + canvas editor
-6. frontend run panel + polling
+4. Worker `flow_run` handler + heartbeat + stale-execution sweep
+5. Webhook routing table + `POST /v0/webhooks/{webhook_id}` route
+6. Frontend list page + canvas editor
+7. Frontend run panel + polling
 
-Steps 1 to 4 are backend-only and should be fully unit/integration tested before
+Steps 1 to 5 are backend-only and should be fully unit/integration tested before
 frontend work depends on them.
 
 ---
 
-## 18. Main improvements from the previous draft
+## 19. Main improvements from v3
 
-This version makes the design clearer by:
-
-- removing ambiguity around the active revision
-- separating revision content from persistent runtime state
-- making DAG-only execution explicit
-- making merge behavior explicit
-- avoiding confusion between `flows.trigger.manual` and
-  `docrouter.trigger.manual`
-- using a clearer revision-read route shape
-- tightening save concurrency and stop semantics
+- Added `ConnectionType` literal and `NodeConnection` typed dataclass; adjacency
+  map types fully specified.
+- Defined `run_data` shape (`NodeRunData` with status, timing, items, error).
+- Typed `flow_revisions.settings` with `execution_timeout_seconds`,
+  `error_flow_id`, `save_execution_data`.
+- Replaced `continueOnFail: bool` with `on_error: OnError` enum on node shape.
+- Added `mode`, `last_node_executed`, `last_heartbeat_at`, `wait_till`,
+  `retry_of`, `parent_execution_id` to `flow_executions`.
+- Typed `trigger` field as a discriminated union.
+- Defined `pin_data` execution semantics explicitly (§5.2.2).
+- Defined `disabled` node semantics explicitly (emit empty output, skip branches).
+- Defined branch-skipping rule explicitly: empty output → skip connected nodes.
+- Added `paired_item` to `FlowItem` for lineage tracking.
+- Defined `FlowServices` Protocol; added `mode` and `trigger_data` to `ExecutionContext`.
+- Added `is_trigger`, `output_labels`, `description`, `category`,
+  `validate_parameters` to `NodeType` protocol.
+- Added `webhook_id` to node shape; added `flows.trigger.webhook` and
+  `flows.trigger.schedule` to the node table with registration semantics.
+- Fixed validation rule 10: "reachable from trigger" (not "no disconnected subgraphs").
+- Added validation for `connections.index` bounds and `pin_data` key references.
+- Added `created_at`/`created_by` to `flows` collection.
+- Added stale-execution recovery via heartbeat.
+- Added `GET /flows/{flow_id}`, `PATCH /flows/{flow_id}`, pagination, webhook
+  inbound route, `GET /flows/{flow_id}/revisions` to the API table.
+- Added §13 (error flow triggering) and §15 (webhook routing table).
+- Merged §14 worker integration with heartbeat and stale-execution rules.
