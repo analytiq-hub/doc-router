@@ -39,9 +39,9 @@ def _toposort(nodes: list[dict[str, Any]], connections: Connections) -> list[str
             if not slot:
                 continue
             for conn in slot:
-                if conn.node in node_ids:
-                    adj[src].append(conn.node)
-                    indeg[conn.node] += 1
+                if conn.dest_node_id in node_ids:
+                    adj[src].append(conn.dest_node_id)
+                    indeg[conn.dest_node_id] += 1
 
     q = [nid for nid, d in indeg.items() if d == 0]
     out: list[str] = []
@@ -96,9 +96,9 @@ def validate_revision(
             if not slot:
                 continue
             for conn in slot:
-                if conn.node not in reachable:
-                    reachable.add(conn.node)
-                    frontier.append(conn.node)
+                if conn.dest_node_id not in reachable:
+                    reachable.add(conn.dest_node_id)
+                    frontier.append(conn.dest_node_id)
     for n in nodes:
         if n["id"] == trigger_id:
             continue
@@ -119,20 +119,22 @@ def validate_revision(
             if not slot:
                 continue
             for conn in slot:
-                if conn.node not in nodes_by_id:
-                    raise FlowValidationError(f"Connection destination node id does not exist: {conn.node}")
-                dst_type = get_node_type(nodes_by_id[conn.node]["type"])
+                if conn.dest_node_id not in nodes_by_id:
+                    raise FlowValidationError(
+                        f"Connection destination node id does not exist: {conn.dest_node_id}"
+                    )
+                dst_type = get_node_type(nodes_by_id[conn.dest_node_id]["type"])
                 if conn.index < 0:
                     raise FlowValidationError("Connection destination index must be >= 0")
                 if dst_type.max_inputs is not None and conn.index >= dst_type.max_inputs:
                     raise FlowValidationError(
-                        f"Connection destination index out of range for node {conn.node}: {conn.index}"
+                        f"Connection destination index out of range for node {conn.dest_node_id}: {conn.index}"
                     )
                 if conn.index >= max(dst_type.min_inputs, (dst_type.max_inputs or conn.index + 1)):
                     # Best-effort; for unbounded max_inputs we accept any index >= 0.
                     if dst_type.max_inputs is not None:
                         raise FlowValidationError(
-                            f"Connection destination index out of range for node {conn.node}: {conn.index}"
+                            f"Connection destination index out of range for node {conn.dest_node_id}: {conn.index}"
                         )
 
     # Acyclic.
@@ -293,7 +295,7 @@ class FlowEngine:
                     if not slot_conns:
                         continue
                     for conn in slot_conns:
-                        dst = nodes_by_id[conn.node]
+                        dst = nodes_by_id[conn.dest_node_id]
                         dst_type = get_node_type(dst["type"])
                         # Determine current input-slot count to allocate.
                         if dst_type.max_inputs is not None:

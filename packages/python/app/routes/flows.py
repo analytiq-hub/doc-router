@@ -293,9 +293,14 @@ async def save_revision(org_id: str, flow_id: str, req: SaveFlowRequest, current
                 for c in slot:
                     # Accept both keys for backward compatibility; canonical key is `connection_type`.
                     ct = c.get("connection_type") or c.get("type") or "main"
+                    dest_node_id = c.get("dest_node_id") or c.get("node_id") or c.get("node")
+                    if not dest_node_id:
+                        raise HTTPException(
+                            status_code=400, detail="Connection missing dest_node_id"
+                        )
                     conns.append(
                         NodeConnection(
-                            node=c["node"],
+                            dest_node_id=dest_node_id,
                             connection_type=ct,
                             index=int(c["index"]),
                         )
