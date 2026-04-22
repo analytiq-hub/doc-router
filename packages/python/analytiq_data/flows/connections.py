@@ -10,10 +10,6 @@ describes a fan-out edge to a *destination* node input port.
 from dataclasses import dataclass
 from typing import Literal, TypedDict
 
-# Allowed values (v1): "main"
-# Future (reserved): "error_output", ...
-
-
 @dataclass
 class NodeConnection:
     """One edge from a source output slot to a destination input slot."""
