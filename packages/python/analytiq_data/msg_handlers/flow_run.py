@@ -17,6 +17,19 @@ logger = logging.getLogger(__name__)
 HEARTBEAT_INTERVAL_SECS = 5
 
 
+async def _heartbeat_loop(db, exec_id: str) -> None:
+    """Bump last_heartbeat_at every HEARTBEAT_INTERVAL_SECS while a run is active."""
+    while True:
+        await asyncio.sleep(HEARTBEAT_INTERVAL_SECS)
+        try:
+            await db.flow_executions.update_one(
+                {"_id": ObjectId(exec_id)},
+                {"$set": {"last_heartbeat_at": datetime.now(UTC)}},
+            )
+        except Exception:
+            pass
+
+
 async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
     """
     Execute a single queued flow run.
@@ -71,7 +84,15 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
             # Already claimed or completed by another worker; drop the message.
             await ad.queue.delete_msg(analytiq_client, "flow_run", msg_id)
             return
-        result = await ad.flows.run_flow(context=context, revision=revision)
+        heartbeat_task = asyncio.create_task(_heartbeat_loop(db, exec_id))
+        try:
+            result = await ad.flows.run_flow(context=context, revision=revision)
+        finally:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
         status = result.get("status") or "success"
         await db.flow_executions.update_one(
             {"_id": ObjectId(exec_id)},
