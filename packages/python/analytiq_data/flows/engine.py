@@ -330,22 +330,46 @@ async def _execute_loop(
                 status = "skipped"
             else:
                 try:
-                    first_item = (
-                        next((it for slot in wi.inputs for it in slot), None) if wi.inputs else None
-                    )
-                    resolved_node = {
-                        **node,
-                        "parameters": ad.flows.resolve_parameters(
-                            node.get("parameters") or {},
-                            item=first_item,
-                            run_data=context.run_data,
-                        ),
-                    }
-                    out_lists = await node_type.execute(context, resolved_node, wi.inputs)
-                    if len(out_lists) != outputs_count:
-                        raise RuntimeError(
-                            f"Node {node['id']} returned {len(out_lists)} output slots, expected {outputs_count}"
+                    if wi.inputs and not node_type.is_merge:
+                        # n8n-style per-item parameter resolution: evaluate params against each input item.
+                        combined: list[list["ad.flows.FlowItem"]] = [[] for _ in range(outputs_count)]
+                        for slot_idx, slot in enumerate(wi.inputs):
+                            for it in slot:
+                                resolved_node = {
+                                    **node,
+                                    "parameters": ad.flows.resolve_parameters(
+                                        node.get("parameters") or {},
+                                        item=it,
+                                        run_data=context.run_data,
+                                    ),
+                                }
+                                per_inputs = [[] for _ in range(len(wi.inputs))]
+                                per_inputs[slot_idx] = [it]
+                                per_out = await node_type.execute(context, resolved_node, per_inputs)
+                                if len(per_out) != outputs_count:
+                                    raise RuntimeError(
+                                        f"Node {node['id']} returned {len(per_out)} output slots, expected {outputs_count}"
+                                    )
+                                for oi in range(outputs_count):
+                                    combined[oi].extend(per_out[oi])
+                        out_lists = combined
+                    else:
+                        first_item = (
+                            next((it for slot in wi.inputs for it in slot), None) if wi.inputs else None
                         )
+                        resolved_node = {
+                            **node,
+                            "parameters": ad.flows.resolve_parameters(
+                                node.get("parameters") or {},
+                                item=first_item,
+                                run_data=context.run_data,
+                            ),
+                        }
+                        out_lists = await node_type.execute(context, resolved_node, wi.inputs)
+                        if len(out_lists) != outputs_count:
+                            raise RuntimeError(
+                                f"Node {node['id']} returned {len(out_lists)} output slots, expected {outputs_count}"
+                            )
                 except Exception as e:
                     on_error = node.get("on_error") or "stop"
                     msg = str(e)

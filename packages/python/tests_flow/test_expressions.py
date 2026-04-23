@@ -60,13 +60,63 @@ class _EchoParamNode:
         inputs: list[list["ad.flows.FlowItem"]],
     ) -> list[list["ad.flows.FlowItem"]]:
         v = (node.get("parameters") or {}).get("value")
-        return [[ad.flows.FlowItem(json={"value": v}, binary={}, meta={}, paired_item=None)]]
+        src = inputs[0][0] if inputs and inputs[0] else None
+        return [
+            [
+                ad.flows.FlowItem(
+                    json={"value": v},
+                    binary=(dict(src.binary) if src is not None else {}),
+                    meta=(dict(src.meta) if src is not None else {}),
+                    paired_item=None,
+                )
+            ]
+        ]
+
+
+class _MultiItemTriggerNode:
+    """Trigger that emits two items with distinct json + binary."""
+
+    key = "tests.trigger.multi"
+    label = "Multi trigger"
+    description = "Test-only: emits two items."
+    category = "Test"
+    is_trigger = True
+    is_merge = False
+    min_inputs = 0
+    max_inputs = 0
+    outputs = 1
+    output_labels = ["output"]
+    parameter_schema: dict[str, Any] = {"type": "object", "properties": {}, "additionalProperties": False}
+
+    def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        return []
+
+    async def execute(
+        self,
+        context: "ad.flows.ExecutionContext",
+        node: dict[str, Any],
+        inputs: list[list["ad.flows.FlowItem"]],
+    ) -> list[list["ad.flows.FlowItem"]]:
+        a = ad.flows.FlowItem(
+            json={"x": 1},
+            binary={"f": ad.flows.BinaryRef(mime_type="text/plain", file_name="a.txt")},
+            meta={},
+            paired_item=None,
+        )
+        b = ad.flows.FlowItem(
+            json={"x": 2},
+            binary={"f": ad.flows.BinaryRef(mime_type="text/plain", file_name="b.txt")},
+            meta={},
+            paired_item=None,
+        )
+        return [[a, b]]
 
 
 @pytest.fixture(autouse=True)
 def _register_nodes() -> None:
     ad.flows.register_builtin_nodes()
     ad.flows.register(_EchoParamNode())
+    ad.flows.register(_MultiItemTriggerNode())
 
 
 @pytest.mark.asyncio
@@ -207,4 +257,37 @@ def test_rewrite_vars_does_not_touch_string_literals() -> None:
     # `$json` inside quotes should remain literal; outside should be rewritten.
     rewritten = ad.flows.expressions._rewrite_vars("'$json' + $json['x']")
     assert rewritten == "'$json' + _json['x']"
+
+
+@pytest.mark.asyncio
+async def test_expressions_resolve_per_item_including_binary() -> None:
+    nodes = [
+        _n("t1", "Start", "tests.trigger.multi", 0),
+        _n("j1", "EchoJson", "tests.echo_param", 200, {"value": "=$json['x']"}),
+        _n("b1", "EchoBin", "tests.echo_param", 400, {"value": "=$binary['f']['file_name']"}),
+    ]
+    conns = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="j1", connection_type="main", index=0)]]},
+        "j1": {"main": [[ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0)]]},
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(context=ctx, revision={"nodes": nodes, "connections": conns, "settings": {}, "pin_data": None})
+    assert res["status"] == "success"
+
+    j_out = ctx.run_data["j1"]["data"]["main"][0]
+    assert [it.json["value"] for it in j_out] == [1, 2]
+
+    b_out = ctx.run_data["b1"]["data"]["main"][0]
+    assert [it.json["value"] for it in b_out] == ["a.txt", "b.txt"]
 

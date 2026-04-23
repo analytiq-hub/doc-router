@@ -102,6 +102,10 @@ def _rewrite_vars(expr: str) -> str:
                 out.append("_node")
                 i += 5
                 continue
+            if expr.startswith("$binary", i):
+                out.append("_binary")
+                i += 7
+                continue
 
             out.append(ch)
             i += 1
@@ -168,6 +172,12 @@ def eval_expression(expr: str, *, item: ad.flows.FlowItem | None, run_data: dict
 
     env = {
         "_json": (item.json if item is not None else {}),
+        "_binary": (
+            {k: {"mime_type": v.mime_type, "file_name": v.file_name, "data": v.data, "storage_id": v.storage_id}
+             for k, v in (item.binary or {}).items()}
+            if item is not None
+            else {}
+        ),
         "_node": materialize_node_data(run_data),
     }
     try:
