@@ -8,7 +8,7 @@ stored in MongoDB.
 
 This document is the definitive guide for someone new to the codebase. It covers
 what we built, how it maps to n8n's architecture, what is already running, and
-what comes next.
+what is still on the roadmap.
 
 ---
 
@@ -32,7 +32,7 @@ keeping it Python-native and much simpler. The table below maps the key concepts
 | `WorkflowDataProxy` (`$json`, `$node`) | `workflow-data-proxy.ts` | `expressions.py` (`$json` → `_json`, `$node` → `_node`) | AST-validated Python eval; no JS/TypeScript |
 | JS/Python Code node (subprocess) | `Code.node.ts`, task runner | `flows.code` + `code_runner.py` | Subprocess with JSON stdin/stdout; restricted builtins |
 | `WorkflowExecuteMode` | `Interfaces.ts` | `ExecutionMode` literal | `"manual" \| "trigger" \| "webhook" \| "schedule" \| "error"` |
-| Bull queue job | `scaling.service.ts` | `queues.flow_run` MongoDB queue | Same role: decouple HTTP trigger from execution worker |
+| Bull queue job | `scaling.service.ts` | `queues.flow_run` (MongoDB-backed) | Same role: decouple HTTP trigger from execution worker (no Bull in DocRouter) |
 | Worker `JobProcessor` | `job-processor.ts` | `process_flow_run_msg` in `msg_handlers/flow_run.py` | Loads revision, builds context, calls `run_flow` |
 | `last_heartbeat_at` / stale detection | heartbeat loop | `_heartbeat_loop` task in `flow_run.py` | Asyncio background task; every 5 s; cancelled in `finally` |
 | `errorWorkflow` setting | `IWorkflowSettings` | `settings.error_flow_id` | Dispatched when execution ends in `"error"` status |
@@ -42,7 +42,7 @@ keeping it Python-native and much simpler. The table below maps the key concepts
 - Flows are **DAGs only** — no looping, no cycles.
 - No credentials system yet; credentials are passed through `analytiq_client`.
 - No real-time push (WebSocket/SSE) yet — clients poll the execution document.
-- No sub-flows, Wait nodes, or scheduler in v1.
+- Inbound **flow** webhooks: `POST /v0/webhooks/{webhook_id}` exists and enqueues a run when a `flow_webhook_routes` document is present. There is still no `flows.trigger.webhook` **node type** in the registry, and **activate/deactivate** do not create or delete `flow_webhook_routes` rows in the current code — routes must be inserted out-of-band (or a future API will do it). Schedule triggers and sub-flows / Wait nodes are not implemented.
 
 ---
 
@@ -77,8 +77,10 @@ using `context.analytiq_client`.
 
 ### HTTP layer (`app/routes/flows.py`)
 
-CRUD routes for flows, revisions, executions. Enqueues `flow_run` messages;
-does not run the engine directly.
+CRUD routes for flows, revisions, executions; `POST` to run a flow; stop and list
+executions. Also `POST /v0/webhooks/{webhook_id}` to enqueue a run from an
+inbound HTTP request. All paths enqueue `flow_run` messages; the API does not
+run the engine directly.
 
 ### Worker (`worker/worker.py` → `msg_handlers/flow_run.py`)
 
@@ -154,6 +156,8 @@ execution. Items are coerced to `FlowItem` instances at runtime.
   "trigger": { "type": "manual", "document_id": null }
 }
 ```
+
+Execution documents in MongoDB also include `organization_id`, `flow_id`, `flow_revid`, `mode` (`"manual"`, `"webhook"`, etc.), and optional fields such as `last_node_executed`, `wait_till`, `retry_of`, and `parent_execution_id` (see `app/routes/flows.py` and the `flow_run` handler).
 
 `run_data` maps `node_id` to a `NodeRunData` record written after each node:
 
@@ -244,15 +248,19 @@ Register a node type with `ad.flows.register(MyNodeType())`.
 
 ### Built-in node types
 
+Registered in `register_builtin.py` (five node types; **only one trigger: `flows.trigger.manual`**):
+
 | Key | `is_trigger` | `is_merge` | Inputs | Outputs | Description |
 |-----|:-----------:|:----------:|:------:|:-------:|-------------|
-| `flows.trigger.manual` | ✓ | ✗ | 0 | 1 | Emits the manual-run seed item |
-| `flows.trigger.webhook` | ✓ | ✗ | 0 | 1 | Starts run on inbound HTTP (Phase 3) |
-| `flows.trigger.schedule` | ✓ | ✗ | 0 | 1 | Starts run on cron (Phase 3) |
-| `flows.webhook` | ✗ | ✗ | 1 | 1 | POSTs item JSON to a URL |
+| `flows.trigger.manual` | ✓ | ✗ | 0 | 1 | Emits the run seed item (used with manual and revision runs) |
+| `flows.webhook` | ✗ | ✗ | 1 | 1 | Outbound: POSTs each item’s JSON to a URL |
 | `flows.branch` | ✗ | ✗ | 1 | 2 | Routes items to `true`/`false` slot |
 | `flows.merge` | ✗ | ✓ | 2+ | 1 | Waits for all inputs, concatenates |
 | `flows.code` | ✗ | ✗ | 1 | 1 | Runs a Python snippet in a subprocess |
+
+**Inbound HTTP (not a separate trigger node type):** `POST /v0/webhooks/{webhook_id}` (`app/routes/flows.py`) looks up `flow_webhook_routes` by `_id`, inserts a `flow_executions` document with `mode: "webhook"`, and enqueues `flow_run`. The graph’s trigger node remains `flows.trigger.manual` (or `docrouter.trigger.manual`); the request body/headers are available in `ExecutionContext` trigger / code context. Populating `flow_webhook_routes` on flow activation is **not** wired in the codebase yet.
+
+**Not implemented:** `flows.trigger.webhook` / `flows.trigger.schedule` as registry entries; cron/scheduler; upload-dispatched run from document upload (upload still fires `document.uploaded` product webhooks and enqueues OCR, not `flow_run` unless added elsewhere).
 
 ---
 
@@ -287,7 +295,7 @@ while work or merge_waiting:
     5. pin_data hit → use pinned FlowItems (coerced), skip execute.
     6. All input slots empty → emit empty outputs, record "skipped"
        (branch-skipping rule: empty output ⟹ downstream skipped).
-    7. Resolve parameters (expressions).
+    7. Resolve parameters (expressions) — see below.
     8. await node_type.execute(context, resolved_node, inputs).
     9. Handle errors: on_error="stop" → raise; on_error="continue" → emit error item.
    10. Write NodeRunData to context.run_data and persist to MongoDB.
@@ -303,14 +311,16 @@ Before calling `execute()`, the engine resolves any parameter values that start
 with `=` via `resolve_parameters()` in `expressions.py`. This is the Python
 equivalent of n8n's `WorkflowDataProxy`.
 
+**Per-item resolution (default path):** for nodes that are **not** merge nodes, `_execute_loop` in `engine.py` evaluates `=` parameters **once per input `FlowItem`**, calls `execute` for that single item, then concatenates output lists across items (n8n-style). Merge nodes and the “all inputs empty” skip path use a **single** `resolve_parameters` pass with the **first** item across the input slots (or `None` if there are no items).
+
 ```python
 # In a node's parameters:
-{"value": "=$json['amount']"}          # reads current item's json
+{"value": "=$json['amount']"}          # per input item: that item’s json
 {"label": "=$node['ocr1']['main'][0][0]['text']"}  # reads prior node output
 ```
 
-Variables in scope:
-- `$json` — current item's `.json` dict (first input item).
+Variables in scope for each evaluation:
+- `$json` — the current item's `.json` dict (in per-item mode, the item being processed; in merge/single pass, the “first” item as described above).
 - `$node` — dict of completed node outputs, keyed by node id.
   Shape: `{node_id: {"status": "...", "main": [[item_json, ...], ...]}}`.
 
@@ -359,8 +369,8 @@ analytiq_data/flows/
   __init__.py           Re-exports everything; exposes register_docrouter_nodes()
   context.py            ExecutionContext dataclass, ExecutionMode literal
   engine.py             run_flow, validate_revision, FlowValidationError,
-                        _execute_loop, persist_run_data, read_stop,
-                        canonical_graph_hash,
+                        _execute_loop (per-item param resolution for non-merge nodes),
+                        persist_run_data, read_stop, canonical_graph_hash,
                         _bson_serialize_value / _bson_serialize_run_data
                         (converts FlowItem/BinaryRef → BSON-safe dicts for Mongo)
   expressions.py        ExpressionError, eval_expression, resolve_parameters,
@@ -372,7 +382,7 @@ analytiq_data/flows/
                         coerce_json_connections_to_dataclasses
   node_registry.py      NodeType Protocol, register(), get(), list_all()
   execution.py          NodeRunData helpers
-  register_builtin.py   register_builtin_nodes() — registers all six built-ins
+  register_builtin.py   register_builtin_nodes() — registers five built-ins
   code_runner.py        run_python_code() — subprocess executor for flows.code
   nodes/
     trigger_manual.py   flows.trigger.manual
@@ -398,9 +408,10 @@ analytiq_data/msg_handlers/
                           - calls ad.flows.run_flow
                           - handles timeout / error / stop
 
-app/routes/flows.py     FastAPI routes (§14 of flows.md):
+app/routes/flows.py     FastAPI routes (see `docs/flows.md`):
                           CRUD for flows + revisions, manual run, stop,
-                          execution history, node-type list
+                          execution history, node-type list, and
+                          `POST /v0/webhooks/{webhook_id}` (inbound flow trigger)
 
 worker/worker.py        worker_flow_run — consumes flow_run queue messages
 
@@ -417,6 +428,8 @@ tests/
 
 ## 7. Execution lifecycle (end to end)
 
+**Manual (or `flow_revid` from API):**
+
 ```
 User / API client
   │
@@ -425,7 +438,7 @@ User / API client
   app/routes/flows.py
     1. Create flow_executions doc (status="queued")
     2. Enqueue flow_run message (flow_id, flow_revid, exec_id, trigger)
-    3. Return 202 { execution_id }
+    3. Return { execution_id } (HTTP 200; async execution is queue-backed)
   │
   ▼
   queues.flow_run (MongoDB-backed queue)
@@ -440,13 +453,20 @@ User / API client
     5. await ad.flows.run_flow(context, revision)
          └─ validate_revision (11 rules)
          └─ _execute_loop (BFS over nodes)
-              └─ resolve_parameters (expressions)
+              └─ resolve_parameters (expressions; per item for non-merge nodes)
               └─ node_type.execute(context, node, inputs)
               └─ persist_run_data → Mongo update (run_data + last_heartbeat_at)
     6. Cancel heartbeat task
     7. Update flow_executions (status, finished_at)
     8. Delete queue message
 ```
+
+**Webhook-shaped runs:** `POST /v0/webhooks/{webhook_id}` creates the execution
+(`status="queued"`, `mode="webhook"`, trigger payload from the HTTP request) and
+enqueues the same `flow_run` message shape; the worker path is identical from
+the compare-and-set step onward. The caller must have inserted a
+`flow_webhook_routes` document whose `_id` is `webhook_id` (the codebase does
+not yet create this row when a flow is activated).
 
 ---
 
@@ -488,7 +508,7 @@ Engine tests run `run_flow` with `analytiq_client=None`, which causes
 
 ## 10. Implementation status
 
-### Done (on this branch)
+### Done (current tree)
 
 | Area | Status |
 |------|--------|
@@ -496,41 +516,38 @@ Engine tests run `run_flow` with `analytiq_client=None`, which causes
 | Validation: all 11 rules, `FlowValidationError` | ✓ Complete |
 | `FlowItem` / `BinaryRef` dataclasses + coercion | ✓ Complete |
 | `NodeType` protocol + in-memory registry | ✓ Complete |
-| Built-in nodes: trigger.manual, webhook, branch, merge, code | ✓ Complete |
+| Built-in nodes (five): `flows.trigger.manual`, `flows.webhook` (outbound), `flows.branch`, `flows.merge`, `flows.code` | ✓ Complete |
+| Per-item `=` parameters and per-item `execute` for **non-merge** nodes (`engine._execute_loop`) | ✓ Complete |
 | `flows.code` subprocess runner (restricted builtins, JSON contract) | ✓ Complete |
 | Expression engine (`$json`, `$node`, AST safety) | ✓ Complete |
-| `resolve_parameters` integration in `_execute_loop` | ✓ Complete |
-| `materialize_node_data` — flattens FlowItem→json for expressions + code context | ✓ Complete |
+| `resolve_parameters` + `materialize_node_data` for expressions and code context | ✓ Complete |
 | `pin_data` coercion (`coerce_flow_item_list`) | ✓ Complete |
 | `_bson_serialize_value` — FlowItem/BinaryRef → BSON-safe for Mongo | ✓ Complete |
 | `coerce_json_connections_to_dataclasses` — dict → dataclass at run time | ✓ Complete |
 | `persist_run_data` — incremental Mongo write after each node | ✓ Complete |
 | `read_stop` — cooperative cancellation between nodes | ✓ Complete |
-| Worker: compare-and-set claim, heartbeat loop, timeout, error handling | ✓ Complete |
-| DocRouter nodes: manual trigger, OCR, LLM extract, set tags | ✓ Complete |
-| HTTP routes: CRUD, manual run, stop, execution history | ✓ Complete |
-| E2E integration test | ✓ Complete |
+| Worker: compare-and-set claim, heartbeat loop, timeout, error handling; `recover_all_queues` at process startup (stale **queue** messages) | ✓ Complete |
+| DocRouter nodes: `docrouter` manual trigger, OCR, LLM extract, set tags | ✓ Complete |
+| HTTP routes: CRUD, manual run, stop, execution history, node-type list | ✓ Complete |
+| Inbound **flow** webhook: `POST /v0/webhooks/{webhook_id}` (reads `flow_webhook_routes`, enqueues `flow_run`) | ✓ HTTP handler |
+| E2E integration test (`test_flows_e2e.py`) | ✓ Complete |
 
-### Next steps (Phase 3)
+### Next steps (roadmap)
 
-These are not yet started. All require no engine changes — they layer on top of
-the completed core.
-
-| Feature | What it needs | Effort |
+| Feature | What it needs | Notes |
 |---------|--------------|--------|
-| **`flows.trigger.webhook`** — inbound HTTP triggers | `flow_webhook_routes` collection, activate/deactivate hooks, `POST /v0/webhooks/{webhook_id}` route | ~1 day |
-| **`flows.trigger.schedule`** — cron-based triggers | Cron registration at activation, scheduler worker loop | ~1 day |
-| **`docrouter.trigger.upload`** — fire on document upload | Upload event dispatch → enqueue flow_run | ~half day |
-| **Stale-execution recovery** — sweep for crashed workers | Worker startup sweep: `status="running"` + `last_heartbeat_at` too old → mark error | ~2 h |
-| **Dynamic node types** (API + MongoDB) | `flow_node_type_definitions` collection, CRUD routes, startup loader | ~2–3 days; needs design ticket |
-| **Frontend canvas** | React Flow editor, parameter panels, execution status UI | Separate product milestone |
-| **Per-item expression resolution** | Change `NodeType.execute` signature; deferred | Requires API change |
+| **`flow_webhook_routes` lifecycle** | Create/update/delete documents when a flow is activated or deactivated (or a dedicated admin API) — see `docs/flows.md` §15 | `POST /v0/webhooks/{webhook_id}` already **reads** this collection; nothing in the repo **writes** it yet |
+| **`flows.trigger.schedule` / cron** | Cron registration at activation, tick → `flow_run` | Not started |
+| **Upload → flow** | Dispatch `flow_run` on `document.uploaded` (or similar) for matching active flows | Upload still enqueues OCR and product `webhooks` only |
+| **Stale-execution recovery** (execution docs) | Sweep `flow_executions` stuck in `running` with an old `last_heartbeat_at` | Different from `recover_stale_messages` on the queue |
+| **Dynamic node types** (API + MongoDB) | e.g. `flow_node_type_definitions` + CRUD + loader | Needs design |
+| **First-class flow builder UI** | Wire React Flow (already used in the app for other workflows) to flow CRUD and execution status | Product milestone |
 
 ### Known limitations (by design for v1)
 
-- Expressions resolve against the **first** input item only. Per-item resolution
-  (one `execute` call per item) requires a `NodeType.execute` signature change and
-  is explicitly deferred.
+- **Merge nodes** use a **single** `resolve_parameters` pass with the first
+  available input item, then one `execute` with merged inputs. **Non-merge**
+  nodes get per-item `=` evaluation and one `execute` per item.
 - `flows.code` is **not** a full multi-tenant sandbox. The subprocess boundary and
   restricted builtins are a v1 precaution; seccomp / WASM isolation is a later
   concern.
