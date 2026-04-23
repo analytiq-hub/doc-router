@@ -704,10 +704,15 @@ analytiq_data/flows/
   __init__.py
   context.py            ExecutionContext, ExecutionMode
   engine.py             run_flow, validate_revision, FlowValidationError,
-                        persist_run_data, read_stop, canonical_graph_hash
+                        persist_run_data, read_stop, canonical_graph_hash,
+                        _bson_serialize_value, _bson_serialize_run_data
   execution.py          NodeRunData, run_data helpers
-  items.py              FlowItem, BinaryRef
-  connections.py        NodeConnection, connection_type literal, Connections
+  expressions.py        ExpressionError, eval_expression, resolve_parameters,
+                        materialize_node_data
+  items.py              FlowItem, BinaryRef, coerce_flow_item,
+                        coerce_flow_item_list, coerce_binary_ref
+  connections.py        NodeConnection, connection_type literal, Connections,
+                        coerce_json_connections_to_dataclasses
   node_registry.py      NodeType protocol, register(), get(), list_all()
   register_builtin.py   register_builtin_nodes()
   nodes/
@@ -715,6 +720,7 @@ analytiq_data/flows/
     webhook.py
     branch.py
     merge.py
+    code.py             flows.code subprocess node
 
 analytiq_data/msg_handlers/
   flow_run.py           process_flow_run_msg → ad.flows.run_flow
@@ -1142,15 +1148,33 @@ File: `nodes/code.py`, `code_runner.py`
 - Runs a Python snippet in a separate subprocess (`sys.executable -I -S`)
 - JSON stdin/stdout contract; safe builtins (no `__import__`)
 - `_minimal_env()` passes only `PATH`
-- Subprocess context: `{“trigger”, “node_id”, “mode”}` — enrichment planned in §20.4
+- Subprocess context: `{“trigger”, “node_id”, “mode”, “nodes”, “organization_id”, “execution_id”, “flow_id”, “flow_revid”}` (§20.4 Option B already implemented)
+
+**Step 1.6 — Expression engine** ✓  (§20.3)
+File: `expressions.py`
+- `ExpressionError(ValueError)` for validation and evaluation failures
+- `_rewrite_vars`: `$json` → `_json`, `$node` → `_node`
+- `_validate_expr_ast`: walks AST, rejects any node type not in explicit allow-set; `ast.Call` is excluded from the allow-set; names starting with `__` are rejected
+- `eval_expression(expr, *, item, run_data)`: parses, validates AST, evaluates with `{“__builtins__”: {}}` and `{_json, _node}` in scope
+- `resolve_parameters(params, *, item, run_data)`: recursively resolves `=`-prefixed strings, passes everything else through unchanged
+- `materialize_node_data(run_data)`: flattens `FlowItem` objects to their `.json` dicts for use in expression scope and subprocess context
+
+**Step 1.7 — Pin-data hardening** ✓  (§20.6)
+File: `items.py`
+- `coerce_binary_ref(raw) -> BinaryRef`: strict type-checking; raises `TypeError` on invalid fields
+- `coerce_flow_item(raw) -> FlowItem`: accepts `FlowItem` (no-op) or `dict`; raises `TypeError` on invalid fields
+- `coerce_flow_item_list(raw) -> list[FlowItem]`: accepts `None` (→ `[]`) or list
+- `coerce_json_connections_to_dataclasses(raw)` in `connections.py`: converts MongoDB dict connections to `NodeConnection` dataclasses; handles legacy field names (`node`/`node_id`/`node`)
 
 **Tests: `packages/python/tests_flow/`**
 
 ```
 tests_flow/
-  conftest.py           Ensures `packages/python` is on `sys.path`
-  test_flows_engine.py  Validation (DAG accept, cycle reject) + run_flow
-                        (code node output, branch/merge skip flush)
+  conftest.py            Ensures `packages/python` is on `sys.path`
+  test_flows_engine.py   Validation (DAG accept, cycle reject) + run_flow
+                         (code node output, branch/merge skip flush)
+  test_expressions.py    $json / $node resolution, on_error continue path,
+                         unsafe-call rejection, pin_data visible via $node
 ```
 
 Run: `pytest packages/python/tests_flow/` (no MongoDB required; `analytiq_client=None`).
@@ -1430,9 +1454,9 @@ passes them unchanged to downstream nodes; any node that accesses `.json`,
 
 | Step | Section | Effort | Depends on | Status |
 |------|---------|--------|------------|--------|
-| 1 | **Pin data coercion + tests** (§20.6) | ~1 h | — | Not started |
-| 2 | **Expression engine v1** (§20.3) | ~1 day | — | Not started |
-| 3 | **`flows.code` enriched context** (§20.4 Option B) | ~1 h | §20.3 (`materialize_node_data`) | Not started |
+| 1 | **Pin data coercion + tests** (§20.6) | ~1 h | — | **Complete** (Phase 1 Step 1.7) |
+| 2 | **Expression engine v1** (§20.3) | ~1 day | — | **Complete** (Phase 1 Step 1.6) |
+| 3 | **`flows.code` enriched context** (§20.4 Option B) | ~1 h | §20.3 (`materialize_node_data`) | **Complete** (Phase 1 Step 1.5) |
 | 4 | **Dynamic node types** (§20.5) | ~2–3 days | §20.3 (expressions in `http_proxy`) | Needs design ticket |
 
 After steps 1–3 the backend is in a good position to support the **canvas UI**

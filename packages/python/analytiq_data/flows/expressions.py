@@ -70,9 +70,6 @@ def _validate_expr_ast(tree: ast.AST) -> None:
     for node in ast.walk(tree):
         if not isinstance(node, _ALLOWED_AST_NODES):
             raise ExpressionError(f"Unsupported expression syntax: {type(node).__name__}")
-        if isinstance(node, ast.Call):
-            # Explicit, even though Call isn't in allowlist.
-            raise ExpressionError("Function calls are not allowed in expressions")
         if isinstance(node, ast.Name):
             if node.id.startswith("__"):
                 raise ExpressionError("Names starting with '__' are not allowed in expressions")
