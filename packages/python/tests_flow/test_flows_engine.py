@@ -637,3 +637,52 @@ async def test_run_flow_pin_data_coerces_binary_ref_dicts() -> None:
     assert pinned_item.binary["f"].data == b"abc"
     assert pinned_item.binary["f"].storage_id == "s1"
 
+
+@pytest.mark.asyncio
+async def test_flows_code_context_includes_nodes_materialized_run_data() -> None:
+    """`flows.code` gets context['nodes'][node_id]['main'] with JSON-only prior outputs."""
+
+    nodes = [
+        _n("t1", "Start", "flows.trigger.manual", 0),
+        _n("p1", "Pinned", "tests.passthrough", 200),
+        _n(
+            "c1",
+            "Code",
+            "flows.code",
+            400,
+            {
+                "python_code": (
+                    "def run(items, context):\n"
+                    "    a = context['nodes']['p1']['main'][0][0]['a']\n"
+                    "    return [{'y': a + 1}]\n"
+                ),
+                "timeout_seconds": 2,
+            },
+        ),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="p1", connection_type="main", index=0)]]},
+        "p1": {"main": [[ad.flows.NodeConnection(dest_node_id="c1", connection_type="main", index=0)]]},
+    }
+    pin_data = {"p1": [{"json": {"a": 41}, "binary": {}, "meta": {}, "paired_item": None}]}
+
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(
+        context=ctx,
+        revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": pin_data},
+    )
+    assert res["status"] == "success"
+    out = ctx.run_data["c1"]["data"]["main"][0]
+    assert out[0].json["y"] == 42
+

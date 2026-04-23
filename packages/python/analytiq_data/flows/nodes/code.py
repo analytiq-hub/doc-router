@@ -72,6 +72,7 @@ class FlowsCodeNode:
             "trigger": context.trigger_data,
             "node_id": node.get("id"),
             "mode": context.mode,
+            "nodes": ad.flows.materialize_node_data(context.run_data),
             "organization_id": context.organization_id,
             "execution_id": context.execution_id,
             "flow_id": context.flow_id,
