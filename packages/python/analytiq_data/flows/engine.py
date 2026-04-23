@@ -330,7 +330,18 @@ async def _execute_loop(
                 status = "skipped"
             else:
                 try:
-                    out_lists = await node_type.execute(context, node, wi.inputs)
+                    first_item = (
+                        next((it for slot in wi.inputs for it in slot), None) if wi.inputs else None
+                    )
+                    resolved_node = {
+                        **node,
+                        "parameters": ad.flows.resolve_parameters(
+                            node.get("parameters") or {},
+                            item=first_item,
+                            run_data=context.run_data,
+                        ),
+                    }
+                    out_lists = await node_type.execute(context, resolved_node, wi.inputs)
                     if len(out_lists) != outputs_count:
                         raise RuntimeError(
                             f"Node {node['id']} returned {len(out_lists)} output slots, expected {outputs_count}"
