@@ -321,7 +321,7 @@ async def _execute_loop(
             out_lists = _empty_outputs(outputs_count)
             status = "skipped"
         elif pin_data and node["id"] in pin_data:
-            pinned = pin_data[node["id"]] or []
+            pinned = ad.flows.coerce_flow_item_list(pin_data[node["id"]] or [])
             out_lists = [pinned] + [[] for _ in range(outputs_count - 1)]
         else:
             # Branch-skipping rule.

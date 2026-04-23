@@ -535,3 +535,105 @@ async def test_run_flow_flowitem_binary_propagates_through_passthrough() -> None
     assert b_a.binary["f"].data == b"flow-test-bytes"
     assert b_p.binary["f"].data == b"flow-test-bytes"
 
+
+@pytest.mark.asyncio
+async def test_run_flow_pin_data_coerces_raw_dict_items_to_flowitems() -> None:
+    """
+    `pin_data` loaded from storage can be plain dicts; engine must coerce them to `FlowItem`
+    so downstream nodes can access `.json` / `.binary` / `.meta` attributes.
+    """
+
+    nodes = [
+        _n("t1", "Start", "flows.trigger.manual", 0),
+        _n("p1", "Pinned", "tests.passthrough", 200),
+        _n("g1", "Tag", "tests.tag", 400, {"tag": "ok"}),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="p1", connection_type="main", index=0)]]},
+        "p1": {"main": [[ad.flows.NodeConnection(dest_node_id="g1", connection_type="main", index=0)]]},
+    }
+    pin_data = {
+        "p1": [
+            {"json": {"hello": "world"}, "binary": {}, "meta": {"m": 1}, "paired_item": None},
+        ]
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(
+        context=ctx,
+        revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": pin_data},
+    )
+    assert res["status"] == "success"
+
+    pinned_out = ctx.run_data["p1"]["data"]["main"][0]
+    assert isinstance(pinned_out[0], ad.flows.FlowItem)
+    assert pinned_out[0].json["hello"] == "world"
+
+    tagged = ctx.run_data["g1"]["data"]["main"][0]
+    assert tagged[0].json["path_tag"] == "ok"
+
+
+@pytest.mark.asyncio
+async def test_run_flow_pin_data_coerces_binary_ref_dicts() -> None:
+    """Pinned dict binary refs must become `BinaryRef` objects in `FlowItem.binary`."""
+
+    nodes = [
+        _n("t1", "Start", "flows.trigger.manual", 0),
+        _n("p1", "Pinned", "tests.passthrough", 200),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="p1", connection_type="main", index=0)]]},
+    }
+    pin_data = {
+        "p1": [
+            {
+                "json": {"x": 1},
+                "binary": {
+                    "f": {
+                        "mime_type": "text/plain",
+                        "file_name": "x.txt",
+                        "data": b"abc",
+                        "storage_id": "s1",
+                    }
+                },
+                "meta": {},
+                "paired_item": None,
+            }
+        ]
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(
+        context=ctx,
+        revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": pin_data},
+    )
+    assert res["status"] == "success"
+
+    pinned_item = ctx.run_data["p1"]["data"]["main"][0][0]
+    assert isinstance(pinned_item, ad.flows.FlowItem)
+    assert isinstance(pinned_item.binary["f"], ad.flows.BinaryRef)
+    assert pinned_item.binary["f"].mime_type == "text/plain"
+    assert pinned_item.binary["f"].file_name == "x.txt"
+    assert pinned_item.binary["f"].data == b"abc"
+    assert pinned_item.binary["f"].storage_id == "s1"
+
