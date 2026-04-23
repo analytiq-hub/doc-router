@@ -558,6 +558,7 @@ class NodeType(Protocol):
     description:      str           # one-line description for UI palette
     category:         str           # palette grouping, e.g. "DocRouter", "Generic"
     is_trigger:       bool          # True for trigger nodes (min_inputs == 0, seeds execution)
+    is_merge:         bool          # True for merge-style nodes; engine accumulates inputs before running
     min_inputs:       int           # minimum required input slots (0 for triggers)
     max_inputs:       int | None    # None = unbounded
     outputs:          int           # number of output slots
@@ -1107,58 +1108,52 @@ src/components/flows/
 
 ## 18. Implementation plan
 
-### Phase 1 — Core engine (`analytiq_data/flows/`)
+### Phase 1 — Core engine (`analytiq_data/flows/`) — **Complete**
 
-**Step 1.1 — Types and items**
+All steps below are implemented and covered by `tests_flow/`.
+
+**Step 1.1 — Types and items** ✓
 Files: `items.py`, `connections.py`
 - `FlowItem`, `BinaryRef` dataclasses
-- `NodeConnection` (`dest_node_id`, `connection_type: Literal["main"]`, `index`), `Connections` map type
+- `NodeConnection` (`dest_node_id`, `connection_type: Literal[“main”]`, `index`), `Connections` map type
 
-**Step 1.2 — Node registry**
+**Step 1.2 — Node registry** ✓
 File: `node_registry.py`
-- `NodeType` Protocol
+- `NodeType` Protocol (including `is_merge: bool` — see §9.1)
 - `register()`, `get()`, `list_all()`
 
-**Step 1.3 — Validation + engine**
+**Step 1.3 — Validation + engine** ✓
 Files: `engine.py`, `execution.py`, `context.py`
-- `validate_revision` / `FlowValidationError` in `engine.py` (graph rules aligned
-  with §8; raises on failure)
-- `run_flow` — main loop; `persist_run_data` + `read_stop` for
-  `flow_executions` updates via `analytiq_client`
-- `ExecutionContext` in `context.py` (includes `analytiq_client`, not a
-  DocRouter `services` object)
+- `validate_revision` / `FlowValidationError` — all 11 rules from §8; unknown
+  node types raise `FlowValidationError` (not `KeyError`)
+- `run_flow` wraps `_execute_loop` with optional `asyncio.wait_for`
+- `_execute_loop` uses `collections.deque` for O(1) pop; `start_datetime`
+  captured before execution; merge detection via `is_merge` (not key string);
+  merge-slot list extended rather than reset on growth; `float(timeout)` not `int`
+- `ExecutionContext` in `context.py`
 
-**Step 1.4 — Built-in generic nodes + registration**
-Files: `register_builtin.py`, `nodes/{trigger_manual,webhook,branch,merge}.py`
-(and **`nodes/code.py`** for `flows.code` once implemented)
-- `register_builtin_nodes()` registers the generic trigger, outbound webhook,
-  branch, merge, and **code** types.
+**Step 1.4 — Built-in generic nodes + registration** ✓
+Files: `register_builtin.py`, `nodes/{trigger_manual,webhook,branch,merge,code}.py`
+- All five node types registered by `register_builtin_nodes()`
+- Every node class sets `is_trigger` and `is_merge`
 
-**Step 1.5 — `flows.code` (v1)**
-File: `nodes/code.py` (name TBD)
-- Node type `flows.code`: execute a **small Python snippet** in-process against
-  `FlowItem` / `context` with **documented limits** (e.g. timeout, no network
-  unless explicitly allowed later).
-- Register in `register_builtin.py`.
-- Must be covered by **unit tests** that run `run_flow` on tiny revisions (no
-  real Mongo if tests use in-memory / stub `analytiq_client` patterns).
+**Step 1.5 — `flows.code` (v1)** ✓
+File: `nodes/code.py`, `code_runner.py`
+- Runs a Python snippet in a separate subprocess (`sys.executable -I -S`)
+- JSON stdin/stdout contract; safe builtins (no `__import__`)
+- `_minimal_env()` passes only `PATH`
+- Subprocess context: `{“trigger”, “node_id”, “mode”}` — enrichment planned in §20.4
 
-**Tests: `packages/python/tests_flow/` (optional suite; not part of default
-`make tests`)**
+**Tests: `packages/python/tests_flow/`**
 
 ```
 tests_flow/
   conftest.py           Ensures `packages/python` is on `sys.path`
-  test_flows_engine.py  Validation + graph invariants
-  (add)                 run_flow tests: branch routing, merge + skip flush,
-                        flows.code snippet output
+  test_flows_engine.py  Validation (DAG accept, cycle reject) + run_flow
+                        (code node output, branch/merge skip flush)
 ```
 
-Run: `make tests-flow` (installs test deps, runs pytest on `tests_flow` only).
-
-**v1 test bar:** before calling the v1 backend “complete”, `tests_flow` should
-include **executing** revisions (via `run_flow`) that exercise **branch**,
-**merge**, and **`flows.code`**, not validation-only cases.
+Run: `pytest packages/python/tests_flow/` (no MongoDB required; `analytiq_client=None`).
 
 ---
 
@@ -1281,111 +1276,165 @@ in-product code path.
 
 ### 20.3 Plan: parameter expressions (n8n-style, Python backend)
 
-**Goal:** For each **string** (and optionally other) fields in a node’s
-`parameters`, support a **literal** value or a **templated** value that is
-**evaluated** once per `FlowItem` (and access to prior nodes for that
-execution), analogous to n8n’s `={{ $json.field }}` / `$node[…]`.
+**Goal:** For each **string** field in a node’s `parameters`, support a
+**literal** value or a **templated** value evaluated before `execute()` runs,
+analogous to n8n’s `={{ $json.field }}` / `$node[…]`.
 
-**Suggested building blocks (implementation detail TBD; keep security in mind):**
+#### Design
 
-1. **Surface syntax** — Align with the product habit from n8n: e.g. values
-   starting with `=` (single-cell expression) for strings, full parsing rules in
-   a dedicated `flows/expressions` (or `flows/template`) module.
-2. **Read-only data proxy** (like `WorkflowDataProxy` in `n8n.md` §4, §19):
-   - `$json` — current item’s JSON (and optionally binary metadata, not raw
-     bytes, in expressions).
-   - `$node` — read **completed** upstream outputs for this execution from
-     `context.run_data` (and/or a slim index built as nodes finish), keyed by
-     **node id** (we use ids, not display names, for rename-safety; optional
-     alias by `name` with explicit disambiguation rules).
-   - Reserved: `$env` / org secrets — only if passed explicitly with strict
-     allowlists; never arbitrary environment by default in multi-tenant runs.
-3. **When to evaluate** — **After** inputs for the node are assembled, **before**
-   `NodeType.execute`, recursively walk `parameters` (or only whitelisted
-   fields per node type) and replace expression strings with resolved values.
-4. **Safety** — **Do not** `eval` user strings as Python. Prefer a **restricted**
-   expression language (e.g. JSONata subset, a small safe AST, or
-   jinja2-style with locked globals) and hard **timeouts** / **size** limits
-   (same security class as n8n’s expression vs. full Code node, per
-   `docs/n8n.md` doc-router note under §19).
-5. **Tests** — `tests_flow`: per-item resolution, `$node` from a prior
-   node’s output, error messages on undefined references, and interaction with
-   `pin_data` (pinned items must be visible to the proxy as if the node had
-   run).
+**New file: `analytiq_data/flows/expressions.py`**
 
-**“Between nodes”:** Implement **parameter-side** resolution first (matches
-n8n). If the product later needs a **first-class “edge transform”** (expression
-on the connection object), that is an **add-on** and not required for n8n core
-parameter parity.
+1. **Surface syntax** — A string parameter value starting with `=` is an
+   expression; everything else is a literal. Matches n8n’s single-cell `=`
+   convention.
+
+2. **Variables in scope:**
+   - `$json` — current item’s `.json` dict (or `{}` if the node has no input).
+   - `$node` — a plain `dict` keyed by node id; each value is
+     `{“main”: [[item_json, …], …], “status”: “…”}` with `FlowItem` objects
+     already materialized to their `.json` dicts. Only completed nodes appear.
+
+   `$json` and `$node` are preprocessed to valid Python identifiers (`_json`,
+   `_node`) before `ast.parse`.
+
+3. **Safety** — Parse with `ast.parse(mode=’eval’)`. Walk the AST and reject
+   any node type not in an explicit allow-set. Allowed: `Constant`, `Name`,
+   `Attribute`, `Subscript`, `BinOp`, `UnaryOp`, `BoolOp`, `Compare`,
+   `IfExp`, `Slice`, `List`, `Tuple`, `Dict`. **`ast.Call` is not in the
+   set** — no function calls. Evaluate with
+   `eval(compiled, {“__builtins__”: {}}, env)`. Wrap in `ExpressionError`
+   on failure.
+
+4. **`resolve_parameters(params, *, item, run_data) -> dict`** — walks the
+   params dict recursively, evaluates `=`-prefixed strings, passes everything
+   else through unchanged. Lists and nested dicts are resolved recursively.
+
+5. **Integration in `_execute_loop`** — inside the existing `try` block, just
+   before `node_type.execute()`:
+   ```python
+   first_item = next((it for slot in wi.inputs for it in slot), None) if wi.inputs else None
+   resolved_node = {**node, “parameters”: resolve_parameters(
+       node.get(“parameters”) or {}, item=first_item, run_data=context.run_data)}
+   out_lists = await node_type.execute(context, resolved_node, wi.inputs)
+   ```
+   The original node dict is not mutated. Expression errors respect `on_error`
+   because they are raised inside the existing `except Exception` block.
+
+6. **Limitation (document):** expressions resolve against the *first* input
+   item, because `execute()` receives all items at once. Per-item resolution
+   would require changing the `NodeType.execute` signature and is deferred.
+
+**Tests to add in `tests_flow/test_expressions.py`:**
+- `=$json[“x”]` resolves against item json
+- `=$node[“t1”][“main”][0][0][“trigger”][“x”]` resolves from prior run_data
+- Undefined key raises `ExpressionError` → caught by `on_error`
+- Unsafe construct (`=__import__(‘os’)`) rejected before eval
+- `pin_data`-pinned outputs are visible via `$node` as if the node had run
+
+**”Between nodes”:** Parameter-side resolution (above) matches n8n’s model.
+Edge-attached transforms are not required for parity and are not planned.
 
 ### 20.4 Plan: expressions + `flows.code`
 
-- **Option A (recommended for parity):** Resolve **templated** entries inside
-  `parameters` (e.g. `python_code` or a separate `context_template` field) the
-  same way as any other node, **before** the subprocess runs — so the child
-  Python process still receives only JSON-serializable `items` and `context` (no
-  expression engine inside the sandbox).
-- **Option B:** Pass an **enriched** `context` into `run_python_code` with
-  pre-bound `$node` / `$json` **already materialized to plain dicts** (no
-  template strings left). Combine with Option A for fields that are not the raw
-  code string.
-- **Out of scope:** Re-implementing n8n’s in-sandbox **JavaScript** Code node
-  APIs inside Python; keep one clear Python `run()` contract (`docs/flows.md`
-  `flows.code` section).
+Both options below apply simultaneously; they are independent changes.
 
-### 20.5 Plan: dynamic node types (API + MongoDB)
+- **Option A — parameter expressions (same as any other node):** The
+  `python_code` string parameter is a literal (not an expression — a code string
+  starting with `=` would be a syntax error anyway). Other parameters on the
+  `flows.code` node (e.g. a future `timeout_seconds` override) can use `=`
+  expressions normally via the §20.3 resolver. No special handling required.
 
-**Goal:** Orgs can **register** new node *definitions* (metadata + parameter
-schema + implementation reference) **without** redeploying the API, with
-definitions **persisted** in MongoDB and merged into the **same** execution
+- **Option B — enriched subprocess context (implement alongside §20.3):** Add a
+  `"nodes"` key to the context dict passed to `run_python_code`, populated from
+  `materialize_node_data(context.run_data)` (the same helper used by §20.3):
+  ```python
+  ctx = {
+      "trigger": context.trigger_data,
+      "node_id": node.get("id"),
+      "mode": context.mode,
+      "nodes": materialize_node_data(context.run_data),
+  }
+  ```
+  This lets user snippets access prior node outputs:
+  ```python
+  def run(items, context):
+      text = context["nodes"]["ocr1"]["main"][0][0].get("text", "")
+  ```
+  The subprocess still receives only JSON-serializable data; no expression
+  engine inside the sandbox.
+
+- **Out of scope:** Re-implementing n8n’s in-sandbox JavaScript Code node APIs;
+  keep one clear Python `run(items, context)` contract.
+
+### 20.5 Plan: dynamic node types (API + MongoDB) — **Deferred; needs design first**
+
+**Goal:** Orgs can **register** new node *definitions* without redeploying the
+API, with definitions persisted in MongoDB and merged into the same execution
 path as built-ins.
 
-**Suggested shape (illustrative; finalize in a follow-up ADR or ticket):**
+**Why deferred:** Requires a new collection, CRUD routes, a startup loader,
+`validate_revision` changes to accept dynamic keys, and a security model for
+what implementations are allowed. This is ~2–3 days of work and should be
+planned as a separate ticket once §20.3 is stable.
 
-1. **Collection** e.g. `flow_node_type_definitions` (name TBD) with
-   `organization_id`, `key` (registry key, unique per org or globally per
-   policy), `version`, `label`, `description`, `category`, `parameter_schema`
-   (JSON Schema), I/O counts, `is_trigger`, `is_merge`, and an **`implementation`**
-   discriminated union, for example:
-   - `http_proxy` — outbound call template (URL/body/headers as templated
-     strings, evaluated with §20.3);
-   - or `invoke_internal` — map to an existing built-in *implementation* with
-     fixed behavior;
-   - future: `wasm` / `remote_plugin` if ever needed.
-2. **API** — CRUD under the existing org-scoped flow routes (e.g. list/create
-   types, get by key, deprecate) with org **admin** role checks.
-3. **Loader** — On worker/API startup and after writes: load org-visible
-   definitions and **register** small wrapper classes that implement
-   `NodeType` and delegate to the generic proxy implementation (or refresh a
-   cache invalidation story if definitions are read per execution).
-4. **Validation** — `validate_revision` must accept dynamic keys when the
-   definition exists in DB; schema validation uses stored `parameter_schema`.
-5. **Security** — Rate limits, audit log, optional approval workflow; never
-   execute raw arbitrary Python from DB without a **separate** hardening story
-   (default to **declarative** `http` / template nodes, not `exec`).
+**Agreed shape (for the ticket):**
+
+1. **Collection `flow_node_type_definitions`** — fields: `organization_id`,
+   `key` (unique per org), `version`, `label`, `description`, `category`,
+   `parameter_schema` (JSON Schema), `min_inputs`, `max_inputs`, `outputs`,
+   `output_labels`, `is_trigger`, `is_merge`, and an **`implementation`**
+   discriminated union:
+   - `http_proxy` — outbound HTTP call with URL/headers/body as expression
+     strings (§20.3); the only v1 implementation type.
+   - `invoke_internal` — delegates to an existing built-in key with fixed
+     behavior (useful for aliasing).
+   - Future: `wasm` / `remote_plugin` — not in v1.
+
+2. **API** — CRUD under `/v0/orgs/{org_id}/flows/node-types` (admin-only);
+   list endpoint merges DB-defined and built-in types.
+
+3. **Loader** — On API/worker startup and after any write: load org-visible
+   definitions, instantiate wrapper `NodeType` classes, call `register()`.
+   Cache invalidation: re-load on write; per-execution re-fetch is not needed.
+
+4. **Validation** — `validate_revision` already calls `ad.flows.get(type)`;
+   the loader ensures dynamic types are registered before validation runs.
+
+5. **Security** — Never execute raw Python from DB. Default to declarative
+   `http_proxy` only. Add rate limits and audit log before shipping.
 
 ### 20.6 Plan: `pin_data` hardening (blocking for trustworthy UI)
 
-1. **Coercion** — Add `coerce_flow_item_list(raw) -> list[FlowItem]` (and binary
-   handling consistent with `engine._bson_serialize_value` / reverse) for
-   `pin_data[node_id]`.
-2. **Call site** — Invoke coercion inside `run_flow` / `_execute_loop` so every
-   pinned output is a real `FlowItem` before routing to downstream nodes.
-3. **Tests** — Pin a branch with JSON + binary references; assert downstream
-   `flows.code` sees correct shapes.
+**Gap:** Pin data stored in MongoDB comes back as plain `dict`s. The engine
+passes them unchanged to downstream nodes; any node that accesses `.json`,
+`.binary`, or `.meta` as attributes gets `AttributeError`.
+
+1. **Coercion functions** — Add to `items.py`:
+   - `coerce_binary_ref(raw) -> BinaryRef`
+   - `coerce_flow_item(raw) -> FlowItem` — accepts `FlowItem` (no-op) or `dict`
+     (maps `json`, `binary`, `meta`, `paired_item` fields; coerces binary refs)
+   - `coerce_flow_item_list(raw) -> list[FlowItem]`
+
+2. **Call site** — One line change in `_execute_loop`, pin_data branch:
+   ```python
+   pinned = coerce_flow_item_list(pin_data[node["id"]] or [])
+   out_lists = [pinned] + [[] for _ in range(outputs_count - 1)]
+   ```
+
+3. **Tests** — Add to `tests_flow/`:
+   - Pin a node with raw dict items; assert downstream `flows.code` sees
+     `FlowItem` with correct `.json`.
+   - Pin with a binary ref dict; assert `BinaryRef` fields are set correctly.
 
 ### 20.7 Suggested implementation order (before UI)
 
-1. **Pin data coercion + tests** (§20.6) — small, de-risks editor “debug with
-   pins” workflows.
-2. **Expression engine v1** (§20.3) — string parameters + `$json` + `$node` by
-   id, integrated into `run_flow` parameter resolution.
-3. **`flows.code` + expressions** (§20.4) — templated parameters or materialized
-   context, document the contract in §11 / code node section.
-4. **Dynamic node types** (§20.5) — collection, API, loader, and at least one
-   reference implementation (e.g. HTTP proxy type).
+| Step | Section | Effort | Depends on | Status |
+|------|---------|--------|------------|--------|
+| 1 | **Pin data coercion + tests** (§20.6) | ~1 h | — | Not started |
+| 2 | **Expression engine v1** (§20.3) | ~1 day | — | Not started |
+| 3 | **`flows.code` enriched context** (§20.4 Option B) | ~1 h | §20.3 (`materialize_node_data`) | Not started |
+| 4 | **Dynamic node types** (§20.5) | ~2–3 days | §20.3 (expressions in `http_proxy`) | Needs design ticket |
 
-After this backlog, the backend is in a good position to support a **canvas
-UI** (§17) with n8n-like authoring patterns from `docs/n8n.md` without requiring
-our stack to copy every n8n internal (queue, webhooks, credentials) — those
-remain incremental.
+After steps 1–3 the backend is in a good position to support the **canvas UI**
+(§17) with n8n-like authoring patterns without copying every n8n internal
+(queue, webhooks, credentials) — those remain incremental Phase 3 work.
