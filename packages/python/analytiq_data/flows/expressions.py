@@ -62,8 +62,84 @@ _ALLOWED_AST_NODES: tuple[type[ast.AST], ...] = (
 
 
 def _rewrite_vars(expr: str) -> str:
-    # n8n-ish surface syntax uses $json / $node; map to valid Python identifiers.
-    return expr.replace("$json", "_json").replace("$node", "_node")
+    """
+    Rewrite n8n-ish `$json` / `$node` to valid Python identifiers, but only when
+    those sequences appear *outside* Python string literals.
+
+    We intentionally do not try to be a full Python lexer; the goal is simply to
+    avoid rewriting inside quoted strings (e.g. "literal $json").
+    """
+
+    out: list[str] = []
+    i = 0
+    n = len(expr)
+
+    quote: str | None = None  # "'" | '"' when inside a string
+    triple = False
+    while i < n:
+        ch = expr[i]
+
+        if quote is None:
+            if ch in ("'", '"'):
+                # Enter string; detect triple quotes.
+                if i + 2 < n and expr[i : i + 3] == ch * 3:
+                    quote = ch
+                    triple = True
+                    out.append(ch * 3)
+                    i += 3
+                    continue
+                quote = ch
+                triple = False
+                out.append(ch)
+                i += 1
+                continue
+
+            if expr.startswith("$json", i):
+                out.append("_json")
+                i += 5
+                continue
+            if expr.startswith("$node", i):
+                out.append("_node")
+                i += 5
+                continue
+
+            out.append(ch)
+            i += 1
+            continue
+
+        # Inside a string.
+        if not triple and ch == "\\":
+            # Preserve escapes in normal strings.
+            if i + 1 < n:
+                out.append(expr[i : i + 2])
+                i += 2
+            else:
+                out.append(ch)
+                i += 1
+            continue
+
+        if triple:
+            if i + 2 < n and expr[i : i + 3] == quote * 3:
+                out.append(quote * 3)
+                i += 3
+                quote = None
+                triple = False
+                continue
+            out.append(ch)
+            i += 1
+            continue
+
+        # Single-quoted string end.
+        if ch == quote:
+            out.append(ch)
+            i += 1
+            quote = None
+            continue
+
+        out.append(ch)
+        i += 1
+
+    return "".join(out)
 
 
 def _validate_expr_ast(tree: ast.AST) -> None:

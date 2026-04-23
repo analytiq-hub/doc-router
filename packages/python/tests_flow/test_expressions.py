@@ -202,3 +202,9 @@ async def test_expression_can_see_pin_data_outputs_via_node() -> None:
     out = ctx.run_data["e1"]["data"]["main"][0][0]
     assert out.json["value"] == 9
 
+
+def test_rewrite_vars_does_not_touch_string_literals() -> None:
+    # `$json` inside quotes should remain literal; outside should be rewritten.
+    rewritten = ad.flows.expressions._rewrite_vars("'$json' + $json['x']")
+    assert rewritten == "'$json' + _json['x']"
+
