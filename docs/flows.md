@@ -1066,7 +1066,14 @@ await ad.queue.send_msg(analytiq_client, "flow_run", {
   revision, builds an `ExecutionContext` (including `analytiq_client`), and
   runs `analytiq_data.flows.run_flow`.
 - Execute the exact `flow_revid` from the queue message. Never re-resolve "latest".
-- Update `last_heartbeat_at` every ~5 seconds while running.
+- **Compare-and-set claim**: before calling `run_flow`, update the execution document
+  with filter `{"status": "queued"}`. If `matched_count == 0` the message was already
+  claimed by another worker; delete it and return.
+- **Heartbeat**: an `asyncio.Task` (`_heartbeat_loop`) is started immediately after the
+  claim and cancelled in a `finally` block after `run_flow` returns. It wakes every
+  `HEARTBEAT_INTERVAL_SECS` (5 s) and writes `last_heartbeat_at` to MongoDB. This
+  ensures liveness is maintained even during a single long-running node (e.g. a slow
+  `flows.code` subprocess), not just at node boundaries.
 - Cooperative stop: `read_stop` between node executions (see §12.9).
 - On completion (success or error), set `finished_at` and final `status`.
 - On startup, sweep for stale executions (see §5.4 stale-execution recovery).
@@ -1161,8 +1168,8 @@ File: `expressions.py`
 
 **Step 1.7 — Pin-data hardening** ✓  (§20.6)
 File: `items.py`
-- `coerce_binary_ref(raw) -> BinaryRef`: strict type-checking; raises `TypeError` on invalid fields
-- `coerce_flow_item(raw) -> FlowItem`: accepts `FlowItem` (no-op) or `dict`; raises `TypeError` on invalid fields
+- `coerce_binary_ref(raw) -> BinaryRef`: strict type-checking; raises `ValueError` on invalid fields
+- `coerce_flow_item(raw) -> FlowItem`: accepts `FlowItem` (no-op) or `dict`; raises `ValueError` on invalid fields (consistent with `FlowValidationError` / `ExpressionError` which are both `ValueError` subclasses)
 - `coerce_flow_item_list(raw) -> list[FlowItem]`: accepts `None` (→ `[]`) or list
 - `coerce_json_connections_to_dataclasses(raw)` in `connections.py`: converts MongoDB dict connections to `NodeConnection` dataclasses; handles legacy field names (`node`/`node_id`/`node`)
 
