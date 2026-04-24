@@ -1,8 +1,10 @@
 import React, { useCallback, useMemo, useRef } from 'react';
 import ReactFlow, {
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
+  Panel,
   addEdge,
   type Connection,
   type Edge,
@@ -13,13 +15,21 @@ import ReactFlow, {
   type NodeChange,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
+import './flows-canvas.css';
 
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
 import FlowNodePalette from './FlowNodePalette';
 import FlowNodeConfigPanel from './FlowNodeConfigPanel';
 import FlowCanvasNode from './FlowCanvasNode';
+import FlowCanvasEdge from './FlowCanvasEdge';
 import { inputHandleCount } from './flowRf';
 import type { FlowRfNodeData } from './flowRf';
+
+const EXECUTE_BUTTON_BG = '#ff6d5a';
+const EXECUTE_BUTTON_BG_HOVER = '#e85d4d';
+
+/** React Flow `edgeTypes` key for the smooth step edge with item-count label. */
+const LABELED_EDGE_TYPE = 'flowLabeled' as const;
 
 function uuid(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now());
@@ -32,6 +42,13 @@ function parseHandleIndex(handle: string | null | undefined, prefix: string): nu
   return Number.isFinite(idx) ? idx : null;
 }
 
+function toCanvasEdges(edges: Edge[]): Edge[] {
+  return edges.map((e) => ({
+    ...e,
+    type: e.type && e.type !== 'default' ? e.type : LABELED_EDGE_TYPE,
+  }));
+}
+
 const FlowEditor: React.FC<{
   nodeTypes: FlowNodeType[];
   nodes: Node<FlowRfNodeData>[];
@@ -40,13 +57,32 @@ const FlowEditor: React.FC<{
   onNodesChange: (next: Node<FlowRfNodeData>[]) => void;
   onEdgesChange: (next: Edge[]) => void;
   onSelectedNodeIdChange: (id: string | null) => void;
-}> = ({ nodeTypes, nodes, edges, selectedNodeId, onNodesChange, onEdgesChange, onSelectedNodeIdChange }) => {
+  /** Primary “run workflow” action shown on the canvas (optional). */
+  onExecute?: () => void;
+}> = ({
+  nodeTypes,
+  nodes,
+  edges,
+  selectedNodeId,
+  onNodesChange,
+  onEdgesChange,
+  onSelectedNodeIdChange,
+  onExecute,
+}) => {
   const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const canvasEdges = useMemo(() => toCanvasEdges(edges), [edges]);
 
   const rfNodeTypes = useMemo(
     () => ({
       'flow-node': FlowCanvasNode,
+    }),
+    [],
+  );
+
+  const rfEdgeTypes = useMemo(
+    () => ({
+      [LABELED_EDGE_TYPE]: FlowCanvasEdge,
     }),
     [],
   );
@@ -66,15 +102,28 @@ const FlowEditor: React.FC<{
       const maxIn = inputHandleCount(dstType);
       if (inIdx < 0 || inIdx >= maxIn) return;
 
-      onEdgesChange(addEdge(params, edges));
+      onEdgesChange(
+        addEdge(
+          {
+            ...params,
+            type: LABELED_EDGE_TYPE,
+            style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
+            data: { itemCount: 1 },
+          },
+          edges,
+        ),
+      );
     },
     [edges, nodeTypesByKey, nodes, onEdgesChange],
   );
 
-  const onSelectionChange = useCallback((e: { nodes: Node[] }) => {
-    const id = e.nodes?.[0]?.id ?? null;
-    onSelectedNodeIdChange(id);
-  }, [onSelectedNodeIdChange]);
+  const onSelectionChange = useCallback(
+    (e: { nodes: Node[] }) => {
+      const id = e.nodes?.[0]?.id ?? null;
+      onSelectedNodeIdChange(id);
+    },
+    [onSelectedNodeIdChange],
+  );
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
@@ -142,14 +191,21 @@ const FlowEditor: React.FC<{
   );
 
   return (
-    <div className="h-[calc(100vh-160px)] border border-gray-200 rounded-lg overflow-hidden">
-      <div className="grid grid-cols-[260px_1fr_340px] h-full">
+    <div className="docrouter-flow-canvas h-[min(80vh,calc(100vh-10rem))] min-h-[480px] overflow-hidden rounded-lg border border-[#e2e4e8] bg-[#f7f7f9]">
+      <div className="grid h-full w-full [grid-template-columns:minmax(200px,240px)_1fr_minmax(300px,380px)]">
         <FlowNodePalette nodeTypes={nodeTypes} />
-        <div ref={wrapperRef} className="h-full" onDrop={onDrop} onDragOver={onDragOver}>
+        <div
+          ref={wrapperRef}
+          className="relative h-full min-h-0"
+          onDrop={onDrop}
+          onDragOver={onDragOver}
+        >
           <ReactFlow
+            className="h-full w-full"
             nodes={nodes}
-            edges={edges}
+            edges={canvasEdges}
             nodeTypes={rfNodeTypes}
+            edgeTypes={rfEdgeTypes}
             onNodesChange={(changes: NodeChange[]) => {
               onNodesChange(applyNodeChanges(changes, nodes));
             }}
@@ -159,10 +215,51 @@ const FlowEditor: React.FC<{
             onConnect={onConnect}
             onSelectionChange={onSelectionChange}
             fitView
+            fitViewOptions={{ padding: 0.25 }}
+            proOptions={{ hideAttribution: true }}
+            minZoom={0.15}
+            maxZoom={1.5}
+            defaultEdgeOptions={{
+              type: LABELED_EDGE_TYPE,
+              style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
+              data: { itemCount: 1 },
+            }}
+            connectionLineStyle={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+            elevateEdgesOnSelect
           >
-            <Controls />
-            <MiniMap />
-            <Background />
+            <Background color="#b8c0cc" gap={20} size={1.2} variant={BackgroundVariant.Dots} />
+            <Controls
+              className="!shadow-md"
+              position="bottom-left"
+              showFitView
+              showInteractive={false}
+            />
+            <MiniMap
+              position="bottom-right"
+              className="!m-2"
+              pannable
+              zoomable
+              nodeStrokeWidth={2}
+              maskColor="rgba(240, 240, 245, 0.7)"
+            />
+            {onExecute && (
+              <Panel position="bottom-center" className="!mb-2">
+                <button
+                  type="button"
+                  onClick={onExecute}
+                  className="rounded-md px-6 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95 active:scale-[0.99]"
+                  style={{ backgroundColor: EXECUTE_BUTTON_BG }}
+                  onMouseEnter={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG_HOVER;
+                  }}
+                  onMouseLeave={(e) => {
+                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG;
+                  }}
+                >
+                  Execute workflow
+                </button>
+              </Panel>
+            )}
           </ReactFlow>
         </div>
         <FlowNodeConfigPanel node={selected.node} nodeType={selected.nodeType} onChange={onPatchSelectedNode} />
@@ -172,4 +269,3 @@ const FlowEditor: React.FC<{
 };
 
 export default FlowEditor;
-

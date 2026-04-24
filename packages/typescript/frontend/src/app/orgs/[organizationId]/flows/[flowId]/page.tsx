@@ -211,7 +211,7 @@ export default function FlowDetailPage({
 
   return (
     <div className="p-4">
-      <div className="max-w-4xl mx-auto">
+      <div className="w-full max-w-[1920px] mx-auto">
         <div className="mb-4">
           <Link
             href={`/orgs/${organizationId}/flows`}
@@ -270,6 +270,7 @@ export default function FlowDetailPage({
                 onNodesChange={onNodesChange}
                 onEdgesChange={onEdgesChange}
                 onSelectedNodeIdChange={onSelectedNodeIdChange}
+                onExecute={onRun}
               />
             </div>
           )}

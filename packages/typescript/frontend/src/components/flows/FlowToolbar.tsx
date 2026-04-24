@@ -30,8 +30,17 @@ const FlowToolbar: React.FC<{
         <Button variant="outlined" onClick={onSave} disabled={!isDirty || isSaving}>
           {isSaving ? 'Saving…' : 'Save'}
         </Button>
-        <Button variant="contained" onClick={onRun}>
-          Run
+        <Button
+          variant="contained"
+          onClick={onRun}
+          sx={{
+            backgroundColor: '#ff6d5a',
+            '&:hover': { backgroundColor: '#e85d4d' },
+            fontWeight: 600,
+            textTransform: 'none',
+          }}
+        >
+          Execute workflow
         </Button>
         {active ? (
           <Button variant="outlined" onClick={onDeactivate}>

@@ -17,8 +17,8 @@ const FlowNodeConfigPanel: React.FC<{
 
   if (!node) {
     return (
-      <div className="h-full border-l border-gray-200 bg-white p-3">
-        <div className="text-sm text-gray-500">Select a node to configure.</div>
+      <div className="h-full border-l border-[#e2e4e8] bg-[#fbfbfc] p-4">
+        <div className="text-sm text-[#6b7280]">Click a node on the canvas to edit its parameters.</div>
       </div>
     );
   }
@@ -132,9 +132,14 @@ const FlowNodeConfigPanel: React.FC<{
   };
 
   return (
-    <div className="h-full overflow-auto border-l border-gray-200 bg-white p-3">
-      <div className="text-xs text-gray-500">{nodeType?.label ?? node.type}</div>
-      <div className="text-sm font-semibold text-gray-900 mb-3">Node config</div>
+    <div className="flex h-full min-w-[300px] max-w-md flex-col overflow-hidden border-l border-[#e2e4e8] bg-white">
+      <div className="shrink-0 border-b border-[#eceff2] bg-[#fbfbfc] px-3 py-2.5">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+          {nodeType?.label ?? node.type}
+        </div>
+        <div className="truncate text-sm font-semibold text-[#1a1d21]">{node.name}</div>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-3">
 
       <TextField
         label="Name"
@@ -163,12 +168,13 @@ const FlowNodeConfigPanel: React.FC<{
         <MenuItem value="continue">continue</MenuItem>
       </TextField>
 
-      <div className="mt-2">
-        <div className="text-xs font-semibold text-gray-600 mb-2">Parameters</div>
+      <div className="mt-1">
+        <div className="mb-2 text-xs font-semibold text-[#374151]">Parameters</div>
         {Object.entries(schemaProps).map(([k, subschema]) => renderParamField(k, subschema))}
         {Object.keys(schemaProps).length === 0 && (
-          <div className="text-sm text-gray-500">No parameters for this node.</div>
+          <div className="text-sm text-[#6b7280]">No parameters for this node type.</div>
         )}
+      </div>
       </div>
     </div>
   );

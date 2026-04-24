@@ -571,7 +571,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                         type="text"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="e.g. Production n8n"
+                        placeholder="e.g. Production automations"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md"
                       />
                     </div>
@@ -658,7 +658,7 @@ export default function OrganizationWebhooks({ organizationId }: { organizationI
                           DocRouter sends body signature in <span className="font-mono">X-DocRouter-Signature</span>.
                         </div>
                       ) : (
-                        <div>DocRouter sends a static auth header (works with n8n Webhook “Header Auth”).</div>
+                        <div>DocRouter sends a static auth header (for tools that expect a static header name/value).</div>
                       )}
                     </div>
                   </div>
