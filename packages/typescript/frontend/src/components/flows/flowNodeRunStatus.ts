@@ -6,7 +6,7 @@ import type { FlowRfNodeData } from './flowRf';
  */
 export type EngineNodeRunStatus = 'success' | 'error' | 'skipped' | 'stopped' | string;
 
-export type NodeRunStatusBadge = 'success' | 'error' | 'skipped' | null;
+export type NodeRunStatusBadge = 'success' | 'error' | 'skipped' | 'stopped' | 'running' | null;
 
 export function getNodeRunStatusFromRunData(
   runData: Record<string, unknown> | null | undefined,
@@ -18,11 +18,13 @@ export function getNodeRunStatusFromRunData(
   if (s === 'success') return 'success';
   if (s === 'error') return 'error';
   if (s === 'skipped') return 'skipped';
+  if (s === 'stopped') return 'stopped';
+  if (s === 'running') return 'running';
   return null;
 }
 
 export type FlowRfNodeDataWithRun = FlowRfNodeData & {
-  /** Set when visualizing a past execution (Executions tab). */
+  /** Set when visualizing a past execution (Executions tab) or derived from latest run_data in the editor. */
   executionNodeStatus?: NodeRunStatusBadge;
 };
 

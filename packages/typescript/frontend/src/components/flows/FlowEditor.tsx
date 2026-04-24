@@ -26,6 +26,7 @@ import FlowNodePalette from './FlowNodePalette';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import FlowCanvasNode from './FlowCanvasNode';
 import FlowCanvasEdge from './FlowCanvasEdge';
+import { FlowCanvasActionsProvider, FlowExecutionVisualProvider } from './flowCanvasActionsContext';
 import { inputHandleCount } from './flowRf';
 import type { FlowRfNodeData } from './flowRf';
 
@@ -250,67 +251,117 @@ const FlowEditor: React.FC<{
     return { node: n.data.flowNode, nodeType: n.data.nodeType ?? nodeTypesByKey[n.data.flowNode.type] ?? null };
   }, [configModalNodeId, nodeTypesByKey, nodes]);
 
+  const canvasActions = useMemo(
+    () => ({
+      onRunWorkflow: onExecute,
+      onToggleNodeDisabled: (nodeId: string) => {
+        onNodesChange(
+          nodes.map((n) => {
+            if (n.id !== nodeId) return n;
+            const fn = n.data.flowNode;
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                flowNode: { ...fn, disabled: !fn.disabled },
+                nodeType: n.data.nodeType ?? nodeTypesByKey[fn.type],
+              },
+            };
+          }),
+        );
+      },
+      onDeleteNode: (nodeId: string) => {
+        onNodesChange(nodes.filter((n) => n.id !== nodeId));
+        onEdgesChange(edges.filter((e) => e.source !== nodeId && e.target !== nodeId));
+      },
+      onOpenNodeSettings: (nodeId: string) => {
+        onNodesChange(nodes.map((n) => ({ ...n, selected: n.id === nodeId })));
+        setConfigModalNodeId(nodeId);
+      },
+      onDeleteEdge: (edgeId: string) => {
+        onEdgesChange(edges.filter((e) => e.id !== edgeId));
+      },
+    }),
+    [edges, nodeTypesByKey, nodes, onEdgesChange, onExecute, onNodesChange],
+  );
+
   return (
     <div className="docrouter-flow-canvas flex h-full min-h-[20rem] w-full min-w-0 flex-col overflow-hidden rounded-lg border border-[#e2e4e8] bg-[#f7f7f9]">
       <div ref={wrapperRef} className="relative h-full min-h-[12rem] min-w-0" onDrop={onDrop} onDragOver={onDragOver}>
-        <ReactFlow
-          className="h-full w-full"
-          nodes={nodes}
-          edges={canvasEdges}
-          nodeTypes={rfNodeTypes}
-          edgeTypes={rfEdgeTypes}
-          onNodesChange={(changes: NodeChange[]) => {
-            onNodesChange(applyNodeChanges(changes, nodes));
-          }}
-          onEdgesChange={(changes: EdgeChange[]) => {
-            onEdgesChange(applyEdgeChanges(changes, edges));
-          }}
-          onConnect={onConnect}
-          onNodeDoubleClick={onNodeDoubleClick}
-          fitView
-          fitViewOptions={{ padding: 0.25 }}
-          proOptions={{ hideAttribution: true }}
-          minZoom={0.15}
-          maxZoom={1.5}
-          defaultEdgeOptions={{
-            type: LABELED_EDGE_TYPE,
-            style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
-            data: { itemCount: 1 },
-          }}
-          connectionLineStyle={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
-          elevateEdgesOnSelect
-        >
-          <ScreenToFlowPointBridge targetRef={screenToFlowPointRef} />
-          <Background color="#b8c0cc" gap={20} size={1.2} variant={BackgroundVariant.Dots} />
-          <Controls className="!shadow-md" position="bottom-left" showFitView showInteractive={false} />
-          <MiniMap
-            position="bottom-right"
-            className="!m-2"
-            pannable
-            zoomable
-            nodeStrokeWidth={2}
-            maskColor="rgba(240, 240, 245, 0.7)"
-          />
-          {onExecute && (
-            <Panel position="bottom-center" className="!mb-2">
-              <button
-                type="button"
-                onClick={onExecute}
-                className="inline-flex items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95 active:scale-[0.99]"
-                style={{ backgroundColor: EXECUTE_BUTTON_BG }}
-                onMouseEnter={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG_HOVER;
-                }}
-                onMouseLeave={(e) => {
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG;
-                }}
-              >
-                <BeakerIcon className="h-4 w-4" aria-hidden />
-                Execute workflow
-              </button>
-            </Panel>
-          )}
-        </ReactFlow>
+        <FlowCanvasActionsProvider value={canvasActions}>
+          <FlowExecutionVisualProvider execution={executionForIo}>
+            <ReactFlow
+              className="h-full w-full"
+              nodes={nodes}
+              edges={canvasEdges}
+              nodeTypes={rfNodeTypes}
+              edgeTypes={rfEdgeTypes}
+              onNodesChange={(changes: NodeChange[]) => {
+                onNodesChange(applyNodeChanges(changes, nodes));
+              }}
+              onEdgesChange={(changes: EdgeChange[]) => {
+                onEdgesChange(applyEdgeChanges(changes, edges));
+              }}
+              onConnect={onConnect}
+              onNodeDoubleClick={onNodeDoubleClick}
+              fitView
+              fitViewOptions={{ padding: 0.25 }}
+              proOptions={{ hideAttribution: true }}
+              minZoom={0.15}
+              maxZoom={1.5}
+              defaultEdgeOptions={{
+                type: LABELED_EDGE_TYPE,
+                style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
+                data: { itemCount: 1 },
+              }}
+              connectionLineStyle={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+              elevateEdgesOnSelect
+            >
+              <ScreenToFlowPointBridge targetRef={screenToFlowPointRef} />
+              <Background color="#b8c0cc" gap={20} size={1.2} variant={BackgroundVariant.Dots} />
+              <Controls className="!shadow-md" position="bottom-left" showFitView showInteractive={false} />
+              <MiniMap
+                position="bottom-right"
+                className="!m-2"
+                pannable
+                zoomable
+                nodeStrokeWidth={2}
+                maskColor="rgba(240, 240, 245, 0.7)"
+              />
+              {onExecute && (
+                <Panel position="bottom-center" className="!mb-2">
+                  <button
+                    type="button"
+                    onClick={onExecute}
+                    className="inline-flex items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95 active:scale-[0.99]"
+                    style={{ backgroundColor: EXECUTE_BUTTON_BG }}
+                    onMouseEnter={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG_HOVER;
+                    }}
+                    onMouseLeave={(e) => {
+                      (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG;
+                    }}
+                  >
+                    <BeakerIcon className="h-4 w-4" aria-hidden />
+                    Execute workflow
+                  </button>
+                </Panel>
+              )}
+            </ReactFlow>
+          </FlowExecutionVisualProvider>
+        </FlowCanvasActionsProvider>
+
+        {nodes.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center">
+            <button
+              type="button"
+              onClick={openPalette}
+              className="pointer-events-auto flex h-[100px] w-[100px] flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#b8c0cc] bg-white/90 px-2 text-center text-sm font-semibold text-[#5a6270] shadow-sm transition hover:border-sky-400 hover:text-sky-800"
+            >
+              Add first step
+            </button>
+          </div>
+        )}
 
         <div className="pointer-events-auto absolute right-2 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-0.5 rounded-lg border border-[#d8dde4] bg-white/95 p-0.5 shadow-md backdrop-blur-sm">
           <Tooltip title="Add node" placement="left">

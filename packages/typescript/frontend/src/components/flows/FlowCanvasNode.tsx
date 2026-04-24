@@ -1,13 +1,29 @@
-import React from 'react';
-import { Handle, Position, type NodeProps } from 'reactflow';
-import { CheckCircleIcon, CursorArrowRaysIcon, ExclamationCircleIcon, Squares2X2Icon } from '@heroicons/react/24/solid';
+'use client';
+
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Handle, NodeToolbar, Position, type NodeProps } from 'reactflow';
+import {
+  BoltIcon,
+  CheckCircleIcon,
+  CursorArrowRaysIcon,
+  EllipsisHorizontalIcon,
+  ExclamationCircleIcon,
+  PlayIcon,
+  Squares2X2Icon,
+  StopCircleIcon,
+  TrashIcon,
+} from '@heroicons/react/24/solid';
+import { NoSymbolIcon } from '@heroicons/react/24/outline';
+import { IconButton, Menu, MenuItem, Tooltip } from '@mui/material';
 import { inputHandleCount } from './flowRf';
-import type { FlowRfNodeDataWithRun } from './flowNodeRunStatus';
+import type { FlowRfNodeDataWithRun, NodeRunStatusBadge } from './flowNodeRunStatus';
+import { getNodeRunStatusFromRunData } from './flowNodeRunStatus';
+import { useFlowCanvasActions, useFlowExecutionVisual } from './flowCanvasActionsContext';
 
 const handleClass =
   '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-emerald-500 hover:!bg-emerald-50';
 
-function ExecutionStatusBadge({ status }: { status: 'success' | 'error' | 'skipped' }) {
+function ExecutionStatusBadge({ status }: { status: NonNullable<NodeRunStatusBadge> }) {
   if (status === 'success') {
     return (
       <div
@@ -28,6 +44,26 @@ function ExecutionStatusBadge({ status }: { status: 'success' | 'error' | 'skipp
       </div>
     );
   }
+  if (status === 'running') {
+    return (
+      <div
+        className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-white shadow-sm"
+        title="Running"
+      >
+        <span className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+      </div>
+    );
+  }
+  if (status === 'stopped') {
+    return (
+      <div
+        className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-white shadow-sm"
+        title="Stopped"
+      >
+        <StopCircleIcon className="h-5 w-5 text-amber-600" aria-hidden />
+      </div>
+    );
+  }
   return (
     <div
       className="pointer-events-none absolute -bottom-0.5 -right-0.5 h-4 min-w-4 rounded border border-amber-200 bg-amber-50 px-0.5 text-center text-[9px] font-bold leading-4 text-amber-800"
@@ -38,11 +74,43 @@ function ExecutionStatusBadge({ status }: { status: 'success' | 'error' | 'skipp
   );
 }
 
-const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ data, selected }) => {
+const boxBase =
+  'relative flex flex-col items-center justify-center border-2 bg-white shadow-sm transition-[box-shadow,opacity]';
+
+/** Delay before hiding so the pointer can cross the gap to the portaled `NodeToolbar`. */
+const TOOLBAR_HIDE_MS = 280;
+
+const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, selected }) => {
   const nt = data.nodeType;
   const node = data.flowNode;
   const isTrigger = Boolean(nt?.is_trigger);
-  const runSt = data.executionNodeStatus;
+  const actions = useFlowCanvasActions();
+  const execution = useFlowExecutionVisual();
+  const [pointerOnNodeOrToolbar, setPointerOnNodeOrToolbar] = useState(false);
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const hideToolbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelHideToolbarTimer = useCallback(() => {
+    if (hideToolbarTimerRef.current != null) {
+      clearTimeout(hideToolbarTimerRef.current);
+      hideToolbarTimerRef.current = null;
+    }
+  }, []);
+
+  const showToolbarForPointer = useCallback(() => {
+    cancelHideToolbarTimer();
+    setPointerOnNodeOrToolbar(true);
+  }, [cancelHideToolbarTimer]);
+
+  const hideToolbarForPointerSoon = useCallback(() => {
+    cancelHideToolbarTimer();
+    hideToolbarTimerRef.current = setTimeout(() => {
+      hideToolbarTimerRef.current = null;
+      setPointerOnNodeOrToolbar(false);
+    }, TOOLBAR_HIDE_MS);
+  }, [cancelHideToolbarTimer]);
+
+  useEffect(() => () => cancelHideToolbarTimer(), [cancelHideToolbarTimer]);
 
   const inputs = inputHandleCount(nt);
   const outputs = Math.max(0, nt?.outputs ?? 1);
@@ -51,28 +119,175 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ data, sele
   const typeLabel = nt?.label ?? node.type;
   const title = node.name || typeLabel;
 
+  const runSt = useMemo((): NodeRunStatusBadge => {
+    if (data.executionNodeStatus != null) return data.executionNodeStatus;
+    if (execution === undefined) return null;
+    const rd = execution?.run_data as Record<string, unknown> | undefined;
+    return getNodeRunStatusFromRunData(rd, id);
+  }, [data.executionNodeStatus, execution, id]);
+
+  const showToolbar = Boolean(actions);
+
+  const labelBlock = (
+    <div
+      className="pointer-events-none absolute left-1/2 top-full z-0 mt-1 min-w-[200px] max-w-[260px] -translate-x-1/2 px-1 text-center"
+      style={{ marginTop: 6 }}
+    >
+      <div className="text-[10px] font-medium uppercase leading-tight tracking-wide text-[#6b7280]">{typeLabel}</div>
+      <div className="line-clamp-2 text-sm font-semibold leading-tight text-[#1a1d21]" title={title}>
+        {title}
+      </div>
+      {outputLabels[0] && !isTrigger ? (
+        <div className="mt-0.5 text-[10px] text-[#8b9099]">Output: {outputLabels[0]}</div>
+      ) : null}
+    </div>
+  );
+
+  const disabledStrike = node.disabled ? (
+    <div
+      className="pointer-events-none absolute left-[-12px] right-[-12px] top-1/2 z-[5] h-px -translate-y-1/2 bg-[#64748b]/90"
+      aria-hidden
+    />
+  ) : null;
+
+  const toolbarVisible = pointerOnNodeOrToolbar || Boolean(menuAnchor);
+
+  const toolbar = showToolbar && actions && (
+    <NodeToolbar
+      nodeId={id}
+      isVisible={toolbarVisible}
+      position={Position.Top}
+      offset={10}
+      align="center"
+      className="rounded-lg border border-[#d8dce3] bg-white/95 shadow-md backdrop-blur-sm"
+    >
+      <div
+        className="flex gap-0.5 px-1 py-0.5"
+        onMouseEnter={showToolbarForPointer}
+        onMouseLeave={hideToolbarForPointerSoon}
+      >
+        <Tooltip title="Run workflow">
+          <span>
+            <IconButton
+              size="small"
+              aria-label="Run workflow"
+              disabled={!actions.onRunWorkflow}
+              onClick={() => actions.onRunWorkflow?.()}
+              className="!h-7 !w-7"
+            >
+              <PlayIcon className="h-4 w-4 text-emerald-600" />
+            </IconButton>
+          </span>
+        </Tooltip>
+        <Tooltip title={node.disabled ? 'Enable node' : 'Disable node'}>
+          <IconButton
+            size="small"
+            aria-label={node.disabled ? 'Enable node' : 'Disable node'}
+            onClick={() => actions.onToggleNodeDisabled(id)}
+            className="!h-7 !w-7"
+          >
+            <NoSymbolIcon className={`h-4 w-4 ${node.disabled ? 'text-amber-600' : 'text-gray-500'}`} />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="Delete node">
+          <IconButton size="small" aria-label="Delete node" onClick={() => actions.onDeleteNode(id)} className="!h-7 !w-7">
+            <TrashIcon className="h-4 w-4 text-gray-600" />
+          </IconButton>
+        </Tooltip>
+        <Tooltip title="More">
+          <IconButton
+            size="small"
+            aria-label="More actions"
+            onClick={(e) => setMenuAnchor(e.currentTarget)}
+            className="!h-7 !w-7"
+          >
+            <EllipsisHorizontalIcon className="h-4 w-4 text-gray-600" />
+          </IconButton>
+        </Tooltip>
+      </div>
+      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
+        <MenuItem
+          onClick={() => {
+            setMenuAnchor(null);
+            actions.onOpenNodeSettings(id);
+          }}
+        >
+          Open settings
+        </MenuItem>
+        <MenuItem disabled>Duplicate (soon)</MenuItem>
+      </Menu>
+    </NodeToolbar>
+  );
+
   if (isTrigger) {
     return (
       <div
+        className={`group relative pb-8 ${node.disabled ? 'opacity-60' : ''}`}
+        onMouseEnter={showToolbarForPointer}
+        onMouseLeave={hideToolbarForPointerSoon}
+      >
+        {toolbar}
+        <div className="relative flex items-center justify-center gap-1.5">
+          <span className="shrink-0 text-amber-500" aria-hidden title="Trigger">
+            <BoltIcon className="h-5 w-5" aria-hidden />
+          </span>
+          <div
+            className={[
+              boxBase,
+              'h-[88px] min-w-[120px] max-w-[200px] rounded-r-[28px] rounded-l-[36px] border-emerald-500/80',
+              selected ? 'ring-2 ring-sky-400/70 ring-offset-1' : '',
+            ].join(' ')}
+          >
+            {disabledStrike}
+            <div className="flex items-center gap-2 px-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-gradient-to-b from-emerald-50 to-white text-emerald-600">
+                <CursorArrowRaysIcon className="h-5 w-5" aria-hidden />
+              </div>
+            </div>
+            {Array.from({ length: Math.max(outputs, 0) }).map((_, i) => (
+              <Handle
+                key={`out-${i}`}
+                id={`out-${i}`}
+                type="source"
+                position={Position.Right}
+                className={handleClass}
+                style={{ top: `${(100 * (i + 1)) / (outputs + 1)}%` }}
+              />
+            ))}
+            {runSt && <ExecutionStatusBadge status={runSt} />}
+          </div>
+        </div>
+        {labelBlock}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`group relative mx-auto w-[120px] pb-8 ${node.disabled ? 'opacity-60' : ''}`}
+      onMouseEnter={showToolbarForPointer}
+      onMouseLeave={hideToolbarForPointerSoon}
+    >
+      {toolbar}
+      <div
         className={[
-          'relative flex min-w-[220px] max-w-[280px] items-center gap-2 border-2 border-emerald-500/80 bg-white py-2.5 pl-3 pr-3 shadow-sm',
-          'rounded-r-[32px] rounded-l-md',
-          selected ? 'ring-2 ring-emerald-500/50 ring-offset-1' : '',
-          node.disabled ? 'opacity-60' : '',
+          boxBase,
+          'mx-auto h-[88px] w-[100px] rounded-2xl border-[#c8cdd5]',
+          selected ? 'ring-2 ring-sky-400/70 ring-offset-1' : '',
         ].join(' ')}
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-gradient-to-b from-emerald-50 to-white text-emerald-600">
-          <CursorArrowRaysIcon className="h-5 w-5" aria-hidden />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-medium uppercase leading-tight tracking-wide text-emerald-800/80">
-            {typeLabel}
-          </div>
-          <div className="line-clamp-2 text-sm font-semibold leading-tight text-gray-900" title={title}>
-            {title}
-          </div>
-        </div>
-
+        {disabledStrike}
+        {Array.from({ length: Math.max(inputs, 0) }).map((_, i) => (
+          <Handle
+            key={`in-${i}`}
+            id={`in-${i}`}
+            type="target"
+            position={Position.Left}
+            className={handleClass}
+            style={{ top: `${(100 * (i + 1)) / (inputs + 1)}%` }}
+          />
+        ))}
+        <Squares2X2Icon className="h-9 w-9 text-[#94a3b8]" aria-hidden />
         {Array.from({ length: Math.max(outputs, 0) }).map((_, i) => (
           <Handle
             key={`out-${i}`}
@@ -85,49 +300,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ data, sele
         ))}
         {runSt && <ExecutionStatusBadge status={runSt} />}
       </div>
-    );
-  }
-
-  return (
-    <div
-      className={[
-        'relative min-w-[200px] max-w-[280px] rounded-2xl border-2 border-[#c8cdd5] bg-white px-3 py-2.5 shadow-sm',
-        selected ? 'ring-2 ring-sky-400/70 ring-offset-1' : '',
-        node.disabled ? 'opacity-60' : '',
-      ].join(' ')}
-    >
-      {Array.from({ length: Math.max(inputs, 0) }).map((_, i) => (
-        <Handle
-          key={`in-${i}`}
-          id={`in-${i}`}
-          type="target"
-          position={Position.Left}
-          className={handleClass}
-          style={{ top: `${(100 * (i + 1)) / (inputs + 1)}%` }}
-        />
-      ))}
-
-      <div className="mb-0.5 flex items-center gap-1.5 text-[#6b6f76]">
-        <Squares2X2Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
-        <span className="text-[10px] font-medium leading-none">{typeLabel}</span>
-      </div>
-      <div className="line-clamp-2 pl-0.5 text-sm font-semibold leading-tight text-[#1a1d21]">{title}</div>
-      {outputLabels[0] && (
-        <div className="mt-0.5 pl-0.5 text-[10px] text-[#8b9099]">Output: {outputLabels[0]}</div>
-      )}
-
-      {Array.from({ length: Math.max(outputs, 0) }).map((_, i) => (
-        <React.Fragment key={`out-${i}`}>
-          <Handle
-            id={`out-${i}`}
-            type="source"
-            position={Position.Right}
-            className={handleClass}
-            style={{ top: `${(100 * (i + 1)) / (outputs + 1)}%` }}
-          />
-        </React.Fragment>
-      ))}
-      {runSt && <ExecutionStatusBadge status={runSt} />}
+      {labelBlock}
     </div>
   );
 };
