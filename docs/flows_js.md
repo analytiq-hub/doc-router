@@ -11,11 +11,11 @@ with the existing `flows.code` Python node.
 `flows.code` (Python) covers the common case. JS/TS nodes add two things:
 
 - **TypeScript** is the language many frontend and full-stack developers reach
-  for when writing data-transformation logic. Offering a TS node lowers the
-  barrier for those teams.
+for when writing data-transformation logic. Offering a TS node lowers the
+barrier for those teams.
 - **Ecosystem parity with n8n.** n8n's code node supports JavaScript and Python.
-  Flows that are migrated from or compared against n8n workflows benefit from
-  having the same two-language choice.
+Flows that are migrated from or compared against n8n workflows benefit from
+having the same two-language choice.
 
 The nodes are additive: Python, JS, and TS nodes coexist in the same flow with
 the same `FlowItem` contract between them.
@@ -32,7 +32,7 @@ Fork a `node` child process per call. Send input JSON on stdin; read output JSON
 from stdout. The contract is identical to the current `flows.code` Python runner.
 
 - **TypeScript support**: not native. Requires a transpilation step (e.g.
-  `esbuild` or `ts-node`) bundled into the runner script.
+`esbuild` or `ts-node`) bundled into the runner script.
 - **Startup cost**: ~50–150 ms per invocation (Node.js process startup).
 - **Isolation**: OS process boundary — equivalent to the Python runner.
 - **Complexity**: low. Mirrors `code_runner.py` exactly.
@@ -45,14 +45,14 @@ compilation configuration.
 
 - **TypeScript support**: native. The runner file itself can be TypeScript.
 - **Startup cost**: first call per snippet ~300–500 ms while Deno's module cache
-  is cold; subsequent calls ~50–150 ms (cache warm). Eliminated entirely with a
-  persistent worker (see §4).
+is cold; subsequent calls ~50–150 ms (cache warm). Eliminated entirely with a
+persistent worker (see §4).
 - **Isolation**: OS process boundary **plus** Deno's permission model. A runner
-  launched with `--no-allow-read --no-allow-write --no-allow-net` cannot touch
-  the filesystem or make outbound requests regardless of what the user snippet
-  does.
+launched with `--no-allow-read --no-allow-write --no-allow-net` cannot touch
+the filesystem or make outbound requests regardless of what the user snippet
+does.
 - **Complexity**: medium. Deno must be installed alongside Python. The runner
-  protocol is the same JSON stdin/stdout contract.
+protocol is the same JSON stdin/stdout contract.
 
 ### 2.3 In-process JavaScript engine
 
@@ -67,12 +67,12 @@ Embeds Google's V8 engine via a C extension (`mini-racer` on PyPI).
 - **TypeScript support**: none. JavaScript only.
 - **Startup cost**: context creation ~1–10 ms; reusable across calls.
 - **Performance**: full JIT compiler — significantly faster than QuickJS for
-  CPU-intensive snippets (tight loops, heavy computation).
+CPU-intensive snippets (tight loops, heavy computation).
 - **Binary size**: ~30 MB (V8 is large).
 - **Isolation**: V8 heap isolation per context; memory is otherwise shared with
-  the host process.
+the host process.
 - **Packaging**: V8 is frozen at build time. The `mini-racer` package has had
-  maintenance gaps and binary packaging issues on ARM and Alpine Linux.
+maintenance gaps and binary packaging issues on ARM and Alpine Linux.
 
 #### QuickJS (`quickjs` on PyPI)
 
@@ -81,12 +81,12 @@ Embeds Fabrice Bellard's QuickJS engine via a C extension.
 - **TypeScript support**: none. JavaScript only.
 - **Startup cost**: context creation in microseconds.
 - **Performance**: interpreter, no JIT. Slower than V8 for CPU-heavy code, but
-  adequate for JSON transformation work (maps, filters, string operations) where
-  serialisation dominates over computation.
+adequate for JSON transformation work (maps, filters, string operations) where
+serialisation dominates over computation.
 - **Binary size**: ~1 MB.
 - **Isolation**: interpreter-level; memory shared with the host process.
 - **Packaging**: small, pure C, portable across platforms including ARM and
-  Alpine. Actively maintained by Bellard.
+Alpine. Actively maintained by Bellard.
 
 #### Which to use
 
@@ -105,16 +105,18 @@ fallback for deployments where Deno is not available.
 
 ### 2.4 Comparison
 
-| | Node.js subprocess | Deno subprocess | PyMiniRacer (V8) | QuickJS |
-|---|---|---|---|---|
-| TypeScript native | No (needs transpiler) | **Yes** | No | No |
-| Per-call startup | ~100 ms | ~100 ms (warm) | ~5 ms | <1 ms |
-| CPU-intensive perf | Good (JIT) | Good (JIT) | **Best** (V8 JIT) | Adequate (interpreter) |
-| Security sandbox | Process boundary | Process + permission flags | Heap isolation only | Interpreter isolation only |
-| Long-lived worker | Yes (see §4) | **Yes** | N/A (in-process) | N/A (in-process) |
-| Binary size | Node.js install | Deno install | ~30 MB | ~1 MB |
-| Platform portability | Good | Good | Problematic on ARM/Alpine | **Excellent** |
-| Extra dependency | `node` | `deno` | `mini-racer` | `quickjs` |
+
+|                      | Node.js subprocess    | Deno subprocess            | PyMiniRacer (V8)          | QuickJS                    |
+| -------------------- | --------------------- | -------------------------- | ------------------------- | -------------------------- |
+| TypeScript native    | No (needs transpiler) | **Yes**                    | No                        | No                         |
+| Per-call startup     | ~100 ms               | ~100 ms (warm)             | ~5 ms                     | <1 ms                      |
+| CPU-intensive perf   | Good (JIT)            | Good (JIT)                 | **Best** (V8 JIT)         | Adequate (interpreter)     |
+| Security sandbox     | Process boundary      | Process + permission flags | Heap isolation only       | Interpreter isolation only |
+| Long-lived worker    | Yes (see §4)          | **Yes**                    | N/A (in-process)          | N/A (in-process)           |
+| Binary size          | Node.js install       | Deno install               | ~30 MB                    | ~1 MB                      |
+| Platform portability | Good                  | Good                       | Problematic on ARM/Alpine | **Excellent**              |
+| Extra dependency     | `node`                | `deno`                     | `mini-racer`              | `quickjs`                  |
+
 
 ---
 
@@ -218,9 +220,9 @@ function run(items, context) {
 
 - `items` — array of the current input slot's item `json` payloads.
 - `context` — same shape as the Python runner context, with `parameters`
-  populated from the resolved node parameters.
+populated from the resolved node parameters.
 - Return — array of output JSON objects. Each becomes one `FlowItem` on
-  output slot 0.
+output slot 0.
 
 The runner evaluates the snippet in strict mode and calls `run(items, context)`
 with a 5-second default timeout (configurable via `timeout_seconds` in node
@@ -301,17 +303,17 @@ async def run_deno_code(
 ### Process lifecycle
 
 - **Startup**: the Deno runner process is started lazily on first call and kept
-  alive for the lifetime of the worker. If the process exits unexpectedly it is
-  restarted on the next call.
+alive for the lifetime of the worker. If the process exits unexpectedly it is
+restarted on the next call.
 - **Concurrency**: each call sends one request line and awaits the matching
-  response line, identified by `call_id`. Multiple coroutines may call
-  `run_deno_code` concurrently; the module maintains a `dict[call_id, Future]`
-  and a single reader task that dispatches response lines to the right future.
+response line, identified by `call_id`. Multiple coroutines may call
+`run_deno_code` concurrently; the module maintains a `dict[call_id, Future]`
+and a single reader task that dispatches response lines to the right future.
 - **Timeout**: enforced both client-side (`asyncio.wait_for`) and inside the
-  Deno runner (via `setTimeout` abort).
+Deno runner (via `setTimeout` abort).
 - **Failure isolation**: a snippet that throws an unhandled error returns an
-  error response; it does not kill the runner process. A snippet that blocks
-  past `timeout_ms` is aborted by the runner's internal timer.
+error response; it does not kill the runner process. A snippet that blocks
+past `timeout_ms` is aborted by the runner's internal timer.
 
 ### Deno runner source
 
@@ -326,14 +328,16 @@ step needed in the runner).
 
 ## 8. Security notes
 
-| Threat | Mitigation |
-|--------|-----------|
-| File system access | `--no-allow-read --no-allow-write` at Deno launch |
-| Outbound network calls | `--no-allow-net` at Deno launch |
-| Environment variable leakage | `--no-allow-env` at Deno launch |
-| Infinite loops / CPU exhaustion | `timeout_ms` enforced inside runner; `asyncio.wait_for` on Python side |
-| Memory exhaustion | Deno V8 heap limit (set via `--v8-flags=--max-heap-size=128`) |
+
+| Threat                                    | Mitigation                                                                                    |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------- |
+| File system access                        | `--no-allow-read --no-allow-write` at Deno launch                                             |
+| Outbound network calls                    | `--no-allow-net` at Deno launch                                                               |
+| Environment variable leakage              | `--no-allow-env` at Deno launch                                                               |
+| Infinite loops / CPU exhaustion           | `timeout_ms` enforced inside runner; `asyncio.wait_for` on Python side                        |
+| Memory exhaustion                         | Deno V8 heap limit (set via `--v8-flags=--max-heap-size=128`)                                 |
 | Prototype pollution / `__proto__` attacks | Runner passes items as JSON-parsed plain objects; snippet cannot reach the runner's own scope |
+
 
 These mitigations are stronger than the Python runner's current posture
 (`sys.executable -I -S` plus restricted builtins) because the permission flags
@@ -416,10 +420,13 @@ Deno do not need it.
 
 ## 11. Roadmap
 
-| Item | Notes |
-|------|-------|
-| Multi-output return (`list[list[dict]]`) | Allows JS/TS nodes to feed branch-style flows; same gap as Python dynamic node types |
-| `flows.js` / `flows.ts` as dynamic node types | Combine §6 with `docs/dynamic_node_types.md`: store JS/TS code in `flow_node_type_definitions` |
-| npm / Deno module imports inside snippets | Requires allow-listing specific modules; significant security surface expansion |
-| Persistent runner pool | Multiple Deno workers for high-concurrency deployments |
-| QuickJS fallback | In-process JS-only fallback when Deno is unavailable (see §10). Chosen over PyMiniRacer: smaller binary (~1 MB vs ~30 MB), microsecond context creation, better portability on ARM/Alpine. V8/MiniRacer's JIT advantage does not apply to the JSON-transformation workloads typical in flow nodes. |
+
+| Item                                          | Notes                                                                                                                                                                                                                                                                                              |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Multi-output return (`list[list[dict]]`)      | Allows JS/TS nodes to feed branch-style flows; same gap as Python dynamic node types                                                                                                                                                                                                               |
+| `flows.js` / `flows.ts` as dynamic node types | Combine §6 with `docs/dynamic_node_types.md`: store JS/TS code in `flow_node_type_definitions`                                                                                                                                                                                                     |
+| npm / Deno module imports inside snippets     | Requires allow-listing specific modules; significant security surface expansion                                                                                                                                                                                                                    |
+| Persistent runner pool                        | Multiple Deno workers for high-concurrency deployments                                                                                                                                                                                                                                             |
+| QuickJS fallback                              | In-process JS-only fallback when Deno is unavailable (see §10). Chosen over PyMiniRacer: smaller binary (~1 MB vs ~30 MB), microsecond context creation, better portability on ARM/Alpine. V8/MiniRacer's JIT advantage does not apply to the JSON-transformation workloads typical in flow nodes. |
+
+
