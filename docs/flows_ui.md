@@ -27,10 +27,9 @@ All core flow routes are implemented in `app/routes/flows.py`:
 | `GET /v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}` | ✓ |
 | `POST /v0/orgs/{org_id}/flows/{flow_id}/executions/{exec_id}/stop` | ✓ |
 | `POST /v0/webhooks/{webhook_id}` | ✓ |
-| `DELETE /v0/orgs/{org_id}/flows/{flow_id}` | **Missing** |
+| `DELETE /v0/orgs/{org_id}/flows/{flow_id}` | ✓ |
 
-The only gap is a delete route for the flow header document. Add it to
-`flows.py` before starting the SDK layer.
+FastAPI route coverage is complete for v1.
 
 ---
 
@@ -51,7 +50,6 @@ export interface FlowNodeType {
   description: string;
   category: string;
   is_trigger: boolean;
-  is_merge: boolean;
   min_inputs: number;
   max_inputs: number | null;
   outputs: number;
@@ -482,13 +480,14 @@ skipped).
 ## 7. Implementation sequence
 
 ### Step 1 — FastAPI gap (30 min)
-Add `DELETE /v0/orgs/{org_id}/flows/{flow_id}` to `flows.py`.
+Done: `DELETE /v0/orgs/{org_id}/flows/{flow_id}` added to `flows.py`.
 
 ### Step 2 — TypeScript SDK (2 h)
-1. Create `types/flows.ts` with all types from §2.1.
-2. Re-export from `types/index.ts`.
-3. Add flow methods to `docrouter-org.ts` (§2.2).
-4. Build and verify `npm run build` in the SDK package.
+Done:
+1. `types/flows.ts` added.
+2. Re-exported from `types/index.ts`.
+3. Added Flows methods to `docrouter-org.ts`.
+4. `npm run build` succeeds (DTS included).
 
 ### Step 3 — Phase 1 UI (1 day)
 1. `FlowList.tsx` + `FlowCreate.tsx` + `FlowStatusBadge.tsx`.
