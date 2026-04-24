@@ -112,11 +112,89 @@ class _MultiItemTriggerNode:
         return [[a, b]]
 
 
+class _SetXNode:
+    """Test-only node that outputs json.x = parameters.x (ignores input json)."""
+
+    key = "tests.set_x"
+    label = "Set x"
+    description = "Test-only: set json.x"
+    category = "Test"
+    is_trigger = False
+    is_merge = False
+    min_inputs = 1
+    max_inputs = 1
+    outputs = 1
+    output_labels = ["output"]
+    parameter_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {"x": {"type": "number"}},
+        "required": ["x"],
+        "additionalProperties": False,
+    }
+
+    def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        return []
+
+    async def execute(
+        self,
+        context: "ad.flows.ExecutionContext",
+        node: dict[str, Any],
+        inputs: list[list["ad.flows.FlowItem"]],
+    ) -> list[list["ad.flows.FlowItem"]]:
+        x = (node.get("parameters") or {}).get("x")
+        src = inputs[0][0] if inputs and inputs[0] else None
+        return [
+            [
+                ad.flows.FlowItem(
+                    json={"x": x},
+                    binary=(dict(src.binary) if src is not None else {}),
+                    meta=(dict(src.meta) if src is not None else {}),
+                    paired_item=None,
+                )
+            ]
+        ]
+
+
+class _MergeEchoParamNode:
+    """Test-only merge node that emits json.value = parameters.value."""
+
+    key = "tests.merge_echo_param"
+    label = "Merge echo param"
+    description = "Test-only: merge node that outputs parameters.value"
+    category = "Test"
+    is_trigger = False
+    is_merge = True
+    min_inputs = 2
+    max_inputs = None
+    outputs = 1
+    output_labels = ["output"]
+    parameter_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {"value": {}},
+        "required": ["value"],
+        "additionalProperties": False,
+    }
+
+    def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        return []
+
+    async def execute(
+        self,
+        context: "ad.flows.ExecutionContext",
+        node: dict[str, Any],
+        inputs: list[list["ad.flows.FlowItem"]],
+    ) -> list[list["ad.flows.FlowItem"]]:
+        v = (node.get("parameters") or {}).get("value")
+        return [[ad.flows.FlowItem(json={"value": v}, binary={}, meta={}, paired_item=None)]]
+
+
 @pytest.fixture(autouse=True)
 def _register_nodes() -> None:
     ad.flows.register_builtin_nodes()
     ad.flows.register(_EchoParamNode())
     ad.flows.register(_MultiItemTriggerNode())
+    ad.flows.register(_SetXNode())
+    ad.flows.register(_MergeEchoParamNode())
 
 
 @pytest.mark.asyncio
@@ -142,6 +220,44 @@ async def test_expression_resolves_json() -> None:
     assert res["status"] == "success"
     out = ctx.run_data["e1"]["data"]["main"][0][0]
     assert out.json["value"] == 5
+
+
+@pytest.mark.asyncio
+async def test_merge_node_expression_can_reference_all_inputs() -> None:
+    nodes = [
+        _n("t1", "Start", "flows.trigger.manual", 0),
+        _n("a1", "A", "tests.set_x", 200, {"x": 1}),
+        _n("b1", "B", "tests.set_x", 200, {"x": 2}),
+        _n("m1", "MergeEcho", "tests.merge_echo_param", 400, {"value": "=$json['inputs'][1][0]['x']"}),
+    ]
+    conns = {
+        "t1": {
+            "main": [
+                [
+                    ad.flows.NodeConnection(dest_node_id="a1", connection_type="main", index=0),
+                    ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0),
+                ]
+            ]
+        },
+        "a1": {"main": [[ad.flows.NodeConnection(dest_node_id="m1", connection_type="main", index=0)]]},
+        "b1": {"main": [[ad.flows.NodeConnection(dest_node_id="m1", connection_type="main", index=1)]]},
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(context=ctx, revision={"nodes": nodes, "connections": conns, "settings": {}, "pin_data": None})
+    assert res["status"] == "success"
+    out = ctx.run_data["m1"]["data"]["main"][0][0]
+    assert out.json["value"] == 2
 
 
 @pytest.mark.asyncio
