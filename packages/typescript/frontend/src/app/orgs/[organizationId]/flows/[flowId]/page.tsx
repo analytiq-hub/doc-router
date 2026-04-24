@@ -8,7 +8,7 @@ import FlowToolbar from '@/components/flows/FlowToolbar';
 import FlowEditor from '@/components/flows/FlowEditor';
 import FlowCanvasViewTabs, { type FlowCanvasView } from '@/components/flows/FlowCanvasViewTabs';
 import FlowLogsPanel from '@/components/flows/FlowLogsPanel';
-import { revisionContentFingerprint, revisionToRF, rfToRevision } from '@/components/flows/flowRf';
+import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNodeData } from '@/components/flows/flowRf';
 import { useFlowApi } from '@/components/flows/useFlowApi';
 import type { Edge, Node } from 'reactflow';
 import FlowExecutionsView from '@/components/flows/FlowExecutionsView';
@@ -248,8 +248,8 @@ export default function FlowDetailPage({
                 <div className="min-h-0 min-w-0 flex-1 overflow-hidden p-0 sm:p-1">
                   <FlowEditor
                     nodeTypes={nodeTypes}
-                    nodes={rfNodes as any}
-                    edges={rfEdges as any}
+                    nodes={rfNodes as Node<FlowRfNodeData>[]}
+                    edges={rfEdges}
                     onNodesChange={onNodesChange}
                     onEdgesChange={onEdgesChange}
                     onExecute={onRun}
@@ -262,6 +262,8 @@ export default function FlowDetailPage({
                   focusExecutionId={logsFocusExecutionId}
                   onClearFocus={() => setLogsFocusExecutionId(null)}
                   onExecutionChange={setExecutionForIo}
+                  graphNodes={rfNodes as Node<FlowRfNodeData>[]}
+                  graphEdges={rfEdges}
                 />
               </div>
             </div>
@@ -272,8 +274,8 @@ export default function FlowDetailPage({
               orgApi={api}
               flowId={flowId}
               nodeTypes={nodeTypes}
-              fallbackNodes={rfNodes as any}
-              fallbackEdges={rfEdges as any}
+              fallbackNodes={rfNodes as Node<FlowRfNodeData>[]}
+              fallbackEdges={rfEdges}
             />
           )}
         </div>
