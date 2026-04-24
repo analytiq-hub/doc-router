@@ -309,18 +309,29 @@ Before calling `execute()`, the engine resolves any parameter values that start
 with `=` via `resolve_parameters()` in `expressions.py`. This is the Python
 equivalent of n8n's `WorkflowDataProxy`.
 
-**Per-item resolution (default path):** for nodes that are **not** merge nodes, `_execute_loop` in `engine.py` evaluates `=` parameters **once per input `FlowItem`**, calls `execute` for that single item, then concatenates output lists across items (n8n-style). Merge nodes and the “all inputs empty” skip path use a **single** `resolve_parameters` pass with the **first** item across the input slots (or `None` if there are no items).
+**Per-item resolution (default path):** for nodes that are **not** merge nodes, `_execute_loop` in `engine.py` evaluates `=` parameters **once per input `FlowItem`**, calls `execute` for that single item, then concatenates output lists across items (n8n-style).
+
+**Merge nodes:** merge nodes resolve `=` parameters **once per node execution** (not per item). Expressions can access *all* incoming items via `$input["all"]`.
 
 ```python
 # In a node's parameters:
 {"value": "=$json['amount']"}          # per input item: that item’s json
 {"label": "=$node['ocr1']['main'][0][0]['text']"}  # reads prior node output
+{"x": "=$input['item']['json']['amount']"}         # same as $json for non-merge nodes
+{"x": "=$input['all'][1][0]['json']['amount']"}    # merge node: slot 1, item 0
 ```
 
 Variables in scope for each evaluation:
-- `$json` — the current item's `.json` dict (in per-item mode, the item being processed; in merge/single pass, the “first” item as described above).
-- `$node` — dict of completed node outputs, keyed by node id.
+- `$json` — the current item's `.json` dict (for non-merge nodes in per-item mode; `{}` for merge-node parameter resolution).
+- `$binary` — current item's binary metadata (no raw bytes).
+- `$item` — the full current item object: `{"json", "binary", "meta", "paired_item"}` (non-merge per-item mode only; `None` for merge-node parameter resolution).
+- `$input` — input context object:
+  - `all`: `list[list[item]]` across input slots, where each `item` is `{"json","binary","meta","paired_item"}`
+  - `item`: the current item (same shape as `$item`) in per-item mode
+  - `input_index`, `item_index`: indices for the current item in per-item mode
+- `$node` — dict of completed node outputs, keyed by node id (JSON-only).
   Shape: `{node_id: {"status": "...", "main": [[item_json, ...], ...]}}`.
+- `$items` — alias for the JSON-only `$node` view (convenience).
 
 Safety: expressions are parsed with `ast.parse(mode="eval")`. Any AST node type
 not in an explicit allow-set raises `ExpressionError`. Function calls (`ast.Call`)
