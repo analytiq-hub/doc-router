@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -6,6 +6,7 @@ import ReactFlow, {
   MiniMap,
   Panel,
   addEdge,
+  useReactFlow,
   type Connection,
   type Edge,
   type Node,
@@ -14,12 +15,15 @@ import ReactFlow, {
   type EdgeChange,
   type NodeChange,
 } from 'reactflow';
+import { Drawer, IconButton, Tooltip } from '@mui/material';
+import { BeakerIcon, MagnifyingGlassIcon, PlusIcon, Square2StackIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon } from '@heroicons/react/24/solid';
 import 'reactflow/dist/style.css';
 import './flows-canvas.css';
 
-import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
+import type { FlowExecution, FlowNode, FlowNodeType } from '@docrouter/sdk';
 import FlowNodePalette from './FlowNodePalette';
-import FlowNodeConfigPanel from './FlowNodeConfigPanel';
+import FlowNodeConfigModal from './FlowNodeConfigModal';
 import FlowCanvasNode from './FlowCanvasNode';
 import FlowCanvasEdge from './FlowCanvasEdge';
 import { inputHandleCount } from './flowRf';
@@ -28,7 +32,6 @@ import type { FlowRfNodeData } from './flowRf';
 const EXECUTE_BUTTON_BG = '#ff6d5a';
 const EXECUTE_BUTTON_BG_HOVER = '#e85d4d';
 
-/** React Flow `edgeTypes` key for the smooth step edge with item-count label. */
 const LABELED_EDGE_TYPE = 'flowLabeled' as const;
 
 function uuid(): string {
@@ -49,29 +52,54 @@ function toCanvasEdges(edges: Edge[]): Edge[] {
   }));
 }
 
+/** Lives inside `<ReactFlow>`; forwards `screenToFlowPosition` to a ref for drop / palette placement. */
+function ScreenToFlowPointBridge({
+  targetRef,
+}: {
+  targetRef: React.MutableRefObject<((p: { x: number; y: number }) => { x: number; y: number }) | null>;
+}) {
+  const { screenToFlowPosition } = useReactFlow();
+  useEffect(() => {
+    targetRef.current = screenToFlowPosition;
+  }, [screenToFlowPosition, targetRef]);
+  return null;
+}
+
 const FlowEditor: React.FC<{
   nodeTypes: FlowNodeType[];
   nodes: Node<FlowRfNodeData>[];
   edges: Edge[];
-  selectedNodeId: string | null;
   onNodesChange: (next: Node<FlowRfNodeData>[]) => void;
   onEdgesChange: (next: Edge[]) => void;
-  onSelectedNodeIdChange: (id: string | null) => void;
-  /** Primary “run workflow” action shown on the canvas (optional). */
   onExecute?: () => void;
-}> = ({
-  nodeTypes,
-  nodes,
-  edges,
-  selectedNodeId,
-  onNodesChange,
-  onEdgesChange,
-  onSelectedNodeIdChange,
-  onExecute,
-}) => {
+  /** Latest execution to drive Input / Output columns in the node modal (e.g. from logs panel). */
+  executionForIo?: FlowExecution | null;
+}> = ({ nodeTypes, nodes, edges, onNodesChange, onEdgesChange, onExecute, executionForIo }) => {
+  const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
+  const [configModalNodeId, setConfigModalNodeId] = useState<string | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+  const screenToFlowPointRef = useRef<((p: { x: number; y: number }) => { x: number; y: number }) | null>(null);
   const canvasEdges = useMemo(() => toCanvasEdges(edges), [edges]);
+  const runData = executionForIo?.run_data as Record<string, unknown> | undefined;
+
+  useEffect(() => {
+    if (configModalNodeId && !nodes.some((n) => n.id === configModalNodeId)) {
+      setConfigModalNodeId(null);
+    }
+  }, [configModalNodeId, nodes]);
+
+  useEffect(() => {
+    if (nodePaletteOpen) {
+      const t = window.setTimeout(() => searchInputRef.current?.focus(), 100);
+      return () => clearTimeout(t);
+    }
+  }, [nodePaletteOpen]);
+
+  const openPalette = useCallback(() => {
+    setNodePaletteOpen(true);
+  }, []);
 
   const rfNodeTypes = useMemo(
     () => ({
@@ -117,64 +145,19 @@ const FlowEditor: React.FC<{
     [edges, nodeTypesByKey, nodes, onEdgesChange],
   );
 
-  const onSelectionChange = useCallback(
-    (e: { nodes: Node[] }) => {
-      const id = e.nodes?.[0]?.id ?? null;
-      onSelectedNodeIdChange(id);
+  const onNodeDoubleClick = useCallback(
+    (_: React.MouseEvent, node: Node) => {
+      onNodesChange(nodes.map((n) => (n.id === node.id ? { ...n, selected: true } : { ...n, selected: false })));
+      setConfigModalNodeId(node.id);
     },
-    [onSelectedNodeIdChange],
+    [nodes, onNodesChange],
   );
 
-  const onDrop = useCallback(
-    (event: React.DragEvent) => {
-      event.preventDefault();
-      const typeKey = event.dataTransfer.getData('application/flow-node-type');
-      if (!typeKey) return;
-
-      const bounds = wrapperRef.current?.getBoundingClientRect();
-      const position = bounds
-        ? { x: event.clientX - bounds.left, y: event.clientY - bounds.top }
-        : { x: event.clientX, y: event.clientY };
-
-      const nt = nodeTypesByKey[typeKey];
-      const id = uuid();
-      const flowNode: FlowNode = {
-        id,
-        name: nt?.label ? `${nt.label}` : typeKey,
-        type: typeKey,
-        position: [Math.round(position.x), Math.round(position.y)],
-        parameters: {},
-        disabled: false,
-        on_error: 'stop',
-        notes: null,
-      };
-      const newNode: Node<FlowRfNodeData> = {
-        id,
-        type: 'flow-node',
-        position,
-        data: { flowNode, nodeType: nt },
-      };
-      onNodesChange([...nodes, newNode]);
-    },
-    [nodeTypesByKey, nodes, onNodesChange],
-  );
-
-  const onDragOver = useCallback((event: React.DragEvent) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
-  }, []);
-
-  const selected = useMemo(() => {
-    const n = nodes.find((x) => x.id === selectedNodeId);
-    if (!n) return { node: null as FlowNode | null, nodeType: null as FlowNodeType | null };
-    return { node: n.data.flowNode, nodeType: n.data.nodeType ?? nodeTypesByKey[n.data.flowNode.type] ?? null };
-  }, [nodeTypesByKey, nodes, selectedNodeId]);
-
-  const onPatchSelectedNode = useCallback(
-    (patch: Partial<FlowNode>) => {
-      if (!selectedNodeId) return;
+  const onPatchNodeById = useCallback(
+    (id: string, patch: Partial<FlowNode>) => {
+      if (!id) return;
       const next = nodes.map((n) => {
-        if (n.id !== selectedNodeId) return n;
+        if (n.id !== id) return n;
         const flowNode = { ...n.data.flowNode, ...patch, parameters: patch.parameters ?? n.data.flowNode.parameters };
         return {
           ...n,
@@ -187,83 +170,207 @@ const FlowEditor: React.FC<{
       });
       onNodesChange(next);
     },
-    [nodeTypesByKey, nodes, onNodesChange, selectedNodeId],
+    [nodeTypesByKey, nodes, onNodesChange],
   );
 
+  const addNodeFromTypeAtViewCenter = useCallback(
+    (typeKey: string) => {
+      const stf = screenToFlowPointRef.current;
+      const el = wrapperRef.current;
+      if (!stf || !el) return;
+
+      const r = el.getBoundingClientRect();
+      const p = stf({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+      const nt = nodeTypesByKey[typeKey];
+      const id = uuid();
+      const flowNode: FlowNode = {
+        id,
+        name: nt?.label ? `${nt.label}` : typeKey,
+        type: typeKey,
+        position: [Math.round(p.x), Math.round(p.y)],
+        parameters: {},
+        disabled: false,
+        on_error: 'stop',
+        notes: null,
+      };
+      const newNode: Node<FlowRfNodeData> = {
+        id,
+        type: 'flow-node',
+        position: p,
+        selected: true,
+        data: { flowNode, nodeType: nt },
+      };
+      onNodesChange([...nodes.map((n) => ({ ...n, selected: false })), newNode]);
+      setConfigModalNodeId(id);
+      setNodePaletteOpen(false);
+    },
+    [nodeTypesByKey, nodes, onNodesChange],
+  );
+
+  const onDrop = useCallback(
+    (event: React.DragEvent) => {
+      event.preventDefault();
+      const typeKey = event.dataTransfer.getData('application/flow-node-type');
+      if (!typeKey) return;
+
+      const stf = screenToFlowPointRef.current;
+      if (!stf) return;
+      const p = stf({ x: event.clientX, y: event.clientY });
+      const nt = nodeTypesByKey[typeKey];
+      const id = uuid();
+      const flowNode: FlowNode = {
+        id,
+        name: nt?.label ? `${nt.label}` : typeKey,
+        type: typeKey,
+        position: [Math.round(p.x), Math.round(p.y)],
+        parameters: {},
+        disabled: false,
+        on_error: 'stop',
+        notes: null,
+      };
+      const newNode: Node<FlowRfNodeData> = {
+        id,
+        type: 'flow-node',
+        position: p,
+        data: { flowNode, nodeType: nt },
+      };
+      onNodesChange([...nodes, newNode]);
+    },
+    [nodeTypesByKey, nodes, onNodesChange],
+  );
+
+  const onDragOver = useCallback((event: React.DragEvent) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  }, []);
+
+  const configRf = useMemo(() => {
+    const n = nodes.find((x) => x.id === configModalNodeId);
+    if (!n) return { node: null as FlowNode | null, nodeType: null as FlowNodeType | null };
+    return { node: n.data.flowNode, nodeType: n.data.nodeType ?? nodeTypesByKey[n.data.flowNode.type] ?? null };
+  }, [configModalNodeId, nodeTypesByKey, nodes]);
+
   return (
-    <div className="docrouter-flow-canvas h-[min(80vh,calc(100vh-10rem))] min-h-[480px] overflow-hidden rounded-lg border border-[#e2e4e8] bg-[#f7f7f9]">
-      <div className="grid h-full w-full [grid-template-columns:minmax(200px,240px)_1fr_minmax(300px,380px)]">
-        <FlowNodePalette nodeTypes={nodeTypes} />
-        <div
-          ref={wrapperRef}
-          className="relative h-full min-h-0"
-          onDrop={onDrop}
-          onDragOver={onDragOver}
+    <div className="docrouter-flow-canvas flex h-full min-h-[20rem] w-full min-w-0 flex-col overflow-hidden rounded-lg border border-[#e2e4e8] bg-[#f7f7f9]">
+      <div ref={wrapperRef} className="relative h-full min-h-[12rem] min-w-0" onDrop={onDrop} onDragOver={onDragOver}>
+        <ReactFlow
+          className="h-full w-full"
+          nodes={nodes}
+          edges={canvasEdges}
+          nodeTypes={rfNodeTypes}
+          edgeTypes={rfEdgeTypes}
+          onNodesChange={(changes: NodeChange[]) => {
+            onNodesChange(applyNodeChanges(changes, nodes));
+          }}
+          onEdgesChange={(changes: EdgeChange[]) => {
+            onEdgesChange(applyEdgeChanges(changes, edges));
+          }}
+          onConnect={onConnect}
+          onNodeDoubleClick={onNodeDoubleClick}
+          fitView
+          fitViewOptions={{ padding: 0.25 }}
+          proOptions={{ hideAttribution: true }}
+          minZoom={0.15}
+          maxZoom={1.5}
+          defaultEdgeOptions={{
+            type: LABELED_EDGE_TYPE,
+            style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
+            data: { itemCount: 1 },
+          }}
+          connectionLineStyle={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
+          elevateEdgesOnSelect
         >
-          <ReactFlow
-            className="h-full w-full"
-            nodes={nodes}
-            edges={canvasEdges}
-            nodeTypes={rfNodeTypes}
-            edgeTypes={rfEdgeTypes}
-            onNodesChange={(changes: NodeChange[]) => {
-              onNodesChange(applyNodeChanges(changes, nodes));
-            }}
-            onEdgesChange={(changes: EdgeChange[]) => {
-              onEdgesChange(applyEdgeChanges(changes, edges));
-            }}
-            onConnect={onConnect}
-            onSelectionChange={onSelectionChange}
-            fitView
-            fitViewOptions={{ padding: 0.25 }}
-            proOptions={{ hideAttribution: true }}
-            minZoom={0.15}
-            maxZoom={1.5}
-            defaultEdgeOptions={{
-              type: LABELED_EDGE_TYPE,
-              style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
-              data: { itemCount: 1 },
-            }}
-            connectionLineStyle={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
-            elevateEdgesOnSelect
-          >
-            <Background color="#b8c0cc" gap={20} size={1.2} variant={BackgroundVariant.Dots} />
-            <Controls
-              className="!shadow-md"
-              position="bottom-left"
-              showFitView
-              showInteractive={false}
-            />
-            <MiniMap
-              position="bottom-right"
-              className="!m-2"
-              pannable
-              zoomable
-              nodeStrokeWidth={2}
-              maskColor="rgba(240, 240, 245, 0.7)"
-            />
-            {onExecute && (
-              <Panel position="bottom-center" className="!mb-2">
-                <button
-                  type="button"
-                  onClick={onExecute}
-                  className="rounded-md px-6 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95 active:scale-[0.99]"
-                  style={{ backgroundColor: EXECUTE_BUTTON_BG }}
-                  onMouseEnter={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG_HOVER;
-                  }}
-                  onMouseLeave={(e) => {
-                    (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG;
-                  }}
-                >
-                  Execute workflow
-                </button>
-              </Panel>
-            )}
-          </ReactFlow>
+          <ScreenToFlowPointBridge targetRef={screenToFlowPointRef} />
+          <Background color="#b8c0cc" gap={20} size={1.2} variant={BackgroundVariant.Dots} />
+          <Controls className="!shadow-md" position="bottom-left" showFitView showInteractive={false} />
+          <MiniMap
+            position="bottom-right"
+            className="!m-2"
+            pannable
+            zoomable
+            nodeStrokeWidth={2}
+            maskColor="rgba(240, 240, 245, 0.7)"
+          />
+          {onExecute && (
+            <Panel position="bottom-center" className="!mb-2">
+              <button
+                type="button"
+                onClick={onExecute}
+                className="inline-flex items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95 active:scale-[0.99]"
+                style={{ backgroundColor: EXECUTE_BUTTON_BG }}
+                onMouseEnter={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG_HOVER;
+                }}
+                onMouseLeave={(e) => {
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG;
+                }}
+              >
+                <BeakerIcon className="h-4 w-4" aria-hidden />
+                Execute workflow
+              </button>
+            </Panel>
+          )}
+        </ReactFlow>
+
+        <div className="pointer-events-auto absolute right-2 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-0.5 rounded-lg border border-[#d8dde4] bg-white/95 p-0.5 shadow-md backdrop-blur-sm">
+          <Tooltip title="Add node" placement="left">
+            <IconButton size="small" onClick={openPalette} aria-label="Add node" className="!text-gray-700">
+              <PlusIcon className="h-5 w-5" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Search nodes" placement="left">
+            <IconButton size="small" onClick={openPalette} aria-label="Search nodes" className="!text-gray-700">
+              <MagnifyingGlassIcon className="h-5 w-5" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Coming soon" placement="left">
+            <span>
+              <IconButton size="small" disabled aria-label="Duplicate" className="!text-gray-400">
+                <Square2StackIcon className="h-5 w-5" />
+              </IconButton>
+            </span>
+          </Tooltip>
         </div>
-        <FlowNodeConfigPanel node={selected.node} nodeType={selected.nodeType} onChange={onPatchSelectedNode} />
       </div>
+
+      <FlowNodeConfigModal
+        open={configModalNodeId != null && configRf.node != null}
+        onClose={() => setConfigModalNodeId(null)}
+        node={configRf.node}
+        nodeType={configRf.nodeType}
+        edges={edges}
+        runData={runData}
+        onChange={(patch) => {
+          if (configModalNodeId) onPatchNodeById(configModalNodeId, patch);
+        }}
+      />
+
+      <Drawer
+        anchor="right"
+        open={nodePaletteOpen}
+        onClose={() => setNodePaletteOpen(false)}
+        PaperProps={{
+          className: '!w-[min(100vw,300px)] border-l border-[#e2e4e8]',
+        }}
+        slotProps={{ backdrop: { className: 'bg-black/20' } }}
+      >
+        <div className="flex h-full min-h-0 flex-col">
+          <div className="flex items-center justify-between border-b border-[#eceff2] px-3 py-2">
+            <span className="text-sm font-semibold text-gray-900">Add node</span>
+            <IconButton size="small" onClick={() => setNodePaletteOpen(false)} aria-label="Close" edge="end">
+              <XMarkIcon className="h-5 w-5" />
+            </IconButton>
+          </div>
+          <div className="min-h-0 flex-1">
+            <FlowNodePalette
+              nodeTypes={nodeTypes}
+              embedInDrawer
+              searchInputRef={searchInputRef}
+              onNodeTypeDoubleClick={addNodeFromTypeAtViewCenter}
+            />
+          </div>
+        </div>
+      </Drawer>
     </div>
   );
 };

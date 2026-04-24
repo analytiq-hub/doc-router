@@ -3,13 +3,19 @@
 import { use, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { FlowNodeType, FlowRevision, FlowRfEdge, FlowRfNode } from '@docrouter/sdk';
+import type { FlowExecution, FlowNodeType, FlowRevision, FlowRfEdge, FlowRfNode } from '@docrouter/sdk';
 import FlowToolbar from '@/components/flows/FlowToolbar';
 import FlowEditor from '@/components/flows/FlowEditor';
+import FlowCanvasViewTabs, { type FlowCanvasView } from '@/components/flows/FlowCanvasViewTabs';
+import FlowLogsPanel from '@/components/flows/FlowLogsPanel';
 import { revisionContentFingerprint, revisionToRF, rfToRevision } from '@/components/flows/flowRf';
 import { useFlowApi } from '@/components/flows/useFlowApi';
 import type { Edge, Node } from 'reactflow';
 import FlowExecutionList from '@/components/flows/FlowExecutionList';
+
+function tabFromQuery(value: string | null): FlowCanvasView {
+  return value === 'executions' ? 'executions' : 'editor';
+}
 
 export default function FlowDetailPage({
   params,
@@ -20,8 +26,7 @@ export default function FlowDetailPage({
   const api = useFlowApi(organizationId);
   const router = useRouter();
   const searchParams = useSearchParams();
-  const tab = searchParams.get('tab') || 'editor';
-
+  const view = tabFromQuery(searchParams.get('tab'));
   const [flowName, setFlowName] = useState<string>('Flow');
   const [flowActive, setFlowActive] = useState<boolean>(false);
   const [latestFlowRevid, setLatestFlowRevid] = useState<string>('');
@@ -31,13 +36,14 @@ export default function FlowDetailPage({
   const [revision, setRevision] = useState<FlowRevision | null>(null);
   const [rfNodes, setRfNodes] = useState<Node[]>([]);
   const [rfEdges, setRfEdges] = useState<Edge[]>([]);
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [executionForIo, setExecutionForIo] = useState<FlowExecution | null>(null);
   const [savedContentFingerprint, setSavedContentFingerprint] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string>('');
+  const [logsFocusExecutionId, setLogsFocusExecutionId] = useState<string | null>(null);
 
-  const handleTabChange = useCallback(
-    (next: string) => {
+  const handleViewChange = useCallback(
+    (next: FlowCanvasView) => {
       router.push(`/orgs/${organizationId}/flows/${flowId}?tab=${next}`);
     },
     [flowId, organizationId, router],
@@ -127,10 +133,6 @@ export default function FlowDetailPage({
     };
   }, [api, flowId]);
 
-  const onSelectedNodeIdChange = useCallback((id: string | null) => {
-    setSelectedNodeId(id);
-  }, []);
-
   const onNodesChange = useCallback((next: Node[]) => {
     setRfNodes(next);
   }, []);
@@ -176,12 +178,14 @@ export default function FlowDetailPage({
     try {
       setMessage('');
       const rev = latestFlowRevid || undefined;
-      await api.runFlow(flowId, { flow_revid: rev, document_id: undefined });
-      handleTabChange('executions');
+      const out = await api.runFlow(flowId, { flow_revid: rev, document_id: undefined });
+      if (out.execution_id) {
+        setLogsFocusExecutionId(out.execution_id);
+      }
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : 'Failed to run');
     }
-  }, [api, flowId, latestFlowRevid, handleTabChange]);
+  }, [api, flowId, latestFlowRevid]);
 
   const onActivate = useCallback(async () => {
     try {
@@ -211,7 +215,7 @@ export default function FlowDetailPage({
 
   return (
     <div className="p-4">
-      <div className="w-full max-w-[1920px] mx-auto">
+      <div className="mx-auto w-full max-w-[1920px]">
         <div className="mb-4">
           <Link
             href={`/orgs/${organizationId}/flows`}
@@ -223,34 +227,12 @@ export default function FlowDetailPage({
         </div>
         {message && <div className="mb-3 text-sm text-red-600">{message}</div>}
 
-        <div className="border-b border-gray-200 mb-3">
-          <div className="flex gap-8">
-            <button
-              onClick={() => handleTabChange('editor')}
-              className={`pb-3 px-1 relative font-semibold text-base ${
-                tab === 'editor'
-                  ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Editor
-            </button>
-            <button
-              onClick={() => handleTabChange('executions')}
-              className={`pb-3 px-1 relative font-semibold text-base ${
-                tab === 'executions'
-                  ? 'text-blue-600 after:absolute after:bottom-0 after:left-0 after:right-0 after:h-0.5 after:bg-blue-600'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              Executions
-            </button>
-          </div>
-        </div>
+        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <FlowCanvasViewTabs value={view} onChange={handleViewChange} />
 
-        <div role="tabpanel" hidden={tab !== 'editor'}>
-          {tab === 'editor' && (
-            <div className="bg-white rounded-lg">
+          {view === 'editor' && (
+            /* Fixed height: React Flow needs a non-zero parent (see error #004). h-full inside scroll areas often resolves to 0. */
+            <div className="flex h-[max(32rem,calc(100dvh-12.5rem))] min-h-[32rem] flex-col">
               <FlowToolbar
                 name={flowName}
                 onNameChange={setFlowName}
@@ -262,23 +244,31 @@ export default function FlowDetailPage({
                 onActivate={onActivate}
                 onDeactivate={onDeactivate}
               />
-              <FlowEditor
-                nodeTypes={nodeTypes}
-                nodes={rfNodes as any}
-                edges={rfEdges as any}
-                selectedNodeId={selectedNodeId}
-                onNodesChange={onNodesChange}
-                onEdgesChange={onEdgesChange}
-                onSelectedNodeIdChange={onSelectedNodeIdChange}
-                onExecute={onRun}
-              />
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <div className="min-h-0 min-w-0 flex-1 overflow-hidden p-0 sm:p-1">
+                  <FlowEditor
+                    nodeTypes={nodeTypes}
+                    nodes={rfNodes as any}
+                    edges={rfEdges as any}
+                    onNodesChange={onNodesChange}
+                    onEdgesChange={onEdgesChange}
+                    onExecute={onRun}
+                    executionForIo={executionForIo}
+                  />
+                </div>
+                <FlowLogsPanel
+                  orgApi={api}
+                  flowId={flowId}
+                  focusExecutionId={logsFocusExecutionId}
+                  onClearFocus={() => setLogsFocusExecutionId(null)}
+                  onExecutionChange={setExecutionForIo}
+                />
+              </div>
             </div>
           )}
-        </div>
 
-        <div role="tabpanel" hidden={tab !== 'executions'}>
-          {tab === 'executions' && (
-            <div className="bg-white border border-gray-200 rounded-lg p-4">
+          {view === 'executions' && (
+            <div className="p-4 sm:p-6">
               <FlowExecutionList orgApi={api} flowId={flowId} />
             </div>
           )}
