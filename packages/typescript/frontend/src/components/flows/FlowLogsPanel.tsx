@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import type { FlowExecution } from '@docrouter/sdk';
 import { IconButton, Tooltip } from '@mui/material';
 import { DocRouterOrgApi } from '@/utils/api';
+import { formatLocalDate } from '@/utils/date';
 import { ChevronDownIcon, ChevronUpIcon, TrashIcon } from '@heroicons/react/24/outline';
 
 function isRunning(e: FlowExecution) {
@@ -87,7 +88,7 @@ const FlowLogsPanel: React.FC<{
           <span className="text-sm font-semibold text-gray-800">Logs</span>
           {execution && (
             <span className="truncate text-xs text-gray-500">
-              {new Date(execution.started_at).toLocaleString()} · {execution.status}
+              {formatLocalDate(execution.started_at)} · {execution.status}
             </span>
           )}
         </button>

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import { DataGrid, type GridColDef, type GridRenderCellParams } from '@mui/x-data-grid';
 import { IconButton, Menu, MenuItem, Tooltip } from '@mui/material';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
@@ -9,6 +9,7 @@ import EditOutlinedIcon from '@mui/icons-material/EditOutlined';
 import ToggleOnIcon from '@mui/icons-material/ToggleOn';
 import ToggleOffIcon from '@mui/icons-material/ToggleOff';
 import { getApiErrorMsg } from '@/utils/api';
+import { formatLocalDate } from '@/utils/date';
 import FlowStatusBadge from './FlowStatusBadge';
 import { useFlowApi } from './useFlowApi';
 import type { FlowListItem } from '@docrouter/sdk';
@@ -132,8 +133,33 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       {
         field: 'updated_at',
         headerName: 'Updated',
-        width: 200,
-        valueGetter: (_v, row) => row.flow.updated_at,
+        type: 'dateTime',
+        width: 220,
+        headerAlign: 'left',
+        align: 'left',
+        valueGetter: (_v, row) => {
+          const v = row.flow.updated_at as string | null | undefined;
+          if (!v) return null;
+          const d = new Date(v);
+          return Number.isNaN(d.getTime()) ? null : d;
+        },
+        valueFormatter: (params: GridRenderCellParams) => {
+          const p = params as unknown as { value?: unknown } | null;
+          if (!p?.value) return '';
+          const v = p.value as Date | string;
+          const iso = v instanceof Date ? v.toISOString() : String(v);
+          return formatLocalDate(iso);
+        },
+        renderCell: (params: GridRenderCellParams) => {
+          const v = (params.row as FlowListRow).flow.updated_at;
+          if (!v) return '';
+          const formatted = formatLocalDate(v);
+          return (
+            <div className="text-gray-600" title={formatted}>
+              {formatted}
+            </div>
+          );
+        },
       },
       {
         field: 'actions',

@@ -158,7 +158,9 @@ async def create_flow(organization_id: str, req: CreateFlowRequest, current_user
     )
     flow_id = str(res.inserted_id)
     header = await db.flows.find_one({"_id": ObjectId(flow_id)})
-    return {"flow": FlowHeader(flow_id=flow_id, **{k: header[k] for k in header if k != "_id"})}
+    _raw = {k: header[k] for k in header if k != "_id"}
+    hdr = {k: (v.replace(tzinfo=UTC) if isinstance(v, datetime) else v) for k, v in _raw.items()}
+    return {"flow": FlowHeader(flow_id=flow_id, **hdr)}
 
 
 @flows_router.get("/v0/orgs/{organization_id}/flows", response_model=ListFlowsResponse)
@@ -184,9 +186,13 @@ async def list_flows(
                     "active": bool(h.get("active")),
                     "active_flow_revid": h.get("active_flow_revid"),
                     "flow_version": int(h.get("flow_version") or 0),
-                    "created_at": h["created_at"],
+                    "created_at": h["created_at"].replace(tzinfo=UTC).isoformat()
+                    if isinstance(h["created_at"], datetime)
+                    else h["created_at"],
                     "created_by": h["created_by"],
-                    "updated_at": h["updated_at"],
+                    "updated_at": h["updated_at"].replace(tzinfo=UTC).isoformat()
+                    if isinstance(h["updated_at"], datetime)
+                    else h["updated_at"],
                     "updated_by": h["updated_by"],
                 },
                 "latest_revision": None if not latest else {"flow_revid": str(latest["_id"]), "flow_version": latest["flow_version"], "graph_hash": latest.get("graph_hash")},
@@ -210,9 +216,9 @@ async def get_flow(organization_id: str, flow_id: str, current_user: User = Depe
             "active": bool(h.get("active")),
             "active_flow_revid": h.get("active_flow_revid"),
             "flow_version": int(h.get("flow_version") or 0),
-            "created_at": h["created_at"],
+            "created_at": h["created_at"].replace(tzinfo=UTC),
             "created_by": h["created_by"],
-            "updated_at": h["updated_at"],
+            "updated_at": h["updated_at"].replace(tzinfo=UTC),
             "updated_by": h["updated_by"],
         },
         "latest_revision": None if not latest else {"flow_revid": str(latest["_id"]), "flow_version": latest["flow_version"], "graph_hash": latest.get("graph_hash")},
@@ -263,7 +269,17 @@ async def list_revisions(
     revs = await db.flow_revisions.find({"flow_id": flow_id}).sort([("flow_version", -1)]).skip(offset).limit(limit).to_list(limit)
     items = []
     for r in revs:
-        items.append({"flow_revid": str(r["_id"]), "flow_version": r["flow_version"], "graph_hash": r.get("graph_hash"), "created_at": r["created_at"], "created_by": r["created_by"]})
+        items.append(
+            {
+                "flow_revid": str(r["_id"]),
+                "flow_version": r["flow_version"],
+                "graph_hash": r.get("graph_hash"),
+                "created_at": r["created_at"].replace(tzinfo=UTC).isoformat()
+                if isinstance(r["created_at"], datetime)
+                else r["created_at"],
+                "created_by": r["created_by"],
+            }
+        )
     return {"items": items, "total": total}
 
 
@@ -276,8 +292,11 @@ async def get_revision(organization_id: str, flow_id: str, flow_revid: str, curr
     r = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
     if not r:
         raise HTTPException(status_code=404, detail="Revision not found")
-    r["_id"] = str(r["_id"])
-    return r
+    out = {**r, "_id": str(r["_id"])}
+    for k, v in list(out.items()):
+        if isinstance(v, datetime):
+            out[k] = v.replace(tzinfo=UTC)
+    return out
 
 
 @flows_router.put("/v0/orgs/{organization_id}/flows/{flow_id}", response_model=SaveFlowResponse)
@@ -313,8 +332,10 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
             {"$set": {"name": req.name, "updated_at": _now(), "updated_by": current_user.user_id}},
         )
         h2 = await db.flows.find_one({"_id": ObjectId(flow_id)})
+        _raw = {k: h2[k] for k in h2 if k != "_id"}
+        hdr = {k: (v.replace(tzinfo=UTC) if isinstance(v, datetime) else v) for k, v in _raw.items()}
         return {
-            "flow": FlowHeader(flow_id=flow_id, **{k: h2[k] for k in h2 if k != "_id"}),
+            "flow": FlowHeader(flow_id=flow_id, **hdr),
             "revision": None,
         }
 
@@ -348,6 +369,8 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
     )
     h2 = await db.flows.find_one({"_id": ObjectId(flow_id)})
     r = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid)})
+    _raw = {k: h2[k] for k in h2 if k != "_id"}
+    hdr = {k: (v.replace(tzinfo=UTC) if isinstance(v, datetime) else v) for k, v in _raw.items()}
     rev = FlowRevision(
         flow_revid=flow_revid,
         flow_id=flow_id,
@@ -358,10 +381,10 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
         pin_data=r.get("pin_data"),
         graph_hash=r["graph_hash"],
         engine_version=r.get("engine_version") or 1,
-        created_at=r["created_at"],
+        created_at=r["created_at"].replace(tzinfo=UTC),
         created_by=r["created_by"],
     )
-    return {"flow": FlowHeader(flow_id=flow_id, **{k: h2[k] for k in h2 if k != "_id"}), "revision": rev}
+    return {"flow": FlowHeader(flow_id=flow_id, **hdr), "revision": rev}
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/activate")
@@ -463,9 +486,19 @@ async def list_executions(
                 organization_id=d["organization_id"],
                 mode=d["mode"],
                 status=d["status"],
-                started_at=d["started_at"],
-                finished_at=d.get("finished_at"),
-                last_heartbeat_at=d.get("last_heartbeat_at"),
+                started_at=d["started_at"].replace(tzinfo=UTC).isoformat()
+                if isinstance(d["started_at"], datetime)
+                else d["started_at"],
+                finished_at=(
+                    d["finished_at"].replace(tzinfo=UTC).isoformat()
+                    if isinstance(d.get("finished_at"), datetime)
+                    else d.get("finished_at")
+                ),
+                last_heartbeat_at=(
+                    d["last_heartbeat_at"].replace(tzinfo=UTC).isoformat()
+                    if isinstance(d.get("last_heartbeat_at"), datetime)
+                    else d.get("last_heartbeat_at")
+                ),
                 stop_requested=bool(d.get("stop_requested")),
                 last_node_executed=d.get("last_node_executed"),
                 run_data=d.get("run_data") or {},
@@ -489,9 +522,11 @@ async def get_execution(organization_id: str, flow_id: str, exec_id: str, curren
         organization_id=d["organization_id"],
         mode=d["mode"],
         status=d["status"],
-        started_at=d["started_at"],
-        finished_at=d.get("finished_at"),
-        last_heartbeat_at=d.get("last_heartbeat_at"),
+        started_at=d["started_at"].replace(tzinfo=UTC),
+        finished_at=d["finished_at"].replace(tzinfo=UTC) if isinstance(d.get("finished_at"), datetime) else d.get("finished_at"),
+        last_heartbeat_at=d["last_heartbeat_at"].replace(tzinfo=UTC)
+        if isinstance(d.get("last_heartbeat_at"), datetime)
+        else d.get("last_heartbeat_at"),
         stop_requested=bool(d.get("stop_requested")),
         last_node_executed=d.get("last_node_executed"),
         run_data=d.get("run_data") or {},

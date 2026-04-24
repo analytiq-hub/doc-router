@@ -8,6 +8,7 @@ import type { FlowExecution, FlowNodeType } from '@docrouter/sdk';
 import type { FlowRfNodeData } from './flowRf';
 import { revisionToRF } from './flowRf';
 import { DocRouterOrgApi } from '@/utils/api';
+import { formatLocalDate } from '@/utils/date';
 import './flows-canvas.css';
 import FlowCanvasNode from './FlowCanvasNode';
 import FlowCanvasEdge from './FlowCanvasEdge';
@@ -214,9 +215,7 @@ const FlowExecutionsView: React.FC<{
                     ].join(' ')}
                   >
                     {sel && <span className="absolute left-0 top-0 h-full w-1 rounded-r bg-emerald-500" aria-hidden />}
-                    <div className="pl-0.5 text-xs font-medium text-gray-500">
-                      {new Date(e.started_at).toLocaleString()}
-                    </div>
+                    <div className="pl-0.5 text-xs font-medium text-gray-500">{formatLocalDate(e.started_at)}</div>
                     <div className="pl-0.5 text-sm font-semibold text-gray-900">
                       {e.status === 'success' && 'Succeeded'}
                       {e.status === 'error' && 'Error'}
@@ -245,7 +244,7 @@ const FlowExecutionsView: React.FC<{
         )}
         {detail && (
           <div className="absolute left-0 right-0 top-0 z-10 border-b border-[#eceff2] bg-white/90 px-3 py-1.5 text-xs text-gray-600 backdrop-blur-sm">
-            <span className="font-medium text-gray-800">{new Date(detail.started_at).toLocaleString()}</span> · {detail.status}
+            <span className="font-medium text-gray-800">{formatLocalDate(detail.started_at)}</span> · {detail.status}
             {detail.finished_at && <span> · {formatDuration(detail)}</span>} · <span className="font-mono">ID {detail.execution_id}</span>
           </div>
         )}

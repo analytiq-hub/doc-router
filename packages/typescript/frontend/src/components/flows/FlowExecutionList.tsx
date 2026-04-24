@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import type { FlowExecution } from '@docrouter/sdk';
 import { Button, Paper, Table, TableBody, TableCell, TableContainer, TableHead, TableRow } from '@mui/material';
 import { DocRouterOrgApi } from '@/utils/api';
+import { formatLocalDate } from '@/utils/date';
 
 function statusRunning(e: FlowExecution) {
   return e.status === 'queued' || e.status === 'running';
@@ -93,7 +94,7 @@ const FlowExecutionList: React.FC<{
                     onClick={() => setExpanded((x) => (x === e.execution_id ? null : e.execution_id))}
                     selected={open}
                   >
-                    <TableCell>{new Date(e.started_at).toLocaleString()}</TableCell>
+                    <TableCell>{formatLocalDate(e.started_at)}</TableCell>
                     <TableCell>{e.mode}</TableCell>
                     <TableCell>{e.status}</TableCell>
                     <TableCell>{formatDuration(e)}</TableCell>
