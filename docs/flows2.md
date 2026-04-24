@@ -549,7 +549,7 @@ Engine tests run `run_flow` with `analytiq_client=None`, which causes
 | **`flows.trigger.schedule` / cron** | Cron registration at activation, tick → `flow_run` | Not started |
 | **Upload → flow** | Dispatch `flow_run` on `document.uploaded` (or similar) for matching active flows | Upload still enqueues OCR and product `webhooks` only |
 | **Stale-execution recovery** (execution docs) | Sweep `flow_executions` stuck in `running` with an old `last_heartbeat_at` | Different from `recover_stale_messages` on the queue |
-| **Dynamic node types** (API + MongoDB) | e.g. `flow_node_type_definitions` + CRUD + loader | Needs design |
+| **Dynamic node types** (API + MongoDB) | e.g. `flow_node_type_definitions` + CRUD + loader | Design: `docs/dynamic_node_types.md` |
 | **First-class flow builder UI** | Wire React Flow (already used in the app for other workflows) to flow CRUD and execution status | Product milestone |
 
 ### Known limitations (by design for v1)
