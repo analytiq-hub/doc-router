@@ -21,12 +21,12 @@ interface SpeechRecognitionErrorEvent extends Event {
   readonly error: string;
 }
 
-declare var SpeechRecognition: {
+declare const SpeechRecognition: {
   prototype: SpeechRecognition;
   new (): SpeechRecognition;
 };
 
-declare var webkitSpeechRecognition: {
+declare const webkitSpeechRecognition: {
   prototype: SpeechRecognition;
   new (): SpeechRecognition;
 };
