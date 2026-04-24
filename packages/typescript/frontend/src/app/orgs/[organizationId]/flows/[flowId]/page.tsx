@@ -8,7 +8,7 @@ import FlowToolbar from '@/components/flows/FlowToolbar';
 import FlowEditor from '@/components/flows/FlowEditor';
 import { revisionToRF, rfToConnections } from '@/components/flows/flowRf';
 import { useFlowApi } from '@/components/flows/useFlowApi';
-import type { Edge, Node } from 'reactflow';
+import { applyEdgeChanges, applyNodeChanges, type Edge, type EdgeChange, type Node, type NodeChange } from 'reactflow';
 
 export default function FlowDetailPage({
   params,
@@ -108,11 +108,34 @@ export default function FlowDetailPage({
     };
   }, [api, flowId]);
 
-  const onEditorChange = useCallback((nodes: any[], edges: any[], sel: string | null) => {
-    setRfNodes(nodes);
-    setRfEdges(edges);
-    setSelectedNodeId(sel);
+  const onSelectedNodeIdChange = useCallback((id: string | null) => {
+    setSelectedNodeId(id);
+  }, []);
+
+  const onNodesChange = useCallback((next: Node[]) => {
+    setRfNodes(next);
     setIsDirty(true);
+  }, []);
+
+  const onEdgesChange = useCallback((next: Edge[]) => {
+    setRfEdges(next);
+    setIsDirty(true);
+  }, []);
+
+  const onReactFlowNodesChange = useCallback((changes: NodeChange[]) => {
+    setRfNodes((prev) => {
+      const next = applyNodeChanges(changes, prev);
+      if (changes.some((c) => c.type !== 'select')) setIsDirty(true);
+      return next;
+    });
+  }, []);
+
+  const onReactFlowEdgesChange = useCallback((changes: EdgeChange[]) => {
+    setRfEdges((prev) => {
+      const next = applyEdgeChanges(changes, prev);
+      if (changes.some((c) => c.type !== 'select')) setIsDirty(true);
+      return next;
+    });
   }, []);
 
   const onSave = useCallback(async () => {
@@ -239,9 +262,12 @@ export default function FlowDetailPage({
               />
               <FlowEditor
                 nodeTypes={nodeTypes}
-                initialNodes={rfNodes as any}
-                initialEdges={rfEdges as any}
-                onChange={onEditorChange}
+                nodes={rfNodes as any}
+                edges={rfEdges as any}
+                selectedNodeId={selectedNodeId}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onSelectedNodeIdChange={onSelectedNodeIdChange}
               />
             </div>
           )}

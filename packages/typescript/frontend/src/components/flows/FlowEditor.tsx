@@ -4,11 +4,13 @@ import ReactFlow, {
   Controls,
   MiniMap,
   addEdge,
-  useEdgesState,
-  useNodesState,
   type Connection,
   type Edge,
   type Node,
+  applyEdgeChanges,
+  applyNodeChanges,
+  type EdgeChange,
+  type NodeChange,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 
@@ -22,18 +24,24 @@ function uuid(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now());
 }
 
+function parseHandleIndex(handle: string | null | undefined, prefix: string): number | null {
+  if (!handle) return null;
+  if (!handle.startsWith(prefix)) return null;
+  const idx = Number(handle.slice(prefix.length));
+  return Number.isFinite(idx) ? idx : null;
+}
+
 const FlowEditor: React.FC<{
   nodeTypes: FlowNodeType[];
-  initialNodes: Node<FlowRFNodeData>[];
-  initialEdges: Edge[];
-  onChange: (nodes: Node<FlowRFNodeData>[], edges: Edge[], selectedNodeId: string | null) => void;
-}> = ({ nodeTypes, initialNodes, initialEdges, onChange }) => {
+  nodes: Node<FlowRFNodeData>[];
+  edges: Edge[];
+  selectedNodeId: string | null;
+  onNodesChange: (next: Node<FlowRFNodeData>[]) => void;
+  onEdgesChange: (next: Edge[]) => void;
+  onSelectedNodeIdChange: (id: string | null) => void;
+}> = ({ nodeTypes, nodes, edges, selectedNodeId, onNodesChange, onEdgesChange, onSelectedNodeIdChange }) => {
   const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
-
-  const [nodes, setNodes, onNodesChange] = useNodesState<FlowRFNodeData>(initialNodes);
-  const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
-  const [selectedNodeId, setSelectedNodeId] = React.useState<string | null>(null);
 
   const rfNodeTypes = useMemo(
     () => ({
@@ -42,29 +50,31 @@ const FlowEditor: React.FC<{
     [],
   );
 
-  const notify = useCallback(
-    (nextNodes: Node<FlowRFNodeData>[], nextEdges: Edge[], sel: string | null) => {
-      onChange(nextNodes, nextEdges, sel);
-    },
-    [onChange],
-  );
-
   const onConnect = useCallback(
     (params: Connection) => {
-      setEdges((eds) => {
-        const next = addEdge(params, eds);
-        notify(nodes, next, selectedNodeId);
-        return next;
-      });
+      const outIdx = parseHandleIndex(params.sourceHandle, 'out-');
+      const inIdx = parseHandleIndex(params.targetHandle, 'in-');
+      if (outIdx == null || inIdx == null) return;
+
+      const src = nodes.find((n) => n.id === params.source);
+      const dst = nodes.find((n) => n.id === params.target);
+      const srcType = src ? nodeTypesByKey[src.data.flowNode.type] : undefined;
+      const dstType = dst ? nodeTypesByKey[dst.data.flowNode.type] : undefined;
+
+      // Validate output slot index is within declared outputs (best-effort).
+      if (srcType && outIdx >= srcType.outputs) return;
+      // Validate destination input index if it has a max.
+      if (dstType && dstType.max_inputs != null && inIdx >= dstType.max_inputs) return;
+
+      onEdgesChange(addEdge(params, edges));
     },
-    [nodes, notify, selectedNodeId, setEdges],
+    [edges, nodeTypesByKey, nodes, onEdgesChange],
   );
 
   const onSelectionChange = useCallback((e: { nodes: Node[] }) => {
     const id = e.nodes?.[0]?.id ?? null;
-    setSelectedNodeId(id);
-    notify(nodes, edges, id);
-  }, [edges, nodes, notify]);
+    onSelectedNodeIdChange(id);
+  }, [onSelectedNodeIdChange]);
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
@@ -95,13 +105,9 @@ const FlowEditor: React.FC<{
         position,
         data: { flowNode, nodeType: nt },
       };
-      setNodes((nds) => {
-        const next = [...nds, newNode];
-        notify(next, edges, selectedNodeId);
-        return next;
-      });
+      onNodesChange([...nodes, newNode]);
     },
-    [edges, nodeTypesByKey, notify, selectedNodeId, setNodes],
+    [nodeTypesByKey, nodes, onNodesChange],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -118,24 +124,21 @@ const FlowEditor: React.FC<{
   const onPatchSelectedNode = useCallback(
     (patch: Partial<FlowNode>) => {
       if (!selectedNodeId) return;
-      setNodes((nds) => {
-        const next = nds.map((n) => {
-          if (n.id !== selectedNodeId) return n;
-          const flowNode = { ...n.data.flowNode, ...patch, parameters: patch.parameters ?? n.data.flowNode.parameters };
-          return {
-            ...n,
-            data: {
-              ...n.data,
-              flowNode,
-              nodeType: n.data.nodeType ?? nodeTypesByKey[flowNode.type],
-            },
-          };
-        });
-        notify(next, edges, selectedNodeId);
-        return next;
+      const next = nodes.map((n) => {
+        if (n.id !== selectedNodeId) return n;
+        const flowNode = { ...n.data.flowNode, ...patch, parameters: patch.parameters ?? n.data.flowNode.parameters };
+        return {
+          ...n,
+          data: {
+            ...n.data,
+            flowNode,
+            nodeType: n.data.nodeType ?? nodeTypesByKey[flowNode.type],
+          },
+        };
       });
+      onNodesChange(next);
     },
-    [edges, nodeTypesByKey, notify, selectedNodeId, setNodes],
+    [nodeTypesByKey, nodes, onNodesChange, selectedNodeId],
   );
 
   return (
@@ -147,13 +150,11 @@ const FlowEditor: React.FC<{
             nodes={nodes}
             edges={edges}
             nodeTypes={rfNodeTypes}
-            onNodesChange={(c) => {
-              onNodesChange(c);
-              // best-effort: read latest state after change via callback setters
-              // (ReactFlow will call state setters; we’ll notify on next render via selection changes / actions)
+            onNodesChange={(changes: NodeChange[]) => {
+              onNodesChange(applyNodeChanges(changes, nodes));
             }}
-            onEdgesChange={(c) => {
-              onEdgesChange(c);
+            onEdgesChange={(changes: EdgeChange[]) => {
+              onEdgesChange(applyEdgeChanges(changes, edges));
             }}
             onConnect={onConnect}
             onSelectionChange={onSelectionChange}
