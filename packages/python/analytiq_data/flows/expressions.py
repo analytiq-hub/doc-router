@@ -106,6 +106,18 @@ def _rewrite_vars(expr: str) -> str:
                 out.append("_binary")
                 i += 7
                 continue
+            if expr.startswith("$input", i):
+                out.append("_input")
+                i += 6
+                continue
+            if expr.startswith("$item", i):
+                out.append("_item")
+                i += 5
+                continue
+            if expr.startswith("$items", i):
+                out.append("_items")
+                i += 6
+                continue
 
             out.append(ch)
             i += 1
@@ -155,7 +167,67 @@ def _validate_expr_ast(tree: ast.AST) -> None:
                 raise ExpressionError("Names starting with '__' are not allowed in expressions")
 
 
-def eval_expression(expr: str, *, item: ad.flows.FlowItem | None, run_data: dict[str, Any]) -> Any:
+def _materialize_binary(binary: dict[str, ad.flows.BinaryRef]) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for k, v in (binary or {}).items():
+        out[k] = {
+            "mime_type": v.mime_type,
+            "file_name": v.file_name,
+            # Intentionally omit raw `data` bytes from expression context.
+            "data": None,
+            "storage_id": v.storage_id,
+        }
+    return out
+
+
+def _materialize_item(it: ad.flows.FlowItem) -> dict[str, Any]:
+    return {
+        "json": it.json,
+        "binary": _materialize_binary(it.binary or {}),
+        "meta": it.meta,
+        "paired_item": it.paired_item,
+    }
+
+
+def materialize_input_context(
+    inputs: list[list[ad.flows.FlowItem]] | None,
+    *,
+    input_index: int | None = None,
+    item_index: int | None = None,
+) -> dict[str, Any]:
+    """
+    Build an n8n-ish `$input` object for expression evaluation.
+
+    Shape:
+    {
+      "all":   [ [item, ...], [item, ...], ... ],   # all input slots
+      "item":  {json,binary,meta,paired_item} | None,  # current item (if in per-item mode)
+      "input_index": int | None,
+      "item_index":  int | None,
+    }
+    """
+
+    slots = inputs or []
+    all_slots = [[_materialize_item(it) for it in slot] for slot in slots]
+    current = None
+    if input_index is not None and item_index is not None:
+        if 0 <= input_index < len(slots) and 0 <= item_index < len(slots[input_index]):
+            current = _materialize_item(slots[input_index][item_index])
+    return {
+        "all": all_slots,
+        "item": current,
+        "input_index": input_index,
+        "item_index": item_index,
+    }
+
+
+def eval_expression(
+    expr: str,
+    *,
+    item: ad.flows.FlowItem | None,
+    run_data: dict[str, Any],
+    input_context: dict[str, Any] | None = None,
+) -> Any:
     """
     Evaluate a single expression string (without leading '=') against the current item and run_data.
     """
@@ -172,13 +244,13 @@ def eval_expression(expr: str, *, item: ad.flows.FlowItem | None, run_data: dict
 
     env = {
         "_json": (item.json if item is not None else {}),
-        "_binary": (
-            {k: {"mime_type": v.mime_type, "file_name": v.file_name, "data": v.data, "storage_id": v.storage_id}
-             for k, v in (item.binary or {}).items()}
-            if item is not None
-            else {}
-        ),
+        "_binary": (_materialize_binary(item.binary or {}) if item is not None else {}),
         "_node": materialize_node_data(run_data),
+        # n8n-ish additions:
+        "_input": (input_context or {"all": [], "item": None, "input_index": None, "item_index": None}),
+        "_item": (_materialize_item(item) if item is not None else None),
+        # Convenience: a JSON-only view of prior node outputs by node id.
+        "_items": materialize_node_data(run_data),
     }
     try:
         return eval(code, {"__builtins__": {}}, env)
@@ -191,6 +263,7 @@ def resolve_parameters(
     *,
     item: ad.flows.FlowItem | None,
     run_data: dict[str, Any],
+    input_context: dict[str, Any] | None = None,
 ) -> Any:
     """
     Recursively resolve parameters, evaluating any string value that starts with '='.
@@ -198,12 +271,15 @@ def resolve_parameters(
 
     if isinstance(params, str):
         if params.startswith("="):
-            return eval_expression(params[1:], item=item, run_data=run_data)
+            return eval_expression(params[1:], item=item, run_data=run_data, input_context=input_context)
         return params
     if isinstance(params, list):
-        return [resolve_parameters(x, item=item, run_data=run_data) for x in params]
+        return [resolve_parameters(x, item=item, run_data=run_data, input_context=input_context) for x in params]
     if isinstance(params, dict):
-        return {k: resolve_parameters(v, item=item, run_data=run_data) for k, v in params.items()}
+        return {
+            k: resolve_parameters(v, item=item, run_data=run_data, input_context=input_context)
+            for k, v in params.items()
+        }
     return params
 
 

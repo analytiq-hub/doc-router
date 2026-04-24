@@ -116,3 +116,9 @@ The Smart Document Router is a full-stack document processing platform with huma
 
 ### Other
 - Use f-strings for python logs
+
+## Repo-specific rules for agents
+
+### `analytiq_data/__init__.py` import behavior
+- Do **not** implement lazy module loading (no `__getattr__`, import shims, or conditional imports) in `packages/python/analytiq_data/__init__.py`.
+- Keep it as a straightforward eager import file consistent with production packaging expectations.

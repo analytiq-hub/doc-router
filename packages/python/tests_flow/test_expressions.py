@@ -228,7 +228,13 @@ async def test_merge_node_expression_can_reference_all_inputs() -> None:
         _n("t1", "Start", "flows.trigger.manual", 0),
         _n("a1", "A", "tests.set_x", 200, {"x": 1}),
         _n("b1", "B", "tests.set_x", 200, {"x": 2}),
-        _n("m1", "MergeEcho", "tests.merge_echo_param", 400, {"value": "=$json['inputs'][1][0]['x']"}),
+        _n(
+            "m1",
+            "MergeEcho",
+            "tests.merge_echo_param",
+            400,
+            {"value": "=$input['all'][1][0]['json']['x']"},
+        ),
     ]
     conns = {
         "t1": {
@@ -258,6 +264,31 @@ async def test_merge_node_expression_can_reference_all_inputs() -> None:
     assert res["status"] == "success"
     out = ctx.run_data["m1"]["data"]["main"][0][0]
     assert out.json["value"] == 2
+
+
+@pytest.mark.asyncio
+async def test_per_item_expression_can_access_current_input_item_via_input_item() -> None:
+    nodes = [
+        _n("t1", "Start", "tests.trigger.multi", 0),
+        _n("e1", "Echo", "tests.echo_param", 200, {"value": "=$input['item']['json']['x']"}),
+    ]
+    conns = {"t1": {"main": [[ad.flows.NodeConnection(dest_node_id="e1", connection_type="main", index=0)]]}}
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(context=ctx, revision={"nodes": nodes, "connections": conns, "settings": {}, "pin_data": None})
+    assert res["status"] == "success"
+    out_items = ctx.run_data["e1"]["data"]["main"][0]
+    assert [it.json["value"] for it in out_items] == [1, 2]
 
 
 @pytest.mark.asyncio

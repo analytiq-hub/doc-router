@@ -332,6 +332,7 @@ async def _execute_loop(
                             node.get("parameters") or {},
                             item=None,
                             run_data=context.run_data,
+                            input_context=ad.flows.materialize_input_context([]),
                         ),
                     }
                     out_lists = await node_type.execute(context, resolved_node, [])
@@ -343,21 +344,15 @@ async def _execute_loop(
                     out_lists = _empty_outputs(outputs_count)
                     status = "skipped"
                 elif node_type.is_merge:
-                    # Merge nodes receive multiple input slots and may be parameterized.
-                    # Resolve expressions against a synthetic item exposing all inputs so
-                    # expressions are not dependent on whichever item happens to be "first".
-                    expr_item = ad.flows.FlowItem(
-                        json={"inputs": [[it.json for it in slot] for slot in wi.inputs]},
-                        binary={},
-                        meta={},
-                        paired_item=None,
-                    )
+                    # Merge nodes resolve expressions once per node execution. Provide an n8n-ish
+                    # `$input` object containing all items across input slots.
                     resolved_node = {
                         **node,
                         "parameters": ad.flows.resolve_parameters(
                             node.get("parameters") or {},
-                            item=expr_item,
+                            item=None,
                             run_data=context.run_data,
+                            input_context=ad.flows.materialize_input_context(wi.inputs),
                         ),
                     }
                     out_lists = await node_type.execute(context, resolved_node, wi.inputs)
@@ -369,13 +364,16 @@ async def _execute_loop(
                     # n8n-style per-item parameter resolution: evaluate params against each input item.
                     combined: list[list["ad.flows.FlowItem"]] = [[] for _ in range(outputs_count)]
                     for slot_idx, slot in enumerate(wi.inputs):
-                        for it in slot:
+                        for item_idx, it in enumerate(slot):
                             resolved_node = {
                                 **node,
                                 "parameters": ad.flows.resolve_parameters(
                                     node.get("parameters") or {},
                                     item=it,
                                     run_data=context.run_data,
+                                    input_context=ad.flows.materialize_input_context(
+                                        wi.inputs, input_index=slot_idx, item_index=item_idx
+                                    ),
                                 ),
                             }
                             per_inputs = [[] for _ in range(len(wi.inputs))]

@@ -543,11 +543,11 @@ Engine tests run `run_flow` with `analytiq_client=None`, which causes
 
 ### Known limitations (by design for v1)
 
-- **Merge nodes** use a **single** `resolve_parameters` pass, but expressions are
-  resolved against a **synthetic** `$json` that includes **all** input items:
-  `$json["inputs"][slot_idx][item_idx]`. Merge nodes then run one `execute` with
-  merged inputs. **Non-merge** nodes get per-item `=` evaluation and one
-  `execute` per item.
+- **Merge nodes** resolve `=` parameters **once** per node execution (not per item).
+  Expressions can access all inputs via `$input["all"][slot_idx][item_idx]["json"]`
+  (and `$input["all"][...]["binary"/"meta"]`). **Non-merge** nodes get per-item `=`
+  evaluation and one `execute` per item; the “current item” is also exposed as
+  `$input["item"]` / `$item`.
 - `flows.code` is **not** a full multi-tenant sandbox. The subprocess boundary and
   restricted builtins are a v1 precaution; seccomp / WASM isolation is a later
   concern.
