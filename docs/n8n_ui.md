@@ -97,61 +97,447 @@ Every mutating canvas operation pushes a command; ctrl+z pops and reverses it.
 ### Node component tree
 
 ```
-CanvasNode.vue              outer wrapper (toolbar, context menu, selection border)
-└── CanvasNodeRenderer.vue  picks the render component by node type
-    ├── CanvasNodeDefault.vue     standard process node
-    ├── CanvasNodeStickyNote.vue  sticky note
-    └── CanvasNodeAddNodes.vue    the "+" ghost node shown at the end of a chain
+CanvasNode.vue                    outer wrapper: toolbar visibility, context menu, selection ring
+├── CanvasNodeToolbar.vue         hover toolbar (run / disable / delete / ⋯)
+├── CanvasNodeRenderer.vue        picks the render sub-component by type
+│   ├── CanvasNodeDefault.vue     standard process node body (icon + name label below)
+│   ├── CanvasNodeStickyNote.vue  sticky note
+│   └── CanvasNodeAddNodes.vue    "+" ghost node at the end of a chain
+└── CanvasHandleRenderer.vue      one instance per port (input or output)
+    ├── CanvasHandleMainInput.vue    left-side rectangle dot
+    ├── CanvasHandleMainOutput.vue   right-side dot + animated + button
+    ├── CanvasHandleNonMainInput.vue bottom-side diamond (AI connections)
+    └── CanvasHandleNonMainOutput.vue top-side diamond
+        └── parts/
+            ├── CanvasHandleDot.vue       filled circle — output connection point
+            ├── CanvasHandleRectangle.vue filled rectangle — input connection point
+            └── CanvasHandlePlus.vue      SVG line + rounded-rect + "+" path
 ```
 
-#### `CanvasNode.vue`
+---
 
-Props: `selected`, `data: CanvasNodeData`, `hovered`, `readOnly`
+### Node shape and CSS
 
-Emits: `add`, `delete`, `run`, `select`, `toggle`, `activate`,
-`open:contextmenu`, `update`, `move`
+**Standard (process) node** — `CanvasNodeDefault.vue`
 
-Renders a node toolbar on hover (run this node, open config, delete). Wraps the
-render component in a selection border and handles the context-menu trigger.
+```scss
+.node {
+  width:  100px;            /* fixed square by default */
+  height: 100px;            /* grows with handle count: +42px per extra handle above 3 */
+  border: 2px solid var(--color-foreground-xdark);
+  border-radius: var(--border-radius-large);   /* ~12px — uniformly rounded */
+  background: var(--color-node-background);    /* white */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+```
 
-#### `CanvasNodeDefault.vue`
+**Trigger node** — same `.node` div but with the CSS class `.trigger` added:
 
-The standard bubble. Shows:
-- Node type icon (loaded from `n8n-design-system`)
-- Node name (bold)
-- Execution status overlay (spinner / green-check / red-x)
-- Pinned-data indicator
-- Error count badge
+```scss
+&.trigger {
+  border-radius: 36px var(--border-radius-large) var(--border-radius-large) 36px;
+  /* left corners are much more rounded (36 px ≈ pill) */
+  /* right corners use the standard radius (~12 px) */
+}
+```
 
-#### Connection handles — `CanvasHandleRenderer.vue`
+This produces the distinctive pill-on-left / square-on-right shape that
+visually distinguishes trigger (start) nodes from process nodes.
 
-Renders the input (left) and output (right) connection points. Handle shapes
-differ by type:
+**Node name label** lives *below* the node box, not inside it:
 
-| Handle type | Shape | Used for |
+```scss
+.description {
+  position: absolute;
+  top: 100%;              /* sits directly below the node box */
+  margin-top: var(--spacing-2xs);   /* ~4 px gap */
+  width: 100%;
+  min-width: calc(var(--canvas-node--width) * 2);  /* 200 px — wider than the box */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.label {
+  font-size: var(--font-size-m);    /* 14 px */
+  font-weight: var(--font-weight-bold);
+  text-align: center;
+  -webkit-line-clamp: 2;            /* truncates after 2 lines */
+  overflow: hidden;
+}
+
+.subtitle {
+  font-size: var(--font-size-xs);   /* 12 px */
+  color: var(--color-text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+```
+
+**State-driven border colours** (CSS class toggling on `.node`):
+
+| Class | Border colour | When |
 |---|---|---|
-| Main input/output | Circle | Normal data flow |
-| Non-main input | Diamond | AI sub-connections (tools, embeddings, …) |
-| Plus | `+` button | Shortcut to add next node |
+| `.selected` | box-shadow ring (sky blue) | node is selected |
+| `.success` | `--color-success` (green) | run completed OK |
+| `.error` | `--color-danger` (red) | run had issues |
+| `.running` | `--color-node-running-border` + dimmed bg | currently executing |
+| `.waiting` | `--color-secondary` (yellow) | paused / waiting |
+| `.disabled` | `--color-foreground-base` (grey) | node is toggled off |
+| `.pinned` | `--color-node-pinned-border` (amber) | data is pinned |
 
-Props: `inputs`, `outputs`, `mainInputs`, `mainOutputs`, `nonMainInputs`,
-`nonMainOutputs`
+The `NodeIcon` (svg/image from the node type registry) is rendered as a child
+inside `CanvasNode.vue`, centred inside the node box at 40 × 40 px (30 × 30 for
+sub-configuration nodes).
 
-### Edge rendering
+---
 
-**`CanvasEdge.vue`** — SVG cubic bezier. Props: `data: CanvasConnectionData`,
-`source`, `target`, `selected`.
+### Hover toolbar — `CanvasNodeToolbar.vue`
 
-Edge status colours:
+The toolbar is an `absolute`-positioned div sitting **above** the node box:
 
-| `data.status` | Colour |
+```scss
+/* CanvasNode.vue */
+.canvasNodeToolbar {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translate(-50%, -100%);  /* floats above the node */
+  opacity: 0;
+  transition: opacity 0.1s ease-in;
+  z-index: 1;
+}
+
+/* revealed on node hover, focus, or when its own context menu is open */
+.canvasNode:hover .canvasNodeToolbar,
+.canvasNode:focus-within .canvasNodeToolbar,
+.canvasNode.showToolbar .canvasNodeToolbar {
+  opacity: 1;
+}
+```
+
+The toolbar itself is a rounded pill containing icon buttons:
+
+```scss
+/* CanvasNodeToolbar.vue */
+.canvasNodeToolbarItems {
+  display: flex;
+  align-items: center;
+  background-color: var(--color-canvas-background);
+  border-radius: var(--border-radius-base);
+}
+```
+
+Buttons rendered (left → right):
+
+| Button | Icon | `data-test-id` | Visible when |
+|---|---|---|---|
+| Run / test step | `play` | `execute-node-button` | not readOnly, not configuration-type |
+| Disable / enable | `power-off` | `disable-node-button` | not readOnly, default type |
+| Delete | `trash` | `delete-node-button` | not readOnly |
+| Sticky color | colour swatches | — | sticky note only |
+| More (⋯) | `ellipsis-h` | `overflow-node-button` | always |
+
+The **⋯ button** opens the context menu (`useContextMenu`). When the context
+menu is open with `source === 'node-button'`, `CanvasNode` adds the
+`.showToolbar` class so the toolbar stays visible while the menu is open.
+
+Emits from `CanvasNodeToolbar`: `run`, `toggle`, `delete`, `update`,
+`open:contextmenu`.
+
+---
+
+### Output handle with + button — `CanvasHandleMainOutput.vue`
+
+Each output port has two visual layers:
+
+1. **`CanvasHandleDot`** — a filled circle (8 × 8 px) that is always visible.
+   It is the Vue Flow `<Handle>` hit target for dragging connections.
+
+2. **`CanvasHandlePlus`** — a small SVG that appears only when the output is
+   **not yet connected** and the canvas is not in read-only mode:
+
+```html
+<!-- CanvasHandleMainOutput.vue (simplified) -->
+<CanvasHandleDot />
+<CanvasHandlePlus
+  v-if="!isConnected && !isReadOnly"
+  v-show="!isConnecting || isHovered"
+  :type="runDataTotal > 0 ? 'success' : 'default'"
+  :line-size="runDataTotal > 0 ? 80 : 46"
+/>
+```
+
+`CanvasHandlePlus` is an SVG composed of three parts:
+
+```
+[---line---][+box]
+```
+
+- **line** — a horizontal `<line>` element from the dot to the box.
+  Length is `lineSize` px (46 by default, 80 when run data is present).
+- **+box** — a 24 × 24 px rounded-rect (`rx=4`) with a `+` path inside.
+  Clicking it emits `add`, which is wired through `CanvasNode` to
+  `useCanvasOperations.addNode()` — opening the node palette pre-wired to
+  this output.
+
+```scss
+/* hover: box and path turn primary blue */
+.plus:hover path { fill: var(--color-primary); }
+.plus:hover rect { stroke: var(--color-primary); }
+
+/* success state: line turns green */
+.wrapper.success .line { stroke: var(--color-success); }
+```
+
+After a successful run the line turns green and the item count label
+(`"1 item"`) appears above the + box. The + box itself disappears once the
+output is connected (a real edge replaces it).
+
+---
+
+### Input handle — `CanvasHandleMainInput.vue`
+
+Simpler than the output handle: just a `CanvasHandleRectangle` (a small
+filled rectangle, 8 × 16 px) with an optional label to its left. No + button.
+The rectangle is the Vue Flow `<Handle type="target">` hit target.
+
+---
+
+### Handle positioning
+
+`CanvasNode.vue` computes handle positions via `createEndpointMappingFn`:
+
+```typescript
+// For N handles on one side, evenly space them:
+offset: { top: `${(100 / (endpoints.length + 1)) * (index + 1)}%` }
+```
+
+Main inputs → `Position.Left`, offset along `top`.
+Main outputs → `Position.Right`, offset along `top`.
+Non-main inputs (AI) → `Position.Bottom`, offset along `left`.
+Non-main outputs (AI) → `Position.Top`, offset along `left`.
+
+---
+
+### Edge rendering and edge hover toolbar
+
+**`CanvasEdge.vue`** — SVG smooth-step path (Vue Flow's `BaseEdge`). Props:
+`data: CanvasConnectionData`, `source`, `target`, `selected`, `hovered`,
+`readOnly`.
+
+Edge status colours (applied via `stroke` in `edgeStyle`):
+
+| `data.status` / condition | Colour |
 |---|---|
-| `'success'` | green |
-| `'error'` | red |
-| `'pinned'` | yellow |
-| `'running'` | animated blue |
+| `'success'` | `--color-success` (green) |
+| `'pinned'` | `--color-secondary` (amber) |
+| `'running'` | `--color-primary` (blue) |
+| non-main connection (AI lane) | `--node-type-supplemental-color`; dashed (`strokeDasharray: '8,8'`) |
+| selected | `--color-background-dark` (near-black) |
+| hovered | `--color-primary` (overrides all above) |
+| default | `--color-foreground-xdark` (dark grey) |
 
-**`CanvasEdgeToolbar.vue`** — delete button shown on edge hover.
+The edge has `interactionWidth: 40` — a 40 px invisible hit zone around the
+path, making it easy to hover a thin line.
+
+#### Edge hover state management (`Canvas.vue`)
+
+`Canvas.vue` maintains a `edgesHoveredById: Record<string, boolean>` ref:
+
+```typescript
+// Vue Flow lifecycle hooks (from @vue-flow/core):
+onEdgeMouseEnter(({ edge }) => { edgesHoveredById.value = { [edge.id]: true }; });
+onEdgeMouseLeave(({ edge }) => { edgesHoveredById.value = { [edge.id]: false }; });
+```
+
+The `hovered` prop is passed into `CanvasEdge` from the edge slot template:
+```html
+<CanvasEdge :hovered="edgesHoveredById[edgeProps.id]" ... />
+```
+
+There is a second hover trigger: the toolbar label area inside the edge itself
+fires `update:label:hovered` events, which also set `edgesHoveredById[id]` and
+additionally set `edgesBringToFrontById[id] = true` so the hovered edge SVG is
+rendered above any overlapping edges.
+
+#### Edge label / toolbar toggle
+
+`CanvasEdge.vue` uses Vue Flow's `<EdgeLabelRenderer>` to place an HTML `div`
+at the midpoint of the path (`labelPosition` computed from
+`getEdgeRenderData`). This div switches between two states:
+
+```html
+<EdgeLabelRenderer>
+  <div :style="edgeToolbarStyle" :class="edgeToolbarClasses"
+       @mouseenter="emit('update:label:hovered', true)"
+       @mouseleave="emit('update:label:hovered', false)">
+
+    <!-- When hovered and not readOnly → show toolbar -->
+    <CanvasEdgeToolbar v-if="hovered && !readOnly" :type="connectionType"
+                       @add="onAdd" @delete="onDelete" />
+
+    <!-- Otherwise → show item count label -->
+    <div v-else>{{ label }}</div>   <!-- e.g. "1 item" -->
+  </div>
+</EdgeLabelRenderer>
+```
+
+The label has a semi-transparent canvas-colour background so it appears to
+float on the dotted grid.
+
+#### `CanvasEdgeToolbar.vue` — the + and delete buttons
+
+```html
+<div class="canvasEdgeToolbar" data-test-id="canvas-edge-toolbar">
+  <!-- + button: only for main connections, not AI lanes -->
+  <N8nIconButton v-if="type === 'main'" icon="plus"
+                 data-test-id="add-connection-button" @click="emit('add')" />
+
+  <!-- delete button: always shown -->
+  <N8nIconButton icon="trash"
+                 data-test-id="delete-connection-button" @click="emit('delete')" />
+</div>
+```
+
+Both are small `tertiary` icon buttons rendered side-by-side in a flex row,
+with a 2 px border. The **+ button is hidden for AI / non-main lanes** (you
+cannot insert a node in the middle of an AI tool connection).
+
+#### What "+" does: insert node between two connected nodes
+
+When the + button is clicked, `CanvasEdge` emits `add(connection)` with the
+full `Connection` object (`source`, `target`, `sourceHandle`, `targetHandle`).
+
+`Canvas.vue` re-emits this as `click:connection:add(connection)` to
+`NodeView.v2.vue`, which calls:
+
+```typescript
+function onClickConnectionAdd(connection: Connection) {
+  nodeCreatorStore.openNodeCreatorForConnectingNode({
+    connection,
+    eventSource: NODE_CREATOR_OPEN_SOURCES.NODE_CONNECTION_ACTION,
+  });
+}
+```
+
+`openNodeCreatorForConnectingNode` in `nodeCreator.store.ts`:
+1. Looks up the source node and records it as `uiStore.lastSelectedNode`.
+2. Stores the **entire original connection** in
+   `uiStore.lastInteractedWithNodeConnection`.
+3. Opens the node palette.
+
+When the user picks a node type and it is created,
+`useCanvasOperations.addNode` detects `lastInteractedWithNodeConnection` and
+performs a **three-step splice**:
+
+```typescript
+// 1. Delete the original A→B edge
+deleteConnection(lastInteractedWithNodeConnection);
+
+// 2. The new node N was already connected: A→N (done by the normal add flow)
+
+// 3. Re-create the severed B leg: N→B
+createConnection({
+  source: newNode.id,
+  sourceHandle: '...',
+  target: lastInteractedWithNodeConnection.target,
+  targetHandle: lastInteractedWithNodeConnection.targetHandle,
+});
+```
+
+Result: `A → N → B` replaces `A → B`, with N positioned between A and B on
+the canvas.
+
+#### DocRouter porting plan for edge toolbar
+
+DocRouter's `FlowCanvasEdge.tsx` already uses `EdgeLabelRenderer` to show an
+item-count label. The edge toolbar is the next step:
+
+1. **Track hover state** in `FlowEditor.tsx`:
+   ```typescript
+   const [hoveredEdgeId, setHoveredEdgeId] = useState<string | null>(null);
+   // React Flow's onEdgeMouseEnter / onEdgeMouseLeave props on <ReactFlow>
+   onEdgeMouseEnter={(_, edge) => setHoveredEdgeId(edge.id)}
+   onEdgeMouseLeave={()          => setHoveredEdgeId(null)}
+   ```
+   Pass `isHovered={edge.id === hoveredEdgeId}` through `edge.data` or via a
+   custom edge prop.
+
+2. **Switch the midpoint label** inside `FlowCanvasEdge.tsx`:
+   ```tsx
+   {isHovered ? (
+     <div className="flex gap-1 ...">
+       <button onClick={onAdd}>+</button>
+       <button onClick={onDelete}>🗑</button>
+     </div>
+   ) : (
+     <div>{label}</div>   // "N items"
+   )}
+   ```
+   Wire `onMouseEnter` / `onMouseLeave` on the label div to keep it hovered
+   while the mouse is on the buttons (same trick n8n uses).
+
+3. **Delete handler**: React Flow's `deleteElements` or a custom
+   `onEdgesDelete` callback keyed by `edge.id`.
+
+4. **Insert handler**: on + click, record `edge` in a `pendingInsertEdge` ref,
+   open `FlowNodePalette`, and on node-type selection:
+   - Remove the original edge.
+   - Create a new node at the midpoint between source and target.
+   - Add `sourceNode → newNode` and `newNode → targetNode` edges.
+
+---
+
+### DocRouter current state and porting plan
+
+DocRouter's `FlowCanvasNode.tsx` already implements the core shape correctly
+using Tailwind classes on a React Flow `NodeProps` component. The following
+table maps what's done vs what's missing:
+
+| Feature | n8n impl | DocRouter status |
+|---|---|---|
+| Rounded-rect process node | `.node { border-radius: 12px }` | `rounded-2xl` — done |
+| Pill-left trigger node | `.trigger { border-radius: 36px 12px 12px 36px }` | `rounded-r-[32px] rounded-l-md` — done |
+| Node name label below box | `position: absolute; top: 100%` | label is inside the box — **gap** |
+| Node icon centred in box | `NodeIcon` 40 × 40 inside box | single icon placeholder — partial |
+| State border colours | CSS class toggling | only `disabled` opacity — **gap** |
+| Hover toolbar above node | `opacity: 0` → `1` on `:hover` | not implemented — **gap** |
+| Run button in toolbar | `N8nIconButton icon="play"` | not implemented — **gap** |
+| Disable toggle in toolbar | `N8nIconButton icon="power-off"` | not implemented — **gap** |
+| Delete in toolbar | `N8nIconButton icon="trash"` | not implemented — **gap** |
+| ⋯ context menu button | `N8nIconButton icon="ellipsis-h"` | not implemented — **gap** |
+| Output + button (unconnected) | `CanvasHandlePlus` SVG | plain `<Handle>` dot — **gap** |
+| + button → open palette | emits `add` → opens node creator | not wired — **gap** |
+| Item count label on edge (post-run) | label above + line turns green | `FlowCanvasEdge` shows count — partial |
+
+**Recommended implementation order for DocRouter `FlowCanvasNode.tsx`:**
+
+1. **Move label below the box** — position the name `div` with
+   `position: absolute; top: 100%; left: 50%; transform: translateX(-50%)`
+   so it floats below the node boundary (React Flow clips `overflow: visible`
+   automatically).
+
+2. **Add hover toolbar** — render a `div` with
+   `position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%)`
+   containing icon buttons (run, disable, delete, ⋯). Use a `useState` hover
+   flag toggled by `onMouseEnter` / `onMouseLeave` on the node root, and set
+   `opacity: 0` / `opacity: 1` with a CSS transition. Wire `stopPropagation`
+   on button clicks to prevent node selection.
+
+3. **Add + button to unconnected outputs** — check whether any edge has
+   `source === node.id && sourceHandle === outHandleId`. If not connected,
+   render an SVG `+` next to the handle dot (positioned absolutely to the right
+   of the handle). On click, emit upward (via `data.onAddNode(handleId)`) so
+   `FlowEditor` can open `FlowNodePalette` pre-targeted to that output.
+
+4. **State border colours** — map `executionNodeStatus` and `node.disabled`
+   to Tailwind border classes: `border-emerald-500` (success), `border-red-400`
+   (error), `border-yellow-400` (running/waiting), `border-gray-300`
+   (disabled).
 
 ---
 
@@ -803,6 +1189,16 @@ n8n UI concept to the closest DocRouter equivalent and flags gaps.
 | `CanvasEdge.vue` | `FlowCanvasEdge.tsx` | Exists |
 | Status colour overlay (running/success/error) | `flowNodeRunStatus.ts` | Exists |
 | Input/output handles by type (main vs non-main) | Single handle type only | Gap |
+| Node label floats below the box (`position: absolute; top: 100%`) | Label rendered inside the box | Gap |
+| `CanvasNodeToolbar` — hover toolbar (run / disable / delete / ⋯) | Not implemented | Gap |
+| `CanvasHandlePlus` — + button on unconnected outputs | Not implemented | Gap |
+| Edge hover toolbar (+ insert / delete connection) | Not implemented | Gap |
+| `CanvasNodeStatusIcons` — running spinner, ✓ + count, ⚠ issues, waiting clock, pinned thumbtack | `ExecutionStatusBadge` (success/error/skipped only) | Partial |
+| `CanvasNodeDisabledStrikeThrough` — horizontal line across disabled nodes | `opacity-60` only | Partial |
+| `CanvasNodeTooltip` — auto-visible tooltip from `render.options.tooltip` | Not implemented | Gap |
+| `CanvasNodeTriggerIcon` — ⚡ bolt to the left of trigger nodes | Not implemented | Gap |
+| `CanvasNodeAddNodes` — dashed 100×100 "Add first step" button on empty canvas | Not implemented | Gap |
+| `CanvasConnectionLine.vue` — animated in-progress drag line | React Flow default dashed | Built-in (unstyled) |
 
 ### Node palette
 
@@ -845,6 +1241,34 @@ n8n UI concept to the closest DocRouter equivalent and flags gaps.
 | `RunDataTable` (tabular item display) | Not implemented | Gap |
 | Execution annotation / voting (enterprise) | Not applicable | Skip |
 
+### Canvas controls and interactions
+
+| n8n | DocRouter | Status |
+|---|---|---|
+| `CanvasControlButtons.vue` — zoom in/out/fit/reset panel (bottom-left) | React Flow built-in `<Controls>` | Available; wired? |
+| `CanvasRunWorkflowButton.vue` — "Execute workflow" / "Waiting for trigger" / "Executing" button (bottom-center) | Not implemented | Gap |
+| `CanvasClearExecutionDataButton.vue` — clears execution overlay after run | Not implemented | Gap |
+| Minimap (`@vue-flow/minimap`, auto-hides 1 s after interaction) | Not implemented | Gap |
+| Ctrl+C / Ctrl+X / Ctrl+V — copy / cut / paste nodes | Not implemented | Gap |
+| Ctrl+D — duplicate selected nodes | Not implemented | Gap |
+| Ctrl+A — select all nodes | Not implemented | Gap |
+| Ctrl+Enter — execute workflow | Not implemented | Gap |
+| Ctrl+S — save workflow | Not implemented | Gap |
+| P — toggle pin on selected nodes | Not implemented | Gap |
+| Delete / Backspace — delete selected nodes/edges | Not implemented | Gap |
+| "Tidy up" context-menu / toolbar action (auto-arrange nodes) | Not implemented | Gap |
+| "Duplicate" node context-menu action | Not implemented | Gap |
+| "Convert to sub-workflow" context-menu action | Not applicable | Skip |
+| Canvas chat panel (`CanvasChat.vue`) for Chat Trigger nodes | Not applicable | Skip |
+
+### Workflow-level settings
+
+| n8n | DocRouter | Status |
+|---|---|---|
+| Workflow settings modal (timezone, execution order, error workflow, save data policy) | Not implemented | Gap |
+| Retry failed execution button | Not implemented | Gap |
+| Execution annotation / voting (enterprise) | Not applicable | Skip |
+
 ### Real-time updates
 
 | n8n | DocRouter | Status |
@@ -854,28 +1278,137 @@ n8n UI concept to the closest DocRouter equivalent and flags gaps.
 
 ### Priority gaps to close (suggested order)
 
-1. **Floating prev/next node navigation** — add an `NDVFloatingNodes`-style
+Items are grouped by effort and impact. "Quick win" means a self-contained
+change unlikely to touch shared state.
+
+#### High impact — node canvas
+
+1. **Node hover toolbar** (`CanvasNodeToolbar` pattern) — show a compact toolbar
+   above the node on hover with Run / Disable / Delete / ⋯ actions. In React
+   Flow this is best done with a `<NodeToolbar>` (built-in since RF 11) or an
+   absolutely-positioned `div` inside the node rendered at `opacity-0` toggled
+   to `opacity-100` on CSS `:hover`. Keep `pointer-events: none` when invisible.
+
+2. **+ button on unconnected outputs** (`CanvasHandlePlus` pattern) — when a
+   source handle has no connected edge, render a clickable `+` SVG/icon to the
+   right of the handle. Clicking it opens the node palette pre-filtered to
+   compatible nodes, then wires the new node automatically.
+   - State: track which handles are unconnected (`edges` list + handle id).
+   - Gate on `!readOnly` (hide during execution review).
+
+3. **Edge hover toolbar** — on `onMouseEnter` / `onMouseLeave` for edges, show
+   a `+` (insert node between) and a delete `×` button at the edge midpoint via
+   `<EdgeLabelRenderer>`. The insert flow:
+   1. Store the original connection (`source`, `sourceHandle`, `target`, `targetHandle`).
+   2. Open the node palette.
+   3. After the user picks a node: remove the original edge, keep the
+      source→new-node edge the palette auto-creates, then add new-node→target.
+
+4. **Node label below the box** — move the node `title` text from inside
+   `FlowCanvasNode.tsx` to an absolutely-positioned `div` with
+   `top: 100%; left: 50%; transform: translateX(-50%)` and
+   `min-width: 200px; text-align: center`. The node icon takes the full box area.
+   This matches n8n's visual language precisely.
+
+5. **Status icons** (`CanvasNodeStatusIcons` pattern) — extend
+   `ExecutionStatusBadge` in `FlowCanvasNode.tsx` to cover all states:
+   - **running**: spinning animation overlay at ~40px centered on the node icon.
+   - **success**: green ✓ badge + iteration count if > 1 run.
+   - **error**: red ⚠ badge (already exists as `ExclamationCircleIcon`).
+   - **waiting**: clock icon badge.
+   - **pinned**: thumbtack icon, replaces the run-status badge.
+
+6. **Disabled strikethrough** — when `node.disabled`, render a 1 px horizontal
+   line (full node width + 12 px overflow on each side) at vertical midpoint,
+   in addition to the existing `opacity-60`.
+
+#### High impact — node config panel
+
+7. **Floating prev/next node navigation** — add an `NDVFloatingNodes`-style
    component to `FlowNodeConfigModal.tsx` (or a future inline panel):
    - Left edge: one clickable badge per direct main-input parent node.
    - Right edge: one clickable badge per direct main-output child node.
    - Clicking a badge closes the current modal and re-opens it for that node.
-   - Implementation: from the open node's `id`, walk `edges` to find
-     `source === id` (children) and `target === id` (parents), look up the
-     connected node's `FlowNode`, and render a small icon button per node.
-2. **Upstream node selector in Input panel** — inside the left "Input" column of
-   `FlowNodeConfigModal.tsx`, add a `<select>` that lists all ancestor nodes
-   (walk edges recursively from the current node's inputs). Changing the
-   selection re-renders the input preview using that ancestor's `run_data`.
-3. **Search in node palette** — `FlowNodePalette.tsx`: add a text input that
-   filters node type cards by label/description.
-4. **Table view for run data** — `FlowLogsPanel.tsx`: add a table mode next to
-   the existing JSON tree, showing `data.main[0]` items as columns.
-5. **Execution filter** — `FlowExecutionList.tsx`: add status and date-range
-   filter controls above the table; pass to `listExecutions`.
-6. **Inline node config panel** (NDV-style) — replace `FlowNodeConfigModal.tsx`
-   with a right-side panel that opens without a modal dialog, keeping the canvas
-   visible.
-7. **Undo/redo** — add a command stack to `FlowEditor.tsx` for node add/remove
-   and position moves.
-8. **Non-main handles** — extend `FlowCanvasNode.tsx` to render separate handle
-   types when a node type declares `ai_*` or other non-main connection lanes.
+   - Implementation: walk `edges` where `source === id` (children) and
+     `target === id` (parents), look up each connected `FlowNode`, render a
+     small icon button per result.
+
+8. **Upstream node selector in Input panel** — inside the left "Input" column of
+   `FlowNodeConfigModal.tsx`, add a `<select>` listing all ancestor nodes (walk
+   edges recursively from the current node's inputs). Changing the selection
+   re-renders the input preview using that ancestor's `run_data`.
+
+9. **Table view for run data** — add a table mode next to the existing JSON tree
+   in `FlowLogsPanel.tsx` / the Output panel of `FlowNodeConfigModal.tsx`.
+   Algorithm: union all top-level keys across `data.main[0]` items into columns;
+   cap at 40 columns; render with a scrollable `<table>`.
+
+10. **Schema mode** — structural type tree built by deep-merging all items, then
+    recursively inferring types. Renders as an indented tree with type badges.
+
+#### Medium impact — canvas UX
+
+11. **Execute workflow button** — a prominent button at the bottom-center of the
+    canvas (or in a top toolbar). States: "Run flow" → "Executing…" (spinner) →
+    back to idle. Wire to `POST /flows/{id}/executions` and start polling.
+
+12. **Clear execution data** — after a run completes, show a small button
+    (bottom-center or toolbar) to clear the `runData` overlay on all nodes,
+    returning the canvas to edit-only state.
+
+13. **Keyboard shortcuts** — wire the following in `FlowEditor.tsx` via
+    `useKeyPress` / `useHotkeys`:
+    - `Ctrl+A` — select all nodes.
+    - `Ctrl+C` / `Ctrl+X` — copy / cut selected nodes (clone their `FlowNode`
+      data + offset positions).
+    - `Ctrl+V` — paste copied nodes at cursor position.
+    - `Ctrl+D` — duplicate selected nodes (copy + paste in one step, offset 20 px).
+    - `Delete` / `Backspace` — delete selected nodes and their edges.
+    - `Ctrl+Enter` — run workflow.
+    - `Ctrl+S` — save workflow.
+
+14. **Search in node palette** — `FlowNodePalette.tsx`: add a text input that
+    filters node type cards by label/description in real time.
+
+15. **Empty canvas placeholder** — when there are zero nodes, show a dashed
+    100×100 button labelled "Add first step" centred on the canvas. Clicking it
+    opens the node palette.
+
+#### Lower priority
+
+16. **Inline node config panel** (NDV-style) — replace `FlowNodeConfigModal.tsx`
+    with a right-side drawer that opens without a modal dialog, keeping the
+    canvas visible. Requires a layout change in `FlowEditor.tsx`.
+
+17. **Undo/redo** — command stack in `FlowEditor.tsx` for node add/remove,
+    position moves, and parameter edits. Model after n8n's six command classes
+    in `packages/editor-ui/src/models/history.ts`.
+
+18. **Execution filter** — `FlowExecutionList.tsx`: add status and date-range
+    filter controls above the table.
+
+19. **Retry failed execution** — add a retry button on the execution detail view;
+    call `POST /flows/{id}/executions/{eid}/retry`.
+
+20. **Minimap** — React Flow ships `<MiniMap>` as a built-in component; wire it
+    with auto-hide (set `style={{ opacity: 0 }}` and fade in/out on canvas
+    interaction).
+
+21. **Tidy up / auto-arrange** — add a toolbar button that runs a simple
+    left-to-right topological sort of nodes and repositions them at a fixed grid.
+
+22. **Non-main handles** — extend `FlowCanvasNode.tsx` to render separate handle
+    types when a node type declares `ai_*` or other non-main connection lanes.
+
+23. **Workflow settings modal** — workflow-level settings (timezone, execution
+    order, error workflow, save data policy). Requires new backend fields.
+
+24. **Trigger bolt icon** — render a ⚡ icon to the left of trigger nodes
+    (quick win; purely visual).
+
+25. **Node tooltip** — if a node type provides `render.options.tooltip`, show an
+    auto-visible tooltip above the node (MUI `<Tooltip>` with `open={true}`).
+
+26. **Binary data mode** — card-per-item viewer with download link; requires
+    designing the `IBinaryData` storage model and a `/binary-data` endpoint.
+    Lower priority until binary outputs are needed.
