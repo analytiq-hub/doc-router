@@ -686,3 +686,49 @@ async def test_flows_code_context_includes_nodes_materialized_run_data() -> None
     out = ctx.run_data["c1"]["data"]["main"][0]
     assert out[0].json["y"] == 42
 
+
+@pytest.mark.asyncio
+async def test_manual_trigger_payload_merged_into_json() -> None:
+    """`flows.trigger.manual` parameters.payload is merged; `trigger` key comes from `trigger_data`."""
+    n = ad.flows.FlowsManualTriggerNode()
+    ctx = ad.flows.ExecutionContext(
+        organization_id="o1",
+        execution_id="e1",
+        flow_id="f1",
+        flow_revid="r1",
+        mode="manual",
+        trigger_data={"type": "manual", "document_id": "d1"},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    out = await n.execute(
+        ctx,
+        {"id": "t1", "parameters": {"payload": {"hello": 1, "x": "y"}}},
+        [[]],
+    )
+    item = out[0][0]
+    assert item.json["hello"] == 1
+    assert item.json["x"] == "y"
+    assert item.json["trigger"] == {"type": "manual", "document_id": "d1"}
+
+
+@pytest.mark.asyncio
+async def test_manual_trigger_without_payload_emits_only_trigger() -> None:
+    n = ad.flows.FlowsManualTriggerNode()
+    ctx = ad.flows.ExecutionContext(
+        organization_id="o1",
+        execution_id="e1",
+        flow_id="f1",
+        flow_revid="r1",
+        mode="manual",
+        trigger_data={"type": "manual"},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    out = await n.execute(ctx, {"id": "t1", "parameters": {}}, [[]])
+    assert out[0][0].json == {"trigger": {"type": "manual"}}
+

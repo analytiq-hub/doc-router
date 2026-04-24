@@ -1,16 +1,17 @@
 import React from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
-import type { FlowRFNodeData } from './flowRf';
+import { inputHandleCount } from './flowRf';
+import type { FlowRfNodeData } from './flowRf';
 
 const handleBase =
   'w-2.5 h-2.5 rounded-full border-2 border-white bg-blue-600';
 
-const FlowCanvasNode: React.FC<NodeProps<FlowRFNodeData>> = ({ data, selected }) => {
+const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeData>> = ({ data, selected }) => {
   const nt = data.nodeType;
   const node = data.flowNode;
 
-  const inputs = nt?.min_inputs ?? 1;
-  const outputs = nt?.outputs ?? 1;
+  const inputs = inputHandleCount(nt);
+  const outputs = Math.max(0, nt?.outputs ?? 1);
   const outputLabels = nt?.output_labels ?? [];
 
   return (

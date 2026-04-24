@@ -18,7 +18,8 @@ import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
 import FlowNodePalette from './FlowNodePalette';
 import FlowNodeConfigPanel from './FlowNodeConfigPanel';
 import FlowCanvasNode from './FlowCanvasNode';
-import type { FlowRFNodeData } from './flowRf';
+import { inputHandleCount } from './flowRf';
+import type { FlowRfNodeData } from './flowRf';
 
 function uuid(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now());
@@ -33,10 +34,10 @@ function parseHandleIndex(handle: string | null | undefined, prefix: string): nu
 
 const FlowEditor: React.FC<{
   nodeTypes: FlowNodeType[];
-  nodes: Node<FlowRFNodeData>[];
+  nodes: Node<FlowRfNodeData>[];
   edges: Edge[];
   selectedNodeId: string | null;
-  onNodesChange: (next: Node<FlowRFNodeData>[]) => void;
+  onNodesChange: (next: Node<FlowRfNodeData>[]) => void;
   onEdgesChange: (next: Edge[]) => void;
   onSelectedNodeIdChange: (id: string | null) => void;
 }> = ({ nodeTypes, nodes, edges, selectedNodeId, onNodesChange, onEdgesChange, onSelectedNodeIdChange }) => {
@@ -61,10 +62,9 @@ const FlowEditor: React.FC<{
       const srcType = src ? nodeTypesByKey[src.data.flowNode.type] : undefined;
       const dstType = dst ? nodeTypesByKey[dst.data.flowNode.type] : undefined;
 
-      // Validate output slot index is within declared outputs (best-effort).
-      if (srcType && outIdx >= srcType.outputs) return;
-      // Validate destination input index if it has a max.
-      if (dstType && dstType.max_inputs != null && inIdx >= dstType.max_inputs) return;
+      if (outIdx < 0 || (srcType && outIdx >= (srcType.outputs ?? 0))) return;
+      const maxIn = inputHandleCount(dstType);
+      if (inIdx < 0 || inIdx >= maxIn) return;
 
       onEdgesChange(addEdge(params, edges));
     },
@@ -99,7 +99,7 @@ const FlowEditor: React.FC<{
         on_error: 'stop',
         notes: null,
       };
-      const newNode: Node<FlowRFNodeData> = {
+      const newNode: Node<FlowRfNodeData> = {
         id,
         type: 'flow-node',
         position,

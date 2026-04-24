@@ -1,14 +1,15 @@
-'use client'
+'use client';
 
 import { use, useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { FlowNodeType, FlowRevision } from '@docrouter/sdk';
+import type { FlowNodeType, FlowRevision, FlowRfEdge, FlowRfNode } from '@docrouter/sdk';
 import FlowToolbar from '@/components/flows/FlowToolbar';
 import FlowEditor from '@/components/flows/FlowEditor';
-import { revisionToRF, rfToConnections } from '@/components/flows/flowRf';
+import { revisionContentFingerprint, revisionToRF, rfToRevision } from '@/components/flows/flowRf';
 import { useFlowApi } from '@/components/flows/useFlowApi';
-import { applyEdgeChanges, applyNodeChanges, type Edge, type EdgeChange, type Node, type NodeChange } from 'reactflow';
+import type { Edge, Node } from 'reactflow';
+import FlowExecutionList from '@/components/flows/FlowExecutionList';
 
 export default function FlowDetailPage({
   params,
@@ -26,29 +27,39 @@ export default function FlowDetailPage({
   const [latestFlowRevid, setLatestFlowRevid] = useState<string>('');
 
   const [nodeTypes, setNodeTypes] = useState<FlowNodeType[]>([]);
-  const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
 
   const [revision, setRevision] = useState<FlowRevision | null>(null);
   const [rfNodes, setRfNodes] = useState<Node[]>([]);
   const [rfEdges, setRfEdges] = useState<Edge[]>([]);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [isDirty, setIsDirty] = useState(false);
+  const [savedContentFingerprint, setSavedContentFingerprint] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string>('');
 
-  const handleTabChange = (next: string) => {
-    router.push(`/orgs/${organizationId}/flows/${flowId}?tab=${next}`);
-  };
+  const handleTabChange = useCallback(
+    (next: string) => {
+      router.push(`/orgs/${organizationId}/flows/${flowId}?tab=${next}`);
+    },
+    [flowId, organizationId, router],
+  );
+
+  const graphFingerprint = useMemo(() => {
+    if (!revision) return null;
+    return revisionContentFingerprint(flowName, rfNodes as FlowRfNode[], rfEdges as FlowRfEdge[], revision);
+  }, [flowName, rfNodes, rfEdges, revision]);
+
+  const isDirty = useMemo(() => {
+    if (graphFingerprint == null || savedContentFingerprint == null) return false;
+    if (!latestFlowRevid) return true;
+    return graphFingerprint !== savedContentFingerprint;
+  }, [graphFingerprint, latestFlowRevid, savedContentFingerprint]);
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
         setMessage('');
-        const [flowItem, nts] = await Promise.all([
-          api.getFlow(flowId),
-          api.listFlowNodeTypes(),
-        ]);
+        const [flowItem, nts] = await Promise.all([api.getFlow(flowId), api.listFlowNodeTypes()]);
         if (!mounted) return;
         setFlowName(flowItem.flow.name);
         setFlowActive(Boolean(flowItem.flow.active));
@@ -61,13 +72,19 @@ export default function FlowDetailPage({
           if (!mounted) return;
           setRevision(rev);
           const { nodes, edges } = revisionToRF(rev, Object.fromEntries(nts.items.map((x) => [x.key, x])));
-          setRfNodes(nodes);
-          setRfEdges(edges);
-          setIsDirty(false);
+          setRfNodes(nodes as Node[]);
+          setRfEdges(edges as Edge[]);
+          setSavedContentFingerprint(
+            revisionContentFingerprint(
+              flowItem.flow.name,
+              nodes,
+              edges,
+              rev,
+            ),
+          );
           return;
         }
 
-        // New flow (no revisions): start empty with a manual trigger node.
         const triggerType = nts.items.find((x) => x.is_trigger)?.key ?? 'flows.trigger.manual';
         const triggerLabel = nts.items.find((x) => x.key === triggerType)?.label ?? 'Manual Trigger';
         const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : 't1';
@@ -95,11 +112,13 @@ export default function FlowDetailPage({
         };
         setRevision(blank);
         const { nodes, edges } = revisionToRF(blank, Object.fromEntries(nts.items.map((x) => [x.key, x])));
-        setRfNodes(nodes);
-        setRfEdges(edges);
-        setIsDirty(true);
-      } catch (err: any) {
-        setMessage(err?.message || 'Failed to load flow');
+        setRfNodes(nodes as Node[]);
+        setRfEdges(edges as Edge[]);
+        setSavedContentFingerprint(
+          revisionContentFingerprint(flowItem.flow.name, nodes, edges, blank),
+        );
+      } catch (err: unknown) {
+        setMessage(err instanceof Error ? err.message : 'Failed to load flow');
       }
     };
     void load();
@@ -114,28 +133,10 @@ export default function FlowDetailPage({
 
   const onNodesChange = useCallback((next: Node[]) => {
     setRfNodes(next);
-    setIsDirty(true);
   }, []);
 
   const onEdgesChange = useCallback((next: Edge[]) => {
     setRfEdges(next);
-    setIsDirty(true);
-  }, []);
-
-  const onReactFlowNodesChange = useCallback((changes: NodeChange[]) => {
-    setRfNodes((prev) => {
-      const next = applyNodeChanges(changes, prev);
-      if (changes.some((c) => c.type !== 'select')) setIsDirty(true);
-      return next;
-    });
-  }, []);
-
-  const onReactFlowEdgesChange = useCallback((changes: EdgeChange[]) => {
-    setRfEdges((prev) => {
-      const next = applyEdgeChanges(changes, prev);
-      if (changes.some((c) => c.type !== 'select')) setIsDirty(true);
-      return next;
-    });
   }, []);
 
   const onSave = useCallback(async () => {
@@ -143,19 +144,14 @@ export default function FlowDetailPage({
     try {
       setIsSaving(true);
       setMessage('');
-      const nodes = rfNodes.map((n: any) => ({
-        ...(n.data.flowNode as any),
-        id: n.id,
-        position: [Math.round(n.position.x), Math.round(n.position.y)],
-      }));
-      const connections = rfToConnections(rfEdges as any);
+      const body = rfToRevision(rfNodes as FlowRfNode[], rfEdges as FlowRfEdge[], revision, flowName);
       const res = await api.saveRevision(flowId, {
         base_flow_revid: latestFlowRevid || '',
-        name: flowName,
-        nodes,
-        connections,
-        settings: revision.settings || {},
-        pin_data: revision.pin_data ?? null,
+        name: body.name,
+        nodes: body.nodes,
+        connections: body.connections,
+        settings: body.settings,
+        pin_data: body.pin_data,
       });
       setFlowName(res.flow.name);
       setFlowActive(Boolean(res.flow.active));
@@ -163,24 +159,29 @@ export default function FlowDetailPage({
       setLatestFlowRevid(newRevid);
       if (res.revision) {
         setRevision(res.revision);
+        setSavedContentFingerprint(
+          revisionContentFingerprint(res.flow.name, rfNodes as FlowRfNode[], rfEdges as FlowRfEdge[], res.revision),
+        );
+      } else {
+        if (graphFingerprint) setSavedContentFingerprint(graphFingerprint);
       }
-      setIsDirty(false);
-    } catch (err: any) {
-      setMessage(err?.message || 'Failed to save');
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setIsSaving(false);
     }
-  }, [api, flowId, flowName, latestFlowRevid, rfEdges, rfNodes, revision]);
+  }, [api, flowId, flowName, latestFlowRevid, rfEdges, rfNodes, revision, graphFingerprint]);
 
   const onRun = useCallback(async () => {
     try {
       setMessage('');
-      await api.runFlow(flowId, {});
+      const rev = latestFlowRevid || undefined;
+      await api.runFlow(flowId, { flow_revid: rev, document_id: undefined });
       handleTabChange('executions');
-    } catch (err: any) {
-      setMessage(err?.message || 'Failed to run');
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : 'Failed to run');
     }
-  }, [api, flowId]);
+  }, [api, flowId, latestFlowRevid, handleTabChange]);
 
   const onActivate = useCallback(async () => {
     try {
@@ -189,8 +190,8 @@ export default function FlowDetailPage({
       const flowItem = await api.getFlow(flowId);
       setFlowActive(Boolean(flowItem.flow.active));
       setLatestFlowRevid(flowItem.latest_revision?.flow_revid ?? '');
-    } catch (err: any) {
-      setMessage(err?.message || 'Failed to activate');
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : 'Failed to activate');
     }
   }, [api, flowId]);
 
@@ -203,8 +204,8 @@ export default function FlowDetailPage({
       const flowItem = await api.getFlow(flowId);
       setFlowActive(Boolean(flowItem.flow.active));
       setLatestFlowRevid(flowItem.latest_revision?.flow_revid ?? '');
-    } catch (err: any) {
-      setMessage(err?.message || 'Failed to deactivate');
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : 'Failed to deactivate');
     }
   }, [api, flowId]);
 
@@ -252,6 +253,7 @@ export default function FlowDetailPage({
             <div className="bg-white rounded-lg">
               <FlowToolbar
                 name={flowName}
+                onNameChange={setFlowName}
                 active={flowActive}
                 isDirty={isDirty}
                 isSaving={isSaving}
@@ -276,7 +278,7 @@ export default function FlowDetailPage({
         <div role="tabpanel" hidden={tab !== 'executions'}>
           {tab === 'executions' && (
             <div className="bg-white border border-gray-200 rounded-lg p-4">
-              <div className="text-sm text-gray-600">Phase 3: execution history UI goes here.</div>
+              <FlowExecutionList orgApi={api} flowId={flowId} />
             </div>
           )}
         </div>
@@ -284,4 +286,3 @@ export default function FlowDetailPage({
     </div>
   );
 }
-

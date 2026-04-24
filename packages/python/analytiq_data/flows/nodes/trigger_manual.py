@@ -20,11 +20,21 @@ class FlowsManualTriggerNode:
     max_inputs = 0
     outputs = 1
     output_labels = ["output"]
-    parameter_schema: dict[str, Any] = {"type": "object", "properties": {}, "additionalProperties": False}
+    parameter_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "payload": {
+                "type": "object",
+                "description": "Optional extra keys merged into the emitted item JSON (after trigger metadata).",
+            },
+        },
+        "additionalProperties": False,
+    }
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
-        """Validate node parameters beyond JSON Schema (none for this node)."""
-
+        pl = params.get("payload")
+        if pl is not None and not isinstance(pl, dict):
+            return ["parameters.payload must be an object when set"]
         return []
 
     async def execute(
@@ -35,8 +45,14 @@ class FlowsManualTriggerNode:
     ) -> list[list["ad.flows.FlowItem"]]:
         """Emit a single item containing `trigger_data` under `json.trigger`."""
 
+        params = node.get("parameters") or {}
+        extra = params.get("payload")
+        if isinstance(extra, dict) and extra:
+            out_json: dict[str, Any] = {**extra, "trigger": context.trigger_data}
+        else:
+            out_json = {"trigger": context.trigger_data}
         item = ad.flows.FlowItem(
-            json={"trigger": context.trigger_data},
+            json=out_json,
             binary={},
             meta={"source_node_id": node["id"], "item_index": 0},
             paired_item=None,
