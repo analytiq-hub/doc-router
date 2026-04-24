@@ -231,6 +231,22 @@ async def patch_flow_name(organization_id: str, flow_id: str, req: PatchFlowRequ
     return await get_flow(organization_id, flow_id, current_user)
 
 
+@flows_router.delete("/v0/orgs/{organization_id}/flows/{flow_id}")
+async def delete_flow(organization_id: str, flow_id: str, current_user: User = Depends(get_org_user)):
+    """
+    Delete a flow header document.
+
+    v1 behavior: only deletes from the `flows` collection. Revisions/executions are left
+    intact for now (can be cleaned up by a later admin task / cascading delete).
+    """
+
+    db = await _get_db()
+    res = await db.flows.delete_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Flow not found")
+    return {"ok": True}
+
+
 @flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}/revisions")
 async def list_revisions(
     organization_id: str,

@@ -94,6 +94,20 @@ import {
   WebhookDeliveryDetail,
   ListWebhookDeliveriesParams,
   ListWebhookDeliveriesResponse,
+  // Flows
+  FlowNodeType,
+  ListNodeTypesResponse,
+  FlowHeader,
+  FlowRevision,
+  FlowRevisionSummary,
+  FlowListItem,
+  ListFlowsResponse,
+  ListRevisionsResponse,
+  FlowExecution,
+  ListExecutionsResponse,
+  CreateFlowParams,
+  SaveRevisionParams,
+  RunFlowParams,
 } from './types';
 
 /**
@@ -877,6 +891,97 @@ export class DocRouterOrg {
   ): Promise<{ status: string; delivery_id: string }> {
     return this.http.post<{ status: string; delivery_id: string }>(
       `/v0/orgs/${this.organizationId}/webhooks/deliveries/${deliveryId}/retry`,
+      {},
+    );
+  }
+
+  // ---------------- Flows ----------------
+
+  async listFlowNodeTypes(): Promise<ListNodeTypesResponse> {
+    return this.http.get<ListNodeTypesResponse>(`/v0/orgs/${this.organizationId}/flows/node-types`);
+  }
+
+  async createFlow(params: CreateFlowParams): Promise<{ flow: FlowHeader }> {
+    return this.http.post<{ flow: FlowHeader }>(`/v0/orgs/${this.organizationId}/flows`, params);
+  }
+
+  async listFlows(params?: { limit?: number; offset?: number }): Promise<ListFlowsResponse> {
+    return this.http.get<ListFlowsResponse>(`/v0/orgs/${this.organizationId}/flows`, {
+      params: {
+        limit: params?.limit ?? 20,
+        offset: params?.offset ?? 0,
+      },
+    });
+  }
+
+  async getFlow(flowId: string): Promise<FlowListItem> {
+    return this.http.get<FlowListItem>(`/v0/orgs/${this.organizationId}/flows/${flowId}`);
+  }
+
+  async patchFlow(flowId: string, params: { name: string }): Promise<FlowListItem> {
+    return this.http.patch<FlowListItem>(`/v0/orgs/${this.organizationId}/flows/${flowId}`, params);
+  }
+
+  async deleteFlow(flowId: string): Promise<void> {
+    await this.http.delete(`/v0/orgs/${this.organizationId}/flows/${flowId}`);
+  }
+
+  async saveRevision(
+    flowId: string,
+    params: SaveRevisionParams,
+  ): Promise<{ flow: FlowHeader; revision: FlowRevision | null }> {
+    return this.http.put<{ flow: FlowHeader; revision: FlowRevision | null }>(
+      `/v0/orgs/${this.organizationId}/flows/${flowId}`,
+      params,
+    );
+  }
+
+  async listRevisions(flowId: string, params?: { limit?: number; offset?: number }): Promise<ListRevisionsResponse> {
+    return this.http.get<ListRevisionsResponse>(`/v0/orgs/${this.organizationId}/flows/${flowId}/revisions`, {
+      params: {
+        limit: params?.limit ?? 50,
+        offset: params?.offset ?? 0,
+      },
+    });
+  }
+
+  async getRevision(flowId: string, flowRevid: string): Promise<FlowRevision> {
+    return this.http.get<FlowRevision>(`/v0/orgs/${this.organizationId}/flows/${flowId}/revisions/${flowRevid}`);
+  }
+
+  async activateFlow(flowId: string, flowRevid?: string): Promise<FlowListItem> {
+    return this.http.post<FlowListItem>(`/v0/orgs/${this.organizationId}/flows/${flowId}/activate`, {
+      flow_revid: flowRevid ?? null,
+    });
+  }
+
+  async deactivateFlow(flowId: string): Promise<FlowListItem> {
+    return this.http.post<FlowListItem>(`/v0/orgs/${this.organizationId}/flows/${flowId}/deactivate`, {});
+  }
+
+  async runFlow(flowId: string, params?: RunFlowParams): Promise<{ execution_id: string }> {
+    return this.http.post<{ execution_id: string }>(`/v0/orgs/${this.organizationId}/flows/${flowId}/run`, {
+      flow_revid: params?.flow_revid ?? null,
+      document_id: params?.document_id ?? null,
+    });
+  }
+
+  async listExecutions(flowId: string, params?: { limit?: number; offset?: number }): Promise<ListExecutionsResponse> {
+    return this.http.get<ListExecutionsResponse>(`/v0/orgs/${this.organizationId}/flows/${flowId}/executions`, {
+      params: {
+        limit: params?.limit ?? 50,
+        offset: params?.offset ?? 0,
+      },
+    });
+  }
+
+  async getExecution(flowId: string, executionId: string): Promise<FlowExecution> {
+    return this.http.get<FlowExecution>(`/v0/orgs/${this.organizationId}/flows/${flowId}/executions/${executionId}`);
+  }
+
+  async stopExecution(flowId: string, executionId: string): Promise<{ ok: boolean }> {
+    return this.http.post<{ ok: boolean }>(
+      `/v0/orgs/${this.organizationId}/flows/${flowId}/executions/${executionId}/stop`,
       {},
     );
   }

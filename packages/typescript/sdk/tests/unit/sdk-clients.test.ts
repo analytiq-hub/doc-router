@@ -105,6 +105,22 @@ describe('SDK Client Unit Tests', () => {
       expect(typeof client.listWebhookDeliveries).toBe('function');
       expect(typeof client.getWebhookDelivery).toBe('function');
       expect(typeof client.retryWebhookDelivery).toBe('function');
+      // flows
+      expect(typeof client.listFlowNodeTypes).toBe('function');
+      expect(typeof client.createFlow).toBe('function');
+      expect(typeof client.listFlows).toBe('function');
+      expect(typeof client.getFlow).toBe('function');
+      expect(typeof client.patchFlow).toBe('function');
+      expect(typeof client.deleteFlow).toBe('function');
+      expect(typeof client.saveRevision).toBe('function');
+      expect(typeof client.listRevisions).toBe('function');
+      expect(typeof client.getRevision).toBe('function');
+      expect(typeof client.activateFlow).toBe('function');
+      expect(typeof client.deactivateFlow).toBe('function');
+      expect(typeof client.runFlow).toBe('function');
+      expect(typeof client.listExecutions).toBe('function');
+      expect(typeof client.getExecution).toBe('function');
+      expect(typeof client.stopExecution).toBe('function');
     });
 
     test('uploadDocuments posts JSON to documents endpoint', async () => {

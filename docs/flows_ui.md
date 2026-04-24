@@ -500,6 +500,8 @@ Add `DELETE /v0/orgs/{org_id}/flows/{flow_id}` to `flows.py`.
 ### Step 4 — Phase 2 UI: canvas (2–3 days)
 1. `revisionToRF` / `rfToRevision` helpers (no React, pure functions — test
    them independently).
+   - Add unit tests that round-trip `FlowRevision → (RF nodes/edges) → SaveRevisionParams`
+     and cover edge cases (multi-output, fan-out, multi-input merge, sparse slots).
 2. `FlowNodePalette.tsx`.
 3. `FlowEditor.tsx` with React Flow canvas, drag-and-drop, edge drawing.
 4. `FlowNodeConfigPanel.tsx` with Monaco for code nodes.

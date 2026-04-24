@@ -197,6 +197,38 @@ async def test_post_run_enqueues_queued_flow_run_message(test_db, mock_auth):
     assert qdocs[0]["msg"]["flow_id"] == flow_id
 
 
+@pytest.mark.asyncio
+async def test_delete_flow_header_removes_flow(test_db, mock_auth):
+    """DELETE /flows/{flow_id} deletes the flow header; subsequent GET returns 404."""
+
+    r0 = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows",
+        json={"name": "E2E flow delete"},
+        headers=get_auth_headers(),
+    )
+    assert r0.status_code == 200, r0.text
+    flow_id = r0.json()["flow"]["flow_id"]
+
+    r1 = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        headers=get_auth_headers(),
+    )
+    assert r1.status_code == 200, r1.text
+
+    r2 = client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        headers=get_auth_headers(),
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json().get("ok") is True
+
+    r3 = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        headers=get_auth_headers(),
+    )
+    assert r3.status_code == 404
+
+
 class _MockWebhookHttpClient:
     """Async context manager returned as `httpx.AsyncClient` for `flows.webhook` in the e2e test."""
 
