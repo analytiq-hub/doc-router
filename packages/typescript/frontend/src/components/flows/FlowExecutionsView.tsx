@@ -1,7 +1,18 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import ReactFlow, { Background, BackgroundVariant, Controls, MiniMap, useReactFlow, type Edge, type Node, type NodeMouseHandler } from 'reactflow';
+import ReactFlow, {
+  Background,
+  BackgroundVariant,
+  Controls,
+  MiniMap,
+  getMarkerEnd,
+  MarkerType,
+  useReactFlow,
+  type Edge,
+  type Node,
+  type NodeMouseHandler,
+} from 'reactflow';
 import { ArrowPathIcon, FunnelIcon } from '@heroicons/react/24/outline';
 import 'reactflow/dist/style.css';
 import type { FlowExecution, FlowNodeType } from '@docrouter/sdk';
@@ -17,10 +28,13 @@ import { applyExecutionStatusToNodes } from './flowNodeRunStatus';
 
 const LABELED_EDGE_TYPE = 'flowLabeled' as const;
 
+const FLOW_EDGE_MARKER_END = getMarkerEnd(MarkerType.ArrowClosed);
+
 function toCanvasEdges(edges: Edge[]): Edge[] {
   return edges.map((e) => ({
     ...e,
     type: e.type && e.type !== 'default' ? e.type : LABELED_EDGE_TYPE,
+    markerEnd: e.markerEnd ?? FLOW_EDGE_MARKER_END,
   }));
 }
 
@@ -272,6 +286,7 @@ const FlowExecutionsView: React.FC<{
               type: LABELED_EDGE_TYPE,
               style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
               data: { itemCount: 1 },
+              markerEnd: FLOW_EDGE_MARKER_END,
             }}
             fitView
             fitViewOptions={{ padding: 0.25 }}

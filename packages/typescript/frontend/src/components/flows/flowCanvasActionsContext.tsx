@@ -10,6 +10,8 @@ export type FlowCanvasActions = {
   onDeleteNode: (nodeId: string) => void;
   onOpenNodeSettings: (nodeId: string) => void;
   onDeleteEdge: (edgeId: string) => void;
+  /** Open the add-node palette (e.g. from an edge “+” control). */
+  onOpenNodePalette?: () => void;
 };
 
 const FlowCanvasActionsContext = createContext<FlowCanvasActions | null>(null);

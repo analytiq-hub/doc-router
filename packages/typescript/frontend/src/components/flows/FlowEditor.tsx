@@ -6,6 +6,8 @@ import ReactFlow, {
   MiniMap,
   Panel,
   addEdge,
+  getMarkerEnd,
+  MarkerType,
   useReactFlow,
   type Connection,
   type Edge,
@@ -35,6 +37,8 @@ const EXECUTE_BUTTON_BG_HOVER = '#e85d4d';
 
 const LABELED_EDGE_TYPE = 'flowLabeled' as const;
 
+const FLOW_EDGE_MARKER_END = getMarkerEnd(MarkerType.ArrowClosed);
+
 function uuid(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now());
 }
@@ -50,6 +54,7 @@ function toCanvasEdges(edges: Edge[]): Edge[] {
   return edges.map((e) => ({
     ...e,
     type: e.type && e.type !== 'default' ? e.type : LABELED_EDGE_TYPE,
+    markerEnd: e.markerEnd ?? FLOW_EDGE_MARKER_END,
   }));
 }
 
@@ -138,6 +143,7 @@ const FlowEditor: React.FC<{
             type: LABELED_EDGE_TYPE,
             style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
             data: { itemCount: 1 },
+            markerEnd: FLOW_EDGE_MARKER_END,
           },
           edges,
         ),
@@ -281,6 +287,7 @@ const FlowEditor: React.FC<{
       onDeleteEdge: (edgeId: string) => {
         onEdgesChange(edges.filter((e) => e.id !== edgeId));
       },
+      onOpenNodePalette: () => setNodePaletteOpen(true),
     }),
     [edges, nodeTypesByKey, nodes, onEdgesChange, onExecute, onNodesChange],
   );
@@ -313,6 +320,7 @@ const FlowEditor: React.FC<{
                 type: LABELED_EDGE_TYPE,
                 style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
                 data: { itemCount: 1 },
+                markerEnd: FLOW_EDGE_MARKER_END,
               }}
               connectionLineStyle={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
               elevateEdgesOnSelect
