@@ -117,6 +117,12 @@ The Smart Document Router is a full-stack document processing platform with huma
 ### Other
 - Use f-strings for python logs
 
+## Flows UI (React Flow editor)
+
+**Reference implementation (read first):** Sibling tree `../n8n` (separate clone). The workflow editor, executions list, and node panels live under `n8n/packages/editor-ui/`, e.g. `src/views/WorkflowExecutionsView.vue`, `src/components/executions/`. Use that tree only to understand behavior and structure before changing DocRouter’s flows UI in `packages/typescript/frontend/src/components/flows/`.
+
+**Naming:** Do not name our functions, files, or identifiers after that product. Prefer neutral terms (`flow`, `executions list`, `node config`, `palette`).
+
 ## Repo-specific rules for agents
 
 ### `analytiq_data/__init__.py` import behavior

@@ -26,6 +26,8 @@ const FlowNodeConfigModal: React.FC<{
   edges: Edge[];
   runData: Record<string, unknown> | null | undefined;
   onChange: (patch: Partial<FlowNode>) => void;
+  /** When true, parameters and settings are not editable (e.g. execution review). */
+  readOnly?: boolean;
 }> = ({
   open,
   onClose,
@@ -34,6 +36,7 @@ const FlowNodeConfigModal: React.FC<{
   edges,
   runData,
   onChange,
+  readOnly = false,
 }) => {
   const [tab, setTab] = useState(0);
 
@@ -99,8 +102,10 @@ const FlowNodeConfigModal: React.FC<{
             </Tabs>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
-            {tab === 0 && <FlowNodeParameterFields node={node} nodeType={nodeType} onChange={onChange} />}
-            {tab === 1 && <FlowNodeSettingsFields node={node} onChange={onChange} />}
+            {tab === 0 && (
+              <FlowNodeParameterFields readOnly={readOnly} node={node} nodeType={nodeType} onChange={onChange} />
+            )}
+            {tab === 1 && <FlowNodeSettingsFields readOnly={readOnly} node={node} onChange={onChange} />}
           </div>
         </div>
 

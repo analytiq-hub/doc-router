@@ -11,7 +11,7 @@ import FlowLogsPanel from '@/components/flows/FlowLogsPanel';
 import { revisionContentFingerprint, revisionToRF, rfToRevision } from '@/components/flows/flowRf';
 import { useFlowApi } from '@/components/flows/useFlowApi';
 import type { Edge, Node } from 'reactflow';
-import FlowExecutionList from '@/components/flows/FlowExecutionList';
+import FlowExecutionsView from '@/components/flows/FlowExecutionsView';
 
 function tabFromQuery(value: string | null): FlowCanvasView {
   return value === 'executions' ? 'executions' : 'editor';
@@ -268,9 +268,13 @@ export default function FlowDetailPage({
           )}
 
           {view === 'executions' && (
-            <div className="p-4 sm:p-6">
-              <FlowExecutionList orgApi={api} flowId={flowId} />
-            </div>
+            <FlowExecutionsView
+              orgApi={api}
+              flowId={flowId}
+              nodeTypes={nodeTypes}
+              fallbackNodes={rfNodes as any}
+              fallbackEdges={rfEdges as any}
+            />
           )}
         </div>
       </div>

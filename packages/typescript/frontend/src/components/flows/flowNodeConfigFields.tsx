@@ -11,7 +11,31 @@ function getSchemaProps(schema: unknown): Record<string, unknown> {
 export const FlowNodeSettingsFields: React.FC<{
   node: FlowNode;
   onChange: (patch: Partial<FlowNode>) => void;
-}> = ({ node, onChange }) => {
+  readOnly?: boolean;
+}> = ({ node, onChange, readOnly = false }) => {
+  if (readOnly) {
+    return (
+      <>
+        <TextField label="Name" value={node.name} fullWidth size="small" className="mb-3" InputProps={{ readOnly: true }} />
+        <TextField
+          label="Disabled"
+          value={node.disabled ? 'yes' : 'no'}
+          fullWidth
+          size="small"
+          className="mb-3"
+          InputProps={{ readOnly: true }}
+        />
+        <TextField
+          label="On error"
+          value={node.on_error ?? 'stop'}
+          fullWidth
+          size="small"
+          className="mb-4"
+          InputProps={{ readOnly: true }}
+        />
+      </>
+    );
+  }
   return (
     <>
       <TextField
@@ -46,7 +70,8 @@ export const FlowNodeParameterFields: React.FC<{
   node: FlowNode;
   nodeType: FlowNodeType | null;
   onChange: (patch: Partial<FlowNode>) => void;
-}> = ({ node, nodeType, onChange }) => {
+  readOnly?: boolean;
+}> = ({ node, nodeType, onChange, readOnly = false }) => {
   const schemaProps = useMemo(() => getSchemaProps(nodeType?.parameter_schema), [nodeType]);
   const params = node.parameters || {};
 
@@ -73,6 +98,7 @@ export const FlowNodeParameterFields: React.FC<{
             language={lang}
             value={textValue}
             onChange={(val) => {
+              if (readOnly) return;
               if (isCode) {
                 onChange({ parameters: { ...params, [key]: val ?? '' } });
                 return;
@@ -88,6 +114,7 @@ export const FlowNodeParameterFields: React.FC<{
               minimap: { enabled: false },
               fontSize: 12,
               scrollBeyondLastLine: false,
+              readOnly,
             }}
           />
         </Box>
@@ -95,7 +122,17 @@ export const FlowNodeParameterFields: React.FC<{
     }
 
     if (t === 'boolean') {
-      return (
+      return readOnly ? (
+        <TextField
+          key={key}
+          label={key}
+          value={Boolean(v) ? 'true' : 'false'}
+          fullWidth
+          size="small"
+          className="mb-3"
+          InputProps={{ readOnly: true }}
+        />
+      ) : (
         <FormControlLabel
           key={key}
           control={
@@ -110,6 +147,19 @@ export const FlowNodeParameterFields: React.FC<{
     }
 
     if (t === 'number' || t === 'integer') {
+      if (readOnly) {
+        return (
+          <TextField
+            key={key}
+            label={key}
+            value={v == null || v === '' ? '' : String(v)}
+            fullWidth
+            size="small"
+            className="mb-3"
+            InputProps={{ readOnly: true }}
+          />
+        );
+      }
       return (
         <TextField
           key={key}
@@ -125,7 +175,17 @@ export const FlowNodeParameterFields: React.FC<{
     }
 
     if (subschema?.enum && Array.isArray(subschema.enum)) {
-      return (
+      return readOnly ? (
+        <TextField
+          key={key}
+          label={key}
+          value={v == null ? '' : String(v)}
+          fullWidth
+          size="small"
+          className="mb-3"
+          InputProps={{ readOnly: true }}
+        />
+      ) : (
         <TextField
           key={key}
           select
@@ -154,6 +214,7 @@ export const FlowNodeParameterFields: React.FC<{
         fullWidth
         size="small"
         className="mb-3"
+        InputProps={readOnly ? { readOnly: true } : undefined}
       />
     );
   };

@@ -1,16 +1,48 @@
 import React from 'react';
 import { Handle, Position, type NodeProps } from 'reactflow';
-import { CursorArrowRaysIcon, Squares2X2Icon } from '@heroicons/react/24/solid';
+import { CheckCircleIcon, CursorArrowRaysIcon, ExclamationCircleIcon, Squares2X2Icon } from '@heroicons/react/24/solid';
 import { inputHandleCount } from './flowRf';
-import type { FlowRfNodeData } from './flowRf';
+import type { FlowRfNodeDataWithRun } from './flowNodeRunStatus';
 
 const handleClass =
   '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-emerald-500 hover:!bg-emerald-50';
 
-const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeData>> = ({ data, selected }) => {
+function ExecutionStatusBadge({ status }: { status: 'success' | 'error' | 'skipped' }) {
+  if (status === 'success') {
+    return (
+      <div
+        className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-white shadow-sm"
+        title="Succeeded"
+      >
+        <CheckCircleIcon className="h-5 w-5 text-emerald-500" aria-hidden />
+      </div>
+    );
+  }
+  if (status === 'error') {
+    return (
+      <div
+        className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-white shadow-sm"
+        title="Error"
+      >
+        <ExclamationCircleIcon className="h-5 w-5 text-red-500" aria-hidden />
+      </div>
+    );
+  }
+  return (
+    <div
+      className="pointer-events-none absolute -bottom-0.5 -right-0.5 h-4 min-w-4 rounded border border-amber-200 bg-amber-50 px-0.5 text-center text-[9px] font-bold leading-4 text-amber-800"
+      title="Skipped"
+    >
+      —
+    </div>
+  );
+}
+
+const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ data, selected }) => {
   const nt = data.nodeType;
   const node = data.flowNode;
   const isTrigger = Boolean(nt?.is_trigger);
+  const runSt = data.executionNodeStatus;
 
   const inputs = inputHandleCount(nt);
   const outputs = Math.max(0, nt?.outputs ?? 1);
@@ -51,6 +83,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeData>> = ({ data, selected })
             style={{ top: `${(100 * (i + 1)) / (outputs + 1)}%` }}
           />
         ))}
+        {runSt && <ExecutionStatusBadge status={runSt} />}
       </div>
     );
   }
@@ -94,6 +127,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeData>> = ({ data, selected })
           />
         </React.Fragment>
       ))}
+      {runSt && <ExecutionStatusBadge status={runSt} />}
     </div>
   );
 };

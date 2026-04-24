@@ -7,7 +7,7 @@ const FlowNodePalette: React.FC<{
   /** When true, only search + list (title lives in the drawer header). */
   embedInDrawer?: boolean;
   searchInputRef?: React.Ref<HTMLInputElement>;
-  /** n8n-style: double-click adds an unconnected node and opens its configuration. */
+  /** Double-click: add an unconnected node on the canvas and open its configuration. */
   onNodeTypeDoubleClick?: (typeKey: string) => void;
   className?: string;
 }> = ({ nodeTypes, embedInDrawer, searchInputRef, onNodeTypeDoubleClick, className = '' }) => {

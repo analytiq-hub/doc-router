@@ -4,46 +4,44 @@ import React from 'react';
 
 export type FlowCanvasView = 'editor' | 'executions';
 
-/** Segmented control for the main flow workspace (Editor vs execution history). */
+/** Rectangular tabs in a low track (aligns with common workflow UIs) for Editor vs execution history. */
 const FlowCanvasViewTabs: React.FC<{
   value: FlowCanvasView;
   onChange: (next: FlowCanvasView) => void;
 }> = ({ value, onChange }) => {
   return (
-    <div className="flex justify-center border-b border-[#e8eaed] bg-[#fbfbfc] py-2.5">
-      <div
-        className="inline-flex rounded-full bg-[#e3e5e8] p-1 shadow-[inset_0_1px_2px_rgba(0,0,0,0.06)]"
-        role="tablist"
-        aria-label="Flow workspace"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={value === 'editor'}
-          onClick={() => onChange('editor')}
-          className={[
-            'min-w-[8rem] rounded-full px-5 py-2 text-sm font-semibold transition',
-            value === 'editor'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-800',
-          ].join(' ')}
+    <div className="border-b border-[#e4e4e7] bg-[#f4f4f5] px-3 py-2">
+      <div className="mx-auto flex max-w-full justify-center">
+        <div
+          className="inline-flex items-center gap-0.5 rounded-md bg-[#d8d8dc] p-0.5 shadow-[inset_0_1px_2px_rgba(0,0,0,0.05)]"
+          role="tablist"
+          aria-label="Flow workspace"
         >
-          Editor
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={value === 'executions'}
-          onClick={() => onChange('executions')}
-          className={[
-            'min-w-[8rem] rounded-full px-5 py-2 text-sm font-semibold transition',
-            value === 'executions'
-              ? 'bg-white text-gray-900 shadow-sm'
-              : 'text-gray-600 hover:text-gray-800',
-          ].join(' ')}
-        >
-          Executions
-        </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={value === 'editor'}
+            onClick={() => onChange('editor')}
+            className={[
+              'min-w-[7.5rem] rounded-md px-4 py-1.5 text-sm font-semibold transition',
+              value === 'editor' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800',
+            ].join(' ')}
+          >
+            Editor
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={value === 'executions'}
+            onClick={() => onChange('executions')}
+            className={[
+              'min-w-[7.5rem] rounded-md px-4 py-1.5 text-sm font-semibold transition',
+              value === 'executions' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-800',
+            ].join(' ')}
+          >
+            Executions
+          </button>
+        </div>
       </div>
     </div>
   );
