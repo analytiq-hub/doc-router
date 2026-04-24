@@ -157,8 +157,6 @@ execution. Items are coerced to `FlowItem` instances at runtime.
 }
 ```
 
-Execution documents in MongoDB also include `organization_id`, `flow_id`, `flow_revid`, `mode` (`"manual"`, `"webhook"`, etc.), and optional fields such as `last_node_executed`, `wait_till`, `retry_of`, and `parent_execution_id` (see `app/routes/flows.py` and the `flow_run` handler).
-
 `run_data` maps `node_id` to a `NodeRunData` record written after each node:
 
 ```json
@@ -295,7 +293,7 @@ while work or merge_waiting:
     5. pin_data hit → use pinned FlowItems (coerced), skip execute.
     6. All input slots empty → emit empty outputs, record "skipped"
        (branch-skipping rule: empty output ⟹ downstream skipped).
-    7. Resolve parameters (expressions) — see below.
+    7. Resolve parameters (expressions).
     8. await node_type.execute(context, resolved_node, inputs).
     9. Handle errors: on_error="stop" → raise; on_error="continue" → emit error item.
    10. Write NodeRunData to context.run_data and persist to MongoDB.
