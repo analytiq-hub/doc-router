@@ -1,0 +1,37 @@
+/* React Flow canvas layout tweaks (scoped) */
+.docrouter-flow-canvas .react-flow__background {
+  background-color: #f7f7f9;
+}
+
+.docrouter-flow-canvas .react-flow__controls {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  border: 1px solid #e2e4e8;
+  border-radius: 8px;
+}
+
+.docrouter-flow-canvas .react-flow__controls-button {
+  border: none;
+  border-bottom: 1px solid #eceff2;
+}
+
+.docrouter-flow-canvas .react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.docrouter-flow-canvas .react-flow__minimap {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid #e2e4e8;
+}
+
+.docrouter-flow-canvas .react-flow__handle {
+  width: 10px;
+  height: 10px;
+  border: 2px solid #d0d5dd;
+  background: #fff;
+}
+
+.docrouter-flow-canvas .react-flow__handle:hover {
+  border-color: #22c55e;
+  background: #f0fdf4;
+}
