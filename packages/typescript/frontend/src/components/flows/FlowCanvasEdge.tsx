@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
@@ -15,6 +15,9 @@ import { Tooltip } from '@mui/material';
 import { useFlowCanvasActions } from './flowCanvasActionsContext';
 
 const DEFAULT_MARKER_END = getMarkerEnd(MarkerType.ArrowClosed);
+
+/** Delay closing edge controls so the pointer can leave the SVG hit path and reach the HTML toolbar. */
+const EDGE_CONTROLS_HIDE_MS = 280;
 
 /** Custom edge: directed arrow, plain item label above the line, + / delete centered on the path (editor only). */
 export default function FlowCanvasEdge(props: EdgeProps) {
@@ -50,6 +53,33 @@ export default function FlowCanvasEdge(props: EdgeProps) {
   const canEdit = Boolean(actions?.onDeleteEdge);
   const canInsert = Boolean(actions?.onBeginInsertOnEdge);
 
+  const [edgeControlsOpen, setEdgeControlsOpen] = useState(false);
+  const hideControlsTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const cancelHideControlsTimer = useCallback(() => {
+    if (hideControlsTimerRef.current != null) {
+      clearTimeout(hideControlsTimerRef.current);
+      hideControlsTimerRef.current = null;
+    }
+  }, []);
+
+  const showEdgeControlsSoon = useCallback(() => {
+    cancelHideControlsTimer();
+    setEdgeControlsOpen(true);
+  }, [cancelHideControlsTimer]);
+
+  const hideEdgeControlsSoon = useCallback(() => {
+    cancelHideControlsTimer();
+    hideControlsTimerRef.current = setTimeout(() => {
+      hideControlsTimerRef.current = null;
+      setEdgeControlsOpen(false);
+    }, EDGE_CONTROLS_HIDE_MS);
+  }, [cancelHideControlsTimer]);
+
+  useEffect(() => () => cancelHideControlsTimer(), [cancelHideControlsTimer]);
+
+  const showItemLabel = !canEdit || !edgeControlsOpen;
+
   const stroke = selected ? '#818cf8' : '#a8b0bd';
 
   return (
@@ -58,12 +88,22 @@ export default function FlowCanvasEdge(props: EdgeProps) {
         id={id}
         path={edgePath}
         markerEnd={markerEnd ?? DEFAULT_MARKER_END}
-        interactionWidth={28}
+        interactionWidth={0}
         style={{
           stroke,
           strokeWidth: selected ? 2 : 1.5,
           ...style,
         }}
+      />
+      {/* Wide hit target + hover source for edge controls (BaseEdge interaction path has no React handlers). */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={32}
+        className="react-flow__edge-interaction"
+        onMouseEnter={canEdit ? showEdgeControlsSoon : undefined}
+        onMouseLeave={canEdit ? hideEdgeControlsSoon : undefined}
       />
       <EdgeLabelRenderer>
         <div
@@ -73,12 +113,17 @@ export default function FlowCanvasEdge(props: EdgeProps) {
           }}
           className="nodrag nopan relative flex flex-col items-center"
         >
-          {/* Plain text above the line; anchor is the edge midpoint (button row center). */}
-          <div className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium text-[#5a6270]">
-            {label}
-          </div>
-          {canEdit && (
-            <div className="pointer-events-auto flex items-center gap-1">
+          {showItemLabel && (
+            <div className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium text-[#5a6270]">
+              {label}
+            </div>
+          )}
+          {canEdit && edgeControlsOpen && (
+            <div
+              className="pointer-events-auto flex items-center gap-1"
+              onMouseEnter={showEdgeControlsSoon}
+              onMouseLeave={hideEdgeControlsSoon}
+            >
               <Tooltip title="Add node on this connection">
                 <span>
                   <button
