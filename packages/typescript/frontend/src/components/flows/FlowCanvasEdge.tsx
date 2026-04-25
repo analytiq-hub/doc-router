@@ -4,8 +4,10 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BaseEdge,
   EdgeLabelRenderer,
+  getBezierPath,
   getMarkerEnd,
   getSmoothStepPath,
+  getStraightPath,
   MarkerType,
   type Edge,
   type EdgeProps,
@@ -40,14 +42,18 @@ export default function FlowCanvasEdge(props: EdgeProps) {
     selected,
   } = edge;
   const actions = useFlowCanvasActions();
-  const [edgePath, labelX, labelY] = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    sourcePosition,
-    targetX,
-    targetY,
-    targetPosition,
-  });
+
+  const isVisuallyStraight =
+    Math.abs(sourceY - targetY) < 0.5 &&
+    ((sourcePosition === 'right' && targetPosition === 'left') ||
+      (sourcePosition === 'left' && targetPosition === 'right') ||
+      (sourcePosition === 'bottom' && targetPosition === 'top') ||
+      (sourcePosition === 'top' && targetPosition === 'bottom'));
+
+  const [edgePath, labelX, labelY] = isVisuallyStraight
+    ? getStraightPath({ sourceX, sourceY, targetX, targetY })
+    : getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
+
   const count = (data as { itemCount?: number } | undefined)?.itemCount ?? 1;
   const label = `${count} item${count === 1 ? '' : 's'}`;
   const canEdit = Boolean(actions?.onDeleteEdge);
@@ -114,9 +120,15 @@ export default function FlowCanvasEdge(props: EdgeProps) {
           className="nodrag nopan relative flex flex-col items-center"
         >
           {showItemLabel && (
-            <div className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium text-[#5a6270]">
-              {label}
-            </div>
+            isVisuallyStraight ? (
+              <div className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium text-[#5a6270]">
+                {label}
+              </div>
+            ) : (
+              <div className="pointer-events-none whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium text-[#5a6270] shadow-sm ring-1 ring-[#e1e4e8] bg-[#f7f7f9]">
+                {label}
+              </div>
+            )
           )}
           {canEdit && edgeControlsOpen && (
             <div
