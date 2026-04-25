@@ -22,19 +22,16 @@ import { revisionToRF } from './flowRf';
 import { DocRouterOrgApi } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
 import './flows-canvas.css';
-import FlowCanvasNode from './FlowCanvasNode';
-import FlowCanvasEdge from './FlowCanvasEdge';
+import { FLOW_RF_LABELED_EDGE_TYPE, flowRfEdgeTypes, flowRfNodeTypes } from './flowRfCanvasTypes';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import { applyExecutionStatusToNodes } from './flowNodeRunStatus';
-
-const LABELED_EDGE_TYPE = 'flowLabeled' as const;
 
 const FLOW_EDGE_MARKER = { type: MarkerType.ArrowClosed } as const;
 
 function toCanvasEdges(edges: Edge[]): Edge[] {
   return edges.map((e) => ({
     ...e,
-    type: e.type && e.type !== 'default' ? e.type : LABELED_EDGE_TYPE,
+    type: e.type && e.type !== 'default' ? e.type : FLOW_RF_LABELED_EDGE_TYPE,
     markerEnd: e.markerEnd ?? FLOW_EDGE_MARKER,
   }));
 }
@@ -170,9 +167,6 @@ const FlowExecutionsView: React.FC<{
 
   const canvasEdges = useMemo(() => toCanvasEdges(viewEdges), [viewEdges]);
 
-  const rfNodeTypes = useMemo(() => ({ 'flow-node': FlowCanvasNode }), []);
-  const rfEdgeTypes = useMemo(() => ({ [LABELED_EDGE_TYPE]: FlowCanvasEdge }), []);
-
   const configRf = useMemo(() => {
     const n = viewNodes.find((x) => x.id === configModalId);
     if (!n) return { node: null, nodeType: null };
@@ -277,8 +271,8 @@ const FlowExecutionsView: React.FC<{
             className="h-full w-full"
             nodes={viewNodes as Node<FlowRfNodeData>[]}
             edges={canvasEdges}
-            nodeTypes={rfNodeTypes}
-            edgeTypes={rfEdgeTypes}
+            nodeTypes={flowRfNodeTypes}
+            edgeTypes={flowRfEdgeTypes}
             nodesConnectable={false}
             elementsSelectable
             onNodeDoubleClick={onNodeDoubleClick}
@@ -287,7 +281,7 @@ const FlowExecutionsView: React.FC<{
             minZoom={0.15}
             maxZoom={1.5}
             defaultEdgeOptions={{
-              type: LABELED_EDGE_TYPE,
+              type: FLOW_RF_LABELED_EDGE_TYPE,
               style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
               data: { itemCount: 1 },
               markerEnd: FLOW_EDGE_MARKER,
