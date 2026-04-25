@@ -216,153 +216,166 @@ async stopExecution(flowId: string, executionId: string): Promise<{ ok: boolean 
 
 ---
 
-## 3. Frontend — file layout
+## 3. Frontend — file layout (current)
 
-The flows section follows the same pattern as `prompts/` and `schemas/`:
-a page-level tab container with child components.
+The flows UI is implemented and wired into the org sidebar. The app uses App
+Router pages under `src/app/` plus `src/components/flows/` building blocks.
 
 ```
 src/app/orgs/[organizationId]/
   flows/
-    page.tsx                      Flow list page (tab: list | create)
+    page.tsx                                Flow list page (tabs: flows | flow-create)
     [flowId]/
-      page.tsx                    Flow editor page (tab: editor | executions)
+      page.tsx                              Server wrapper → FlowDetailPageClient
+      FlowDetailPageClient.tsx              Client page: editor + executions tabs, load/save/run/activate
 
 src/components/flows/
-  FlowList.tsx                    Table of flows with actions
-  FlowCreate.tsx                  Create-flow form (name only)
-  FlowEditor.tsx                  React Flow canvas + side panels
-  FlowNodePalette.tsx             Left sidebar: draggable node type cards
-  FlowNodeConfigPanel.tsx         Right sidebar: parameter form for selected node
-  FlowToolbar.tsx                 Top bar: save / run / activate / deactivate
-  FlowExecutionList.tsx           Execution history table
-  FlowExecutionDetail.tsx         Run data tree / node status overlay
-  FlowStatusBadge.tsx             Coloured badge for execution status
-  useFlowApi.ts                   Hook wrapping DocRouterOrg flow methods
-  useExecutionPoller.ts           Hook polling getExecution until terminal status
+  FlowList.tsx                              List flows (edit/run/activate/deactivate/delete) + pagination
+  FlowCreate.tsx                            Create flow (name only) → navigates to editor
+  FlowStatusBadge.tsx                       Active/inactive badge
+  useFlowApi.ts                             Hook creating `DocRouterOrgApi`
+
+  FlowCanvasViewTabs.tsx                    Editor / Executions tab switcher
+  FlowToolbar.tsx                           Inline rename + Save / Execute / Activate / Deactivate
+  FlowEditor.tsx                            React Flow canvas (D&D nodes, connect edges, insert-on-edge)
+  FlowNodePalette.tsx                       Node type palette (search, grouped by category, draggable)
+  FlowNodeConfigModal.tsx                   Node settings modal (incl. read-only mode in executions view)
+  flowNodeConfigFields.tsx                  Parameter schema → form/Monaco field renderers
+
+  FlowCanvasNode.tsx                        Custom RF node renderer (trigger + process shapes, toolbars)
+  FlowCanvasEdge.tsx                        Custom edge renderer (labels + inline insert/delete affordances)
+  flowRfCanvasTypes.ts                      RF nodeTypes/edgeTypes registration
+  flowCanvasActionsContext.tsx              Canvas actions + execution visual contexts
+
+  FlowExecutionsView.tsx                    Executions tab (list + read-only graph view + per-node status)
+  FlowExecutionList.tsx                     Alternate executions table w/ inline JSON (currently unused)
+  FlowLogsPanel.tsx                         Bottom logs panel (polls getExecution; node IO previews)
+
+  canvasGrid.ts                             Grid snap helpers
+  flows-canvas.css                          Canvas styling
+  flowNodeRunStatus.ts                      Run-data → per-node status mapping helpers
+  flowNodeIoPreview.ts                      Build per-node input/output previews from run_data + edges
+  flowUiClasses.ts                          Shared class strings
+  useInlineNameWidthPx.ts                   Inline name sizing helper
 ```
 
 ---
 
-## 4. Phase 1 — Flow list and management
+## 4. Phase 1 — Flow list and management (implemented)
 
 **Goal**: list, create, rename, delete, activate, deactivate, and manually run
 flows without a graph editor.
 
-### 4.1 `flows/page.tsx`
+### 4.1 `flows/page.tsx` (done)
 
-Mirrors `prompts/page.tsx`: tab bar with "Flows" and "Create Flow" tabs.
-Uses `useSearchParams` for tab state in the URL.
+Tab bar with "Flows" and "Create Flow" tabs, using `useSearchParams` for tab
+state in the URL.
 
 ```tsx
 'use client'
 export default function FlowsPage({ params }) {
   const { organizationId } = use(params);
-  // tab: 'list' | 'create'
+  // tab: 'flows' | 'flow-create'
   return (
     <div className="p-4">
       {/* tab bar */}
       <div role="tabpanel">
-        {tab === 'list'   && <FlowList   organizationId={organizationId} />}
-        {tab === 'create' && <FlowCreate organizationId={organizationId} />}
+        {tab === 'flows' && <FlowList organizationId={organizationId} />}
+        {tab === 'flow-create' && <FlowCreate organizationId={organizationId} />}
       </div>
     </div>
   );
 }
 ```
 
-### 4.2 `FlowList.tsx`
+### 4.2 `FlowList.tsx` (done)
 
 Table columns: Name, Status (active badge), Version, Last updated, Actions.
 
 Actions per row:
 - **Edit** → navigate to `/orgs/{org}/flows/{flowId}`
-- **Run** → call `runFlow`, show snackbar with execution id
-- **Activate / Deactivate** → toggle with confirmation for deactivate
+- **Run** → calls `runFlow` and reloads the list
+- **Activate / Deactivate** → toggles activation
 - **Delete** → confirmation dialog, then `deleteFlow`
 
 Pagination: `limit=20`, offset-based, same pattern as `PromptList`.
 
-### 4.3 `FlowCreate.tsx`
+### 4.3 `FlowCreate.tsx` (done)
 
 Single text field for name. On submit calls `createFlow`, then navigates to
 `/orgs/{org}/flows/{flowId}` so the user lands in the editor.
 
-### 4.4 Sidebar navigation entry
+### 4.4 Sidebar navigation entry (done)
 
-Add "Flows" to the org sidebar navigation (wherever `Prompts`, `Documents`,
-etc. appear). Route: `/orgs/{organizationId}/flows`.
+Added to the org sidebar (`src/components/Layout.tsx`). Route:
+`/orgs/{organizationId}/flows`.
 
 ---
 
-## 5. Phase 2 — Graph editor
+## 5. Phase 2 — Graph editor (implemented)
 
 **Goal**: a visual canvas where users can build, edit, and save flow graphs.
 
-### 5.1 `flows/[flowId]/page.tsx`
+### 5.1 `flows/[flowId]/page.tsx` (done)
 
-Two-tab layout: **Editor** and **Executions**.
+Two-tab layout: **Editor** and **Executions** (query param `tab=editor|executions`).
 
-On mount:
-1. Load `getFlow(flowId)` → display name and active status in the toolbar.
-2. Load `getRevision(flowId, latestRevisionId)` → populate the canvas.
-3. Load `listFlowNodeTypes()` → populate the node palette.
+On mount (`FlowDetailPageClient.tsx`):
+1. Load `getFlow(flowId)` and `listFlowNodeTypes()` in parallel.
+2. If there is a latest revision, load `getRevision(flowId, latestRevisionId)` and populate canvas.
+3. If there is no revision yet, start with a blank revision containing a trigger node.
 
-### 5.2 `FlowEditor.tsx`
+### 5.2 `FlowEditor.tsx` (done)
 
 Built on `reactflow` (already in `package.json` at `^11.11.4`).
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│  FlowToolbar (save | run | activate | status badge)     │
-├──────────────┬──────────────────────────┬───────────────┤
-│ NodePalette  │   React Flow canvas      │ NodeConfig    │
-│ (node types  │   (nodes + edges)        │ Panel         │
-│  draggable)  │                          │ (params for   │
-│              │                          │  selected     │
-│              │                          │  node)        │
-└──────────────┴──────────────────────────┴───────────────┘
+│  FlowToolbar (save | execute | activate | status badge) │
+├─────────────────────────────────────────────────────────┤
+│  React Flow canvas (nodes + edges)                      │
+│  - Right-side buttons: add/search palette               │
+│  - Bottom: zoom controls + “Execute workflow”           │
+├─────────────────────────────────────────────────────────┤
+│  FlowLogsPanel (collapsible)                            │
+└─────────────────────────────────────────────────────────┘
+
+Palette and node configuration are modal/drawer based:
+- Node palette opens as a right-side drawer.
+- Node configuration opens as `FlowNodeConfigModal` (double-click node).
 ```
 
-**State model:**
+State is hosted by `FlowDetailPageClient.tsx` (nodes/edges/revision/name/active,
+dirty fingerprinting). `FlowEditor.tsx` is a controlled component.
+
+**Conversion between engine and React Flow formats (done, moved to SDK):**
+
+The engine stores `nodes[]` + `connections` (source-keyed dict). React Flow uses
+`nodes[]` + `edges[]`. The round-trip helpers live in the TypeScript SDK now:
 
 ```typescript
-interface EditorState {
-  nodes: RFNode[];        // React Flow node objects
-  edges: RFEdge[];        // React Flow edge objects
-  selectedNodeId: string | null;
-  isDirty: boolean;       // unsaved changes
-  isSaving: boolean;
-  isRunning: boolean;
-  lastExecution: FlowExecution | null;
-}
+revisionToRF(revision: FlowRevision, nodeTypesByKey?: Record<string, FlowNodeType>): { nodes; edges }
+rfToRevision(rfNodes: FlowRfNode[], rfEdges: FlowRfEdge[], current: FlowRevision, name: string): SaveRevisionParams
+revisionContentFingerprint(...)
 ```
 
-**Conversion between engine and React Flow formats:**
+Unit tests: `packages/typescript/sdk/tests/unit/flow-rf.test.ts`.
 
-The engine stores `nodes[]` and `connections` (source-keyed dict). React Flow
-uses `nodes[]` (with `position`) and `edges[]` (source/target pairs). Two
-helper functions handle the round-trip:
+**Adding nodes (done)**:
+- Drag from `FlowNodePalette` onto the canvas (HTML D&D + `onDrop`).
+- Also supported: open palette drawer and double-click a node type to insert at view center.
 
-```typescript
-function revisionToRF(revision: FlowRevision): { nodes: RFNode[]; edges: RFEdge[] }
-function rfToRevision(rfNodes: RFNode[], rfEdges: RFEdge[], current: FlowRevision): SaveRevisionParams
-```
+**Connecting nodes (done)**: `onConnect` validates source output index and
+destination input index against node type bounds. Invalid connections are
+rejected (no edge added).
 
-**Adding nodes**: drag from `FlowNodePalette` onto the canvas. On drop, create
-a new node with a UUID id, the dropped type's key, default position, and an
-empty `parameters` object. React Flow's `onDrop` + `onDragOver` handlers manage
-this.
+**Insert node on edge (done)**: edges expose an “insert” flow that opens the
+palette; the chosen node type is inserted inline and rewires source → new → target.
 
-**Connecting nodes**: React Flow's built-in edge drawing. `onConnect` validates
-that the source output index and destination input index are within the node
-type's declared bounds. Invalid connections are rejected silently (no edge
-added).
+**Deleting nodes/edges (done)**: node toolbars and edge controls call back into
+the parent via `flowCanvasActionsContext.tsx`.
 
-**Deleting nodes/edges**: React Flow's `onNodesDelete` / `onEdgesDelete`
-callbacks update state. Deleting a node removes all its edges too.
-
-### 5.3 `FlowNodePalette.tsx`
+### 5.3 `FlowNodePalette.tsx` (done)
 
 Left sidebar. Groups node types by `category`. Each entry is a draggable card
 showing `label` and `description`. On drag start sets `dataTransfer` with the
@@ -377,10 +390,11 @@ node type key.
 </div>
 ```
 
-### 5.4 `FlowNodeConfigPanel.tsx`
+### 5.4 Node configuration UI (done, modal-based)
 
-Right sidebar. Rendered when `selectedNodeId` is set. Shows a form for the
-selected node's `parameters`, driven by the node type's `parameter_schema`.
+The editor uses `FlowNodeConfigModal.tsx` (not a right sidebar panel). It shows
+editable node settings driven by the node type’s `parameter_schema` and supports
+a `readOnly` mode (used by the executions view).
 
 Parameter form rendering rules:
 - `string` with key `python_code` or `js_code` or `ts_code` → Monaco Editor
@@ -390,15 +404,14 @@ Parameter form rendering rules:
 - `boolean` → `<Switch>`
 - `object` / `array` → Monaco Editor in JSON mode.
 
-Also shows:
+Also supports:
 - Node name (editable, must be unique within the flow)
 - `disabled` toggle
 - `on_error` select (`stop` / `continue`)
 
-Changes are applied to local state immediately (the canvas is the source of
-truth until Save).
+Changes apply to local state immediately; Save persists a new revision.
 
-### 5.5 `FlowToolbar.tsx`
+### 5.5 `FlowToolbar.tsx` (done)
 
 ```
 [flow name]  [active badge]   |  [Save]  [Run]  [Activate / Deactivate]
@@ -407,15 +420,14 @@ truth until Save).
 **Save**: calls `saveRevision`. Passes current `latest_revision.flow_revid` as
 `base_flow_revid`. On 409 (concurrent edit), shows an error toast.
 
-**Run**: calls `runFlow`, then starts the execution poller (§5.7), switches to
-the Executions tab.
+**Run**: calls `runFlow`; the page focuses the returned execution id in the logs panel.
 
 **Activate**: calls `activateFlow` (uses the latest saved revision). Disabled
 if there are unsaved changes (`isDirty`).
 
 **Deactivate**: calls `deactivateFlow` with a confirmation dialog.
 
-### 5.6 Custom React Flow node renderer
+### 5.6 Custom React Flow renderers (done)
 
 Each node on the canvas is rendered by a custom node component that shows:
 - Node type label (small, grey)
@@ -435,83 +447,65 @@ const nodeTypes = useMemo(() => ({
 All engine node types map to the same `'flow-node'` React Flow node type; the
 display varies only by data (label, handle counts, status).
 
-### 5.7 `useExecutionPoller.ts`
+### 5.7 Execution polling + status overlay (done, no dedicated hook)
 
-Polls `getExecution` every 2 seconds until `status` is `success | error |
-stopped`. Returns the latest `FlowExecution`. The editor uses this to overlay
-per-node status badges on the canvas.
-
-```typescript
-function useExecutionPoller(
-  orgApi: DocRouterOrg,
-  flowId: string,
-  executionId: string | null,
-): { execution: FlowExecution | null; isPolling: boolean }
-```
+Polling is implemented inside `FlowLogsPanel.tsx` (2s while `queued|running`)
+and inside `FlowExecutionsView.tsx` (3s list refresh while any run is active).
+Per-node badges/overlays use `flowNodeRunStatus.ts`.
 
 ---
 
-## 6. Phase 3 — Execution history tab
+## 6. Phase 3 — Execution history tab (implemented)
 
-### 6.1 `FlowExecutionList.tsx`
+### 6.1 Executions tab (done)
 
-Table columns: Started, Mode, Status, Duration, Actions.
+The page uses `FlowExecutionsView.tsx` (sidebar list + read-only graph view +
+node modal). It auto-refreshes the list when there are active runs.
 
-Actions:
-- **View** → expand `FlowExecutionDetail` inline or navigate to a detail panel.
-- **Stop** → calls `stopExecution` (only shown when status is `queued | running`).
+`FlowExecutionList.tsx` exists as an alternate executions table with inline JSON
+detail and a Stop button; it is currently not used by the page.
 
-Polling: when any row is in `queued | running` state, poll `listExecutions`
-every 3 seconds to refresh status.
+### 6.2 Logs panel (done)
 
-### 6.2 `FlowExecutionDetail.tsx`
-
-Shows the `run_data` for a completed execution. Two views:
-- **Node summary**: table of node id → status → execution_time_ms.
-- **Node output**: collapsible JSON tree for each node's `data.main` output.
-  Use a simple recursive JSON renderer or `react-json-view`.
-
-When an execution is selected, the Editor tab can also use this data to overlay
-per-node status on the canvas (green border = success, red = error, grey =
-skipped).
+`FlowLogsPanel.tsx` provides an in-editor logs view with per-node input/output
+previews derived from `run_data` and the current graph wiring.
 
 ---
 
 ## 7. Implementation sequence
 
-### Step 1 — FastAPI gap (30 min)
-Done: `DELETE /v0/orgs/{org_id}/flows/{flow_id}` added to `flows.py`.
+This section is kept as a dependency chain, but updated to reflect what exists
+in the codebase today.
 
-### Step 2 — TypeScript SDK (2 h)
-Done:
-1. `types/flows.ts` added.
-2. Re-exported from `types/index.ts`.
-3. Added Flows methods to `docrouter-org.ts`.
-4. `npm run build` succeeds (DTS included).
+### Step 1 — FastAPI routes (done)
+FastAPI route coverage is complete for v1 (incl. delete).
 
-### Step 3 — Phase 1 UI (1 day)
-1. `FlowList.tsx` + `FlowCreate.tsx` + `FlowStatusBadge.tsx`.
-2. `flows/page.tsx` tab container.
-3. `useFlowApi.ts` hook.
-4. Add "Flows" to the org sidebar.
-5. Verify list, create, rename, delete, activate, run all work end-to-end.
+### Step 2 — TypeScript SDK flows + RF helpers (done)
+- `packages/typescript/sdk/src/types/flows.ts`
+- `packages/typescript/sdk/src/docrouter-org.ts` flows methods
+- `packages/typescript/sdk/src/flow-rf.ts` (`revisionToRF`, `rfToRevision`, etc.)
+- Unit tests: `packages/typescript/sdk/tests/unit/flow-rf.test.ts`
 
-### Step 4 — Phase 2 UI: canvas (2–3 days)
-1. `revisionToRF` / `rfToRevision` helpers (no React, pure functions — test
-   them independently).
-   - Add unit tests that round-trip `FlowRevision → (RF nodes/edges) → SaveRevisionParams`
-     and cover edge cases (multi-output, fan-out, multi-input merge, sparse slots).
-2. `FlowNodePalette.tsx`.
-3. `FlowEditor.tsx` with React Flow canvas, drag-and-drop, edge drawing.
-4. `FlowNodeConfigPanel.tsx` with Monaco for code nodes.
-5. `FlowToolbar.tsx` with save / run / activate.
-6. `flows/[flowId]/page.tsx` wiring it together.
+### Step 3 — Phase 1 UI: list + create + sidebar (done)
+- `flows/page.tsx`, `FlowList.tsx`, `FlowCreate.tsx`, `FlowStatusBadge.tsx`, `useFlowApi.ts`
+- Org sidebar entry in `src/components/Layout.tsx`
 
-### Step 5 — Phase 3 UI: executions (1 day)
-1. `useExecutionPoller.ts`.
-2. `FlowExecutionList.tsx` with polling.
-3. `FlowExecutionDetail.tsx` with run_data tree.
-4. Per-node status overlay on the canvas.
+### Step 4 — Phase 2 UI: editor canvas (done)
+- `flows/[flowId]/page.tsx` + `FlowDetailPageClient.tsx` wiring
+- `FlowEditor.tsx` (React Flow canvas), `FlowNodePalette.tsx`, `FlowToolbar.tsx`
+- Custom node/edge renderers: `FlowCanvasNode.tsx`, `FlowCanvasEdge.tsx`
+- Node configuration modal: `FlowNodeConfigModal.tsx` + schema-driven fields
+- Insert-on-edge and node/edge actions via `flowCanvasActionsContext.tsx`
+
+### Step 5 — Phase 3 UI: executions + logs (done)
+- Executions tab: `FlowExecutionsView.tsx` (list + read-only graph + node modal)
+- In-editor logs: `FlowLogsPanel.tsx` (polling + IO previews)
+
+### Remaining gaps / follow-ups (as of now)
+1. **Decide on one executions UI**: keep `FlowExecutionsView.tsx` and remove or repurpose the unused `FlowExecutionList.tsx`.
+2. **Stop execution from executions view**: `FlowExecutionsView.tsx` currently doesn’t expose Stop; `FlowExecutionList.tsx` does.
+3. **Rename flow from list**: list page supports edit/run/activate/delete, but not rename inline (rename is in editor toolbar).
+4. **Polish run UX**: after `runFlow`, optionally auto-switch to the Executions tab (currently it focuses the logs panel).
 
 ---
 
@@ -544,6 +538,6 @@ and `max_inputs` declared by the node types.
 for `js_code` → `"javascript"`; for `ts_code` → `"typescript"`. Height should
 be `300px` by default with a vertical resize handle.
 
-**No SSE / WebSocket**: the server only supports polling. The `useExecutionPoller`
-hook is sufficient. Poll interval: 2 s during active execution, stop when
-terminal status is reached.
+**No SSE / WebSocket**: the server only supports polling. Polling is implemented
+in `FlowLogsPanel.tsx` (2s while `queued|running`) and `FlowExecutionsView.tsx`
+(3s list refresh while any run is active).
