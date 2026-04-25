@@ -135,10 +135,9 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
 
   const inputs = inputHandleCount(nt);
   const outputs = Math.max(0, nt?.outputs ?? 1);
-  const outputLabels = nt?.output_labels ?? [];
 
   const typeLabel = nt?.label ?? node.type;
-  const title = node.name || typeLabel;
+  const displayLabel = node.name?.trim() ? node.name : typeLabel;
 
   const runSt = useMemo((): NodeRunStatusBadge => {
     if (data.executionNodeStatus != null) return data.executionNodeStatus;
@@ -151,16 +150,12 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
 
   const labelBlock = (
     <div
-      className="pointer-events-none absolute left-1/2 top-full z-0 mt-1 min-w-[200px] max-w-[260px] -translate-x-1/2 px-1 text-center"
-      style={{ marginTop: 6 }}
+      className="pointer-events-none absolute left-1/2 top-full z-0 min-w-[120px] max-w-[260px] -translate-x-1/2 px-1 text-center"
+      style={{ marginTop: 2 }}
     >
-      <div className="text-[10px] font-medium uppercase leading-tight tracking-wide text-[#6b7280]">{typeLabel}</div>
-      <div className="line-clamp-2 text-sm font-semibold leading-tight text-[#1a1d21]" title={title}>
-        {title}
+      <div className="line-clamp-2 text-sm font-semibold leading-tight text-[#1a1d21]" title={displayLabel}>
+        {displayLabel}
       </div>
-      {outputLabels[0] && !isTrigger ? (
-        <div className="mt-0.5 text-[10px] text-[#8b9099]">Output: {outputLabels[0]}</div>
-      ) : null}
     </div>
   );
 
