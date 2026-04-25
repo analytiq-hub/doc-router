@@ -3,7 +3,7 @@ import type { FlowNode } from '@docrouter/sdk';
 
 /**
  * Canvas dot spacing and drag snap step (px).
- * Typical n8n-style workflow canvas step; keep in sync with `<Background gap={…}>`.
+ * Keep in sync with `<Background gap={…}>`.
  */
 export const FLOW_CANVAS_GRID_PX = 24;
 

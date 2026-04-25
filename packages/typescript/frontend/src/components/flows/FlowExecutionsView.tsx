@@ -290,10 +290,10 @@ const FlowExecutionsView: React.FC<{
               type: LABELED_EDGE_TYPE,
               style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
               data: { itemCount: 1 },
-                markerEnd: FLOW_EDGE_MARKER,
+              markerEnd: FLOW_EDGE_MARKER,
             }}
             fitView
-            fitViewOptions={{ padding: 0.25 }}
+            fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
           >
             <FitViewWhenDataChanges id={fitId} />
             <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />

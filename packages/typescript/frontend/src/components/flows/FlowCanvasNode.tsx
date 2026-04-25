@@ -74,7 +74,7 @@ function ExecutionStatusBadge({ status }: { status: NonNullable<NodeRunStatusBad
   );
 }
 
-/** Thin stroke, white fill; selection uses stacked spread shadows like n8n (white gap + thick light-gray band). */
+/** Thin stroke, white fill; selection uses stacked spread shadows (white gap + thick light-gray band). */
 const nodeBodyBase =
   'relative flex flex-col items-center justify-center border bg-white transition-[border-color,box-shadow]';
 
@@ -82,16 +82,16 @@ function nodeBorderClass(): string {
   return 'border-[#d2d6dc]';
 }
 
-/** Process nodes: uniform ~12px corners (n8n `border-radius-large`). */
+/** Process nodes: uniform ~12px corners. */
 const processShape = 'rounded-xl';
 
-/** Trigger: more rounded on the left (n8n `.trigger` — ~36px left, ~12px right). */
+/** Trigger: more rounded on the left (~36px left, ~12px right). */
 const triggerShape = 'rounded-l-[36px] rounded-r-xl';
 
 /**
- * n8n canvas selection: uniform white margin, then a thick light-gray outer contour that follows
+ * Selection contour: uniform white margin, then a thick light-gray outer contour that follows
  * the same border-radius as the node (incl. trigger D-shape). Implemented as stacked box-shadows
- * (spread-only, no blur) — same idea as n8n’s `.selected` ring, tuned to match the live UI grays.
+ * (spread-only, no blur).
  */
 function nodeSelectionContour(selected: boolean): string {
   if (!selected) return '';
@@ -261,7 +261,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
           <div className="flex h-full w-full items-center justify-center">
             <CursorArrowRaysIcon className="h-10 w-10 text-[#a8b0ba]" aria-hidden />
           </div>
-          {/* n8n trigger bolt: outside-left, vertically centered (`right: 100%`, `margin: auto`). */}
+          {/* Trigger bolt: outside-left, vertically centered (`right: 100%`, `margin: auto`). */}
           <div className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 p-1 text-[#ff6d5a]">
             <BoltIcon className="h-5 w-5" aria-hidden />
           </div>

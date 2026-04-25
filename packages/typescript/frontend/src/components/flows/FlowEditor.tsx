@@ -6,9 +6,13 @@ import ReactFlow, {
   MiniMap,
   Panel,
   addEdge,
+  getNodesBounds,
+  getViewportForBounds,
   getMarkerEnd,
   MarkerType,
+  useNodesInitialized,
   useReactFlow,
+  useStore,
   type Connection,
   type Edge,
   type Node,
@@ -18,7 +22,16 @@ import ReactFlow, {
   type NodeChange,
 } from 'reactflow';
 import { Drawer, IconButton, Tooltip } from '@mui/material';
-import { BeakerIcon, MagnifyingGlassIcon, PlusIcon, Square2StackIcon } from '@heroicons/react/24/outline';
+import {
+  ArrowUturnLeftIcon,
+  ArrowsPointingOutIcon,
+  BeakerIcon,
+  MagnifyingGlassIcon,
+  MagnifyingGlassMinusIcon,
+  MagnifyingGlassPlusIcon,
+  PlusIcon,
+  Square2StackIcon,
+} from '@heroicons/react/24/outline';
 import { XMarkIcon } from '@heroicons/react/24/solid';
 import 'reactflow/dist/style.css';
 import './flows-canvas.css';
@@ -43,6 +56,57 @@ const EXECUTE_BUTTON_BG_HOVER = '#e85d4d';
 const LABELED_EDGE_TYPE = 'flowLabeled' as const;
 
 const FLOW_EDGE_MARKER = { type: MarkerType.ArrowClosed } as const;
+
+function CanvasZoomControls({ addFooterPadding }: { addFooterPadding: boolean }) {
+  const { setViewport, getNodes, zoomIn, zoomOut, zoomTo } = useReactFlow();
+  const nodesInitialized = useNodesInitialized();
+  const width = useStore((s) => s.width);
+  const height = useStore((s) => s.height);
+  const didInitialFitRef = useRef(false);
+
+  const onZoomToFit = useCallback(async () => {
+    const nodes = getNodes().filter((n) => !n.hidden);
+    if (!nodes.length || width === 0 || height === 0) return;
+
+    // Reserve space for bottom UI controls when fitting.
+    const footerHeightPx = addFooterPadding ? 200 : 100;
+    const bounds = getNodesBounds(nodes);
+    const next = getViewportForBounds(bounds, width, Math.max(1, height - footerHeightPx), 0.15, 1, 0.2);
+    await setViewport(next, { duration: 200 });
+  }, [addFooterPadding, getNodes, height, setViewport, width]);
+
+  useEffect(() => {
+    if (!nodesInitialized) return;
+    if (didInitialFitRef.current) return;
+    didInitialFitRef.current = true;
+    void onZoomToFit();
+  }, [nodesInitialized, onZoomToFit]);
+
+  return (
+    <Panel position="bottom-left" className="!mb-3 !ml-3 flex items-center gap-1 rounded-lg bg-white/95 p-1 shadow-md backdrop-blur-sm">
+      <Tooltip title="Zoom to fit" placement="top">
+        <IconButton size="small" onClick={() => void onZoomToFit()} aria-label="Zoom to fit" className="!text-gray-700">
+          <ArrowsPointingOutIcon className="h-5 w-5" />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="Zoom in" placement="top">
+        <IconButton size="small" onClick={() => void zoomIn({ duration: 120 })} aria-label="Zoom in" className="!text-gray-700">
+          <MagnifyingGlassPlusIcon className="h-5 w-5" />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="Zoom out" placement="top">
+        <IconButton size="small" onClick={() => void zoomOut({ duration: 120 })} aria-label="Zoom out" className="!text-gray-700">
+          <MagnifyingGlassMinusIcon className="h-5 w-5" />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="Reset zoom" placement="top">
+        <IconButton size="small" onClick={() => void zoomTo(1, { duration: 120 })} aria-label="Reset zoom" className="!text-gray-700">
+          <ArrowUturnLeftIcon className="h-5 w-5" />
+        </IconButton>
+      </Tooltip>
+    </Panel>
+  );
+}
 
 function uuid(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now());
@@ -416,8 +480,6 @@ const FlowEditor: React.FC<{
               onNodeDoubleClick={onNodeDoubleClick}
               snapToGrid
               snapGrid={[FLOW_CANVAS_GRID_PX, FLOW_CANVAS_GRID_PX]}
-              fitView
-              fitViewOptions={{ padding: 0.25 }}
               proOptions={{ hideAttribution: true }}
               minZoom={0.15}
               maxZoom={1.5}
@@ -432,7 +494,8 @@ const FlowEditor: React.FC<{
             >
               <ScreenToFlowPointBridge targetRef={screenToFlowPointRef} />
               <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />
-              <Controls className="!shadow-md" position="bottom-left" showFitView showInteractive={false} />
+              <Controls className="!shadow-md" position="bottom-left" showZoom={false} showFitView={false} showInteractive={false} />
+              <CanvasZoomControls addFooterPadding={Boolean(onExecute)} />
               <MiniMap
                 position="bottom-right"
                 className="!m-2"
@@ -442,7 +505,7 @@ const FlowEditor: React.FC<{
                 maskColor="rgba(240, 240, 245, 0.7)"
               />
               {onExecute && (
-                <Panel position="bottom-center" className="!mb-2">
+                <Panel position="bottom-center" className="!mb-6">
                   <button
                     type="button"
                     onClick={onExecute}
