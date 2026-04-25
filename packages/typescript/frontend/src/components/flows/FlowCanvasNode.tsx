@@ -73,12 +73,12 @@ function ExecutionStatusBadge({ status }: { status: NonNullable<NodeRunStatusBad
   );
 }
 
-/** Thin stroke, white fill; selection adds outer gray ring with offset (n8n-style halo). */
+/** Thin stroke, white fill; selection uses stacked spread shadows like n8n (white gap + thick light-gray band). */
 const nodeBodyBase =
   'relative flex flex-col items-center justify-center border bg-white transition-[border-color,box-shadow]';
 
-function nodeBorderClass(selected: boolean): string {
-  return selected ? 'border-[#b8bcc4]' : 'border-[#d2d6dc]';
+function nodeBorderClass(): string {
+  return 'border-[#d2d6dc]';
 }
 
 /** Process nodes: uniform ~12px corners (n8n `border-radius-large`). */
@@ -87,10 +87,14 @@ const processShape = 'rounded-xl';
 /** Trigger: more rounded on the left (n8n `.trigger` — ~36px left, ~12px right). */
 const triggerShape = 'rounded-l-[36px] rounded-r-xl';
 
-/** Selection contour: second ring outside the node with visible gap (offset), like n8n canvas selection. */
-function nodeSelectionRing(selected: boolean): string {
+/**
+ * n8n canvas selection: uniform white margin, then a thick light-gray outer contour that follows
+ * the same border-radius as the node (incl. trigger D-shape). Implemented as stacked box-shadows
+ * (spread-only, no blur) — same idea as n8n’s `.selected` ring, tuned to match the live UI grays.
+ */
+function nodeSelectionContour(selected: boolean): string {
   if (!selected) return '';
-  return 'ring-2 ring-[#9aa0a9] ring-offset-[6px] ring-offset-white';
+  return 'shadow-[0_0_0_0px_#fff,0_0_0_5px_#e0e2e5]';
 }
 
 /** Delay before hiding so the pointer can cross the gap to the portaled `NodeToolbar`. */
@@ -248,8 +252,8 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
             nodeBodyBase,
             'mx-auto h-[88px] w-[100px]',
             triggerShape,
-            nodeBorderClass(selected),
-            nodeSelectionRing(selected),
+            nodeBorderClass(),
+            nodeSelectionContour(selected),
           ].join(' ')}
         >
           {disabledStrike}
@@ -285,8 +289,8 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
           nodeBodyBase,
           'mx-auto h-[88px] w-[100px]',
           processShape,
-          nodeBorderClass(selected),
-          nodeSelectionRing(selected),
+          nodeBorderClass(),
+          nodeSelectionContour(selected),
         ].join(' ')}
       >
         {disabledStrike}

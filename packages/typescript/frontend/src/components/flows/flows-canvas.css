@@ -8,6 +8,10 @@
   z-index: 5000;
 }
 
+.docrouter-flow-canvas .react-flow__node {
+  overflow: visible;
+}
+
 .docrouter-flow-canvas .react-flow__background {
   background-color: #f7f7f9;
 }
