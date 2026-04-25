@@ -1394,8 +1394,58 @@ change unlikely to touch shared state.
     with auto-hide (set `style={{ opacity: 0 }}` and fade in/out on canvas
     interaction).
 
-21. **Tidy up / auto-arrange** — add a toolbar button that runs a simple
-    left-to-right topological sort of nodes and repositions them at a fixed grid.
+21. **Tidy up / auto-arrange** — add a "Tidy Up" button to the canvas controls
+    panel (bottom-left, alongside zoom controls). n8n's implementation (commit
+    `f381a241`, PR #13471) is a useful reference.
+
+    **n8n implementation summary:**
+
+    - **Button**: `CanvasControlButtons.vue` — icon button with a custom
+      `TidyUpIcon.vue` SVG, keyboard shortcut `Shift+Alt+T`. Also available in
+      the right-click context menu (`useContextMenu.ts`, action id `tidy_up`)
+      with context-sensitive labels ("Tidy up workflow" vs. "Tidy up selection").
+
+    - **Handler** (`Canvas.vue`):
+      ```typescript
+      async function onTidyUp() {
+          const applyOnSelection = selectedNodes.value.length > 1;
+          const { nodes } = layout(applyOnSelection ? 'selection' : 'all');
+          onUpdateNodesPosition(nodes.map(n => ({ id: n.id, position: { x: n.x, y: n.y } })));
+          if (!applyOnSelection) {
+              await nextTick();
+              await onFitView();
+          }
+      }
+      ```
+      If >1 node is selected, only those nodes are rearranged; otherwise the
+      full workflow is rearranged and the view is fitted.
+
+    - **Layout algorithm** (`composables/useCanvasLayout.ts`, 516 lines):
+      Uses **`@dagrejs/dagre`** (`^1.1.4`).
+      1. Decomposes the graph into connected subgraphs.
+      2. Each subgraph gets Dagre layout with `rankdir: 'LR'` (left-to-right).
+      3. AI / configurable sub-nodes get `rankdir: 'TB'` within their parent.
+      4. Subgraphs are stacked vertically via a second Dagre pass (`rankdir: 'TB'`).
+      5. Sticky notes are repositioned below the nodes they cover.
+      6. Post-processing prevents AI node vertical overlap with unrelated nodes.
+
+      Spacing constants (based on `GRID_SIZE = 20 px`):
+      | Constant | Value | Purpose |
+      |---|---|---|
+      | `NODE_X_SPACING` | `GRID_SIZE * 6 = 120 px` | Horizontal gap between nodes |
+      | `NODE_Y_SPACING` | `GRID_SIZE * 5 = 100 px` | Vertical gap between nodes |
+      | `SUBGRAPH_SPACING` | `GRID_SIZE * 8 = 160 px` | Gap between disconnected subgraphs |
+      | `AI_X_SPACING` | `GRID_SIZE * 2 = 40 px` | AI node horizontal gap |
+      | `AI_Y_SPACING` | `GRID_SIZE * 6 = 120 px` | AI node vertical gap |
+
+    **DocRouter porting plan:**
+    1. Add `@dagrejs/dagre` (and `@types/dagrejs__dagre`) to the frontend package.
+    2. Create `useFlowLayout.ts` implementing the subgraph decomposition and
+       Dagre passes above (simplified: skip AI-node special-casing until needed).
+    3. Add a "Tidy Up" icon button to the canvas controls area in `FlowEditor.tsx`.
+    4. On click: call `layout('all')` or `layout('selection')` based on
+       `getNodes().filter(n => n.selected).length > 1`, then call
+       `setNodes(repositioned)` and `fitView()` if full-graph.
 
 22. **Non-main handles** — extend `FlowCanvasNode.tsx` to render separate handle
     types when a node type declares `ai_*` or other non-main connection lanes.
