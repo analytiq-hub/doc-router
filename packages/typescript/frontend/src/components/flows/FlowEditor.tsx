@@ -28,7 +28,11 @@ import FlowNodePalette from './FlowNodePalette';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import FlowCanvasNode from './FlowCanvasNode';
 import FlowCanvasEdge from './FlowCanvasEdge';
-import { FlowCanvasActionsProvider, FlowExecutionVisualProvider } from './flowCanvasActionsContext';
+import {
+  FlowCanvasActionsProvider,
+  FlowExecutionVisualProvider,
+  type EdgeInsertPayload,
+} from './flowCanvasActionsContext';
 import { inputHandleCount } from './flowRf';
 import type { FlowRfNodeData } from './flowRf';
 
@@ -87,6 +91,7 @@ const FlowEditor: React.FC<{
   const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const screenToFlowPointRef = useRef<((p: { x: number; y: number }) => { x: number; y: number }) | null>(null);
+  const pendingEdgeInsertRef = useRef<EdgeInsertPayload | null>(null);
   const canvasEdges = useMemo(() => toCanvasEdges(edges), [edges]);
   const runData = executionForIo?.run_data as Record<string, unknown> | undefined;
 
@@ -103,7 +108,13 @@ const FlowEditor: React.FC<{
     }
   }, [nodePaletteOpen]);
 
+  const closePalette = useCallback(() => {
+    pendingEdgeInsertRef.current = null;
+    setNodePaletteOpen(false);
+  }, []);
+
   const openPalette = useCallback(() => {
+    pendingEdgeInsertRef.current = null;
     setNodePaletteOpen(true);
   }, []);
 
@@ -180,8 +191,95 @@ const FlowEditor: React.FC<{
     [nodeTypesByKey, nodes, onNodesChange],
   );
 
+  const insertNodeOnSplitEdge = useCallback(
+    (pending: EdgeInsertPayload, typeKey: string): boolean => {
+      const nt = nodeTypesByKey[typeKey];
+      if (!nt) return false;
+      if (inputHandleCount(nt) < 1 || (nt.outputs ?? 0) < 1) return false;
+
+      if (!edges.some((e) => e.id === pending.edgeId)) return false;
+
+      const srcNode = nodes.find((n) => n.id === pending.source);
+      const dstNode = nodes.find((n) => n.id === pending.target);
+      if (!srcNode?.data.flowNode || !dstNode?.data.flowNode) return false;
+
+      const sh = pending.sourceHandle ?? 'out-0';
+      const th = pending.targetHandle ?? 'in-0';
+      const outIdx = parseHandleIndex(sh, 'out-');
+      const inIdx = parseHandleIndex(th, 'in-');
+      if (outIdx == null || inIdx == null) return false;
+
+      const srcType = srcNode.data.nodeType ?? nodeTypesByKey[srcNode.data.flowNode.type];
+      const dstType = dstNode.data.nodeType ?? nodeTypesByKey[dstNode.data.flowNode.type];
+      if (outIdx < 0 || (srcType && outIdx >= (srcType.outputs ?? 0))) return false;
+      if (inIdx < 0 || inIdx >= inputHandleCount(dstType)) return false;
+
+      const newId = uuid();
+      const pos = { x: Math.round(pending.flowPosition.x), y: Math.round(pending.flowPosition.y) };
+      const flowNode: FlowNode = {
+        id: newId,
+        name: nt.label ? `${nt.label}` : typeKey,
+        type: typeKey,
+        position: [pos.x, pos.y],
+        parameters: {},
+        disabled: false,
+        on_error: 'stop',
+        notes: null,
+      };
+      const newNode: Node<FlowRfNodeData> = {
+        id: newId,
+        type: 'flow-node',
+        position: pos,
+        selected: true,
+        data: { flowNode, nodeType: nt },
+      };
+
+      const rest = edges.filter((e) => e.id !== pending.edgeId);
+      const edgeBase = {
+        type: LABELED_EDGE_TYPE,
+        style: { stroke: '#a8b0bd', strokeWidth: 1.5 } as const,
+        data: { itemCount: 1 },
+        markerEnd: FLOW_EDGE_MARKER_END,
+      };
+      const e1: Edge = {
+        id: uuid(),
+        source: pending.source,
+        target: newId,
+        sourceHandle: sh,
+        targetHandle: 'in-0',
+        ...edgeBase,
+      };
+      const e2: Edge = {
+        id: uuid(),
+        source: newId,
+        target: pending.target,
+        sourceHandle: 'out-0',
+        targetHandle: th,
+        ...edgeBase,
+      };
+
+      onNodesChange([...nodes.map((n) => ({ ...n, selected: false })), newNode]);
+      onEdgesChange([...rest, e1, e2]);
+      setConfigModalNodeId(newId);
+      return true;
+    },
+    [edges, nodeTypesByKey, nodes, onEdgesChange, onNodesChange],
+  );
+
   const addNodeFromTypeAtViewCenter = useCallback(
     (typeKey: string) => {
+      const pending = pendingEdgeInsertRef.current;
+      if (pending) {
+        pendingEdgeInsertRef.current = null;
+        const ok = insertNodeOnSplitEdge(pending, typeKey);
+        if (ok) {
+          closePalette();
+          return;
+        }
+        pendingEdgeInsertRef.current = pending;
+        return;
+      }
+
       const stf = screenToFlowPointRef.current;
       const el = wrapperRef.current;
       if (!stf || !el) return;
@@ -209,14 +307,15 @@ const FlowEditor: React.FC<{
       };
       onNodesChange([...nodes.map((n) => ({ ...n, selected: false })), newNode]);
       setConfigModalNodeId(id);
-      setNodePaletteOpen(false);
+      closePalette();
     },
-    [nodeTypesByKey, nodes, onNodesChange],
+    [closePalette, insertNodeOnSplitEdge, nodeTypesByKey, nodes, onNodesChange],
   );
 
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
+      pendingEdgeInsertRef.current = null;
       const typeKey = event.dataTransfer.getData('application/flow-node-type');
       if (!typeKey) return;
 
@@ -287,7 +386,10 @@ const FlowEditor: React.FC<{
       onDeleteEdge: (edgeId: string) => {
         onEdgesChange(edges.filter((e) => e.id !== edgeId));
       },
-      onOpenNodePalette: () => setNodePaletteOpen(true),
+      onBeginInsertOnEdge: (payload: EdgeInsertPayload) => {
+        pendingEdgeInsertRef.current = payload;
+        setNodePaletteOpen(true);
+      },
     }),
     [edges, nodeTypesByKey, nodes, onEdgesChange, onExecute, onNodesChange],
   );
@@ -407,7 +509,7 @@ const FlowEditor: React.FC<{
       <Drawer
         anchor="right"
         open={nodePaletteOpen}
-        onClose={() => setNodePaletteOpen(false)}
+        onClose={closePalette}
         PaperProps={{
           className: '!w-[min(100vw,300px)] border-l border-[#e2e4e8]',
         }}
@@ -416,7 +518,7 @@ const FlowEditor: React.FC<{
         <div className="flex h-full min-h-0 flex-col">
           <div className="flex items-center justify-between border-b border-[#eceff2] px-3 py-2">
             <span className="text-sm font-semibold text-gray-900">Add node</span>
-            <IconButton size="small" onClick={() => setNodePaletteOpen(false)} aria-label="Close" edge="end">
+            <IconButton size="small" onClick={closePalette} aria-label="Close" edge="end">
               <XMarkIcon className="h-5 w-5" />
             </IconButton>
           </div>

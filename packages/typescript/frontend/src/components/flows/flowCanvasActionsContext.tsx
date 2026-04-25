@@ -3,6 +3,17 @@
 import React, { createContext, useContext } from 'react';
 import type { FlowExecution } from '@docrouter/sdk';
 
+/** Payload when inserting a node on an existing edge (split source → new → target). */
+export type EdgeInsertPayload = {
+  edgeId: string;
+  source: string;
+  target: string;
+  sourceHandle: string | null;
+  targetHandle: string | null;
+  /** Flow coordinates (same space as node `position`) — typically the edge path midpoint. */
+  flowPosition: { x: number; y: number };
+};
+
 /** Actions for the editable flow canvas (node toolbar, edge controls). Executions read-only view omits this provider. */
 export type FlowCanvasActions = {
   onRunWorkflow?: () => void;
@@ -10,8 +21,8 @@ export type FlowCanvasActions = {
   onDeleteNode: (nodeId: string) => void;
   onOpenNodeSettings: (nodeId: string) => void;
   onDeleteEdge: (edgeId: string) => void;
-  /** Open the add-node palette (e.g. from an edge “+” control). */
-  onOpenNodePalette?: () => void;
+  /** Start add-node flow to split this edge (opens palette; chosen type is wired inline). */
+  onBeginInsertOnEdge?: (payload: EdgeInsertPayload) => void;
 };
 
 const FlowCanvasActionsContext = createContext<FlowCanvasActions | null>(null);

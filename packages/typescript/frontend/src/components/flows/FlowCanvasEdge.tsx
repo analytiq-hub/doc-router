@@ -1,17 +1,41 @@
 'use client';
 
 import React from 'react';
-import { BaseEdge, EdgeLabelRenderer, getMarkerEnd, getSmoothStepPath, MarkerType, type EdgeProps } from 'reactflow';
+import {
+  BaseEdge,
+  EdgeLabelRenderer,
+  getMarkerEnd,
+  getSmoothStepPath,
+  MarkerType,
+  type Edge,
+  type EdgeProps,
+} from 'reactflow';
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { Tooltip } from '@mui/material';
 import { useFlowCanvasActions } from './flowCanvasActionsContext';
 
 const DEFAULT_MARKER_END = getMarkerEnd(MarkerType.ArrowClosed);
 
-/** Custom edge: directed arrow, item count above the path, + / delete centered on the path (editor only). */
+/** Custom edge: directed arrow, plain item label above the line, + / delete centered on the path (editor only). */
 export default function FlowCanvasEdge(props: EdgeProps) {
-  const { id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, markerEnd, style, data, selected } =
-    props;
+  const edge = props as EdgeProps & Pick<Edge, 'sourceHandle' | 'targetHandle'>;
+  const {
+    id,
+    source,
+    target,
+    sourceHandle,
+    targetHandle,
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourcePosition,
+    targetPosition,
+    markerEnd,
+    style,
+    data,
+    selected,
+  } = edge;
   const actions = useFlowCanvasActions();
   const [edgePath, labelX, labelY] = getSmoothStepPath({
     sourceX,
@@ -24,7 +48,7 @@ export default function FlowCanvasEdge(props: EdgeProps) {
   const count = (data as { itemCount?: number } | undefined)?.itemCount ?? 1;
   const label = `${count} item${count === 1 ? '' : 's'}`;
   const canEdit = Boolean(actions?.onDeleteEdge);
-  const canAdd = Boolean(actions?.onOpenNodePalette);
+  const canInsert = Boolean(actions?.onBeginInsertOnEdge);
 
   const stroke = selected ? '#818cf8' : '#a8b0bd';
 
@@ -47,23 +71,30 @@ export default function FlowCanvasEdge(props: EdgeProps) {
             position: 'absolute',
             transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)`,
           }}
-          className="nodrag nopan flex flex-col items-center gap-1"
+          className="nodrag nopan relative flex flex-col items-center"
         >
-          {/* Item count — above the edge / arrow line */}
-          <div className="pointer-events-none -translate-y-2 rounded border border-[#dadce2] bg-white px-1.5 py-0.5 text-[11px] font-medium text-[#5a6270] shadow-sm">
+          {/* Plain text above the line; anchor is the edge midpoint (button row center). */}
+          <div className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium text-[#5a6270]">
             {label}
           </div>
           {canEdit && (
             <div className="pointer-events-auto flex items-center gap-1">
-              <Tooltip title="Add node">
+              <Tooltip title="Add node on this connection">
                 <span>
                   <button
                     type="button"
-                    disabled={!canAdd}
-                    aria-label="Add node"
+                    disabled={!canInsert}
+                    aria-label="Add node on this connection"
                     onClick={(e) => {
                       e.stopPropagation();
-                      actions?.onOpenNodePalette?.();
+                      actions?.onBeginInsertOnEdge?.({
+                        edgeId: id,
+                        source,
+                        target,
+                        sourceHandle: sourceHandle ?? null,
+                        targetHandle: targetHandle ?? null,
+                        flowPosition: { x: labelX, y: labelY },
+                      });
                     }}
                     className="flex h-7 w-7 items-center justify-center rounded border border-[#c5cad3] bg-[#f4f5f6] text-gray-700 shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
                   >
