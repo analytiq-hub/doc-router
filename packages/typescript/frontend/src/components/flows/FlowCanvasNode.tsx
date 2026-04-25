@@ -14,7 +14,6 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/solid';
 import { NoSymbolIcon } from '@heroicons/react/24/outline';
-import { IconButton, Menu, MenuItem, Tooltip } from '@mui/material';
 import { inputHandleCount } from './flowRf';
 import type { FlowRfNodeDataWithRun, NodeRunStatusBadge } from './flowNodeRunStatus';
 import { getNodeRunStatusFromRunData } from './flowNodeRunStatus';
@@ -108,7 +107,8 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
   const actions = useFlowCanvasActions();
   const execution = useFlowExecutionVisual();
   const [pointerOnNodeOrToolbar, setPointerOnNodeOrToolbar] = useState(false);
-  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const hideToolbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelHideToolbarTimer = useCallback(() => {
@@ -132,6 +132,17 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
   }, [cancelHideToolbarTimer]);
 
   useEffect(() => () => cancelHideToolbarTimer(), [cancelHideToolbarTimer]);
+
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onDoc = (e: MouseEvent) => {
+      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
+        setMoreOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, [moreOpen]);
 
   const inputs = inputHandleCount(nt);
   const outputs = Math.max(0, nt?.outputs ?? 1);
@@ -163,7 +174,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
     />
   ) : null;
 
-  const toolbarVisible = pointerOnNodeOrToolbar || Boolean(menuAnchor);
+  const toolbarVisible = pointerOnNodeOrToolbar || moreOpen;
 
   const toolbar = showToolbar && actions && (
     <NodeToolbar
@@ -179,56 +190,72 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
         onMouseEnter={showToolbarForPointer}
         onMouseLeave={hideToolbarForPointerSoon}
       >
-        <Tooltip title="Run workflow">
-          <span>
-            <IconButton
-              size="small"
-              aria-label="Run workflow"
-              disabled={!actions.onRunWorkflow}
-              onClick={() => actions.onRunWorkflow?.()}
-              className="!h-7 !w-7"
-            >
-              <PlayIcon className="h-4 w-4 text-gray-600" />
-            </IconButton>
-          </span>
-        </Tooltip>
-        <Tooltip title={node.disabled ? 'Enable node' : 'Disable node'}>
-          <IconButton
-            size="small"
+        <span title="Run workflow">
+          <button
+            type="button"
+            aria-label="Run workflow"
+            disabled={!actions.onRunWorkflow}
+            onClick={() => actions.onRunWorkflow?.()}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 enabled:hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <PlayIcon className="h-4 w-4" />
+          </button>
+        </span>
+        <span title={node.disabled ? 'Enable node' : 'Disable node'}>
+          <button
+            type="button"
             aria-label={node.disabled ? 'Enable node' : 'Disable node'}
             onClick={() => actions.onToggleNodeDisabled(id)}
-            className="!h-7 !w-7"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
           >
             <NoSymbolIcon className={`h-4 w-4 ${node.disabled ? 'text-amber-600' : 'text-gray-500'}`} />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="Delete node">
-          <IconButton size="small" aria-label="Delete node" onClick={() => actions.onDeleteNode(id)} className="!h-7 !w-7">
-            <TrashIcon className="h-4 w-4 text-gray-600" />
-          </IconButton>
-        </Tooltip>
-        <Tooltip title="More">
-          <IconButton
-            size="small"
-            aria-label="More actions"
-            onClick={(e) => setMenuAnchor(e.currentTarget)}
-            className="!h-7 !w-7"
+          </button>
+        </span>
+        <span title="Delete node">
+          <button
+            type="button"
+            aria-label="Delete node"
+            onClick={() => actions.onDeleteNode(id)}
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
           >
-            <EllipsisHorizontalIcon className="h-4 w-4 text-gray-600" />
-          </IconButton>
-        </Tooltip>
+            <TrashIcon className="h-4 w-4" />
+          </button>
+        </span>
+        <div className="relative" ref={moreMenuRef}>
+          <span title="More">
+            <button
+              type="button"
+              aria-label="More actions"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((o) => !o)}
+              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
+            >
+              <EllipsisHorizontalIcon className="h-4 w-4" />
+            </button>
+          </span>
+          {moreOpen && (
+            <div
+              className="absolute right-0 top-full z-[200] mt-1 w-40 rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg"
+              role="menu"
+            >
+              <button
+                type="button"
+                className="block w-full px-3 py-2 text-left text-gray-800 hover:bg-gray-100"
+                onClick={() => {
+                  setMoreOpen(false);
+                  actions.onOpenNodeSettings(id);
+                }}
+                role="menuitem"
+              >
+                Open settings
+              </button>
+              <div className="px-3 py-2 text-left text-gray-400" role="menuitem" aria-disabled>
+                Duplicate (soon)
+              </div>
+            </div>
+          )}
+        </div>
       </div>
-      <Menu anchorEl={menuAnchor} open={Boolean(menuAnchor)} onClose={() => setMenuAnchor(null)} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
-        <MenuItem
-          onClick={() => {
-            setMenuAnchor(null);
-            actions.onOpenNodeSettings(id);
-          }}
-        >
-          Open settings
-        </MenuItem>
-        <MenuItem disabled>Duplicate (soon)</MenuItem>
-      </Menu>
     </NodeToolbar>
   );
 

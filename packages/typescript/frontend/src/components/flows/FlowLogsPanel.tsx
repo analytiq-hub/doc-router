@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FlowExecution } from '@docrouter/sdk';
 import type { Edge, Node } from 'reactflow';
-import { IconButton, Tooltip } from '@mui/material';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { ExclamationCircleIcon } from '@heroicons/react/24/outline';
 import { DocRouterOrgApi } from '@/utils/api';
@@ -163,15 +162,24 @@ const FlowLogsPanel: React.FC<{
         </button>
         <div className="flex shrink-0 items-center gap-0.5">
           {(execution || focusExecutionId) && (
-            <Tooltip title="Clear execution from panel">
-              <IconButton size="small" onClick={onClear} aria-label="Clear execution">
-                <TrashIcon className="h-4 w-4" />
-              </IconButton>
-            </Tooltip>
+            <button
+              type="button"
+              title="Clear execution from panel"
+              onClick={onClear}
+              aria-label="Clear execution"
+              className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100"
+            >
+              <TrashIcon className="h-4 w-4" />
+            </button>
           )}
-          <IconButton size="small" onClick={() => setExpanded((e) => !e)} aria-label={expanded ? 'Collapse' : 'Expand'}>
+          <button
+            type="button"
+            onClick={() => setExpanded((e) => !e)}
+            aria-label={expanded ? 'Collapse' : 'Expand'}
+            className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100"
+          >
             {expanded ? <ChevronDownIcon className="h-5 w-5" /> : <ChevronUpIcon className="h-5 w-5" />}
-          </IconButton>
+          </button>
         </div>
       </div>
       {expanded && (

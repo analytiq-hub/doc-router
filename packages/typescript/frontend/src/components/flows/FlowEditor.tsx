@@ -20,7 +20,6 @@ import ReactFlow, {
   type EdgeChange,
   type NodeChange,
 } from 'reactflow';
-import { Drawer, IconButton, Tooltip } from '@mui/material';
 import {
   ArrowUturnLeftIcon,
   ArrowsPointingOutIcon,
@@ -80,26 +79,42 @@ function CanvasZoomControls({ addFooterPadding }: { addFooterPadding: boolean })
 
   return (
     <Panel position="bottom-left" className="!mb-3 !ml-3 flex items-center gap-1 rounded-lg bg-white/95 p-1 shadow-md backdrop-blur-sm">
-      <Tooltip title="Zoom to fit" placement="top">
-        <IconButton size="small" onClick={() => void onZoomToFit()} aria-label="Zoom to fit" className="!text-gray-700">
-          <ArrowsPointingOutIcon className="h-5 w-5" />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="Zoom in" placement="top">
-        <IconButton size="small" onClick={() => void zoomIn({ duration: 120 })} aria-label="Zoom in" className="!text-gray-700">
-          <MagnifyingGlassPlusIcon className="h-5 w-5" />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="Zoom out" placement="top">
-        <IconButton size="small" onClick={() => void zoomOut({ duration: 120 })} aria-label="Zoom out" className="!text-gray-700">
-          <MagnifyingGlassMinusIcon className="h-5 w-5" />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="Reset zoom" placement="top">
-        <IconButton size="small" onClick={() => void zoomTo(1, { duration: 120 })} aria-label="Reset zoom" className="!text-gray-700">
-          <ArrowUturnLeftIcon className="h-5 w-5" />
-        </IconButton>
-      </Tooltip>
+      <button
+        type="button"
+        onClick={() => void onZoomToFit()}
+        title="Zoom to fit"
+        aria-label="Zoom to fit"
+        className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+      >
+        <ArrowsPointingOutIcon className="h-5 w-5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => void zoomIn({ duration: 120 })}
+        title="Zoom in"
+        aria-label="Zoom in"
+        className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+      >
+        <MagnifyingGlassPlusIcon className="h-5 w-5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => void zoomOut({ duration: 120 })}
+        title="Zoom out"
+        aria-label="Zoom out"
+        className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+      >
+        <MagnifyingGlassMinusIcon className="h-5 w-5" />
+      </button>
+      <button
+        type="button"
+        onClick={() => void zoomTo(1, { duration: 120 })}
+        title="Reset zoom"
+        aria-label="Reset zoom"
+        className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+      >
+        <ArrowUturnLeftIcon className="h-5 w-5" />
+      </button>
     </Panel>
   );
 }
@@ -199,6 +214,15 @@ const FlowEditor: React.FC<{
     pendingEdgeInsertRef.current = null;
     setNodePaletteOpen(true);
   }, []);
+
+  useEffect(() => {
+    if (!nodePaletteOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closePalette();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [nodePaletteOpen, closePalette]);
 
   const onConnect = useCallback(
     (params: Connection) => {
@@ -550,23 +574,33 @@ const FlowEditor: React.FC<{
         )}
 
         <div className="pointer-events-auto absolute right-2 top-1/2 z-10 flex -translate-y-1/2 flex-col gap-0.5 rounded-lg border border-[#d8dde4] bg-white/95 p-0.5 shadow-md backdrop-blur-sm">
-          <Tooltip title="Add node" placement="left">
-            <IconButton size="small" onClick={openPalette} aria-label="Add node" className="!text-gray-700">
-              <PlusIcon className="h-5 w-5" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Search nodes" placement="left">
-            <IconButton size="small" onClick={openPalette} aria-label="Search nodes" className="!text-gray-700">
-              <MagnifyingGlassIcon className="h-5 w-5" />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Coming soon" placement="left">
-            <span>
-              <IconButton size="small" disabled aria-label="Duplicate" className="!text-gray-400">
-                <Square2StackIcon className="h-5 w-5" />
-              </IconButton>
-            </span>
-          </Tooltip>
+          <button
+            type="button"
+            onClick={openPalette}
+            title="Add node"
+            aria-label="Add node"
+            className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+          >
+            <PlusIcon className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={openPalette}
+            title="Search nodes"
+            aria-label="Search nodes"
+            className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+          >
+            <MagnifyingGlassIcon className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            disabled
+            title="Coming soon"
+            aria-label="Duplicate (coming soon)"
+            className="cursor-not-allowed rounded-md p-1.5 text-gray-400"
+          >
+            <Square2StackIcon className="h-5 w-5" />
+          </button>
         </div>
       </div>
 
@@ -587,32 +621,37 @@ const FlowEditor: React.FC<{
         }}
       />
 
-      <Drawer
-        anchor="right"
-        open={nodePaletteOpen}
-        onClose={closePalette}
-        PaperProps={{
-          className: '!w-[min(100vw,300px)] border-l border-[#e2e4e8]',
-        }}
-        slotProps={{ backdrop: { className: 'bg-black/20' } }}
-      >
-        <div className="flex h-full min-h-0 flex-col">
-          <div className="flex items-center justify-between border-b border-[#eceff2] px-3 py-2">
-            <span className="text-sm font-semibold text-gray-900">Add node</span>
-            <IconButton size="small" onClick={closePalette} aria-label="Close" edge="end">
-              <XMarkIcon className="h-5 w-5" />
-            </IconButton>
+      {nodePaletteOpen && (
+        <>
+          <div className="fixed inset-0 z-[150] bg-black/20" onClick={closePalette} aria-hidden />
+          <div
+            className="fixed right-0 top-0 z-[160] flex h-full w-[min(100vw,300px)] min-w-0 flex-col border-l border-[#e2e4e8] bg-white shadow-xl"
+            role="dialog"
+            aria-modal
+            aria-label="Add node"
+          >
+            <div className="flex items-center justify-between border-b border-[#eceff2] px-3 py-2">
+              <span className="text-sm font-semibold text-gray-900">Add node</span>
+              <button
+                type="button"
+                onClick={closePalette}
+                aria-label="Close"
+                className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <FlowNodePalette
+                nodeTypes={nodeTypes}
+                embedInDrawer
+                searchInputRef={searchInputRef}
+                onNodeTypeDoubleClick={addNodeFromTypeAtViewCenter}
+              />
+            </div>
           </div>
-          <div className="min-h-0 flex-1">
-            <FlowNodePalette
-              nodeTypes={nodeTypes}
-              embedInDrawer
-              searchInputRef={searchInputRef}
-              onNodeTypeDoubleClick={addNodeFromTypeAtViewCenter}
-            />
-          </div>
-        </div>
-      </Drawer>
+        </>
+      )}
     </div>
   );
 };

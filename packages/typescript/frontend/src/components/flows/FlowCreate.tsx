@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { TextField, Button, Box } from '@mui/material';
 import { getApiErrorMsg } from '@/utils/api';
 import { useFlowApi } from './useFlowApi';
+import { flowInputClass, flowLabelClass } from './flowUiClasses';
 
 const FlowCreate: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const api = useFlowApi(organizationId);
@@ -30,24 +30,33 @@ const FlowCreate: React.FC<{ organizationId: string }> = ({ organizationId }) =>
   };
 
   return (
-    <Box className="bg-white border border-gray-200 rounded-lg p-4">
+    <div className="rounded-lg border border-gray-200 bg-white p-4">
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
-        <TextField
-          label="Flow name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          fullWidth
-        />
+        <div>
+          <label className={flowLabelClass} htmlFor="new-flow-name">
+            Flow name
+          </label>
+          <input
+            id="new-flow-name"
+            className={flowInputClass}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            autoComplete="off"
+          />
+        </div>
         <div className="flex items-center gap-3">
-          <Button type="submit" variant="contained" disabled={isSubmitting}>
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="inline-flex items-center justify-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
             {isSubmitting ? 'Creating…' : 'Create Flow'}
-          </Button>
+          </button>
           {message && <span className="text-sm text-red-600">{message}</span>}
         </div>
       </form>
-    </Box>
+    </div>
   );
 };
 
 export default FlowCreate;
-

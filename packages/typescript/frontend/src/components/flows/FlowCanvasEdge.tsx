@@ -13,7 +13,6 @@ import {
   type EdgeProps,
 } from 'reactflow';
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { Tooltip } from '@mui/material';
 import { useFlowCanvasActions } from './flowCanvasActionsContext';
 
 const DEFAULT_MARKER_END = getMarkerEnd(MarkerType.ArrowClosed);
@@ -142,44 +141,38 @@ export default function FlowCanvasEdge(props: EdgeProps) {
               onMouseEnter={showEdgeControlsSoon}
               onMouseLeave={hideEdgeControlsSoon}
             >
-              <Tooltip title="Add node on this connection">
-                <span>
-                  <button
-                    type="button"
-                    disabled={!canInsert}
-                    aria-label="Add node on this connection"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      actions?.onBeginInsertOnEdge?.({
-                        edgeId: id,
-                        source,
-                        target,
-                        sourceHandle: sourceHandle ?? null,
-                        targetHandle: targetHandle ?? null,
-                        flowPosition: { x: labelX, y: labelY },
-                      });
-                    }}
-                    className="flex h-7 w-7 items-center justify-center rounded border border-[#c5cad3] bg-[#f4f5f6] text-gray-700 shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <PlusIcon className="h-3.5 w-3.5" strokeWidth={2} />
-                  </button>
-                </span>
-              </Tooltip>
-              <Tooltip title="Delete connection">
-                <span>
-                  <button
-                    type="button"
-                    aria-label="Delete connection"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      actions?.onDeleteEdge(id);
-                    }}
-                    className="flex h-7 w-7 items-center justify-center rounded border border-[#c5cad3] bg-[#f4f5f6] text-gray-700 shadow-sm hover:bg-red-50 hover:border-red-200 hover:text-red-700"
-                  >
-                    <TrashIcon className="h-3.5 w-3.5" strokeWidth={2} />
-                  </button>
-                </span>
-              </Tooltip>
+              <button
+                type="button"
+                title="Add node on this connection"
+                disabled={!canInsert}
+                aria-label="Add node on this connection"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  actions?.onBeginInsertOnEdge?.({
+                    edgeId: id,
+                    source,
+                    target,
+                    sourceHandle: sourceHandle ?? null,
+                    targetHandle: targetHandle ?? null,
+                    flowPosition: { x: labelX, y: labelY },
+                  });
+                }}
+                className="flex h-7 w-7 items-center justify-center rounded border border-[#c5cad3] bg-[#f4f5f6] text-gray-700 shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <PlusIcon className="h-3.5 w-3.5" strokeWidth={2} />
+              </button>
+              <button
+                type="button"
+                title="Delete connection"
+                aria-label="Delete connection"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  actions?.onDeleteEdge(id);
+                }}
+                className="flex h-7 w-7 items-center justify-center rounded border border-[#c5cad3] bg-[#f4f5f6] text-gray-700 shadow-sm hover:border-red-200 hover:bg-red-50 hover:text-red-700"
+              >
+                <TrashIcon className="h-3.5 w-3.5" strokeWidth={2} />
+              </button>
             </div>
           )}
         </div>
