@@ -7,6 +7,7 @@ import {
   CursorArrowRaysIcon,
   EllipsisHorizontalIcon,
   ExclamationCircleIcon,
+  BoltIcon,
   PlayIcon,
   Squares2X2Icon,
   StopCircleIcon,
@@ -259,6 +260,10 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
           {disabledStrike}
           <div className="flex h-full w-full items-center justify-center">
             <CursorArrowRaysIcon className="h-10 w-10 text-[#a8b0ba]" aria-hidden />
+          </div>
+          {/* n8n trigger bolt: outside-left, vertically centered (`right: 100%`, `margin: auto`). */}
+          <div className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 p-1 text-[#ff6d5a]">
+            <BoltIcon className="h-5 w-5" aria-hidden />
           </div>
           {Array.from({ length: Math.max(outputs, 0) }).map((_, i) => (
             <Handle
