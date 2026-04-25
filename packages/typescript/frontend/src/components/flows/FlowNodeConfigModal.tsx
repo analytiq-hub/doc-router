@@ -2,13 +2,19 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/solid';
-import { UserIcon } from '@heroicons/react/24/outline';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import type { Edge } from 'reactflow';
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
 import { buildNodeInputPreview, buildNodeOutputPreview } from './flowNodeIoPreview';
-import { flowNameBreadcrumbInputClass, flowLabelClass, flowSelectClass } from './flowUiClasses';
+import {
+  flowInlineNameInputClass,
+  flowInlineNameMeasureClass,
+  flowInlineNameReadClass,
+  flowLabelClass,
+  flowSelectClass,
+} from './flowUiClasses';
+import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 
 const IoBlock: React.FC<{
   title: string;
@@ -47,11 +53,16 @@ const FlowNodeConfigModal: React.FC<{
 }) => {
   const [tab, setTab] = useState(0);
   const [selectedInputNodeId, setSelectedInputNodeId] = useState<string>('');
+  const [nameHover, setNameHover] = useState(false);
+  const [nameFocus, setNameFocus] = useState(false);
+  const measure = useInlineNameWidthPx(node?.name ?? '', 'Node name');
 
   useEffect(() => {
     if (node) {
       setTab(0);
       setSelectedInputNodeId('');
+      setNameHover(false);
+      setNameFocus(false);
     }
   }, [node?.id]);
 
@@ -98,6 +109,7 @@ const FlowNodeConfigModal: React.FC<{
   }
 
   const typeLabel = nodeType?.label ?? node.type;
+  const showNameField = !readOnly && (nameHover || nameFocus);
 
   return (
     <Dialog open={open} onClose={onClose} className="relative z-[200]">
@@ -111,30 +123,42 @@ const FlowNodeConfigModal: React.FC<{
           className="flex h-[min(90vh,900px)] w-[min(1400px,95vw)] max-w-[95vw] flex-col overflow-hidden rounded-lg border border-[#e2e4e8] bg-white shadow-2xl transition data-[closed]:scale-95 data-[closed]:opacity-0"
         >
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#eceff2] py-2.5 pl-4 pr-2">
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-              <UserIcon className="h-4 w-4 shrink-0 text-gray-500" aria-hidden />
-              <span className="text-sm text-gray-500">{typeLabel}</span>
-              <span className="text-sm text-gray-300">/</span>
+            <div
+              className="max-w-full shrink-0"
+              onMouseEnter={() => !readOnly && setNameHover(true)}
+              onMouseLeave={() => !readOnly && setNameHover(false)}
+            >
+              <span
+                ref={measure.spanRef}
+                className={flowInlineNameMeasureClass}
+                style={{
+                  position: 'absolute',
+                  visibility: 'hidden',
+                  pointerEvents: 'none',
+                  whiteSpace: 'pre',
+                }}
+                aria-hidden
+              >
+                {measure.basis}
+              </span>
               {readOnly ? (
-                <span className="min-w-0 max-w-md truncate text-sm font-semibold text-gray-900">{node.name}</span>
-              ) : (
+                <span className="block min-w-0 truncate text-sm font-semibold text-gray-900">{node.name}</span>
+              ) : showNameField ? (
                 <input
-                  className={flowNameBreadcrumbInputClass}
+                  className={flowInlineNameInputClass}
+                  style={measure.widthPx ? { width: `${measure.widthPx}px` } : undefined}
                   value={node.name}
                   onChange={(e) => onChange({ name: e.target.value })}
                   placeholder="Node name"
                   aria-label="Node name"
+                  onFocus={() => setNameFocus(true)}
+                  onBlur={() => setNameFocus(false)}
                 />
+              ) : (
+                <span className={flowInlineNameReadClass} title={node.name.trim() ? node.name : 'Node name'}>
+                  {node.name.trim() ? node.name : 'Unnamed node'}
+                </span>
               )}
-              <button
-                type="button"
-                className="shrink-0 text-sm text-gray-500 opacity-50"
-                tabIndex={-1}
-                disabled
-                title="Not available yet"
-              >
-                + Add tag
-              </button>
             </div>
             <button
               type="button"

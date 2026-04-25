@@ -2,17 +2,13 @@
 
 import React, { useState } from 'react';
 import FlowStatusBadge from './FlowStatusBadge';
+import { flowInlineNameInputClass, flowInlineNameMeasureClass, flowInlineNameReadClass } from './flowUiClasses';
+import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 
 const flowToolbarBtnClass =
   'inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
 const runBtnClass =
   'inline-flex items-center justify-center rounded-md px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50';
-
-const nameBlockClass = 'min-h-[38px] min-w-[8rem] max-w-xl flex-1 rounded-md px-3 py-1.5';
-const nameInputClass =
-  `${nameBlockClass} w-full border border-gray-300 bg-white text-sm font-semibold text-gray-900 shadow-sm focus:border-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-500/25`;
-const nameReadClass =
-  `${nameBlockClass} flex cursor-default items-center truncate border border-transparent text-sm font-semibold text-gray-900`;
 
 const FlowToolbar: React.FC<{
   name: string;
@@ -28,18 +24,33 @@ const FlowToolbar: React.FC<{
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
   const showNameField = nameHover || nameFocus;
+  const measure = useInlineNameWidthPx(name, 'Flow name');
 
   return (
     <div className="flex items-center justify-between border-b border-gray-200 bg-white px-3 py-2">
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 pr-2">
         <div
-          className="min-w-0 max-w-xl flex-1"
+          className="max-w-full shrink-0"
           onMouseEnter={() => setNameHover(true)}
           onMouseLeave={() => setNameHover(false)}
         >
+          <span
+            ref={measure.spanRef}
+            className={flowInlineNameMeasureClass}
+            style={{
+              position: 'absolute',
+              visibility: 'hidden',
+              pointerEvents: 'none',
+              whiteSpace: 'pre',
+            }}
+            aria-hidden
+          >
+            {measure.basis}
+          </span>
           {showNameField ? (
             <input
-              className={nameInputClass}
+              className={flowInlineNameInputClass}
+              style={measure.widthPx ? { width: `${measure.widthPx}px` } : undefined}
               value={name}
               onChange={(e) => onNameChange(e.target.value)}
               placeholder="Flow name"
@@ -48,7 +59,7 @@ const FlowToolbar: React.FC<{
               onBlur={() => setNameFocus(false)}
             />
           ) : (
-            <span className={nameReadClass} title={name || 'Flow name'}>
+            <span className={flowInlineNameReadClass} title={name || 'Flow name'}>
               {name.trim() ? name : 'Untitled flow'}
             </span>
           )}
