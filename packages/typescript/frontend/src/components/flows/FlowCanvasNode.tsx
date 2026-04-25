@@ -149,10 +149,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
   const showToolbar = Boolean(actions);
 
   const labelBlock = (
-    <div
-      className="pointer-events-none absolute left-1/2 top-full z-0 min-w-[120px] max-w-[260px] -translate-x-1/2 px-1 text-center"
-      style={{ marginTop: 2 }}
-    >
+    <div className="pointer-events-none absolute left-1/2 top-full z-0 mt-4 min-w-[120px] max-w-[260px] -translate-x-1/2 px-1 text-center">
       <div className="line-clamp-2 text-sm font-semibold leading-tight text-[#1a1d21]" title={displayLabel}>
         {displayLabel}
       </div>
@@ -243,23 +240,71 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
         onMouseLeave={hideToolbarForPointerSoon}
       >
         {toolbar}
+        <div className="relative mx-auto w-[96px]">
+          <div
+            className={[
+              nodeBodyBase,
+              'mx-auto h-[96px] w-[96px]',
+              triggerShape,
+              nodeBorderClass(),
+              nodeSelectionContour(selected),
+            ].join(' ')}
+          >
+            {disabledStrike}
+            <div className="flex h-full w-full items-center justify-center">
+              <CursorArrowRaysIcon className="h-10 w-10 text-[#a8b0ba]" aria-hidden />
+            </div>
+            {/* Trigger bolt: outside-left, vertically centered (`right: 100%`, `margin: auto`). */}
+            <div className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 p-1 text-[#ff6d5a]">
+              <BoltIcon className="h-5 w-5" aria-hidden />
+            </div>
+            {Array.from({ length: Math.max(outputs, 0) }).map((_, i) => (
+              <Handle
+                key={`out-${i}`}
+                id={`out-${i}`}
+                type="source"
+                position={Position.Right}
+                className={handleClass}
+                style={{ top: `${(100 * (i + 1)) / (outputs + 1)}%` }}
+              />
+            ))}
+            {runSt && <ExecutionStatusBadge status={runSt} />}
+          </div>
+          {labelBlock}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`group relative mx-auto w-[120px] pb-8 ${node.disabled ? 'opacity-60' : ''}`}
+      onMouseEnter={showToolbarForPointer}
+      onMouseLeave={hideToolbarForPointerSoon}
+    >
+      {toolbar}
+      <div className="relative mx-auto w-[96px]">
         <div
           className={[
             nodeBodyBase,
             'mx-auto h-[96px] w-[96px]',
-            triggerShape,
+            processShape,
             nodeBorderClass(),
             nodeSelectionContour(selected),
           ].join(' ')}
         >
           {disabledStrike}
-          <div className="flex h-full w-full items-center justify-center">
-            <CursorArrowRaysIcon className="h-10 w-10 text-[#a8b0ba]" aria-hidden />
-          </div>
-          {/* Trigger bolt: outside-left, vertically centered (`right: 100%`, `margin: auto`). */}
-          <div className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 p-1 text-[#ff6d5a]">
-            <BoltIcon className="h-5 w-5" aria-hidden />
-          </div>
+          {Array.from({ length: Math.max(inputs, 0) }).map((_, i) => (
+            <Handle
+              key={`in-${i}`}
+              id={`in-${i}`}
+              type="target"
+              position={Position.Left}
+              className={handleClass}
+              style={{ top: `${(100 * (i + 1)) / (inputs + 1)}%` }}
+            />
+          ))}
+          <Squares2X2Icon className="h-9 w-9 text-[#94a3b8]" aria-hidden />
           {Array.from({ length: Math.max(outputs, 0) }).map((_, i) => (
             <Handle
               key={`out-${i}`}
@@ -274,50 +319,6 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
         </div>
         {labelBlock}
       </div>
-    );
-  }
-
-  return (
-    <div
-      className={`group relative mx-auto w-[120px] pb-8 ${node.disabled ? 'opacity-60' : ''}`}
-      onMouseEnter={showToolbarForPointer}
-      onMouseLeave={hideToolbarForPointerSoon}
-    >
-      {toolbar}
-      <div
-        className={[
-          nodeBodyBase,
-          'mx-auto h-[96px] w-[96px]',
-          processShape,
-          nodeBorderClass(),
-          nodeSelectionContour(selected),
-        ].join(' ')}
-      >
-        {disabledStrike}
-        {Array.from({ length: Math.max(inputs, 0) }).map((_, i) => (
-          <Handle
-            key={`in-${i}`}
-            id={`in-${i}`}
-            type="target"
-            position={Position.Left}
-            className={handleClass}
-            style={{ top: `${(100 * (i + 1)) / (inputs + 1)}%` }}
-          />
-        ))}
-        <Squares2X2Icon className="h-9 w-9 text-[#94a3b8]" aria-hidden />
-        {Array.from({ length: Math.max(outputs, 0) }).map((_, i) => (
-          <Handle
-            key={`out-${i}`}
-            id={`out-${i}`}
-            type="source"
-            position={Position.Right}
-            className={handleClass}
-            style={{ top: `${(100 * (i + 1)) / (outputs + 1)}%` }}
-          />
-        ))}
-        {runSt && <ExecutionStatusBadge status={runSt} />}
-      </div>
-      {labelBlock}
     </div>
   );
 };
