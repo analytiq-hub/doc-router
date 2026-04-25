@@ -8,6 +8,7 @@ import FlowToolbar from '@/components/flows/FlowToolbar';
 import FlowEditor from '@/components/flows/FlowEditor';
 import FlowCanvasViewTabs, { type FlowCanvasView } from '@/components/flows/FlowCanvasViewTabs';
 import FlowLogsPanel from '@/components/flows/FlowLogsPanel';
+import { snapRfNodesPositions } from '@/components/flows/canvasGrid';
 import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNodeData } from '@/components/flows/flowRf';
 import { useFlowApi } from '@/components/flows/useFlowApi';
 import type { Edge, Node } from 'reactflow';
@@ -78,12 +79,13 @@ export default function FlowDetailPage({
           if (!mounted) return;
           setRevision(rev);
           const { nodes, edges } = revisionToRF(rev, Object.fromEntries(nts.items.map((x) => [x.key, x])));
-          setRfNodes(nodes as Node[]);
+          const snapped = snapRfNodesPositions(nodes as Node<FlowRfNodeData>[]);
+          setRfNodes(snapped as Node[]);
           setRfEdges(edges as Edge[]);
           setSavedContentFingerprint(
             revisionContentFingerprint(
               flowItem.flow.name,
-              nodes,
+              snapped,
               edges,
               rev,
             ),
@@ -104,7 +106,7 @@ export default function FlowDetailPage({
               id,
               name: triggerLabel,
               type: triggerType,
-              position: [100, 100],
+              position: [120, 120],
               parameters: {},
               disabled: false,
               on_error: 'stop',
@@ -118,10 +120,11 @@ export default function FlowDetailPage({
         };
         setRevision(blank);
         const { nodes, edges } = revisionToRF(blank, Object.fromEntries(nts.items.map((x) => [x.key, x])));
-        setRfNodes(nodes as Node[]);
+        const snapped = snapRfNodesPositions(nodes as Node<FlowRfNodeData>[]);
+        setRfNodes(snapped as Node[]);
         setRfEdges(edges as Edge[]);
         setSavedContentFingerprint(
-          revisionContentFingerprint(flowItem.flow.name, nodes, edges, blank),
+          revisionContentFingerprint(flowItem.flow.name, snapped, edges, blank),
         );
       } catch (err: unknown) {
         setMessage(err instanceof Error ? err.message : 'Failed to load flow');

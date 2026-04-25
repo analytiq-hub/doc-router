@@ -17,6 +17,7 @@ import { ArrowPathIcon, FunnelIcon } from '@heroicons/react/24/outline';
 import 'reactflow/dist/style.css';
 import type { FlowExecution, FlowNodeType } from '@docrouter/sdk';
 import type { FlowRfNodeData } from './flowRf';
+import { FLOW_CANVAS_GRID_PX, snapRfNodesPositions } from './canvasGrid';
 import { revisionToRF } from './flowRf';
 import { DocRouterOrgApi } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
@@ -123,7 +124,8 @@ const FlowExecutionsView: React.FC<{
           try {
             const rev = await orgApi.getRevision(flowId, ex.flow_revid);
             const { nodes, edges } = revisionToRF(rev, nodeTypesByKey);
-            setViewNodes(applyExecutionStatusToNodes(nodes as Node<FlowRfNodeData>[], runData) as Node<FlowRfNodeData>[]);
+            const snapped = snapRfNodesPositions(nodes as Node<FlowRfNodeData>[]);
+            setViewNodes(applyExecutionStatusToNodes(snapped, runData) as Node<FlowRfNodeData>[]);
             setViewEdges(toCanvasEdges(edges as Edge[]));
             setFitId(`${id}-${ex.flow_revid}`);
             return;
@@ -131,7 +133,9 @@ const FlowExecutionsView: React.FC<{
             // fall through to fallback graph
           }
         }
-        setViewNodes(applyExecutionStatusToNodes(fallbackNodes, runData) as Node<FlowRfNodeData>[]);
+        setViewNodes(
+          applyExecutionStatusToNodes(snapRfNodesPositions(fallbackNodes), runData) as Node<FlowRfNodeData>[],
+        );
         setViewEdges(toCanvasEdges(fallbackEdges));
         setFitId(`${id}-fallback`);
       } catch (e: unknown) {
@@ -292,7 +296,7 @@ const FlowExecutionsView: React.FC<{
             fitViewOptions={{ padding: 0.25 }}
           >
             <FitViewWhenDataChanges id={fitId} />
-            <Background color="#b8c0cc" gap={20} size={1.2} variant={BackgroundVariant.Dots} />
+            <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />
             <Controls className="!shadow-md" position="bottom-left" showFitView showInteractive={false} />
             <MiniMap
               position="bottom-right"

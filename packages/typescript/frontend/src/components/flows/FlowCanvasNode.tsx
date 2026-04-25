@@ -73,22 +73,25 @@ function ExecutionStatusBadge({ status }: { status: NonNullable<NodeRunStatusBad
   );
 }
 
-/** n8n-ish: thin stroke, no drop shadow; selection = darker gray border only (no ring). */
+/** Thin stroke, white fill; selection adds outer gray ring with offset (n8n-style halo). */
 const nodeBodyBase =
-  'relative flex flex-col items-center justify-center border bg-white transition-[border-color,opacity]';
+  'relative flex flex-col items-center justify-center border bg-white transition-[border-color,box-shadow]';
 
 function nodeBorderClass(selected: boolean): string {
-  return selected ? 'border-[#6d7178]' : 'border-[#d2d6dc]';
+  return selected ? 'border-[#b8bcc4]' : 'border-[#d2d6dc]';
 }
 
-/** Process node: ~12px corners on all sides (see docs/n8n_ui.md — `border-radius-large`). */
+/** Process nodes: uniform ~12px corners (n8n `border-radius-large`). */
 const processShape = 'rounded-xl';
 
-/**
- * Trigger / start node: pill-left, square-right (see docs/n8n_ui.md — `.trigger` radii).
- * `36px` left, ~12px right — reads as a flat “D” toward the wiring edge.
- */
+/** Trigger: more rounded on the left (n8n `.trigger` — ~36px left, ~12px right). */
 const triggerShape = 'rounded-l-[36px] rounded-r-xl';
+
+/** Selection contour: second ring outside the node with visible gap (offset), like n8n canvas selection. */
+function nodeSelectionRing(selected: boolean): string {
+  if (!selected) return '';
+  return 'ring-2 ring-[#9aa0a9] ring-offset-[6px] ring-offset-white';
+}
 
 /** Delay before hiding so the pointer can cross the gap to the portaled `NodeToolbar`. */
 const TOOLBAR_HIDE_MS = 280;
@@ -188,7 +191,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
               onClick={() => actions.onRunWorkflow?.()}
               className="!h-7 !w-7"
             >
-              <PlayIcon className="h-4 w-4 text-emerald-600" />
+              <PlayIcon className="h-4 w-4 text-gray-600" />
             </IconButton>
           </span>
         </Tooltip>
@@ -246,6 +249,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
             'mx-auto h-[88px] w-[100px]',
             triggerShape,
             nodeBorderClass(selected),
+            nodeSelectionRing(selected),
           ].join(' ')}
         >
           {disabledStrike}
@@ -277,7 +281,13 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
     >
       {toolbar}
       <div
-        className={[nodeBodyBase, 'mx-auto h-[88px] w-[100px]', processShape, nodeBorderClass(selected)].join(' ')}
+        className={[
+          nodeBodyBase,
+          'mx-auto h-[88px] w-[100px]',
+          processShape,
+          nodeBorderClass(selected),
+          nodeSelectionRing(selected),
+        ].join(' ')}
       >
         {disabledStrike}
         {Array.from({ length: Math.max(inputs, 0) }).map((_, i) => (

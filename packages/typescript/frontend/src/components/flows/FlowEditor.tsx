@@ -33,6 +33,7 @@ import {
   FlowExecutionVisualProvider,
   type EdgeInsertPayload,
 } from './flowCanvasActionsContext';
+import { FLOW_CANVAS_GRID_PX, snapToFlowGrid } from './canvasGrid';
 import { inputHandleCount } from './flowRf';
 import type { FlowRfNodeData } from './flowRf';
 
@@ -215,7 +216,7 @@ const FlowEditor: React.FC<{
       if (inIdx < 0 || inIdx >= inputHandleCount(dstType)) return false;
 
       const newId = uuid();
-      const pos = { x: Math.round(pending.flowPosition.x), y: Math.round(pending.flowPosition.y) };
+      const pos = snapToFlowGrid({ x: pending.flowPosition.x, y: pending.flowPosition.y });
       const flowNode: FlowNode = {
         id: newId,
         name: nt.label ? `${nt.label}` : typeKey,
@@ -285,14 +286,14 @@ const FlowEditor: React.FC<{
       if (!stf || !el) return;
 
       const r = el.getBoundingClientRect();
-      const p = stf({ x: r.left + r.width / 2, y: r.top + r.height / 2 });
+      const p = snapToFlowGrid(stf({ x: r.left + r.width / 2, y: r.top + r.height / 2 }));
       const nt = nodeTypesByKey[typeKey];
       const id = uuid();
       const flowNode: FlowNode = {
         id,
         name: nt?.label ? `${nt.label}` : typeKey,
         type: typeKey,
-        position: [Math.round(p.x), Math.round(p.y)],
+        position: [p.x, p.y],
         parameters: {},
         disabled: false,
         on_error: 'stop',
@@ -321,14 +322,14 @@ const FlowEditor: React.FC<{
 
       const stf = screenToFlowPointRef.current;
       if (!stf) return;
-      const p = stf({ x: event.clientX, y: event.clientY });
+      const p = snapToFlowGrid(stf({ x: event.clientX, y: event.clientY }));
       const nt = nodeTypesByKey[typeKey];
       const id = uuid();
       const flowNode: FlowNode = {
         id,
         name: nt?.label ? `${nt.label}` : typeKey,
         type: typeKey,
-        position: [Math.round(p.x), Math.round(p.y)],
+        position: [p.x, p.y],
         parameters: {},
         disabled: false,
         on_error: 'stop',
@@ -413,6 +414,8 @@ const FlowEditor: React.FC<{
               }}
               onConnect={onConnect}
               onNodeDoubleClick={onNodeDoubleClick}
+              snapToGrid
+              snapGrid={[FLOW_CANVAS_GRID_PX, FLOW_CANVAS_GRID_PX]}
               fitView
               fitViewOptions={{ padding: 0.25 }}
               proOptions={{ hideAttribution: true }}
@@ -428,7 +431,7 @@ const FlowEditor: React.FC<{
               elevateEdgesOnSelect
             >
               <ScreenToFlowPointBridge targetRef={screenToFlowPointRef} />
-              <Background color="#b8c0cc" gap={20} size={1.2} variant={BackgroundVariant.Dots} />
+              <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />
               <Controls className="!shadow-md" position="bottom-left" showFitView showInteractive={false} />
               <MiniMap
                 position="bottom-right"
