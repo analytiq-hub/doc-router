@@ -250,7 +250,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
         <div
           className={[
             nodeBodyBase,
-            'mx-auto h-[88px] w-[100px]',
+            'mx-auto h-[96px] w-[96px]',
             triggerShape,
             nodeBorderClass(),
             nodeSelectionContour(selected),
@@ -287,7 +287,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
       <div
         className={[
           nodeBodyBase,
-          'mx-auto h-[88px] w-[100px]',
+          'mx-auto h-[96px] w-[96px]',
           processShape,
           nodeBorderClass(),
           nodeSelectionContour(selected),
