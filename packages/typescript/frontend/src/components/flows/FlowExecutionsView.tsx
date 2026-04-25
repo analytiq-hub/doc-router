@@ -316,8 +316,10 @@ const FlowExecutionsView: React.FC<{
         readOnly
         node={configRf.node}
         nodeType={configRf.nodeType}
+        allNodes={viewNodes.map((n) => (n as Node<FlowRfNodeData>).data.flowNode)}
         edges={viewEdges}
         runData={runDataForModal}
+        onSelectNode={(nodeId) => setConfigModalId(nodeId)}
         onChange={() => {}}
       />
     </div>

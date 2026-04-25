@@ -565,8 +565,13 @@ const FlowEditor: React.FC<{
         onClose={() => setConfigModalNodeId(null)}
         node={configRf.node}
         nodeType={configRf.nodeType}
+        allNodes={nodes.map((n) => n.data.flowNode)}
         edges={edges}
         runData={runData}
+        onSelectNode={(nodeId) => {
+          onNodesChange(nodes.map((n) => ({ ...n, selected: n.id === nodeId })));
+          setConfigModalNodeId(nodeId);
+        }}
         onChange={(patch) => {
           if (configModalNodeId) onPatchNodeById(configModalNodeId, patch);
         }}
