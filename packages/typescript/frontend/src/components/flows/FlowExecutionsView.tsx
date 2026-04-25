@@ -29,13 +29,13 @@ import { applyExecutionStatusToNodes } from './flowNodeRunStatus';
 
 const LABELED_EDGE_TYPE = 'flowLabeled' as const;
 
-const FLOW_EDGE_MARKER_END = getMarkerEnd(MarkerType.ArrowClosed);
+const FLOW_EDGE_MARKER = { type: MarkerType.ArrowClosed } as const;
 
 function toCanvasEdges(edges: Edge[]): Edge[] {
   return edges.map((e) => ({
     ...e,
     type: e.type && e.type !== 'default' ? e.type : LABELED_EDGE_TYPE,
-    markerEnd: e.markerEnd ?? FLOW_EDGE_MARKER_END,
+    markerEnd: e.markerEnd ?? FLOW_EDGE_MARKER,
   }));
 }
 
@@ -290,7 +290,7 @@ const FlowExecutionsView: React.FC<{
               type: LABELED_EDGE_TYPE,
               style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
               data: { itemCount: 1 },
-              markerEnd: FLOW_EDGE_MARKER_END,
+                markerEnd: FLOW_EDGE_MARKER,
             }}
             fitView
             fitViewOptions={{ padding: 0.25 }}

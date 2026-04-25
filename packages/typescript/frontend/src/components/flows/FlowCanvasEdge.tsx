@@ -6,9 +6,9 @@ import {
   EdgeLabelRenderer,
   getBezierPath,
   getMarkerEnd,
-  getSmoothStepPath,
   getStraightPath,
   MarkerType,
+  type EdgeMarker,
   type Edge,
   type EdgeProps,
 } from 'reactflow';
@@ -87,13 +87,19 @@ export default function FlowCanvasEdge(props: EdgeProps) {
   const showItemLabel = !canEdit || !edgeControlsOpen;
 
   const stroke = selected ? '#818cf8' : '#a8b0bd';
+  const resolvedMarkerEnd =
+    typeof markerEnd === 'string'
+      ? markerEnd && markerEnd !== 'none'
+        ? markerEnd
+        : DEFAULT_MARKER_END
+      : getMarkerEnd((markerEnd as EdgeMarker | undefined)?.type ?? MarkerType.ArrowClosed);
 
   return (
     <>
       <BaseEdge
         id={id}
         path={edgePath}
-        markerEnd={markerEnd ?? DEFAULT_MARKER_END}
+        markerEnd={resolvedMarkerEnd}
         interactionWidth={0}
         style={{
           stroke,
