@@ -108,6 +108,27 @@ function CanvasZoomControls({ addFooterPadding }: { addFooterPadding: boolean })
   );
 }
 
+function escapeRegexLiteral(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function makeUniqueNodeName(base: string, existingNames: string[]): string {
+  const trimmed = base.trim();
+  const safeBase = trimmed.length ? trimmed : 'Node';
+  const set = new Set(existingNames.map((n) => n.trim()).filter(Boolean));
+  if (!set.has(safeBase)) return safeBase;
+
+  const re = new RegExp(`^${escapeRegexLiteral(safeBase)}(?:\\s+(\\d+))?$`);
+  let maxSuffix = 0;
+  for (const n of set) {
+    const m = re.exec(n);
+    if (!m) continue;
+    const suffix = m[1] ? Number(m[1]) : 0;
+    if (Number.isFinite(suffix) && suffix > maxSuffix) maxSuffix = suffix;
+  }
+  return `${safeBase} ${maxSuffix + 1}`;
+}
+
 function uuid(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now());
 }
@@ -281,9 +302,14 @@ const FlowEditor: React.FC<{
 
       const newId = uuid();
       const pos = snapToFlowGrid({ x: pending.flowPosition.x, y: pending.flowPosition.y });
+      const baseName = nt.label ? `${nt.label}` : typeKey;
+      const uniqueName = makeUniqueNodeName(
+        baseName,
+        nodes.map((n) => n.data.flowNode.name),
+      );
       const flowNode: FlowNode = {
         id: newId,
-        name: nt.label ? `${nt.label}` : typeKey,
+        name: uniqueName,
         type: typeKey,
         position: [pos.x, pos.y],
         parameters: {},
@@ -353,9 +379,14 @@ const FlowEditor: React.FC<{
       const p = snapToFlowGrid(stf({ x: r.left + r.width / 2, y: r.top + r.height / 2 }));
       const nt = nodeTypesByKey[typeKey];
       const id = uuid();
+      const baseName = nt?.label ? `${nt.label}` : typeKey;
+      const uniqueName = makeUniqueNodeName(
+        baseName,
+        nodes.map((n) => n.data.flowNode.name),
+      );
       const flowNode: FlowNode = {
         id,
-        name: nt?.label ? `${nt.label}` : typeKey,
+        name: uniqueName,
         type: typeKey,
         position: [p.x, p.y],
         parameters: {},
@@ -389,9 +420,14 @@ const FlowEditor: React.FC<{
       const p = snapToFlowGrid(stf({ x: event.clientX, y: event.clientY }));
       const nt = nodeTypesByKey[typeKey];
       const id = uuid();
+      const baseName = nt?.label ? `${nt.label}` : typeKey;
+      const uniqueName = makeUniqueNodeName(
+        baseName,
+        nodes.map((n) => n.data.flowNode.name),
+      );
       const flowNode: FlowNode = {
         id,
-        name: nt?.label ? `${nt.label}` : typeKey,
+        name: uniqueName,
         type: typeKey,
         position: [p.x, p.y],
         parameters: {},

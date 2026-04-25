@@ -110,7 +110,29 @@ const FlowNodeConfigModal: React.FC<{
           <div className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
             {nodeType?.label ?? node.type}
           </div>
-          <div className="truncate font-semibold text-[#1a1d21]">{node.name}</div>
+          {readOnly ? (
+            <div className="truncate font-semibold text-[#1a1d21]">{node.name}</div>
+          ) : (
+            <TextField
+              value={node.name}
+              onChange={(e) => onChange({ name: e.target.value })}
+              size="small"
+              fullWidth
+              variant="standard"
+              placeholder="Node name"
+              InputProps={{
+                disableUnderline: false,
+                sx: { fontWeight: 600, color: '#1a1d21' },
+              }}
+              inputProps={{
+                className: 'text-[16px] leading-tight',
+              }}
+              sx={{
+                mt: 0.25,
+                maxWidth: 520,
+              }}
+            />
+          )}
         </div>
         <IconButton size="small" onClick={onClose} aria-label="Close" edge="end">
           <XMarkIcon className="h-5 w-5" />
@@ -192,9 +214,18 @@ const FlowNodeConfigModal: React.FC<{
           <Panel defaultSize={42} minSize={28} className="min-w-[320px]">
             <div className="flex min-h-0 min-w-0 flex-1 flex-col">
               <div className="shrink-0 border-b border-[#eceff2] bg-white px-1">
-                <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="fullWidth" sx={{ minHeight: 40 }}>
-                  <Tab label="Parameters" sx={{ minHeight: 40, fontSize: 12, textTransform: 'none', fontWeight: 600 }} />
-                  <Tab label="Settings" sx={{ minHeight: 40, fontSize: 12, textTransform: 'none', fontWeight: 600 }} />
+                <Tabs
+                  value={tab}
+                  onChange={(_, v) => setTab(v)}
+                  variant="fullWidth"
+                  sx={{
+                    minHeight: 40,
+                    '& .MuiTab-root': { minHeight: 40, textTransform: 'none', fontWeight: 700, color: '#4b5563', opacity: 1 },
+                    '& .MuiTab-root.Mui-selected': { color: '#1d4ed8' },
+                  }}
+                >
+                  <Tab label="Parameters" sx={{ fontSize: 12 }} />
+                  <Tab label="Settings" sx={{ fontSize: 12 }} />
                 </Tabs>
               </div>
               <div className="min-h-0 flex-1 overflow-y-auto p-3">
