@@ -5,8 +5,6 @@ import ReactFlow, {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
-  getMarkerEnd,
   MarkerType,
   useReactFlow,
   type Edge,
@@ -292,14 +290,6 @@ const FlowExecutionsView: React.FC<{
             <FitViewWhenDataChanges id={fitId} />
             <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />
             <Controls className="!shadow-md" position="bottom-left" showFitView showInteractive={false} />
-            <MiniMap
-              position="bottom-right"
-              className="!m-2"
-              pannable
-              zoomable
-              nodeStrokeWidth={2}
-              maskColor="rgba(240, 240, 245, 0.7)"
-            />
           </ReactFlow>
         </div>
       </div>

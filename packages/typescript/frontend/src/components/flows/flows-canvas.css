@@ -31,12 +31,6 @@
   border-bottom: none;
 }
 
-.docrouter-flow-canvas .react-flow__minimap {
-  border-radius: 8px;
-  overflow: hidden;
-  border: 1px solid #e2e4e8;
-}
-
 .docrouter-flow-canvas .react-flow__handle {
   width: 10px;
   height: 10px;

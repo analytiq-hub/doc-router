@@ -3,7 +3,6 @@ import ReactFlow, {
   Background,
   BackgroundVariant,
   Controls,
-  MiniMap,
   Panel,
   addEdge,
   getNodesBounds,
@@ -515,14 +514,6 @@ const FlowEditor: React.FC<{
               <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />
               <Controls className="!shadow-md" position="bottom-left" showZoom={false} showFitView={false} showInteractive={false} />
               <CanvasZoomControls addFooterPadding={Boolean(onExecute)} />
-              <MiniMap
-                position="bottom-right"
-                className="!m-2"
-                pannable
-                zoomable
-                nodeStrokeWidth={2}
-                maskColor="rgba(240, 240, 245, 0.7)"
-              />
               {onExecute && (
                 <Panel position="bottom-center" className="!mb-6">
                   <button
