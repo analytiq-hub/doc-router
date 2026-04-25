@@ -3,7 +3,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Handle, NodeToolbar, Position, type NodeProps } from 'reactflow';
 import {
-  BoltIcon,
   CheckCircleIcon,
   CursorArrowRaysIcon,
   EllipsisHorizontalIcon,
@@ -74,8 +73,22 @@ function ExecutionStatusBadge({ status }: { status: NonNullable<NodeRunStatusBad
   );
 }
 
-const boxBase =
-  'relative flex flex-col items-center justify-center border-2 bg-white shadow-sm transition-[box-shadow,opacity]';
+/** n8n-ish: thin stroke, no drop shadow; selection = darker gray border only (no ring). */
+const nodeBodyBase =
+  'relative flex flex-col items-center justify-center border bg-white transition-[border-color,opacity]';
+
+function nodeBorderClass(selected: boolean): string {
+  return selected ? 'border-[#6d7178]' : 'border-[#d2d6dc]';
+}
+
+/** Process node: ~12px corners on all sides (see docs/n8n_ui.md — `border-radius-large`). */
+const processShape = 'rounded-xl';
+
+/**
+ * Trigger / start node: pill-left, square-right (see docs/n8n_ui.md — `.trigger` radii).
+ * `36px` left, ~12px right — reads as a flat “D” toward the wiring edge.
+ */
+const triggerShape = 'rounded-l-[36px] rounded-r-xl';
 
 /** Delay before hiding so the pointer can cross the gap to the portaled `NodeToolbar`. */
 const TOOLBAR_HIDE_MS = 280;
@@ -222,40 +235,34 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
   if (isTrigger) {
     return (
       <div
-        className={`group relative pb-8 ${node.disabled ? 'opacity-60' : ''}`}
+        className={`group relative mx-auto w-[120px] pb-8 ${node.disabled ? 'opacity-60' : ''}`}
         onMouseEnter={showToolbarForPointer}
         onMouseLeave={hideToolbarForPointerSoon}
       >
         {toolbar}
-        <div className="relative flex items-center justify-center gap-1.5">
-          <span className="shrink-0 text-amber-500" aria-hidden title="Trigger">
-            <BoltIcon className="h-5 w-5" aria-hidden />
-          </span>
-          <div
-            className={[
-              boxBase,
-              'h-[88px] min-w-[120px] max-w-[200px] rounded-r-[28px] rounded-l-[36px] border-emerald-500/80',
-              selected ? 'ring-2 ring-sky-400/70 ring-offset-1' : '',
-            ].join(' ')}
-          >
-            {disabledStrike}
-            <div className="flex items-center gap-2 px-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-emerald-200 bg-gradient-to-b from-emerald-50 to-white text-emerald-600">
-                <CursorArrowRaysIcon className="h-5 w-5" aria-hidden />
-              </div>
-            </div>
-            {Array.from({ length: Math.max(outputs, 0) }).map((_, i) => (
-              <Handle
-                key={`out-${i}`}
-                id={`out-${i}`}
-                type="source"
-                position={Position.Right}
-                className={handleClass}
-                style={{ top: `${(100 * (i + 1)) / (outputs + 1)}%` }}
-              />
-            ))}
-            {runSt && <ExecutionStatusBadge status={runSt} />}
+        <div
+          className={[
+            nodeBodyBase,
+            'mx-auto h-[88px] w-[100px]',
+            triggerShape,
+            nodeBorderClass(selected),
+          ].join(' ')}
+        >
+          {disabledStrike}
+          <div className="flex h-full w-full items-center justify-center">
+            <CursorArrowRaysIcon className="h-10 w-10 text-[#a8b0ba]" aria-hidden />
           </div>
+          {Array.from({ length: Math.max(outputs, 0) }).map((_, i) => (
+            <Handle
+              key={`out-${i}`}
+              id={`out-${i}`}
+              type="source"
+              position={Position.Right}
+              className={handleClass}
+              style={{ top: `${(100 * (i + 1)) / (outputs + 1)}%` }}
+            />
+          ))}
+          {runSt && <ExecutionStatusBadge status={runSt} />}
         </div>
         {labelBlock}
       </div>
@@ -270,11 +277,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
     >
       {toolbar}
       <div
-        className={[
-          boxBase,
-          'mx-auto h-[88px] w-[100px] rounded-2xl border-[#c8cdd5]',
-          selected ? 'ring-2 ring-sky-400/70 ring-offset-1' : '',
-        ].join(' ')}
+        className={[nodeBodyBase, 'mx-auto h-[88px] w-[100px]', processShape, nodeBorderClass(selected)].join(' ')}
       >
         {disabledStrike}
         {Array.from({ length: Math.max(inputs, 0) }).map((_, i) => (
