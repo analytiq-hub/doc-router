@@ -1,4 +1,13 @@
 /* React Flow canvas layout tweaks (scoped) */
+/*
+ * Edge paths live in SVG; EdgeLabelRenderer portals HTML into .react-flow__renderer.
+ * After node moves, React Flow can raise per-edge z-index (e.g. elevateEdgesOnSelect),
+ * which paints the SVG stroke over our + / delete controls unless the label layer wins.
+ */
+.docrouter-flow-canvas .react-flow__edgelabel-renderer {
+  z-index: 5000;
+}
+
 .docrouter-flow-canvas .react-flow__background {
   background-color: #f7f7f9;
 }
