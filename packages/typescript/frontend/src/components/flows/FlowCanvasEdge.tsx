@@ -125,7 +125,7 @@ export default function FlowCanvasEdge(props: EdgeProps) {
                 {label}
               </div>
             ) : (
-              <div className="pointer-events-none whitespace-nowrap rounded px-1.5 py-0.5 text-[11px] font-medium text-[#5a6270] shadow-sm ring-1 ring-[#e1e4e8] bg-[#f7f7f9]">
+              <div className="pointer-events-none whitespace-nowrap bg-[#f7f7f9] px-1 text-[11px] font-medium text-[#5a6270]">
                 {label}
               </div>
             )
