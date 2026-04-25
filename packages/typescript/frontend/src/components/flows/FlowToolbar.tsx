@@ -1,12 +1,18 @@
-import React from 'react';
-import { UserIcon } from '@heroicons/react/24/outline';
+'use client';
+
+import React, { useState } from 'react';
 import FlowStatusBadge from './FlowStatusBadge';
-import { flowNameBreadcrumbInputClass } from './flowUiClasses';
 
 const flowToolbarBtnClass =
   'inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
 const runBtnClass =
   'inline-flex items-center justify-center rounded-md px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50';
+
+const nameBlockClass = 'min-h-[38px] min-w-[8rem] max-w-xl flex-1 rounded-md px-3 py-1.5';
+const nameInputClass =
+  `${nameBlockClass} w-full border border-gray-300 bg-white text-sm font-semibold text-gray-900 shadow-sm focus:border-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-500/25`;
+const nameReadClass =
+  `${nameBlockClass} flex cursor-default items-center truncate border border-transparent text-sm font-semibold text-gray-900`;
 
 const FlowToolbar: React.FC<{
   name: string;
@@ -18,36 +24,35 @@ const FlowToolbar: React.FC<{
   onRun: () => void;
   onActivate: () => void;
   onDeactivate: () => void;
-  /** Breadcrumb left segment (e.g. org or collection name). */
-  contextLabel?: string;
-}> = ({
-  name,
-  onNameChange,
-  active,
-  isDirty,
-  isSaving,
-  onSave,
-  onRun,
-  onActivate,
-  onDeactivate,
-  contextLabel = 'Flows',
-}) => {
+}> = ({ name, onNameChange, active, isDirty, isSaving, onSave, onRun, onActivate, onDeactivate }) => {
+  const [nameHover, setNameHover] = useState(false);
+  const [nameFocus, setNameFocus] = useState(false);
+  const showNameField = nameHover || nameFocus;
+
   return (
     <div className="flex items-center justify-between border-b border-gray-200 bg-white px-3 py-2">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 pr-2">
-        <UserIcon className="h-4 w-4 shrink-0 text-gray-500" aria-hidden />
-        <span className="shrink-0 text-sm text-gray-500">{contextLabel}</span>
-        <span className="shrink-0 text-sm text-gray-300">/</span>
-        <input
-          className={flowNameBreadcrumbInputClass}
-          value={name}
-          onChange={(e) => onNameChange(e.target.value)}
-          placeholder="Flow name"
-          aria-label="Flow name"
-        />
-        <button type="button" className="shrink-0 text-sm text-gray-500 opacity-50" tabIndex={-1} disabled title="Not available yet">
-          + Add tag
-        </button>
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 pr-2">
+        <div
+          className="min-w-0 max-w-xl flex-1"
+          onMouseEnter={() => setNameHover(true)}
+          onMouseLeave={() => setNameHover(false)}
+        >
+          {showNameField ? (
+            <input
+              className={nameInputClass}
+              value={name}
+              onChange={(e) => onNameChange(e.target.value)}
+              placeholder="Flow name"
+              aria-label="Flow name"
+              onFocus={() => setNameFocus(true)}
+              onBlur={() => setNameFocus(false)}
+            />
+          ) : (
+            <span className={nameReadClass} title={name || 'Flow name'}>
+              {name.trim() ? name : 'Untitled flow'}
+            </span>
+          )}
+        </div>
         <FlowStatusBadge active={active} />
         {isDirty && <div className="shrink-0 text-xs text-amber-700">Unsaved changes</div>}
       </div>

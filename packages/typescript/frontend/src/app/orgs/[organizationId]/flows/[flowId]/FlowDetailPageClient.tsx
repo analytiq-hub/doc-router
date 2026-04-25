@@ -161,22 +161,26 @@ export default function FlowDetailPageClient({
       });
       setFlowName(res.flow.name);
       setFlowActive(Boolean(res.flow.active));
-      const newRevid = res.revision?.flow_revid ?? '';
-      setLatestFlowRevid(newRevid);
+      // API returns `revision: null` for a name-only save (graph unchanged); the latest revision id
+      // in the database is unchanged — do not clear `latestFlowRevid` or the next save sends an empty
+      // base_flow_revid and the server returns 409.
       if (res.revision) {
+        setLatestFlowRevid(res.revision.flow_revid);
         setRevision(res.revision);
         setSavedContentFingerprint(
           revisionContentFingerprint(res.flow.name, rfNodes as FlowRfNode[], rfEdges as FlowRfEdge[], res.revision),
         );
       } else {
-        if (graphFingerprint) setSavedContentFingerprint(graphFingerprint);
+        setSavedContentFingerprint(
+          revisionContentFingerprint(res.flow.name, rfNodes as FlowRfNode[], rfEdges as FlowRfEdge[], revision),
+        );
       }
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setIsSaving(false);
     }
-  }, [api, flowId, flowName, latestFlowRevid, rfEdges, rfNodes, revision, graphFingerprint]);
+  }, [api, flowId, flowName, latestFlowRevid, rfEdges, rfNodes, revision]);
 
   const onRun = useCallback(async () => {
     try {
