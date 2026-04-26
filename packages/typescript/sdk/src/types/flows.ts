@@ -59,12 +59,22 @@ export interface FlowNodeConnection {
 
 export type FlowConnections = Record<string, { main: Array<FlowNodeConnection[] | null> }>;
 
+export type FlowPinItem = { json: unknown };
+
+/** Pinned output for a single node, keyed like engine `data.main`. */
+export type FlowPinNodeOutput = {
+  main: Array<FlowPinItem[] | null>;
+};
+
+/** Revision-level pin data, keyed by **node id**. */
+export type FlowPinData = Record<string, FlowPinNodeOutput>;
+
 export interface FlowRevision extends FlowRevisionSummary {
   flow_id: string;
   nodes: FlowNode[];
   connections: FlowConnections;
   settings: Record<string, unknown>;
-  pin_data: Record<string, unknown> | null;
+  pin_data: FlowPinData | null;
   engine_version: number;
 }
 
@@ -117,7 +127,7 @@ export interface SaveRevisionParams {
   nodes: FlowNode[];
   connections: FlowConnections;
   settings?: Record<string, unknown>;
-  pin_data?: Record<string, unknown> | null;
+  pin_data?: FlowPinData | null;
 }
 
 export interface RunFlowParams {

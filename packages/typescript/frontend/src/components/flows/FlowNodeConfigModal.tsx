@@ -1,12 +1,14 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
-import { XMarkIcon } from '@heroicons/react/24/solid';
+import { BookmarkIcon, PencilSquareIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import Editor from '@monaco-editor/react';
 import type { Edge } from 'reactflow';
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
-import { buildNodeInputPreview, buildNodeOutputPreview } from './flowNodeIoPreview';
+import { buildNodeInputPreview } from './flowNodeIoPreview';
+import { IoViewer } from './IoViewer';
 import {
   flowInlineNameInputClass,
   flowInlineNameMeasureClass,
@@ -18,15 +20,44 @@ import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 
 const IoBlock: React.FC<{
   title: string;
+  right?: React.ReactNode;
   children: React.ReactNode;
-}> = ({ title, children }) => (
+}> = ({ title, right, children }) => (
   <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-[#e8eaee] last:border-r-0">
-    <div className="shrink-0 border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
+    <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
       <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">{title}</span>
+      {right}
     </div>
     <div className="min-h-0 flex-1 overflow-auto p-3 text-xs text-[#1a1d21]">{children}</div>
   </div>
 );
+
+type FlowPinNodeOutput = { main: Array<Array<{ json: unknown }> | null> };
+type FlowPinData = Record<string, FlowPinNodeOutput>;
+
+function safeParseJson(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
+  try {
+    return { ok: true, value: JSON.parse(text) };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Invalid JSON' };
+  }
+}
+
+function nodeItemsFromRunData(runData: Record<string, unknown> | null | undefined, nodeId: string): Array<{ json: unknown }> | null {
+  if (!runData) return null;
+  const rec = runData[nodeId] as { data?: { main?: Array<Array<{ json?: unknown } | null> | null> } } | undefined;
+  const lane0 = rec?.data?.main?.[0];
+  if (!Array.isArray(lane0)) return null;
+  const items: Array<{ json: unknown }> = [];
+  for (const it of lane0) {
+    if (it && typeof it === 'object' && 'json' in it) items.push({ json: (it as { json?: unknown }).json ?? null });
+  }
+  return items;
+}
+
+function pinNodeOutputFromItems(items: Array<{ json: unknown }>): FlowPinNodeOutput {
+  return { main: [[...items.map((i) => ({ json: i.json }))]] };
+}
 
 const FlowNodeConfigModal: React.FC<{
   open: boolean;
@@ -36,6 +67,8 @@ const FlowNodeConfigModal: React.FC<{
   allNodes?: FlowNode[];
   edges: Edge[];
   runData: Record<string, unknown> | null | undefined;
+  pinData?: Record<string, unknown> | null;
+  onPinDataChange?: (next: Record<string, unknown> | null) => void;
   onChange: (patch: Partial<FlowNode>) => void;
   onSelectNode?: (nodeId: string) => void;
   readOnly?: boolean;
@@ -47,6 +80,8 @@ const FlowNodeConfigModal: React.FC<{
   allNodes,
   edges,
   runData,
+  pinData,
+  onPinDataChange,
   onChange,
   onSelectNode,
   readOnly = false,
@@ -56,6 +91,7 @@ const FlowNodeConfigModal: React.FC<{
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
   const measure = useInlineNameWidthPx(node?.name ?? '', 'Node name');
+  const nodeId = node?.id ?? '';
 
   useEffect(() => {
     if (node) {
@@ -75,10 +111,72 @@ const FlowNodeConfigModal: React.FC<{
     return { ...base, slots: filteredSlots };
   }, [node, edges, runData, selectedInputNodeId]);
 
-  const outputPreview = useMemo(() => {
-    if (!node) return { data: null, message: 'No node' };
-    return buildNodeOutputPreview(node.id, runData);
-  }, [node, runData]);
+  const typedPinData = useMemo(() => {
+    if (!pinData || typeof pinData !== 'object') return null;
+    return pinData as FlowPinData;
+  }, [pinData]);
+
+  const pinnedForNode = nodeId ? (typedPinData?.[nodeId] ?? null) : null;
+  const pinnedItems = useMemo(() => {
+    const lane0 = pinnedForNode?.main?.[0];
+    return Array.isArray(lane0) ? lane0.filter(Boolean) : null;
+  }, [pinnedForNode]);
+
+  const runItems = useMemo(() => (nodeId ? nodeItemsFromRunData(runData, nodeId) : null), [runData, nodeId]);
+  const outputItems = pinnedItems ?? runItems;
+  const outputValue = useMemo(() => (outputItems ? outputItems.map((i) => i.json) : null), [outputItems]);
+
+  const [pinEditOpen, setPinEditOpen] = useState(false);
+  const [pinEditText, setPinEditText] = useState('');
+  const [pinEditError, setPinEditError] = useState<string>('');
+
+  const hasPin = Boolean(pinnedForNode);
+
+  const onTogglePin = () => {
+    if (readOnly) return;
+    if (!onPinDataChange) return;
+    const base = (typedPinData ?? {}) as FlowPinData;
+    if (hasPin) {
+      const { [nodeId]: _removed, ...rest } = base;
+      onPinDataChange(Object.keys(rest).length ? rest : null);
+      return;
+    }
+    const itemsToPin = outputItems ?? [];
+    const next: FlowPinData = { ...base, [nodeId]: pinNodeOutputFromItems(itemsToPin) };
+    onPinDataChange(next);
+  };
+
+  const onClearPin = () => {
+    if (readOnly) return;
+    if (!onPinDataChange) return;
+    const base = (typedPinData ?? {}) as FlowPinData;
+    const { [nodeId]: _removed, ...rest } = base;
+    onPinDataChange(Object.keys(rest).length ? rest : null);
+  };
+
+  const onOpenEditPin = () => {
+    setPinEditError('');
+    setPinEditText(JSON.stringify(pinnedForNode ?? pinNodeOutputFromItems(outputItems ?? []), null, 2));
+    setPinEditOpen(true);
+  };
+
+  const onSaveEditPin = () => {
+    if (readOnly) return;
+    if (!onPinDataChange) return;
+    const parsed = safeParseJson(pinEditText);
+    if (!parsed.ok) {
+      setPinEditError(parsed.error);
+      return;
+    }
+    if (!parsed.value || typeof parsed.value !== 'object') {
+      setPinEditError('Pinned output must be a JSON object with shape { "main": [[{ "json": ... }]] }.');
+      return;
+    }
+    const base = (typedPinData ?? {}) as FlowPinData;
+    const next: FlowPinData = { ...base, [nodeId]: parsed.value as FlowPinNodeOutput };
+    onPinDataChange(next);
+    setPinEditOpen(false);
+  };
 
   const upstreamNodeIds = useMemo(() => {
     if (!node) return [];
@@ -231,17 +329,17 @@ const FlowNodeConfigModal: React.FC<{
 
                   {inputPreview.message && <div className="mb-2 text-sm text-[#6b7280]">{inputPreview.message}</div>}
                   {!inputPreview.message && inputPreview.slots.length > 0 && (
-                    <pre className="whitespace-pre-wrap break-words rounded border border-[#eceff2] bg-[#fbfbfc] p-2 font-mono text-[11px] leading-relaxed">
-                      {JSON.stringify(
-                        inputPreview.slots.map((s) => ({
-                          in: s.slot,
-                          from: nodeLabelById.get(s.fromNodeId) ?? s.fromNodeId,
-                          item: s.payload,
-                        })),
-                        null,
-                        2,
-                      )}
-                    </pre>
+                    <div className="space-y-3">
+                      {inputPreview.slots.map((s) => (
+                        <IoViewer
+                          key={`${s.fromNodeId}:${s.slot}`}
+                          title={`in ${s.slot} ← ${nodeLabelById.get(s.fromNodeId) ?? s.fromNodeId}`}
+                          value={s.payload}
+                          dragSource={{ nodeId: s.fromNodeId, source: 'nodeOutput' }}
+                          defaultMode="schema"
+                        />
+                      ))}
+                    </div>
                   )}
                 </IoBlock>
               </Panel>
@@ -278,16 +376,53 @@ const FlowNodeConfigModal: React.FC<{
               <PanelResizeHandle className="w-px bg-[#e8eaee]" />
 
               <Panel defaultSize={33} minSize={18} className="min-w-[260px]">
-                <IoBlock title="Output">
-                  {outputPreview.data != null ? (
-                    <>
-                      {outputPreview.message && <div className="mb-2 text-sm text-amber-800">{outputPreview.message}</div>}
-                      <pre className="whitespace-pre-wrap break-words rounded border border-[#eceff2] bg-[#fbfbfc] p-2 font-mono text-[11px] leading-relaxed">
-                        {JSON.stringify(outputPreview.data, null, 2)}
-                      </pre>
-                    </>
+                <IoBlock
+                  title="Output"
+                  right={
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={onTogglePin}
+                        disabled={readOnly || !onPinDataChange}
+                        className={[
+                          'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold',
+                          hasPin ? 'border-violet-200 bg-violet-50 text-violet-800' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50',
+                          (readOnly || !onPinDataChange) ? 'cursor-not-allowed opacity-50' : '',
+                        ].join(' ')}
+                        title={hasPin ? 'Unpin output' : 'Pin output'}
+                      >
+                        <BookmarkIcon className="h-4 w-4" aria-hidden />
+                        {hasPin ? 'Pinned' : 'Pin'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onOpenEditPin}
+                        disabled={readOnly || !onPinDataChange}
+                        className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        title="Edit pinned output"
+                      >
+                        <PencilSquareIcon className="h-4 w-4" aria-hidden />
+                        Edit
+                      </button>
+                      <button
+                        type="button"
+                        onClick={onClearPin}
+                        disabled={!hasPin || readOnly || !onPinDataChange}
+                        className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        title="Clear pin"
+                      >
+                        <TrashIcon className="h-4 w-4" aria-hidden />
+                        Clear
+                      </button>
+                    </div>
+                  }
+                >
+                  {!runData && !hasPin && <div className="text-sm text-[#6b7280]">Run the workflow to see output data for this node.</div>}
+                  {hasPin && <div className="mb-2 text-[11px] font-semibold text-violet-700">Using pinned output for preview</div>}
+                  {outputValue != null ? (
+                    <IoViewer title={node.name || typeLabel} value={outputValue} dragSource={{ nodeId: node.id, source: 'nodeOutput' }} defaultMode="table" />
                   ) : (
-                    <div className="text-sm text-[#6b7280]">{outputPreview.message ?? '—'}</div>
+                    <div className="text-sm text-[#6b7280]">No output items.</div>
                   )}
                 </IoBlock>
               </Panel>
@@ -295,6 +430,66 @@ const FlowNodeConfigModal: React.FC<{
           </div>
         </DialogPanel>
       </div>
+
+      <Dialog open={pinEditOpen} onClose={() => setPinEditOpen(false)} className="relative z-[250]">
+        <DialogBackdrop className="fixed inset-0 bg-black/30" />
+        <div className="fixed inset-0 flex items-center justify-center p-3">
+          <DialogPanel className="w-[min(900px,95vw)] overflow-hidden rounded-lg border border-gray-200 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
+              <div className="text-sm font-semibold text-gray-900">Edit pinned output</div>
+              <button
+                type="button"
+                onClick={() => setPinEditOpen(false)}
+                className="rounded-md p-1.5 text-gray-600 hover:bg-gray-100"
+                aria-label="Close"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
+            {pinEditError && <div className="border-b border-gray-100 px-4 py-2 text-sm text-red-600">{pinEditError}</div>}
+            <div className="p-3">
+              <div className="rounded border border-gray-200">
+                <Editor
+                  height="520px"
+                  language="json"
+                  value={pinEditText}
+                  onChange={(val) => {
+                    setPinEditError('');
+                    setPinEditText(val ?? '');
+                  }}
+                  options={{
+                    minimap: { enabled: false },
+                    fontSize: 12,
+                    scrollBeyondLastLine: false,
+                    wordWrap: 'on',
+                    readOnly: readOnly || !onPinDataChange,
+                  }}
+                />
+              </div>
+              <div className="mt-2 text-xs text-gray-500">
+                Shape: <span className="font-mono">{`{ "<node_id>": { "main": [[{ "json": ... }]] } }`}</span>
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setPinEditOpen(false)}
+                className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={onSaveEditPin}
+                disabled={readOnly || !onPinDataChange}
+                className="rounded-md bg-violet-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-violet-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Save
+              </button>
+            </div>
+          </DialogPanel>
+        </div>
+      </Dialog>
     </Dialog>
   );
 };

@@ -7,6 +7,7 @@ import {
   CursorArrowRaysIcon,
   EllipsisHorizontalIcon,
   ExclamationCircleIcon,
+  BookmarkIcon,
   BoltIcon,
   PlayIcon,
   Squares2X2Icon,
@@ -69,6 +70,17 @@ function ExecutionStatusBadge({ status }: { status: NonNullable<NodeRunStatusBad
       title="Skipped"
     >
       —
+    </div>
+  );
+}
+
+function PinnedBadge() {
+  return (
+    <div
+      className="pointer-events-none absolute -top-1 -left-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white bg-white shadow-sm"
+      title="Pinned output"
+    >
+      <BookmarkIcon className="h-4 w-4 text-violet-600" aria-hidden />
     </div>
   );
 }
@@ -156,6 +168,8 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
     const rd = execution?.run_data as Record<string, unknown> | undefined;
     return getNodeRunStatusFromRunData(rd, id);
   }, [data.executionNodeStatus, execution, id]);
+
+  const isPinned = Boolean(data.pinned);
 
   const showToolbar = Boolean(actions);
 
@@ -278,6 +292,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
             ].join(' ')}
           >
             {disabledStrike}
+            {isPinned && <PinnedBadge />}
             <div className="flex h-full w-full items-center justify-center">
               <CursorArrowRaysIcon className="h-10 w-10 text-[#a8b0ba]" aria-hidden />
             </div>
@@ -321,6 +336,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
           ].join(' ')}
         >
           {disabledStrike}
+          {isPinned && <PinnedBadge />}
           {Array.from({ length: Math.max(inputs, 0) }).map((_, i) => (
             <Handle
               key={`in-${i}`}

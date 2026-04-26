@@ -26,6 +26,8 @@ export function getNodeRunStatusFromRunData(
 export type FlowRfNodeDataWithRun = FlowRfNodeData & {
   /** Set when visualizing a past execution (Executions tab) or derived from latest run_data in the editor. */
   executionNodeStatus?: NodeRunStatusBadge;
+  /** True when the node has pinned output in the current revision. */
+  pinned?: boolean;
 };
 
 export function applyExecutionStatusToNodes(

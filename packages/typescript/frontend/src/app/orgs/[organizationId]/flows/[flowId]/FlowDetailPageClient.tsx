@@ -262,6 +262,10 @@ export default function FlowDetailPageClient({
                     onEdgesChange={onEdgesChange}
                     onExecute={onRun}
                     executionForIo={executionForIo}
+                    pinData={revision?.pin_data ?? null}
+                    onPinDataChange={(next) => {
+                      setRevision((cur) => (cur ? { ...cur, pin_data: next } : cur));
+                    }}
                   />
                 </div>
                 <FlowLogsPanel

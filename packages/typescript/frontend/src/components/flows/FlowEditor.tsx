@@ -183,7 +183,10 @@ const FlowEditor: React.FC<{
   onExecute?: () => void;
   /** Latest execution to drive Input / Output columns in the node modal (e.g. from logs panel). */
   executionForIo?: FlowExecution | null;
-}> = ({ nodeTypes, nodes, edges, onNodesChange, onEdgesChange, onExecute, executionForIo }) => {
+  /** Revision pin data keyed by node id. */
+  pinData?: Record<string, unknown> | null;
+  onPinDataChange?: (next: Record<string, unknown> | null) => void;
+}> = ({ nodeTypes, nodes, edges, onNodesChange, onEdgesChange, onExecute, executionForIo, pinData, onPinDataChange }) => {
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [configModalNodeId, setConfigModalNodeId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -193,6 +196,18 @@ const FlowEditor: React.FC<{
   const pendingEdgeInsertRef = useRef<EdgeInsertPayload | null>(null);
   const canvasEdges = useMemo(() => toCanvasEdges(edges), [edges]);
   const runData = executionForIo?.run_data as Record<string, unknown> | undefined;
+
+  const nodesWithPinnedFlag = useMemo(() => {
+    // Keep node identity stable; only enrich the `data` payload for rendering.
+    const pd = (pinData && typeof pinData === 'object') ? (pinData as Record<string, unknown>) : null;
+    return nodes.map((n) => ({
+      ...n,
+      data: {
+        ...n.data,
+        pinned: Boolean(pd?.[n.id]),
+      },
+    }));
+  }, [nodes, pinData]);
 
   useEffect(() => {
     if (configModalNodeId && !nodes.some((n) => n.id === configModalNodeId)) {
@@ -510,7 +525,7 @@ const FlowEditor: React.FC<{
           <FlowExecutionVisualProvider execution={executionForIo}>
             <ReactFlow
               className="h-full w-full"
-              nodes={nodes}
+              nodes={nodesWithPinnedFlag}
               edges={canvasEdges}
               nodeTypes={flowRfNodeTypes}
               edgeTypes={flowRfEdgeTypes}
@@ -614,6 +629,8 @@ const FlowEditor: React.FC<{
         allNodes={nodes.map((n) => n.data.flowNode)}
         edges={edges}
         runData={runData}
+        pinData={pinData}
+        onPinDataChange={onPinDataChange}
         onSelectNode={(nodeId) => {
           onNodesChange(nodes.map((n) => ({ ...n, selected: n.id === nodeId })));
           setConfigModalNodeId(nodeId);
