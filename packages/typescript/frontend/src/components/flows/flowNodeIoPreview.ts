@@ -17,6 +17,15 @@ export function buildNodeInputPreview(
   }
   const incoming = edges.filter((e) => e.target === nodeId);
   if (incoming.length === 0) {
+    // Trigger/source nodes have no wires in. For them, show their own emitted data as "input" when available.
+    const selfRec = runData[nodeId] as { data?: { main?: Array<Array<{ json?: unknown } | null> | null> } } | null;
+    const selfMain0 = selfRec?.data?.main?.[0];
+    const selfFirst = Array.isArray(selfMain0) && selfMain0.length > 0 ? selfMain0[0] : null;
+    const selfPayload =
+      selfFirst && typeof selfFirst === 'object' && 'json' in (selfFirst as object) ? (selfFirst as { json: unknown }).json : selfFirst;
+    if (selfPayload != null) {
+      return { slots: [{ slot: 0, fromNodeId: nodeId, payload: selfPayload }], message: null };
+    }
     return { slots: [], message: 'This node has no input connections (trigger / source nodes have no wire in).' };
   }
   const slots: { slot: number; fromNodeId: string; payload: unknown }[] = [];

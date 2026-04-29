@@ -146,8 +146,15 @@ export const IoViewer: React.FC<{
   value: unknown;
   dragSource: { nodeId: string; source: FlowValueDragPayload['source'] };
   defaultMode?: 'schema' | 'table' | 'json';
-}> = ({ title, value, dragSource, defaultMode = 'json' }) => {
-  const [mode, setMode] = useState<'schema' | 'table' | 'json'>(defaultMode);
+  mode?: 'schema' | 'table' | 'json';
+  onModeChange?: (next: 'schema' | 'table' | 'json') => void;
+}> = ({ title, value, dragSource, defaultMode = 'json', mode: controlledMode, onModeChange }) => {
+  const [uncontrolledMode, setUncontrolledMode] = useState<'schema' | 'table' | 'json'>(defaultMode);
+  const mode = controlledMode ?? uncontrolledMode;
+  const setMode = (next: 'schema' | 'table' | 'json') => {
+    onModeChange?.(next);
+    if (controlledMode == null) setUncontrolledMode(next);
+  };
 
   const sample = useMemo(() => {
     if (Array.isArray(value)) return value[0];

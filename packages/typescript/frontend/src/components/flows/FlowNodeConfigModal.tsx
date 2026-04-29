@@ -35,6 +35,21 @@ const IoBlock: React.FC<{
 type FlowPinNodeOutput = { main: Array<Array<{ json: unknown }> | null> };
 type FlowPinData = Record<string, FlowPinNodeOutput>;
 
+const VariablesAndContext: React.FC = () => {
+  return (
+    <div className="mb-3 rounded-md border border-gray-200 bg-white">
+      <div className="border-b border-gray-100 px-3 py-2">
+        <div className="text-[11px] font-semibold text-gray-900">Variables & context</div>
+        <div className="mt-0.5 text-[11px] text-gray-500">Available in expressions:</div>
+      </div>
+      <div className="space-y-1 px-3 py-2 text-[11px]">
+        <div className="font-mono font-semibold text-gray-900">$json</div>
+        <div className="font-mono font-semibold text-gray-900">$binary</div>
+      </div>
+    </div>
+  );
+};
+
 function safeParseJson(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
   try {
     return { ok: true, value: JSON.parse(text) };
@@ -90,17 +105,21 @@ const FlowNodeConfigModal: React.FC<{
   const [selectedInputNodeId, setSelectedInputNodeId] = useState<string>('');
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
+  const [inputIoMode, setInputIoMode] = useState<'schema' | 'table' | 'json'>('schema');
+  const [outputIoMode, setOutputIoMode] = useState<'schema' | 'table' | 'json'>('table');
   const measure = useInlineNameWidthPx(node?.name ?? '', 'Node name');
   const nodeId = node?.id ?? '';
 
   useEffect(() => {
-    if (node) {
+    if (nodeId) {
       setTab(0);
       setSelectedInputNodeId('');
       setNameHover(false);
       setNameFocus(false);
+      setInputIoMode('schema');
+      setOutputIoMode('table');
     }
-  }, [node?.id]);
+  }, [nodeId]);
 
   const inputPreview = useMemo(() => {
     if (!node) return { slots: [] as { slot: number; fromNodeId: string; payload: unknown }[], message: 'No node' };
@@ -137,7 +156,8 @@ const FlowNodeConfigModal: React.FC<{
     if (!onPinDataChange) return;
     const base = (typedPinData ?? {}) as FlowPinData;
     if (hasPin) {
-      const { [nodeId]: _removed, ...rest } = base;
+      const { [nodeId]: removed, ...rest } = base;
+      void removed;
       onPinDataChange(Object.keys(rest).length ? rest : null);
       return;
     }
@@ -150,7 +170,8 @@ const FlowNodeConfigModal: React.FC<{
     if (readOnly) return;
     if (!onPinDataChange) return;
     const base = (typedPinData ?? {}) as FlowPinData;
-    const { [nodeId]: _removed, ...rest } = base;
+    const { [nodeId]: removed, ...rest } = base;
+    void removed;
     onPinDataChange(Object.keys(rest).length ? rest : null);
   };
 
@@ -337,10 +358,23 @@ const FlowNodeConfigModal: React.FC<{
                           value={s.payload}
                           dragSource={{ nodeId: s.fromNodeId, source: 'nodeOutput' }}
                           defaultMode="schema"
+                          mode={inputIoMode}
+                          onModeChange={setInputIoMode}
                         />
                       ))}
                     </div>
                   )}
+                  {(inputPreview.message || inputPreview.slots.length === 0) && (
+                    <IoViewer
+                      title="Input"
+                      value={null}
+                      dragSource={{ nodeId: node.id, source: 'nodeInput' }}
+                      defaultMode="schema"
+                      mode={inputIoMode}
+                      onModeChange={setInputIoMode}
+                    />
+                  )}
+                  {inputIoMode === 'schema' && <VariablesAndContext />}
                 </IoBlock>
               </Panel>
 
@@ -419,11 +453,15 @@ const FlowNodeConfigModal: React.FC<{
                 >
                   {!runData && !hasPin && <div className="text-sm text-[#6b7280]">Run the workflow to see output data for this node.</div>}
                   {hasPin && <div className="mb-2 text-[11px] font-semibold text-violet-700">Using pinned output for preview</div>}
-                  {outputValue != null ? (
-                    <IoViewer title={node.name || typeLabel} value={outputValue} dragSource={{ nodeId: node.id, source: 'nodeOutput' }} defaultMode="table" />
-                  ) : (
-                    <div className="text-sm text-[#6b7280]">No output items.</div>
-                  )}
+                  <IoViewer
+                    title={node.name || typeLabel}
+                    value={outputValue ?? null}
+                    dragSource={{ nodeId: node.id, source: 'nodeOutput' }}
+                    defaultMode="table"
+                    mode={outputIoMode}
+                    onModeChange={setOutputIoMode}
+                  />
+                  {runData && outputValue == null && <div className="mt-2 text-sm text-[#6b7280]">No output items.</div>}
                 </IoBlock>
               </Panel>
             </PanelGroup>
