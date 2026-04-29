@@ -145,6 +145,8 @@ const FlowNodeConfigModal: React.FC<{
   const outputItems = pinnedItems ?? runItems;
   const outputValue = useMemo(() => (outputItems ? outputItems.map((i) => i.json) : null), [outputItems]);
 
+  const isTrigger = Boolean(nodeType?.is_trigger);
+
   const [pinEditOpen, setPinEditOpen] = useState(false);
   const [pinEditText, setPinEditText] = useState('');
   const [pinEditError, setPinEditError] = useState<string>('');
@@ -325,62 +327,66 @@ const FlowNodeConfigModal: React.FC<{
             )}
 
             <PanelGroup direction="horizontal" className="h-full w-full">
-              <Panel defaultSize={25} minSize={18} className="min-w-[260px]">
-                <IoBlock title="Input">
-                  {upstreamNodeIds.length > 1 && (
-                    <div className="mb-3">
-                      <label className={flowLabelClass} htmlFor="flow-input-from">
-                        Input from
-                      </label>
-                      <select
-                        id="flow-input-from"
-                        className={flowSelectClass}
-                        value={selectedInputNodeId}
-                        onChange={(e) => setSelectedInputNodeId(e.target.value)}
-                      >
-                        <option value="">Auto</option>
-                        {upstreamNodeIds.map((nid) => (
-                          <option key={nid} value={nid}>
-                            {nodeLabelById.get(nid) ?? nid}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  )}
+              {!isTrigger && (
+                <>
+                  <Panel defaultSize={25} minSize={18} className="min-w-[260px]">
+                    <IoBlock title="Input">
+                      {upstreamNodeIds.length > 1 && (
+                        <div className="mb-3">
+                          <label className={flowLabelClass} htmlFor="flow-input-from">
+                            Input from
+                          </label>
+                          <select
+                            id="flow-input-from"
+                            className={flowSelectClass}
+                            value={selectedInputNodeId}
+                            onChange={(e) => setSelectedInputNodeId(e.target.value)}
+                          >
+                            <option value="">Auto</option>
+                            {upstreamNodeIds.map((nid) => (
+                              <option key={nid} value={nid}>
+                                {nodeLabelById.get(nid) ?? nid}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
 
-                  {inputPreview.message && <div className="mb-2 text-sm text-[#6b7280]">{inputPreview.message}</div>}
-                  {!inputPreview.message && inputPreview.slots.length > 0 && (
-                    <div className="space-y-3">
-                      {inputPreview.slots.map((s) => (
+                      {inputPreview.message && <div className="mb-2 text-sm text-[#6b7280]">{inputPreview.message}</div>}
+                      {!inputPreview.message && inputPreview.slots.length > 0 && (
+                        <div className="space-y-3">
+                          {inputPreview.slots.map((s) => (
+                            <IoViewer
+                              key={`${s.fromNodeId}:${s.slot}`}
+                              title={`in ${s.slot} ← ${nodeLabelById.get(s.fromNodeId) ?? s.fromNodeId}`}
+                              value={s.payload}
+                              dragSource={{ nodeId: s.fromNodeId, source: 'nodeOutput' }}
+                              defaultMode="schema"
+                              mode={inputIoMode}
+                              onModeChange={setInputIoMode}
+                            />
+                          ))}
+                        </div>
+                      )}
+                      {(inputPreview.message || inputPreview.slots.length === 0) && (
                         <IoViewer
-                          key={`${s.fromNodeId}:${s.slot}`}
-                          title={`in ${s.slot} ← ${nodeLabelById.get(s.fromNodeId) ?? s.fromNodeId}`}
-                          value={s.payload}
-                          dragSource={{ nodeId: s.fromNodeId, source: 'nodeOutput' }}
+                          title="Input"
+                          value={null}
+                          dragSource={{ nodeId: node.id, source: 'nodeInput' }}
                           defaultMode="schema"
                           mode={inputIoMode}
                           onModeChange={setInputIoMode}
                         />
-                      ))}
-                    </div>
-                  )}
-                  {(inputPreview.message || inputPreview.slots.length === 0) && (
-                    <IoViewer
-                      title="Input"
-                      value={null}
-                      dragSource={{ nodeId: node.id, source: 'nodeInput' }}
-                      defaultMode="schema"
-                      mode={inputIoMode}
-                      onModeChange={setInputIoMode}
-                    />
-                  )}
-                  {inputIoMode === 'schema' && <VariablesAndContext />}
-                </IoBlock>
-              </Panel>
+                      )}
+                      {inputIoMode === 'schema' && <VariablesAndContext />}
+                    </IoBlock>
+                  </Panel>
 
-              <PanelResizeHandle className="w-px bg-[#e8eaee]" />
+                  <PanelResizeHandle className="w-px bg-[#e8eaee]" />
+                </>
+              )}
 
-              <Panel defaultSize={42} minSize={28} className="min-w-[320px]">
+              <Panel defaultSize={isTrigger ? 58 : 42} minSize={28} className="min-w-[320px]">
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                   <TabGroup selectedIndex={tab} onChange={setTab} className="flex min-h-0 flex-1 flex-col">
                     <div className="shrink-0 border-b border-[#eceff2] bg-white px-1">
