@@ -116,6 +116,19 @@ export const FlowNodeParameterFields: React.FC<{
   const schemaProps = useMemo(() => getSchemaProps(nodeType?.parameter_schema), [nodeType]);
   const params = node.parameters || {};
 
+  if (nodeType?.is_trigger) {
+    return (
+      <div className="rounded-md border border-gray-200 bg-gray-50/80 px-3 py-3 text-sm text-gray-700">
+        <p>This trigger has no editable parameters.</p>
+        {!readOnly && (
+          <p className="mt-2 text-gray-600">
+            Add a Code node after the trigger to emit rows, mock data, or reshape what downstream nodes receive.
+          </p>
+        )}
+      </div>
+    );
+  }
+
   const renderParamField = (key: string, subschema: { type?: string; enum?: unknown[] } & Record<string, unknown>) => {
     const t = subschema?.type;
     const v = (params as Record<string, unknown>)[key];

@@ -21,18 +21,14 @@ class DocRouterManualTriggerNode:
     max_inputs = 0
     outputs = 1
     output_labels = ["output"]
+    # Triggers have no user-editable parameters; `document_id` comes from the run request / trigger_data.
     parameter_schema: dict[str, Any] = {
         "type": "object",
-        "properties": {"document_id": {"type": "string"}},
-        "required": ["document_id"],
-        "additionalProperties": False,
+        "properties": {},
+        "additionalProperties": True,
     }
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
-        """Require a `document_id` parameter for manual document runs."""
-
-        if not isinstance(params.get("document_id"), str) or not params["document_id"]:
-            return ["parameters.document_id is required"]
         return []
 
     async def execute(
@@ -43,9 +39,9 @@ class DocRouterManualTriggerNode:
     ):
         """Fetch the document and emit it as `json.document` + `json.document_id`."""
 
-        doc_id = (node.get("parameters") or {}).get("document_id") or context.trigger_data.get("document_id")
-        if not doc_id:
-            raise ValueError("document_id required for docrouter.trigger.manual")
+        doc_id = context.trigger_data.get("document_id")
+        if not isinstance(doc_id, str) or not doc_id.strip():
+            raise ValueError("document_id required in trigger_data for docrouter.trigger.manual")
         doc = await flow_services.get_document(context.analytiq_client, context.organization_id, doc_id)
         return [
             [

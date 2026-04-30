@@ -168,15 +168,6 @@ export default function FlowDetailPageClient({
         const triggerType = nts.items.find((x) => x.is_trigger)?.key ?? 'flows.trigger.manual';
         const triggerLabel = nts.items.find((x) => x.key === triggerType)?.label ?? 'Manual Trigger';
         const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : 't1';
-        const triggerParams =
-          triggerType === 'flows.trigger.manual'
-            ? {
-                payload: [
-                  { name: 'First item', code: 1 },
-                  { name: 'Second item', code: 2 },
-                ],
-              }
-            : {};
         const blank: FlowRevision = {
           flow_revid: '',
           flow_id: flowId,
@@ -188,7 +179,7 @@ export default function FlowDetailPageClient({
               name: triggerLabel,
               type: triggerType,
               position: [120, 120],
-              parameters: triggerParams,
+              parameters: {},
               disabled: false,
               on_error: 'stop',
               notes: null,

@@ -14,8 +14,6 @@ def _n(
     x: int,
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    if ntype == "flows.trigger.manual" and params is None:
-        params = {"payload": []}
     return {
         "id": id_,
         "name": name,
