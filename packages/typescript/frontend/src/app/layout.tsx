@@ -29,7 +29,7 @@ export default async function RootLayout({
       <head>
         <link rel="stylesheet" href="/formio.full.css" />
       </head>
-      <body>
+      <body suppressHydrationWarning>
         <ThemeRegistry>
           <SessionProvider session={appSession}>
             <AppSessionProvider>

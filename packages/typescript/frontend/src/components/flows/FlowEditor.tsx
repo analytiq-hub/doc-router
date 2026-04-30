@@ -70,9 +70,8 @@ function CanvasZoomControls({
     const nodes = getNodes().filter((n) => !n.hidden);
     if (!nodes.length || width === 0 || height === 0) return;
 
-    // Reserve space for bottom UI controls when fitting.
-    // Bottom-left stack: zoom strip + optional execute button + margins.
-    const footerHeightPx = addFooterPadding ? 260 : 100;
+    // Reserve space: zoom panel bottom-left + optional execute bottom-center (~one row tall).
+    const footerHeightPx = addFooterPadding ? 120 : 90;
     const bounds = getNodesBounds(nodes);
     const next = getViewportForBounds(bounds, width, Math.max(1, height - footerHeightPx), 0.15, 1, 0.2);
     await setViewport(next, { duration: 200 });
@@ -86,47 +85,53 @@ function CanvasZoomControls({
   }, [nodesInitialized, onZoomToFit]);
 
   return (
-    <Panel position="bottom-left" className={['!mb-3 !ml-3 flex flex-col items-start', runButton ? 'gap-2' : false].filter(Boolean).join(' ')}>
-      <div className="flex items-center gap-1 rounded-lg bg-white/95 p-1 shadow-md backdrop-blur-sm">
-        <button
-          type="button"
-          onClick={() => void onZoomToFit()}
-          title="Zoom to fit"
-          aria-label="Zoom to fit"
-          className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
-        >
-          <ArrowsPointingOutIcon className="h-5 w-5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => void zoomIn({ duration: 120 })}
-          title="Zoom in"
-          aria-label="Zoom in"
-          className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
-        >
-          <MagnifyingGlassPlusIcon className="h-5 w-5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => void zoomOut({ duration: 120 })}
-          title="Zoom out"
-          aria-label="Zoom out"
-          className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
-        >
-          <MagnifyingGlassMinusIcon className="h-5 w-5" />
-        </button>
-        <button
-          type="button"
-          onClick={() => void zoomTo(1, { duration: 120 })}
-          title="Reset zoom"
-          aria-label="Reset zoom"
-          className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
-        >
-          <ArrowUturnLeftIcon className="h-5 w-5" />
-        </button>
-      </div>
-      {runButton}
-    </Panel>
+    <>
+      <Panel position="bottom-left" className="!mb-3 !ml-3">
+        <div className="flex items-center gap-1 rounded-lg bg-white/95 p-1 shadow-md backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={() => void onZoomToFit()}
+            title="Zoom to fit"
+            aria-label="Zoom to fit"
+            className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+          >
+            <ArrowsPointingOutIcon className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void zoomIn({ duration: 120 })}
+            title="Zoom in"
+            aria-label="Zoom in"
+            className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+          >
+            <MagnifyingGlassPlusIcon className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void zoomOut({ duration: 120 })}
+            title="Zoom out"
+            aria-label="Zoom out"
+            className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+          >
+            <MagnifyingGlassMinusIcon className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => void zoomTo(1, { duration: 120 })}
+            title="Reset zoom"
+            aria-label="Reset zoom"
+            className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+          >
+            <ArrowUturnLeftIcon className="h-5 w-5" />
+          </button>
+        </div>
+      </Panel>
+      {runButton ? (
+        <Panel position="bottom-center" className="!mb-3">
+          {runButton}
+        </Panel>
+      ) : null}
+    </>
   );
 }
 
