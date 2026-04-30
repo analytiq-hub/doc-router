@@ -266,13 +266,28 @@ const FlowLogsPanel: React.FC<{
             )}
             {execution && (
               <>
-                <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2 border-b border-[#eceff2] pb-2">
-                  <div className="text-sm font-semibold text-gray-900">{summaryLine}</div>
-                  <div className="text-[11px] text-gray-500">
-                    {execution.mode && <span className="mr-2">Mode: {execution.mode}</span>}
-                    <span className="font-mono">ID {execution.execution_id}</span>
+                {activeTab === 'overview' && (
+                  <div className="mb-3 flex items-baseline justify-between gap-2 border-b border-[#eceff2] pb-2">
+                    <div className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">{summaryLine}</div>
+                    <div className="inline-flex flex-none rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
+                      {(['overview', 'details'] as const).map((t) => (
+                        <button
+                          key={t}
+                          type="button"
+                          onClick={() => setActiveTab(t)}
+                          className={[
+                            'rounded px-2 py-1 font-semibold',
+                            activeTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
+                          ].join(' ')}
+                        >
+                          {t === 'overview' ? 'Overview' : 'Details'}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {/* In details mode, this strip is rendered inside the left panel (next to the divider). */}
 
                 {sortedRunEntries.length === 0 ? (
                   <div className="text-sm text-gray-600">No node results recorded yet for this run.</div>
@@ -367,22 +382,27 @@ const FlowLogsPanel: React.FC<{
                       >
                         <Panel defaultSize={nodeSplitLeftPct} minSize={22} className="min-w-0">
                           <div className="group relative min-w-0">
-                            {/* Hover-only Overview/Details toggle, positioned at the right edge (next to divider). */}
-                            <div className="pointer-events-none absolute right-1 top-1 z-10 opacity-0 transition group-hover:opacity-100">
-                              <div className="pointer-events-auto inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px] shadow-sm">
-                                {(['overview', 'details'] as const).map((t) => (
-                                  <button
-                                    key={t}
-                                    type="button"
-                                    onClick={() => setActiveTab(t)}
-                                    className={[
-                                      'rounded px-2 py-1 font-semibold',
-                                      activeTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
-                                    ].join(' ')}
-                                  >
-                                    {t === 'overview' ? 'Overview' : 'Details'}
-                                  </button>
-                                ))}
+                            {/* Buttons must live inside this strip (details mode). */}
+                            <div className="mb-3 flex items-baseline justify-between gap-2 border-b border-[#eceff2] pb-2 pr-2">
+                              <div className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">
+                                {summaryLine}
+                              </div>
+                              <div className="pointer-events-none opacity-0 transition group-hover:opacity-100">
+                                <div className="pointer-events-auto inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px] shadow-sm">
+                                  {(['overview', 'details'] as const).map((t) => (
+                                    <button
+                                      key={t}
+                                      type="button"
+                                      onClick={() => setActiveTab(t)}
+                                      className={[
+                                        'rounded px-2 py-1 font-semibold',
+                                        activeTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
+                                      ].join(' ')}
+                                    >
+                                      {t === 'overview' ? 'Overview' : 'Details'}
+                                    </button>
+                                  ))}
+                                </div>
                               </div>
                             </div>
 
