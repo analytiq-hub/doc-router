@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   EllipsisVerticalIcon,
@@ -140,7 +141,12 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
               return (
                 <tr key={item.flow.flow_id} className="hover:bg-gray-50/80">
                   <td className={td}>
-                    <span className="font-medium text-gray-900">{item.flow.name}</span>
+                    <Link
+                      href={`/orgs/${organizationId}/flows/${item.flow.flow_id}`}
+                      className="font-medium text-blue-700 hover:underline"
+                    >
+                      {item.flow.name}
+                    </Link>
                   </td>
                   <td className={td}>
                     <FlowStatusBadge active={item.flow.active} />
