@@ -33,11 +33,35 @@ function getAtPath(root: unknown, path: JsonPath): unknown {
 
 type TableData = { columns: string[]; rows: Record<string, unknown>[] };
 
+function coerceExecutionItems(raw: unknown): unknown[] {
+  if (raw == null) return [];
+  return Array.isArray(raw) ? raw : [raw];
+}
+
 function convertToTable(value: unknown, caps: { maxCols: number; maxRows: number }): TableData | null {
   if (!Array.isArray(value)) return null;
   const objs = value.filter(isPlainObject) as Record<string, unknown>[];
   if (objs.length === 0) return null;
   const rows = objs.slice(0, caps.maxRows);
+  const colsSet = new Set<string>();
+  for (const r of rows) for (const k of Object.keys(r)) colsSet.add(k);
+  const columns = Array.from(colsSet).slice(0, caps.maxCols);
+  return { columns, rows };
+}
+
+/** One tabular row per item; non-object items use a `_` column. */
+function executionItemsTable(items: unknown[], caps: { maxCols: number; maxRows: number }): TableData | null {
+  if (items.length === 0) return null;
+  const slice = items.slice(0, caps.maxRows);
+  const objs = slice.filter(isPlainObject) as Record<string, unknown>[];
+  if (objs.length === slice.length) {
+    return convertToTable(slice, caps);
+  }
+  const rows = slice.map((v) =>
+    isPlainObject(v)
+      ? (v as Record<string, unknown>)
+      : { _: stringifyJsonCompact(v ?? null) } as Record<string, unknown>,
+  );
   const colsSet = new Set<string>();
   for (const r of rows) for (const k of Object.keys(r)) colsSet.add(k);
   const columns = Array.from(colsSet).slice(0, caps.maxCols);
@@ -60,8 +84,19 @@ function stringifyJson(v: unknown): string {
   }
 }
 
+function stringifyJsonCompact(v: unknown): string {
+  try {
+    return JSON.stringify(v ?? null);
+  } catch {
+    return String(v);
+  }
+}
+
 function isExpandable(v: unknown): boolean {
-  return (Array.isArray(v) && v.length > 0) || (Boolean(v) && typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length > 0);
+  return (
+    (Array.isArray(v) && v.length > 0) ||
+    (Boolean(v) && typeof v === 'object' && !Array.isArray(v) && Object.keys(v as object).length > 0)
+  );
 }
 
 function shortValuePreview(v: unknown): string {
@@ -149,10 +184,10 @@ export const IoViewer: React.FC<{
   mode?: 'schema' | 'table' | 'json';
   onModeChange?: (next: 'schema' | 'table' | 'json') => void;
   /**
-   * When `value` is an array and mode is Schema: use only the first element (n8n-style single-item
-   * shape for logs / previews), or expand the entire array under `$json` (e.g. node modal output lane).
+   * `executionItems`: value is treated as `FlowItem[].json` only (often an array). Schema uses the first item;
+   * table one row per item; JSON renders a top-level `[...]` (or `[]`).
    */
-  schemaWhenArray?: 'first-element' | 'full-array';
+  valueKind?: 'executionItems' | 'json';
 }> = ({
   title,
   value,
@@ -160,7 +195,7 @@ export const IoViewer: React.FC<{
   defaultMode = 'json',
   mode: controlledMode,
   onModeChange,
-  schemaWhenArray = 'first-element',
+  valueKind = 'json',
 }) => {
   const [uncontrolledMode, setUncontrolledMode] = useState<'schema' | 'table' | 'json'>(defaultMode);
   const mode = controlledMode ?? uncontrolledMode;
@@ -169,12 +204,30 @@ export const IoViewer: React.FC<{
     if (controlledMode == null) setUncontrolledMode(next);
   };
 
-  const sample = useMemo(() => {
-    if (Array.isArray(value) && schemaWhenArray === 'first-element') return value[0];
-    return value;
-  }, [value, schemaWhenArray]);
+  const executionItems = useMemo(
+    () => (valueKind === 'executionItems' ? coerceExecutionItems(value) : []),
+    [value, valueKind],
+  );
 
-  const table = useMemo(() => convertToTable(value, { maxCols: 25, maxRows: 50 }), [value]);
+  const schemaRoot = useMemo(() => {
+    if (valueKind === 'executionItems') {
+      return executionItems.length === 0 ? undefined : executionItems[0];
+    }
+    if (Array.isArray(value) && value.length > 0) return value[0];
+    return value;
+  }, [value, valueKind, executionItems]);
+
+  const table = useMemo(() => {
+    if (valueKind === 'executionItems') {
+      return executionItemsTable(executionItems, { maxCols: 25, maxRows: 500 });
+    }
+    return convertToTable(value, { maxCols: 25, maxRows: 50 });
+  }, [value, valueKind, executionItems]);
+
+  const jsonText = useMemo(() => {
+    if (valueKind === 'executionItems') return stringifyJson(executionItems);
+    return stringifyJson(value);
+  }, [value, valueKind, executionItems]);
 
   const startDrag = (e: React.DragEvent, path: JsonPath) => {
     const payload: FlowValueDragPayload = {
@@ -182,11 +235,13 @@ export const IoViewer: React.FC<{
       source: dragSource.source,
       nodeId: dragSource.nodeId,
       path,
-      exampleValue: getAtPath(sample, path),
+      exampleValue: getAtPath(schemaRoot ?? null, path),
     };
     e.dataTransfer.setData(FLOW_VALUE_MIME, JSON.stringify(payload));
     e.dataTransfer.effectAllowed = 'copy';
   };
+
+  const isExecution = valueKind === 'executionItems';
 
   return (
     <div className="min-w-0">
@@ -216,22 +271,30 @@ export const IoViewer: React.FC<{
       {mode === 'schema' && (
         <div className="rounded border border-[#eceff2] bg-white">
           <div className="max-h-[360px] overflow-auto">
-            <SchemaAccordion
-              label="$json"
-              value={sample}
-              path={[]}
-              onDragStartPath={startDrag}
-              depth={0}
-              maxDepth={6}
-            />
+            {isExecution && executionItems.length === 0 ? (
+              <div className="p-3 text-sm text-gray-500">No items.</div>
+            ) : (
+              <SchemaAccordion
+                label="$json"
+                value={schemaRoot ?? null}
+                path={[]}
+                onDragStartPath={startDrag}
+                depth={0}
+                maxDepth={6}
+              />
+            )}
           </div>
         </div>
       )}
 
       {mode === 'table' && (
         <div className="rounded border border-[#eceff2] bg-white">
-          {table == null ? (
-            <div className="p-3 text-sm text-gray-500">Not a table: expected an array of objects.</div>
+          {isExecution && executionItems.length === 0 ? (
+            <div className="p-3 text-sm text-gray-500">No items.</div>
+          ) : table == null ? (
+            <div className="p-3 text-sm text-gray-500">
+              {isExecution ? 'No tabular preview for these items.' : 'Not a table: expected an array of objects.'}
+            </div>
           ) : (
             <div className="max-h-[360px] overflow-auto">
               <table className="w-full border-collapse text-[11px]">
@@ -272,7 +335,7 @@ export const IoViewer: React.FC<{
           <Editor
             height="360px"
             language="json"
-            value={stringifyJson(value)}
+            value={jsonText}
             options={{
               minimap: { enabled: false },
               fontSize: 11,
@@ -290,4 +353,3 @@ export const IoViewer: React.FC<{
     </div>
   );
 };
-

@@ -564,17 +564,14 @@ const FlowLogsPanel: React.FC<{
                                       {selectedOutputPreview?.message && (
                                         <div className="mb-2 text-sm text-amber-800">{selectedOutputPreview.message}</div>
                                       )}
-                                      {selectedOutputPreview?.data != null ? (
+                                      {selectedOutputPreview ? (
                                         <IoViewer
-                                          value={selectedOutputPreview.data}
+                                          value={selectedOutputPreview.itemsJson}
+                                          valueKind="executionItems"
                                           dragSource={{ nodeId: selectedNodeId, source: 'nodeOutput' }}
                                           defaultMode="schema"
                                         />
-                                      ) : (
-                                        !selectedOutputPreview?.message && (
-                                          <div className="text-sm text-gray-600">No output payload for this node.</div>
-                                        )
-                                      )}
+                                      ) : null}
                                     </div>
                                   </div>
                                 )}
@@ -592,6 +589,7 @@ const FlowLogsPanel: React.FC<{
                                       ) : (
                                         <IoViewer
                                           value={selectedParametersValue}
+                                          valueKind="json"
                                           dragSource={{ nodeId: selectedNodeId, source: 'nodeInput' }}
                                           defaultMode="schema"
                                         />
@@ -605,19 +603,18 @@ const FlowLogsPanel: React.FC<{
                                           {selectedInputPreview.message ? (
                                             <div className="text-sm text-gray-600">{selectedInputPreview.message}</div>
                                           ) : (
-                                            <IoViewer
-                                              value={
-                                                selectedInputPreview.slots.length > 0
-                                                  ? selectedInputPreview.slots.map((s) => ({
-                                                      in: s.slot,
-                                                      from: s.fromNodeId,
-                                                      item: s.payload,
-                                                    }))
-                                                  : null
-                                              }
-                                              dragSource={{ nodeId: selectedNodeId, source: 'nodeInput' }}
-                                              defaultMode="schema"
-                                            />
+                                            <div className="space-y-3">
+                                              {selectedInputPreview.slots.map((s) => (
+                                                <IoViewer
+                                                  key={`${s.fromNodeId}:${s.slot}`}
+                                                  title={`in ${s.slot} ← ${nodeLabel(nodes, s.fromNodeId)}`}
+                                                  value={s.itemsJson}
+                                                  valueKind="executionItems"
+                                                  dragSource={{ nodeId: selectedNodeId, source: 'nodeInput' }}
+                                                  defaultMode="schema"
+                                                />
+                                              ))}
+                                            </div>
                                           )}
                                         </div>
                                       )}

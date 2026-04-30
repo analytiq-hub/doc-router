@@ -122,7 +122,7 @@ const FlowNodeConfigModal: React.FC<{
   }, [nodeId]);
 
   const inputPreview = useMemo(() => {
-    if (!node) return { slots: [] as { slot: number; fromNodeId: string; payload: unknown }[], message: 'No node' };
+    if (!node) return { slots: [] as { slot: number; fromNodeId: string; itemsJson: unknown[] }[], message: 'No node' };
     const base = buildNodeInputPreview(node.id, edges, runData);
     const filteredSlots = selectedInputNodeId
       ? base.slots.filter((s) => s.fromNodeId === selectedInputNodeId)
@@ -391,7 +391,8 @@ const FlowNodeConfigModal: React.FC<{
                             <IoViewer
                               key={`${s.fromNodeId}:${s.slot}`}
                               title={`in ${s.slot} ← ${nodeLabelById.get(s.fromNodeId) ?? s.fromNodeId}`}
-                              value={s.payload}
+                              value={s.itemsJson}
+                              valueKind="executionItems"
                               dragSource={{ nodeId: s.fromNodeId, source: 'nodeOutput' }}
                               defaultMode="schema"
                               mode={inputIoMode}
@@ -400,10 +401,11 @@ const FlowNodeConfigModal: React.FC<{
                           ))}
                         </div>
                       )}
-                      {(inputPreview.message || inputPreview.slots.length === 0) && (
+                      {!inputPreview.message && inputPreview.slots.length === 0 && (
                         <IoViewer
                           title="Input"
-                          value={null}
+                          value={[]}
+                          valueKind="executionItems"
                           dragSource={{ nodeId: node.id, source: 'nodeInput' }}
                           defaultMode="schema"
                           mode={inputIoMode}
@@ -493,14 +495,13 @@ const FlowNodeConfigModal: React.FC<{
                   {hasPin && <div className="mb-2 text-[11px] font-semibold text-violet-700">Using pinned output for preview</div>}
                   <IoViewer
                     title={node.name || typeLabel}
-                    value={outputValue ?? null}
+                    value={outputValue ?? []}
+                    valueKind="executionItems"
                     dragSource={{ nodeId: node.id, source: 'nodeOutput' }}
                     defaultMode="table"
                     mode={outputIoMode}
                     onModeChange={setOutputIoMode}
-                    schemaWhenArray="full-array"
                   />
-                  {runData && outputValue == null && <div className="mt-2 text-sm text-[#6b7280]">No output items.</div>}
                 </IoBlock>
               </Panel>
             </PanelGroup>
