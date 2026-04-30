@@ -11,12 +11,15 @@ import { ChevronDownIcon, ChevronUpIcon, TrashIcon } from '@heroicons/react/24/o
 import type { FlowRfNodeData } from './flowRf';
 import { buildNodeInputPreview, buildNodeOutputPreview } from './flowNodeIoPreview';
 import { IoViewer } from './IoViewer';
+import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 
 function isRunning(e: FlowExecution) {
   return e.status === 'queued' || e.status === 'running';
 }
 
 type LogsTab = 'overview' | 'details';
+
+const NODE_SPLIT_STORAGE_KEY = 'docrouter.flow.logsPanel.nodeSplit.leftPct';
 
 type RunDataEntry = {
   status?: string;
@@ -75,6 +78,13 @@ const FlowLogsPanel: React.FC<{
   const [activeTab, setActiveTab] = useState<LogsTab>('overview');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [ioTab, setIoTab] = useState<'input' | 'output'>('output');
+  const [nodeSplitLeftPct, setNodeSplitLeftPct] = useState<number>(() => {
+    if (typeof window === 'undefined') return 32;
+    const raw = window.localStorage.getItem(NODE_SPLIT_STORAGE_KEY);
+    const n = raw ? Number(raw) : NaN;
+    if (!Number.isFinite(n)) return 32;
+    return Math.min(60, Math.max(22, n));
+  });
 
   const edges = useMemo(() => graphEdges ?? [], [graphEdges]);
   const nodes = useMemo(() => graphNodes ?? [], [graphNodes]);
@@ -267,126 +277,191 @@ const FlowLogsPanel: React.FC<{
                 {sortedRunEntries.length === 0 ? (
                   <div className="text-sm text-gray-600">No node results recorded yet for this run.</div>
                 ) : (
-                  <div className="grid gap-3 lg:grid-cols-[320px_1fr]">
-                    <div className="min-w-0">
-                      <div className="mb-2 inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
-                        {(['overview', 'details'] as const).map((t) => (
-                          <button
-                            key={t}
-                            type="button"
-                            onClick={() => setActiveTab(t)}
-                            className={[
-                              'rounded px-2 py-1 font-semibold',
-                              activeTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
-                            ].join(' ')}
-                          >
-                            {t === 'overview' ? 'Overview' : 'Details'}
-                          </button>
-                        ))}
-                      </div>
+                  <div className="min-w-0">
 
-                      <ul className="divide-y divide-[#eceff2] rounded-md border border-[#e8eaed] bg-white">
-                        {sortedRunEntries.map(({ nodeId, rec }) => {
-                          const ok = rec.status === 'success';
-                          const label = nodeLabel(nodes, nodeId);
-                          const selected = nodeId === selectedNodeId;
-                          const canEdit = Boolean(onEditNode) && nodes.some((n) => n.id === nodeId);
-                          return (
-                            <li key={nodeId}>
-                              <div
-                                role="button"
-                                tabIndex={0}
-                                onClick={() => {
-                                  setSelectedNodeId(nodeId);
-                                  setActiveTab('details');
-                                }}
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' || e.key === ' ') {
-                                    e.preventDefault();
+                    {activeTab === 'overview' && (
+                      <div className="overflow-hidden rounded-md border border-[#e8eaed] bg-white">
+                        <ul className="divide-y divide-[#eceff2]">
+                          {sortedRunEntries.map(({ nodeId, rec }) => {
+                            const ok = rec.status === 'success';
+                            const label = nodeLabel(nodes, nodeId);
+                            const selected = nodeId === selectedNodeId;
+                            const canEdit = Boolean(onEditNode) && nodes.some((n) => n.id === nodeId);
+                            const started = rec.start_time ? formatLocalDate(rec.start_time) : '—';
+                            return (
+                              <li key={nodeId}>
+                                <div
+                                  role="button"
+                                  tabIndex={0}
+                                  onClick={() => {
                                     setSelectedNodeId(nodeId);
                                     setActiveTab('details');
-                                  }
-                                }}
-                                className={[
-                                  'group flex w-full items-center gap-2 px-2 py-2 text-left transition sm:px-3',
-                                  selected ? 'bg-gray-100' : 'bg-white hover:bg-gray-50',
-                                ].join(' ')}
-                              >
-                                <div className="shrink-0">
-                                  {ok ? (
-                                    <CheckCircleIcon className="h-5 w-5 text-emerald-500" aria-hidden />
-                                  ) : (
-                                    <ExclamationCircleIcon className="h-5 w-5 text-red-500" aria-hidden />
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault();
+                                      setSelectedNodeId(nodeId);
+                                      setActiveTab('details');
+                                    }
+                                  }}
+                                  className={[
+                                    'group flex min-h-[44px] w-full items-center gap-2 px-3 py-2 text-left transition',
+                                    selected ? 'bg-gray-100' : 'bg-white hover:bg-gray-50',
+                                  ].join(' ')}
+                                >
+                                  <div className="shrink-0">
+                                    {ok ? (
+                                      <CheckCircleIcon className="h-5 w-5 text-emerald-500" aria-hidden />
+                                    ) : (
+                                      <ExclamationCircleIcon className="h-5 w-5 text-red-500" aria-hidden />
+                                    )}
+                                  </div>
+                                  <div className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">{label}</div>
+
+                                  <div className="shrink-0 whitespace-nowrap text-xs text-gray-600">
+                                    {formatExecutionMs(rec.execution_time_ms)}
+                                  </div>
+                                  <div className="shrink-0 whitespace-nowrap text-xs text-gray-500">{started}</div>
+
+                                  {canEdit && (
+                                    <span className="shrink-0 opacity-0 pointer-events-none transition group-hover:opacity-100 group-hover:pointer-events-auto">
+                                      <button
+                                        type="button"
+                                        title="Edit"
+                                        aria-label="Edit"
+                                        onClick={(ev) => {
+                                          ev.preventDefault();
+                                          ev.stopPropagation();
+                                          onEditNode?.(nodeId);
+                                        }}
+                                        className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100"
+                                      >
+                                        <PencilSquareIcon className="h-5 w-5" />
+                                      </button>
+                                    </span>
                                   )}
                                 </div>
-                                <div className="min-w-0 flex-1">
-                                  <div className="truncate text-sm font-medium text-gray-900">{label}</div>
-                                  <div className="text-xs text-gray-500">
-                                    {rec.status ?? '—'} · {formatExecutionMs(rec.execution_time_ms)}
-                                    {rec.start_time && (
-                                      <span className="ml-1">· started {formatLocalDate(rec.start_time)}</span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      </div>
+                    )}
+
+                    {activeTab === 'details' && (
+                      <PanelGroup
+                        direction="horizontal"
+                        className="min-h-0"
+                        onLayout={(sizes) => {
+                          const left = sizes[0] ?? 0;
+                          if (left > 0) {
+                            const next = Math.min(60, Math.max(22, left));
+                            setNodeSplitLeftPct(next);
+                            try {
+                              window.localStorage.setItem(NODE_SPLIT_STORAGE_KEY, String(next));
+                            } catch {
+                              // ignore
+                            }
+                          }
+                        }}
+                      >
+                        <Panel defaultSize={nodeSplitLeftPct} minSize={22} className="min-w-0">
+                          <div className="group relative min-w-0">
+                            {/* Hover-only Overview/Details toggle, positioned at the right edge (next to divider). */}
+                            <div className="pointer-events-none absolute right-1 top-1 z-10 opacity-0 transition group-hover:opacity-100">
+                              <div className="pointer-events-auto inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px] shadow-sm">
+                                {(['overview', 'details'] as const).map((t) => (
+                                  <button
+                                    key={t}
+                                    type="button"
+                                    onClick={() => setActiveTab(t)}
+                                    className={[
+                                      'rounded px-2 py-1 font-semibold',
+                                      activeTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
+                                    ].join(' ')}
+                                  >
+                                    {t === 'overview' ? 'Overview' : 'Details'}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+
+                            <ul className="divide-y divide-[#eceff2] rounded-md border border-[#e8eaed] bg-white">
+                              {sortedRunEntries.map(({ nodeId, rec }) => {
+                                const ok = rec.status === 'success';
+                                const label = nodeLabel(nodes, nodeId);
+                                const selected = nodeId === selectedNodeId;
+                                const canEdit = Boolean(onEditNode) && nodes.some((n) => n.id === nodeId);
+                                return (
+                                  <li key={nodeId}>
+                                    <div
+                                      role="button"
+                                      tabIndex={0}
+                                      onClick={() => setSelectedNodeId(nodeId)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter' || e.key === ' ') {
+                                          e.preventDefault();
+                                          setSelectedNodeId(nodeId);
+                                        }
+                                      }}
+                                      className={[
+                                        'group flex min-h-[44px] w-full items-center gap-2 px-2 py-2 text-left transition sm:px-3',
+                                        selected ? 'bg-gray-100' : 'bg-white hover:bg-gray-50',
+                                      ].join(' ')}
+                                    >
+                                      <div className="shrink-0">
+                                        {ok ? (
+                                          <CheckCircleIcon className="h-5 w-5 text-emerald-500" aria-hidden />
+                                        ) : (
+                                          <ExclamationCircleIcon className="h-5 w-5 text-red-500" aria-hidden />
+                                        )}
+                                      </div>
+                                      <div className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">
+                                        {label}
+                                      </div>
+                                      {canEdit && (
+                                        <span className="shrink-0 opacity-0 pointer-events-none transition group-hover:opacity-100 group-hover:pointer-events-auto">
+                                          <button
+                                            type="button"
+                                            title="Edit"
+                                            aria-label="Edit"
+                                            onClick={(ev) => {
+                                              ev.preventDefault();
+                                              ev.stopPropagation();
+                                              onEditNode?.(nodeId);
+                                            }}
+                                            className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100"
+                                          >
+                                            <PencilSquareIcon className="h-5 w-5" />
+                                          </button>
+                                        </span>
+                                      )}
+                                    </div>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          </div>
+                        </Panel>
+                        <PanelResizeHandle className="w-2 cursor-col-resize bg-transparent hover:bg-[#e8eaed]" />
+                        <Panel defaultSize={100 - nodeSplitLeftPct} minSize={35} className="min-w-0">
+                          <div className="min-w-0">
+                            <div className="rounded-md border border-gray-200 bg-white">
+                              <div className="flex items-start justify-between gap-3 border-b border-[#eceff2] px-3 py-2">
+                                <div className="min-w-0">
+                                  <div className="truncate text-sm font-semibold text-gray-900">
+                                    {selectedNodeId ? nodeLabel(nodes, selectedNodeId) : 'Select a node'}
+                                  </div>
+                                  <div className="mt-0.5 text-[11px] text-gray-500">
+                                    {selectedRunEntry?.status ?? '—'}
+                                    {selectedRunEntry?.execution_time_ms != null && (
+                                      <span> · {formatExecutionMs(selectedRunEntry.execution_time_ms)}</span>
                                     )}
                                   </div>
                                 </div>
-                                <div className="shrink-0 text-[11px] font-semibold text-gray-500">
-                                  {formatExecutionMs(rec.execution_time_ms)}
-                                </div>
-                                {canEdit && (
-                                  <span className="shrink-0 opacity-0 pointer-events-none transition group-hover:opacity-100 group-hover:pointer-events-auto">
-                                    <button
-                                      type="button"
-                                      title="Edit"
-                                      aria-label="Edit"
-                                      onClick={(ev) => {
-                                        ev.preventDefault();
-                                        ev.stopPropagation();
-                                        onEditNode?.(nodeId);
-                                      }}
-                                      className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100"
-                                    >
-                                      <PencilSquareIcon className="h-5 w-5" />
-                                    </button>
-                                  </span>
-                                )}
-                              </div>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
 
-                    <div className="min-w-0">
-                      {activeTab === 'overview' && (
-                        <div className="rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-600">
-                          Click a node on the left to view run details.
-                        </div>
-                      )}
-
-                      {activeTab === 'details' && (
-                        <div className="rounded-md border border-gray-200 bg-white">
-                          <div className="flex items-center justify-between gap-2 border-b border-[#eceff2] px-3 py-2">
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-semibold text-gray-900">
-                                {selectedNodeId ? nodeLabel(nodes, selectedNodeId) : 'Select a node'}
-                              </div>
-                              <div className="mt-0.5 text-[11px] text-gray-500">
-                                {selectedRunEntry?.status ?? '—'}
-                                {selectedRunEntry?.execution_time_ms != null && (
-                                  <span> · {formatExecutionMs(selectedRunEntry.execution_time_ms)}</span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {!selectedNodeId && (
-                            <div className="p-3 text-sm text-gray-600">Select a node to view details.</div>
-                          )}
-
-                          {selectedNodeId && (
-                            <div>
-                              {!isSelectedTrigger && (
-                                <div className="border-b border-[#eceff2] bg-white px-3 py-2">
-                                  <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
+                                {!isSelectedTrigger && selectedNodeId && (
+                                  <div className="inline-flex shrink-0 rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
                                     {(['input', 'output'] as const).map((t) => (
                                       <button
                                         key={t}
@@ -401,85 +476,93 @@ const FlowLogsPanel: React.FC<{
                                       </button>
                                     ))}
                                   </div>
-                                </div>
-                              )}
+                                )}
+                              </div>
 
-                              {(isSelectedTrigger || ioTab === 'output') && (
-                                <div className="min-w-0">
-                                  <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
-                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
-                                      OUTPUT
-                                    </span>
-                                  </div>
-                                  <div className="p-3">
-                                    {selectedOutputPreview?.message && (
-                                      <div className="mb-2 text-sm text-amber-800">{selectedOutputPreview.message}</div>
-                                    )}
-                                    {selectedOutputPreview?.data != null ? (
-                                      <IoViewer
-                                        value={selectedOutputPreview.data}
-                                        dragSource={{ nodeId: selectedNodeId, source: 'nodeOutput' }}
-                                        defaultMode="table"
-                                      />
-                                    ) : (
-                                      !selectedOutputPreview?.message && (
-                                        <div className="text-sm text-gray-600">No output payload for this node.</div>
-                                      )
-                                    )}
-                                  </div>
-                                </div>
-                              )}
+                            {!selectedNodeId && (
+                              <div className="p-3 text-sm text-gray-600">Select a node to view details.</div>
+                            )}
 
-                              {!isSelectedTrigger && ioTab === 'input' && (
-                                <div className="min-w-0">
-                                  <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
-                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
-                                      INPUT
-                                    </span>
+                            {selectedNodeId && (
+                              <div>
+                                {(isSelectedTrigger || ioTab === 'output') && (
+                                  <div className="min-w-0">
+                                    <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
+                                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+                                        OUTPUT
+                                      </span>
+                                    </div>
+                                    <div className="p-3">
+                                      {selectedOutputPreview?.message && (
+                                        <div className="mb-2 text-sm text-amber-800">{selectedOutputPreview.message}</div>
+                                      )}
+                                      {selectedOutputPreview?.data != null ? (
+                                        <IoViewer
+                                          value={selectedOutputPreview.data}
+                                          dragSource={{ nodeId: selectedNodeId, source: 'nodeOutput' }}
+                                          defaultMode="table"
+                                        />
+                                      ) : (
+                                        !selectedOutputPreview?.message && (
+                                          <div className="text-sm text-gray-600">No output payload for this node.</div>
+                                        )
+                                      )}
+                                    </div>
                                   </div>
-                                  <div className="p-3">
-                                    {selectedParametersValue == null ? (
-                                      <div className="text-sm text-gray-600">No node parameters available.</div>
-                                    ) : (
-                                      <IoViewer
-                                        value={selectedParametersValue}
-                                        dragSource={{ nodeId: selectedNodeId, source: 'nodeInput' }}
-                                        defaultMode="schema"
-                                      />
-                                    )}
+                                )}
 
-                                    {selectedInputPreview && (
-                                      <div className="mt-4 border-t border-[#eceff2] pt-4">
-                                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
-                                          WIRING
+                                {!isSelectedTrigger && ioTab === 'input' && (
+                                  <div className="min-w-0">
+                                    <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
+                                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+                                        INPUT
+                                      </span>
+                                    </div>
+                                    <div className="p-3">
+                                      {selectedParametersValue == null ? (
+                                        <div className="text-sm text-gray-600">No node parameters available.</div>
+                                      ) : (
+                                        <IoViewer
+                                          value={selectedParametersValue}
+                                          dragSource={{ nodeId: selectedNodeId, source: 'nodeInput' }}
+                                          defaultMode="schema"
+                                        />
+                                      )}
+
+                                      {selectedInputPreview && (
+                                        <div className="mt-4 border-t border-[#eceff2] pt-4">
+                                          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+                                            WIRING
+                                          </div>
+                                          {selectedInputPreview.message ? (
+                                            <div className="text-sm text-gray-600">{selectedInputPreview.message}</div>
+                                          ) : (
+                                            <IoViewer
+                                              value={
+                                                selectedInputPreview.slots.length > 0
+                                                  ? selectedInputPreview.slots.map((s) => ({
+                                                      in: s.slot,
+                                                      from: s.fromNodeId,
+                                                      item: s.payload,
+                                                    }))
+                                                  : null
+                                              }
+                                              dragSource={{ nodeId: selectedNodeId, source: 'nodeInput' }}
+                                              defaultMode="json"
+                                            />
+                                          )}
                                         </div>
-                                        {selectedInputPreview.message ? (
-                                          <div className="text-sm text-gray-600">{selectedInputPreview.message}</div>
-                                        ) : (
-                                          <IoViewer
-                                            value={
-                                              selectedInputPreview.slots.length > 0
-                                                ? selectedInputPreview.slots.map((s) => ({
-                                                    in: s.slot,
-                                                    from: s.fromNodeId,
-                                                    item: s.payload,
-                                                  }))
-                                                : null
-                                            }
-                                            dragSource={{ nodeId: selectedNodeId, source: 'nodeInput' }}
-                                            defaultMode="json"
-                                          />
-                                        )}
-                                      </div>
-                                    )}
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                )}
+                              </div>
+                            )}
                             </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                          </div>
+                        </Panel>
+                      </PanelGroup>
+                    )}
                   </div>
                 )}
               </>
