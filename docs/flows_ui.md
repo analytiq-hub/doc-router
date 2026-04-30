@@ -248,7 +248,6 @@ src/components/flows/
   flowCanvasActionsContext.tsx              Canvas actions + execution visual contexts
 
   FlowExecutionsView.tsx                    Executions tab (list + read-only graph view + per-node status)
-  FlowExecutionList.tsx                     Alternate executions table w/ inline JSON (currently unused)
   FlowLogsPanel.tsx                         Bottom logs panel (polls getExecution; node IO previews)
 
   canvasGrid.ts                             Grid snap helpers
@@ -462,9 +461,6 @@ Per-node badges/overlays use `flowNodeRunStatus.ts`.
 The page uses `FlowExecutionsView.tsx` (sidebar list + read-only graph view +
 node modal). It auto-refreshes the list when there are active runs.
 
-`FlowExecutionList.tsx` exists as an alternate executions table with inline JSON
-detail and a Stop button; it is currently not used by the page.
-
 ### 6.2 Logs panel (done)
 
 `FlowLogsPanel.tsx` provides an in-editor logs view with per-node input/output
@@ -498,14 +494,13 @@ FastAPI route coverage is complete for v1 (incl. delete).
 - Insert-on-edge and node/edge actions via `flowCanvasActionsContext.tsx`
 
 ### Step 5 — Phase 3 UI: executions + logs (done)
-- Executions tab: `FlowExecutionsView.tsx` (list + read-only graph + node modal)
+- Executions tab: `FlowExecutionsView.tsx` (sidebar list + read-only graph + node modal; `FlowExecutionList.tsx` removed)
 - In-editor logs: `FlowLogsPanel.tsx` (polling + IO previews)
 
 ### Remaining gaps / follow-ups (as of now)
-1. **Decide on one executions UI**: keep `FlowExecutionsView.tsx` and remove or repurpose the unused `FlowExecutionList.tsx`.
-2. **Stop execution from executions view**: `FlowExecutionsView.tsx` currently doesn’t expose Stop; `FlowExecutionList.tsx` does.
-3. **Rename flow from list**: list page supports edit/run/activate/delete, but not rename inline (rename is in editor toolbar).
-4. **Polish run UX**: after `runFlow`, optionally auto-switch to the Executions tab (currently it focuses the logs panel).
+1. **Stop execution from executions view**: `FlowExecutionsView.tsx` doesn’t expose a Stop button for running executions.
+2. **Rename flow from list**: list page supports edit/run/activate/delete, but not rename inline (rename is in editor toolbar).
+3. **Polish run UX**: after `runFlow`, optionally auto-switch to the Executions tab (currently it focuses the logs panel).
 
 ---
 
