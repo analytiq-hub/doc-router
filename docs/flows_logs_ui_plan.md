@@ -51,18 +51,18 @@ Notes:
 
 In Details, show two sections similar to `n8n`’s “INPUT / OUTPUT” panes, but adapted to our data model:
 
-- **Parameters**
+- **INPUT**
   - Value source: the node’s **current graph node definition** (from `graphNodes` / `FlowNode.parameters`, plus maybe `disabled`, `on_error`, etc.).
   - Render with `IoViewer` so the user can switch **Schema/Table/JSON**.
   - This is *not* the same as input items; it’s the node configuration snapshot.
 
-- **Results**
+- **OUTPUT**
   - Value source: the node’s run output items derived from `run_data` (we already compute these in `buildNodeOutputPreview`).
   - Render with `IoViewer` so the user can switch **Schema/Table/JSON**.
   - Use the same “first item as sample” semantics as `IoViewer` for Schema/JSON, and treat arrays of objects as Table.
 
 Trigger-node special case:
-- If the selected node’s type is a trigger (`FlowNodeType.is_trigger === true`), **hide Parameters** and only show **Results**.
+- If the selected node’s type is a trigger (`FlowNodeType.is_trigger === true`), **hide INPUT** and only show **OUTPUT**.
 
 ### 3) Edit node button (no trigger/start buttons)
 
@@ -97,8 +97,8 @@ Explicit non-goals:
      - `nodeParametersValue` (object: `selectedNode.data.flowNode.parameters` plus key metadata)
      - `nodeResultsValue` (array/object from `run_data`, using existing preview builders)
    - Render:
-     - `IoViewer` for Parameters (unless trigger node)
-     - `IoViewer` for Results
+     - `IoViewer` for INPUT (unless trigger node)
+     - `IoViewer` for OUTPUT
    - Add empty states for missing data (no run data yet, node not found in graph, etc.).
 
 4. **Add Edit node action plumbing**

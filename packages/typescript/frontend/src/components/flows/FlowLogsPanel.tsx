@@ -373,7 +373,7 @@ const FlowLogsPanel: React.FC<{
                                 <div className="min-w-0 border-[#e8eaed] sm:border-r">
                                   <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
                                     <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
-                                      Parameters
+                                      INPUT
                                     </span>
                                   </div>
                                   <div className="p-3">
@@ -386,6 +386,31 @@ const FlowLogsPanel: React.FC<{
                                         defaultMode="schema"
                                       />
                                     )}
+
+                                    {selectedInputPreview && (
+                                      <div className="mt-4 border-t border-[#eceff2] pt-4">
+                                        <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+                                          WIRING
+                                        </div>
+                                        {selectedInputPreview.message ? (
+                                          <div className="text-sm text-gray-600">{selectedInputPreview.message}</div>
+                                        ) : (
+                                          <IoViewer
+                                            value={
+                                              selectedInputPreview.slots.length > 0
+                                                ? selectedInputPreview.slots.map((s) => ({
+                                                    in: s.slot,
+                                                    from: s.fromNodeId,
+                                                    item: s.payload,
+                                                  }))
+                                                : null
+                                            }
+                                            dragSource={{ nodeId: selectedNodeId, source: 'nodeInput' }}
+                                            defaultMode="json"
+                                          />
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               )}
@@ -393,7 +418,7 @@ const FlowLogsPanel: React.FC<{
                               <div className="min-w-0">
                                 <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
                                   <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
-                                    Results
+                                    OUTPUT
                                   </span>
                                 </div>
                                 <div className="p-3">
@@ -410,29 +435,6 @@ const FlowLogsPanel: React.FC<{
                                     !selectedOutputPreview?.message && (
                                       <div className="text-sm text-gray-600">No output payload for this node.</div>
                                     )
-                                  )}
-
-                                  {!isSelectedTrigger && selectedInputPreview && (
-                                    <div className="mt-3 border-t border-[#eceff2] pt-3">
-                                      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
-                                        Inputs (wiring)
-                                      </div>
-                                      {selectedInputPreview.message ? (
-                                        <div className="text-sm text-gray-600">{selectedInputPreview.message}</div>
-                                      ) : (
-                                        <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-gray-800">
-                                          {JSON.stringify(
-                                            selectedInputPreview.slots.map((s) => ({
-                                              in: s.slot,
-                                              from: s.fromNodeId,
-                                              item: s.payload,
-                                            })),
-                                            null,
-                                            2,
-                                          )}
-                                        </pre>
-                                      )}
-                                    </div>
                                   )}
                                 </div>
                               </div>
