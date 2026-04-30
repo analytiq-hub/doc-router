@@ -278,16 +278,25 @@ const FlowLogsPanel: React.FC<{
                           const ok = rec.status === 'success';
                           const label = nodeLabel(nodes, nodeId);
                           const selected = nodeId === selectedNodeId;
+                          const canEdit = Boolean(onEditNode) && nodes.some((n) => n.id === nodeId);
                           return (
                             <li key={nodeId}>
-                              <button
-                                type="button"
+                              <div
+                                role="button"
+                                tabIndex={0}
                                 onClick={() => {
                                   setSelectedNodeId(nodeId);
                                   setActiveTab('details');
                                 }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' || e.key === ' ') {
+                                    e.preventDefault();
+                                    setSelectedNodeId(nodeId);
+                                    setActiveTab('details');
+                                  }
+                                }}
                                 className={[
-                                  'flex w-full items-center gap-2 px-2 py-2 text-left transition sm:px-3',
+                                  'group flex w-full items-center gap-2 px-2 py-2 text-left transition sm:px-3',
                                   selected ? 'bg-gray-100' : 'bg-white hover:bg-gray-50',
                                 ].join(' ')}
                               >
@@ -307,7 +316,24 @@ const FlowLogsPanel: React.FC<{
                                     )}
                                   </div>
                                 </div>
-                              </button>
+                                {canEdit && (
+                                  <span className="shrink-0 opacity-0 pointer-events-none transition group-hover:opacity-100 group-hover:pointer-events-auto">
+                                    <button
+                                      type="button"
+                                      title="Edit"
+                                      aria-label="Edit"
+                                      onClick={(ev) => {
+                                        ev.preventDefault();
+                                        ev.stopPropagation();
+                                        onEditNode?.(nodeId);
+                                      }}
+                                      className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100"
+                                    >
+                                      <PencilSquareIcon className="h-5 w-5" />
+                                    </button>
+                                  </span>
+                                )}
+                              </div>
                             </li>
                           );
                         })}
@@ -335,19 +361,6 @@ const FlowLogsPanel: React.FC<{
                                 )}
                               </div>
                             </div>
-
-                            {selectedNodeId && onEditNode && selectedNode && (
-                              <button
-                                type="button"
-                                onClick={() => onEditNode(selectedNodeId)}
-                                className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
-                                title="Edit node"
-                                aria-label="Edit node"
-                              >
-                                <PencilSquareIcon className="h-4 w-4" />
-                                Edit
-                              </button>
-                            )}
                           </div>
 
                           {!selectedNodeId && (
