@@ -7,7 +7,7 @@ import type { FlowExecution, FlowNodeType, FlowRevision, FlowRfEdge, FlowRfNode 
 import FlowToolbar from '@/components/flows/FlowToolbar';
 import FlowEditor from '@/components/flows/FlowEditor';
 import FlowCanvasViewTabs, { FlowWorkspaceTabStraddle, type FlowCanvasView } from '@/components/flows/FlowCanvasViewTabs';
-import { FLOW_WORKSPACE_HEADER_HEIGHT_CLASS } from '@/components/flows/flowUiClasses';
+import { FLOW_WORKSPACE_HEADER_HEIGHT_CLASS, FLOW_WORKSPACE_TITLE_READ_CLASS } from '@/components/flows/flowUiClasses';
 import FlowLogsPanel from '@/components/flows/FlowLogsPanel';
 import { snapRfNodesPositions } from '@/components/flows/canvasGrid';
 import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNodeData } from '@/components/flows/flowRf';
@@ -410,9 +410,13 @@ export default function FlowDetailPageClient({
 
           {view === 'executions' && (
             <div className="flex h-[max(32rem,calc(100dvh-12.5rem))] min-h-[32rem] flex-col bg-white">
-              <div className="relative z-10 shrink-0 bg-white px-3">
-                <div className={`flex ${FLOW_WORKSPACE_HEADER_HEIGHT_CLASS} shrink-0 items-center border-b border-gray-200`}>
-                  <span className="truncate text-sm font-semibold text-gray-900">{flowName.trim() || 'Untitled flow'}</span>
+              <div className="relative z-10 shrink-0 bg-white">
+                <div
+                  className={`flex ${FLOW_WORKSPACE_HEADER_HEIGHT_CLASS} shrink-0 items-center border-b border-gray-200 px-3`}
+                >
+                  <span className={FLOW_WORKSPACE_TITLE_READ_CLASS} title={flowName.trim() || 'Untitled flow'}>
+                    {flowName.trim() || 'Untitled flow'}
+                  </span>
                 </div>
                 <FlowWorkspaceTabStraddle>
                   <FlowCanvasViewTabs value={view} onChange={handleViewChange} />

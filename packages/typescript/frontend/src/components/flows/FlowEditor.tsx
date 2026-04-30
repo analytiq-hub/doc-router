@@ -53,7 +53,13 @@ const EXECUTE_BUTTON_BG_HOVER = '#e85d4d';
 
 const FLOW_EDGE_MARKER = { type: MarkerType.ArrowClosed } as const;
 
-function CanvasZoomControls({ addFooterPadding }: { addFooterPadding: boolean }) {
+function CanvasZoomControls({
+  addFooterPadding,
+  runButton,
+}: {
+  addFooterPadding: boolean;
+  runButton?: React.ReactNode;
+}) {
   const { setViewport, getNodes, zoomIn, zoomOut, zoomTo } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
   const width = useStore((s) => s.width);
@@ -65,7 +71,8 @@ function CanvasZoomControls({ addFooterPadding }: { addFooterPadding: boolean })
     if (!nodes.length || width === 0 || height === 0) return;
 
     // Reserve space for bottom UI controls when fitting.
-    const footerHeightPx = addFooterPadding ? 200 : 100;
+    // Bottom-left stack: zoom strip + optional execute button + margins.
+    const footerHeightPx = addFooterPadding ? 260 : 100;
     const bounds = getNodesBounds(nodes);
     const next = getViewportForBounds(bounds, width, Math.max(1, height - footerHeightPx), 0.15, 1, 0.2);
     await setViewport(next, { duration: 200 });
@@ -79,43 +86,46 @@ function CanvasZoomControls({ addFooterPadding }: { addFooterPadding: boolean })
   }, [nodesInitialized, onZoomToFit]);
 
   return (
-    <Panel position="bottom-left" className="!mb-3 !ml-3 flex items-center gap-1 rounded-lg bg-white/95 p-1 shadow-md backdrop-blur-sm">
-      <button
-        type="button"
-        onClick={() => void onZoomToFit()}
-        title="Zoom to fit"
-        aria-label="Zoom to fit"
-        className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
-      >
-        <ArrowsPointingOutIcon className="h-5 w-5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => void zoomIn({ duration: 120 })}
-        title="Zoom in"
-        aria-label="Zoom in"
-        className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
-      >
-        <MagnifyingGlassPlusIcon className="h-5 w-5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => void zoomOut({ duration: 120 })}
-        title="Zoom out"
-        aria-label="Zoom out"
-        className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
-      >
-        <MagnifyingGlassMinusIcon className="h-5 w-5" />
-      </button>
-      <button
-        type="button"
-        onClick={() => void zoomTo(1, { duration: 120 })}
-        title="Reset zoom"
-        aria-label="Reset zoom"
-        className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
-      >
-        <ArrowUturnLeftIcon className="h-5 w-5" />
-      </button>
+    <Panel position="bottom-left" className={['!mb-3 !ml-3 flex flex-col items-start', runButton ? 'gap-2' : false].filter(Boolean).join(' ')}>
+      <div className="flex items-center gap-1 rounded-lg bg-white/95 p-1 shadow-md backdrop-blur-sm">
+        <button
+          type="button"
+          onClick={() => void onZoomToFit()}
+          title="Zoom to fit"
+          aria-label="Zoom to fit"
+          className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+        >
+          <ArrowsPointingOutIcon className="h-5 w-5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => void zoomIn({ duration: 120 })}
+          title="Zoom in"
+          aria-label="Zoom in"
+          className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+        >
+          <MagnifyingGlassPlusIcon className="h-5 w-5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => void zoomOut({ duration: 120 })}
+          title="Zoom out"
+          aria-label="Zoom out"
+          className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+        >
+          <MagnifyingGlassMinusIcon className="h-5 w-5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => void zoomTo(1, { duration: 120 })}
+          title="Reset zoom"
+          aria-label="Reset zoom"
+          className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100"
+        >
+          <ArrowUturnLeftIcon className="h-5 w-5" />
+        </button>
+      </div>
+      {runButton}
     </Panel>
   );
 }
@@ -578,26 +588,28 @@ const FlowEditor: React.FC<{
               <ScreenToFlowPointBridge targetRef={screenToFlowPointRef} />
               <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />
               <Controls className="!shadow-md" position="bottom-left" showZoom={false} showFitView={false} showInteractive={false} />
-              <CanvasZoomControls addFooterPadding={Boolean(onExecute)} />
-              {onExecute && (
-                <Panel position="bottom-center" className="!mb-6">
-                  <button
-                    type="button"
-                    onClick={onExecute}
-                    className="inline-flex items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95 active:scale-[0.99]"
-                    style={{ backgroundColor: EXECUTE_BUTTON_BG }}
-                    onMouseEnter={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG_HOVER;
-                    }}
-                    onMouseLeave={(e) => {
-                      (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG;
-                    }}
-                  >
-                    <BeakerIcon className="h-4 w-4" aria-hidden />
-                    Execute workflow
-                  </button>
-                </Panel>
-              )}
+              <CanvasZoomControls
+                addFooterPadding={Boolean(onExecute)}
+                runButton={
+                  onExecute ? (
+                    <button
+                      type="button"
+                      onClick={onExecute}
+                      className="inline-flex shrink-0 items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95 active:scale-[0.99]"
+                      style={{ backgroundColor: EXECUTE_BUTTON_BG }}
+                      onMouseEnter={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG_HOVER;
+                      }}
+                      onMouseLeave={(e) => {
+                        (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG;
+                      }}
+                    >
+                      <BeakerIcon className="h-4 w-4" aria-hidden />
+                      Execute workflow
+                    </button>
+                  ) : undefined
+                }
+              />
             </ReactFlow>
           </FlowExecutionVisualProvider>
         </FlowCanvasActionsProvider>

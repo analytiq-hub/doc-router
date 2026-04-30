@@ -21,3 +21,7 @@ export const flowInlineNameMeasureClass = `${flowInlineNameShell} border border-
 
 /** Matches executions workspace title strip — keeps editor toolbar one row visually aligned (42px). */
 export const FLOW_WORKSPACE_HEADER_HEIGHT_CLASS = 'h-[2.625rem]';
+
+/** Toolbar collapsed title + executions header title — plain text inset (no chip padding); lives under outer `px-3`. */
+export const FLOW_WORKSPACE_TITLE_READ_CLASS =
+  'min-w-0 max-w-[min(100%,42rem)] truncate text-sm font-semibold text-gray-900';

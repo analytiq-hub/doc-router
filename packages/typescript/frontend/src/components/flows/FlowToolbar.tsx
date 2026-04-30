@@ -6,9 +6,9 @@ import MoreVertIcon from '@mui/icons-material/MoreVert';
 import FlowStatusBadge from './FlowStatusBadge';
 import {
   FLOW_WORKSPACE_HEADER_HEIGHT_CLASS,
+  FLOW_WORKSPACE_TITLE_READ_CLASS,
   flowInlineNameInputClass,
   flowInlineNameMeasureClass,
-  flowInlineNameReadClass,
 } from './flowUiClasses';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 
@@ -46,7 +46,7 @@ const FlowToolbar: React.FC<{
     <div className={`flex ${FLOW_WORKSPACE_HEADER_HEIGHT_CLASS} shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3`}>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 pr-2">
         <div
-          className="max-w-full shrink-0"
+          className="min-w-0 max-w-[min(100%,42rem)] shrink"
           onMouseEnter={() => setNameHover(true)}
           onMouseLeave={() => setNameHover(false)}
         >
@@ -75,7 +75,7 @@ const FlowToolbar: React.FC<{
               onBlur={() => setNameFocus(false)}
             />
           ) : (
-            <span className={flowInlineNameReadClass} title={name || 'Flow name'}>
+            <span className={FLOW_WORKSPACE_TITLE_READ_CLASS} title={name || 'Flow name'}>
               {name.trim() ? name : 'Untitled flow'}
             </span>
           )}
