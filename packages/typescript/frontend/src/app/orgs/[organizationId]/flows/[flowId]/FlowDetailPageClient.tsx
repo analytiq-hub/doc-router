@@ -412,6 +412,7 @@ export default function FlowDetailPageClient({
               nodeTypes={nodeTypes}
               fallbackNodes={rfNodes as Node<FlowRfNodeData>[]}
               fallbackEdges={rfEdges}
+              onEditFlowNode={onLogsEditNode}
             />
           )}
         </div>

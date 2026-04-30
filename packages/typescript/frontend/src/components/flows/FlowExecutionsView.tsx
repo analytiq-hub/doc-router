@@ -21,6 +21,7 @@ import { DocRouterOrgApi } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
 import './flows-canvas.css';
 import { FLOW_RF_LABELED_EDGE_TYPE, flowRfEdgeTypes, flowRfNodeTypes } from './flowRfCanvasTypes';
+import FlowLogsPanel from './FlowLogsPanel';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import { applyExecutionStatusToNodes } from './flowNodeRunStatus';
 import { IconButton, Menu, MenuItem } from '@mui/material';
@@ -43,6 +44,11 @@ const RF_EXEC_VIEW_PRO_OPTIONS = { hideAttribution: true } as const;
 const RF_EXEC_VIEW_FIT_OPTIONS = { padding: 0.2, maxZoom: 1 } as const;
 
 const EXECUTIONS_LIST_SPLIT_STORAGE_KEY = 'docrouter.flow.executionsView.listLeftPct';
+
+const EXEC_LOGS_COLLAPSED_PCT = 8;
+const EXEC_LOGS_MIN_EXPANDED_PCT = EXEC_LOGS_COLLAPSED_PCT;
+const EXEC_LOGS_MAX_EXPANDED_PCT = 90;
+const EXEC_LOGS_EXPANDED_STORAGE_KEY = 'docrouter.flow.executionsView.logsPanel.expandedPct';
 
 /** Read persisted list width (client-only; do not call during SSR / first paint). */
 function readStoredExecutionsListLeftPct(): number {
@@ -115,7 +121,9 @@ const FlowExecutionsView: React.FC<{
   /** Latest graph from the editor; used if an execution’s revision is unavailable. */
   fallbackNodes: Node<FlowRfNodeData>[];
   fallbackEdges: Edge[];
-}> = ({ orgApi, flowId, nodeTypes, fallbackNodes, fallbackEdges }) => {
+  /** Open editor and focus node config — e.g. from logs “Edit node”. */
+  onEditFlowNode?: (nodeId: string) => void;
+}> = ({ orgApi, flowId, nodeTypes, fallbackNodes, fallbackEdges, onEditFlowNode }) => {
   const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
   const [list, setList] = useState<FlowExecution[]>([]);
   const [total, setTotal] = useState(0);
@@ -131,12 +139,56 @@ const FlowExecutionsView: React.FC<{
   const [fitId, setFitId] = useState('');
   const [execActionsAnchorEl, setExecActionsAnchorEl] = useState<null | HTMLElement>(null);
   const executionsSplitRef = useRef<ImperativePanelGroupHandle | null>(null);
+  const execLogsPanelGroupRef = useRef<ImperativePanelGroupHandle | null>(null);
+  const [execLogsExpanded, setExecLogsExpanded] = useState(false);
+  const [execLogsExpandedPct, setExecLogsExpandedPct] = useState<number>(() => {
+    if (typeof window === 'undefined') return 50;
+    try {
+      const raw = window.localStorage.getItem(EXEC_LOGS_EXPANDED_STORAGE_KEY);
+      const n = raw ? Number(raw) : NaN;
+      if (!Number.isFinite(n)) return 50;
+      return Math.min(EXEC_LOGS_MAX_EXPANDED_PCT, Math.max(EXEC_LOGS_MIN_EXPANDED_PCT, n));
+    } catch {
+      return 50;
+    }
+  });
+
+  const applyExecLogsLayout = useCallback(
+    (nextExpanded: boolean, nextExpandedPct?: number) => {
+      const api = execLogsPanelGroupRef.current;
+      if (!api) return;
+      if (!nextExpanded) {
+        api.setLayout([100 - EXEC_LOGS_COLLAPSED_PCT, EXEC_LOGS_COLLAPSED_PCT]);
+        return;
+      }
+      const pct = Math.min(
+        EXEC_LOGS_MAX_EXPANDED_PCT,
+        Math.max(EXEC_LOGS_MIN_EXPANDED_PCT, nextExpandedPct ?? execLogsExpandedPct),
+      );
+      api.setLayout([100 - pct, pct]);
+    },
+    [execLogsExpandedPct],
+  );
+
+  const toggleExecLogsExpanded = useCallback(() => {
+    setExecLogsExpanded((cur) => {
+      const next = !cur;
+      queueMicrotask(() => applyExecLogsLayout(next));
+      return next;
+    });
+  }, [applyExecLogsLayout]);
 
   /** Reconcile client with localStorage after hydration so SSR % matches first paint HTML. */
   useLayoutEffect(() => {
     const left = readStoredExecutionsListLeftPct();
     executionsSplitRef.current?.setLayout([left, 100 - left]);
   }, []);
+
+  useEffect(() => {
+    if (!selectedId) return;
+    setExecLogsExpanded(true);
+    queueMicrotask(() => applyExecLogsLayout(true));
+  }, [applyExecLogsLayout, selectedId]);
 
   const loadList = useCallback(async () => {
     try {
@@ -359,95 +411,138 @@ const FlowExecutionsView: React.FC<{
         <Panel
           defaultSize={100 - EXECUTIONS_LIST_PANEL_DEFAULT_PCT}
           minSize={38}
-          className="min-h-0 min-w-0"
+          className="flex min-h-0 min-w-0 flex-col"
         >
-          <div className="relative h-full min-h-0 min-w-0">
-        {detailLoading && (
-          <div className="absolute left-0 right-0 top-0 z-20 flex h-8 items-center justify-center border-b border-amber-200/80 bg-amber-50/90 text-xs text-amber-900">
-            Loading run…
-          </div>
-        )}
-        {detail && (
-          <div className="absolute left-0 right-0 top-0 z-10 border-b border-[#eceff2] bg-white/90 px-3 py-1.5 text-xs text-gray-600 backdrop-blur-sm">
-            <div className="flex items-center justify-between gap-2">
-              <div className="min-w-0">
-                <span className="font-medium text-gray-800">{formatLocalDate(detail.started_at)}</span> · {detail.status}
-                {detail.finished_at && <span> · {formatDuration(detail)}</span>} ·{' '}
-                <span className="font-mono">ID {detail.execution_id}</span>
-              </div>
-              <div className="flex shrink-0 items-center gap-0.5">
-                <IconButton
-                  size="small"
-                  aria-label="More actions"
-                  onClick={(e) => setExecActionsAnchorEl(e.currentTarget)}
-                >
-                  <MoreVertIcon fontSize="small" />
-                </IconButton>
-                <Menu anchorEl={execActionsAnchorEl} open={Boolean(execActionsAnchorEl)} onClose={() => setExecActionsAnchorEl(null)}>
-                  <MenuItem
-                    onClick={() => {
-                      setExecActionsAnchorEl(null);
-                      downloadJsonFile(`execution_${flowId}_${detail.execution_id}.json`, detail);
-                    }}
-                  >
-                    Download
-                  </MenuItem>
-                </Menu>
-                {statusRunning(detail) && (
-                  <button
-                    type="button"
-                    disabled={stopLoadingId === detail.execution_id}
-                    onClick={(ev) => {
-                      ev.preventDefault();
-                      ev.stopPropagation();
-                      void stopExecution(detail.execution_id);
-                    }}
-                    className={[
-                      'shrink-0 rounded border px-2.5 py-1 text-[11px] font-semibold shadow-sm transition',
-                      stopLoadingId === detail.execution_id
-                        ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
-                        : 'border-red-200 bg-white text-red-700 hover:bg-red-50',
-                    ].join(' ')}
-                    title="Request stop"
-                    aria-label="Stop execution"
-                  >
-                    {stopLoadingId === detail.execution_id ? 'Stopping…' : 'Stop'}
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-        {!selectedId && !listLoading && (
-          <div className="absolute inset-0 z-[5] flex items-center justify-center bg-[#f7f7f9] text-sm text-gray-500">
-            Select a run
-          </div>
-        )}
-
-        <div className="h-full w-full min-h-0 min-w-0 bg-[#f7f7f9] pt-8">
-          <ReactFlow
-            className="h-full w-full"
-            nodes={viewNodes as Node<FlowRfNodeData>[]}
-            edges={canvasEdges}
-            nodeTypes={flowRfNodeTypes}
-            edgeTypes={flowRfEdgeTypes}
-            nodesConnectable={false}
-            elementsSelectable
-            onNodeDoubleClick={onNodeDoubleClick}
-            nodesDraggable={false}
-            proOptions={RF_EXEC_VIEW_PRO_OPTIONS}
-            minZoom={0.15}
-            maxZoom={1.5}
-            defaultEdgeOptions={RF_EXEC_VIEW_DEFAULT_EDGE_OPTIONS}
-            fitView
-            fitViewOptions={RF_EXEC_VIEW_FIT_OPTIONS}
+          <PanelGroup
+            ref={execLogsPanelGroupRef}
+            direction="vertical"
+            className="flex min-h-0 min-w-0 flex-1 flex-col"
+            onLayout={(sizes) => {
+              const bottom = sizes[1] ?? 0;
+              if (bottom <= EXEC_LOGS_COLLAPSED_PCT + 0.5) {
+                if (execLogsExpanded) setExecLogsExpanded(false);
+                return;
+              }
+              if (!execLogsExpanded) setExecLogsExpanded(true);
+              const next = Math.min(EXEC_LOGS_MAX_EXPANDED_PCT, Math.max(EXEC_LOGS_MIN_EXPANDED_PCT, bottom));
+              setExecLogsExpandedPct(next);
+              try {
+                window.localStorage.setItem(EXEC_LOGS_EXPANDED_STORAGE_KEY, String(next));
+              } catch {
+                // ignore
+              }
+            }}
           >
-            <FitViewWhenDataChanges id={fitId} />
-            <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />
-            <Controls className="!shadow-md" position="bottom-left" showFitView showInteractive={false} />
-          </ReactFlow>
-        </div>
-          </div>
+            <Panel defaultSize={100 - EXEC_LOGS_COLLAPSED_PCT} minSize={25} className="min-h-0 min-w-0">
+              <div className="relative h-full min-h-0 min-w-0 flex flex-col">
+                {detailLoading && (
+                  <div className="absolute left-0 right-0 top-0 z-20 flex h-8 items-center justify-center border-b border-amber-200/80 bg-amber-50/90 text-xs text-amber-900">
+                    Loading run…
+                  </div>
+                )}
+                {detail && (
+                  <div className="absolute left-0 right-0 top-0 z-10 border-b border-[#eceff2] bg-white/90 px-3 py-1.5 text-xs text-gray-600 backdrop-blur-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <span className="font-medium text-gray-800">{formatLocalDate(detail.started_at)}</span> · {detail.status}
+                        {detail.finished_at && <span> · {formatDuration(detail)}</span>} ·{' '}
+                        <span className="font-mono">ID {detail.execution_id}</span>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-0.5">
+                        <IconButton
+                          size="small"
+                          aria-label="More actions"
+                          onClick={(e) => setExecActionsAnchorEl(e.currentTarget)}
+                        >
+                          <MoreVertIcon fontSize="small" />
+                        </IconButton>
+                        <Menu anchorEl={execActionsAnchorEl} open={Boolean(execActionsAnchorEl)} onClose={() => setExecActionsAnchorEl(null)}>
+                          <MenuItem
+                            onClick={() => {
+                              setExecActionsAnchorEl(null);
+                              downloadJsonFile(`execution_${flowId}_${detail.execution_id}.json`, detail);
+                            }}
+                          >
+                            Download
+                          </MenuItem>
+                        </Menu>
+                        {statusRunning(detail) && (
+                          <button
+                            type="button"
+                            disabled={stopLoadingId === detail.execution_id}
+                            onClick={(ev) => {
+                              ev.preventDefault();
+                              ev.stopPropagation();
+                              void stopExecution(detail.execution_id);
+                            }}
+                            className={[
+                              'shrink-0 rounded border px-2.5 py-1 text-[11px] font-semibold shadow-sm transition',
+                              stopLoadingId === detail.execution_id
+                                ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+                                : 'border-red-200 bg-white text-red-700 hover:bg-red-50',
+                            ].join(' ')}
+                            title="Request stop"
+                            aria-label="Stop execution"
+                          >
+                            {stopLoadingId === detail.execution_id ? 'Stopping…' : 'Stop'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {!selectedId && !listLoading && (
+                  <div className="absolute inset-0 z-[5] flex items-center justify-center bg-[#f7f7f9] text-sm text-gray-500">
+                    Select a run
+                  </div>
+                )}
+
+                <div className="flex min-h-0 min-w-0 flex-1 bg-[#f7f7f9] pt-8">
+                  <ReactFlow
+                    className="h-full w-full min-h-0"
+                    nodes={viewNodes as Node<FlowRfNodeData>[]}
+                    edges={canvasEdges}
+                    nodeTypes={flowRfNodeTypes}
+                    edgeTypes={flowRfEdgeTypes}
+                    nodesConnectable={false}
+                    elementsSelectable
+                    onNodeDoubleClick={onNodeDoubleClick}
+                    nodesDraggable={false}
+                    proOptions={RF_EXEC_VIEW_PRO_OPTIONS}
+                    minZoom={0.15}
+                    maxZoom={1.5}
+                    defaultEdgeOptions={RF_EXEC_VIEW_DEFAULT_EDGE_OPTIONS}
+                    fitView
+                    fitViewOptions={RF_EXEC_VIEW_FIT_OPTIONS}
+                  >
+                    <FitViewWhenDataChanges id={fitId} />
+                    <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />
+                    <Controls className="!shadow-md" position="bottom-left" showFitView showInteractive={false} />
+                  </ReactFlow>
+                </div>
+              </div>
+            </Panel>
+            {execLogsExpanded ? (
+              <PanelResizeHandle className="h-2 cursor-row-resize shrink-0 bg-[#e8eaed] hover:bg-[#d8dde4]" />
+            ) : (
+              <PanelResizeHandle className="h-px shrink-0 bg-[#e8eaed]" />
+            )}
+            <Panel defaultSize={EXEC_LOGS_COLLAPSED_PCT} minSize={EXEC_LOGS_COLLAPSED_PCT} className="min-h-0 min-w-0">
+              <div className="h-full min-h-0 min-w-0">
+                <FlowLogsPanel
+                  orgApi={orgApi}
+                  flowId={flowId}
+                  focusExecutionId={selectedId}
+                  onClearFocus={() => setSelectedId(null)}
+                  onEditNode={onEditFlowNode}
+                  expanded={execLogsExpanded}
+                  onToggleExpanded={toggleExecLogsExpanded}
+                  graphNodes={viewNodes}
+                  graphEdges={viewEdges}
+                />
+              </div>
+            </Panel>
+          </PanelGroup>
         </Panel>
       </PanelGroup>
 
