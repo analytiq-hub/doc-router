@@ -43,12 +43,21 @@ export default function FlowDetailPageClient({
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string>('');
   const [logsFocusExecutionId, setLogsFocusExecutionId] = useState<string | null>(null);
+  const [editorOpenConfigNodeId, setEditorOpenConfigNodeId] = useState<string | null>(null);
 
   const handleViewChange = useCallback(
     (next: FlowCanvasView) => {
       router.push(`/orgs/${organizationId}/flows/${flowId}?tab=${next}`);
     },
     [flowId, organizationId, router],
+  );
+
+  const onLogsEditNode = useCallback(
+    (nodeId: string) => {
+      setEditorOpenConfigNodeId(nodeId);
+      handleViewChange('editor');
+    },
+    [handleViewChange],
   );
 
   const graphFingerprint = useMemo(() => {
@@ -266,6 +275,8 @@ export default function FlowDetailPageClient({
                     onPinDataChange={(next) => {
                       setRevision((cur) => (cur ? { ...cur, pin_data: next } : cur));
                     }}
+                    openConfigNodeId={editorOpenConfigNodeId}
+                    onOpenConfigNodeIdChange={setEditorOpenConfigNodeId}
                   />
                 </div>
                 <FlowLogsPanel
@@ -274,6 +285,7 @@ export default function FlowDetailPageClient({
                   focusExecutionId={logsFocusExecutionId}
                   onClearFocus={() => setLogsFocusExecutionId(null)}
                   onExecutionChange={setExecutionForIo}
+                  onEditNode={onLogsEditNode}
                   graphNodes={rfNodes as Node<FlowRfNodeData>[]}
                   graphEdges={rfEdges}
                 />

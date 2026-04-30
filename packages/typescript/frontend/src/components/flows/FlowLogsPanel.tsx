@@ -4,16 +4,19 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FlowExecution } from '@docrouter/sdk';
 import type { Edge, Node } from 'reactflow';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
-import { ExclamationCircleIcon } from '@heroicons/react/24/outline';
+import { ExclamationCircleIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
 import { DocRouterOrgApi } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
 import { ChevronDownIcon, ChevronUpIcon, TrashIcon } from '@heroicons/react/24/outline';
 import type { FlowRfNodeData } from './flowRf';
 import { buildNodeInputPreview, buildNodeOutputPreview } from './flowNodeIoPreview';
+import { IoViewer } from './IoViewer';
 
 function isRunning(e: FlowExecution) {
   return e.status === 'queued' || e.status === 'running';
 }
+
+type LogsTab = 'overview' | 'details';
 
 type RunDataEntry = {
   status?: string;
@@ -50,16 +53,18 @@ const FlowLogsPanel: React.FC<{
   focusExecutionId: string | null;
   onClearFocus: () => void;
   onExecutionChange?: (e: FlowExecution | null) => void;
+  onEditNode?: (nodeId: string) => void;
   /** Current canvas graph — used for node names and input wiring in log details. */
   graphNodes?: Node<FlowRfNodeData>[];
   graphEdges?: Edge[];
-}> = ({ orgApi, flowId, focusExecutionId, onClearFocus, onExecutionChange, graphNodes, graphEdges }) => {
+}> = ({ orgApi, flowId, focusExecutionId, onClearFocus, onExecutionChange, onEditNode, graphNodes, graphEdges }) => {
   const [expanded, setExpanded] = useState(false);
   const [execution, setExecution] = useState<FlowExecution | null>(null);
-  const [detailsNodeId, setDetailsNodeId] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<LogsTab>('overview');
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  const edges = graphEdges ?? [];
-  const nodes = graphNodes ?? [];
+  const edges = useMemo(() => graphEdges ?? [], [graphEdges]);
+  const nodes = useMemo(() => graphNodes ?? [], [graphNodes]);
 
   useEffect(() => {
     if (focusExecutionId) {
@@ -72,7 +77,8 @@ const FlowLogsPanel: React.FC<{
   }, [execution, onExecutionChange]);
 
   useEffect(() => {
-    setDetailsNodeId(null);
+    setSelectedNodeId(null);
+    setActiveTab('overview');
   }, [execution?.execution_id]);
 
   const [err, setErr] = useState<string>('');
@@ -114,7 +120,8 @@ const FlowLogsPanel: React.FC<{
   const onClear = () => {
     onClearFocus();
     setExecution(null);
-    setDetailsNodeId(null);
+    setSelectedNodeId(null);
+    setActiveTab('overview');
     setErr('');
   };
 
@@ -126,6 +133,12 @@ const FlowLogsPanel: React.FC<{
       .map(([nodeId, raw]) => ({ nodeId, rec: raw as RunDataEntry }))
       .sort((a, b) => (a.rec.start_time ?? '').localeCompare(b.rec.start_time ?? ''));
   }, [runData]);
+
+  useEffect(() => {
+    if (!selectedNodeId && sortedRunEntries.length > 0) {
+      setSelectedNodeId(sortedRunEntries[0].nodeId);
+    }
+  }, [selectedNodeId, sortedRunEntries]);
 
   const summaryLine = useMemo(() => {
     if (!execution) return '';
@@ -144,6 +157,42 @@ const FlowLogsPanel: React.FC<{
     const wall = formatRunWallDuration(execution);
     return `${statusLabel} in ${wall}`;
   }, [execution]);
+
+  const selectedNode = useMemo(() => {
+    if (!selectedNodeId) return null;
+    return nodes.find((n) => n.id === selectedNodeId) ?? null;
+  }, [nodes, selectedNodeId]);
+
+  const selectedNodeType = selectedNode?.data?.nodeType ?? null;
+  const isSelectedTrigger = Boolean(selectedNodeType?.is_trigger);
+
+  const selectedRunEntry = useMemo(() => {
+    if (!selectedNodeId) return null;
+    const raw = runData?.[selectedNodeId];
+    return raw ? (raw as RunDataEntry) : null;
+  }, [runData, selectedNodeId]);
+
+  const selectedInputPreview = useMemo(() => {
+    if (!selectedNodeId) return null;
+    return buildNodeInputPreview(selectedNodeId, edges, runData);
+  }, [edges, runData, selectedNodeId]);
+
+  const selectedOutputPreview = useMemo(() => {
+    if (!selectedNodeId) return null;
+    return buildNodeOutputPreview(selectedNodeId, runData);
+  }, [runData, selectedNodeId]);
+
+  const selectedParametersValue = useMemo(() => {
+    const flowNode = selectedNode?.data?.flowNode;
+    if (!flowNode) return null;
+    return {
+      name: flowNode.name,
+      type: flowNode.type,
+      disabled: Boolean(flowNode.disabled),
+      on_error: flowNode.on_error ?? 'stop',
+      parameters: flowNode.parameters ?? {},
+    };
+  }, [selectedNode]);
 
   return (
     <div className="shrink-0 border-t border-[#e2e4e8] bg-[#fbfbfc]" data-testid="flow-logs-panel">
@@ -206,94 +255,180 @@ const FlowLogsPanel: React.FC<{
                 {sortedRunEntries.length === 0 ? (
                   <div className="text-sm text-gray-600">No node results recorded yet for this run.</div>
                 ) : (
-                  <ul className="divide-y divide-[#eceff2] rounded-md border border-[#e8eaed]">
-                    {sortedRunEntries.map(({ nodeId, rec }) => {
-                      const ok = rec.status === 'success';
-                      const label = nodeLabel(nodes, nodeId);
-                      const open = detailsNodeId === nodeId;
-                      const inputPreview = buildNodeInputPreview(nodeId, edges, runData);
-                      const outputPreview = buildNodeOutputPreview(nodeId, runData);
-                      return (
-                        <li key={nodeId} className="bg-white">
-                          <div className="flex items-center gap-2 px-2 py-2 sm:px-3">
-                            <div className="shrink-0">
-                              {ok ? (
-                                <CheckCircleIcon className="h-5 w-5 text-emerald-500" aria-hidden />
-                              ) : (
-                                <ExclamationCircleIcon className="h-5 w-5 text-red-500" aria-hidden />
-                              )}
-                            </div>
-                            <div className="min-w-0 flex-1">
-                              <div className="truncate text-sm font-medium text-gray-900">{label}</div>
-                              <div className="text-xs text-gray-500">
-                                {rec.status ?? '—'} · {formatExecutionMs(rec.execution_time_ms)}
-                                {rec.start_time && (
-                                  <span className="ml-1">· started {formatLocalDate(rec.start_time)}</span>
+                  <div className="grid gap-3 lg:grid-cols-[320px_1fr]">
+                    <div className="min-w-0">
+                      <div className="mb-2 inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
+                        {(['overview', 'details'] as const).map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => setActiveTab(t)}
+                            className={[
+                              'rounded px-2 py-1 font-semibold',
+                              activeTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
+                            ].join(' ')}
+                          >
+                            {t === 'overview' ? 'Overview' : 'Details'}
+                          </button>
+                        ))}
+                      </div>
+
+                      <ul className="divide-y divide-[#eceff2] rounded-md border border-[#e8eaed] bg-white">
+                        {sortedRunEntries.map(({ nodeId, rec }) => {
+                          const ok = rec.status === 'success';
+                          const label = nodeLabel(nodes, nodeId);
+                          const selected = nodeId === selectedNodeId;
+                          return (
+                            <li key={nodeId}>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedNodeId(nodeId);
+                                  setActiveTab('details');
+                                }}
+                                className={[
+                                  'flex w-full items-center gap-2 px-2 py-2 text-left transition sm:px-3',
+                                  selected ? 'bg-gray-100' : 'bg-white hover:bg-gray-50',
+                                ].join(' ')}
+                              >
+                                <div className="shrink-0">
+                                  {ok ? (
+                                    <CheckCircleIcon className="h-5 w-5 text-emerald-500" aria-hidden />
+                                  ) : (
+                                    <ExclamationCircleIcon className="h-5 w-5 text-red-500" aria-hidden />
+                                  )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                  <div className="truncate text-sm font-medium text-gray-900">{label}</div>
+                                  <div className="text-xs text-gray-500">
+                                    {rec.status ?? '—'} · {formatExecutionMs(rec.execution_time_ms)}
+                                    {rec.start_time && (
+                                      <span className="ml-1">· started {formatLocalDate(rec.start_time)}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+
+                    <div className="min-w-0">
+                      {activeTab === 'overview' && (
+                        <div className="rounded-md border border-gray-200 bg-white p-3 text-sm text-gray-600">
+                          Click a node on the left to view run details.
+                        </div>
+                      )}
+
+                      {activeTab === 'details' && (
+                        <div className="rounded-md border border-gray-200 bg-white">
+                          <div className="flex items-center justify-between gap-2 border-b border-[#eceff2] px-3 py-2">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-semibold text-gray-900">
+                                {selectedNodeId ? nodeLabel(nodes, selectedNodeId) : 'Select a node'}
+                              </div>
+                              <div className="mt-0.5 text-[11px] text-gray-500">
+                                {selectedRunEntry?.status ?? '—'}
+                                {selectedRunEntry?.execution_time_ms != null && (
+                                  <span> · {formatExecutionMs(selectedRunEntry.execution_time_ms)}</span>
                                 )}
                               </div>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => setDetailsNodeId(open ? null : nodeId)}
-                              className="shrink-0 rounded border border-[#d8dce3] bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
-                            >
-                              {open ? 'Hide' : 'Details'}
-                            </button>
+
+                            {selectedNodeId && onEditNode && selectedNode && (
+                              <button
+                                type="button"
+                                onClick={() => onEditNode(selectedNodeId)}
+                                className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 shadow-sm hover:bg-gray-50"
+                                title="Edit node"
+                                aria-label="Edit node"
+                              >
+                                <PencilSquareIcon className="h-4 w-4" />
+                                Edit
+                              </button>
+                            )}
                           </div>
-                          {open && (
-                            <div className="grid gap-0 border-t border-[#eceff2] bg-[#fafbfc] sm:grid-cols-2">
-                              <div className="min-w-0 border-[#e8eaed] sm:border-r">
-                                <div className="border-b border-[#eceff2] bg-[#f4f5f6] px-2 py-1.5">
-                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
-                                    Input
-                                  </span>
+
+                          {!selectedNodeId && (
+                            <div className="p-3 text-sm text-gray-600">Select a node to view details.</div>
+                          )}
+
+                          {selectedNodeId && (
+                            <div className="grid gap-0 sm:grid-cols-2">
+                              {!isSelectedTrigger && (
+                                <div className="min-w-0 border-[#e8eaed] sm:border-r">
+                                  <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+                                      Parameters
+                                    </span>
+                                  </div>
+                                  <div className="p-3">
+                                    {selectedParametersValue == null ? (
+                                      <div className="text-sm text-gray-600">No node parameters available.</div>
+                                    ) : (
+                                      <IoViewer
+                                        value={selectedParametersValue}
+                                        dragSource={{ nodeId: selectedNodeId, source: 'nodeInput' }}
+                                        defaultMode="schema"
+                                      />
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="max-h-64 overflow-auto p-2">
-                                  {inputPreview.message && (
-                                    <div className="mb-2 text-xs text-gray-600">{inputPreview.message}</div>
-                                  )}
-                                  {!inputPreview.message && inputPreview.slots.length > 0 && (
-                                    <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-gray-800">
-                                      {JSON.stringify(
-                                        inputPreview.slots.map((s) => ({
-                                          in: s.slot,
-                                          from: s.fromNodeId,
-                                          item: s.payload,
-                                        })),
-                                        null,
-                                        2,
-                                      )}
-                                    </pre>
-                                  )}
-                                </div>
-                              </div>
+                              )}
+
                               <div className="min-w-0">
-                                <div className="border-b border-[#eceff2] bg-[#f4f5f6] px-2 py-1.5">
+                                <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
                                   <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
-                                    Output
+                                    Results
                                   </span>
                                 </div>
-                                <div className="max-h-64 overflow-auto p-2">
-                                  {outputPreview.message && (
-                                    <div className="mb-2 text-xs text-amber-800">{outputPreview.message}</div>
+                                <div className="p-3">
+                                  {selectedOutputPreview?.message && (
+                                    <div className="mb-2 text-sm text-amber-800">{selectedOutputPreview.message}</div>
                                   )}
-                                  {outputPreview.data != null ? (
-                                    <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-gray-800">
-                                      {JSON.stringify(outputPreview.data, null, 2)}
-                                    </pre>
+                                  {selectedOutputPreview?.data != null ? (
+                                    <IoViewer
+                                      value={selectedOutputPreview.data}
+                                      dragSource={{ nodeId: selectedNodeId, source: 'nodeOutput' }}
+                                      defaultMode="table"
+                                    />
                                   ) : (
-                                    !outputPreview.message && (
-                                      <div className="text-xs text-gray-500">No output payload for this node.</div>
+                                    !selectedOutputPreview?.message && (
+                                      <div className="text-sm text-gray-600">No output payload for this node.</div>
                                     )
+                                  )}
+
+                                  {!isSelectedTrigger && selectedInputPreview && (
+                                    <div className="mt-3 border-t border-[#eceff2] pt-3">
+                                      <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+                                        Inputs (wiring)
+                                      </div>
+                                      {selectedInputPreview.message ? (
+                                        <div className="text-sm text-gray-600">{selectedInputPreview.message}</div>
+                                      ) : (
+                                        <pre className="whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed text-gray-800">
+                                          {JSON.stringify(
+                                            selectedInputPreview.slots.map((s) => ({
+                                              in: s.slot,
+                                              from: s.fromNodeId,
+                                              item: s.payload,
+                                            })),
+                                            null,
+                                            2,
+                                          )}
+                                        </pre>
+                                      )}
+                                    </div>
                                   )}
                                 </div>
                               </div>
                             </div>
                           )}
-                        </li>
-                      );
-                    })}
-                  </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 )}
               </>
             )}

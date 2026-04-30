@@ -45,6 +45,7 @@ This doc describes the next set of improvements for the **in-editor Logs panel**
 Notes:
 - The Logs panel should remember the last selected tab for the current execution (local component state is fine).
 - If no node is selected, Details shows an empty state (“Select a node”).
+- Clicking a node in the Overview node list should **select that node and open Details** immediately (no per-row “Details” button).
 
 ### 2) Details layout and viewers (Schema/Table/JSON)
 
@@ -87,7 +88,7 @@ Explicit non-goals:
 
 2. **Implement Overview tab UI**
    - Use the existing node run entry list, but make rows selectable (single selection).
-   - Move per-node “Details” expansion out; selection should drive the Details tab.
+   - Remove per-row “Details” button/expansion; clicking a row should set `selectedNodeId` and switch to the Details tab.
 
 3. **Implement Details tab UI**
    - Compute:

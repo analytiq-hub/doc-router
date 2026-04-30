@@ -9,7 +9,6 @@ import ReactFlow, {
   addEdge,
   getNodesBounds,
   getViewportForBounds,
-  getMarkerEnd,
   MarkerType,
   useNodesInitialized,
   useReactFlow,
@@ -186,7 +185,22 @@ const FlowEditor: React.FC<{
   /** Revision pin data keyed by node id. */
   pinData?: FlowPinData | null;
   onPinDataChange?: (next: FlowPinData | null) => void;
-}> = ({ nodeTypes, nodes, edges, onNodesChange, onEdgesChange, onExecute, executionForIo, pinData, onPinDataChange }) => {
+  /** When set, opens the node config modal for the given node id. */
+  openConfigNodeId?: string | null;
+  onOpenConfigNodeIdChange?: (next: string | null) => void;
+}> = ({
+  nodeTypes,
+  nodes,
+  edges,
+  onNodesChange,
+  onEdgesChange,
+  onExecute,
+  executionForIo,
+  pinData,
+  onPinDataChange,
+  openConfigNodeId,
+  onOpenConfigNodeIdChange,
+}) => {
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [configModalNodeId, setConfigModalNodeId] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -213,6 +227,13 @@ const FlowEditor: React.FC<{
       setConfigModalNodeId(null);
     }
   }, [configModalNodeId, nodes]);
+
+  useEffect(() => {
+    if (!openConfigNodeId) return;
+    if (!nodes.some((n) => n.id === openConfigNodeId)) return;
+    setConfigModalNodeId(openConfigNodeId);
+    onNodesChange(nodes.map((n) => ({ ...n, selected: n.id === openConfigNodeId })));
+  }, [nodes, onNodesChange, openConfigNodeId]);
 
   useEffect(() => {
     if (nodePaletteOpen) {
@@ -622,7 +643,10 @@ const FlowEditor: React.FC<{
 
       <FlowNodeConfigModal
         open={configModalNodeId != null && configRf.node != null}
-        onClose={() => setConfigModalNodeId(null)}
+        onClose={() => {
+          setConfigModalNodeId(null);
+          onOpenConfigNodeIdChange?.(null);
+        }}
         node={configRf.node}
         nodeType={configRf.nodeType}
         allNodes={nodes.map((n) => n.data.flowNode)}
@@ -633,6 +657,7 @@ const FlowEditor: React.FC<{
         onSelectNode={(nodeId) => {
           onNodesChange(nodes.map((n) => ({ ...n, selected: n.id === nodeId })));
           setConfigModalNodeId(nodeId);
+          onOpenConfigNodeIdChange?.(nodeId);
         }}
         onChange={(patch) => {
           if (configModalNodeId) onPatchNodeById(configModalNodeId, patch);
