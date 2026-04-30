@@ -23,6 +23,8 @@ import './flows-canvas.css';
 import { FLOW_RF_LABELED_EDGE_TYPE, flowRfEdgeTypes, flowRfNodeTypes } from './flowRfCanvasTypes';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import { applyExecutionStatusToNodes } from './flowNodeRunStatus';
+import { IconButton, Menu, MenuItem } from '@mui/material';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 
 const FLOW_EDGE_MARKER = { type: MarkerType.ArrowClosed } as const;
 
@@ -45,6 +47,18 @@ function formatDuration(e: FlowExecution) {
   const s = Math.max(0, Math.round((end - start) / 1000));
   if (s < 60) return `${s}s`;
   return `${Math.floor(s / 60)}m ${s % 60}s`;
+}
+
+function downloadJsonFile(filename: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
 }
 
 function FitViewWhenDataChanges({ id }: { id: string }) {
@@ -81,6 +95,7 @@ const FlowExecutionsView: React.FC<{
   const [viewEdges, setViewEdges] = useState<Edge[]>([]);
   const [configModalId, setConfigModalId] = useState<string | null>(null);
   const [fitId, setFitId] = useState('');
+  const [execActionsAnchorEl, setExecActionsAnchorEl] = useState<null | HTMLElement>(null);
 
   const loadList = useCallback(async () => {
     try {
@@ -312,27 +327,46 @@ const FlowExecutionsView: React.FC<{
                 {detail.finished_at && <span> · {formatDuration(detail)}</span>} ·{' '}
                 <span className="font-mono">ID {detail.execution_id}</span>
               </div>
-              {statusRunning(detail) && (
-                <button
-                  type="button"
-                  disabled={stopLoadingId === detail.execution_id}
-                  onClick={(ev) => {
-                    ev.preventDefault();
-                    ev.stopPropagation();
-                    void stopExecution(detail.execution_id);
-                  }}
-                  className={[
-                    'shrink-0 rounded border px-2.5 py-1 text-[11px] font-semibold shadow-sm transition',
-                    stopLoadingId === detail.execution_id
-                      ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
-                      : 'border-red-200 bg-white text-red-700 hover:bg-red-50',
-                  ].join(' ')}
-                  title="Request stop"
-                  aria-label="Stop execution"
+              <div className="flex shrink-0 items-center gap-0.5">
+                <IconButton
+                  size="small"
+                  aria-label="More actions"
+                  onClick={(e) => setExecActionsAnchorEl(e.currentTarget)}
                 >
-                  {stopLoadingId === detail.execution_id ? 'Stopping…' : 'Stop'}
-                </button>
-              )}
+                  <MoreVertIcon fontSize="small" />
+                </IconButton>
+                <Menu anchorEl={execActionsAnchorEl} open={Boolean(execActionsAnchorEl)} onClose={() => setExecActionsAnchorEl(null)}>
+                  <MenuItem
+                    onClick={() => {
+                      setExecActionsAnchorEl(null);
+                      downloadJsonFile(`execution_${flowId}_${detail.execution_id}.json`, detail);
+                    }}
+                  >
+                    Download
+                  </MenuItem>
+                </Menu>
+                {statusRunning(detail) && (
+                  <button
+                    type="button"
+                    disabled={stopLoadingId === detail.execution_id}
+                    onClick={(ev) => {
+                      ev.preventDefault();
+                      ev.stopPropagation();
+                      void stopExecution(detail.execution_id);
+                    }}
+                    className={[
+                      'shrink-0 rounded border px-2.5 py-1 text-[11px] font-semibold shadow-sm transition',
+                      stopLoadingId === detail.execution_id
+                        ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+                        : 'border-red-200 bg-white text-red-700 hover:bg-red-50',
+                    ].join(' ')}
+                    title="Request stop"
+                    aria-label="Stop execution"
+                  >
+                    {stopLoadingId === detail.execution_id ? 'Stopping…' : 'Stop'}
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         )}

@@ -24,6 +24,18 @@ function tabFromQuery(value: string | null): FlowCanvasView {
   return value === 'executions' ? 'executions' : 'editor';
 }
 
+function downloadBlobJson(filename: string, data: unknown) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export default function FlowDetailPageClient({
   organizationId,
   flowId,
@@ -156,6 +168,15 @@ export default function FlowDetailPageClient({
         const triggerType = nts.items.find((x) => x.is_trigger)?.key ?? 'flows.trigger.manual';
         const triggerLabel = nts.items.find((x) => x.key === triggerType)?.label ?? 'Manual Trigger';
         const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : 't1';
+        const triggerParams =
+          triggerType === 'flows.trigger.manual'
+            ? {
+                payload: [
+                  { name: 'First item', code: 1 },
+                  { name: 'Second item', code: 2 },
+                ],
+              }
+            : {};
         const blank: FlowRevision = {
           flow_revid: '',
           flow_id: flowId,
@@ -167,7 +188,7 @@ export default function FlowDetailPageClient({
               name: triggerLabel,
               type: triggerType,
               position: [120, 120],
-              parameters: {},
+              parameters: triggerParams,
               disabled: false,
               on_error: 'stop',
               notes: null,
@@ -254,6 +275,21 @@ export default function FlowDetailPageClient({
     }
   }, [api, flowId, latestFlowRevid]);
 
+  const onDownloadFlowJson = useCallback(async () => {
+    const rid = (revision?.flow_revid ?? latestFlowRevid ?? '').trim();
+    if (!rid) {
+      setMessage('Save the flow once to download Flow JSON.');
+      return;
+    }
+    try {
+      setMessage('');
+      const revDoc = await api.getRevision(flowId, rid);
+      downloadBlobJson(`flow_${flowId}_${rid}.json`, revDoc);
+    } catch (err: unknown) {
+      setMessage(err instanceof Error ? err.message : 'Failed to download Flow JSON');
+    }
+  }, [api, flowId, latestFlowRevid, revision?.flow_revid]);
+
   const onActivate = useCallback(async () => {
     try {
       setMessage('');
@@ -310,6 +346,7 @@ export default function FlowDetailPageClient({
                 onRun={onRun}
                 onActivate={onActivate}
                 onDeactivate={onDeactivate}
+                onDownloadFlowJson={() => void onDownloadFlowJson()}
               />
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <PanelGroup

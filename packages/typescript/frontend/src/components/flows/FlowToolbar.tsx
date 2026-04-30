@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState } from 'react';
+import { IconButton, Menu, MenuItem } from '@mui/material';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import FlowStatusBadge from './FlowStatusBadge';
 import { flowInlineNameInputClass, flowInlineNameMeasureClass, flowInlineNameReadClass } from './flowUiClasses';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
@@ -20,9 +22,22 @@ const FlowToolbar: React.FC<{
   onRun: () => void;
   onActivate: () => void;
   onDeactivate: () => void;
-}> = ({ name, onNameChange, active, isDirty, isSaving, onSave, onRun, onActivate, onDeactivate }) => {
+  onDownloadFlowJson: () => void;
+}> = ({
+  name,
+  onNameChange,
+  active,
+  isDirty,
+  isSaving,
+  onSave,
+  onRun,
+  onActivate,
+  onDeactivate,
+  onDownloadFlowJson,
+}) => {
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
+  const [flowActionsAnchorEl, setFlowActionsAnchorEl] = useState<null | HTMLElement>(null);
   const showNameField = nameHover || nameFocus;
   const measure = useInlineNameWidthPx(name, 'Flow name');
 
@@ -68,6 +83,25 @@ const FlowToolbar: React.FC<{
         {isDirty && <div className="shrink-0 text-xs text-amber-700">Unsaved changes</div>}
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        <>
+          <IconButton size="small" aria-label="More actions" onClick={(e) => setFlowActionsAnchorEl(e.currentTarget)}>
+            <MoreVertIcon fontSize="small" />
+          </IconButton>
+          <Menu
+            anchorEl={flowActionsAnchorEl}
+            open={Boolean(flowActionsAnchorEl)}
+            onClose={() => setFlowActionsAnchorEl(null)}
+          >
+            <MenuItem
+              onClick={() => {
+                setFlowActionsAnchorEl(null);
+                onDownloadFlowJson();
+              }}
+            >
+              Download
+            </MenuItem>
+          </Menu>
+        </>
         <button type="button" className={flowToolbarBtnClass} onClick={onSave} disabled={!isDirty || isSaving}>
           {isSaving ? 'Saving…' : 'Save'}
         </button>

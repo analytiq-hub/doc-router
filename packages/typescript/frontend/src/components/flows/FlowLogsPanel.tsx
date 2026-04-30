@@ -12,6 +12,8 @@ import type { FlowRfNodeData } from './flowRf';
 import { buildNodeInputPreview, buildNodeOutputPreview } from './flowNodeIoPreview';
 import { IoViewer } from './IoViewer';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
+import { IconButton, Menu, MenuItem } from '@mui/material';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 
 function isRunning(e: FlowExecution) {
   return e.status === 'queued' || e.status === 'running';
@@ -78,6 +80,7 @@ const FlowLogsPanel: React.FC<{
   const [activeTab, setActiveTab] = useState<LogsTab>('overview');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [ioTab, setIoTab] = useState<'input' | 'output'>('output');
+  const [downloadAnchorEl, setDownloadAnchorEl] = useState<null | HTMLElement>(null);
   const [nodeSplitLeftPct, setNodeSplitLeftPct] = useState<number>(() => {
     if (typeof window === 'undefined') return 32;
     const raw = window.localStorage.getItem(NODE_SPLIT_STORAGE_KEY);
@@ -101,6 +104,28 @@ const FlowLogsPanel: React.FC<{
 
   const [err, setErr] = useState<string>('');
   const [loading, setLoading] = useState(false);
+
+  const downloadJson = (filename: string, data: unknown) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const onDownloadExecutionJson = useCallback(() => {
+    if (!execution) return;
+    try {
+      setErr('');
+      downloadJson(`execution_${flowId}_${execution.execution_id}.json`, execution);
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'Failed to download execution JSON');
+    }
+  }, [execution, flowId]);
 
   const load = useCallback(
     async (id: string) => {
@@ -232,6 +257,31 @@ const FlowLogsPanel: React.FC<{
           )}
         </button>
         <div className="flex shrink-0 items-center gap-0.5">
+          {execution && (
+            <>
+              <IconButton
+                size="small"
+                aria-label="More actions"
+                onClick={(e) => setDownloadAnchorEl(e.currentTarget)}
+              >
+                <MoreVertIcon fontSize="small" />
+              </IconButton>
+              <Menu
+                anchorEl={downloadAnchorEl}
+                open={Boolean(downloadAnchorEl)}
+                onClose={() => setDownloadAnchorEl(null)}
+              >
+                <MenuItem
+                  onClick={() => {
+                    setDownloadAnchorEl(null);
+                    onDownloadExecutionJson();
+                  }}
+                >
+                  Download
+                </MenuItem>
+              </Menu>
+            </>
+          )}
           {(execution || focusExecutionId) && (
             <button
               type="button"
