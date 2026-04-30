@@ -230,10 +230,14 @@ const FlowEditor: React.FC<{
 
   useEffect(() => {
     if (!openConfigNodeId) return;
+    if (configModalNodeId === openConfigNodeId) return;
     if (!nodes.some((n) => n.id === openConfigNodeId)) return;
     setConfigModalNodeId(openConfigNodeId);
-    onNodesChange(nodes.map((n) => ({ ...n, selected: n.id === openConfigNodeId })));
-  }, [nodes, onNodesChange, openConfigNodeId]);
+    const alreadySelected = nodes.some((n) => n.id === openConfigNodeId && n.selected);
+    if (!alreadySelected) {
+      onNodesChange(nodes.map((n) => ({ ...n, selected: n.id === openConfigNodeId })));
+    }
+  }, [configModalNodeId, nodes, onNodesChange, openConfigNodeId]);
 
   useEffect(() => {
     if (nodePaletteOpen) {
