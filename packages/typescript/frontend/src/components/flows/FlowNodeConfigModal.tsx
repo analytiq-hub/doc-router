@@ -380,7 +380,7 @@ const FlowNodeConfigModal: React.FC<{
                 </>
               )}
 
-              <Panel defaultSize={isTrigger ? 58 : 42} minSize={28} className="min-w-[320px]">
+              <Panel defaultSize={isTrigger ? 67 : 42} minSize={28} className="min-w-[320px]">
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                   <TabGroup selectedIndex={tab} onChange={setTab} className="flex min-h-0 flex-1 flex-col">
                     <div className="shrink-0 border-b border-[#eceff2] bg-white px-1">
