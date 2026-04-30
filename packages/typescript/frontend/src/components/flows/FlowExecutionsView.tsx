@@ -104,7 +104,7 @@ const FlowExecutionsView: React.FC<{
     if (!autoRefresh || !anyActive) return;
     const n = setInterval(() => {
       void loadList();
-    }, 1000);
+    }, 3000);
     return () => clearInterval(n);
   }, [anyActive, autoRefresh, loadList]);
 
