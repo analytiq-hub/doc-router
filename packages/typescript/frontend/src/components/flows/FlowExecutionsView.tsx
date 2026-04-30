@@ -6,6 +6,7 @@ import ReactFlow, {
   BackgroundVariant,
   Controls,
   MarkerType,
+  Panel as RFPanel,
   useReactFlow,
   type Edge,
   type Node,
@@ -428,75 +429,78 @@ const FlowExecutionsView: React.FC<{
             }}
           >
             <Panel defaultSize={100 - EXEC_LOGS_COLLAPSED_PCT} minSize={25} className="min-h-0 min-w-0">
-              <div className="relative h-full min-h-0 min-w-0 flex flex-col">
-                {detailLoading && (
-                  <div className="absolute left-0 right-0 top-0 z-20 flex h-8 items-center justify-center border-b border-amber-200/80 bg-amber-50/90 text-xs text-amber-900">
-                    Loading run…
-                  </div>
-                )}
-                {detail && (
-                  <div className="absolute left-0 right-0 top-0 z-10 border-b border-[#eceff2] bg-white/90 px-3 py-1.5 text-xs text-gray-600 backdrop-blur-sm">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <span className="font-medium text-gray-800">{formatLocalDate(detail.started_at)}</span> · {detail.status}
-                        {detail.finished_at && <span> · {formatDuration(detail)}</span>} ·{' '}
-                        <span className="font-mono">ID {detail.execution_id}</span>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-0.5">
-                        {statusRunning(detail) && (
-                          <button
-                            type="button"
-                            disabled={stopLoadingId === detail.execution_id}
-                            onClick={(ev) => {
-                              ev.preventDefault();
-                              ev.stopPropagation();
-                              void stopExecution(detail.execution_id);
-                            }}
-                            className={[
-                              'shrink-0 rounded border px-2.5 py-1 text-[11px] font-semibold shadow-sm transition',
-                              stopLoadingId === detail.execution_id
-                                ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
-                                : 'border-red-200 bg-white text-red-700 hover:bg-red-50',
-                            ].join(' ')}
-                            title="Request stop"
-                            aria-label="Stop execution"
-                          >
-                            {stopLoadingId === detail.execution_id ? 'Stopping…' : 'Stop'}
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
+              <div className="relative flex h-full min-h-0 min-w-0 flex-col bg-[#f7f7f9]">
                 {!selectedId && !listLoading && (
-                  <div className="absolute inset-0 z-[5] flex items-center justify-center bg-[#f7f7f9] text-sm text-gray-500">
+                  <div className="pointer-events-none absolute inset-0 z-[5] flex items-center justify-center bg-[#f7f7f9] text-sm text-gray-500">
                     Select a run
                   </div>
                 )}
-
-                <div className="flex min-h-0 min-w-0 flex-1 bg-[#f7f7f9] pt-8">
-                  <ReactFlow
-                    className="h-full w-full min-h-0"
-                    nodes={viewNodes as Node<FlowRfNodeData>[]}
-                    edges={canvasEdges}
-                    nodeTypes={flowRfNodeTypes}
-                    edgeTypes={flowRfEdgeTypes}
-                    nodesConnectable={false}
-                    elementsSelectable
-                    onNodeDoubleClick={onNodeDoubleClick}
-                    nodesDraggable={false}
-                    proOptions={RF_EXEC_VIEW_PRO_OPTIONS}
-                    minZoom={0.15}
-                    maxZoom={1.5}
-                    defaultEdgeOptions={RF_EXEC_VIEW_DEFAULT_EDGE_OPTIONS}
-                    fitView
-                    fitViewOptions={RF_EXEC_VIEW_FIT_OPTIONS}
-                  >
-                    <FitViewWhenDataChanges id={fitId} />
-                    <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />
-                    <Controls className="!shadow-md" position="bottom-left" showFitView showInteractive={false} />
-                  </ReactFlow>
-                </div>
+                <ReactFlow
+                  className="h-full w-full flex-1 min-h-0"
+                  nodes={viewNodes as Node<FlowRfNodeData>[]}
+                  edges={canvasEdges}
+                  nodeTypes={flowRfNodeTypes}
+                  edgeTypes={flowRfEdgeTypes}
+                  nodesConnectable={false}
+                  elementsSelectable
+                  onNodeDoubleClick={onNodeDoubleClick}
+                  nodesDraggable={false}
+                  proOptions={RF_EXEC_VIEW_PRO_OPTIONS}
+                  minZoom={0.15}
+                  maxZoom={1.5}
+                  defaultEdgeOptions={RF_EXEC_VIEW_DEFAULT_EDGE_OPTIONS}
+                  fitView
+                  fitViewOptions={RF_EXEC_VIEW_FIT_OPTIONS}
+                >
+                  {selectedId && detailLoading ? (
+                    <RFPanel
+                      position="top-left"
+                      className="!z-[30] !left-0 !right-0 !top-0 !m-0 !w-auto rounded-none border-0 border-b border-amber-200/80 bg-amber-50 px-3 py-1.5 text-center text-xs text-amber-900"
+                    >
+                      Loading run…
+                    </RFPanel>
+                  ) : null}
+                  {selectedId && !detailLoading && detail ? (
+                    <RFPanel
+                      position="top-left"
+                      className="!z-[30] !left-0 !right-0 !top-0 !m-0 !max-w-none !w-auto rounded-none border-0 bg-[#f7f7f9] px-3 py-1.5 text-xs text-gray-600 shadow-none"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="m-0 min-w-0 leading-snug break-words">
+                          <span className="font-medium text-gray-800">{formatLocalDate(detail.started_at)}</span> · {detail.status}
+                          {detail.finished_at && <span> · {formatDuration(detail)}</span>} ·{' '}
+                          <span className="font-mono text-[11px] text-gray-700">ID {detail.execution_id}</span>
+                        </p>
+                        <div className="flex shrink-0 items-center gap-0.5 self-start pt-px">
+                          {statusRunning(detail) && (
+                            <button
+                              type="button"
+                              disabled={stopLoadingId === detail.execution_id}
+                              onClick={(ev) => {
+                                ev.preventDefault();
+                                ev.stopPropagation();
+                                void stopExecution(detail.execution_id);
+                              }}
+                              className={[
+                                'shrink-0 rounded border px-2.5 py-1 text-[11px] font-semibold shadow-sm transition',
+                                stopLoadingId === detail.execution_id
+                                  ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+                                  : 'border-red-200 bg-white text-red-700 hover:bg-red-50',
+                              ].join(' ')}
+                              title="Request stop"
+                              aria-label="Stop execution"
+                            >
+                              {stopLoadingId === detail.execution_id ? 'Stopping…' : 'Stop'}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </RFPanel>
+                  ) : null}
+                  <FitViewWhenDataChanges id={fitId} />
+                  <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />
+                  <Controls className="!shadow-md" position="bottom-left" showFitView showInteractive={false} />
+                </ReactFlow>
               </div>
             </Panel>
             {execLogsExpanded ? (
