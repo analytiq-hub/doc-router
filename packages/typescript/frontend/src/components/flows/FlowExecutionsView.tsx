@@ -24,8 +24,6 @@ import { FLOW_RF_LABELED_EDGE_TYPE, flowRfEdgeTypes, flowRfNodeTypes } from './f
 import FlowLogsPanel from './FlowLogsPanel';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import { applyExecutionStatusToNodes } from './flowNodeRunStatus';
-import { IconButton, Menu, MenuItem } from '@mui/material';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelGroupHandle } from 'react-resizable-panels';
 
 const FLOW_EDGE_MARKER = { type: MarkerType.ArrowClosed } as const;
@@ -90,18 +88,6 @@ function formatDuration(e: FlowExecution) {
   return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
-function downloadJsonFile(filename: string, data: unknown) {
-  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
 function FitViewWhenDataChanges({ id }: { id: string }) {
   const { fitView } = useReactFlow();
   useEffect(() => {
@@ -139,7 +125,6 @@ const FlowExecutionsView: React.FC<{
   const [viewEdges, setViewEdges] = useState<Edge[]>([]);
   const [configModalId, setConfigModalId] = useState<string | null>(null);
   const [fitId, setFitId] = useState('');
-  const [execActionsAnchorEl, setExecActionsAnchorEl] = useState<null | HTMLElement>(null);
   const executionsSplitRef = useRef<ImperativePanelGroupHandle | null>(null);
   const execLogsPanelGroupRef = useRef<ImperativePanelGroupHandle | null>(null);
   const [execLogsExpanded, setExecLogsExpanded] = useState(false);
@@ -458,23 +443,6 @@ const FlowExecutionsView: React.FC<{
                         <span className="font-mono">ID {detail.execution_id}</span>
                       </div>
                       <div className="flex shrink-0 items-center gap-0.5">
-                        <IconButton
-                          size="small"
-                          aria-label="More actions"
-                          onClick={(e) => setExecActionsAnchorEl(e.currentTarget)}
-                        >
-                          <MoreVertIcon fontSize="small" />
-                        </IconButton>
-                        <Menu anchorEl={execActionsAnchorEl} open={Boolean(execActionsAnchorEl)} onClose={() => setExecActionsAnchorEl(null)}>
-                          <MenuItem
-                            onClick={() => {
-                              setExecActionsAnchorEl(null);
-                              downloadJsonFile(`execution_${flowId}_${detail.execution_id}.json`, detail);
-                            }}
-                          >
-                            Download
-                          </MenuItem>
-                        </Menu>
                         {statusRunning(detail) && (
                           <button
                             type="button"
