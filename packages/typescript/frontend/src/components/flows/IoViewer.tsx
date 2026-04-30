@@ -187,12 +187,14 @@ export const IoViewer: React.FC<{
               key={m}
               type="button"
               onClick={() => setMode(m)}
+              title={m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : 'JSON'}
+              aria-label={m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : 'JSON'}
               className={[
-                'rounded px-2 py-1 font-semibold',
+                'rounded px-2 py-1 text-[10px] font-semibold leading-none',
                 mode === m ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
               ].join(' ')}
             >
-              {m.toUpperCase()}
+              {m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : 'JSON'}
             </button>
           ))}
         </div>
