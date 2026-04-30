@@ -259,7 +259,7 @@ export const IoViewer: React.FC<{
           <Editor
             height="360px"
             language="json"
-            value={stringifyJson(sample)}
+            value={stringifyJson(value)}
             options={{
               minimap: { enabled: false },
               fontSize: 11,
