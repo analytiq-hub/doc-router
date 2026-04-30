@@ -305,6 +305,122 @@ async def test_run_flow_executes_code_node() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_flow_code_emits_multiple_items_and_branch_maps_string_equals() -> None:
+    """Code returns two dicts while branch `equals` is a UI string (`"1"`) matching numeric `code` (1)."""
+
+    python_code = (
+        "def run(items, context):\n"
+        "    return [\n"
+        '        {\"name\": \"First item\", \"code\": 1},\n'
+        '        {\"name\": \"Second item\", \"code\": 2},\n'
+        "    ]\n"
+    )
+
+    nodes = [
+        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {"payload": []}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
+        {
+            "id": "c1",
+            "name": "Code",
+            "type": "flows.code",
+            "position": [100, 0],
+            "parameters": {"python_code": python_code, "timeout_seconds": 2},
+            "webhook_id": None,
+            "disabled": False,
+            "on_error": "stop",
+            "retry_on_fail": False,
+            "max_tries": 1,
+            "wait_between_tries_ms": 1000,
+            "notes": None,
+        },
+        {
+            "id": "b1",
+            "name": "Branch",
+            "type": "flows.branch",
+            "position": [200, 0],
+            "parameters": {"field": "code", "equals": "1"},
+            "webhook_id": None,
+            "disabled": False,
+            "on_error": "stop",
+            "retry_on_fail": False,
+            "max_tries": 1,
+            "wait_between_tries_ms": 1000,
+            "notes": None,
+        },
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="c1", connection_type="main", index=0)]]},
+        "c1": {"main": [[ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0)]]},
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(context=ctx, revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": None})
+    assert res["status"] == "success"
+    code_out = ctx.run_data["c1"]["data"]["main"][0]
+    assert len(code_out) == 2
+    br = ctx.run_data["b1"]["data"]["main"]
+    assert [len(br[0]), len(br[1])] == [1, 1]
+    assert br[0][0].json["name"] == "First item"
+    assert br[1][0].json["name"] == "Second item"
+
+
+@pytest.mark.asyncio
+async def test_run_flow_code_batches_all_upstream_items_in_one_execute() -> None:
+    """`flows.code` must see every upstream item list in one `run()` call — not invoke once per item."""
+
+    python_code = (
+        "def run(items, context):\n"
+        "    assert len(items) == 2, len(items)\n"
+        '    return [{\"tag\": \"a\"}, {\"tag\": \"b\"}]\n'
+    )
+    nodes = [
+        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {"payload": [{"i": 0}, {"i": 1}]}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
+        {
+            "id": "c1",
+            "name": "Code",
+            "type": "flows.code",
+            "position": [100, 0],
+            "parameters": {"python_code": python_code, "timeout_seconds": 2},
+            "webhook_id": None,
+            "disabled": False,
+            "on_error": "stop",
+            "retry_on_fail": False,
+            "max_tries": 1,
+            "wait_between_tries_ms": 1000,
+            "notes": None,
+        },
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="c1", connection_type="main", index=0)]]},
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={"type": "manual"},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(context=ctx, revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": None})
+    assert res["status"] == "success"
+    out_items = ctx.run_data["c1"]["data"]["main"][0]
+    assert len(out_items) == 2
+
+
+@pytest.mark.asyncio
 async def test_run_flow_branch_and_merge_flush_when_one_branch_skipped() -> None:
     """
     Branch emits empty list on one output => that path is skipped.

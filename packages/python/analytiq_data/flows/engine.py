@@ -343,9 +343,10 @@ async def _execute_loop(
                 elif all(len(slot) == 0 for slot in wi.inputs):
                     out_lists = _empty_outputs(outputs_count)
                     status = "skipped"
-                elif node_type.is_merge:
-                    # Merge nodes resolve expressions once per node execution. Provide an n8n-ish
-                    # `$input` object containing all items across input slots.
+                elif node_type.is_merge or bool(getattr(node_type, "batch_execute_inputs", False)):
+                    # Batch nodes (`is_merge`, or types with batch_execute_inputs): resolve expressions
+                    # once per node execution. Provide an n8n-ish `$input` object containing all items
+                    # across input slots (see `materialize_input_context`).
                     resolved_node = {
                         **node,
                         "parameters": ad.flows.resolve_parameters(

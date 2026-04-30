@@ -4,6 +4,8 @@ import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
 import { BookmarkIcon, PencilSquareIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor from '@monaco-editor/react';
+import { IconButton, Menu, MenuItem } from '@mui/material';
+import MoreVertIcon from '@mui/icons-material/MoreVert';
 import type { Edge } from 'reactflow';
 import type { FlowNode, FlowNodeType, FlowPinData, FlowPinItem, FlowPinNodeOutput } from '@docrouter/sdk';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
@@ -102,6 +104,7 @@ const FlowNodeConfigModal: React.FC<{
   const [selectedInputNodeId, setSelectedInputNodeId] = useState<string>('');
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
+  const [nodeActionsAnchorEl, setNodeActionsAnchorEl] = useState<null | HTMLElement>(null);
   const [inputIoMode, setInputIoMode] = useState<'schema' | 'table' | 'json'>('schema');
   const [outputIoMode, setOutputIoMode] = useState<'schema' | 'table' | 'json'>('table');
   const measure = useInlineNameWidthPx(node?.name ?? '', 'Node name');
@@ -226,6 +229,18 @@ const FlowNodeConfigModal: React.FC<{
   const typeLabel = nodeType?.label ?? node.type;
   const showNameField = !readOnly && (nameHover || nameFocus);
 
+  const downloadJson = (filename: string, data: unknown) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <Dialog open={open} onClose={onClose} className="relative z-[200]">
       <DialogBackdrop
@@ -275,14 +290,37 @@ const FlowNodeConfigModal: React.FC<{
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="shrink-0 rounded-md p-1.5 text-gray-500 transition hover:bg-gray-100"
-              aria-label="Close"
-            >
-              <XMarkIcon className="h-5 w-5" />
-            </button>
+            <div className="flex shrink-0 items-center gap-0.5">
+              <IconButton
+                size="small"
+                aria-label="More actions"
+                onClick={(e) => setNodeActionsAnchorEl(e.currentTarget)}
+              >
+                <MoreVertIcon fontSize="small" />
+              </IconButton>
+              <Menu
+                anchorEl={nodeActionsAnchorEl}
+                open={Boolean(nodeActionsAnchorEl)}
+                onClose={() => setNodeActionsAnchorEl(null)}
+              >
+                <MenuItem
+                  onClick={() => {
+                    setNodeActionsAnchorEl(null);
+                    downloadJson(`node_${node.id}.json`, node);
+                  }}
+                >
+                  Download
+                </MenuItem>
+              </Menu>
+              <button
+                type="button"
+                onClick={onClose}
+                className="shrink-0 rounded-md p-1.5 text-gray-500 transition hover:bg-gray-100"
+                aria-label="Close"
+              >
+                <XMarkIcon className="h-5 w-5" />
+              </button>
+            </div>
           </div>
           <DialogTitle className="sr-only">
             {typeLabel} — {node.name}

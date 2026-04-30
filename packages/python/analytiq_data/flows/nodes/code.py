@@ -16,6 +16,10 @@ class FlowsCodeNode:
 
         def run(items: list[dict], context: dict) -> list[dict]:
             ...
+
+    The engine calls this once per scheduling step with the full list of
+    incoming FlowItems per input slot (`batch_execute_inputs`), unlike nodes
+    that resolve parameters once per row.
     """
 
     key = "flows.code"
@@ -28,6 +32,9 @@ class FlowsCodeNode:
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    #: When True, ``engine._execute_loop`` invokes ``execute()`` once per work item
+    #: with ``inputs`` containing all queued items per slot (n8n-style batch).
+    batch_execute_inputs: bool = True
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {

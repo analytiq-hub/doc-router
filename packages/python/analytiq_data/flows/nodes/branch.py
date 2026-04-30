@@ -7,6 +7,21 @@ from typing import Any
 import analytiq_data as ad
 
 
+def _branch_field_equals(actual: Any, expected: Any) -> bool:
+    """Loose equality for branch conditions (handles JSON numeric vs string from UIs/API)."""
+
+    if actual == expected:
+        return True
+    try:
+        if isinstance(actual, (int, float)) and isinstance(expected, str):
+            return float(actual) == float(expected)
+        if isinstance(actual, str) and isinstance(expected, (int, float)):
+            return float(actual) == float(expected)
+    except (TypeError, ValueError):
+        return False
+    return False
+
+
 class FlowsBranchNode:
     """Route each input item to either the `true` or `false` output slot."""
 
@@ -51,7 +66,8 @@ class FlowsBranchNode:
         true_items: list["ad.flows.FlowItem"] = []
         false_items: list["ad.flows.FlowItem"] = []
         for it in inputs[0]:
-            if it.json.get(field) == equals:
+            actual = it.json.get(field)
+            if _branch_field_equals(actual, equals):
                 true_items.append(it)
             else:
                 false_items.append(it)
