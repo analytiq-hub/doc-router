@@ -36,7 +36,7 @@ import { XMarkIcon } from '@heroicons/react/24/solid';
 import 'reactflow/dist/style.css';
 import './flows-canvas.css';
 
-import type { FlowExecution, FlowNode, FlowNodeType } from '@docrouter/sdk';
+import type { FlowExecution, FlowNode, FlowNodeType, FlowPinData } from '@docrouter/sdk';
 import FlowNodePalette from './FlowNodePalette';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import { FLOW_RF_LABELED_EDGE_TYPE, flowRfEdgeTypes, flowRfNodeTypes } from './flowRfCanvasTypes';
@@ -184,8 +184,8 @@ const FlowEditor: React.FC<{
   /** Latest execution to drive Input / Output columns in the node modal (e.g. from logs panel). */
   executionForIo?: FlowExecution | null;
   /** Revision pin data keyed by node id. */
-  pinData?: Record<string, unknown> | null;
-  onPinDataChange?: (next: Record<string, unknown> | null) => void;
+  pinData?: FlowPinData | null;
+  onPinDataChange?: (next: FlowPinData | null) => void;
 }> = ({ nodeTypes, nodes, edges, onNodesChange, onEdgesChange, onExecute, executionForIo, pinData, onPinDataChange }) => {
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [configModalNodeId, setConfigModalNodeId] = useState<string | null>(null);
@@ -199,12 +199,11 @@ const FlowEditor: React.FC<{
 
   const nodesWithPinnedFlag = useMemo(() => {
     // Keep node identity stable; only enrich the `data` payload for rendering.
-    const pd = (pinData && typeof pinData === 'object') ? (pinData as Record<string, unknown>) : null;
     return nodes.map((n) => ({
       ...n,
       data: {
         ...n.data,
-        pinned: Boolean(pd?.[n.id]),
+        pinned: Boolean(pinData?.[n.id]),
       },
     }));
   }, [nodes, pinData]);

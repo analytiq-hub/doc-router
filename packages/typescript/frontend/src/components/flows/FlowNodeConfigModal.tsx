@@ -5,7 +5,7 @@ import { BookmarkIcon, PencilSquareIcon, TrashIcon, XMarkIcon } from '@heroicons
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor from '@monaco-editor/react';
 import type { Edge } from 'reactflow';
-import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
+import type { FlowNode, FlowNodeType, FlowPinData, FlowPinItem, FlowPinNodeOutput } from '@docrouter/sdk';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
 import { buildNodeInputPreview } from './flowNodeIoPreview';
 import { IoViewer } from './IoViewer';
@@ -32,9 +32,6 @@ const IoBlock: React.FC<{
   </div>
 );
 
-type FlowPinNodeOutput = { main: Array<Array<{ json: unknown }> | null> };
-type FlowPinData = Record<string, FlowPinNodeOutput>;
-
 const VariablesAndContext: React.FC = () => {
   return (
     <div className="mb-3 rounded-md border border-gray-200 bg-white">
@@ -58,19 +55,19 @@ function safeParseJson(text: string): { ok: true; value: unknown } | { ok: false
   }
 }
 
-function nodeItemsFromRunData(runData: Record<string, unknown> | null | undefined, nodeId: string): Array<{ json: unknown }> | null {
+function nodeItemsFromRunData(runData: Record<string, unknown> | null | undefined, nodeId: string): FlowPinItem[] | null {
   if (!runData) return null;
   const rec = runData[nodeId] as { data?: { main?: Array<Array<{ json?: unknown } | null> | null> } } | undefined;
   const lane0 = rec?.data?.main?.[0];
   if (!Array.isArray(lane0)) return null;
-  const items: Array<{ json: unknown }> = [];
+  const items: FlowPinItem[] = [];
   for (const it of lane0) {
     if (it && typeof it === 'object' && 'json' in it) items.push({ json: (it as { json?: unknown }).json ?? null });
   }
   return items;
 }
 
-function pinNodeOutputFromItems(items: Array<{ json: unknown }>): FlowPinNodeOutput {
+function pinNodeOutputFromItems(items: FlowPinItem[]): FlowPinNodeOutput {
   return { main: [[...items.map((i) => ({ json: i.json }))]] };
 }
 
@@ -82,8 +79,8 @@ const FlowNodeConfigModal: React.FC<{
   allNodes?: FlowNode[];
   edges: Edge[];
   runData: Record<string, unknown> | null | undefined;
-  pinData?: Record<string, unknown> | null;
-  onPinDataChange?: (next: Record<string, unknown> | null) => void;
+  pinData?: FlowPinData | null;
+  onPinDataChange?: (next: FlowPinData | null) => void;
   onChange: (patch: Partial<FlowNode>) => void;
   onSelectNode?: (nodeId: string) => void;
   readOnly?: boolean;
@@ -130,10 +127,7 @@ const FlowNodeConfigModal: React.FC<{
     return { ...base, slots: filteredSlots };
   }, [node, edges, runData, selectedInputNodeId]);
 
-  const typedPinData = useMemo(() => {
-    if (!pinData || typeof pinData !== 'object') return null;
-    return pinData as FlowPinData;
-  }, [pinData]);
+  const typedPinData = useMemo(() => pinData ?? null, [pinData]);
 
   const pinnedForNode = nodeId ? (typedPinData?.[nodeId] ?? null) : null;
   const pinnedItems = useMemo(() => {
