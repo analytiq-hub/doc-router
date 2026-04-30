@@ -311,6 +311,11 @@ async def _execute_loop(
         node = nodes_by_id[wi.node_id]
         node_type = ad.flows.get(node["type"])
         outputs_count = node_type.outputs
+        _execution_refs = {
+            "execution_id": context.execution_id,
+            "flow_id": context.flow_id,
+            "flow_revid": context.flow_revid,
+        }
 
         start = time.time()
         start_datetime = datetime.now(UTC)
@@ -333,6 +338,7 @@ async def _execute_loop(
                             item=None,
                             run_data=context.run_data,
                             input_context=ad.flows.materialize_input_context([]),
+                            execution_refs=_execution_refs,
                         ),
                     }
                     out_lists = await node_type.execute(context, resolved_node, [])
@@ -354,6 +360,7 @@ async def _execute_loop(
                             item=None,
                             run_data=context.run_data,
                             input_context=ad.flows.materialize_input_context(wi.inputs),
+                            execution_refs=_execution_refs,
                         ),
                     }
                     out_lists = await node_type.execute(context, resolved_node, wi.inputs)
@@ -375,6 +382,7 @@ async def _execute_loop(
                                     input_context=ad.flows.materialize_input_context(
                                         wi.inputs, input_index=slot_idx, item_index=item_idx
                                     ),
+                                    execution_refs=_execution_refs,
                                 ),
                             }
                             per_inputs = [[] for _ in range(len(wi.inputs))]

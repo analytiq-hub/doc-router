@@ -406,6 +406,35 @@ def test_rewrite_vars_does_not_touch_string_literals() -> None:
     assert rewritten == "'$json' + _json['x']"
 
 
+def test_rewrite_vars_execution_tokens_longest_first() -> None:
+    rewritten = ad.flows.expressions._rewrite_vars("$execution_id == $execution['flow_id']")
+    assert rewritten == "_execution['execution_id'] == _execution['flow_id']"
+
+
+def test_rewrite_vars_execution_time_before_execution_object() -> None:
+    rewritten = ad.flows.expressions._rewrite_vars("$execution_time == $execution['flow_id']")
+    assert rewritten == "_execution_time == _execution['flow_id']"
+
+
+def test_rewrite_vars_start_time() -> None:
+    assert ad.flows.expressions._rewrite_vars("$start_time") == "_start_time"
+
+
+def test_materialize_node_data_preserves_timing_fields() -> None:
+    rd = {
+        "n1": {
+            "status": "success",
+            "start_time": "2026-04-30T23:26:46.907441+00:00",
+            "execution_time_ms": 52,
+            "data": {"main": [[]]},
+        },
+    }
+    m = ad.flows.expressions.materialize_node_data(rd)
+    assert m["n1"]["status"] == "success"
+    assert m["n1"]["start_time"] == "2026-04-30T23:26:46.907441+00:00"
+    assert m["n1"]["execution_time_ms"] == 52
+
+
 @pytest.mark.asyncio
 async def test_expressions_resolve_per_item_including_binary() -> None:
     nodes = [
@@ -437,4 +466,73 @@ async def test_expressions_resolve_per_item_including_binary() -> None:
 
     b_out = ctx.run_data["b1"]["data"]["main"][0]
     assert [it.json["value"] for it in b_out] == ["a.txt", "b.txt"]
+
+
+@pytest.mark.asyncio
+async def test_expression_can_read_execution_refs() -> None:
+    nodes = [
+        _n("t1", "Start", "flows.trigger.manual", 0),
+        _n(
+            "e1",
+            "Echo",
+            "tests.echo_param",
+            200,
+            {"value": "=$execution_id + '|' + $flow_id + '|' + $flow_revid"},
+        ),
+    ]
+    conns = {"t1": {"main": [[ad.flows.NodeConnection(dest_node_id="e1", connection_type="main", index=0)]]}}
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec-abc",
+        flow_id="flow-xyz",
+        flow_revid="rev-222",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(context=ctx, revision={"nodes": nodes, "connections": conns, "settings": {}, "pin_data": None})
+    assert res["status"] == "success"
+    assert ctx.run_data["e1"]["data"]["main"][0][0].json["value"] == "exec-abc|flow-xyz|rev-222"
+
+
+@pytest.mark.asyncio
+async def test_expression_reads_source_run_timing_via_dollar_aliases() -> None:
+    nodes = [
+        _n("t1", "Start", "flows.trigger.manual", 0),
+        _n("e_st", "EchoStart", "tests.echo_param", 200, {"value": "=$start_time"}),
+        _n("e_et", "EchoMs", "tests.echo_param", 400, {"value": "=$execution_time"}),
+    ]
+    conns = {
+        "t1": {
+            "main": [
+                [
+                    ad.flows.NodeConnection(dest_node_id="e_st", connection_type="main", index=0),
+                    ad.flows.NodeConnection(dest_node_id="e_et", connection_type="main", index=0),
+                ]
+            ]
+        }
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(context=ctx, revision={"nodes": nodes, "connections": conns, "settings": {}, "pin_data": None})
+    assert res["status"] == "success"
+    st = ctx.run_data["t1"].get("start_time")
+    et = ctx.run_data["t1"].get("execution_time_ms")
+    assert isinstance(st, str) and len(st) > 0
+    assert isinstance(et, int)
+    assert ctx.run_data["e_st"]["data"]["main"][0][0].json["value"] == st
+    assert ctx.run_data["e_et"]["data"]["main"][0][0].json["value"] == et
 

@@ -536,6 +536,15 @@ const FlowExecutionsView: React.FC<{
         allNodes={viewNodes.map((n) => (n as Node<FlowRfNodeData>).data.flowNode)}
         edges={viewEdges}
         runData={runDataForModal}
+        expressionExecution={
+          detail
+            ? {
+                execution_id: detail.execution_id,
+                flow_id: detail.flow_id,
+                flow_revid: detail.flow_revid,
+              }
+            : null
+        }
         onSelectNode={(nodeId) => setConfigModalId(nodeId)}
         onChange={() => {}}
       />

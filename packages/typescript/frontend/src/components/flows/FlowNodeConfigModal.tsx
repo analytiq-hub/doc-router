@@ -1,6 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Dialog, DialogBackdrop, DialogPanel, DialogTitle } from '@headlessui/react';
+import {
+  Dialog,
+  DialogBackdrop,
+  DialogPanel,
+  DialogTitle,
+  Disclosure,
+  DisclosureButton,
+  DisclosurePanel,
+} from '@headlessui/react';
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
+import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { BookmarkIcon, PencilSquareIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor from '@monaco-editor/react';
@@ -34,20 +43,53 @@ const IoBlock: React.FC<{
   </div>
 );
 
-const VariablesAndContext: React.FC = () => {
-  return (
-    <div className="mb-3 rounded-md border border-gray-200 bg-white">
-      <div className="border-b border-gray-100 px-3 py-2">
-        <div className="text-[11px] font-semibold text-gray-900">Variables & context</div>
-        <div className="mt-0.5 text-[11px] text-gray-500">Available in expressions:</div>
+const VariablesAndContext: React.FC<{
+  execution?: { execution_id: string; flow_id: string; flow_revid: string } | null;
+}> = ({ execution }) => (
+  <Disclosure as="div" defaultOpen={false} className="mb-3 rounded-md border border-gray-200 bg-white">
+    <DisclosureButton className="flex w-full items-center justify-between gap-2 border-gray-100 px-3 py-2 text-left outline-none hover:bg-gray-50/80">
+      {({ open }) => (
+        <>
+          <div className="min-w-0 flex-1">
+            <div className="text-[11px] font-semibold text-gray-900">Context</div>
+            <div className="mt-0.5 text-[11px] text-gray-500">Available in expressions:</div>
+          </div>
+          <ChevronDownIcon className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
+        </>
+      )}
+    </DisclosureButton>
+    <DisclosurePanel className="border-t border-gray-100 px-3 py-2 text-[11px]">
+      <div className="space-y-2">
+        <div>
+          <div className="font-mono font-semibold text-gray-900">$json</div>
+          <div className="font-mono font-semibold text-gray-900">$binary</div>
+        </div>
+        <div>
+          <div className="font-mono font-semibold text-gray-900">$start_time</div>
+          <div className="font-mono font-semibold text-gray-900">$execution_time</div>
+        </div>
+        <div>
+          <div className="font-mono font-semibold text-gray-900">$flow_id</div>
+          <div className="font-mono font-semibold text-gray-900">$flow_revid</div>
+          <div className="font-mono font-semibold text-gray-900">$execution_id</div>
+          {execution ? (
+            <div className="mt-1 space-y-0.5 break-all text-[10px] text-gray-500">
+              <div>
+                <span className="font-medium text-gray-600">flow_id</span> {execution.flow_id}
+              </div>
+              <div>
+                <span className="font-medium text-gray-600">flow_revid</span> {execution.flow_revid}
+              </div>
+              <div>
+                <span className="font-medium text-gray-600">execution_id</span> {execution.execution_id}
+              </div>
+            </div>
+          ) : null}
+        </div>
       </div>
-      <div className="space-y-1 px-3 py-2 text-[11px]">
-        <div className="font-mono font-semibold text-gray-900">$json</div>
-        <div className="font-mono font-semibold text-gray-900">$binary</div>
-      </div>
-    </div>
-  );
-};
+    </DisclosurePanel>
+  </Disclosure>
+);
 
 function safeParseJson(text: string): { ok: true; value: unknown } | { ok: false; error: string } {
   try {
@@ -81,6 +123,8 @@ const FlowNodeConfigModal: React.FC<{
   allNodes?: FlowNode[];
   edges: Edge[];
   runData: Record<string, unknown> | null | undefined;
+  /** When set (e.g. executions viewer), show ids under $execution_* hints. */
+  expressionExecution?: { execution_id: string; flow_id: string; flow_revid: string } | null;
   pinData?: FlowPinData | null;
   onPinDataChange?: (next: FlowPinData | null) => void;
   onChange: (patch: Partial<FlowNode>) => void;
@@ -94,6 +138,7 @@ const FlowNodeConfigModal: React.FC<{
   allNodes,
   edges,
   runData,
+  expressionExecution,
   pinData,
   onPinDataChange,
   onChange,
@@ -412,7 +457,7 @@ const FlowNodeConfigModal: React.FC<{
                           onModeChange={setInputIoMode}
                         />
                       )}
-                      {inputIoMode === 'schema' && <VariablesAndContext />}
+                      {inputIoMode === 'schema' && <VariablesAndContext execution={expressionExecution ?? null} />}
                     </IoBlock>
                   </Panel>
 

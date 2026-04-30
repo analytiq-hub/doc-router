@@ -61,6 +61,30 @@ _ALLOWED_AST_NODES: tuple[type[ast.AST], ...] = (
 )
 
 
+def timing_from_items_source_run(
+    item: ad.flows.FlowItem | None,
+    run_data: dict[str, Any] | None,
+) -> tuple[Any, Any]:
+    """
+    `start_time` and `execution_time_ms` from the **producing** node for this item
+    (`item.meta[\"source_node_id\"]` → `run_data[node_id]`).
+
+    Returned tuple is `(start_time, execution_time)` where ``execution_time`` is
+    the engine's ``execution_time_ms`` value (ms). Missing data → ``(None, None)``.
+    """
+
+    if item is None or not run_data:
+        return (None, None)
+    meta = item.meta if isinstance(item.meta, dict) else {}
+    sid = meta.get("source_node_id")
+    if not isinstance(sid, str) or not sid:
+        return (None, None)
+    entry = run_data.get(sid)
+    if not isinstance(entry, dict):
+        return (None, None)
+    return (entry.get("start_time"), entry.get("execution_time_ms"))
+
+
 def _rewrite_vars(expr: str) -> str:
     """
     Rewrite n8n-ish `$json` / `$node` to valid Python identifiers, but only when
@@ -94,6 +118,30 @@ def _rewrite_vars(expr: str) -> str:
                 i += 1
                 continue
 
+            if expr.startswith("$execution_id", i):
+                out.append("_execution['execution_id']")
+                i += len("$execution_id")
+                continue
+            if expr.startswith("$flow_revid", i):
+                out.append("_execution['flow_revid']")
+                i += len("$flow_revid")
+                continue
+            if expr.startswith("$flow_id", i):
+                out.append("_execution['flow_id']")
+                i += len("$flow_id")
+                continue
+            if expr.startswith("$execution_time", i):
+                out.append("_execution_time")
+                i += len("$execution_time")
+                continue
+            if expr.startswith("$execution", i):
+                out.append("_execution")
+                i += len("$execution")
+                continue
+            if expr.startswith("$start_time", i):
+                out.append("_start_time")
+                i += len("$start_time")
+                continue
             if expr.startswith("$json", i):
                 out.append("_json")
                 i += 5
@@ -227,6 +275,7 @@ def eval_expression(
     item: ad.flows.FlowItem | None,
     run_data: dict[str, Any],
     input_context: dict[str, Any] | None = None,
+    execution_refs: dict[str, Any] | None = None,
 ) -> Any:
     """
     Evaluate a single expression string (without leading '=') against the current item and run_data.
@@ -242,10 +291,15 @@ def eval_expression(
     _validate_expr_ast(tree)
     code = compile(tree, "<flow-expr>", "eval")
 
+    refs = execution_refs if execution_refs is not None else {}
+    src_start, src_exec_ms = timing_from_items_source_run(item, run_data)
     env = {
         "_json": (item.json if item is not None else {}),
         "_binary": (_materialize_binary(item.binary or {}) if item is not None else {}),
         "_node": materialize_node_data(run_data),
+        "_execution": dict(refs) if refs else {},
+        "_start_time": src_start,
+        "_execution_time": src_exec_ms,
         # n8n-ish additions:
         "_input": (input_context or {"all": [], "item": None, "input_index": None, "item_index": None}),
         "_item": (_materialize_item(item) if item is not None else None),
@@ -264,6 +318,7 @@ def resolve_parameters(
     item: ad.flows.FlowItem | None,
     run_data: dict[str, Any],
     input_context: dict[str, Any] | None = None,
+    execution_refs: dict[str, Any] | None = None,
 ) -> Any:
     """
     Recursively resolve parameters, evaluating any string value that starts with '='.
@@ -271,13 +326,22 @@ def resolve_parameters(
 
     if isinstance(params, str):
         if params.startswith("="):
-            return eval_expression(params[1:], item=item, run_data=run_data, input_context=input_context)
+            return eval_expression(
+                params[1:],
+                item=item,
+                run_data=run_data,
+                input_context=input_context,
+                execution_refs=execution_refs,
+            )
         return params
     if isinstance(params, list):
-        return [resolve_parameters(x, item=item, run_data=run_data, input_context=input_context) for x in params]
+        return [
+            resolve_parameters(x, item=item, run_data=run_data, input_context=input_context, execution_refs=execution_refs)
+            for x in params
+        ]
     if isinstance(params, dict):
         return {
-            k: resolve_parameters(v, item=item, run_data=run_data, input_context=input_context)
+            k: resolve_parameters(v, item=item, run_data=run_data, input_context=input_context, execution_refs=execution_refs)
             for k, v in params.items()
         }
     return params
@@ -326,7 +390,12 @@ def materialize_node_data(run_data: dict[str, Any]) -> dict[str, Any]:
                     items_json.append(it)
             slots_json.append(items_json)
 
-        out[node_id] = {"status": status, "main": slots_json}
+        row: dict[str, Any] = {"status": status, "main": slots_json}
+        if "start_time" in entry:
+            row["start_time"] = entry["start_time"]
+        if "execution_time_ms" in entry:
+            row["execution_time_ms"] = entry["execution_time_ms"]
+        out[node_id] = row
 
     return out
 
