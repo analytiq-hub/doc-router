@@ -518,7 +518,7 @@ const FlowLogsPanel: React.FC<{
                                         <IoViewer
                                           value={selectedOutputPreview.data}
                                           dragSource={{ nodeId: selectedNodeId, source: 'nodeOutput' }}
-                                          defaultMode="table"
+                                          defaultMode="schema"
                                         />
                                       ) : (
                                         !selectedOutputPreview?.message && (
@@ -566,7 +566,7 @@ const FlowLogsPanel: React.FC<{
                                                   : null
                                               }
                                               dragSource={{ nodeId: selectedNodeId, source: 'nodeInput' }}
-                                              defaultMode="json"
+                                              defaultMode="schema"
                                             />
                                           )}
                                         </div>
