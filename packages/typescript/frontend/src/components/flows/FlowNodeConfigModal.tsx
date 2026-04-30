@@ -9,7 +9,6 @@ import {
   DisclosurePanel,
 } from '@headlessui/react';
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
-import { ChevronDownIcon } from '@heroicons/react/24/outline';
 import { BookmarkIcon, PencilSquareIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor from '@monaco-editor/react';
@@ -43,49 +42,53 @@ const IoBlock: React.FC<{
   </div>
 );
 
+function contextValuePreview(v: string | undefined): string {
+  if (v == null || v === '') return '[filled at execution time]';
+  return v.length > 48 ? `${v.slice(0, 45)}…` : v;
+}
+
 const VariablesAndContext: React.FC<{
   execution?: { execution_id: string; flow_id: string; flow_revid: string } | null;
 }> = ({ execution }) => (
-  <Disclosure as="div" defaultOpen={false} className="mb-3 rounded-md border border-gray-200 bg-white">
-    <DisclosureButton className="flex w-full items-center justify-between gap-2 border-gray-100 px-3 py-2 text-left outline-none hover:bg-gray-50/80">
+  <Disclosure as="div" defaultOpen={false} className="mb-3 rounded border border-[#eceff2] bg-white">
+    <DisclosureButton className="flex w-full items-start gap-2 border-b border-gray-100 px-2 py-1.5 text-left outline-none hover:bg-gray-50">
       {({ open }) => (
         <>
-          <div className="min-w-0 flex-1">
-            <div className="text-[11px] font-semibold text-gray-900">Context</div>
-            <div className="mt-0.5 text-[11px] text-gray-500">Available in expressions:</div>
+          <span
+            className="mt-px shrink-0 select-none rounded px-1 text-[11px] font-semibold leading-none text-gray-500"
+            aria-hidden
+          >
+            {open ? '▼' : '▶'}
+          </span>
+          <div className="min-w-0 flex-1 pt-px">
+            <div className="truncate text-[11px] font-semibold text-gray-900">Context</div>
           </div>
-          <ChevronDownIcon className={`h-4 w-4 shrink-0 text-gray-500 transition-transform ${open ? 'rotate-180' : ''}`} aria-hidden />
         </>
       )}
     </DisclosureButton>
-    <DisclosurePanel className="border-t border-gray-100 px-3 py-2 text-[11px]">
-      <div className="space-y-2">
-        <div>
-          <div className="font-mono font-semibold text-gray-900">$json</div>
-          <div className="font-mono font-semibold text-gray-900">$binary</div>
-        </div>
-        <div>
-          <div className="font-mono font-semibold text-gray-900">$start_time</div>
-          <div className="font-mono font-semibold text-gray-900">$execution_time</div>
-        </div>
-        <div>
-          <div className="font-mono font-semibold text-gray-900">$flow_id</div>
-          <div className="font-mono font-semibold text-gray-900">$flow_revid</div>
-          <div className="font-mono font-semibold text-gray-900">$execution_id</div>
-          {execution ? (
-            <div className="mt-1 space-y-0.5 break-all text-[10px] text-gray-500">
-              <div>
-                <span className="font-medium text-gray-600">flow_id</span> {execution.flow_id}
-              </div>
-              <div>
-                <span className="font-medium text-gray-600">flow_revid</span> {execution.flow_revid}
-              </div>
-              <div>
-                <span className="font-medium text-gray-600">execution_id</span> {execution.execution_id}
-              </div>
+    <DisclosurePanel className="max-h-[280px] overflow-auto text-[11px]">
+      <div className="divide-y divide-gray-100">
+        {(
+          [
+            ['$json', 'Object'],
+            ['$binary', 'Object'],
+            ['$start_time', 'string'],
+            ['$execution_time', 'number'],
+            ['$flow_id', contextValuePreview(execution?.flow_id)],
+            ['$flow_revid', contextValuePreview(execution?.flow_revid)],
+            ['$execution_id', contextValuePreview(execution?.execution_id)],
+          ] as const
+        ).map(([name, preview]) => (
+          <div key={name} className="flex items-start gap-2 px-2 py-1.5">
+            <span className="shrink-0 px-1 text-[11px] font-semibold text-transparent" aria-hidden>
+              ▶
+            </span>
+            <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
+              <div className="min-w-0 truncate font-mono font-semibold text-gray-900">{name}</div>
+              <div className="min-w-0 truncate text-right font-mono text-gray-600">{preview}</div>
             </div>
-          ) : null}
-        </div>
+          </div>
+        ))}
       </div>
     </DisclosurePanel>
   </Disclosure>
