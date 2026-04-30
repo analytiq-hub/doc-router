@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import ReactFlow, {
   Background,
   BackgroundVariant,
@@ -11,7 +11,7 @@ import ReactFlow, {
   type Node,
   type NodeMouseHandler,
 } from 'reactflow';
-import { ArrowPathIcon, FunnelIcon } from '@heroicons/react/24/outline';
+import { ArrowPathIcon } from '@heroicons/react/24/outline';
 import 'reactflow/dist/style.css';
 import type { FlowExecution, FlowNodeType } from '@docrouter/sdk';
 import type { FlowRfNodeData } from './flowRf';
@@ -25,8 +25,43 @@ import FlowNodeConfigModal from './FlowNodeConfigModal';
 import { applyExecutionStatusToNodes } from './flowNodeRunStatus';
 import { IconButton, Menu, MenuItem } from '@mui/material';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelGroupHandle } from 'react-resizable-panels';
 
 const FLOW_EDGE_MARKER = { type: MarkerType.ArrowClosed } as const;
+
+/** SSR + initial client paint: must equal server HTML so hydrated nodes match panels. Persisted ratio is reapplied after mount via `PanelGroup#setLayout`. */
+const EXECUTIONS_LIST_PANEL_DEFAULT_PCT = 30;
+
+const RF_EXEC_VIEW_DEFAULT_EDGE_OPTIONS = {
+  type: FLOW_RF_LABELED_EDGE_TYPE,
+  style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
+  data: { itemCount: 1 },
+  markerEnd: FLOW_EDGE_MARKER,
+} as const;
+
+const RF_EXEC_VIEW_PRO_OPTIONS = { hideAttribution: true } as const;
+const RF_EXEC_VIEW_FIT_OPTIONS = { padding: 0.2, maxZoom: 1 } as const;
+
+const EXECUTIONS_LIST_SPLIT_STORAGE_KEY = 'docrouter.flow.executionsView.listLeftPct';
+
+/** Read persisted list width (client-only; do not call during SSR / first paint). */
+function readStoredExecutionsListLeftPct(): number {
+  if (typeof window === 'undefined') return EXECUTIONS_LIST_PANEL_DEFAULT_PCT;
+  try {
+    const raw = window.localStorage.getItem(EXECUTIONS_LIST_SPLIT_STORAGE_KEY);
+    const n = raw ? Number(raw) : NaN;
+    if (!Number.isFinite(n)) return EXECUTIONS_LIST_PANEL_DEFAULT_PCT;
+    // One-time bump: old default was 22%; widen for status line layout without clearing storage.
+    if (raw != null && (raw === '22' || raw === '22.0')) {
+      const next = EXECUTIONS_LIST_PANEL_DEFAULT_PCT;
+      window.localStorage.setItem(EXECUTIONS_LIST_SPLIT_STORAGE_KEY, String(next));
+      return next;
+    }
+    return Math.min(52, Math.max(18, n));
+  } catch {
+    return EXECUTIONS_LIST_PANEL_DEFAULT_PCT;
+  }
+}
 
 function toCanvasEdges(edges: Edge[]): Edge[] {
   return edges.map((e) => ({
@@ -87,7 +122,6 @@ const FlowExecutionsView: React.FC<{
   const [err, setErr] = useState('');
   const [listLoading, setListLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [autoRefresh, setAutoRefresh] = useState(true);
   const [detail, setDetail] = useState<FlowExecution | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [stopLoadingId, setStopLoadingId] = useState<string | null>(null);
@@ -96,6 +130,13 @@ const FlowExecutionsView: React.FC<{
   const [configModalId, setConfigModalId] = useState<string | null>(null);
   const [fitId, setFitId] = useState('');
   const [execActionsAnchorEl, setExecActionsAnchorEl] = useState<null | HTMLElement>(null);
+  const executionsSplitRef = useRef<ImperativePanelGroupHandle | null>(null);
+
+  /** Reconcile client with localStorage after hydration so SSR % matches first paint HTML. */
+  useLayoutEffect(() => {
+    const left = readStoredExecutionsListLeftPct();
+    executionsSplitRef.current?.setLayout([left, 100 - left]);
+  }, []);
 
   const loadList = useCallback(async () => {
     try {
@@ -113,15 +154,6 @@ const FlowExecutionsView: React.FC<{
   useEffect(() => {
     void loadList();
   }, [loadList]);
-
-  const anyActive = useMemo(() => list.some(statusRunning), [list]);
-  useEffect(() => {
-    if (!autoRefresh || !anyActive) return;
-    const n = setInterval(() => {
-      void loadList();
-    }, 3000);
-    return () => clearInterval(n);
-  }, [anyActive, autoRefresh, loadList]);
 
   const loadDetailAndGraph = useCallback(
     async (id: string) => {
@@ -209,20 +241,26 @@ const FlowExecutionsView: React.FC<{
   const runDataForModal = detail?.run_data as Record<string, unknown> | undefined;
 
   return (
-    <div className="docrouter-flow-canvas flex h-[max(32rem,calc(100dvh-12.5rem))] min-h-[32rem] w-full min-w-0 flex-row overflow-hidden border-t border-[#e8eaed] bg-white">
-      <aside className="flex w-[min(100%,320px)] shrink-0 flex-col border-r border-[#e8eaed] bg-[#fbfbfc]">
+    <div className="docrouter-flow-canvas flex h-[max(32rem,calc(100dvh-12.5rem))] min-h-[32rem] w-full min-w-0 overflow-hidden border-t border-[#e8eaed] bg-white">
+      <PanelGroup
+        ref={executionsSplitRef}
+        direction="horizontal"
+        className="flex min-h-0 min-w-0 flex-1"
+        onLayout={(sizes) => {
+          const left = sizes[0];
+          if (typeof left !== 'number' || !Number.isFinite(left)) return;
+          try {
+            window.localStorage.setItem(EXECUTIONS_LIST_SPLIT_STORAGE_KEY, String(Math.round(left * 10) / 10));
+          } catch {
+            /* ignore */
+          }
+        }}
+      >
+        <Panel defaultSize={EXECUTIONS_LIST_PANEL_DEFAULT_PCT} minSize={18} maxSize={52} className="min-h-0 min-w-0">
+          <aside className="flex h-full w-full flex-col border-r border-[#e8eaed] bg-[#fbfbfc]">
         <div className="flex items-center justify-between border-b border-[#eceff2] px-3 py-2">
           <span className="text-sm font-semibold text-gray-900">Executions</span>
           <div className="flex items-center gap-0.5">
-            <label className="inline-flex items-center gap-1.5 text-[11px] text-gray-600">
-              <input
-                type="checkbox"
-                className="h-3.5 w-3.5 rounded"
-                checked={autoRefresh}
-                onChange={(e) => setAutoRefresh(e.target.checked)}
-              />
-              Auto refresh
-            </label>
             <button
               type="button"
               className="inline-flex h-7 w-7 items-center justify-center rounded text-gray-500 hover:bg-gray-200"
@@ -232,9 +270,6 @@ const FlowExecutionsView: React.FC<{
             >
               <ArrowPathIcon className="h-4 w-4" />
             </button>
-            <span className="inline-flex h-7 w-7 items-center justify-center text-gray-300" title="Filter (coming soon)">
-              <FunnelIcon className="h-4 w-4" />
-            </span>
           </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-0">
@@ -268,7 +303,12 @@ const FlowExecutionsView: React.FC<{
                         <span className="absolute left-0 top-0 h-full w-1 rounded-r bg-emerald-500" aria-hidden />
                       )}
                       <div className="pl-0.5 text-xs font-medium text-gray-500">{formatLocalDate(e.started_at)}</div>
-                      <div className="pl-0.5 text-sm font-semibold text-gray-900">
+                      <div
+                        className="block min-w-0 pl-0.5 text-sm font-semibold leading-snug text-gray-900 overflow-hidden text-ellipsis whitespace-nowrap text-left"
+                        title={
+                          `${e.status === 'success' ? 'Succeeded' : e.status === 'error' ? 'Error' : e.status === 'running' ? 'Running' : e.status === 'queued' ? 'Queued' : e.status === 'stopped' ? 'Stopped' : e.status} in ${formatDuration(e)}`
+                        }
+                      >
                         {e.status === 'success' && 'Succeeded'}
                         {e.status === 'error' && 'Error'}
                         {e.status === 'running' && 'Running'}
@@ -311,9 +351,17 @@ const FlowExecutionsView: React.FC<{
         <div className="shrink-0 border-t border-[#eceff2] px-3 py-1.5 text-[10px] text-gray-400">
           {list.length} of {total} runs
         </div>
-      </aside>
+          </aside>
+        </Panel>
 
-      <div className="relative min-h-0 min-w-0 flex-1">
+        <PanelResizeHandle className="w-2 shrink-0 cursor-col-resize bg-transparent hover:bg-[#e8eaed]" />
+
+        <Panel
+          defaultSize={100 - EXECUTIONS_LIST_PANEL_DEFAULT_PCT}
+          minSize={38}
+          className="min-h-0 min-w-0"
+        >
+          <div className="relative h-full min-h-0 min-w-0">
         {detailLoading && (
           <div className="absolute left-0 right-0 top-0 z-20 flex h-8 items-center justify-center border-b border-amber-200/80 bg-amber-50/90 text-xs text-amber-900">
             Loading run…
@@ -387,24 +435,21 @@ const FlowExecutionsView: React.FC<{
             elementsSelectable
             onNodeDoubleClick={onNodeDoubleClick}
             nodesDraggable={false}
-            proOptions={{ hideAttribution: true }}
+            proOptions={RF_EXEC_VIEW_PRO_OPTIONS}
             minZoom={0.15}
             maxZoom={1.5}
-            defaultEdgeOptions={{
-              type: FLOW_RF_LABELED_EDGE_TYPE,
-              style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
-              data: { itemCount: 1 },
-              markerEnd: FLOW_EDGE_MARKER,
-            }}
+            defaultEdgeOptions={RF_EXEC_VIEW_DEFAULT_EDGE_OPTIONS}
             fitView
-            fitViewOptions={{ padding: 0.2, maxZoom: 1 }}
+            fitViewOptions={RF_EXEC_VIEW_FIT_OPTIONS}
           >
             <FitViewWhenDataChanges id={fitId} />
             <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />
             <Controls className="!shadow-md" position="bottom-left" showFitView showInteractive={false} />
           </ReactFlow>
         </div>
-      </div>
+          </div>
+        </Panel>
+      </PanelGroup>
 
       <FlowNodeConfigModal
         open={configModalId != null && configRf.node != null}
