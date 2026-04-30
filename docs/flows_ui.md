@@ -499,8 +499,6 @@ FastAPI route coverage is complete for v1 (incl. delete).
 
 ### Remaining gaps / follow-ups (as of now)
 1. **Stop execution from executions view** (done): Implemented in `FlowExecutionsView.tsx`. A Stop button is shown for `queued|running` executions in both the executions list row and the selected execution header, calling `stopExecution(flowId, executionId)` and refreshing list + detail.
-2. **Rename flow from list**: list page supports edit/run/activate/delete, but not rename inline (rename is in editor toolbar).
-3. **Polish run UX**: after `runFlow`, optionally auto-switch to the Executions tab (currently it focuses the logs panel).
 
 ---
 
