@@ -148,7 +148,20 @@ export const IoViewer: React.FC<{
   defaultMode?: 'schema' | 'table' | 'json';
   mode?: 'schema' | 'table' | 'json';
   onModeChange?: (next: 'schema' | 'table' | 'json') => void;
-}> = ({ title, value, dragSource, defaultMode = 'json', mode: controlledMode, onModeChange }) => {
+  /**
+   * When `value` is an array and mode is Schema: use only the first element (n8n-style single-item
+   * shape for logs / previews), or expand the entire array under `$json` (e.g. node modal output lane).
+   */
+  schemaWhenArray?: 'first-element' | 'full-array';
+}> = ({
+  title,
+  value,
+  dragSource,
+  defaultMode = 'json',
+  mode: controlledMode,
+  onModeChange,
+  schemaWhenArray = 'first-element',
+}) => {
   const [uncontrolledMode, setUncontrolledMode] = useState<'schema' | 'table' | 'json'>(defaultMode);
   const mode = controlledMode ?? uncontrolledMode;
   const setMode = (next: 'schema' | 'table' | 'json') => {
@@ -157,9 +170,9 @@ export const IoViewer: React.FC<{
   };
 
   const sample = useMemo(() => {
-    if (Array.isArray(value)) return value[0];
+    if (Array.isArray(value) && schemaWhenArray === 'first-element') return value[0];
     return value;
-  }, [value]);
+  }, [value, schemaWhenArray]);
 
   const table = useMemo(() => convertToTable(value, { maxCols: 25, maxRows: 50 }), [value]);
 

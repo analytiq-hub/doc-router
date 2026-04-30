@@ -498,6 +498,7 @@ const FlowNodeConfigModal: React.FC<{
                     defaultMode="table"
                     mode={outputIoMode}
                     onModeChange={setOutputIoMode}
+                    schemaWhenArray="full-array"
                   />
                   {runData && outputValue == null && <div className="mt-2 text-sm text-[#6b7280]">No output items.</div>}
                 </IoBlock>
