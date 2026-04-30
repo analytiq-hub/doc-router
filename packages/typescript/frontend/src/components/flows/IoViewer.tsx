@@ -297,6 +297,18 @@ export const IoViewer: React.FC<{
     return stringifyJson(value);
   }, [value, valueKind, executionItems]);
 
+  const itemsCountLabel = useMemo(() => {
+    if (valueKind === 'executionItems') {
+      const n = executionItems.length;
+      return `${n} ${n === 1 ? 'item' : 'items'}`;
+    }
+    if (Array.isArray(value)) {
+      const n = value.length;
+      return `${n} ${n === 1 ? 'item' : 'items'}`;
+    }
+    return null;
+  }, [executionItems, value, valueKind]);
+
   const startDrag = (e: React.DragEvent, path: JsonPath) => {
     const payload: FlowValueDragPayload = {
       kind: 'jsonPath',
@@ -328,22 +340,27 @@ export const IoViewer: React.FC<{
         <div className="min-w-0">
           {title && <div className="truncate text-[11px] font-semibold text-gray-700">{title}</div>}
         </div>
-        <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
-          {(['schema', 'table', 'json'] as const).map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => setMode(m)}
-              title={m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : 'JSON'}
-              aria-label={m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : 'JSON'}
-              className={[
-                'rounded px-2 py-1 text-[10px] font-semibold leading-none',
-                mode === m ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
-              ].join(' ')}
-            >
-              {m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : 'JSON'}
-            </button>
-          ))}
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
+            {(['schema', 'table', 'json'] as const).map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => setMode(m)}
+                title={m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : 'JSON'}
+                aria-label={m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : 'JSON'}
+                className={[
+                  'rounded px-2 py-1 text-[10px] font-semibold leading-none',
+                  mode === m ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
+                ].join(' ')}
+              >
+                {m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : 'JSON'}
+              </button>
+            ))}
+          </div>
+          {itemsCountLabel != null ? (
+            <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-gray-500">{itemsCountLabel}</span>
+          ) : null}
         </div>
       </div>
 
