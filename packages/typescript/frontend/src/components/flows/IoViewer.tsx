@@ -33,39 +33,79 @@ function getAtPath(root: unknown, path: JsonPath): unknown {
 
 type TableData = { columns: string[]; rows: Record<string, unknown>[] };
 
+/** Aligned with n8n editor `RunDataTable.vue` `convertToTable` (one row per item, columns grow in first-seen key order). */
+const TABLE_MAX_KEYS_PER_ROW = 40;
+
 function coerceExecutionItems(raw: unknown): unknown[] {
   if (raw == null) return [];
   return Array.isArray(raw) ? raw : [raw];
 }
 
-function convertToTable(value: unknown, caps: { maxCols: number; maxRows: number }): TableData | null {
-  if (!Array.isArray(value)) return null;
-  const objs = value.filter(isPlainObject) as Record<string, unknown>[];
-  if (objs.length === 0) return null;
-  const rows = objs.slice(0, caps.maxRows);
-  const colsSet = new Set<string>();
-  for (const r of rows) for (const k of Object.keys(r)) colsSet.add(k);
-  const columns = Array.from(colsSet).slice(0, caps.maxCols);
-  return { columns, rows };
-}
+/**
+ * n8n-style: walk items in order; columns are appended when new keys appear; missing keys are `undefined`
+ * and earlier rows are padded with trailing `undefined`s for columns added later.
+ * Skips non-plain-object items (like n8n skipping entries without `json`).
+ */
+function convertToTableLikeN8n(items: unknown[], maxRows: number): TableData | null {
+  const slice = items.slice(0, maxRows);
+  const tableColumns: string[] = [];
+  const rowArrays: unknown[][] = [];
+  const rowSources: Record<string, unknown>[] = [];
 
-/** One tabular row per item; non-object items use a `_` column. */
-function executionItemsTable(items: unknown[], caps: { maxCols: number; maxRows: number }): TableData | null {
-  if (items.length === 0) return null;
-  const slice = items.slice(0, caps.maxRows);
-  const objs = slice.filter(isPlainObject) as Record<string, unknown>[];
-  if (objs.length === slice.length) {
-    return convertToTable(slice, caps);
+  for (const raw of slice) {
+    if (!isPlainObject(raw)) continue;
+    const entry = raw;
+    rowSources.push(entry);
+    let entryColumns = Object.keys(entry);
+    if (entryColumns.length > TABLE_MAX_KEYS_PER_ROW) {
+      entryColumns = entryColumns.slice(0, TABLE_MAX_KEYS_PER_ROW);
+    }
+
+    let leftEntryColumns = [...entryColumns];
+    const entryRows: unknown[] = [];
+
+    for (const key of tableColumns) {
+      if (Object.prototype.hasOwnProperty.call(entry, key)) {
+        entryRows.push(entry[key]);
+        const ix = leftEntryColumns.indexOf(key);
+        if (ix !== -1) leftEntryColumns.splice(ix, 1);
+      } else {
+        entryRows.push(undefined);
+      }
+    }
+
+    for (const key of leftEntryColumns) {
+      tableColumns.push(key);
+      entryRows.push(entry[key]);
+    }
+
+    rowArrays.push(entryRows);
   }
-  const rows = slice.map((v) =>
-    isPlainObject(v)
-      ? (v as Record<string, unknown>)
-      : { _: stringifyJsonCompact(v ?? null) } as Record<string, unknown>,
-  );
-  const colsSet = new Set<string>();
-  for (const r of rows) for (const k of Object.keys(r)) colsSet.add(k);
-  const columns = Array.from(colsSet).slice(0, caps.maxCols);
-  return { columns, rows };
+
+  if (rowArrays.length === 0) return null;
+
+  for (const row of rowArrays) {
+    while (row.length < tableColumns.length) {
+      row.push(undefined);
+    }
+  }
+
+  if (tableColumns.length === 0) {
+    return {
+      columns: ['_'],
+      rows: rowSources.map((o) => ({ _: stringifyJsonCompact(o) })),
+    };
+  }
+
+  const rows: Record<string, unknown>[] = rowArrays.map((arr) => {
+    const rec: Record<string, unknown> = {};
+    tableColumns.forEach((col, i) => {
+      rec[col] = arr[i];
+    });
+    return rec;
+  });
+
+  return { columns: tableColumns, rows };
 }
 
 function pathToExpression(nodeId: string, path: JsonPath): string {
@@ -219,9 +259,12 @@ export const IoViewer: React.FC<{
 
   const table = useMemo(() => {
     if (valueKind === 'executionItems') {
-      return executionItemsTable(executionItems, { maxCols: 25, maxRows: 500 });
+      return convertToTableLikeN8n(executionItems, 500);
     }
-    return convertToTable(value, { maxCols: 25, maxRows: 50 });
+    if (Array.isArray(value)) {
+      return convertToTableLikeN8n(value, 200);
+    }
+    return null;
   }, [value, valueKind, executionItems]);
 
   const jsonText = useMemo(() => {
