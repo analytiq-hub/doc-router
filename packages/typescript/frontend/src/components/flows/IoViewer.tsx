@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import Editor from '@monaco-editor/react';
+import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 
 type JsonPath = Array<string | number>;
 
@@ -31,10 +32,19 @@ function getAtPath(root: unknown, path: JsonPath): unknown {
   return cur;
 }
 
-type TableData = { columns: string[]; rows: Record<string, unknown>[] };
+type TableData = {
+  columns: string[];
+  rows: Record<string, unknown>[];
+  /** Plain-object items beyond this were omitted from the table (browser safety cap). */
+  omittedTailItemCount?: number;
+};
 
 /** Aligned with n8n editor `RunDataTable.vue` `convertToTable` (one row per item, columns grow in first-seen key order). */
 const TABLE_MAX_KEYS_PER_ROW = 40;
+/** Upper bound on items passed into table conversion — pagination displays within this window. */
+const TABLE_MATERIALIZATION_CAP = 25_000;
+
+const TABLE_PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const;
 
 function coerceExecutionItems(raw: unknown): unknown[] {
   if (raw == null) return [];
@@ -46,8 +56,11 @@ function coerceExecutionItems(raw: unknown): unknown[] {
  * and earlier rows are padded with trailing `undefined`s for columns added later.
  * Skips non-plain-object items (like n8n skipping entries without `json`).
  */
-function convertToTableLikeN8n(items: unknown[], maxRows: number): TableData | null {
-  const slice = items.slice(0, maxRows);
+function convertToTableLikeN8n(items: unknown[], maxItems: number): TableData | null {
+  const omittedTailItemCount =
+    items.length > maxItems ? items.filter(isPlainObject).length - items.slice(0, maxItems).filter(isPlainObject).length : 0;
+
+  const slice = items.slice(0, maxItems);
   const tableColumns: string[] = [];
   const rowArrays: unknown[][] = [];
   const rowSources: Record<string, unknown>[] = [];
@@ -94,6 +107,7 @@ function convertToTableLikeN8n(items: unknown[], maxRows: number): TableData | n
     return {
       columns: ['_'],
       rows: rowSources.map((o) => ({ _: stringifyJsonCompact(o) })),
+      omittedTailItemCount: omittedTailItemCount > 0 ? omittedTailItemCount : undefined,
     };
   }
 
@@ -105,7 +119,11 @@ function convertToTableLikeN8n(items: unknown[], maxRows: number): TableData | n
     return rec;
   });
 
-  return { columns: tableColumns, rows };
+  return {
+    columns: tableColumns,
+    rows,
+    omittedTailItemCount: omittedTailItemCount > 0 ? omittedTailItemCount : undefined,
+  };
 }
 
 function pathToExpression(nodeId: string, path: JsonPath): string {
@@ -259,13 +277,20 @@ export const IoViewer: React.FC<{
 
   const table = useMemo(() => {
     if (valueKind === 'executionItems') {
-      return convertToTableLikeN8n(executionItems, 500);
+      return convertToTableLikeN8n(executionItems, TABLE_MATERIALIZATION_CAP);
     }
     if (Array.isArray(value)) {
-      return convertToTableLikeN8n(value, 200);
+      return convertToTableLikeN8n(value, TABLE_MATERIALIZATION_CAP);
     }
     return null;
   }, [value, valueKind, executionItems]);
+
+  const [tablePageIndex, setTablePageIndex] = useState(0);
+  const [tablePageSize, setTablePageSize] = useState<(typeof TABLE_PAGE_SIZE_OPTIONS)[number]>(25);
+
+  useEffect(() => {
+    setTablePageIndex(0);
+  }, [table, tablePageSize]);
 
   const jsonText = useMemo(() => {
     if (valueKind === 'executionItems') return stringifyJson(executionItems);
@@ -285,6 +310,17 @@ export const IoViewer: React.FC<{
   };
 
   const isExecution = valueKind === 'executionItems';
+
+  const tablePagination = useMemo(() => {
+    if (!table || table.rows.length === 0) return null;
+    const totalRows = table.rows.length;
+    const pageCount = Math.max(1, Math.ceil(totalRows / tablePageSize));
+    const safePage = Math.min(Math.max(tablePageIndex, 0), pageCount - 1);
+    const start = safePage * tablePageSize;
+    const end = Math.min(start + tablePageSize, totalRows);
+    const slice = table.rows.slice(start, start + tablePageSize);
+    return { totalRows, pageCount, safePage, start, end, slice };
+  }, [table, tablePageIndex, tablePageSize]);
 
   return (
     <div className="min-w-0">
@@ -339,36 +375,95 @@ export const IoViewer: React.FC<{
               {isExecution ? 'No tabular preview for these items.' : 'Not a table: expected an array of objects.'}
             </div>
           ) : (
-            <div className="max-h-[360px] overflow-auto">
-              <table className="w-full border-collapse text-[11px]">
-                <thead className="sticky top-0 bg-[#fafbfc]">
-                  <tr>
-                    {table.columns.map((c) => (
-                      <th
-                        key={c}
-                        className="border-b border-gray-200 px-2 py-1.5 text-left font-semibold text-gray-700"
-                        draggable
-                        onDragStart={(e) => startDrag(e, [c])}
-                        title={`Drag to insert expression: ${pathToExpression(dragSource.nodeId, [c])}`}
-                      >
-                        <span className="cursor-grab active:cursor-grabbing">{c}</span>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {table.rows.map((row, idx) => (
-                    <tr key={idx} className="odd:bg-white even:bg-gray-50/40">
+            <>
+              <div className="max-h-[360px] overflow-auto">
+                <table className="w-full border-collapse text-[11px]">
+                  <thead className="sticky top-0 bg-[#fafbfc]">
+                    <tr>
                       {table.columns.map((c) => (
-                        <td key={c} className="border-b border-gray-100 px-2 py-1 align-top text-gray-900">
-                          <span className="line-clamp-2 font-mono">{stringifyJson(row[c])}</span>
-                        </td>
+                        <th
+                          key={c}
+                          className="border-b border-gray-200 px-2 py-1.5 text-left font-semibold text-gray-700"
+                          draggable
+                          onDragStart={(e) => startDrag(e, [c])}
+                          title={`Drag to insert expression: ${pathToExpression(dragSource.nodeId, [c])}`}
+                        >
+                          <span className="cursor-grab active:cursor-grabbing">{c}</span>
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  </thead>
+                  <tbody>
+                    {(tablePagination?.slice ?? []).map((row, idx) => (
+                      <tr key={tablePagination!.start + idx} className="odd:bg-white even:bg-gray-50/40">
+                        {table.columns.map((c) => (
+                          <td key={c} className="border-b border-gray-100 px-2 py-1 align-top text-gray-900">
+                            <span className="line-clamp-2 font-mono">{stringifyJson(row[c])}</span>
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {tablePagination && (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[#eceff2] px-2 py-2 text-[11px] text-gray-600">
+                  <div className="min-w-0 space-y-0.5">
+                    <div className="text-gray-700">
+                      Rows {tablePagination.start + 1}–{tablePagination.end} of {tablePagination.totalRows}
+                      <span className="text-gray-500">
+                        {' '}
+                        (page {tablePagination.safePage + 1}/{tablePagination.pageCount})
+                      </span>
+                    </div>
+                    {table.omittedTailItemCount != null && table.omittedTailItemCount > 0 && (
+                      <div className="max-w-xl text-[10px] text-amber-800">
+                        Another {table.omittedTailItemCount} item(s) exceed the UI table cap ({TABLE_MATERIALIZATION_CAP}). Use Download to view the full result.
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <label className="flex items-center gap-1 whitespace-nowrap text-gray-600">
+                      Per page
+                      <select
+                        className="max-w-[5.5rem] rounded-md border border-gray-200 bg-white px-1.5 py-1 text-[11px] text-gray-900 shadow-sm"
+                        aria-label="Rows per page"
+                        value={tablePageSize}
+                        onChange={(e) => setTablePageSize(Number(e.target.value) as (typeof TABLE_PAGE_SIZE_OPTIONS)[number])}
+                      >
+                        {TABLE_PAGE_SIZE_OPTIONS.map((n) => (
+                          <option key={n} value={n}>
+                            {n}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="inline-flex items-center gap-0.5">
+                      <button
+                        type="button"
+                        className="rounded-md border border-gray-200 bg-white p-1 text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="Previous page"
+                        disabled={tablePagination.safePage <= 0}
+                        onClick={() => setTablePageIndex(Math.max(tablePagination.safePage - 1, 0))}
+                      >
+                        <ChevronLeftIcon className="h-4 w-4" aria-hidden />
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-md border border-gray-200 bg-white p-1 text-gray-700 transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                        aria-label="Next page"
+                        disabled={tablePagination.safePage >= tablePagination.pageCount - 1}
+                        onClick={() =>
+                          setTablePageIndex(Math.min(tablePagination.safePage + 1, tablePagination.pageCount - 1))
+                        }
+                      >
+                        <ChevronRightIcon className="h-4 w-4" aria-hidden />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
