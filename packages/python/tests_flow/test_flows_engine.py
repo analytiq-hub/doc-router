@@ -207,7 +207,7 @@ def test_validate_revision_accepts_simple_dag() -> None:
             "name": "Start",
             "type": "flows.trigger.manual",
             "position": [0, 0],
-            "parameters": {},
+            "parameters": {"payload": []},
             "webhook_id": None,
             "disabled": False,
             "on_error": "stop",
@@ -245,7 +245,7 @@ def test_validate_revision_rejects_cycle() -> None:
     """A cycle among non-trigger nodes is rejected."""
 
     nodes = [
-        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
+        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {"payload": []}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
         {"id": "a1", "name": "A", "type": "tests.passthrough", "position": [200, 0], "parameters": {}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
         {"id": "b1", "name": "B", "type": "tests.passthrough", "position": [400, 0], "parameters": {}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
     ]
@@ -263,7 +263,7 @@ async def test_run_flow_executes_code_node() -> None:
     """`flows.code` runs in an isolated subprocess and transforms items."""
 
     nodes = [
-        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
+        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {"payload": []}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
         {
             "id": "c1",
             "name": "Code",
@@ -312,7 +312,7 @@ async def test_run_flow_branch_and_merge_flush_when_one_branch_skipped() -> None
     """
 
     nodes = [
-        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
+        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {"payload": []}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
         {"id": "b1", "name": "Branch", "type": "flows.branch", "position": [200, 0], "parameters": {"field": "x", "equals": 1}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
         {"id": "m1", "name": "Merge", "type": "flows.merge", "position": [400, 0], "parameters": {}, "webhook_id": None, "disabled": False, "on_error": "stop", "retry_on_fail": False, "max_tries": 1, "wait_between_tries_ms": 1000, "notes": None},
     ]
@@ -352,6 +352,8 @@ def _n(
     x: int,
     params: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    if ntype == "flows.trigger.manual" and params is None:
+        params = {"payload": []}
     return {
         "id": id_,
         "name": name,
@@ -688,8 +690,8 @@ async def test_flows_code_context_includes_nodes_materialized_run_data() -> None
 
 
 @pytest.mark.asyncio
-async def test_manual_trigger_payload_merged_into_json() -> None:
-    """`flows.trigger.manual` parameters.payload is merged; `trigger` key comes from `trigger_data`."""
+async def test_manual_trigger_payload_array_item_merged_into_json() -> None:
+    """`flows.trigger.manual` merges each payload array item; `trigger` key comes from `trigger_data`."""
     n = ad.flows.FlowsManualTriggerNode()
     ctx = ad.flows.ExecutionContext(
         organization_id="o1",
@@ -705,7 +707,7 @@ async def test_manual_trigger_payload_merged_into_json() -> None:
     )
     out = await n.execute(
         ctx,
-        {"id": "t1", "parameters": {"payload": {"hello": 1, "x": "y"}}},
+        {"id": "t1", "parameters": {"payload": [{"hello": 1, "x": "y"}]}},
         [[]],
     )
     item = out[0][0]
@@ -729,6 +731,38 @@ async def test_manual_trigger_without_payload_emits_only_trigger() -> None:
         stop_requested=False,
         logger=None,
     )
-    out = await n.execute(ctx, {"id": "t1", "parameters": {}}, [[]])
+    out = await n.execute(ctx, {"id": "t1", "parameters": {"payload": []}}, [[]])
     assert out[0][0].json == {"trigger": {"type": "manual"}}
+
+
+@pytest.mark.asyncio
+async def test_manual_trigger_payload_array_emits_multiple_items() -> None:
+    n = ad.flows.FlowsManualTriggerNode()
+    ctx = ad.flows.ExecutionContext(
+        organization_id="o1",
+        execution_id="e1",
+        flow_id="f1",
+        flow_revid="r1",
+        mode="manual",
+        trigger_data={"type": "manual", "document_id": "d1"},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    out = await n.execute(
+        ctx,
+        {"id": "t1", "parameters": {"payload": [{"name": "First item", "code": 1}, {"name": "Second item", "code": 2}]}},
+        [[]],
+    )
+    assert len(out) == 1
+    assert len(out[0]) == 2
+    assert out[0][0].json["name"] == "First item"
+    assert out[0][0].json["code"] == 1
+    assert out[0][1].json["name"] == "Second item"
+    assert out[0][1].json["code"] == 2
+    assert out[0][0].json["trigger"] == {"type": "manual", "document_id": "d1"}
+    assert out[0][1].json["trigger"] == {"type": "manual", "document_id": "d1"}
+    assert out[0][0].meta["item_index"] == 0
+    assert out[0][1].meta["item_index"] == 1
 

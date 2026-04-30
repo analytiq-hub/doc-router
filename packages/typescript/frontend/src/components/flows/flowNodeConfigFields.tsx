@@ -120,8 +120,9 @@ export const FlowNodeParameterFields: React.FC<{
     const t = subschema?.type;
     const v = (params as Record<string, unknown>)[key];
     const isCode = key === 'python_code' || key === 'js_code' || key === 'ts_code';
+    const hasOneOf = Array.isArray((subschema as { oneOf?: unknown }).oneOf);
 
-    if (isCode || t === 'object' || t === 'array') {
+    if (isCode || hasOneOf || t === 'object' || t === 'array') {
       const lang = key === 'python_code' ? 'python' : key === 'ts_code' ? 'typescript' : key === 'js_code' ? 'javascript' : 'json';
       const textValue =
         typeof v === 'string'
