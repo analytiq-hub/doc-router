@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type { FlowExecution, FlowNodeType, FlowRevision, FlowRfEdge, FlowRfNode } from '@docrouter/sdk';
@@ -13,6 +13,12 @@ import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNode
 import { useFlowApi } from '@/components/flows/useFlowApi';
 import type { Edge, Node } from 'reactflow';
 import FlowExecutionsView from '@/components/flows/FlowExecutionsView';
+import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelGroupHandle } from 'react-resizable-panels';
+
+const LOGS_COLLAPSED_PCT = 8;
+const LOGS_MIN_EXPANDED_PCT = LOGS_COLLAPSED_PCT;
+const LOGS_MAX_EXPANDED_PCT = 90;
+const LOGS_STORAGE_KEY = 'docrouter.flow.logsPanel.expandedPct';
 
 function tabFromQuery(value: string | null): FlowCanvasView {
   return value === 'executions' ? 'executions' : 'editor';
@@ -45,6 +51,16 @@ export default function FlowDetailPageClient({
   const [logsFocusExecutionId, setLogsFocusExecutionId] = useState<string | null>(null);
   const [editorOpenConfigNodeId, setEditorOpenConfigNodeId] = useState<string | null>(null);
 
+  const logsPanelGroupRef = useRef<ImperativePanelGroupHandle | null>(null);
+  const [logsExpanded, setLogsExpanded] = useState(false);
+  const [logsExpandedPct, setLogsExpandedPct] = useState<number>(() => {
+    if (typeof window === 'undefined') return 50;
+    const raw = window.localStorage.getItem(LOGS_STORAGE_KEY);
+    const n = raw ? Number(raw) : NaN;
+    if (!Number.isFinite(n)) return 50;
+    return Math.min(LOGS_MAX_EXPANDED_PCT, Math.max(LOGS_MIN_EXPANDED_PCT, n));
+  });
+
   const handleViewChange = useCallback(
     (next: FlowCanvasView) => {
       router.push(`/orgs/${organizationId}/flows/${flowId}?tab=${next}`);
@@ -59,6 +75,40 @@ export default function FlowDetailPageClient({
     },
     [handleViewChange],
   );
+
+  const applyLogsLayout = useCallback(
+    (nextExpanded: boolean, nextExpandedPct?: number) => {
+      const api = logsPanelGroupRef.current;
+      if (!api) return;
+      if (!nextExpanded) {
+        api.setLayout([100 - LOGS_COLLAPSED_PCT, LOGS_COLLAPSED_PCT]);
+        return;
+      }
+      const pct = Math.min(
+        LOGS_MAX_EXPANDED_PCT,
+        Math.max(LOGS_MIN_EXPANDED_PCT, nextExpandedPct ?? logsExpandedPct),
+      );
+      api.setLayout([100 - pct, pct]);
+    },
+    [logsExpandedPct],
+  );
+
+  const toggleLogsExpanded = useCallback(() => {
+    setLogsExpanded((cur) => {
+      const next = !cur;
+      // Apply layout immediately after state update.
+      queueMicrotask(() => applyLogsLayout(next));
+      return next;
+    });
+  }, [applyLogsLayout]);
+
+  useEffect(() => {
+    if (logsFocusExecutionId) {
+      setLogsExpanded(true);
+      // Ensure the panel opens even if it was collapsed.
+      queueMicrotask(() => applyLogsLayout(true));
+    }
+  }, [applyLogsLayout, logsFocusExecutionId]);
 
   const graphFingerprint = useMemo(() => {
     if (!revision) return null;
@@ -262,33 +312,67 @@ export default function FlowDetailPageClient({
                 onDeactivate={onDeactivate}
               />
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <div className="min-h-0 min-w-0 flex-1 overflow-hidden p-0 sm:p-1">
-                  <FlowEditor
-                    nodeTypes={nodeTypes}
-                    nodes={rfNodes as Node<FlowRfNodeData>[]}
-                    edges={rfEdges}
-                    onNodesChange={onNodesChange}
-                    onEdgesChange={onEdgesChange}
-                    onExecute={onRun}
-                    executionForIo={executionForIo}
-                    pinData={revision?.pin_data ?? null}
-                    onPinDataChange={(next) => {
-                      setRevision((cur) => (cur ? { ...cur, pin_data: next } : cur));
-                    }}
-                    openConfigNodeId={editorOpenConfigNodeId}
-                    onOpenConfigNodeIdChange={setEditorOpenConfigNodeId}
-                  />
-                </div>
-                <FlowLogsPanel
-                  orgApi={api}
-                  flowId={flowId}
-                  focusExecutionId={logsFocusExecutionId}
-                  onClearFocus={() => setLogsFocusExecutionId(null)}
-                  onExecutionChange={setExecutionForIo}
-                  onEditNode={onLogsEditNode}
-                  graphNodes={rfNodes as Node<FlowRfNodeData>[]}
-                  graphEdges={rfEdges}
-                />
+                <PanelGroup
+                  ref={logsPanelGroupRef}
+                  direction="vertical"
+                  className="min-h-0 flex-1"
+                  onLayout={(sizes) => {
+                    const bottom = sizes[1] ?? 0;
+                    if (bottom <= LOGS_COLLAPSED_PCT + 0.5) {
+                      if (logsExpanded) setLogsExpanded(false);
+                      return;
+                    }
+                    if (!logsExpanded) setLogsExpanded(true);
+                    const next = Math.min(LOGS_MAX_EXPANDED_PCT, Math.max(LOGS_MIN_EXPANDED_PCT, bottom));
+                    setLogsExpandedPct(next);
+                    try {
+                      window.localStorage.setItem(LOGS_STORAGE_KEY, String(next));
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                >
+                  <Panel defaultSize={100 - LOGS_COLLAPSED_PCT} minSize={25} className="min-h-0">
+                    <div className="h-full min-h-0 min-w-0 overflow-hidden p-0 sm:p-1">
+                      <FlowEditor
+                        nodeTypes={nodeTypes}
+                        nodes={rfNodes as Node<FlowRfNodeData>[]}
+                        edges={rfEdges}
+                        onNodesChange={onNodesChange}
+                        onEdgesChange={onEdgesChange}
+                        onExecute={onRun}
+                        executionForIo={executionForIo}
+                        pinData={revision?.pin_data ?? null}
+                        onPinDataChange={(next) => {
+                          setRevision((cur) => (cur ? { ...cur, pin_data: next } : cur));
+                        }}
+                        openConfigNodeId={editorOpenConfigNodeId}
+                        onOpenConfigNodeIdChange={setEditorOpenConfigNodeId}
+                      />
+                    </div>
+                  </Panel>
+                  {logsExpanded ? (
+                    <PanelResizeHandle className="h-2 cursor-row-resize bg-[#e8eaed] hover:bg-[#d8dde4]" />
+                  ) : (
+                    <PanelResizeHandle className="h-px bg-[#e8eaed]" />
+                  )}
+                  <Panel defaultSize={LOGS_COLLAPSED_PCT} minSize={LOGS_COLLAPSED_PCT} className="min-h-0">
+                    <div className="h-full min-h-0">
+                      <FlowLogsPanel
+                        orgApi={api}
+                        flowId={flowId}
+                        focusExecutionId={logsFocusExecutionId}
+                        onClearFocus={() => setLogsFocusExecutionId(null)}
+                        onExecutionChange={setExecutionForIo}
+                        onEditNode={onLogsEditNode}
+                        expanded={logsExpanded}
+                        onToggleExpanded={toggleLogsExpanded}
+                        graphNodes={rfNodes as Node<FlowRfNodeData>[]}
+                        graphEdges={rfEdges}
+                      />
+                    </div>
+                  </Panel>
+                </PanelGroup>
               </div>
             </div>
           )}

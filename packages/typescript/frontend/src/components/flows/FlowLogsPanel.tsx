@@ -54,23 +54,29 @@ const FlowLogsPanel: React.FC<{
   onClearFocus: () => void;
   onExecutionChange?: (e: FlowExecution | null) => void;
   onEditNode?: (nodeId: string) => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
   /** Current canvas graph — used for node names and input wiring in log details. */
   graphNodes?: Node<FlowRfNodeData>[];
   graphEdges?: Edge[];
-}> = ({ orgApi, flowId, focusExecutionId, onClearFocus, onExecutionChange, onEditNode, graphNodes, graphEdges }) => {
-  const [expanded, setExpanded] = useState(false);
+}> = ({
+  orgApi,
+  flowId,
+  focusExecutionId,
+  onClearFocus,
+  onExecutionChange,
+  onEditNode,
+  expanded,
+  onToggleExpanded,
+  graphNodes,
+  graphEdges,
+}) => {
   const [execution, setExecution] = useState<FlowExecution | null>(null);
   const [activeTab, setActiveTab] = useState<LogsTab>('overview');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const edges = useMemo(() => graphEdges ?? [], [graphEdges]);
   const nodes = useMemo(() => graphNodes ?? [], [graphNodes]);
-
-  useEffect(() => {
-    if (focusExecutionId) {
-      setExpanded(true);
-    }
-  }, [focusExecutionId]);
 
   useEffect(() => {
     onExecutionChange?.(execution);
@@ -195,11 +201,11 @@ const FlowLogsPanel: React.FC<{
   }, [selectedNode]);
 
   return (
-    <div className="shrink-0 border-t border-[#e2e4e8] bg-[#fbfbfc]" data-testid="flow-logs-panel">
+    <div className="flex h-full min-h-0 flex-col border-t border-[#e2e4e8] bg-[#fbfbfc]" data-testid="flow-logs-panel">
       <div className="flex h-11 items-center justify-between gap-2 px-3">
         <button
           type="button"
-          onClick={() => setExpanded((e) => !e)}
+          onClick={onToggleExpanded}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
           <span className="text-sm font-semibold text-gray-800">Logs</span>
@@ -223,7 +229,7 @@ const FlowLogsPanel: React.FC<{
           )}
           <button
             type="button"
-            onClick={() => setExpanded((e) => !e)}
+            onClick={onToggleExpanded}
             aria-label={expanded ? 'Collapse' : 'Expand'}
             className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100"
           >
@@ -232,7 +238,7 @@ const FlowLogsPanel: React.FC<{
         </div>
       </div>
       {expanded && (
-        <div className="max-h-[min(50vh,560px)] overflow-auto border-t border-[#eceff2] bg-white">
+        <div className="min-h-0 flex-1 overflow-auto border-t border-[#eceff2] bg-white">
           <div className="p-3">
             {err && <div className="mb-2 text-sm text-red-600">{err}</div>}
             {loading && !execution && <div className="text-sm text-gray-500">Loading…</div>}
