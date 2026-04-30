@@ -76,6 +76,7 @@ const FlowExecutionsView: React.FC<{
   const [autoRefresh, setAutoRefresh] = useState(true);
   const [detail, setDetail] = useState<FlowExecution | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
+  const [stopLoadingId, setStopLoadingId] = useState<string | null>(null);
   const [viewNodes, setViewNodes] = useState<Node<FlowRfNodeData>[]>([]);
   const [viewEdges, setViewEdges] = useState<Edge[]>([]);
   const [configModalId, setConfigModalId] = useState<string | null>(null);
@@ -103,7 +104,7 @@ const FlowExecutionsView: React.FC<{
     if (!autoRefresh || !anyActive) return;
     const n = setInterval(() => {
       void loadList();
-    }, 3000);
+    }, 1000);
     return () => clearInterval(n);
   }, [anyActive, autoRefresh, loadList]);
 
@@ -141,6 +142,25 @@ const FlowExecutionsView: React.FC<{
       }
     },
     [fallbackEdges, fallbackNodes, flowId, nodeTypesByKey, orgApi],
+  );
+
+  const stopExecution = useCallback(
+    async (executionId: string) => {
+      try {
+        setErr('');
+        setStopLoadingId(executionId);
+        await orgApi.stopExecution(flowId, executionId);
+        await loadList();
+        if (selectedId === executionId) {
+          await loadDetailAndGraph(executionId);
+        }
+      } catch (e: unknown) {
+        setErr(e instanceof Error ? e.message : 'Failed to stop execution');
+      } finally {
+        setStopLoadingId(null);
+      }
+    },
+    [flowId, loadDetailAndGraph, loadList, orgApi, selectedId],
   );
 
   useEffect(() => {
@@ -211,31 +231,63 @@ const FlowExecutionsView: React.FC<{
           <ul className="py-0">
             {list.map((e) => {
               const sel = e.execution_id === selectedId;
+              const running = statusRunning(e);
+              const stopping = stopLoadingId === e.execution_id;
               return (
                 <li key={e.execution_id} className="relative">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedId(e.execution_id);
-                      setConfigModalId(null);
-                    }}
+                  <div
                     className={[
-                      'relative flex w-full flex-col gap-0.5 border-b border-[#e8eaed] py-2.5 pl-3 pr-2 text-left transition',
+                      'relative flex w-full items-stretch gap-1 border-b border-[#e8eaed] text-left transition',
                       sel ? 'bg-gray-100' : 'bg-white hover:bg-gray-50',
                     ].join(' ')}
                   >
-                    {sel && <span className="absolute left-0 top-0 h-full w-1 rounded-r bg-emerald-500" aria-hidden />}
-                    <div className="pl-0.5 text-xs font-medium text-gray-500">{formatLocalDate(e.started_at)}</div>
-                    <div className="pl-0.5 text-sm font-semibold text-gray-900">
-                      {e.status === 'success' && 'Succeeded'}
-                      {e.status === 'error' && 'Error'}
-                      {e.status === 'running' && 'Running'}
-                      {e.status === 'queued' && 'Queued'}
-                      {e.status === 'stopped' && 'Stopped'}
-                      {!['success', 'error', 'running', 'queued', 'stopped'].includes(e.status) && e.status}{' '}
-                      <span className="font-normal text-gray-500">in {formatDuration(e)}</span>
-                    </div>
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedId(e.execution_id);
+                        setConfigModalId(null);
+                      }}
+                      className="relative flex min-w-0 flex-1 flex-col gap-0.5 py-2.5 pl-3 pr-2"
+                    >
+                      {sel && (
+                        <span className="absolute left-0 top-0 h-full w-1 rounded-r bg-emerald-500" aria-hidden />
+                      )}
+                      <div className="pl-0.5 text-xs font-medium text-gray-500">{formatLocalDate(e.started_at)}</div>
+                      <div className="pl-0.5 text-sm font-semibold text-gray-900">
+                        {e.status === 'success' && 'Succeeded'}
+                        {e.status === 'error' && 'Error'}
+                        {e.status === 'running' && 'Running'}
+                        {e.status === 'queued' && 'Queued'}
+                        {e.status === 'stopped' && 'Stopped'}
+                        {!['success', 'error', 'running', 'queued', 'stopped'].includes(e.status) && e.status}{' '}
+                        <span className="font-normal text-gray-500">in {formatDuration(e)}</span>
+                      </div>
+                    </button>
+
+                    {running && (
+                      <div className="flex shrink-0 flex-col justify-center pr-2">
+                        <button
+                          type="button"
+                          disabled={stopping}
+                          onClick={(ev) => {
+                            ev.preventDefault();
+                            ev.stopPropagation();
+                            void stopExecution(e.execution_id);
+                          }}
+                          className={[
+                            'rounded border px-2.5 py-1 text-xs font-semibold shadow-sm transition',
+                            stopping
+                              ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+                              : 'border-red-200 bg-white text-red-700 hover:bg-red-50',
+                          ].join(' ')}
+                          title="Request stop"
+                          aria-label="Stop execution"
+                        >
+                          {stopping ? 'Stopping…' : 'Stop'}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </li>
               );
             })}
@@ -254,8 +306,34 @@ const FlowExecutionsView: React.FC<{
         )}
         {detail && (
           <div className="absolute left-0 right-0 top-0 z-10 border-b border-[#eceff2] bg-white/90 px-3 py-1.5 text-xs text-gray-600 backdrop-blur-sm">
-            <span className="font-medium text-gray-800">{formatLocalDate(detail.started_at)}</span> · {detail.status}
-            {detail.finished_at && <span> · {formatDuration(detail)}</span>} · <span className="font-mono">ID {detail.execution_id}</span>
+            <div className="flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <span className="font-medium text-gray-800">{formatLocalDate(detail.started_at)}</span> · {detail.status}
+                {detail.finished_at && <span> · {formatDuration(detail)}</span>} ·{' '}
+                <span className="font-mono">ID {detail.execution_id}</span>
+              </div>
+              {statusRunning(detail) && (
+                <button
+                  type="button"
+                  disabled={stopLoadingId === detail.execution_id}
+                  onClick={(ev) => {
+                    ev.preventDefault();
+                    ev.stopPropagation();
+                    void stopExecution(detail.execution_id);
+                  }}
+                  className={[
+                    'shrink-0 rounded border px-2.5 py-1 text-[11px] font-semibold shadow-sm transition',
+                    stopLoadingId === detail.execution_id
+                      ? 'cursor-not-allowed border-gray-200 bg-gray-100 text-gray-400'
+                      : 'border-red-200 bg-white text-red-700 hover:bg-red-50',
+                  ].join(' ')}
+                  title="Request stop"
+                  aria-label="Stop execution"
+                >
+                  {stopLoadingId === detail.execution_id ? 'Stopping…' : 'Stop'}
+                </button>
+              )}
+            </div>
           </div>
         )}
         {!selectedId && !listLoading && (
