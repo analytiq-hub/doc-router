@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import type { FlowExecution, FlowNodeType, FlowRevision, FlowRfEdge, FlowRfNode } from '@docrouter/sdk';
 import FlowToolbar from '@/components/flows/FlowToolbar';
 import FlowEditor from '@/components/flows/FlowEditor';
-import FlowCanvasViewTabs, { type FlowCanvasView } from '@/components/flows/FlowCanvasViewTabs';
+import FlowCanvasViewTabs, { FlowWorkspaceTabStraddle, type FlowCanvasView } from '@/components/flows/FlowCanvasViewTabs';
 import FlowLogsPanel from '@/components/flows/FlowLogsPanel';
 import { snapRfNodesPositions } from '@/components/flows/canvasGrid';
 import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNodeData } from '@/components/flows/flowRf';
@@ -322,24 +322,27 @@ export default function FlowDetailPageClient({
         {message && <div className="mb-3 text-sm text-red-600">{message}</div>}
 
         <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-          <FlowCanvasViewTabs value={view} onChange={handleViewChange} />
-
           {view === 'editor' && (
             /* Fixed height: React Flow needs a non-zero parent (see error #004). h-full inside scroll areas often resolves to 0. */
             <div className="flex h-[max(32rem,calc(100dvh-12.5rem))] min-h-[32rem] flex-col">
-              <FlowToolbar
-                name={flowName}
-                onNameChange={setFlowName}
-                active={flowActive}
-                isDirty={isDirty}
-                isSaving={isSaving}
-                onSave={onSave}
-                onRun={onRun}
-                onActivate={onActivate}
-                onDeactivate={onDeactivate}
-                onDownloadFlowJson={() => void onDownloadFlowJson()}
-              />
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="relative z-10 shrink-0 bg-white">
+                <FlowToolbar
+                  name={flowName}
+                  onNameChange={setFlowName}
+                  active={flowActive}
+                  isDirty={isDirty}
+                  isSaving={isSaving}
+                  onSave={onSave}
+                  onRun={onRun}
+                  onActivate={onActivate}
+                  onDeactivate={onDeactivate}
+                  onDownloadFlowJson={() => void onDownloadFlowJson()}
+                />
+                <FlowWorkspaceTabStraddle>
+                  <FlowCanvasViewTabs value={view} onChange={handleViewChange} />
+                </FlowWorkspaceTabStraddle>
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
                 <PanelGroup
                   ref={logsPanelGroupRef}
                   direction="vertical"
@@ -406,14 +409,27 @@ export default function FlowDetailPageClient({
           )}
 
           {view === 'executions' && (
-            <FlowExecutionsView
-              orgApi={api}
-              flowId={flowId}
-              nodeTypes={nodeTypes}
-              fallbackNodes={rfNodes as Node<FlowRfNodeData>[]}
-              fallbackEdges={rfEdges}
-              onEditFlowNode={onLogsEditNode}
-            />
+            <div className="flex h-[max(32rem,calc(100dvh-12.5rem))] min-h-[32rem] flex-col bg-white">
+              <div className="relative z-10 shrink-0 bg-white px-3">
+                <div className="flex min-h-[2.625rem] items-center border-b border-gray-200 py-2">
+                  <span className="truncate text-sm font-semibold text-gray-900">{flowName.trim() || 'Untitled flow'}</span>
+                </div>
+                <FlowWorkspaceTabStraddle>
+                  <FlowCanvasViewTabs value={view} onChange={handleViewChange} />
+                </FlowWorkspaceTabStraddle>
+              </div>
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
+                <FlowExecutionsView
+                  suppressTopChrome
+                  orgApi={api}
+                  flowId={flowId}
+                  nodeTypes={nodeTypes}
+                  fallbackNodes={rfNodes as Node<FlowRfNodeData>[]}
+                  fallbackEdges={rfEdges}
+                  onEditFlowNode={onLogsEditNode}
+                />
+              </div>
+            </div>
           )}
         </div>
       </div>

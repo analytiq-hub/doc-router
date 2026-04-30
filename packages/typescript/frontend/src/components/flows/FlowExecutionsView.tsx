@@ -123,7 +123,9 @@ const FlowExecutionsView: React.FC<{
   fallbackEdges: Edge[];
   /** Open editor and focus node config — e.g. from logs “Edit node”. */
   onEditFlowNode?: (nodeId: string) => void;
-}> = ({ orgApi, flowId, nodeTypes, fallbackNodes, fallbackEdges, onEditFlowNode }) => {
+  /** When true, omit top border (workspace header above already divides the pane). */
+  suppressTopChrome?: boolean;
+}> = ({ orgApi, flowId, nodeTypes, fallbackNodes, fallbackEdges, onEditFlowNode, suppressTopChrome }) => {
   const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
   const [list, setList] = useState<FlowExecution[]>([]);
   const [total, setTotal] = useState(0);
@@ -293,7 +295,14 @@ const FlowExecutionsView: React.FC<{
   const runDataForModal = detail?.run_data as Record<string, unknown> | undefined;
 
   return (
-    <div className="docrouter-flow-canvas flex h-[max(32rem,calc(100dvh-12.5rem))] min-h-[32rem] w-full min-w-0 overflow-hidden border-t border-[#e8eaed] bg-white">
+    <div
+      className={[
+        'docrouter-flow-canvas flex h-full min-h-0 w-full min-w-0 flex-1 overflow-hidden bg-white',
+        suppressTopChrome ? '' : 'border-t border-[#e8eaed]',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <PanelGroup
         ref={executionsSplitRef}
         direction="horizontal"
