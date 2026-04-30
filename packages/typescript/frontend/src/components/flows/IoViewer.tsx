@@ -234,6 +234,70 @@ const SchemaAccordion: React.FC<{
   );
 };
 
+/** n8n-style schema: item count lives in header; body shows fields of the first item only — no `$json` root row. */
+function SchemaFirstItemFields({
+  schemaRoot,
+  startDrag,
+}: {
+  schemaRoot: unknown;
+  startDrag: (e: React.DragEvent, path: JsonPath) => void;
+}) {
+  if (schemaRoot === null || typeof schemaRoot === 'undefined') {
+    return <div className="px-2 py-2 text-[11px] text-gray-500">No structured fields.</div>;
+  }
+  if (isPlainObject(schemaRoot)) {
+    const entries = Object.entries(schemaRoot);
+    if (entries.length === 0) {
+      return <div className="px-2 py-2 text-[11px] text-gray-500">Empty object.</div>;
+    }
+    return (
+      <>
+        {entries.map(([k, v]) => (
+          <SchemaAccordion
+            key={k}
+            label={k}
+            value={v}
+            path={[k]}
+            onDragStartPath={startDrag}
+            depth={0}
+            maxDepth={6}
+          />
+        ))}
+      </>
+    );
+  }
+  if (Array.isArray(schemaRoot)) {
+    if (schemaRoot.length === 0) {
+      return <div className="px-2 py-2 text-[11px] text-gray-500">Empty array.</div>;
+    }
+    const capped = schemaRoot.slice(0, 200);
+    return (
+      <>
+        {capped.map((v, i) => (
+          <SchemaAccordion
+            key={i}
+            label={String(i)}
+            value={v}
+            path={[i]}
+            onDragStartPath={startDrag}
+            depth={0}
+            maxDepth={6}
+          />
+        ))}
+        {schemaRoot.length > 200 && (
+          <div className="px-2 py-1 text-[11px] text-gray-500">
+            … truncated ({schemaRoot.length - 200} more index entries)
+          </div>
+        )}
+      </>
+    );
+  }
+
+  return (
+    <SchemaAccordion label="#" value={schemaRoot} path={[]} onDragStartPath={startDrag} depth={0} maxDepth={6} />
+  );
+}
+
 export const IoViewer: React.FC<{
   title?: string;
   value: unknown;
@@ -300,11 +364,11 @@ export const IoViewer: React.FC<{
   const itemsCountLabel = useMemo(() => {
     if (valueKind === 'executionItems') {
       const n = executionItems.length;
-      return `${n} ${n === 1 ? 'item' : 'items'}`;
+      return `${n} ${n === 1 ? 'Item' : 'Items'}`;
     }
     if (Array.isArray(value)) {
       const n = value.length;
-      return `${n} ${n === 1 ? 'item' : 'items'}`;
+      return `${n} ${n === 1 ? 'Item' : 'Items'}`;
     }
     return null;
   }, [executionItems, value, valueKind]);
@@ -370,14 +434,7 @@ export const IoViewer: React.FC<{
             {isExecution && executionItems.length === 0 ? (
               <div className="p-3 text-sm text-gray-500">No items.</div>
             ) : (
-              <SchemaAccordion
-                label="$json"
-                value={schemaRoot ?? null}
-                path={[]}
-                onDragStartPath={startDrag}
-                depth={0}
-                maxDepth={6}
-              />
+              <SchemaFirstItemFields schemaRoot={schemaRoot ?? null} startDrag={startDrag} />
             )}
           </div>
         </div>
