@@ -268,7 +268,7 @@ const FlowLogsPanel: React.FC<{
               <>
                 {activeTab === 'overview' && (
                   <div className="mb-3 flex items-baseline justify-between gap-2 border-b border-[#eceff2] pb-2">
-                    <div className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">{summaryLine}</div>
+                    <div className="flex-none whitespace-nowrap text-sm font-semibold text-gray-900">{summaryLine}</div>
                     <div className="inline-flex flex-none rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
                       {(['overview', 'details'] as const).map((t) => (
                         <button
@@ -384,9 +384,7 @@ const FlowLogsPanel: React.FC<{
                           <div className="group relative min-w-0">
                             {/* Buttons must live inside this strip (details mode). */}
                             <div className="mb-3 flex items-baseline justify-between gap-2 border-b border-[#eceff2] pb-2 pr-2">
-                              <div className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-900">
-                                {summaryLine}
-                              </div>
+                              <div className="flex-none whitespace-nowrap text-sm font-semibold text-gray-900">{summaryLine}</div>
                               <div className="pointer-events-none opacity-0 transition group-hover:opacity-100">
                                 <div className="pointer-events-auto inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px] shadow-sm">
                                   {(['overview', 'details'] as const).map((t) => (
