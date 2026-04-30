@@ -8,7 +8,7 @@ export const flowNameBreadcrumbInputClass =
 
 /** Shared shell: inline name styling (used by read + input + measuring span). */
 const flowInlineNameShell =
-  'box-border inline-block min-h-[38px] max-w-[min(100%,42rem)] whitespace-nowrap rounded-md px-3 py-1.5 align-middle text-sm font-semibold text-gray-900';
+  'box-border inline-block min-h-0 max-w-[min(100%,42rem)] whitespace-nowrap rounded-md px-2.5 py-0.5 align-middle text-sm font-semibold text-gray-900';
 
 /** Plain title (no border); width follows text up to max-w. */
 export const flowInlineNameReadClass = `${flowInlineNameShell} cursor-default overflow-hidden text-ellipsis border border-transparent`;
@@ -17,5 +17,7 @@ export const flowInlineNameReadClass = `${flowInlineNameShell} cursor-default ov
 export const flowInlineNameInputClass = `${flowInlineNameShell} border border-gray-300 bg-white shadow-sm focus:border-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-500/25`;
 
 /** Hidden measuring span for inline-name inputs (same font + padding, no border/shadow). */
-export const flowInlineNameMeasureClass =
-  `${flowInlineNameShell} border border-transparent shadow-none px-3 py-1.5`;
+export const flowInlineNameMeasureClass = `${flowInlineNameShell} border border-transparent shadow-none px-2.5 py-0.5`;
+
+/** Matches executions workspace title strip — keeps editor toolbar one row visually aligned (42px). */
+export const FLOW_WORKSPACE_HEADER_HEIGHT_CLASS = 'h-[2.625rem]';

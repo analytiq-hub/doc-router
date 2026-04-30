@@ -4,13 +4,16 @@ import React, { useState } from 'react';
 import { IconButton, Menu, MenuItem } from '@mui/material';
 import MoreVertIcon from '@mui/icons-material/MoreVert';
 import FlowStatusBadge from './FlowStatusBadge';
-import { flowInlineNameInputClass, flowInlineNameMeasureClass, flowInlineNameReadClass } from './flowUiClasses';
+import {
+  FLOW_WORKSPACE_HEADER_HEIGHT_CLASS,
+  flowInlineNameInputClass,
+  flowInlineNameMeasureClass,
+  flowInlineNameReadClass,
+} from './flowUiClasses';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 
 const flowToolbarBtnClass =
-  'inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
-const runBtnClass =
-  'inline-flex items-center justify-center rounded-md px-4 py-1.5 text-sm font-semibold text-white shadow-sm transition hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50';
+  'inline-flex items-center justify-center rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-medium text-gray-800 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
 
 const FlowToolbar: React.FC<{
   name: string;
@@ -19,7 +22,6 @@ const FlowToolbar: React.FC<{
   isDirty: boolean;
   isSaving: boolean;
   onSave: () => void;
-  onRun: () => void;
   onActivate: () => void;
   onDeactivate: () => void;
   onDownloadFlowJson: () => void;
@@ -30,7 +32,6 @@ const FlowToolbar: React.FC<{
   isDirty,
   isSaving,
   onSave,
-  onRun,
   onActivate,
   onDeactivate,
   onDownloadFlowJson,
@@ -42,7 +43,7 @@ const FlowToolbar: React.FC<{
   const measure = useInlineNameWidthPx(name, 'Flow name');
 
   return (
-    <div className="flex items-center justify-between border-b border-gray-200 bg-white px-3 py-2">
+    <div className={`flex ${FLOW_WORKSPACE_HEADER_HEIGHT_CLASS} shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3`}>
       <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 pr-2">
         <div
           className="max-w-full shrink-0"
@@ -104,20 +105,6 @@ const FlowToolbar: React.FC<{
         </>
         <button type="button" className={flowToolbarBtnClass} onClick={onSave} disabled={!isDirty || isSaving}>
           {isSaving ? 'Saving…' : 'Save'}
-        </button>
-        <button
-          type="button"
-          onClick={onRun}
-          className={runBtnClass}
-          style={{ backgroundColor: '#ff6d5a' }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#e85d4d';
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.backgroundColor = '#ff6d5a';
-          }}
-        >
-          Execute workflow
         </button>
         {active ? (
           <button type="button" className={flowToolbarBtnClass} onClick={onDeactivate}>
