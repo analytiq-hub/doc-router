@@ -74,6 +74,7 @@ const FlowLogsPanel: React.FC<{
   const [execution, setExecution] = useState<FlowExecution | null>(null);
   const [activeTab, setActiveTab] = useState<LogsTab>('overview');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [ioTab, setIoTab] = useState<'input' | 'output'>('output');
 
   const edges = useMemo(() => graphEdges ?? [], [graphEdges]);
   const nodes = useMemo(() => graphNodes ?? [], [graphNodes]);
@@ -85,6 +86,7 @@ const FlowLogsPanel: React.FC<{
   useEffect(() => {
     setSelectedNodeId(null);
     setActiveTab('overview');
+    setIoTab('output');
   }, [execution?.execution_id]);
 
   const [err, setErr] = useState<string>('');
@@ -171,6 +173,10 @@ const FlowLogsPanel: React.FC<{
 
   const selectedNodeType = selectedNode?.data?.nodeType ?? null;
   const isSelectedTrigger = Boolean(selectedNodeType?.is_trigger);
+
+  useEffect(() => {
+    if (isSelectedTrigger) setIoTab('output');
+  }, [isSelectedTrigger]);
 
   const selectedRunEntry = useMemo(() => {
     if (!selectedNodeId) return null;
@@ -322,6 +328,9 @@ const FlowLogsPanel: React.FC<{
                                     )}
                                   </div>
                                 </div>
+                                <div className="shrink-0 text-[11px] font-semibold text-gray-500">
+                                  {formatExecutionMs(rec.execution_time_ms)}
+                                </div>
                                 {canEdit && (
                                   <span className="shrink-0 opacity-0 pointer-events-none transition group-hover:opacity-100 group-hover:pointer-events-auto">
                                     <button
@@ -374,9 +383,55 @@ const FlowLogsPanel: React.FC<{
                           )}
 
                           {selectedNodeId && (
-                            <div className="grid gap-0 sm:grid-cols-2">
+                            <div>
                               {!isSelectedTrigger && (
-                                <div className="min-w-0 border-[#e8eaed] sm:border-r">
+                                <div className="border-b border-[#eceff2] bg-white px-3 py-2">
+                                  <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
+                                    {(['input', 'output'] as const).map((t) => (
+                                      <button
+                                        key={t}
+                                        type="button"
+                                        onClick={() => setIoTab(t)}
+                                        className={[
+                                          'rounded px-2 py-1 font-semibold',
+                                          ioTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
+                                        ].join(' ')}
+                                      >
+                                        {t === 'input' ? 'Input' : 'Output'}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {(isSelectedTrigger || ioTab === 'output') && (
+                                <div className="min-w-0">
+                                  <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
+                                    <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+                                      OUTPUT
+                                    </span>
+                                  </div>
+                                  <div className="p-3">
+                                    {selectedOutputPreview?.message && (
+                                      <div className="mb-2 text-sm text-amber-800">{selectedOutputPreview.message}</div>
+                                    )}
+                                    {selectedOutputPreview?.data != null ? (
+                                      <IoViewer
+                                        value={selectedOutputPreview.data}
+                                        dragSource={{ nodeId: selectedNodeId, source: 'nodeOutput' }}
+                                        defaultMode="table"
+                                      />
+                                    ) : (
+                                      !selectedOutputPreview?.message && (
+                                        <div className="text-sm text-gray-600">No output payload for this node.</div>
+                                      )
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {!isSelectedTrigger && ioTab === 'input' && (
+                                <div className="min-w-0">
                                   <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
                                     <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
                                       INPUT
@@ -420,30 +475,6 @@ const FlowLogsPanel: React.FC<{
                                   </div>
                                 </div>
                               )}
-
-                              <div className="min-w-0">
-                                <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
-                                  <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
-                                    OUTPUT
-                                  </span>
-                                </div>
-                                <div className="p-3">
-                                  {selectedOutputPreview?.message && (
-                                    <div className="mb-2 text-sm text-amber-800">{selectedOutputPreview.message}</div>
-                                  )}
-                                  {selectedOutputPreview?.data != null ? (
-                                    <IoViewer
-                                      value={selectedOutputPreview.data}
-                                      dragSource={{ nodeId: selectedNodeId, source: 'nodeOutput' }}
-                                      defaultMode="table"
-                                    />
-                                  ) : (
-                                    !selectedOutputPreview?.message && (
-                                      <div className="text-sm text-gray-600">No output payload for this node.</div>
-                                    )
-                                  )}
-                                </div>
-                              </div>
                             </div>
                           )}
                         </div>
