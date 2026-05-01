@@ -13,8 +13,14 @@ from analytiq_data.ocr.ocr_config import (
     merge_org_ocr_config,
     ocr_settings_catalog,
     spu_ocr_for_page_count,
-    textract_spu_charge,
+    textract_spu_and_usd_charge,
+    textract_usd_cost,
+    textract_spu_base_charge,
     textract_spu_cost,
+    USD_TEXTRACT_DETECT_PER_PAGE,
+    USD_TEXTRACT_FORMS_PER_PAGE,
+    USD_TEXTRACT_LAYOUT_STANDALONE_PER_PAGE,
+    USD_TEXTRACT_TABLES_PER_PAGE,
 )
 from analytiq_data.ocr.ocr_runners import run_document_ocr
 from analytiq_data.ocr.llm_ocr import _parse_llm_ocr_response
@@ -93,12 +99,35 @@ def test_spu_ocr_for_page_count():
     assert spu_ocr_for_page_count(50) == 2
 
 
-def test_textract_spu_charge_scales_per_feature():
-    assert textract_spu_charge(0, []) == 0
-    assert textract_spu_charge(25, []) == 1
-    assert textract_spu_charge(25, ["LAYOUT"]) == 4
-    assert textract_spu_charge(25, ["LAYOUT", "TABLES"]) == 8
-    assert textract_spu_charge(50, ["LAYOUT"]) == 8  # base 2, ×4 for one feature
+def test_textract_spu_base_charge_scales_per_feature():
+    assert textract_spu_base_charge(0, []) == 0
+    assert textract_spu_base_charge(25, []) == 1
+    assert textract_spu_base_charge(25, ["LAYOUT"]) == 4
+    assert textract_spu_base_charge(25, ["LAYOUT", "TABLES"]) == 8
+    assert textract_spu_base_charge(50, ["LAYOUT"]) == 8  # base 2, ×4 for one feature
+
+
+def test_textract_usd_cost_detect_and_analyze():
+    assert textract_usd_cost(100, []) == pytest.approx(
+        100 * USD_TEXTRACT_DETECT_PER_PAGE
+    )
+    # Layout + Tables: tables line only (layout bundled with tables in pricing examples)
+    assert textract_usd_cost(10, ["LAYOUT", "TABLES"]) == pytest.approx(
+        10 * USD_TEXTRACT_TABLES_PER_PAGE
+    )
+    assert textract_usd_cost(2, ["FORMS", "TABLES"]) == pytest.approx(
+        2 * (USD_TEXTRACT_FORMS_PER_PAGE + USD_TEXTRACT_TABLES_PER_PAGE)
+    )
+
+
+def test_textract_spu_and_usd_charge_prefers_cost_based_when_higher(monkeypatch):
+    monkeypatch.setattr(
+        "analytiq_data.payments.spu.compute_spu_to_charge",
+        lambda *_a, **_k: 99,
+    )
+    spus, usd = textract_spu_and_usd_charge(25, ["LAYOUT"])
+    assert spus == 99
+    assert usd == pytest.approx(25 * USD_TEXTRACT_LAYOUT_STANDALONE_PER_PAGE)
 
 
 def test_max_reserved_without_pdf_uses_fallback():
@@ -110,10 +139,11 @@ def test_max_reserved_textract_with_features():
     cfg = merge_org_ocr_config(
         {"textract": {"feature_types": ["LAYOUT", "TABLES"]}}
     )
-    assert max_reserved_spu_for_ocr_config(cfg) == textract_spu_charge(
+    expected_spus, _ = textract_spu_and_usd_charge(
         100, ["LAYOUT", "TABLES"]
     )
-    assert max_reserved_spu_for_ocr_config(cfg) == 32
+    assert max_reserved_spu_for_ocr_config(cfg) == expected_spus
+    assert expected_spus == 32
 
 
 def test_max_reserved_with_pdf_bytes():
@@ -252,6 +282,9 @@ async def test_run_document_ocr_textract_records_feature_scaled_spus():
         )
     rec.assert_called_once()
     assert rec.call_args.kwargs["spus"] == 4
+    assert rec.call_args.kwargs["actual_cost"] == pytest.approx(
+        USD_TEXTRACT_LAYOUT_STANDALONE_PER_PAGE
+    )
 
 
 @pytest.mark.asyncio

@@ -15,7 +15,7 @@ from analytiq_data.ocr.ocr_config import (
     OrgOcrConfig,
     max_reserved_spu_for_ocr_config,
     spu_ocr_for_page_count,
-    textract_spu_charge,
+    textract_spu_and_usd_charge,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,7 +91,9 @@ async def run_document_ocr(
                 "Textract did not produce usable output. Check logs and AWS configuration."
             )
         n_pages = _textract_page_count(tr)
-        spus = textract_spu_charge(n_pages, list(cfg.textract.feature_types))
+        spus, usd = textract_spu_and_usd_charge(
+            n_pages, list(cfg.textract.feature_types)
+        )
         if spus > 0:
             await ad.payments.record_spu_usage(
                 org_id=org_id,
@@ -99,10 +101,12 @@ async def run_document_ocr(
                 llm_provider="ocr",
                 llm_model="ocr",
                 operation="ocr",
+                actual_cost=usd,
             )
         logger.info(
             f"OCR textract finished org_id={org_id} document_id={document_id} "
-            f"pages={n_pages} features={len(cfg.textract.feature_types)} spus={spus}"
+            f"pages={n_pages} features={len(cfg.textract.feature_types)} "
+            f"usd={usd:.6f} spus={spus}"
         )
         return tr
 

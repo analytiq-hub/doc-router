@@ -43,7 +43,7 @@ def spu_ocr_for_page_count(n_pages: int) -> int:
     Base Textract SPUs from page count: 1 SPU per 25 pages (rounded up).
 
     Used alone for DetectDocumentText (no AnalyzeDocument features). For feature
-    pricing see :func:`textract_spu_charge`.
+    pricing see :func:`textract_spu_base_charge`.
     """
     if n_pages <= 0:
         return 0
@@ -52,8 +52,48 @@ def spu_ocr_for_page_count(n_pages: int) -> int:
 
 TEXTRACT_SPU_PER_FEATURE_MULTIPLIER = 4
 
+# --- AWS Textract USD estimates (list price, first tier / US public examples) ---------------
+# Textract does not return dollars on the API; we approximate for SPU upsizing.
+# Tune for your region/tier; see https://aws.amazon.com/textract/pricing/
+USD_TEXTRACT_DETECT_PER_PAGE = 0.0015
+USD_TEXTRACT_TABLES_PER_PAGE = 0.015
+USD_TEXTRACT_FORMS_PER_PAGE = 0.05
+USD_TEXTRACT_SIGNATURES_PER_PAGE = 0.0035
+# Layout is bundled with Tables when both are on (no extra line in AWS examples).
+# Layout without Tables: approximate same Analyze tier as Tables-only (first tier).
+USD_TEXTRACT_LAYOUT_STANDALONE_PER_PAGE = 0.015
 
-def textract_spu_charge(n_pages: int, feature_types: list[str]) -> int:
+
+def textract_usd_cost(n_pages: int, feature_types: list[str]) -> float:
+    """
+    Rough **list-price** USD for a Textract job (Detect vs Analyze + feature mix).
+
+    Multiplies **per-page** rates by ``n_pages``. Uses an additive model for Forms /
+    Tables / Signatures; Layout is omitted when Tables is also selected (bundling per AWS
+    pricing examples). Not an invoice — AWS billing may use volume tiers and bundle rules.
+    """
+    if n_pages <= 0:
+        return 0.0
+    fts = set(feature_types)
+    if not fts:
+        return float(n_pages) * USD_TEXTRACT_DETECT_PER_PAGE
+
+    per_page = 0.0
+    if "FORMS" in fts:
+        per_page += USD_TEXTRACT_FORMS_PER_PAGE
+    if "TABLES" in fts:
+        per_page += USD_TEXTRACT_TABLES_PER_PAGE
+    if "SIGNATURES" in fts:
+        per_page += USD_TEXTRACT_SIGNATURES_PER_PAGE
+    if "LAYOUT" in fts and "TABLES" not in fts:
+        per_page += USD_TEXTRACT_LAYOUT_STANDALONE_PER_PAGE
+
+    if per_page <= 0.0:
+        per_page = USD_TEXTRACT_DETECT_PER_PAGE
+    return float(n_pages) * per_page
+
+
+def textract_spu_base_charge(n_pages: int, feature_types: list[str]) -> int:
     """
     Textract OCR SPUs after a successful run.
 
@@ -67,6 +107,28 @@ def textract_spu_charge(n_pages: int, feature_types: list[str]) -> int:
     if k == 0:
         return base
     return base * TEXTRACT_SPU_PER_FEATURE_MULTIPLIER * k
+
+
+def textract_spu_and_usd_charge(
+    n_pages: int, feature_types: list[str]
+) -> tuple[int, float]:
+    """
+    Billable SPUs for Textract and the USD estimate used for cost-based charging.
+
+    Takes ``max`` of the internal heuristic (:func:`textract_spu_base_charge`) and
+    :func:`analytiq_data.payments.spu.compute_spu_to_charge` applied to
+    :func:`textract_usd_cost` (same pattern as LLM: cover ~200% of estimated USD
+    in credit terms when ``price_per_credit`` is configured).
+    """
+    usd = textract_usd_cost(n_pages, feature_types)
+    heuristic = textract_spu_base_charge(n_pages, feature_types)
+    if n_pages <= 0:
+        return (0, usd)
+
+    from analytiq_data.payments.spu import compute_spu_to_charge
+
+    cost_based_spus = compute_spu_to_charge(usd)
+    return (max(heuristic, cost_based_spus), usd)
 
 
 class OrgOcrTextractSettings(BaseModel):
@@ -155,8 +217,8 @@ def max_reserved_spu_for_ocr_config(
 
     ``pymupdf`` mode bills **0** SPU — no reservation.
 
-    For ``textract``, reservation matches :func:`textract_spu_charge` (4× base per
-    enabled AnalyzeDocument feature).
+    For ``textract``, reservation matches :func:`textract_spu_and_usd_charge`
+    (heuristic plus optional upsize from estimated AWS USD vs ``price_per_credit``).
     """
     if cfg.mode == "pymupdf":
         return 0
@@ -166,10 +228,16 @@ def max_reserved_spu_for_ocr_config(
         n = pdf_page_count(pdf_bytes)
         if n is not None and n > 0:
             if cfg.mode == "textract":
-                return max(1, textract_spu_charge(n, list(cfg.textract.feature_types)))
+                spus, _ = textract_spu_and_usd_charge(
+                    n, list(cfg.textract.feature_types)
+                )
+                return max(1, spus)
             return max(1, spu_ocr_for_page_count(n))
     if cfg.mode == "textract":
-        return max(1, textract_spu_charge(100, list(cfg.textract.feature_types)))
+        spus, _ = textract_spu_and_usd_charge(
+            100, list(cfg.textract.feature_types)
+        )
+        return max(1, spus)
     # Unknown page count: reserve as if 100 pages (4 SPUs) to avoid blocking large jobs.
     return max(1, spu_ocr_for_page_count(100))
 
