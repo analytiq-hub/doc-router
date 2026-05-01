@@ -296,10 +296,10 @@ const FlowNodeConfigModal: React.FC<{
         transition
         className="fixed inset-0 bg-black/20 transition data-[closed]:opacity-0 data-[enter]:duration-200 data-[leave]:duration-150"
       />
-      <div className="fixed inset-0 flex w-screen items-center justify-center p-2">
+      <div className="fixed inset-0 flex w-screen items-center justify-center py-2 px-[calc(22px+3pt)]">
         <DialogPanel
           transition
-          className="relative flex h-[min(90vh,900px)] w-[min(1400px,95vw)] max-w-[95vw] flex-col overflow-visible rounded-lg border border-[#e2e4e8] bg-white shadow-2xl transition data-[closed]:scale-95 data-[closed]:opacity-0"
+          className="relative flex h-[min(90vh,900px)] w-[min(1200px,90vw)] max-w-[90vw] flex-col overflow-visible rounded-lg border border-[#e2e4e8] bg-white shadow-2xl transition data-[closed]:scale-95 data-[closed]:opacity-0"
         >
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#eceff2] py-2.5 pl-4 pr-2">
             <div
