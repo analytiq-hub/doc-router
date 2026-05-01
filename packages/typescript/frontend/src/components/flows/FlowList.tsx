@@ -1,4 +1,5 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Menu, MenuButton, MenuItem, MenuItems, MenuSeparator } from '@headlessui/react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
@@ -10,6 +11,13 @@ import {
 import { getApiErrorMsg } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
 import FlowStatusBadge from './FlowStatusBadge';
+import {
+  flowWorkspaceDropdownDividerClass,
+  flowWorkspaceDropdownItemClass,
+  flowWorkspaceDropdownItemDestructiveClass,
+  flowWorkspaceMenuPanelClass,
+  flowWorkspaceMenuTriggerIconBtnClass,
+} from './flowWorkspaceMenu';
 import { useFlowApi } from './useFlowApi';
 import type { FlowListItem } from '@docrouter/sdk';
 
@@ -22,9 +30,6 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [pagination, setPagination] = useState({ page: 0, pageSize: 20 });
-
-  const [rowMenu, setRowMenu] = useState<FlowListItem | null>(null);
-  const rowMenuRef = useRef<HTMLDivElement | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -47,20 +52,8 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    if (!rowMenu) return;
-    const onDoc = (e: MouseEvent) => {
-      if (rowMenuRef.current && !rowMenuRef.current.contains(e.target as Node)) {
-        setRowMenu(null);
-      }
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [rowMenu]);
-
   const handleEdit = (item: FlowListItem) => {
     router.push(`/orgs/${organizationId}/flows/${item.flow.flow_id}`);
-    setRowMenu(null);
   };
 
   const handleRun = async (item: FlowListItem) => {
@@ -69,8 +62,6 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       await load();
     } catch (err) {
       setMessage(getApiErrorMsg(err) || 'Failed to run flow');
-    } finally {
-      setRowMenu(null);
     }
   };
 
@@ -84,8 +75,6 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       await load();
     } catch (err) {
       setMessage(getApiErrorMsg(err) || 'Failed to update flow activation');
-    } finally {
-      setRowMenu(null);
     }
   };
 
@@ -97,8 +86,6 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       await load();
     } catch (err) {
       setMessage(getApiErrorMsg(err) || 'Failed to delete flow');
-    } finally {
-      setRowMenu(null);
     }
   };
 
@@ -175,57 +162,58 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
                       >
                         <PlayIcon className="h-5 w-5" />
                       </button>
-                      <div className="relative" ref={rowMenu?.flow.flow_id === item.flow.flow_id ? rowMenuRef : null}>
-                        <button
-                          type="button"
-                          title="More"
-                          aria-label="More"
-                          aria-expanded={rowMenu?.flow.flow_id === item.flow.flow_id}
-                          onClick={() => setRowMenu((m) => (m?.flow.flow_id === item.flow.flow_id ? null : item))}
-                          className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100"
-                        >
-                          <EllipsisVerticalIcon className="h-5 w-5" />
-                        </button>
-                        {rowMenu?.flow.flow_id === item.flow.flow_id && (
-                          <div
-                            className="absolute right-0 z-20 mt-1 w-44 rounded-md border border-gray-200 bg-white py-1 text-left text-sm shadow-lg"
-                            role="menu"
-                          >
-                            <button
-                              type="button"
-                              className="flex w-full items-center gap-2 px-3 py-2 text-gray-800 hover:bg-gray-100"
-                              onClick={() => handleEdit(item)}
-                              role="menuitem"
-                            >
-                              <PencilSquareIcon className="h-4 w-4" /> Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="flex w-full items-center gap-2 px-3 py-2 text-gray-800 hover:bg-gray-100"
-                              onClick={() => void handleRun(item)}
-                              role="menuitem"
-                            >
-                              <PlayIcon className="h-4 w-4" /> Run
-                            </button>
-                            <button
-                              type="button"
-                              className="flex w-full items-center gap-2 px-3 py-2 text-gray-800 hover:bg-gray-100"
-                              onClick={() => void handleToggleActive(item)}
-                              role="menuitem"
-                            >
-                              {item.flow.active ? 'Deactivate' : 'Activate'}
-                            </button>
-                            <button
-                              type="button"
-                              className="flex w-full items-center gap-2 px-3 py-2 text-red-700 hover:bg-red-50"
-                              onClick={() => void handleDelete(item)}
-                              role="menuitem"
-                            >
-                              <TrashIcon className="h-4 w-4" /> Delete
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                      <Menu as="div" className="relative inline-flex">
+                        <MenuButton className={flowWorkspaceMenuTriggerIconBtnClass} title="More" aria-label="More">
+                          <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
+                        </MenuButton>
+                        <MenuItems anchor="bottom end" portal className={flowWorkspaceMenuPanelClass}>
+                          <MenuItem>
+                            {({ focus }) => (
+                              <button
+                                type="button"
+                                className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                                onClick={() => handleEdit(item)}
+                              >
+                                <PencilSquareIcon className="h-4 w-4 shrink-0" aria-hidden /> Edit
+                              </button>
+                            )}
+                          </MenuItem>
+                          <MenuItem>
+                            {({ focus }) => (
+                              <button
+                                type="button"
+                                className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                                onClick={() => void handleRun(item)}
+                              >
+                                <PlayIcon className="h-4 w-4 shrink-0" aria-hidden /> Run
+                              </button>
+                            )}
+                          </MenuItem>
+                          <MenuItem>
+                            {({ focus }) => (
+                              <button
+                                type="button"
+                                className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                                onClick={() => void handleToggleActive(item)}
+                              >
+                                {item.flow.active ? 'Deactivate' : 'Activate'}
+                              </button>
+                            )}
+                          </MenuItem>
+                          <MenuSeparator className={flowWorkspaceDropdownDividerClass} />
+                          <MenuItem>
+                            {({ focus }) => (
+                              <button
+                                type="button"
+                                className={`${flowWorkspaceDropdownItemDestructiveClass} w-full ${focus ? 'bg-red-50' : ''}`}
+                                onClick={() => void handleDelete(item)}
+                              >
+                                <TrashIcon className="h-4 w-4 shrink-0" aria-hidden /> Delete
+                              </button>
+                            )}
+                          </MenuItem>
+                        </MenuItems>
+                      </Menu>
                     </div>
                   </td>
                 </tr>

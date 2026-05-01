@@ -7,14 +7,20 @@ import {
   Disclosure,
   DisclosureButton,
   DisclosurePanel,
+  Menu,
+  MenuButton,
+  MenuItem,
+  MenuItems,
+  Tab,
+  TabGroup,
+  TabList,
+  TabPanel,
+  TabPanels,
 } from '@headlessui/react';
-import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
-import { BeakerIcon, ChevronRightIcon, MapPinIcon as MapPinOutlineIcon } from '@heroicons/react/24/outline';
+import { BeakerIcon, ChevronRightIcon, EllipsisVerticalIcon, MapPinIcon as MapPinOutlineIcon } from '@heroicons/react/24/outline';
 import { MapPinIcon as MapPinSolidIcon, PencilSquareIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor from '@monaco-editor/react';
-import { IconButton, Menu, MenuItem } from '@mui/material';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
 import type { Edge } from 'reactflow';
 import type { FlowNode, FlowNodeType, FlowPinData, FlowPinItem, FlowPinNodeOutput } from '@docrouter/sdk';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
@@ -28,6 +34,11 @@ import {
 } from './flowUiClasses';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 import { FlowModalSideNavStraddle } from './FlowCanvasViewTabs';
+import {
+  flowWorkspaceDropdownItemSimpleClass,
+  flowWorkspaceMenuPanelClass,
+  flowWorkspaceMenuTriggerIconBtnClass,
+} from './flowWorkspaceMenu';
 
 const IoBlock: React.FC<{
   title: string;
@@ -158,7 +169,6 @@ const FlowNodeConfigModal: React.FC<{
   const [tab, setTab] = useState(0);
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
-  const [nodeActionsAnchorEl, setNodeActionsAnchorEl] = useState<null | HTMLElement>(null);
   const [inputIoMode, setInputIoMode] = useState<'schema' | 'table' | 'json'>('schema');
   const [outputIoMode, setOutputIoMode] = useState<'schema' | 'table' | 'json'>('table');
   const measure = useInlineNameWidthPx(node?.name ?? '', 'Node name');
@@ -345,26 +355,23 @@ const FlowNodeConfigModal: React.FC<{
               )}
             </div>
             <div className="flex shrink-0 items-center gap-0.5">
-              <IconButton
-                size="small"
-                aria-label="More actions"
-                onClick={(e) => setNodeActionsAnchorEl(e.currentTarget)}
-              >
-                <MoreVertIcon fontSize="small" />
-              </IconButton>
-              <Menu
-                anchorEl={nodeActionsAnchorEl}
-                open={Boolean(nodeActionsAnchorEl)}
-                onClose={() => setNodeActionsAnchorEl(null)}
-              >
-                <MenuItem
-                  onClick={() => {
-                    setNodeActionsAnchorEl(null);
-                    downloadJson(`node_${node.id}.json`, node);
-                  }}
-                >
-                  Download
-                </MenuItem>
+              <Menu as="div" className="relative inline-flex">
+                <MenuButton className={flowWorkspaceMenuTriggerIconBtnClass} aria-label="More actions">
+                  <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
+                </MenuButton>
+                <MenuItems anchor="bottom end" portal modal={false} className={flowWorkspaceMenuPanelClass}>
+                  <MenuItem>
+                    {({ focus }) => (
+                      <button
+                        type="button"
+                        className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                        onClick={() => downloadJson(`node_${node.id}.json`, node)}
+                      >
+                        Download
+                      </button>
+                    )}
+                  </MenuItem>
+                </MenuItems>
               </Menu>
               <button
                 type="button"

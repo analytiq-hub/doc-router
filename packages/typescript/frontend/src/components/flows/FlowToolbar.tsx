@@ -1,14 +1,19 @@
 'use client';
 
 import React, { useState } from 'react';
-import { IconButton, Menu, MenuItem, Tooltip } from '@mui/material';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
+import { EllipsisVerticalIcon } from '@heroicons/react/24/outline';
 import {
   FLOW_WORKSPACE_HEADER_HEIGHT_CLASS,
   FLOW_WORKSPACE_TITLE_READ_CLASS,
   flowInlineNameInputClass,
   flowInlineNameMeasureClass,
 } from './flowUiClasses';
+import {
+  flowWorkspaceDropdownItemSimpleClass,
+  flowWorkspaceMenuPanelClass,
+  flowWorkspaceMenuTriggerIconBtnClass,
+} from './flowWorkspaceMenu';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 
 const flowToolbarBtnClass =
@@ -23,27 +28,19 @@ function shortPublishRevisionHint(revid: string | null | undefined): string | un
 
 const FlowPublishedIndicator: React.FC<{ revisionIdHint?: string | null }> = ({ revisionIdHint }) => {
   const short = shortPublishRevisionHint(revisionIdHint);
-  const tooltipTitle =
-    short != null ? (
-      <div style={{ fontSize: 13, lineHeight: 1.35 }}>
-        <div style={{ opacity: 0.75, marginBottom: 4 }}>{`Version ${short}`}</div>
-        <div>{'Published (active)'}</div>
-      </div>
-    ) : (
-      'Active flow — deactivate from menu'
-    );
+  const tip =
+    short != null ? `Version ${short} · Published (active)` : 'Active flow — deactivate from ⋮ menu';
   return (
-    <Tooltip title={tooltipTitle} placement="bottom" enterDelay={400}>
-      <span
-        className="inline-flex h-[18px] w-[18px] shrink-0 cursor-default items-center justify-center rounded-full bg-emerald-600 shadow-sm"
-        role="img"
-        aria-label="Flow is active"
-      >
-        <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 12 12" fill="none" aria-hidden>
-          <path d="M2.5 6.2 4.8 8.5 9.5 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-      </span>
-    </Tooltip>
+    <span
+      className="inline-flex h-[18px] w-[18px] shrink-0 cursor-default items-center justify-center rounded-full bg-emerald-600 shadow-sm"
+      role="img"
+      aria-label="Flow is active"
+      title={tip}
+    >
+      <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 12 12" fill="none" aria-hidden>
+        <path d="M2.5 6.2 4.8 8.5 9.5 3.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </span>
   );
 };
 
@@ -75,7 +72,6 @@ const FlowToolbar: React.FC<{
 }) => {
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
-  const [flowActionsAnchorEl, setFlowActionsAnchorEl] = useState<null | HTMLElement>(null);
   const showNameField = nameHover || nameFocus;
   const measure = useInlineNameWidthPx(name, 'Flow name');
   const activateDisabled = isDirty || activationPending;
@@ -138,45 +134,50 @@ const FlowToolbar: React.FC<{
         ) : (
           <FlowPublishedIndicator revisionIdHint={activeFlowRevid} />
         )}
-        <IconButton size="small" aria-label="More actions" edge="end" onClick={(e) => setFlowActionsAnchorEl(e.currentTarget)}>
-          <MoreVertIcon fontSize="small" />
-        </IconButton>
-        <Menu
-          anchorEl={flowActionsAnchorEl}
-          open={Boolean(flowActionsAnchorEl)}
-          onClose={() => setFlowActionsAnchorEl(null)}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-          transformOrigin={{ vertical: 'top', horizontal: 'right' }}
-        >
-          <MenuItem
-            onClick={() => {
-              setFlowActionsAnchorEl(null);
-              onDownloadFlowJson();
-            }}
-          >
-            Download
-          </MenuItem>
-          {!active ? (
-            <MenuItem
-              disabled={activateDisabled}
-              onClick={() => {
-                setFlowActionsAnchorEl(null);
-                void onActivate();
-              }}
-            >
-              Activate
+        <Menu as="div" className="relative inline-flex">
+          <MenuButton className={flowWorkspaceMenuTriggerIconBtnClass} aria-label="More actions">
+            <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
+          </MenuButton>
+          <MenuItems anchor="bottom end" portal modal={false} className={flowWorkspaceMenuPanelClass}>
+            <MenuItem>
+              {({ focus }) => (
+                <button
+                  type="button"
+                  className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                  onClick={() => onDownloadFlowJson()}
+                >
+                  Download
+                </button>
+              )}
             </MenuItem>
-          ) : (
-            <MenuItem
-              disabled={deactivateDisabled}
-              onClick={() => {
-                setFlowActionsAnchorEl(null);
-                void onDeactivate();
-              }}
-            >
-              Deactivate
-            </MenuItem>
-          )}
+            {!active ? (
+              <MenuItem disabled={activateDisabled}>
+                {({ disabled, focus }) => (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${disabled ? 'cursor-not-allowed opacity-45' : ''} ${focus && !disabled ? 'bg-gray-100' : ''}`}
+                    onClick={() => void onActivate()}
+                  >
+                    Activate
+                  </button>
+                )}
+              </MenuItem>
+            ) : (
+              <MenuItem disabled={deactivateDisabled}>
+                {({ disabled, focus }) => (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${disabled ? 'cursor-not-allowed opacity-45' : ''} ${focus && !disabled ? 'bg-gray-100' : ''}`}
+                    onClick={() => void onDeactivate()}
+                  >
+                    Deactivate
+                  </button>
+                )}
+              </MenuItem>
+            )}
+          </MenuItems>
         </Menu>
       </div>
     </div>

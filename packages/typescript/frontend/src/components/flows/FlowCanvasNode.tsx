@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import { Handle, NodeToolbar, Position, type NodeProps } from 'reactflow';
 import {
   CheckCircleIcon,
@@ -18,6 +19,12 @@ import type { FlowRfNodeDataWithRun, NodeRunStatusBadge } from './flowNodeRunSta
 import { getNodeRunStatusFromRunData } from './flowNodeRunStatus';
 import { useFlowCanvasActions, useFlowExecutionVisual } from './flowCanvasActionsContext';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
+import {
+  flowWorkspaceDropdownItemMutedClass,
+  flowWorkspaceDropdownItemSimpleClass,
+  flowWorkspaceMenuPanelClass,
+  flowWorkspaceMenuTriggerCompactClass,
+} from './flowWorkspaceMenu';
 
 const handleClass =
   '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-emerald-500 hover:!bg-emerald-50';
@@ -118,8 +125,6 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
   const actions = useFlowCanvasActions();
   const execution = useFlowExecutionVisual();
   const [pointerOnNodeOrToolbar, setPointerOnNodeOrToolbar] = useState(false);
-  const [moreOpen, setMoreOpen] = useState(false);
-  const moreMenuRef = useRef<HTMLDivElement | null>(null);
   const hideToolbarTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const cancelHideToolbarTimer = useCallback(() => {
@@ -143,17 +148,6 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
   }, [cancelHideToolbarTimer]);
 
   useEffect(() => () => cancelHideToolbarTimer(), [cancelHideToolbarTimer]);
-
-  useEffect(() => {
-    if (!moreOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) {
-        setMoreOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', onDoc);
-    return () => document.removeEventListener('mousedown', onDoc);
-  }, [moreOpen]);
 
   const inputs = inputHandleCount(nt);
   const outputs = Math.max(0, nt?.outputs ?? 1);
@@ -187,89 +181,81 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
     />
   ) : null;
 
-  const toolbarVisible = pointerOnNodeOrToolbar || moreOpen;
-
   const toolbar = showToolbar && actions && (
-    <NodeToolbar
-      nodeId={id}
-      isVisible={toolbarVisible}
-      position={Position.Top}
-      offset={10}
-      align="center"
-      className="rounded-lg border border-[#d8dce3] bg-white/95 shadow-md backdrop-blur-sm"
-    >
-      <div
-        className="flex gap-0.5 px-1 py-0.5"
-        onMouseEnter={showToolbarForPointer}
-        onMouseLeave={hideToolbarForPointerSoon}
-      >
-        <span title={isTrigger ? 'Triggers run with the full workflow' : 'Execute step (partial run through this node)'}>
-          <button
-            type="button"
-            aria-label={isTrigger ? 'Execute step unavailable for triggers' : 'Execute step'}
-            disabled={isTrigger || !actions.onExecuteNodeStep || Boolean(actions.executeStepBusy)}
-            onClick={() => void actions.onExecuteNodeStep?.(id)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 enabled:hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+    <Menu>
+      {({ open: overflowMenuOpen }) => {
+        const toolbarVisible = pointerOnNodeOrToolbar || overflowMenuOpen;
+        return (
+          <NodeToolbar
+            nodeId={id}
+            isVisible={toolbarVisible}
+            position={Position.Top}
+            offset={10}
+            align="center"
+            className="rounded-lg border border-[#d8dce3] bg-white/95 shadow-md backdrop-blur-sm"
           >
-            <PlayIcon className="h-4 w-4" />
-          </button>
-        </span>
-        <span title={node.disabled ? 'Enable node' : 'Disable node'}>
-          <button
-            type="button"
-            aria-label={node.disabled ? 'Enable node' : 'Disable node'}
-            onClick={() => actions.onToggleNodeDisabled(id)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
-          >
-            <NoSymbolIcon className={`h-4 w-4 ${node.disabled ? 'text-amber-600' : 'text-gray-500'}`} />
-          </button>
-        </span>
-        <span title="Delete node">
-          <button
-            type="button"
-            aria-label="Delete node"
-            onClick={() => actions.onDeleteNode(id)}
-            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
-          >
-            <TrashIcon className="h-4 w-4" />
-          </button>
-        </span>
-        <div className="relative" ref={moreMenuRef}>
-          <span title="More">
-            <button
-              type="button"
-              aria-label="More actions"
-              aria-expanded={moreOpen}
-              onClick={() => setMoreOpen((o) => !o)}
-              className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
-            >
-              <EllipsisHorizontalIcon className="h-4 w-4" />
-            </button>
-          </span>
-          {moreOpen && (
             <div
-              className="absolute right-0 top-full z-[200] mt-1 w-40 rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg"
-              role="menu"
+              className="flex gap-0.5 px-1 py-0.5"
+              onMouseEnter={showToolbarForPointer}
+              onMouseLeave={hideToolbarForPointerSoon}
             >
-              <button
-                type="button"
-                className="block w-full px-3 py-2 text-left text-gray-800 hover:bg-gray-100"
-                onClick={() => {
-                  setMoreOpen(false);
-                  actions.onOpenNodeSettings(id);
-                }}
-                role="menuitem"
-              >
-                Open settings
-              </button>
-              <div className="px-3 py-2 text-left text-gray-400" role="menuitem" aria-disabled>
-                Duplicate (soon)
-              </div>
+              <span title={isTrigger ? 'Triggers run with the full workflow' : 'Execute step (partial run through this node)'}>
+                <button
+                  type="button"
+                  aria-label={isTrigger ? 'Execute step unavailable for triggers' : 'Execute step'}
+                  disabled={isTrigger || !actions.onExecuteNodeStep || Boolean(actions.executeStepBusy)}
+                  onClick={() => void actions.onExecuteNodeStep?.(id)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 enabled:hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <PlayIcon className="h-4 w-4" />
+                </button>
+              </span>
+              <span title={node.disabled ? 'Enable node' : 'Disable node'}>
+                <button
+                  type="button"
+                  aria-label={node.disabled ? 'Enable node' : 'Disable node'}
+                  onClick={() => actions.onToggleNodeDisabled(id)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
+                >
+                  <NoSymbolIcon className={`h-4 w-4 ${node.disabled ? 'text-amber-600' : 'text-gray-500'}`} />
+                </button>
+              </span>
+              <span title="Delete node">
+                <button
+                  type="button"
+                  aria-label="Delete node"
+                  onClick={() => actions.onDeleteNode(id)}
+                  className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
+                >
+                  <TrashIcon className="h-4 w-4" />
+                </button>
+              </span>
+              <span title="More">
+                <MenuButton className={flowWorkspaceMenuTriggerCompactClass} aria-label="More actions">
+                  <EllipsisHorizontalIcon className="h-4 w-4" aria-hidden />
+                </MenuButton>
+              </span>
+              <MenuItems anchor="bottom end" portal modal={false} className={`${flowWorkspaceMenuPanelClass} min-w-[10rem]`}>
+                <MenuItem>
+                  {({ focus }) => (
+                    <button
+                      type="button"
+                      className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                      onClick={() => actions.onOpenNodeSettings(id)}
+                    >
+                      Open settings
+                    </button>
+                  )}
+                </MenuItem>
+                <MenuItem disabled>
+                  <span className={`${flowWorkspaceDropdownItemMutedClass} block w-full cursor-not-allowed opacity-70`}>Duplicate (soon)</span>
+                </MenuItem>
+              </MenuItems>
             </div>
-          )}
-        </div>
-      </div>
-    </NodeToolbar>
+          </NodeToolbar>
+        );
+      }}
+    </Menu>
   );
 
   if (isTrigger) {

@@ -12,8 +12,13 @@ import type { FlowRfNodeData } from './flowRf';
 import { buildNodeInputPreview, buildNodeOutputPreview } from './flowNodeIoPreview';
 import { IoViewer } from './IoViewer';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { IconButton, Menu, MenuItem } from '@mui/material';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
+import { EllipsisVerticalIcon } from '@heroicons/react/24/outline';
+import {
+  flowWorkspaceDropdownItemSimpleClass,
+  flowWorkspaceMenuPanelClass,
+  flowWorkspaceMenuTriggerIconBtnClass,
+} from './flowWorkspaceMenu';
 
 function isRunning(e: FlowExecution) {
   return e.status === 'queued' || e.status === 'running';
@@ -83,7 +88,6 @@ const FlowLogsPanel: React.FC<{
   const [activeTab, setActiveTab] = useState<LogsTab>('overview');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [ioTab, setIoTab] = useState<'input' | 'output'>('output');
-  const [downloadAnchorEl, setDownloadAnchorEl] = useState<null | HTMLElement>(null);
   const [nodeSplitLeftPct, setNodeSplitLeftPct] = useState<number>(() => {
     if (typeof window === 'undefined') return 32;
     const raw = window.localStorage.getItem(NODE_SPLIT_STORAGE_KEY);
@@ -262,26 +266,23 @@ const FlowLogsPanel: React.FC<{
         <div className="flex shrink-0 items-center gap-0.5">
           {execution && (
             <>
-              <IconButton
-                size="small"
-                aria-label="More actions"
-                onClick={(e) => setDownloadAnchorEl(e.currentTarget)}
-              >
-                <MoreVertIcon fontSize="small" />
-              </IconButton>
-              <Menu
-                anchorEl={downloadAnchorEl}
-                open={Boolean(downloadAnchorEl)}
-                onClose={() => setDownloadAnchorEl(null)}
-              >
-                <MenuItem
-                  onClick={() => {
-                    setDownloadAnchorEl(null);
-                    onDownloadExecutionJson();
-                  }}
-                >
-                  Download
-                </MenuItem>
+              <Menu as="div" className="relative inline-flex">
+                <MenuButton className={flowWorkspaceMenuTriggerIconBtnClass} aria-label="More actions">
+                  <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
+                </MenuButton>
+                <MenuItems anchor="bottom end" portal modal={false} className={flowWorkspaceMenuPanelClass}>
+                  <MenuItem>
+                    {({ focus }) => (
+                      <button
+                        type="button"
+                        className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                        onClick={() => onDownloadExecutionJson()}
+                      >
+                        Download
+                      </button>
+                    )}
+                  </MenuItem>
+                </MenuItems>
               </Menu>
             </>
           )}
