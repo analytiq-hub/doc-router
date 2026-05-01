@@ -50,6 +50,7 @@ export default function FlowDetailPageClient({
   const view = tabFromQuery(searchParams.get('tab'));
   const [flowName, setFlowName] = useState<string>('Flow');
   const [flowActive, setFlowActive] = useState<boolean>(false);
+  const [activeFlowRevid, setActiveFlowRevid] = useState<string | null>(null);
   const [latestFlowRevid, setLatestFlowRevid] = useState<string>('');
 
   const [nodeTypes, setNodeTypes] = useState<FlowNodeType[]>([]);
@@ -60,6 +61,7 @@ export default function FlowDetailPageClient({
   const [executionForIo, setExecutionForIo] = useState<FlowExecution | null>(null);
   const [savedContentFingerprint, setSavedContentFingerprint] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [activationPending, setActivationPending] = useState(false);
   const [message, setMessage] = useState<string>('');
   const [logsFocusExecutionId, setLogsFocusExecutionId] = useState<string | null>(null);
   const [editorOpenConfigNodeId, setEditorOpenConfigNodeId] = useState<string | null>(null);
@@ -153,6 +155,7 @@ export default function FlowDetailPageClient({
         if (!mounted) return;
         setFlowName(flowItem.flow.name);
         setFlowActive(Boolean(flowItem.flow.active));
+        setActiveFlowRevid(flowItem.flow.active_flow_revid ?? null);
         setLatestFlowRevid(flowItem.latest_revision?.flow_revid ?? '');
         setNodeTypes(nts.items);
 
@@ -243,6 +246,7 @@ export default function FlowDetailPageClient({
       });
       setFlowName(res.flow.name);
       setFlowActive(Boolean(res.flow.active));
+      setActiveFlowRevid(res.flow.active_flow_revid ?? null);
       // API returns `revision: null` for a name-only save (graph unchanged); the latest revision id
       // in the database is unchanged — do not clear `latestFlowRevid` or the next save sends an empty
       // base_flow_revid and the server returns 409.
@@ -287,6 +291,7 @@ export default function FlowDetailPageClient({
         });
         setFlowName(res.flow.name);
         setFlowActive(Boolean(res.flow.active));
+        setActiveFlowRevid(res.flow.active_flow_revid ?? null);
         if (res.revision) {
           setLatestFlowRevid(res.revision.flow_revid);
           setRevision(res.revision);
@@ -393,28 +398,36 @@ export default function FlowDetailPageClient({
   }, [api, flowId, latestFlowRevid, revision?.flow_revid]);
 
   const onActivate = useCallback(async () => {
+    setActivationPending(true);
     try {
       setMessage('');
       await api.activateFlow(flowId);
       const flowItem = await api.getFlow(flowId);
       setFlowActive(Boolean(flowItem.flow.active));
+      setActiveFlowRevid(flowItem.flow.active_flow_revid ?? null);
       setLatestFlowRevid(flowItem.latest_revision?.flow_revid ?? '');
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : 'Failed to activate');
+    } finally {
+      setActivationPending(false);
     }
   }, [api, flowId]);
 
   const onDeactivate = useCallback(async () => {
     const ok = window.confirm('Deactivate this flow?');
     if (!ok) return;
+    setActivationPending(true);
     try {
       setMessage('');
       await api.deactivateFlow(flowId);
       const flowItem = await api.getFlow(flowId);
       setFlowActive(Boolean(flowItem.flow.active));
+      setActiveFlowRevid(flowItem.flow.active_flow_revid ?? null);
       setLatestFlowRevid(flowItem.latest_revision?.flow_revid ?? '');
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : 'Failed to deactivate');
+    } finally {
+      setActivationPending(false);
     }
   }, [api, flowId]);
 
@@ -441,8 +454,10 @@ export default function FlowDetailPageClient({
                   name={flowName}
                   onNameChange={setFlowName}
                   active={flowActive}
+                  activeFlowRevid={activeFlowRevid}
                   isDirty={isDirty}
                   isSaving={isSaving}
+                  activationPending={activationPending}
                   onSave={onSave}
                   onActivate={onActivate}
                   onDeactivate={onDeactivate}
