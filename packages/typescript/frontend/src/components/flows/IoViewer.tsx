@@ -186,18 +186,22 @@ const SchemaAccordion: React.FC<{
 
   return (
     <div className="border-b border-gray-100 last:border-b-0">
-      <div className="flex items-start gap-2 px-2 py-1.5">
-        <button
-          type="button"
-          className={[
-            'shrink-0 rounded px-1 text-[11px] font-semibold text-gray-500',
-            expandable ? 'hover:bg-gray-50' : 'cursor-default',
-          ].join(' ')}
-          onClick={() => expandable && setOpen((o) => !o)}
-          aria-label={expandable ? (open ? 'Collapse' : 'Expand') : 'Value'}
-        >
-          {expandable ? (open ? '▼' : '▶') : '•'}
-        </button>
+      <div className="flex items-center gap-2 px-2 py-1.5">
+        {expandable ? (
+          <button
+            type="button"
+            className="flex h-4 w-4 shrink-0 items-center justify-center rounded text-gray-500 hover:bg-gray-50"
+            onClick={() => setOpen((o) => !o)}
+            aria-label={open ? 'Collapse' : 'Expand'}
+          >
+            <ChevronRightIcon
+              className={['h-3 w-3 transition-transform duration-150 ease-out', open ? 'rotate-90' : 'rotate-0'].join(' ')}
+              strokeWidth={1.5}
+            />
+          </button>
+        ) : (
+          <span className="h-4 w-4 shrink-0" aria-hidden />
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-start justify-between gap-2">
             <div

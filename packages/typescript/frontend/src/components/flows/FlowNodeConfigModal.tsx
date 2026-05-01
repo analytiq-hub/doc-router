@@ -9,6 +9,7 @@ import {
   DisclosurePanel,
 } from '@headlessui/react';
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
+import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import { BookmarkIcon, PencilSquareIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor from '@monaco-editor/react';
@@ -52,16 +53,16 @@ const VariablesAndContext: React.FC<{
   execution?: { execution_id: string; flow_id: string; flow_revid: string } | null;
 }> = ({ execution }) => (
   <Disclosure as="div" defaultOpen={false} className="mb-3 rounded border border-[#eceff2] bg-white">
-    <DisclosureButton className="flex w-full items-start gap-2 border-b border-gray-100 px-2 py-1.5 text-left outline-none hover:bg-gray-50">
+    <DisclosureButton className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left outline-none hover:bg-gray-50">
       {({ open }) => (
         <>
-          <span
-            className="mt-px shrink-0 select-none rounded px-1 text-[11px] font-semibold leading-none text-gray-500"
-            aria-hidden
-          >
-            {open ? '▼' : '▶'}
+          <span className="flex h-4 w-4 shrink-0 items-center justify-center text-gray-500" aria-hidden>
+            <ChevronRightIcon
+              className={['h-3 w-3 transition-transform duration-150 ease-out', open ? 'rotate-90' : 'rotate-0'].join(' ')}
+              strokeWidth={1.5}
+            />
           </span>
-          <div className="min-w-0 flex-1 pt-px">
+          <div className="min-w-0 flex-1">
             <div className="truncate text-[11px] font-semibold text-gray-900">Context</div>
           </div>
         </>
@@ -80,10 +81,8 @@ const VariablesAndContext: React.FC<{
             ['$execution_id', contextValuePreview(execution?.execution_id)],
           ] as const
         ).map(([name, preview]) => (
-          <div key={name} className="flex items-start gap-2 px-2 py-1.5">
-            <span className="shrink-0 px-1 text-[11px] font-semibold text-transparent" aria-hidden>
-              ▶
-            </span>
+          <div key={name} className="flex items-center gap-2 px-2 py-1.5">
+            <div className="h-4 w-4 shrink-0" aria-hidden />
             <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
               <div className="min-w-0 truncate font-mono font-semibold text-gray-900">{name}</div>
               <div className="min-w-0 truncate text-right font-mono text-gray-600">{preview}</div>
