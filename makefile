@@ -231,7 +231,7 @@ tests: setup-python
 tests-flow: setup-python
 	. .venv/bin/activate && pytest -q packages/python/tests_flow/
 
-UPSTREAM_NODES_ROOT ?= ../upstream_nodes
+UPSTREAM_NODES_ROOT ?= ../n8n
 FLOW_DUMP_SUBDIRS ?= packages/nodes-base/dist/nodes
 
 .PHONY: flow-node-dump flow-node-port
