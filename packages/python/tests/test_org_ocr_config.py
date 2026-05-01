@@ -13,6 +13,7 @@ from analytiq_data.ocr.ocr_config import (
     merge_org_ocr_config,
     ocr_settings_catalog,
     spu_ocr_for_page_count,
+    textract_spu_charge,
     textract_spu_cost,
 )
 from analytiq_data.ocr.ocr_runners import run_document_ocr
@@ -92,9 +93,27 @@ def test_spu_ocr_for_page_count():
     assert spu_ocr_for_page_count(50) == 2
 
 
+def test_textract_spu_charge_scales_per_feature():
+    assert textract_spu_charge(0, []) == 0
+    assert textract_spu_charge(25, []) == 1
+    assert textract_spu_charge(25, ["LAYOUT"]) == 4
+    assert textract_spu_charge(25, ["LAYOUT", "TABLES"]) == 8
+    assert textract_spu_charge(50, ["LAYOUT"]) == 8  # base 2, ×4 for one feature
+
+
 def test_max_reserved_without_pdf_uses_fallback():
     base = merge_org_ocr_config(None)
     assert max_reserved_spu_for_ocr_config(base) == spu_ocr_for_page_count(100)
+
+
+def test_max_reserved_textract_with_features():
+    cfg = merge_org_ocr_config(
+        {"textract": {"feature_types": ["LAYOUT", "TABLES"]}}
+    )
+    assert max_reserved_spu_for_ocr_config(cfg) == textract_spu_charge(
+        100, ["LAYOUT", "TABLES"]
+    )
+    assert max_reserved_spu_for_ocr_config(cfg) == 32
 
 
 def test_max_reserved_with_pdf_bytes():
@@ -212,6 +231,27 @@ def test_mode_llm_valid():
     assert cfg.mode == "llm"
     assert cfg.llm.provider == "openai"
     assert cfg.llm.model == "gpt-4o"
+
+
+@pytest.mark.asyncio
+async def test_run_document_ocr_textract_records_feature_scaled_spus():
+    cfg = merge_org_ocr_config({"textract": {"feature_types": ["LAYOUT"]}})
+    async def fake_textract(*_a, **_k):
+        return {"DocumentMetadata": {"Pages": 1}, "Blocks": []}
+
+    with (
+        patch(
+            "analytiq_data.ocr.ocr_runners.textract_mod.run_textract",
+            side_effect=fake_textract,
+        ),
+        patch("analytiq_data.ocr.ocr_runners.ad.payments.check_spu_limits"),
+        patch("analytiq_data.ocr.ocr_runners.ad.payments.record_spu_usage") as rec,
+    ):
+        await run_document_ocr(
+            None, b"%PDF-1.4", org_id="o", document_id="d", cfg=cfg
+        )
+    rec.assert_called_once()
+    assert rec.call_args.kwargs["spus"] == 4
 
 
 @pytest.mark.asyncio

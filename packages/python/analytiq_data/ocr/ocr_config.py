@@ -40,13 +40,33 @@ def textract_spu_cost(feature_types: list[str]) -> int:
 
 def spu_ocr_for_page_count(n_pages: int) -> int:
     """
-    SPUs to charge for a successful OCR run: 1 SPU per 25 pages (rounded up).
+    Base Textract SPUs from page count: 1 SPU per 25 pages (rounded up).
 
-    Minimum 1 SPU when n_pages >= 1; 0 pages -> 0 SPUs.
+    Used alone for DetectDocumentText (no AnalyzeDocument features). For feature
+    pricing see :func:`textract_spu_charge`.
     """
     if n_pages <= 0:
         return 0
     return max(1, math.ceil(n_pages / 25))
+
+
+TEXTRACT_SPU_PER_FEATURE_MULTIPLIER = 4
+
+
+def textract_spu_charge(n_pages: int, feature_types: list[str]) -> int:
+    """
+    Textract OCR SPUs after a successful run.
+
+    * **Base** = :func:`spu_ocr_for_page_count` (page-based).
+    * **No** ``feature_types``: charge base only (text detection / no AnalyzeDocument extras).
+    * **Each** enabled AnalyzeDocument feature: charge an **additional** ``4 × base`` (so
+      ``k`` features → ``base × 4 × k``).
+    """
+    base = spu_ocr_for_page_count(n_pages)
+    k = len(feature_types)
+    if k == 0:
+        return base
+    return base * TEXTRACT_SPU_PER_FEATURE_MULTIPLIER * k
 
 
 class OrgOcrTextractSettings(BaseModel):
@@ -134,6 +154,9 @@ def max_reserved_spu_for_ocr_config(
     Uses PDF page count when ``pdf_bytes`` is provided; otherwise a conservative default.
 
     ``pymupdf`` mode bills **0** SPU — no reservation.
+
+    For ``textract``, reservation matches :func:`textract_spu_charge` (4× base per
+    enabled AnalyzeDocument feature).
     """
     if cfg.mode == "pymupdf":
         return 0
@@ -142,7 +165,11 @@ def max_reserved_spu_for_ocr_config(
 
         n = pdf_page_count(pdf_bytes)
         if n is not None and n > 0:
+            if cfg.mode == "textract":
+                return max(1, textract_spu_charge(n, list(cfg.textract.feature_types)))
             return max(1, spu_ocr_for_page_count(n))
+    if cfg.mode == "textract":
+        return max(1, textract_spu_charge(100, list(cfg.textract.feature_types)))
     # Unknown page count: reserve as if 100 pages (4 SPUs) to avoid blocking large jobs.
     return max(1, spu_ocr_for_page_count(100))
 
