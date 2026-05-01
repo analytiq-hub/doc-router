@@ -184,22 +184,165 @@ Registration (at app startup or via a discovery plugin) **`import`**s the module
 
 ### 6.2 `executor_kind: "declarative"`
 
-For nodes where behavior is entirely data-driven (HTTP, JMESPath, static routing):
+For nodes where behavior is entirely data-driven — HTTP integrations, transforms, static outputs — without a new Python class per vendor.
 
+#### How it works
+
+Two JSON documents govern a declarative node at execution time:
+
+| Document | Purpose | Who reads it |
+|---|---|---|
+| `parameter.schema.json` | What the user configures in the UI | Form renderer, runtime validator |
+| spec (`spec_ref` target) | How the runtime executes, using those parameters | The runtime interpreter (Python) |
+
+The spec may reference `parameters.*` and `credentials.*` via Jinja2 `{{ }}` expressions (e.g. `"{{ parameters.channel }}"`). The interpreter resolves these before executing.
+
+#### Runtime registry
+
+Keep the set small. Each runtime is one Python class implementing a fixed interpreter contract:
+
+| `runtime` | Behavior |
+|---|---|
+| `http_request_v1` | Makes an HTTP request; maps the response to output items |
+| `jq_transform_v1` | Applies a jq expression to input items |
+| `template_render_v1` | Renders a Jinja2 template over item data; emits strings |
+| `static_output_v1` | Emits a fixed JSON payload (constants, seed data, stubs) |
+
+Per-runtime JSON Schemas live under `schemas/runtimes/` (e.g. `schemas/runtimes/http_request_v1.schema.json`) and are used by the §8 validation pipeline.
+
+#### `$content_ref` inside specs
+
+`$content_ref` works inside spec files by the same package-relative rules as inside parameter schemas — the runtime loader resolves them before executing. This keeps large bodies, scripts, and templates out of JSON strings.
+
+#### Example 1 — HTTP integration (`http_request_v1`)
+
+**`node.manifest.json`:**
 ```json
 {
+  "key": "integrations.slack_post_message",
+  "label": "Slack: Post Message",
   "executor": {
     "kind": "declarative",
     "runtime": "http_request_v1",
     "spec_ref": "http.spec.json"
+  },
+  "parameter_schema_ref": "parameter.schema.json",
+  "credential_slots": [
+    { "slot": "slackToken", "label": "Slack Bot Token", "required": true }
+  ]
+}
+```
+
+**`parameter.schema.json`:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "channel": { "type": "string" },
+    "message": { "type": "string" }
+  },
+  "required": ["channel", "message"],
+  "additionalProperties": false
+}
+```
+
+**`http.spec.json`:**
+```json
+{
+  "method": "POST",
+  "url": "https://slack.com/api/chat.postMessage",
+  "headers": {
+    "Content-Type": "application/json",
+    "Authorization": "Bearer {{ credentials.slackToken }}"
+  },
+  "body": {
+    "$content_ref": "templates/post_message.json.tpl",
+    "$content_media_type": "application/json"
+  },
+  "response_jmespath": "ok"
+}
+```
+
+**`templates/post_message.json.tpl`:**
+```
+{
+  "channel": "{{ parameters.channel }}",
+  "text":    "{{ parameters.message }}"
+}
+```
+
+#### Example 2 — Data transform (`jq_transform_v1`)
+
+**`node.manifest.json`:**
+```json
+{
+  "key": "flows.extract_line_items",
+  "label": "Extract Line Items",
+  "executor": {
+    "kind": "declarative",
+    "runtime": "jq_transform_v1",
+    "spec_ref": "transform.spec.json"
+  },
+  "parameter_schema_ref": "parameter.schema.json"
+}
+```
+
+**`parameter.schema.json`:**
+```json
+{
+  "type": "object",
+  "properties": {
+    "include_tax": { "type": "boolean", "default": false }
+  },
+  "additionalProperties": false
+}
+```
+
+**`transform.spec.json`:**
+```json
+{
+  "expression": { "$content_ref": "transform.jq" },
+  "input_slot": 0
+}
+```
+
+**`transform.jq`:**
+```
+.items[] | {
+  id:    .id,
+  name:  .name,
+  total: (if $parameters.include_tax then .price * .qty * 1.2 else .price * .qty end)
+}
+```
+
+#### Example 3 — Static output (`static_output_v1`)
+
+Useful for injecting constants or seed data into a flow without any Python:
+
+**`node.manifest.json`:**
+```json
+{
+  "key": "flows.seed_config",
+  "label": "Seed Config",
+  "is_trigger": true,
+  "min_inputs": 0,
+  "max_inputs": 0,
+  "outputs": 1,
+  "output_labels": ["output"],
+  "executor": {
+    "kind": "declarative",
+    "runtime": "static_output_v1",
+    "spec_ref": "output.spec.json"
   }
 }
 ```
 
-- **`runtime`** names a **small set** of interpreters implemented once in Python (e.g. `http_request_v1`, `jq_transform_v1`).
-- **`spec_ref`** resolves to JSON consumed by that runtime. Large bodies again MAY use **`content_ref`** inside that spec pointing to **`templates/`**.
-
-This path is ideal for translating **n8n-style declarative routing** into DocRouter without a new Python class per vendor.
+**`output.spec.json`:**
+```json
+{
+  "items": { "$content_ref": "defaults/config.json" }
+}
+```
 
 ### 6.3 `executor_kind: "composite"`
 
@@ -230,12 +373,12 @@ Do **not** put secrets in the manifest. Prefer:
 
 ## 8. Validation pipeline (recommended)
 
-1. **Structural:** Validate **`node.manifest.json`** against **`docrouter-flow-node-manifest-v1.json`** (publish this schema beside the loader or under `schemas/` in-repo).
-2. **References:** Resolve **`parameter_schema_ref`**, **`spec_ref`**, and all **`content_ref`** paths; ensure no traversal outside the package root.
+1. **Structural:** Validate **`node.manifest.json`** against **`schemas/flow-node-manifest-v1.json`** (committed in-repo beside the loader).
+2. **References:** Resolve **`parameter_schema_ref`**, **`spec_ref`**, and all **`$content_ref`** paths (in both the parameter schema and any spec files); ensure no traversal outside the package root.
 3. **`parameter.schema.json`:** Valid JSON Schema; optional CI step to **`jsonschema` validate** **`fixtures/**/*.json`**.
 4. **`executor`**:
    - For **`python_class`**, optionally **`python -c`** import smoke test or static analysis listing.
-   - For **`declarative`**, validate **`spec_ref`** against a per-runtime schema (e.g. `http_request_v1.schema.json`).
+   - For **`declarative`**, validate **`spec_ref`** against the matching per-runtime schema under **`schemas/runtimes/`** (e.g. `schemas/runtimes/http_request_v1.schema.json`).
 
 ---
 
