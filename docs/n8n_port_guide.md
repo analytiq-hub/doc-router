@@ -28,40 +28,16 @@ A smaller set have real imperative `execute()` logic (transforms, code nodes, da
 
 ## 2. Input source
 
-Do not parse TypeScript AST — it is fragile across n8n versions. Instead, **require() the compiled JS** from `../n8n/packages/nodes-base/dist/` after `pnpm build`. A small Node.js shim instantiates each node class and dumps `.description` as JSONL:
+Do not parse TypeScript AST — it is fragile across upstream releases. Instead **require() the compiled `*.node.js` modules** from the built repo. Implemented as **`tools/dump_nodes.js`**: mandatory **`--upstream-root`**, discovery via repeatable **`--subdir REL`** paths *or* the **`FLOW_DUMP_SUBDIRS`** environment variable (**`:`**-separated relative paths under the upstream root).
 
-```js
-// tools/dump_n8n_nodes.js
-const { globSync } = require('glob');
-const path = require('path');
-
-const patterns = [
-  '../n8n/packages/nodes-base/dist/nodes/**/*.node.js',
-  '../n8n/packages/@n8n/nodes-langchain/dist/nodes/**/*.node.js',
-];
-
-for (const file of globSync(patterns.flatMap(p => p))) {
-  try {
-    const mod = require(path.resolve(file));
-    for (const cls of Object.values(mod)) {
-      if (typeof cls !== 'function') continue;
-      const inst = new cls();
-      if (!inst.description) continue;
-      process.stdout.write(JSON.stringify({ source: file, description: inst.description }) + '\n');
-    }
-  } catch (e) {
-    process.stderr.write(`skip ${file}: ${e.message}\n`);
-  }
-}
-```
-
-Run once per n8n version bump:
+Example (paths depend on how the sibling monorepo lays out packages):
 
 ```bash
-node tools/dump_n8n_nodes.js > tools/n8n_node_dump.jsonl
+FLOW_DUMP_SUBDIRS='packages/nodes-base/dist/nodes:packages/other-vendor-ai/dist/nodes' \
+  node tools/dump_nodes.js --upstream-root ../upstream_nodes > tools/flow_node_dump.jsonl
 ```
 
-The Python converter reads `n8n_node_dump.jsonl`. No TypeScript toolchain needed at conversion time.
+`make flow-node-dump` sets **`FLOW_DUMP_SUBDIRS`** / **`UPSTREAM_NODES_ROOT`** (see top-level makefile). The converter reads **`tools/flow_node_dump.jsonl`**.
 
 ---
 
@@ -99,7 +75,7 @@ Manifest top-level fields derived from `INodeTypeDescription`:
 | n8n field | DocRouter manifest field | Notes |
 |---|---|---|
 | `displayName` | `label` | |
-| `name` | `key` | Prefix with integration namespace, e.g. `n8n.slack` |
+| `name` | `key` | Prefix with integration namespace (`ext.` in generated output, e.g. `ext.slack`) |
 | `description` | `description` | |
 | `group[0]` | `category` | e.g. `"output"`, `"transform"` |
 | `defaultVersion` \| `version` | `type_version` | Use `defaultVersion` when present; for arrays take the max |
@@ -110,7 +86,7 @@ Manifest top-level fields derived from `INodeTypeDescription`:
 | `icon` | `icon_key` | Strip `file:` prefix; store path relative to package root |
 | `usableAsTool` | (future) | Skip for now |
 
-**`key` convention:** `n8n.<integration>.<operation>` for single-operation ports, `n8n.<integration>` for multi-operation nodes that expose an `operation` parameter.
+**`key` convention:** `ext.<integration>` (generated); adjust if you rename the namespace during import wiring.
 
 ---
 
@@ -210,7 +186,7 @@ One directory per ported node under `nodes/`:
 
 ```
 nodes/
-└── n8n_slack_post_message/
+└── ext_slack_post_message/
     ├── node.manifest.json       ← generated
     ├── parameter.schema.json    ← generated
     ├── http.spec.json           ← generated (declarative track only)
@@ -218,11 +194,13 @@ nodes/
         └── body.json.tpl        ← generated if body is large
 ```
 
+The CLI defaults to **`packages/python/analytiq_data/flows/port/generated_nodes/`** (`--out`) so stubs are importable as `analytiq_data.flows.port.generated_nodes.<slug>.node_impl`. Pass `--out` elsewhere if needed and adjust **`executor.import`** accordingly.
+
 For `python_class` stubs, also emit a skeleton Python file:
 
 ```
 nodes/
-└── n8n_postgres_query/
+└── ext_postgres_query/
     ├── node.manifest.json
     ├── parameter.schema.json
     └── node_impl.py             ← stub; behavior must be ported by hand
@@ -236,11 +214,11 @@ from typing import Any
 import analytiq_data as ad
 
 
-class N8nPostgresQueryNode:
-    """Ported from n8n packages/nodes-base/nodes/Postgres/Postgres.node.ts — stub."""
+class ExtPostgresQueryNode:
+    """Upstream Postgres node — stub."""
 
-    key = "n8n.postgres_query"
-    label = "Postgres (n8n)"
+    key = "ext.postgres_query"
+    label = "Postgres"
     description = "Stub: implement execute() for DocRouter."
     category = "Database"
     is_trigger = False
@@ -266,7 +244,7 @@ class N8nPostgresQueryNode:
         node: dict[str, Any],
         inputs: list[list[ad.flows.FlowItem]],
     ) -> list[list[ad.flows.FlowItem]]:
-        raise NotImplementedError("n8n.postgres_query: Python port not yet implemented")
+        raise NotImplementedError("ext.postgres_query: Python stub not implemented")
 ```
 
 ---
@@ -299,7 +277,7 @@ def main():
         manifest_schema = json.load(f)
     jsonschema.Draft7Validator.check_schema(manifest_schema)
     mv = jsonschema.Draft7Validator(manifest_schema)
-    for path in sorted(glob.glob("nodes/*/node.manifest.json")):
+    for path in sorted(glob.glob("packages/python/analytiq_data/flows/port/generated_nodes/*/node.manifest.json")):
         with open(path) as f:
             mv.validate(json.load(f))
         print(path, "ok")
@@ -308,7 +286,7 @@ main()
 PY
 
 # Parameter schemas (Draft 7 meta-schema check only)
-for f in nodes/*/parameter.schema.json; do
+for f in packages/python/analytiq_data/flows/port/generated_nodes/*/parameter.schema.json; do
   python -c "import jsonschema, json; jsonschema.Draft7Validator.check_schema(json.load(open('$f')))"
 done
 
@@ -319,24 +297,24 @@ with open("schemas/runtimes/http_request_v1.schema.json") as f:
     spec_schema = json.load(f)
 jsonschema.Draft7Validator.check_schema(spec_schema)
 sv = jsonschema.Draft7Validator(spec_schema)
-for path in sorted(glob.glob("nodes/*/http.spec.json")):
+for path in sorted(glob.glob("packages/python/analytiq_data/flows/port/generated_nodes/*/http.spec.json")):
     with open(path) as f:
         sv.validate(json.load(f))
     print(path, "ok")
 PY
 ```
 
-Alternatively: `check-jsonschema --schemafile schemas/flow-node-manifest-v1.json nodes/*/node.manifest.json` (and similarly for **`http.spec.json`**). Add this as a CI step when the dump or converter changes.
+Alternatively: `check-jsonschema --schemafile schemas/flow-node-manifest-v1.json packages/python/analytiq_data/flows/port/generated_nodes/*/node.manifest.json` (and similarly for **`http.spec.json`**). Add this as a CI step when the dump or converter changes.
 
 ---
 
 ## 11. Suggested implementation order
 
-1. Write `tools/dump_n8n_nodes.js` and generate `n8n_node_dump.jsonl` from the current n8n checkout.
-2. Write `tools/port_n8n_nodes.py`: reads JSONL, emits node packages under `nodes/`.
-3. Start with a single well-understood declarative node (e.g. Slack `postMessage`) to validate the full pipeline end to end.
-4. Run against all 506 `n8n-nodes-base` entries; triage the `python_class` stubs by priority.
-5. Commit `n8n_node_dump.jsonl` to the repo and re-run the converter in CI whenever the dump is refreshed.
+1. Run **`make flow-node-dump`** (tune **`UPSTREAM_NODES_ROOT`** / **`FLOW_DUMP_SUBDIRS`**) producing **`tools/flow_node_dump.jsonl`** (see §2).
+2. **`make flow-node-port`** (or `python tools/port_nodes.py`) reads that JSONL and emits packages under **`analytiq_data/flows/port/generated_nodes/`** by default.
+3. Smoke-test one declarative HTTP connector plus one imperative **`python_class`** stub end to end against `schemas/` validation.
+4. Scale to the rest of your upstream catalogue; prioritize stub implementations where needed.
+5. Refresh the JSONL whenever the sibling integration rebuild changes `*.node.js` artifacts.
 
 ---
 
@@ -399,13 +377,13 @@ The engine validates parameters against `parameter_schema` but does not apply `d
 
 ### Toolchain — needed to generate the packages
 
-#### 12.7 `tools/dump_n8n_nodes.js`
+#### 12.7 `tools/dump_nodes.js`
 
-The Node.js shim that requires compiled n8n dist and dumps `.description` as JSONL (see §2). Does not exist yet; without it the converter has no input.
+**Implemented.** Node shim that walks compiled `*.node.js` modules and emits JSONL (`source`, `description`, optional `integration_type_version_key`). Run **`make flow-node-dump`** (see makefile variables **`UPSTREAM_NODES_ROOT`** / **`FLOW_DUMP_SUBDIRS`**) or §2.
 
-#### 12.8 `tools/port_n8n_nodes.py`
+#### 12.8 `packages/python/analytiq_data/flows/port/` + `tools/port_nodes.py`
 
-The Python converter that reads the JSONL dump and emits node packages under `nodes/` (see §3–§8). Does not exist yet.
+**Implemented.** Python converter reads the JSONL dump and writes packages under `analytiq_data/flows/port/generated_nodes/<slug>/` (`node.manifest.json`, `parameter.schema.json`, optional `http.spec.json`, `node_impl.py` stubs). CLI: **`python tools/port_nodes.py [jsonl] --validate`**; **`make flow-node-port`**.
 
 ### Recommended build order
 
@@ -415,7 +393,7 @@ The Python converter that reads the JSONL dump and emits node packages under `no
 3. http_request_v1 runtime               (enables declarative track)
 4. Credential storage + API              (enables real integrations)
 5. Credential injection in execution     (connects storage to runtime)
-6. dump_n8n_nodes.js + port_n8n_nodes.py (the porting toolchain)
+6. dump_nodes.js + port_nodes.py (`analytiq_data.flows.port`, the packaging toolchain)
 7. Frontend: multiOptions rendering      (most common missing UI type)
 8. JSON Schema default propagation       (correctness for many nodes)
 ```

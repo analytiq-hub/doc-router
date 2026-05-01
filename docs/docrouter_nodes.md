@@ -1,12 +1,12 @@
 # DocRouter node format: JSON manifest + sidecars
 
-This document specifies a **file-based** description of flow node types that DocRouter (and tooling such as codegen or import from n8n) can consume. Goals:
+This document specifies a **file-based** description of flow node types that DocRouter (and tooling such as codegen or import from external workflow-integration dumps) can consume. Goals:
 
 - Keep a **canonical JSON** artifact that is strict, diff-friendly, and easy to validate in CI.
 - Avoid huge inline strings (templates, payloads, JMESPath, SQL) inside that JSON by using **sidecar files**.
 - Align with the runtime **`NodeType` protocol** ([`packages/python/analytiq_data/flows/node_registry.py`](../packages/python/analytiq_data/flows/node_registry.py)): palette metadata, **`parameter_schema`** (JSON Schema), ports, **`execute`** behavior binding.
 
-Relationship to broader interop goals: see [`flows_workflow_interop.md`](./flows_workflow_interop.md). For n8n’s `*.node.ts` shape contrast, see the appendix in [`n8n_nodes.md`](./n8n_nodes.md).
+Relationship to broader interop goals: see [`flows_workflow_interop.md`](./flows_workflow_interop.md). For a contrasting upstream `*.node.ts` authoring model (sibling-repo reference inventory), see the appendix in [`n8n_nodes.md`](./n8n_nodes.md).
 
 ---
 
@@ -43,7 +43,7 @@ nodes/
 | **`schema`** | URI of the manifest JSON Schema (`docrouter.ai/flow-node-manifest/v1` or similar pegged revision). Loaded by validators only. |
 | **`key`** | Stable string identifier registered in the engine, e.g. `docrouter.llm_extract`, `flows.http_request`. Matches Python `NodeType.key`. |
 | **`manifest_version`** | Integer for **this file format**. Bump when mandatory fields or semantics change. |
-| **`type_version`** | Integer for **parameter / behavior contract** of this node definition. Equivalent in spirit to n8n **`typeVersion`**. Workflow instances store **`type`** + **`parameters`** only; **`type_version`** is resolved via the manifest at registration/import time unless you duplicate it per instance in the revision (product choice). |
+| **`type_version`** | Integer for **parameter / behavior contract** of this node definition (same role as **`typeVersion`** in common workflow DSLs). Workflow instances store **`type`** + **`parameters`** only; **`type_version`** is resolved via the manifest at registration/import time unless you duplicate it per instance in the revision (product choice). |
 
 **Recommended `key` pattern:** dotted namespace (`product.area.name`), lowercase, ASCII alphanumerics and dots/hyphens/underscores.
 
@@ -148,7 +148,7 @@ Parameters holding **large or line-sensitive** content (templates, scripts, SQL,
 
 **When `$content_ref` is resolved (two cases):**
 
-- **Inside `parameter.schema.json`:** Intended for **authoring defaults and tooling** — e.g. n8n import writes a sidecar file; an editor loads it when seeding parameter JSON. Persisted **`FlowRevision`** data remains plain JSON (**no** unresolved `$content_ref` in Mongo). Saved workflow **`parameters`** are always concrete strings/objects/arrays.
+- **Inside `parameter.schema.json`:** Intended for **authoring defaults and tooling** — import tooling may materialize defaults into sidecar files; an editor loads them when seeding parameter JSON. Persisted **`FlowRevision`** data remains plain JSON (**no** unresolved `$content_ref` in Mongo). Saved workflow **`parameters`** are always concrete strings/objects/arrays.
 - **Inside a declarative spec** (file pointed to by **`spec_ref`**, e.g. **`http.spec.json`):** Intended for **runtime** — the interpreter MUST resolve **`$content_ref`** before interpolate-and-execute (read file, splice into object tree, continue).
 
 - May appear at **any depth** in the schema tree, including nested object properties.

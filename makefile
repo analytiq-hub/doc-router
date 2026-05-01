@@ -46,6 +46,8 @@ help:
 	@echo "Testing:"
 	@echo "  make tests                   - Run Python unit tests (fast, excludes kb_slow)"
 	@echo "  make tests-flow              - Run flow engine tests only"
+	@echo "  make flow-node-dump          - Dump upstream integration nodes to tools/flow_node_dump.jsonl"
+	@echo "  make flow-node-port          - Emit DocRouter packages from tools/flow_node_dump.jsonl"
 	@echo "  make tests-kb                - Run slow KB integration tests (real search indexes)"
 	@echo "  make tests-scale             - Run Python scale tests"
 	@echo "  make tests-all               - Run all Python tests"
@@ -228,6 +230,16 @@ tests: setup-python
 
 tests-flow: setup-python
 	. .venv/bin/activate && pytest -q packages/python/tests_flow/
+
+UPSTREAM_NODES_ROOT ?= ../upstream_nodes
+FLOW_DUMP_SUBDIRS ?= packages/nodes-base/dist/nodes
+
+.PHONY: flow-node-dump flow-node-port
+flow-node-dump:
+	FLOW_DUMP_SUBDIRS="$(FLOW_DUMP_SUBDIRS)" node tools/dump_nodes.js --upstream-root "$(UPSTREAM_NODES_ROOT)" > tools/flow_node_dump.jsonl
+
+flow-node-port: setup-python
+	. .venv/bin/activate && python tools/port_nodes.py tools/flow_node_dump.jsonl --validate
 
 tests-kb: setup-python
 	. .venv/bin/activate && pytest -v -m "kb_slow" packages/python/tests/
