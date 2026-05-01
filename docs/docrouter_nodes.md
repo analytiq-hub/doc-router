@@ -110,23 +110,23 @@ Parameters holding **large or line-sensitive** content (templates, scripts, SQL,
 
 ```json
 {
-  “type”: “object”,
-  “properties”: {
-    “body_template”: {
-      “type”: “string”,
-      “$content_ref”: “templates/request_body.tpl.txt”
+  "type": "object",
+  "properties": {
+    "body_template": {
+      "type": "string",
+      "$content_ref": "templates/request_body.tpl.txt"
     },
-    “processor_code”: {
-      “type”: “string”,
-      “$content_ref”: “scripts/processor.py”
+    "processor_code": {
+      "type": "string",
+      "$content_ref": "scripts/processor.py"
     },
-    “config”: {
-      “type”: “object”,
-      “$content_ref”: “defaults/config.json”
+    "config": {
+      "type": "object",
+      "$content_ref": "defaults/config.json"
     },
-    “allowed_tags”: {
-      “type”: “array”,
-      “$content_ref”: “defaults/tags.json”
+    "allowed_tags": {
+      "type": "array",
+      "$content_ref": "defaults/tags.json"
     }
   }
 }
