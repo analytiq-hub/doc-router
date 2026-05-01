@@ -25,3 +25,10 @@ export const FLOW_WORKSPACE_HEADER_HEIGHT_CLASS = 'h-[2.625rem]';
 /** Toolbar collapsed title + executions header title — plain text inset (no chip padding); lives under outer `px-3`. */
 export const FLOW_WORKSPACE_TITLE_READ_CLASS =
   'min-w-0 max-w-[min(100%,42rem)] truncate text-sm font-semibold text-gray-900';
+
+/**
+ * Use on React Flow `Panel` rows pinned to `top` under the flow workspace header. The centered
+ * Editor/Executions tab straddle (`FlowWorkspaceTabStraddle`) hangs ~half its height into the canvas;
+ * this top padding keeps status text from sitting under the pill.
+ */
+export const FLOW_RF_PANEL_CLEAR_BELOW_WORKSPACE_TABS = '!pt-7';

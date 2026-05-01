@@ -23,6 +23,7 @@ import { DocRouterOrgApi } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
 import './flows-canvas.css';
 import { FLOW_RF_LABELED_EDGE_TYPE, flowRfEdgeTypes, flowRfNodeTypes } from './flowRfCanvasTypes';
+import { FLOW_RF_PANEL_CLEAR_BELOW_WORKSPACE_TABS } from './flowUiClasses';
 import FlowLogsPanel from './FlowLogsPanel';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import { applyExecutionStatusToNodes } from './flowNodeRunStatus';
@@ -459,7 +460,7 @@ const FlowExecutionsView: React.FC<{
                   {selectedId && detailLoading ? (
                     <RFPanel
                       position="top-left"
-                      className="!z-[30] !left-0 !right-0 !top-0 !m-0 !w-auto rounded-none border-0 border-b border-amber-200/80 bg-amber-50 px-3 py-1.5 text-center text-xs text-amber-900"
+                      className={`!z-[30] !left-0 !right-0 !top-0 !m-0 !w-auto rounded-none border-0 border-b border-amber-200/80 bg-amber-50 px-3 !pb-1.5 text-center text-xs text-amber-900 ${FLOW_RF_PANEL_CLEAR_BELOW_WORKSPACE_TABS}`}
                     >
                       Loading run…
                     </RFPanel>
@@ -467,7 +468,7 @@ const FlowExecutionsView: React.FC<{
                   {selectedId && !detailLoading && detail ? (
                     <RFPanel
                       position="top-left"
-                      className="!z-[30] !left-0 !right-0 !top-0 !m-0 !max-w-none !w-auto rounded-none border-0 bg-[#f7f7f9] px-3 py-1.5 text-xs text-gray-600 shadow-none"
+                      className={`!z-[30] !left-0 !right-0 !top-0 !m-0 !max-w-none !w-auto rounded-none border-0 bg-[#f7f7f9] px-3 !pb-1.5 text-xs text-gray-600 shadow-none ${FLOW_RF_PANEL_CLEAR_BELOW_WORKSPACE_TABS}`}
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="m-0 min-w-0 leading-snug break-words">
