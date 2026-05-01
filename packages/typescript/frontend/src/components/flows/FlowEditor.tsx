@@ -45,6 +45,7 @@ import {
   type EdgeInsertPayload,
 } from './flowCanvasActionsContext';
 import { FLOW_CANVAS_GRID_PX, snapToFlowGrid } from './canvasGrid';
+import { edgesWithRunDataItemCounts } from './flowNodeIoPreview';
 import { inputHandleCount } from './flowRf';
 import type { FlowRfNodeData } from './flowRf';
 
@@ -223,8 +224,11 @@ const FlowEditor: React.FC<{
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const screenToFlowPointRef = useRef<((p: { x: number; y: number }) => { x: number; y: number }) | null>(null);
   const pendingEdgeInsertRef = useRef<EdgeInsertPayload | null>(null);
-  const canvasEdges = useMemo(() => toCanvasEdges(edges), [edges]);
   const runData = executionForIo?.run_data as Record<string, unknown> | undefined;
+  const canvasEdges = useMemo(
+    () => edgesWithRunDataItemCounts(toCanvasEdges(edges), runData),
+    [edges, runData],
+  );
 
   const nodesWithPinnedFlag = useMemo(() => {
     // Keep node identity stable; only enrich the `data` payload for rendering.
@@ -301,7 +305,6 @@ const FlowEditor: React.FC<{
             ...params,
             type: FLOW_RF_LABELED_EDGE_TYPE,
             style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
-            data: { itemCount: 1 },
             markerEnd: FLOW_EDGE_MARKER,
           },
           edges,
@@ -391,7 +394,6 @@ const FlowEditor: React.FC<{
       const edgeBase = {
         type: FLOW_RF_LABELED_EDGE_TYPE,
         style: { stroke: '#a8b0bd', strokeWidth: 1.5 } as const,
-        data: { itemCount: 1 },
         markerEnd: FLOW_EDGE_MARKER,
       };
       const e1: Edge = {
@@ -584,7 +586,6 @@ const FlowEditor: React.FC<{
               defaultEdgeOptions={{
                 type: FLOW_RF_LABELED_EDGE_TYPE,
                 style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
-                data: { itemCount: 1 },
                 markerEnd: FLOW_EDGE_MARKER,
               }}
               connectionLineStyle={{ stroke: '#94a3b8', strokeWidth: 1.5 }}

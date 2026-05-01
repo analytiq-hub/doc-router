@@ -53,8 +53,10 @@ export default function FlowCanvasEdge(props: EdgeProps) {
     ? getStraightPath({ sourceX, sourceY, targetX, targetY })
     : getBezierPath({ sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition });
 
-  const count = (data as { itemCount?: number } | undefined)?.itemCount ?? 1;
-  const label = `${count} item${count === 1 ? '' : 's'}`;
+  const itemCount = (data as { itemCount?: number } | undefined)?.itemCount;
+  const showItemCountBadge =
+    typeof itemCount === 'number' && Number.isFinite(itemCount) && itemCount >= 0;
+  const label = `${itemCount} item${itemCount === 1 ? '' : 's'}`;
   const canEdit = Boolean(actions?.onDeleteEdge);
   const canInsert = Boolean(actions?.onBeginInsertOnEdge);
 
@@ -124,7 +126,7 @@ export default function FlowCanvasEdge(props: EdgeProps) {
           }}
           className="nodrag nopan relative flex flex-col items-center"
         >
-          {showItemLabel && (
+          {showItemLabel && showItemCountBadge && (
             isVisuallyStraight ? (
               <div className="pointer-events-none absolute bottom-full left-1/2 mb-1 -translate-x-1/2 whitespace-nowrap text-[11px] font-medium text-[#5a6270]">
                 {label}

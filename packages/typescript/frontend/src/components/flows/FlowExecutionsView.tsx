@@ -17,6 +17,7 @@ import 'reactflow/dist/style.css';
 import type { FlowExecution, FlowNodeType } from '@docrouter/sdk';
 import type { FlowRfNodeData } from './flowRf';
 import { FLOW_CANVAS_GRID_PX, snapRfNodesPositions } from './canvasGrid';
+import { edgesWithRunDataItemCounts } from './flowNodeIoPreview';
 import { revisionToRF } from './flowRf';
 import { DocRouterOrgApi } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
@@ -35,7 +36,6 @@ const EXECUTIONS_LIST_PANEL_DEFAULT_PCT = 30;
 const RF_EXEC_VIEW_DEFAULT_EDGE_OPTIONS = {
   type: FLOW_RF_LABELED_EDGE_TYPE,
   style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
-  data: { itemCount: 1 },
   markerEnd: FLOW_EDGE_MARKER,
 } as const;
 
@@ -270,7 +270,11 @@ const FlowExecutionsView: React.FC<{
     setConfigModalId(n.id);
   }, []);
 
-  const canvasEdges = useMemo(() => toCanvasEdges(viewEdges), [viewEdges]);
+  const runDataForEdges = detail?.run_data as Record<string, unknown> | undefined;
+  const canvasEdges = useMemo(
+    () => edgesWithRunDataItemCounts(toCanvasEdges(viewEdges), runDataForEdges),
+    [viewEdges, runDataForEdges],
+  );
 
   const configRf = useMemo(() => {
     const n = viewNodes.find((x) => x.id === configModalId);

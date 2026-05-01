@@ -31,6 +31,29 @@ export function laneMain0ItemsJson(runEntry: unknown): unknown[] {
 }
 
 /**
+ * Item count on the **source** node's output lane `main[0]` when that node exists in `run_data`.
+ * `undefined` means there is no run snapshot for the source (hide the edge item badge).
+ */
+export function edgeItemCountFromRunData(runData: RunData, sourceNodeId: string): number | undefined {
+  if (!runData || !sourceNodeId) return undefined;
+  const rec = runData[sourceNodeId];
+  if (rec == null || typeof rec !== 'object') return undefined;
+  return laneMain0ItemsJson(rec).length;
+}
+
+/** Strips any stale `itemCount` on edges, then sets it from `run_data` when the source node has a run entry. */
+export function edgesWithRunDataItemCounts(edges: Edge[], runData: RunData): Edge[] {
+  return edges.map((e) => {
+    const next: Record<string, unknown> =
+      typeof e.data === 'object' && e.data != null ? { ...(e.data as Record<string, unknown>) } : {};
+    delete next.itemCount;
+    const n = runData ? edgeItemCountFromRunData(runData, e.source) : undefined;
+    if (n !== undefined) next.itemCount = n;
+    return { ...e, data: next };
+  });
+}
+
+/**
  * Upstream per-slot preview for a node from a completed execution’s `run_data`
  * and the current graph edges — full item list (`itemsJson`) from each wire’s upstream lane `main[0]`.
  */
