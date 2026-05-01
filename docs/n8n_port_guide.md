@@ -39,6 +39,22 @@ FLOW_DUMP_SUBDIRS='packages/nodes-base/dist/nodes:packages/other-vendor-ai/dist/
 
 `make flow-node-dump` sets **`FLOW_DUMP_SUBDIRS`** / **`UPSTREAM_NODES_ROOT`** (see top-level makefile). The converter reads **`tools/flow_node_dump.jsonl`**.
 
+### Upstream toolchain and build (required)
+
+The sibling monorepo is **pnpm-based**. If `pnpm` is missing, install it (for example `corepack enable && corepack prepare pnpm@latest --activate`, or `npm install -g pnpm`, or an OS package). From the **upstream repository root**, run **`pnpm install`**, then **`pnpm build`** so compiled artifacts exist (including **`packages/nodes-base/dist/nodes/**/*.node.js`** and any other trees you list in **`FLOW_DUMP_SUBDIRS`**). Without a successful build, `make flow-node-dump` either warns that no `*.node.js` files were found or produces an incomplete JSONL.
+
+### Verifying the JSONL before `flow-node-port`
+
+Open **`tools/flow_node_dump.jsonl`** and spot-check important integrations (e.g. Slack, Airtable). A **healthy** row includes a full **`description.properties`** array (dozens of fields for large SaaS nodes). A **degraded** row often has only metadata such as **`displayName`**, **`name`**, **`defaultVersion`**, **`icon`**, **`group`** — and **no** (or empty) **`properties`**.
+
+**Why this happens — versioned nodes:** many upstream nodes use a **thin base** `description` on the class and move the real UI and routing into **`nodeVersions`**: a map of version keys to **sub-constructors**, each with a complete `description`. **`tools/dump_nodes.js`** tries **`new SubCtor()`** for each entry. If instantiation **throws** (missing context, side effects, or environment), **no** version line is emitted for that sub-class; the tool then falls back to a single JSONL record using the **base** `description` only. **`tools/port_nodes.py`** correctly turns that into **schema-valid** packages with **empty `parameter.schema.json`**, missing **`credential_slots`**, and a **`python_class`** stub — which is **not** a faithful port.
+
+**What to do:** fix or extend **`tools/dump_nodes.js`** (more robust construction, alternative extraction from compiled metadata, logging of `tryInstantiate` failures) and **re-dump**; optionally hand-merge rows for critical nodes; then re-run **`make flow-node-port`**.
+
+**Declarative HTTP count:** even with full descriptions, **`http.spec.json`** is emitted only when the converter can extract a usable **`routing.request`**. Expect **most** packages to remain **`python_class`** until heuristics improve or nodes are ported by hand.
+
+**`--validate`:** `python tools/port_nodes.py … --validate` checks **JSON Schema** shape for manifests (and **`http.spec.json`** when present). It does **not** prove behavioral parity with upstream or that the dump contained full **`properties`**.
+
 ---
 
 ## 3. Executor classification
@@ -259,11 +275,15 @@ class ExtPostgresQueryNode:
 | Sub-workflow nodes (`ExecuteWorkflow`) | DocRouter has a different sub-flow model | Stub only |
 | n8n-specific helpers (`$node`, `$workflow`, `$execution`) | Used in some `execute()` bodies | Manual port only; no equivalent in DocRouter today |
 | Multi-output routing (Switch, If) | n8n uses multiple `Main` outputs; DocRouter supports `outputs > 1` | Port is possible but routing logic needs Python |
-| Versioned nodes (`VersionedNodeType`) | Multiple `typeVersion` slices | Port the `defaultVersion` slice only; bump `type_version` manually if re-porting |
+| Versioned nodes (`VersionedNodeType`, `nodeVersions`) | Multiple `typeVersion` slices; sub-constructor `description` is the source of truth | If sub-constructors fail to instantiate in **`dump_nodes.js`**, JSONL contains only the **base** shell → empty parameter schema in DocRouter. Fix the dumper / environment; re-dump per version key you need; bump **`type_version`** from **`integration_type_version_key`** when present |
+| Expression URLs (`=…` prefix on `routing.request.url`) | Leading `=` is stripped in **`http_spec.py`**; remaining string may still be upstream expression syntax | Treat as manual: Jinja/templates in **`http.spec.json`** or **`python_class`** |
+| Incomplete declarative extraction | Nodes with `routing` / `requestDefaults` that omit a simple `routing.request` dict fall back to **`python_class`** | Converter prints stderr warnings per slug; inspect upstream `properties` trees |
 
 ---
 
 ## 10. Validation after generation
+
+**Schema vs semantics:** validating manifests guarantees **syntax** compatible with **`schemas/`** — not that each node matches upstream capabilities. Combine this with **JSONL spot-checks** (§2, “Verifying the JSONL before `flow-node-port`”) so versioned nodes did not collapse to empty **`properties`**.
 
 Run the standard §8 pipeline from [`docrouter_nodes.md`](./docrouter_nodes.md) on every generated package. The PyPI **`jsonschema`** package does not always install a working **`jsonschema` CLI** — use **`check-jsonschema`** ([PyPI](https://pypi.org/project/check-jsonschema/)) or a small Python harness:
 
@@ -310,17 +330,18 @@ Alternatively: `check-jsonschema --schemafile schemas/flow-node-manifest-v1.json
 
 ## 11. Suggested implementation order
 
-**Packaging track (done)**
+**Packaging track (mostly done — dump quality still iterative)**
 
-1. ~~**`make flow-node-dump`** → **`tools/flow_node_dump.jsonl`**~~ — **Done** (§2, §12.7).
-2. ~~**`make flow-node-port`** / **`python tools/port_nodes.py --validate`**~~ — **Done** (§12.8).
-3. **Ongoing:** run **`pytest packages/python/tests/test_flow_port_converter.py`** when changing the converter; refresh JSONL when upstream `*.node.js` dist changes.
+1. **Upstream:** install **pnpm**, **`pnpm install`** + **`pnpm build`** in the sibling clone so **`dist/**/*.node.js`** exists (§2).
+2. ~~**`make flow-node-dump`** → **`tools/flow_node_dump.jsonl`**~~ — **Done** mechanically (§2, §12.7); verify JSONL for **versioned** nodes before trusting bulk output (§2).
+3. ~~**`make flow-node-port`** / **`python tools/port_nodes.py --validate`**~~ — **Done** (§12.8).
+4. **Ongoing:** run **`pytest packages/python/tests/test_flow_port_converter.py`** when changing the converter or **`http_spec.py`**; re-dump when upstream **`*.node.js`** changes; tighten **`dump_nodes.js`** when **`nodeVersions` instantiation** fails for important nodes.
 
 **To make ported nodes executable**
 
-4. Build **§12.1 → §12.4** in order (resolver → loader → **`http_request_v1`** → credentials) — see **Status** at the **end** of this document for a checklist and recommended order.
-5. Expand the generated catalogue; prioritize implementing high-value **`python_class`** stubs manually where declarative mapping is insufficient.
-6. Improve declarative **`http.spec.json`** generation using real failures (multi-operation routing, **`response_set`**, templated bodies).
+5. Build **§12.1 → §12.4** in order (resolver → loader → **`http_request_v1`** → credentials) — see **Status** at the **end** of this document for a checklist and recommended order.
+6. Expand the generated catalogue; prioritize implementing high-value **`python_class`** stubs manually where declarative mapping is insufficient.
+7. Improve declarative **`http.spec.json`** generation using real failures (multi-operation routing, **`response_set`**, templated bodies).
 
 ---
 
@@ -385,7 +406,7 @@ The engine validates parameters against `parameter_schema` but does not apply `d
 
 #### 12.7 `tools/dump_nodes.js`
 
-**Implemented.** Node shim that walks compiled `*.node.js` modules and emits JSONL (`source`, `description`, optional `integration_type_version_key`). Run **`make flow-node-dump`** (see makefile variables **`UPSTREAM_NODES_ROOT`** / **`FLOW_DUMP_SUBDIRS`**) or §2.
+**Implemented** with known limits. Walks compiled `*.node.js` modules, **`require()`**s each file, discovers constructors, **`tryInstantiate`**, and emits JSONL (`source`, `description`, optional `integration_type_version_key`). For **`nodeVersions`**, it emits one record per successfully instantiated sub-class; **failed** `new SubCtor()` attempts are skipped silently today, which can leave only the **base** `description` for that file (see §2). Run **`make flow-node-dump`** (makefile **`UPSTREAM_NODES_ROOT`** / **`FLOW_DUMP_SUBDIRS`**) or §2.
 
 #### 12.8 `packages/python/analytiq_data/flows/port/` + `tools/port_nodes.py`
 
@@ -411,7 +432,8 @@ Then: JSON Schema defaults (§12.6), richer parameter UI (§12.5)
 
 | Area | State | Where |
 |------|--------|--------|
-| **JSONL dump** from compiled `*.node.js` | **Done** | [`tools/dump_nodes.js`](../tools/dump_nodes.js), `make flow-node-dump` |
+| **JSONL dump** from compiled `*.node.js` | **Done** (quality depends on build + `nodeVersions` instantiation) | [`tools/dump_nodes.js`](../tools/dump_nodes.js), `make flow-node-dump` — see §2 |
+| **Full `description` for versioned nodes** (`nodeVersions` sub-constructors) | **Partial / fragile** | Silent skip when **`new SubCtor()`** fails → empty **`properties`** in JSONL until dumper improves |
 | **Package generator** (manifest, parameter schema, optional `http.spec.json`, `python_class` stubs) | **Done** | [`analytiq_data/flows/port/`](../packages/python/analytiq_data/flows/port/), [`tools/port_nodes.py`](../tools/port_nodes.py), `make flow-node-port` |
 | **Manifest / http spec JSON Schemas (stubs)** | **Done** | [`schemas/flow-node-manifest-v1.json`](../schemas/flow-node-manifest-v1.json), [`schemas/runtimes/http_request_v1.schema.json`](../schemas/runtimes/http_request_v1.schema.json) |
 | **Unit tests for the converter** | **Done** | [`packages/python/tests/test_flow_port_converter.py`](../packages/python/tests/test_flow_port_converter.py) — `pytest packages/python/tests/test_flow_port_converter.py` |
@@ -425,6 +447,12 @@ Then: JSON Schema defaults (§12.6), richer parameter UI (§12.5)
 **Partial by design:** the converter classifies from **`description` only** (no inspection of imperative `execute()` in compiled JS yet). **`http.spec.json`** emission is **best-effort** (first usable `routing.request`, limited `postReceive` handling). Large catalogue output expects **review**, not guaranteed drop-in parity.
 
 ### What to build next (recommended order)
+
+**Packaging fidelity (alongside runtime work):**
+
+- Harden **`tools/dump_nodes.js`**: surface **`nodeVersions`** instantiation failures (stderr summary per file/version key), optionally stub dependencies or extract descriptions without constructing full upstream classes — so SaaS nodes do not degrade to empty **`properties`**.
+
+Then **runtime** (unchanged priority):
 
 1. **`$content_ref` resolver** — walk dicts, resolve paths relative to package root, inline loaded content (shared by schema load + declarative specs).
 2. **Manifest loader** — discover packages under `flows/port/generated_nodes/` (or configurable root), validate, register **`NodeType`** instances (`python_class` import + declarative wrapper).
