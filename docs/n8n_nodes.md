@@ -1044,3 +1044,5 @@ DocRouter **`NodeType`** contract (Python): [`packages/python/analytiq_data/flow
 
 For n8n’s type contracts, prefer reading **[`Interfaces.ts`](../../n8n/packages/workflow/src/Interfaces.ts)** in **`../n8n`**; for DocRouter, **`node_registry.py`** and **`FlowsCodeNode`**-style examples in **`packages/python/analytiq_data/flows/nodes/`**.
 
+For the programmatic pipeline that converts n8n nodes into DocRouter node packages, see **[`n8n_port_guide.md`](./n8n_port_guide.md)**.
+
