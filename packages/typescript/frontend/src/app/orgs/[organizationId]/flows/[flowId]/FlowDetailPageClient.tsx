@@ -342,7 +342,7 @@ export default function FlowDetailPageClient({
                   <FlowCanvasViewTabs value={view} onChange={handleViewChange} />
                 </FlowWorkspaceTabStraddle>
               </div>
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <PanelGroup
                   ref={logsPanelGroupRef}
                   direction="vertical"
@@ -364,7 +364,7 @@ export default function FlowDetailPageClient({
                   }}
                 >
                   <Panel defaultSize={100 - LOGS_COLLAPSED_PCT} minSize={25} className="min-h-0">
-                    <div className="h-full min-h-0 min-w-0 overflow-hidden p-0 sm:p-1">
+                    <div className="h-full min-h-0 min-w-0 overflow-hidden">
                       <FlowEditor
                         nodeTypes={nodeTypes}
                         nodes={rfNodes as Node<FlowRfNodeData>[]}
@@ -422,7 +422,7 @@ export default function FlowDetailPageClient({
                   <FlowCanvasViewTabs value={view} onChange={handleViewChange} />
                 </FlowWorkspaceTabStraddle>
               </div>
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-3">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <FlowExecutionsView
                   suppressTopChrome
                   orgApi={api}
