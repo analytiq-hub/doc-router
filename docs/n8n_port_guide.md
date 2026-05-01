@@ -310,17 +310,23 @@ Alternatively: `check-jsonschema --schemafile schemas/flow-node-manifest-v1.json
 
 ## 11. Suggested implementation order
 
-1. Run **`make flow-node-dump`** (tune **`UPSTREAM_NODES_ROOT`** / **`FLOW_DUMP_SUBDIRS`**) producing **`tools/flow_node_dump.jsonl`** (see §2).
-2. **`make flow-node-port`** (or `python tools/port_nodes.py`) reads that JSONL and emits packages under **`analytiq_data/flows/port/generated_nodes/`** by default.
-3. Smoke-test one declarative HTTP connector plus one imperative **`python_class`** stub end to end against `schemas/` validation.
-4. Scale to the rest of your upstream catalogue; prioritize stub implementations where needed.
-5. Refresh the JSONL whenever the sibling integration rebuild changes `*.node.js` artifacts.
+**Packaging track (done)**
+
+1. ~~**`make flow-node-dump`** → **`tools/flow_node_dump.jsonl`**~~ — **Done** (§2, §12.7).
+2. ~~**`make flow-node-port`** / **`python tools/port_nodes.py --validate`**~~ — **Done** (§12.8).
+3. **Ongoing:** run **`pytest packages/python/tests/test_flow_port_converter.py`** when changing the converter; refresh JSONL when upstream `*.node.js` dist changes.
+
+**To make ported nodes executable**
+
+4. Build **§12.1 → §12.4** in order (resolver → loader → **`http_request_v1`** → credentials) — see **Status** at the **end** of this document for a checklist and recommended order.
+5. Expand the generated catalogue; prioritize implementing high-value **`python_class`** stubs manually where declarative mapping is insufficient.
+6. Improve declarative **`http.spec.json`** generation using real failures (multi-operation routing, **`response_set`**, templated bodies).
 
 ---
 
-## 12. DocRouter prerequisites
+## 12. DocRouter prerequisites (runtime + product gaps)
 
-The following DocRouter capabilities must exist before the porting pipeline can be used end to end. They are listed in the recommended build order.
+What follows blocks **executing** flows that use generated packages. **§12.7–§12.8** are the **authoring toolchain** (already implemented).
 
 ### Blockers — nothing works without these
 
@@ -385,17 +391,47 @@ The engine validates parameters against `parameter_schema` but does not apply `d
 
 **Implemented.** Python converter reads the JSONL dump and writes packages under `analytiq_data/flows/port/generated_nodes/<slug>/` (`node.manifest.json`, `parameter.schema.json`, optional `http.spec.json`, `node_impl.py` stubs). CLI: **`python tools/port_nodes.py [jsonl] --validate`**; **`make flow-node-port`**.
 
-### Recommended build order
+### Recommended runtime build order
+
+Shortcut list — full **Status** table and notes are at the **end** of this document §13.
 
 ```
-1. $content_ref resolver utility          (small; needed by everything below)
-2. Node manifest loader                   (foundation for the whole system)
-3. http_request_v1 runtime               (enables declarative track)
-4. Credential storage + API              (enables real integrations)
-5. Credential injection in execution     (connects storage to runtime)
-6. dump_nodes.js + port_nodes.py (`analytiq_data.flows.port`, the packaging toolchain)
-7. Frontend: multiOptions rendering      (most common missing UI type)
-8. JSON Schema default propagation       (correctness for many nodes)
+✓ Packaging: dump_nodes.js + analytiq_data.flows.port + port_nodes.py  (DONE — §12.7–§12.8)
+
+1. $content_ref resolver utility
+2. Node manifest loader
+3. http_request_v1 runtime
+4. Credential storage + API + injection at execute time
+Then: JSON Schema defaults (§12.6), richer parameter UI (§12.5)
 ```
 
-Items 1–3 are pure backend and can proceed in parallel with 4–5. The toolchain (6) can start as soon as the loader (2) works end to end with a single manually authored example node.
+---
+
+## 13. Status (what we built vs what runs)
+
+| Area | State | Where |
+|------|--------|--------|
+| **JSONL dump** from compiled `*.node.js` | **Done** | [`tools/dump_nodes.js`](../tools/dump_nodes.js), `make flow-node-dump` |
+| **Package generator** (manifest, parameter schema, optional `http.spec.json`, `python_class` stubs) | **Done** | [`analytiq_data/flows/port/`](../packages/python/analytiq_data/flows/port/), [`tools/port_nodes.py`](../tools/port_nodes.py), `make flow-node-port` |
+| **Manifest / http spec JSON Schemas (stubs)** | **Done** | [`schemas/flow-node-manifest-v1.json`](../schemas/flow-node-manifest-v1.json), [`schemas/runtimes/http_request_v1.schema.json`](../schemas/runtimes/http_request_v1.schema.json) |
+| **Unit tests for the converter** | **Done** | [`packages/python/tests/test_flow_port_converter.py`](../packages/python/tests/test_flow_port_converter.py) — `pytest packages/python/tests/test_flow_port_converter.py` |
+| **`$content_ref` resolution** (schema + spec) | **Not started** | §12.1 — needed by loader + declarative runtime |
+| **Dynamic registration from `node.manifest.json`** | **Not started** | §12.2 — `NodeType`s are still hand-registered at startup |
+| **`http_request_v1` executor at runtime** | **Not started** | §12.3 — emitted `http.spec.json` is inert until an interpreter exists |
+| **Org credential store + runtime injection** | **Not started** | §12.4 |
+| **JSON Schema `default` merge before `execute()`** | **Not started** | §12.6 |
+| **Richer frontend for ported parameter shapes** | **Partial / gaps** | §12.5, §9 |
+
+**Partial by design:** the converter classifies from **`description` only** (no inspection of imperative `execute()` in compiled JS yet). **`http.spec.json`** emission is **best-effort** (first usable `routing.request`, limited `postReceive` handling). Large catalogue output expects **review**, not guaranteed drop-in parity.
+
+### What to build next (recommended order)
+
+1. **`$content_ref` resolver** — walk dicts, resolve paths relative to package root, inline loaded content (shared by schema load + declarative specs).
+2. **Manifest loader** — discover packages under `flows/port/generated_nodes/` (or configurable root), validate, register **`NodeType`** instances (`python_class` import + declarative wrapper).
+3. **`http_request_v1` runtime** — HTTP client + Jinja2 for `parameters.*` / `credentials.*`, response shaping via `response_jmespath`; emit **`FlowItem`** outputs.
+4. **Credentials** — persistence + API + **`credential_slots`** wiring into the execution context.
+5. **Defaults + UI** — engine applies JSON Schema defaults before execute (§12.6); then **`multiOptions`** / collection editors (§12.5) as needed.
+
+Steps 1–3 unlock a **declarative** generated node end-to-end without hand-copied Python; step 4 unlocks typical SaaS integrations.
+
+Packaging was implemented **early** so manifests accumulate under `schemas/` validation and **`test_flow_port_converter.py`**; runtime work (**1–3**) is still required before flows can call generated declarative nodes.
