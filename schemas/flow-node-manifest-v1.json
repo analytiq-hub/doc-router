@@ -1,0 +1,218 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "title": "DocRouter flow node manifest",
+  "description": "Stable v1 shape for node packages (see docs/docrouter_nodes.md). Stub schema — tighten patterns and executor variants as the loader lands.",
+  "type": "object",
+  "additionalProperties": false,
+  "definitions": {
+    "executor_python_class": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "import", "class"],
+      "properties": {
+        "kind": {
+          "const": "python_class",
+          "description": "Load class from import path and register()"
+        },
+        "import": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Dotted Python module path"
+        },
+        "class": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Attribute name on the module"
+        }
+      }
+    },
+    "executor_declarative": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "runtime", "spec_ref"],
+      "properties": {
+        "kind": {
+          "const": "declarative"
+        },
+        "runtime": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Interpreter name (e.g. http_request_v1)"
+        },
+        "spec_ref": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "^((?!\\.\\.).)*$",
+          "description": "Package-relative path to declarative spec JSON"
+        }
+      }
+    },
+    "executor_composite_stub": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "const": "composite"
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object"
+          }
+        }
+      }
+    },
+    "credential_slot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["slot", "label", "required"],
+      "properties": {
+        "slot": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "docrouter_binding": {
+          "type": "string"
+        }
+      }
+    },
+    "relative_safe_path": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^((?!\\.\\.).)*$"
+    }
+  },
+  "required": [
+    "schema",
+    "manifest_version",
+    "key",
+    "type_version",
+    "label",
+    "description",
+    "category",
+    "is_trigger",
+    "is_merge",
+    "min_inputs",
+    "max_inputs",
+    "outputs",
+    "output_labels",
+    "executor"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "minLength": 1,
+      "description": "URI identifying this manifest schema revision"
+    },
+    "manifest_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "key": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9._\\-]+$"
+    },
+    "type_version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "category": {
+      "type": "string",
+      "minLength": 1
+    },
+    "is_trigger": {
+      "type": "boolean"
+    },
+    "is_merge": {
+      "type": "boolean"
+    },
+    "min_inputs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "max_inputs": {
+      "type": ["integer", "null"],
+      "minimum": 0
+    },
+    "outputs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "output_labels": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "icon_key": {
+      "type": ["string", "null"]
+    },
+    "batch_execute_inputs": {
+      "type": "boolean"
+    },
+    "parameter_schema": {
+      "type": "object",
+      "description": "Inline JSON Schema for node parameters (mutually exclusive with parameter_schema_ref)"
+    },
+    "parameter_schema_ref": {
+      "$ref": "#/definitions/relative_safe_path",
+      "description": "Package-relative path to parameter JSON Schema document"
+    },
+    "credential_slots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/credential_slot"
+      }
+    },
+    "executor": {
+      "oneOf": [
+        {
+          "$ref": "#/definitions/executor_python_class"
+        },
+        {
+          "$ref": "#/definitions/executor_declarative"
+        },
+        {
+          "$ref": "#/definitions/executor_composite_stub"
+        }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "required": ["parameter_schema"],
+          "not": {
+            "required": ["parameter_schema_ref"]
+          }
+        },
+        {
+          "required": ["parameter_schema_ref"],
+          "not": {
+            "required": ["parameter_schema"]
+          }
+        }
+      ]
+    }
+  ],
+  "$comment": "Enforce len(output_labels)==outputs in CI; awkward in pure Draft 07 without custom keywords."
+}
