@@ -27,6 +27,7 @@ import {
   flowSelectClass,
 } from './flowUiClasses';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
+import { FlowModalSideNavStraddle } from './FlowCanvasViewTabs';
 
 const IoBlock: React.FC<{
   title: string;
@@ -298,7 +299,7 @@ const FlowNodeConfigModal: React.FC<{
       <div className="fixed inset-0 flex w-screen items-center justify-center p-2">
         <DialogPanel
           transition
-          className="flex h-[min(90vh,900px)] w-[min(1400px,95vw)] max-w-[95vw] flex-col overflow-hidden rounded-lg border border-[#e2e4e8] bg-white shadow-2xl transition data-[closed]:scale-95 data-[closed]:opacity-0"
+          className="relative flex h-[min(90vh,900px)] w-[min(1400px,95vw)] max-w-[95vw] flex-col overflow-visible rounded-lg border border-[#e2e4e8] bg-white shadow-2xl transition data-[closed]:scale-95 data-[closed]:opacity-0"
         >
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#eceff2] py-2.5 pl-4 pr-2">
             <div
@@ -374,39 +375,8 @@ const FlowNodeConfigModal: React.FC<{
             {typeLabel} — {node.name}
           </DialogTitle>
 
-          <div className="relative min-h-0 flex-1">
-            {onSelectNode && (upstreamNodeIds.length > 0 || downstreamNodeIds.length > 0) && (
-              <div className="pointer-events-none absolute inset-0 z-10">
-                <div className="absolute left-0 top-0 bottom-0 flex flex-col items-center justify-center gap-3">
-                  {upstreamNodeIds.map((nid) => (
-                    <button
-                      key={`up-${nid}`}
-                      type="button"
-                      title={nodeLabelById.get(nid) ?? nid}
-                      onClick={() => onSelectNode(nid)}
-                      className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-xl border border-[#e2e4e8] bg-white shadow-sm transition hover:scale-110"
-                    >
-                      <span className="text-xs font-bold text-[#5a6270]">◀</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="absolute right-0 top-0 bottom-0 flex flex-col items-center justify-center gap-3">
-                  {downstreamNodeIds.map((nid) => (
-                    <button
-                      key={`dn-${nid}`}
-                      type="button"
-                      title={nodeLabelById.get(nid) ?? nid}
-                      onClick={() => onSelectNode(nid)}
-                      className="pointer-events-auto flex h-11 w-11 items-center justify-center rounded-xl border border-[#e2e4e8] bg-white shadow-sm transition hover:scale-110"
-                    >
-                      <span className="text-xs font-bold text-[#5a6270]">▶</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <PanelGroup direction="horizontal" className="h-full w-full">
+          <div className="relative z-0 min-h-0 flex-1">
+            <PanelGroup direction="horizontal" className="relative z-0 h-full w-full">
               {!isTrigger && (
                 <>
                   <Panel defaultSize={25} minSize={18} className="min-w-[260px]">
@@ -554,6 +524,36 @@ const FlowNodeConfigModal: React.FC<{
               </Panel>
             </PanelGroup>
           </div>
+          {onSelectNode && upstreamNodeIds.length > 0 && (
+            <FlowModalSideNavStraddle side="left">
+              {upstreamNodeIds.map((nid) => (
+                <button
+                  key={`up-${nid}`}
+                  type="button"
+                  title={nodeLabelById.get(nid) ?? nid}
+                  onClick={() => onSelectNode(nid)}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#e2e4e8] bg-white shadow-md ring-1 ring-black/5 transition hover:scale-105"
+                >
+                  <span className="text-xs font-bold text-[#5a6270]">◀</span>
+                </button>
+              ))}
+            </FlowModalSideNavStraddle>
+          )}
+          {onSelectNode && downstreamNodeIds.length > 0 && (
+            <FlowModalSideNavStraddle side="right">
+              {downstreamNodeIds.map((nid) => (
+                <button
+                  key={`dn-${nid}`}
+                  type="button"
+                  title={nodeLabelById.get(nid) ?? nid}
+                  onClick={() => onSelectNode(nid)}
+                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#e2e4e8] bg-white shadow-md ring-1 ring-black/5 transition hover:scale-105"
+                >
+                  <span className="text-xs font-bold text-[#5a6270]">▶</span>
+                </button>
+              ))}
+            </FlowModalSideNavStraddle>
+          )}
         </DialogPanel>
       </div>
 

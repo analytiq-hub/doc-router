@@ -16,6 +16,21 @@ export function FlowWorkspaceTabStraddle({ children }: { children: React.ReactNo
   );
 }
 
+/**
+ * Pins nav controls to the modal’s left/right border: `inset-y-0` follows the full panel height,
+ * inner `translate-x ±50%` centers the control on the stroke (same idea as {@link FlowWorkspaceTabStraddle}).
+ * Render as a direct child of a `relative` modal shell so `left-0` / `right-0` match the card edge.
+ */
+export function FlowModalSideNavStraddle({ side, children }: { side: 'left' | 'right'; children: React.ReactNode }) {
+  const inset = side === 'left' ? 'left-0' : 'right-0';
+  const shift = side === 'left' ? '-translate-x-1/2' : 'translate-x-1/2';
+  return (
+    <div className={`pointer-events-none absolute inset-y-0 z-[50] flex items-center ${inset}`}>
+      <div className={`pointer-events-auto flex flex-col items-center gap-3 ${shift}`}>{children}</div>
+    </div>
+  );
+}
+
 /** n8n-style pill: foreground-base track (~26px segments), rounded-md, active slice raised white. */
 const FlowCanvasViewTabs: React.FC<{
   value: FlowCanvasView;
