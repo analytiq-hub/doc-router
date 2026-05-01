@@ -54,7 +54,7 @@ class OrgOcrTextractSettings(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    feature_types: list[str] = Field(default_factory=lambda: ["LAYOUT"])
+    feature_types: list[str] = Field(default_factory=list)
 
     @field_validator("feature_types")
     @classmethod
@@ -71,12 +71,6 @@ class OrgOcrTextractSettings(BaseModel):
                 seen.add(ft)
                 out.append(ft)
         return out
-
-    @model_validator(mode="after")
-    def _require_at_least_one_feature(self) -> OrgOcrTextractSettings:
-        if not self.feature_types:
-            raise ValueError("At least one Textract feature type is required (e.g. LAYOUT).")
-        return self
 
 
 class OrgOcrMistralSettings(BaseModel):

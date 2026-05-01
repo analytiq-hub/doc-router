@@ -33,7 +33,7 @@ def test_ocr_engine_run_order_starts_with_textract():
 
 def test_merge_defaults_when_missing():
     cfg = merge_org_ocr_config(None)
-    assert cfg.textract.feature_types == ["LAYOUT"]
+    assert cfg.textract.feature_types == []
     assert cfg.mode == "textract"
 
 
@@ -46,7 +46,7 @@ def test_merge_legacy_drops_deprecated_gemini_vertex():
             "textract": {"enabled": False},
         }
     )
-    assert cfg.textract.feature_types == ["LAYOUT"]
+    assert cfg.textract.feature_types == []
     assert cfg.mode == "textract"
 
 
@@ -62,20 +62,20 @@ def test_invalid_feature_rejected():
         OrgOcrTextractSettings(feature_types=["LAYOUT", "NOT_A_FEATURE"])
 
 
-def test_textract_requires_at_least_one_feature():
-    with pytest.raises(ValidationError, match="At least one Textract feature type"):
-        OrgOcrTextractSettings(feature_types=[])
+def test_textract_allows_empty_feature_types():
+    cfg = OrgOcrTextractSettings(feature_types=[])
+    assert cfg.feature_types == []
 
 
 @pytest.mark.asyncio
-async def test_apply_rejects_empty_feature_types():
-    with pytest.raises(ValidationError, match="At least one Textract feature type"):
-        await apply_ocr_config_update(
-            None,
-            {
-                "textract": {"feature_types": []},
-            },
-        )
+async def test_apply_allows_empty_feature_types():
+    out = await apply_ocr_config_update(
+        None,
+        {
+            "textract": {"feature_types": []},
+        },
+    )
+    assert out["textract"]["feature_types"] == []
 
 
 def test_textract_and_spu_costs_legacy():
@@ -223,7 +223,7 @@ async def test_gemini_only_stored_config_resets_to_defaults_then_textract_runs()
             "gemini": {"enabled": True, "model": "gemini/gemini-2.5-flash"},
         }
     )
-    assert cfg.textract.feature_types == ["LAYOUT"]
+    assert cfg.textract.feature_types == []
 
     async def fake_textract(*_a, **_k):
         return {

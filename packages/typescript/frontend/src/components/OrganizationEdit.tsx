@@ -48,9 +48,9 @@ function normalizeOcrConfig(raw: OrgOcrConfig): OrgOcrConfig {
     mode: raw.mode ?? 'textract',
     textract: {
       feature_types:
-        raw.textract?.feature_types && raw.textract.feature_types.length > 0
-          ? raw.textract.feature_types
-          : ['LAYOUT'],
+        raw.textract?.feature_types !== undefined && Array.isArray(raw.textract.feature_types)
+          ? [...raw.textract.feature_types]
+          : [],
     },
     mistral: raw.mistral ?? {},
     mistral_vertex: raw.mistral_vertex ?? {},
@@ -221,10 +221,6 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     }
 
     if (ocrConfig) {
-      if (ocrConfig.mode === 'textract' && ocrConfig.textract.feature_types.length === 0) {
-        toast.error('Select at least one Textract feature type (e.g. LAYOUT).');
-        return;
-      }
       if (ocrConfig.mode === 'llm') {
         const p = ocrConfig.llm.provider?.trim() ?? '';
         const m = ocrConfig.llm.model?.trim() ?? '';
@@ -799,7 +795,10 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                 <div className="space-y-4">
                   <div className="border-t border-gray-200 pt-4 first:border-t-0 first:pt-0">
                     <p className="text-sm font-medium text-gray-800 mb-2">AWS Textract</p>
-                    <p className="text-xs text-gray-500 mb-2">Feature types (AnalyzeDocument)</p>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Feature types (AnalyzeDocument). If none are selected, Textract uses text detection only
+                      (plain text/lines).
+                    </p>
                     <div className="flex flex-wrap gap-3">
                       {textractFeatureOptions.map((ft) => (
                         <label key={ft} className="inline-flex items-center gap-2 text-sm text-gray-700">
