@@ -533,7 +533,7 @@ const FlowNodeConfigModal: React.FC<{
                   onClick={() => onSelectNode(nid)}
                   className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#e2e4e8] bg-white shadow-md ring-1 ring-black/5 transition hover:scale-105"
                 >
-                  <span className="text-xs font-bold text-[#5a6270]">◀</span>
+                  <ChevronRightIcon className="h-3 w-3 shrink-0 rotate-180 text-gray-500" strokeWidth={1.5} aria-hidden />
                 </button>
               ))}
             </FlowModalSideNavStraddle>
@@ -548,7 +548,7 @@ const FlowNodeConfigModal: React.FC<{
                   onClick={() => onSelectNode(nid)}
                   className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#e2e4e8] bg-white shadow-md ring-1 ring-black/5 transition hover:scale-105"
                 >
-                  <span className="text-xs font-bold text-[#5a6270]">▶</span>
+                  <ChevronRightIcon className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={1.5} aria-hidden />
                 </button>
               ))}
             </FlowModalSideNavStraddle>
