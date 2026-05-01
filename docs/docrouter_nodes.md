@@ -104,38 +104,61 @@ Prefer a separate file for large schemas, generated schemas, or shared fragments
 
 **Resolution:** Resolve `parameter_schema_ref` relative to the package root and load JSON. The resolved document MUST be a valid JSON Schema object. Loaders SHOULD reject documents that declare **both** `parameter_schema` and `parameter_schema_ref`.
 
-### 4.3 Optional future: `$ref` inside schema
+### 4.3 Content references inside the schema (`$content_ref`)
 
-Sidecar **`parameter.schema.json`** MAY use **`$ref`** to sibling files under the package (e.g. `defs/common.json`). Loaders that only support inlined schemas can run a **`$ref` flattening** step in CI to emit a single bundle.
-
----
-
-## 5. Sidecar text blobs (`content_ref`)
-
-Some parameters are meant to hold **large or line-sensitive** text (HTTP body templates, scripts, SQL). Embedded JSON strings are valid but painful to diff and edit.
-
-**Convention:** in **`parameter.schema.json`**, such properties stay typed as **`{ "type": "string" }`** (or `string` with `contentEncoding` hints if you adopt a stricter convention). At **authoring time**, optional metadata in the **manifest** (not inside the JSON Schema draft spec) describes **defaults** or **fixtures** pointing at files:
+Parameters holding **large or line-sensitive** content (templates, scripts, SQL, HTML, JSON payloads) can reference a sidecar file directly from the schema node using the `$content_ref` extension keyword. JSON Schema validators (Draft 7) skip unknown `$`-prefixed keywords, so no pre-processing step is needed before validation.
 
 ```json
 {
-  "sidecars": {
-    "parameters": {
-      "body_template": {
-        "content_ref": "templates/request_body.tpl.txt",
-        "media_type": "text/plain"
-      }
+  “type”: “object”,
+  “properties”: {
+    “body_template”: {
+      “type”: “string”,
+      “$content_ref”: “templates/request_body.tpl.txt”
+    },
+    “processor_code”: {
+      “type”: “string”,
+      “$content_ref”: “scripts/processor.py”
+    },
+    “config”: {
+      “type”: “object”,
+      “$content_ref”: “defaults/config.json”
+    },
+    “allowed_tags”: {
+      “type”: “array”,
+      “$content_ref”: “defaults/tags.json”
     }
   }
 }
 ```
 
-Semantics:
+**Rules:**
 
-- **`sidecars`** is **documentation / tooling only** unless the product explicitly adds a “load fixture into editor” feature. It does **not** change runtime JSON: run parameters are still plain strings once the workflow is saved.
-- **`content_ref`** is a package-relative path; same root confinement rules as **`parameter_schema_ref`**.
-- **`media_type`** is optional (e.g. `application/json` for pretty-printed JSON templates).
+- Valid on nodes whose `type` is `string`, `object`, or `array`. Has no meaning on `number`, `integer`, or `boolean` nodes.
+- Path is **package-relative** from the manifest directory. `..` segments are forbidden (same root confinement rule as `parameter_schema_ref`).
+- When the file extension is ambiguous, add **`$content_media_type`** on the same node:
 
-**Import tooling** (e.g. n8n → DocRouter) can use **`content_ref`** to map n8n multiline defaults into files and set workflow defaults to either the inlined string or a placeholder that tells the UI to open the sidecar path (product-specific).
+```json
+{
+  “type”: “string”,
+  “$content_ref”: “scripts/processor”,
+  “$content_media_type”: “text/x-python”
+}
+```
+
+- May appear at **any depth** in the schema tree, including nested object properties.
+- **Authoring/tooling only:** tells editors and import tooling (e.g. n8n → DocRouter) where to find a default value. Does **not** affect the runtime parameter contract — parameters are always plain strings/objects/arrays in the saved workflow.
+- Do **not** place `$content_ref` on a node that also carries a JSON Schema `$ref` (schema composition reference) — the semantics conflict.
+
+**Schema `$ref` composition** (distinct from `$content_ref`): `parameter.schema.json` MAY use standard JSON Schema `$ref` to reference sibling schema fragments under the package (e.g. `”$ref”: “defs/common.json”`). Loaders that only support inlined schemas can run a `$ref`-flattening step in CI to emit a single bundle.
+
+---
+
+## 5. Sidecar file references
+
+Sidecar file references for parameter defaults and fixtures are declared using **`$content_ref`** (and optionally **`$content_media_type`**) directly on schema nodes in **`parameter.schema.json`** — see §4.3.
+
+The manifest-level `sidecars` block described in earlier drafts of this spec is superseded by the `$content_ref` mechanism and MUST NOT be used in new packages.
 
 ---
 
@@ -234,7 +257,6 @@ The formal schema should be committed as **`schemas/flow-node-manifest-v1.json`*
 | `batch_execute_inputs` | no | Boolean, default false. |
 | `parameter_schema` | one of | Object; mutually exclusive with `parameter_schema_ref`. |
 | `parameter_schema_ref` | one of | String path. |
-| `sidecars` | no | Object (see §5). |
 | `executor` | yes | Object with `kind` discriminator. |
 | `credential_slots` | no | Array. |
 
@@ -294,8 +316,8 @@ The formal schema should be committed as **`schemas/flow-node-manifest-v1.json`*
 | Artifact | Role |
 |----------|------|
 | **`node.manifest.json`** | Canonical node descriptor: identity, ports, **`parameter_schema`** pointer or inline, **`executor`** binding. |
-| **`parameter.schema.json`** | Optional sidecar JSON Schema for parameters (and optional **`$ref` graph inside the package). |
-| **`templates/*`, declarative specs** | Sidecar blobs or structured specs referenced by **`_ref`** fields instead of inlined strings. |
+| **`parameter.schema.json`** | Optional sidecar JSON Schema for parameters. MAY use `$content_ref` / `$content_media_type` on any `string`, `object`, or `array` node to point at a sidecar file, and MAY use JSON Schema `$ref` for schema fragment composition. |
+| **`templates/*`, scripts, declarative specs** | Sidecar blobs or structured specs referenced by `$content_ref` (in the schema) or `spec_ref` (in the executor) instead of inlined strings. |
 
 This split keeps CI validation simple (**everything is JSON on the wire**) while preserving **human-friendly** authoring for large payloads and a clear bridge to **`NodeType`** at runtime.
 
