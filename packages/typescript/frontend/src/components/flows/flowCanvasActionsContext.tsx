@@ -16,7 +16,9 @@ export type EdgeInsertPayload = {
 
 /** Actions for the editable flow canvas (node toolbar, edge controls). Executions read-only view omits this provider. */
 export type FlowCanvasActions = {
-  onRunWorkflow?: () => void;
+  /** Partial run through this node (same as modal “Execute step”). Omitted when execute-step is unavailable. */
+  onExecuteNodeStep?: (nodeId: string) => void | Promise<void>;
+  executeStepBusy?: boolean;
   onToggleNodeDisabled: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
   onOpenNodeSettings: (nodeId: string) => void;

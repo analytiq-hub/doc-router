@@ -203,12 +203,12 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
         onMouseEnter={showToolbarForPointer}
         onMouseLeave={hideToolbarForPointerSoon}
       >
-        <span title="Run workflow">
+        <span title={isTrigger ? 'Triggers run with the full workflow' : 'Execute step (partial run through this node)'}>
           <button
             type="button"
-            aria-label="Run workflow"
-            disabled={!actions.onRunWorkflow}
-            onClick={() => actions.onRunWorkflow?.()}
+            aria-label={isTrigger ? 'Execute step unavailable for triggers' : 'Execute step'}
+            disabled={isTrigger || !actions.onExecuteNodeStep || Boolean(actions.executeStepBusy)}
+            onClick={() => void actions.onExecuteNodeStep?.(id)}
             className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 enabled:hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <PlayIcon className="h-4 w-4" />

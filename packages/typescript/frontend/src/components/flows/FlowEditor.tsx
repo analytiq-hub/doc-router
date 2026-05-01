@@ -542,22 +542,31 @@ const FlowEditor: React.FC<{
     return { node: n.data.flowNode, nodeType: n.data.nodeType ?? nodeTypesByKey[n.data.flowNode.type] ?? null };
   }, [configModalNodeId, nodeTypesByKey, nodes]);
 
+  const runExecuteStepForNode = useCallback(
+    async (targetNodeId: string) => {
+      if (!onExecuteStep) return;
+      setExecuteStepBusy(true);
+      try {
+        await onExecuteStep({
+          targetNodeId,
+          seedRunData: { ...(runData ?? {}) },
+        });
+      } finally {
+        setExecuteStepBusy(false);
+      }
+    },
+    [onExecuteStep, runData],
+  );
+
   const onExecuteStepClick = useCallback(async () => {
-    if (!onExecuteStep || !configModalNodeId) return;
-    setExecuteStepBusy(true);
-    try {
-      await onExecuteStep({
-        targetNodeId: configModalNodeId,
-        seedRunData: { ...(runData ?? {}) },
-      });
-    } finally {
-      setExecuteStepBusy(false);
-    }
-  }, [onExecuteStep, configModalNodeId, runData]);
+    if (!configModalNodeId) return;
+    await runExecuteStepForNode(configModalNodeId);
+  }, [configModalNodeId, runExecuteStepForNode]);
 
   const canvasActions = useMemo(
     () => ({
-      onRunWorkflow: onExecute,
+      onExecuteNodeStep: onExecuteStep ? runExecuteStepForNode : undefined,
+      executeStepBusy,
       onToggleNodeDisabled: (nodeId: string) => {
         onNodesChange(
           nodes.map((n) => {
@@ -590,7 +599,7 @@ const FlowEditor: React.FC<{
         setNodePaletteOpen(true);
       },
     }),
-    [edges, nodeTypesByKey, nodes, onEdgesChange, onExecute, onNodesChange],
+    [edges, executeStepBusy, nodeTypesByKey, nodes, onEdgesChange, onExecuteStep, onNodesChange, runExecuteStepForNode],
   );
 
   return (
