@@ -19,13 +19,12 @@ import type { Edge } from 'reactflow';
 import type { FlowNode, FlowNodeType, FlowPinData, FlowPinItem, FlowPinNodeOutput } from '@docrouter/sdk';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
 import { buildNodeInputPreview } from './flowNodeIoPreview';
+import { FlowInputUpstreamList } from './FlowInputUpstreamList';
 import { IoViewer } from './IoViewer';
 import {
   flowInlineNameInputClass,
   flowInlineNameMeasureClass,
   flowInlineNameReadClass,
-  flowLabelClass,
-  flowSelectClass,
 } from './flowUiClasses';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 import { FlowModalSideNavStraddle } from './FlowCanvasViewTabs';
@@ -149,7 +148,6 @@ const FlowNodeConfigModal: React.FC<{
   readOnly = false,
 }) => {
   const [tab, setTab] = useState(0);
-  const [selectedInputNodeId, setSelectedInputNodeId] = useState<string>('');
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
   const [nodeActionsAnchorEl, setNodeActionsAnchorEl] = useState<null | HTMLElement>(null);
@@ -161,7 +159,6 @@ const FlowNodeConfigModal: React.FC<{
   useEffect(() => {
     if (nodeId) {
       setTab(0);
-      setSelectedInputNodeId('');
       setNameHover(false);
       setNameFocus(false);
       setInputIoMode('schema');
@@ -171,12 +168,8 @@ const FlowNodeConfigModal: React.FC<{
 
   const inputPreview = useMemo(() => {
     if (!node) return { slots: [] as { slot: number; fromNodeId: string; itemsJson: unknown[] }[], message: 'No node' };
-    const base = buildNodeInputPreview(node.id, edges, runData);
-    const filteredSlots = selectedInputNodeId
-      ? base.slots.filter((s) => s.fromNodeId === selectedInputNodeId)
-      : base.slots;
-    return { ...base, slots: filteredSlots };
-  }, [node, edges, runData, selectedInputNodeId]);
+    return buildNodeInputPreview(node.id, edges, runData);
+  }, [node, edges, runData]);
 
   const typedPinData = useMemo(() => pinData ?? null, [pinData]);
 
@@ -380,43 +373,14 @@ const FlowNodeConfigModal: React.FC<{
                 <>
                   <Panel defaultSize={25} minSize={18} className="min-w-[260px]">
                     <IoBlock title="Input">
-                      {upstreamNodeIds.length > 1 && (
-                        <div className="mb-3">
-                          <label className={flowLabelClass} htmlFor="flow-input-from">
-                            Input from
-                          </label>
-                          <select
-                            id="flow-input-from"
-                            className={flowSelectClass}
-                            value={selectedInputNodeId}
-                            onChange={(e) => setSelectedInputNodeId(e.target.value)}
-                          >
-                            <option value="">Auto</option>
-                            {upstreamNodeIds.map((nid) => (
-                              <option key={nid} value={nid}>
-                                {nodeLabelById.get(nid) ?? nid}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-
                       {inputPreview.message && <div className="mb-2 text-sm text-[#6b7280]">{inputPreview.message}</div>}
                       {!inputPreview.message && inputPreview.slots.length > 0 && (
-                        <div className="space-y-3">
-                          {inputPreview.slots.map((s) => (
-                            <IoViewer
-                              key={`${s.fromNodeId}:${s.slot}`}
-                              title={`in ${s.slot} ← ${nodeLabelById.get(s.fromNodeId) ?? s.fromNodeId}`}
-                              value={s.itemsJson}
-                              valueKind="executionItems"
-                              dragSource={{ nodeId: s.fromNodeId, source: 'nodeOutput' }}
-                              defaultMode="schema"
-                              mode={inputIoMode}
-                              onModeChange={setInputIoMode}
-                            />
-                          ))}
-                        </div>
+                        <FlowInputUpstreamList
+                          slots={inputPreview.slots}
+                          nodeLabelById={nodeLabelById}
+                          mode={inputIoMode}
+                          onModeChange={setInputIoMode}
+                        />
                       )}
                       {!inputPreview.message && inputPreview.slots.length === 0 && (
                         <IoViewer
