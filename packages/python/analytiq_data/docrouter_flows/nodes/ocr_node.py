@@ -17,10 +17,12 @@ class DocRouterOcrNode:
     description = "Runs OCR on the input document(s)."
     category = "DocRouter"
     is_trigger = False
+    is_merge = False
     min_inputs = 1
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    icon_key = "ocr"
     parameter_schema: dict[str, Any] = {"type": "object", "properties": {}, "additionalProperties": False}
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:

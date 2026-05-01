@@ -22,6 +22,7 @@ class _PassThroughNode:
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    icon_key = None
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {},
@@ -55,6 +56,7 @@ class _TagItemNode:
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    icon_key = None
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {
@@ -103,6 +105,7 @@ class _ListParamsEchoNode:
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    icon_key = None
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {
@@ -152,6 +155,7 @@ class _BinaryAttachNode:
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    icon_key = None
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {},

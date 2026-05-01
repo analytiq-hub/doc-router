@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import type { FlowNodeType } from '@docrouter/sdk';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
 
 const FlowNodePalette: React.FC<{
   nodeTypes: FlowNodeType[];
@@ -21,7 +22,8 @@ const FlowNodePalette: React.FC<{
           nt.label.toLowerCase().includes(q) ||
           nt.key.toLowerCase().includes(q) ||
           (nt.description && nt.description.toLowerCase().includes(q)) ||
-          (nt.category && nt.category.toLowerCase().includes(q));
+          (nt.category && nt.category.toLowerCase().includes(q)) ||
+          (nt.icon_key && nt.icon_key.toLowerCase().includes(q));
         if (!hit) continue;
       }
       const key = nt.category || 'Other';
@@ -78,12 +80,29 @@ const FlowNodePalette: React.FC<{
                     className="group cursor-grab select-none rounded-lg border border-[#e2e4e8] bg-white p-2.5 shadow-sm transition hover:border-sky-300 hover:shadow active:cursor-grabbing"
                     title={nt.description}
                   >
-                    <div className="text-sm font-semibold text-[#1a1d21] group-hover:text-sky-800">{nt.label}</div>
-                    {nt.description && (
-                      <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-[#6b7280]">
-                        {nt.description}
+                    <div className="flex items-start gap-2.5">
+                      <div
+                        className={[
+                          'mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg',
+                          nt.is_trigger ? 'bg-[#fff5f3]' : 'bg-[#f3f5f8]',
+                        ].join(' ')}
+                        aria-hidden
+                      >
+                        <FlowNodeTypeIcon
+                          iconKey={nt.icon_key}
+                          fallback={nt.is_trigger ? 'trigger' : 'process'}
+                          className={nt.is_trigger ? 'h-[22px] w-[22px] text-[#a8b0ba]' : 'h-5 w-5 text-[#94a3b8]'}
+                        />
                       </div>
-                    )}
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-semibold text-[#1a1d21] group-hover:text-sky-800">{nt.label}</div>
+                        {nt.description && (
+                          <div className="mt-0.5 line-clamp-2 text-[11px] leading-snug text-[#6b7280]">
+                            {nt.description}
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>

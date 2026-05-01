@@ -27,6 +27,8 @@ class NodeType(Protocol):
     outputs: int
     output_labels: list[str]
     parameter_schema: dict[str, Any]
+    #: Preset understood by the front-end palette/canvas (`null`/missing → generic glyph).
+    icon_key: str | None
 
     async def execute(
         self,

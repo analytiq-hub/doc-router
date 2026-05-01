@@ -17,10 +17,12 @@ class DocRouterLlmExtractNode:
     description = "Runs linked prompt-based extraction."
     category = "DocRouter"
     is_trigger = False
+    is_merge = False
     min_inputs = 1
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    icon_key = "llm_extract"
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {

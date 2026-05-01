@@ -97,6 +97,7 @@ class _E2eContextSeedNode:
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    icon_key = None
     parameter_schema: dict = {"type": "object", "properties": {}, "additionalProperties": False}
 
     def validate_parameters(self, params: dict) -> list[str]:

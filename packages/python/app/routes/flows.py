@@ -145,6 +145,7 @@ async def list_node_types(organization_id: str, current_user: User = Depends(get
                 "outputs": nt.outputs,
                 "output_labels": nt.output_labels,
                 "parameter_schema": nt.parameter_schema,
+                "icon_key": nt.icon_key,
             }
         )
     return {"items": items, "total": len(items)}

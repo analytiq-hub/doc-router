@@ -539,6 +539,7 @@ const FlowExecutionsView: React.FC<{
         node={configRf.node}
         nodeType={configRf.nodeType}
         allNodes={viewNodes.map((n) => (n as Node<FlowRfNodeData>).data.flowNode)}
+        nodeTypes={nodeTypes}
         edges={viewEdges}
         runData={runDataForModal}
         expressionExecution={

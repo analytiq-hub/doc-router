@@ -123,6 +123,8 @@ const FlowNodeConfigModal: React.FC<{
   node: FlowNode | null;
   nodeType: FlowNodeType | null;
   allNodes?: FlowNode[];
+  /** When provided, upstream input rows show per-node preset icons. */
+  nodeTypes?: FlowNodeType[];
   edges: Edge[];
   runData: Record<string, unknown> | null | undefined;
   /** When set (e.g. executions viewer), show ids under $execution_* hints. */
@@ -141,6 +143,7 @@ const FlowNodeConfigModal: React.FC<{
   node,
   nodeType,
   allNodes,
+  nodeTypes,
   edges,
   runData,
   expressionExecution,
@@ -268,6 +271,20 @@ const FlowNodeConfigModal: React.FC<{
     return map;
   }, [allNodes]);
 
+  const upstreamNodeIcons = useMemo(() => {
+    if (!nodeTypes?.length) return undefined;
+    const byKey = new Map(nodeTypes.map((nt) => [nt.key, nt]));
+    const m = new Map<string, { iconKey?: string | null; isTrigger?: boolean }>();
+    for (const n of allNodes ?? []) {
+      const nt = byKey.get(n.type);
+      m.set(n.id, {
+        iconKey: nt?.icon_key ?? null,
+        isTrigger: Boolean(nt?.is_trigger),
+      });
+    }
+    return m;
+  }, [allNodes, nodeTypes]);
+
   if (!node) {
     return null;
   }
@@ -383,6 +400,7 @@ const FlowNodeConfigModal: React.FC<{
                         <FlowInputUpstreamList
                           slots={inputPreview.slots}
                           nodeLabelById={nodeLabelById}
+                          upstreamNodeIcons={upstreamNodeIcons}
                           mode={inputIoMode}
                           onModeChange={setInputIoMode}
                         />

@@ -17,10 +17,12 @@ class DocRouterSetTagsNode:
     description = "Applies configured tags."
     category = "DocRouter"
     is_trigger = False
+    is_merge = False
     min_inputs = 1
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    icon_key = "set_tags"
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {"tag_ids": {"type": "array", "items": {"type": "string"}}},

@@ -32,6 +32,7 @@ class FlowsCodeNode:
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    icon_key = "code"
     #: When True, ``engine._execute_loop`` invokes ``execute()`` once per work item
     #: with ``inputs`` containing all queued items per slot (n8n-style batch).
     batch_execute_inputs: bool = True

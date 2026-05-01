@@ -31,6 +31,7 @@ class FlowsWebhookNode:
     category = "Generic"
     is_trigger = False
     is_merge = False
+    icon_key = "webhook"
     min_inputs = 1
     max_inputs = 1
     outputs = 1

@@ -20,6 +20,7 @@ class FlowsMergeNode:
     max_inputs = None
     outputs = 1
     output_labels = ["output"]
+    icon_key = "merge"
     parameter_schema: dict[str, Any] = {"type": "object", "properties": {}, "additionalProperties": False}
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:

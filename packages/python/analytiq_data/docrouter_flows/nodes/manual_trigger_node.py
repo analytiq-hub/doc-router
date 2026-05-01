@@ -17,10 +17,12 @@ class DocRouterManualTriggerNode:
     description = "Emits the target document as one item."
     category = "DocRouter"
     is_trigger = True
+    is_merge = False
     min_inputs = 0
     max_inputs = 0
     outputs = 1
     output_labels = ["output"]
+    icon_key = "manual_trigger_document"
     # Triggers have no user-editable parameters; `document_id` comes from the run request / trigger_data.
     parameter_schema: dict[str, Any] = {
         "type": "object",

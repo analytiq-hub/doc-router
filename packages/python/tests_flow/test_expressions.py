@@ -43,6 +43,7 @@ class _EchoParamNode:
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    icon_key = None
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {"value": {}},
@@ -86,6 +87,7 @@ class _MultiItemTriggerNode:
     max_inputs = 0
     outputs = 1
     output_labels = ["output"]
+    icon_key = None
     parameter_schema: dict[str, Any] = {"type": "object", "properties": {}, "additionalProperties": False}
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
@@ -125,6 +127,7 @@ class _SetXNode:
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    icon_key = None
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {"x": {"type": "number"}},
@@ -168,6 +171,7 @@ class _MergeEchoParamNode:
     max_inputs = None
     outputs = 1
     output_labels = ["output"]
+    icon_key = None
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {"value": {}},

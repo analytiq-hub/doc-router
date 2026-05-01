@@ -20,6 +20,7 @@ class FlowsManualTriggerNode:
     max_inputs = 0
     outputs = 1
     output_labels = ["output"]
+    icon_key = "manual_trigger"
     # Triggers have no user-editable parameters; tolerate legacy keys in stored revisions.
     parameter_schema: dict[str, Any] = {
         "type": "object",

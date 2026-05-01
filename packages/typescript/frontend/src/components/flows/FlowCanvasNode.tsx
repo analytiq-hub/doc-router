@@ -4,13 +4,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Handle, NodeToolbar, Position, type NodeProps } from 'reactflow';
 import {
   CheckCircleIcon,
-  CursorArrowRaysIcon,
   EllipsisHorizontalIcon,
   ExclamationCircleIcon,
   BookmarkIcon,
   BoltIcon,
   PlayIcon,
-  Squares2X2Icon,
   StopCircleIcon,
   TrashIcon,
 } from '@heroicons/react/24/solid';
@@ -19,6 +17,7 @@ import { inputHandleCount } from './flowRf';
 import type { FlowRfNodeDataWithRun, NodeRunStatusBadge } from './flowNodeRunStatus';
 import { getNodeRunStatusFromRunData } from './flowNodeRunStatus';
 import { useFlowCanvasActions, useFlowExecutionVisual } from './flowCanvasActionsContext';
+import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
 
 const handleClass =
   '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-emerald-500 hover:!bg-emerald-50';
@@ -294,7 +293,11 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
             {disabledStrike}
             {isPinned && <PinnedBadge />}
             <div className="flex h-full w-full items-center justify-center">
-              <CursorArrowRaysIcon className="h-10 w-10 text-[#a8b0ba]" aria-hidden />
+              <FlowNodeTypeIcon
+                iconKey={nt?.icon_key}
+                fallback="trigger"
+                className="h-10 w-10 text-[#a8b0ba]"
+              />
             </div>
             {/* Trigger bolt: outside-left, vertically centered (`right: 100%`, `margin: auto`). */}
             <div className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 p-1 text-[#ff6d5a]">
@@ -347,7 +350,11 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
               style={{ top: `${(100 * (i + 1)) / (inputs + 1)}%` }}
             />
           ))}
-          <Squares2X2Icon className="h-9 w-9 text-[#94a3b8]" aria-hidden />
+          <FlowNodeTypeIcon
+            iconKey={nt?.icon_key}
+            fallback="process"
+            className="h-9 w-9 text-[#94a3b8]"
+          />
           {Array.from({ length: Math.max(outputs, 0) }).map((_, i) => (
             <Handle
               key={`out-${i}`}

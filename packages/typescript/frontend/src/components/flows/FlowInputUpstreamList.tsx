@@ -3,9 +3,12 @@
 import React from 'react';
 import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
+import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
 import { IoDataModeTabs, IoViewer } from './IoViewer';
 
 export type UpstreamInputSlot = { slot: number; fromNodeId: string; itemsJson: unknown[] };
+
+export type UpstreamNodeIconMeta = { iconKey?: string | null; isTrigger?: boolean };
 
 function slotKey(s: UpstreamInputSlot): string {
   return `${s.fromNodeId}:${s.slot}`;
@@ -18,9 +21,11 @@ function slotKey(s: UpstreamInputSlot): string {
 export const FlowInputUpstreamList: React.FC<{
   slots: UpstreamInputSlot[];
   nodeLabelById: Map<string, string>;
+  /** When set, shows a preset icon per upstream node id (from flow node type). */
+  upstreamNodeIcons?: ReadonlyMap<string, UpstreamNodeIconMeta | undefined>;
   mode: 'schema' | 'table' | 'json';
   onModeChange: (next: 'schema' | 'table' | 'json') => void;
-}> = ({ slots, nodeLabelById, mode, onModeChange }) => {
+}> = ({ slots, nodeLabelById, upstreamNodeIcons, mode, onModeChange }) => {
   if (slots.length === 0) return null;
 
   return (
@@ -47,6 +52,21 @@ export const FlowInputUpstreamList: React.FC<{
                         strokeWidth={1.5}
                       />
                     </span>
+                    {upstreamNodeIcons && (
+                      <span
+                        className={[
+                          'flex h-4 w-4 shrink-0 items-center justify-center',
+                          upstreamNodeIcons.get(s.fromNodeId)?.isTrigger ? 'text-[#a8b0ba]' : 'text-[#94a3b8]',
+                        ].join(' ')}
+                        aria-hidden
+                      >
+                        <FlowNodeTypeIcon
+                          iconKey={upstreamNodeIcons.get(s.fromNodeId)?.iconKey}
+                          fallback={upstreamNodeIcons.get(s.fromNodeId)?.isTrigger ? 'trigger' : 'process'}
+                          className="h-3.5 w-3.5"
+                        />
+                      </span>
+                    )}
                     <span className="min-w-0 flex-1 truncate text-[11px] font-semibold text-gray-900">
                       {label}
                       {titleSuffix}

@@ -35,6 +35,7 @@ class FlowsBranchNode:
     max_inputs = 1
     outputs = 2
     output_labels = ["true", "false"]
+    icon_key = "branch"
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {

@@ -5,6 +5,8 @@ export interface FlowNodeType {
   label: string;
   description: string;
   category: string;
+  /** Backend preset mapped to bundled Heroicons (`null`/omit → generic process/trigger glyph). */
+  icon_key?: string | null;
   is_trigger: boolean;
   min_inputs: number;
   max_inputs: number | null;

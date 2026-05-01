@@ -711,6 +711,7 @@ const FlowEditor: React.FC<{
         node={configRf.node}
         nodeType={configRf.nodeType}
         allNodes={nodes.map((n) => n.data.flowNode)}
+        nodeTypes={nodeTypes}
         edges={edges}
         runData={runData}
         pinData={pinData}
