@@ -204,6 +204,8 @@ const FlowEditor: React.FC<{
   /** When set, opens the node config modal for the given node id. */
   openConfigNodeId?: string | null;
   onOpenConfigNodeIdChange?: (next: string | null) => void;
+  /** Execute step (partial run): parent supplies API call with saved revision id. */
+  onExecuteStep?: (args: { targetNodeId: string; seedRunData: Record<string, unknown> }) => void | Promise<void>;
 }> = ({
   nodeTypes,
   nodes,
@@ -216,9 +218,11 @@ const FlowEditor: React.FC<{
   onPinDataChange,
   openConfigNodeId,
   onOpenConfigNodeIdChange,
+  onExecuteStep,
 }) => {
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [configModalNodeId, setConfigModalNodeId] = useState<string | null>(null);
+  const [executeStepBusy, setExecuteStepBusy] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -538,6 +542,19 @@ const FlowEditor: React.FC<{
     return { node: n.data.flowNode, nodeType: n.data.nodeType ?? nodeTypesByKey[n.data.flowNode.type] ?? null };
   }, [configModalNodeId, nodeTypesByKey, nodes]);
 
+  const onExecuteStepClick = useCallback(async () => {
+    if (!onExecuteStep || !configModalNodeId) return;
+    setExecuteStepBusy(true);
+    try {
+      await onExecuteStep({
+        targetNodeId: configModalNodeId,
+        seedRunData: { ...(runData ?? {}) },
+      });
+    } finally {
+      setExecuteStepBusy(false);
+    }
+  }, [onExecuteStep, configModalNodeId, runData]);
+
   const canvasActions = useMemo(
     () => ({
       onRunWorkflow: onExecute,
@@ -706,6 +723,8 @@ const FlowEditor: React.FC<{
         onChange={(patch) => {
           if (configModalNodeId) onPatchNodeById(configModalNodeId, patch);
         }}
+        onExecuteStep={onExecuteStep ? onExecuteStepClick : undefined}
+        executeStepBusy={executeStepBusy}
       />
 
       {nodePaletteOpen && (

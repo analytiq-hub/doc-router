@@ -62,6 +62,14 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
         await ad.queue.delete_msg(analytiq_client, "flow_run", msg_id)
         return
 
+    run_data: dict = dict(exec_doc.get("run_data") or {})
+    initial = exec_doc.get("initial_run_data") or {}
+    dirty = frozenset(str(x) for x in (exec_doc.get("dirty_node_ids") or []) if x)
+    for k, v in initial.items():
+        if k in dirty:
+            continue
+        run_data[k] = v
+
     context = ad.flows.ExecutionContext(
         organization_id=org_id,
         execution_id=exec_id,
@@ -69,7 +77,7 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
         flow_revid=flow_revid,
         mode=exec_doc.get("mode") or "manual",
         trigger_data=trigger,
-        run_data=exec_doc.get("run_data") or {},
+        run_data=run_data,
         analytiq_client=analytiq_client,
         stop_requested=bool(exec_doc.get("stop_requested")),
         logger=logger,
@@ -86,7 +94,14 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
             return
         heartbeat_task = asyncio.create_task(_heartbeat_loop(db, exec_id))
         try:
-            result = await ad.flows.run_flow(context=context, revision=revision)
+            tgt = exec_doc.get("target_node_id")
+            target_node_id = str(tgt) if tgt else None
+            result = await ad.flows.run_flow(
+                context=context,
+                revision=revision,
+                target_node_id=target_node_id,
+                dirty_node_ids=dirty if dirty else None,
+            )
         finally:
             heartbeat_task.cancel()
             try:

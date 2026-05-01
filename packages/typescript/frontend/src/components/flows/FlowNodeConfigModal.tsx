@@ -9,7 +9,7 @@ import {
   DisclosurePanel,
 } from '@headlessui/react';
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
-import { ChevronRightIcon } from '@heroicons/react/24/outline';
+import { BeakerIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { BookmarkIcon, PencilSquareIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor from '@monaco-editor/react';
@@ -132,6 +132,9 @@ const FlowNodeConfigModal: React.FC<{
   onChange: (patch: Partial<FlowNode>) => void;
   onSelectNode?: (nodeId: string) => void;
   readOnly?: boolean;
+  /** Run this node with upstream reuse (editor test `runData` as seed). */
+  onExecuteStep?: () => void | Promise<void>;
+  executeStepBusy?: boolean;
 }> = ({
   open,
   onClose,
@@ -146,6 +149,8 @@ const FlowNodeConfigModal: React.FC<{
   onChange,
   onSelectNode,
   readOnly = false,
+  onExecuteStep,
+  executeStepBusy = false,
 }) => {
   const [tab, setTab] = useState(0);
   const [nameHover, setNameHover] = useState(false);
@@ -405,16 +410,32 @@ const FlowNodeConfigModal: React.FC<{
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                   <TabGroup selectedIndex={tab} onChange={setTab} className="flex min-h-0 flex-1 flex-col">
                     <div className="shrink-0 border-b border-[#eceff2] bg-white px-1">
-                      <TabList className="flex w-full">
-                        {(['Parameters', 'Settings'] as const).map((label) => (
-                          <Tab
-                            key={label}
-                            className="flex-1 border-b-2 border-transparent py-2.5 text-center text-xs font-bold text-gray-600 outline-none data-[selected]:border-blue-600 data-[selected]:text-blue-800"
-                          >
-                            {label}
-                          </Tab>
-                        ))}
-                      </TabList>
+                      <div className="flex items-stretch gap-2">
+                        <TabList className="flex min-w-0 flex-1">
+                          {(['Parameters', 'Settings'] as const).map((label) => (
+                            <Tab
+                              key={label}
+                              className="flex-1 border-b-2 border-transparent py-2.5 text-center text-xs font-bold text-gray-600 outline-none data-[selected]:border-blue-600 data-[selected]:text-blue-800"
+                            >
+                              {label}
+                            </Tab>
+                          ))}
+                        </TabList>
+                        {onExecuteStep && !readOnly && !isTrigger ? (
+                          <div className="flex shrink-0 items-center pr-1">
+                            <button
+                              type="button"
+                              disabled={executeStepBusy}
+                              onClick={() => void onExecuteStep()}
+                              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-red-200 bg-[#ff6d5a] px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+                              title="Run this node; upstream outputs are reused from the latest test run when available"
+                            >
+                              <BeakerIcon className="h-3.5 w-3.5" aria-hidden />
+                              {executeStepBusy ? 'Running…' : 'Execute step'}
+                            </button>
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
                     <TabPanels className="min-h-0 flex-1 overflow-y-auto p-3">
                       <TabPanel>

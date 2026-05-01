@@ -85,9 +85,18 @@ class ActivateFlowRequest(BaseModel):
 class RunFlowRequest(BaseModel):
     flow_revid: str | None = None
     document_id: str | None = None
+    """When set, run only the upstream subgraph through this node (execute step)."""
+
+    target_node_id: str | None = None
+    """Client-supplied prior outputs keyed by node id (validated); merged into execution before run."""
+    run_data: dict[str, Any] | None = None
+    """Node ids whose seed entries are ignored so those nodes re-execute."""
+    dirty_node_ids: list[str] | None = None
 
 
 class FlowExecution(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
     execution_id: str
     flow_id: str
     flow_revid: str
@@ -102,6 +111,8 @@ class FlowExecution(BaseModel):
     run_data: dict[str, Any] = {}
     error: dict[str, Any] | None = None
     trigger: dict[str, Any]
+    target_node_id: str | None = None
+    initial_run_data: dict[str, Any] | None = None
 
 
 class ListExecutionsResponse(BaseModel):
@@ -434,6 +445,27 @@ async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, curr
             raise HTTPException(status_code=400, detail="Flow has no revisions")
         flow_revid = str(latest["_id"])
 
+    rev = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
+    if not rev:
+        raise HTTPException(status_code=404, detail="Revision not found")
+
+    known_node_ids = {str(n["id"]) for n in (rev.get("nodes") or []) if n.get("id")}
+    if req.target_node_id and req.target_node_id not in known_node_ids:
+        raise HTTPException(status_code=400, detail="target_node_id is not a node on the selected revision")
+
+    if req.run_data and not req.target_node_id:
+        raise HTTPException(status_code=400, detail="target_node_id is required when run_data is supplied")
+
+    try:
+        seed_filtered = ad.flows.validate_and_filter_run_data_seed(
+            known_node_ids=known_node_ids,
+            seed=req.run_data,
+        )
+    except ad.flows.RunDataSeedValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+
+    dirty_clean = [str(x) for x in (req.dirty_node_ids or []) if str(x) in known_node_ids]
+
     exec_doc = {
         "flow_id": flow_id,
         "flow_revid": flow_revid,
@@ -451,6 +483,9 @@ async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, curr
         "run_data": {},
         "error": None,
         "trigger": {"type": "manual", "document_id": req.document_id},
+        "target_node_id": req.target_node_id,
+        "initial_run_data": seed_filtered or None,
+        "dirty_node_ids": dirty_clean or None,
     }
     res = await db.flow_executions.insert_one(exec_doc)
     exec_id = str(res.inserted_id)
@@ -504,6 +539,8 @@ async def list_executions(
                 run_data=d.get("run_data") or {},
                 error=d.get("error"),
                 trigger=d.get("trigger") or {},
+                target_node_id=d.get("target_node_id"),
+                initial_run_data=d.get("initial_run_data"),
             )
         )
     return {"items": items, "total": total}
@@ -532,6 +569,8 @@ async def get_execution(organization_id: str, flow_id: str, exec_id: str, curren
         run_data=d.get("run_data") or {},
         error=d.get("error"),
         trigger=d.get("trigger") or {},
+        target_node_id=d.get("target_node_id"),
+        initial_run_data=d.get("initial_run_data"),
     )
 
 

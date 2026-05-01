@@ -110,6 +110,10 @@ export interface FlowExecution {
   run_data: Record<string, unknown>;
   error: Record<string, unknown> | null;
   trigger: Record<string, unknown>;
+  /** Set for execute-step / partial manual runs. */
+  target_node_id?: string | null;
+  /** Client-supplied seed snapshot at queue time (optional). */
+  initial_run_data?: Record<string, unknown> | null;
 }
 
 export interface ListExecutionsResponse {
@@ -133,5 +137,11 @@ export interface SaveRevisionParams {
 export interface RunFlowParams {
   flow_revid?: string;
   document_id?: string;
+  /** Run only upstream subgraph through this node id (execute step). */
+  target_node_id?: string;
+  /** Prior `run_data` entries to reuse (validated); requires `target_node_id`. */
+  run_data?: Record<string, unknown>;
+  /** Node ids to force re-run even if present in `run_data`. */
+  dirty_node_ids?: string[];
 }
 

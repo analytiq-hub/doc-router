@@ -267,6 +267,31 @@ export default function FlowDetailPageClient({
     }
   }, [api, flowId, latestFlowRevid]);
 
+  const onExecuteFlowStep = useCallback(
+    async ({ targetNodeId, seedRunData }: { targetNodeId: string; seedRunData: Record<string, unknown> }) => {
+      const rev = latestFlowRevid?.trim();
+      if (!rev) {
+        setMessage('Save the flow once before running a single step.');
+        return;
+      }
+      try {
+        setMessage('');
+        const out = await api.runFlow(flowId, {
+          flow_revid: rev,
+          document_id: undefined,
+          target_node_id: targetNodeId,
+          run_data: seedRunData,
+        });
+        if (out.execution_id) {
+          setLogsFocusExecutionId(out.execution_id);
+        }
+      } catch (err: unknown) {
+        setMessage(err instanceof Error ? err.message : 'Execute step failed');
+      }
+    },
+    [api, flowId, latestFlowRevid],
+  );
+
   const onDownloadFlowJson = useCallback(async () => {
     const rid = (revision?.flow_revid ?? latestFlowRevid ?? '').trim();
     if (!rid) {
@@ -372,6 +397,7 @@ export default function FlowDetailPageClient({
                         onNodesChange={onNodesChange}
                         onEdgesChange={onEdgesChange}
                         onExecute={onRun}
+                        onExecuteStep={onExecuteFlowStep}
                         executionForIo={executionForIo}
                         pinData={revision?.pin_data ?? null}
                         onPinDataChange={(next) => {

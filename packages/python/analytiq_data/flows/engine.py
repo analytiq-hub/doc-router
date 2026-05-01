@@ -247,6 +247,94 @@ def _bson_serialize_run_data(run_data: dict[str, Any]) -> dict[str, Any]:
     return {k: _bson_serialize_value(v) for k, v in run_data.items()}
 
 
+def _upstream_nodes_reaching_target(
+    target_id: str,
+    connections: "ad.flows.Connections",
+) -> set[str]:
+    """All node ids that can reach ``target_id`` via a reverse walk along ``main`` edges."""
+
+    rev: dict[str, list[str]] = {}
+    for src, typed in (connections or {}).items():
+        for slot in (typed or {}).get("main") or []:
+            if not slot:
+                continue
+            for conn in slot:
+                rev.setdefault(conn.dest_node_id, []).append(src)
+    seen: set[str] = {target_id}
+    stack = [target_id]
+    while stack:
+        cur = stack.pop()
+        for p in rev.get(cur, []):
+            if p not in seen:
+                seen.add(p)
+                stack.append(p)
+    return seen
+
+
+def _forward_reachable_from(trigger_id: str, connections: "ad.flows.Connections") -> set[str]:
+    """All node ids reachable from ``trigger_id`` following ``main`` edges forward."""
+
+    seen: set[str] = {trigger_id}
+    q: collections.deque[str] = collections.deque([trigger_id])
+    while q:
+        cur = q.popleft()
+        typed = (connections or {}).get(cur) or {}
+        for slot in typed.get("main") or []:
+            if not slot:
+                continue
+            for conn in slot:
+                if conn.dest_node_id not in seen:
+                    seen.add(conn.dest_node_id)
+                    q.append(conn.dest_node_id)
+    return seen
+
+
+def upstream_closure_for_target(
+    trigger_id: str,
+    target_id: str,
+    connections: "ad.flows.Connections",
+) -> set[str]:
+    """
+    Nodes that lie on at least one path from ``trigger_id`` to ``target_id`` (inclusive).
+
+    Intersection of (backward from target) and (forward from trigger).
+    """
+
+    return _upstream_nodes_reaching_target(target_id, connections) & _forward_reachable_from(
+        trigger_id, connections
+    )
+
+
+def _seed_entry_is_reusable(entry: Any, node_id: str, dirty: frozenset[str]) -> bool:
+    if node_id in dirty:
+        return False
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("status") != "success":
+        return False
+    if entry.get("error"):
+        return False
+    data = entry.get("data")
+    if not isinstance(data, dict):
+        return False
+    main = data.get("main")
+    if not isinstance(main, list):
+        return False
+    return True
+
+
+def _coerce_main_to_output_slots(main: list[Any], outputs_count: int) -> list[list["ad.flows.FlowItem"]]:
+    out: list[list["ad.flows.FlowItem"]] = []
+    for i in range(outputs_count):
+        lane = main[i] if i < len(main) else []
+        if lane is None:
+            lane = []
+        if not isinstance(lane, list):
+            raise RuntimeError(f"run_data seed lane {i} must be a list")
+        out.append([ad.flows.coerce_flow_item(x) for x in lane])
+    return out
+
+
 async def persist_run_data(context: "ad.flows.ExecutionContext", run_data: dict[str, Any]) -> None:
     """Persist full `run_data` for a flow execution (used for incremental progress)."""
 
@@ -289,8 +377,14 @@ async def _execute_loop(
     pin_data: dict[str, Any] | None,
     work: "collections.deque[_WorkItem]",
     merge_waiting: "dict[str, list[list[ad.flows.FlowItem] | None]]",
+    *,
+    allowed_nodes: set[str] | None = None,
+    stop_after_node_id: str | None = None,
+    dirty_node_ids: frozenset[str] = frozenset(),
 ) -> dict[str, Any]:
     """Inner BFS execution loop shared by `run_flow` and `asyncio.wait_for`."""
+
+    partial = allowed_nodes is not None
 
     while work or merge_waiting:
         try:
@@ -302,6 +396,9 @@ async def _execute_loop(
 
         if not work and merge_waiting:
             for node_id, slots in list(merge_waiting.items()):
+                if partial and node_id not in allowed_nodes:  # type: ignore[operator]
+                    merge_waiting.pop(node_id, None)
+                    continue
                 node = nodes_by_id[node_id]
                 ready_inputs = [(x or []) for x in slots]
                 work.append(_WorkItem(node_id=node["id"], inputs=ready_inputs))
@@ -328,6 +425,12 @@ async def _execute_loop(
         elif pin_data and node["id"] in pin_data:
             pinned = ad.flows.coerce_flow_item_list(pin_data[node["id"]] or [])
             out_lists = [pinned] + [[] for _ in range(outputs_count - 1)]
+        elif partial and _seed_entry_is_reusable(context.run_data.get(node["id"]), node["id"], dirty_node_ids):
+            cached = context.run_data[node["id"]]
+            main_raw = cached["data"]["main"]
+            if not isinstance(main_raw, list):
+                raise RuntimeError(f"Corrupt seed run_data for node {node['id']}: data.main must be a list")
+            out_lists = _coerce_main_to_output_slots(main_raw, outputs_count)
         else:
             try:
                 if not wi.inputs:
@@ -439,6 +542,8 @@ async def _execute_loop(
             if not slot_conns:
                 continue
             for conn in slot_conns:
+                if partial and conn.dest_node_id not in allowed_nodes:  # type: ignore[operator]
+                    continue
                 dst = nodes_by_id[conn.dest_node_id]
                 dst_type = ad.flows.get(dst["type"])
                 if dst_type.max_inputs is not None:
@@ -463,10 +568,21 @@ async def _execute_loop(
                     inp[conn.index] = items
                     work.append(_WorkItem(node_id=dst["id"], inputs=inp))
 
+        if stop_after_node_id and node["id"] == stop_after_node_id:
+            work.clear()
+            merge_waiting.clear()
+            return {"status": "success"}
+
     return {"status": "success"}
 
 
-async def run_flow(*, context: "ad.flows.ExecutionContext", revision: dict[str, Any]) -> dict[str, Any]:
+async def run_flow(
+    *,
+    context: "ad.flows.ExecutionContext",
+    revision: dict[str, Any],
+    target_node_id: str | None = None,
+    dirty_node_ids: frozenset[str] | None = None,
+) -> dict[str, Any]:
     """
     Run a single flow execution for a specific immutable revision snapshot.
 
@@ -484,12 +600,39 @@ async def run_flow(*, context: "ad.flows.ExecutionContext", revision: dict[str, 
 
     nodes_by_id = {n["id"]: n for n in nodes}
     trigger = next(n for n in nodes if ad.flows.get(n["type"]).is_trigger)
+    dirty = dirty_node_ids or frozenset()
 
     merge_waiting: dict[str, list[list["ad.flows.FlowItem"] | None]] = {}
     work: collections.deque[_WorkItem] = collections.deque([_WorkItem(node_id=trigger["id"], inputs=[])])
 
+    if target_node_id:
+        if target_node_id not in nodes_by_id:
+            raise FlowValidationError(f"target_node_id not found in revision: {target_node_id}")
+        closure = upstream_closure_for_target(trigger["id"], target_node_id, connections)
+        if target_node_id not in closure:
+            raise FlowValidationError("target_node_id is not reachable from the trigger on this revision")
+        coro = _execute_loop(
+            context,
+            nodes_by_id,
+            connections,
+            pin_data,
+            work,
+            merge_waiting,
+            allowed_nodes=closure,
+            stop_after_node_id=target_node_id,
+            dirty_node_ids=dirty,
+        )
+    else:
+        coro = _execute_loop(
+            context,
+            nodes_by_id,
+            connections,
+            pin_data,
+            work,
+            merge_waiting,
+        )
+
     timeout = settings.get("execution_timeout_seconds")
-    coro = _execute_loop(context, nodes_by_id, connections, pin_data, work, merge_waiting)
     if timeout:
         return await asyncio.wait_for(coro, timeout=float(timeout))
     return await coro
