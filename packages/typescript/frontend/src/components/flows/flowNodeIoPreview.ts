@@ -41,6 +41,79 @@ export function edgeItemCountFromRunData(runData: RunData, sourceNodeId: string)
   return laneMain0ItemsJson(rec).length;
 }
 
+/** All nodes that feed ``nodeId`` (direct sources and every transitive predecessor), excluding ``nodeId``. */
+export function collectUpstreamClosure(nodeId: string, edges: Edge[]): Set<string> {
+  const rev = new Map<string, string[]>();
+  for (const e of edges) {
+    if (typeof e.target !== 'string' || typeof e.source !== 'string') continue;
+    const arr = rev.get(e.target) ?? [];
+    arr.push(e.source);
+    rev.set(e.target, arr);
+  }
+
+  const out = new Set<string>();
+  const stack: string[] = [];
+  for (const e of edges) {
+    if (e.target === nodeId && typeof e.source === 'string') stack.push(e.source);
+  }
+  while (stack.length > 0) {
+    const n = stack.pop()!;
+    if (out.has(n)) continue;
+    out.add(n);
+    const ps = rev.get(n);
+    if (ps) {
+      for (const p of ps) stack.push(p);
+    }
+  }
+  return out;
+}
+
+/**
+ * Order nodes in ``closure`` by **graph distance toward** ``sinkId``:
+ * immediate parents of ``sinkId`` first, then their parents, and so on (backward BFS).
+ * Within each layer, ids are sorted lexically for stability.
+ */
+function orderUpstreamByDistanceSinkward(sinkId: string, edges: Edge[], closure: Set<string>): string[] {
+  const rev = new Map<string, string[]>();
+  for (const e of edges) {
+    if (typeof e.target !== 'string' || typeof e.source !== 'string') continue;
+    const arr = rev.get(e.target) ?? [];
+    arr.push(e.source);
+    rev.set(e.target, arr);
+  }
+
+  const ordered: string[] = [];
+  const visited = new Set<string>();
+
+  let frontier = [
+    ...new Set(edges.filter((e) => e.target === sinkId && typeof e.source === 'string').map((e) => e.source as string)),
+  ]
+    .filter((id) => closure.has(id))
+    .sort();
+
+  while (frontier.length > 0) {
+    for (const n of frontier) {
+      if (visited.has(n)) continue;
+      visited.add(n);
+      ordered.push(n);
+    }
+
+    const next = new Set<string>();
+    for (const n of frontier) {
+      for (const p of rev.get(n) ?? []) {
+        if (closure.has(p) && !visited.has(p)) next.add(p);
+      }
+    }
+    frontier = [...next].sort();
+  }
+
+  for (const id of [...closure].sort()) {
+    if (!visited.has(id)) ordered.push(id);
+  }
+
+  return ordered;
+}
+
 /** Strips any stale `itemCount` on edges, then sets it from `run_data` when the source node has a run entry. */
 export function edgesWithRunDataItemCounts(edges: Edge[], runData: RunData): Edge[] {
   return edges.map((e) => {
@@ -54,8 +127,9 @@ export function edgesWithRunDataItemCounts(edges: Edge[], runData: RunData): Edg
 }
 
 /**
- * Upstream per-slot preview for a node from a completed execution’s `run_data`
- * and the current graph edges — full item list (`itemsJson`) from each wire’s upstream lane `main[0]`.
+ * Upstream preview for a node: **transitive closure** feeding this node, ordered **sinkward layers** —
+ * immediate parents first, then their parents, and so on. Uses each predecessor’s executed output lane
+ * `main[0]` from `run_data`. Direct merge inputs retain their `slot` index for `· in N` labels.
  */
 export function buildNodeInputPreview(
   nodeId: string,
@@ -74,18 +148,25 @@ export function buildNodeInputPreview(
     }
     return { slots: [], message: 'This node has no input connections (trigger / source nodes have no wire in).' };
   }
-  const slots: { slot: number; fromNodeId: string; itemsJson: unknown[] }[] = [];
+
+  const closure = collectUpstreamClosure(nodeId, edges);
+  const ordered = orderUpstreamByDistanceSinkward(nodeId, edges, closure);
+
+  const slotForDirectParent = new Map<string, number>();
   for (const e of incoming) {
-    const slot = parseHandleIndex(e.targetHandle, 'in-') ?? 0;
-    const fromNodeId = e.source;
+    if (typeof e.source !== 'string') continue;
+    slotForDirectParent.set(e.source, parseHandleIndex(e.targetHandle, 'in-') ?? 0);
+  }
+
+  const slots = ordered.map((fromNodeId) => {
     const rec = runData[fromNodeId] as unknown;
-    slots.push({
-      slot,
+    return {
+      slot: slotForDirectParent.get(fromNodeId) ?? 0,
       fromNodeId,
       itemsJson: laneMain0ItemsJson(rec),
-    });
-  }
-  slots.sort((a, b) => a.slot - b.slot);
+    };
+  });
+
   return { slots, message: null };
 }
 
