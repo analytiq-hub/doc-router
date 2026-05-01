@@ -1,6 +1,6 @@
 # Porting n8n nodes to DocRouter
 
-This guide describes the **programmatic pipeline** for converting n8n node types (from the sibling `../n8n` clone) into DocRouter node packages — the `node.manifest.json` + `parameter.schema.json` + optional executor spec layout described in [`docrouter_nodes.md`](./docrouter_nodes.md).
+This guide describes the **programmatic pipeline** for converting n8n node types (from the sibling `../n8n` clone) into DocRouter node packages — the `node.manifest.json` + `parameter.schema.json` + optional executor spec layout described in [`docrouter_nodes.md`](./docrouter_nodes.md) (declarative **`executor.kind`** + **`http_request_v1`** etc.: §6.2 there).
 
 Goal: quickly bootstrap the DocRouter node ecosystem by translating the large n8n integration library rather than hand-authoring each node from scratch.
 
@@ -67,16 +67,26 @@ The Python converter reads `n8n_node_dump.jsonl`. No TypeScript toolchain needed
 
 ## 3. Executor classification
 
+Heuristic only: n8n can combine **`routing`** / **`requestDefaults`** with imperative **`execute()`** logic that ignores or extends the declarative path.
+
 ```python
-def classify(description: dict) -> str:
+def classify(description: dict, has_body_execute: bool) -> str:
     """Return 'declarative' or 'python_class'."""
-    if description.get('requestDefaults'):
-        return 'declarative'
+
+    if has_body_execute:
+        # Instantiating the version-specific class and inspecting whether
+        # `execute` is the generic routing helper vs overridden is ideal; if unknown, err on python_class.
+        return "python_class"
+
+    if description.get("requestDefaults"):
+        return "declarative"
     for prop in iter_properties(description):
-        if prop.get('routing'):
-            return 'declarative'
-    return 'python_class'
+        if prop.get("routing"):
+            return "declarative"
+    return "python_class"
 ```
+
+When you only have the dump of **`.description`** (no class), treat nodes that **also** ship non-trivial **`execute`** as **`python_class`** after sampling the compiled module. If you cannot detect `execute` reliably, prefer **`python_class`** stubs for anything that is not a **pure routing** HTTP connector.
 
 `iter_properties` flattens all nested `INodeProperties` entries including those inside `options[].values` and versioned node slices.
 
@@ -113,7 +123,7 @@ Build a single `parameter.schema.json` `object` whose `properties` are the top-l
 | `string` | `{"type": "string"}` | |
 | `number` | `{"type": "number"}` | |
 | `boolean` | `{"type": "boolean"}` | |
-| `options` | `{"type": "string", "enum": [...]}` | `options[].value` → enum values; `options[].name` → `enumNames` (non-standard, UI hint) |
+| `options` | `{"type": "string", "enum": [...]}` | `options[].value` → enum values; `options[].name` → **`x-enumNames`** (UI hint array, same order as `enum`) |
 | `multiOptions` | `{"type": "array", "items": {"type": "string", "enum": [...]}}` | |
 | `collection` | `{"type": "object", "properties": {...}}` | Recurse into `options` |
 | `fixedCollection` | `{"type": "object", "properties": {...}}` | Flatten `values` arrays into properties |
@@ -218,19 +228,44 @@ nodes/
     └── node_impl.py             ← stub; behavior must be ported by hand
 ```
 
-**`node_impl.py` stub template:**
+**`node_impl.py` stub template:** (duck-types the **`NodeType`** protocol — do not subclass it; match fields and method signatures like existing nodes, e.g. [`packages/python/analytiq_data/flows/nodes/code.py`](../packages/python/analytiq_data/flows/nodes/code.py).)
 
 ```python
-from analytiq_data.flows.node_registry import NodeType, ExecutionContext
-from analytiq_data.flows.engine import FlowNode, FlowItem
+from typing import Any
 
-class N8nPostgresQueryNode(NodeType):
-    # Ported from n8n packages/nodes-base/nodes/Postgres/Postgres.node.ts
-    # TODO: implement execute()
+import analytiq_data as ad
+
+
+class N8nPostgresQueryNode:
+    """Ported from n8n packages/nodes-base/nodes/Postgres/Postgres.node.ts — stub."""
+
     key = "n8n.postgres_query"
+    label = "Postgres (n8n)"
+    description = "Stub: implement execute() for DocRouter."
+    category = "Database"
+    is_trigger = False
+    is_merge = False
+    min_inputs = 1
+    max_inputs = 1
+    outputs = 1
+    output_labels = ["main"]
+    icon_key = None
+    batch_execute_inputs = False
+    parameter_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
 
-    async def execute(self, context: ExecutionContext, node: FlowNode,
-                      inputs: list[list[FlowItem]]) -> list[list[FlowItem]]:
+    def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        return []
+
+    async def execute(
+        self,
+        context: ad.flows.ExecutionContext,
+        node: dict[str, Any],
+        inputs: list[list[ad.flows.FlowItem]],
+    ) -> list[list[ad.flows.FlowItem]]:
         raise NotImplementedError("n8n.postgres_query: Python port not yet implemented")
 ```
 
@@ -252,22 +287,46 @@ class N8nPostgresQueryNode(NodeType):
 
 ## 10. Validation after generation
 
-Run the standard §8 pipeline from [`docrouter_nodes.md`](./docrouter_nodes.md) on every generated package:
+Run the standard §8 pipeline from [`docrouter_nodes.md`](./docrouter_nodes.md) on every generated package. The PyPI **`jsonschema`** package does not always install a working **`jsonschema` CLI** — use **`check-jsonschema`** ([PyPI](https://pypi.org/project/check-jsonschema/)) or a small Python harness:
 
 ```bash
-# Validate manifest structure
-jsonschema -i nodes/*/node.manifest.json schemas/flow-node-manifest-v1.json
+# Manifests (Draft 7 validator; requires: pip install jsonschema)
+python <<'PY'
+import json, glob, jsonschema
 
-# Validate parameter schemas
+def main():
+    with open("schemas/flow-node-manifest-v1.json") as f:
+        manifest_schema = json.load(f)
+    jsonschema.Draft7Validator.check_schema(manifest_schema)
+    mv = jsonschema.Draft7Validator(manifest_schema)
+    for path in sorted(glob.glob("nodes/*/node.manifest.json")):
+        with open(path) as f:
+            mv.validate(json.load(f))
+        print(path, "ok")
+
+main()
+PY
+
+# Parameter schemas (Draft 7 meta-schema check only)
 for f in nodes/*/parameter.schema.json; do
   python -c "import jsonschema, json; jsonschema.Draft7Validator.check_schema(json.load(open('$f')))"
 done
 
-# Validate http.spec.json files
-jsonschema -i nodes/*/http.spec.json schemas/runtimes/http_request_v1.schema.json
+# Declarative specs (when present)
+python <<'PY'
+import json, glob, jsonschema
+with open("schemas/runtimes/http_request_v1.schema.json") as f:
+    spec_schema = json.load(f)
+jsonschema.Draft7Validator.check_schema(spec_schema)
+sv = jsonschema.Draft7Validator(spec_schema)
+for path in sorted(glob.glob("nodes/*/http.spec.json")):
+    with open(path) as f:
+        sv.validate(json.load(f))
+    print(path, "ok")
+PY
 ```
 
-Add this as a CI step that runs whenever `tools/n8n_node_dump.jsonl` or the converter script changes.
+Alternatively: `check-jsonschema --schemafile schemas/flow-node-manifest-v1.json nodes/*/node.manifest.json` (and similarly for **`http.spec.json`**). Add this as a CI step when the dump or converter changes.
 
 ---
 

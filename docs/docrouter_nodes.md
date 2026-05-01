@@ -140,17 +140,21 @@ Parameters holding **large or line-sensitive** content (templates, scripts, SQL,
 
 ```json
 {
-  “type”: “string”,
-  “$content_ref”: “scripts/processor”,
-  “$content_media_type”: “text/x-python”
+  "type": "string",
+  "$content_ref": "scripts/processor",
+  "$content_media_type": "text/x-python"
 }
 ```
 
+**When `$content_ref` is resolved (two cases):**
+
+- **Inside `parameter.schema.json`:** Intended for **authoring defaults and tooling** — e.g. n8n import writes a sidecar file; an editor loads it when seeding parameter JSON. Persisted **`FlowRevision`** data remains plain JSON (**no** unresolved `$content_ref` in Mongo). Saved workflow **`parameters`** are always concrete strings/objects/arrays.
+- **Inside a declarative spec** (file pointed to by **`spec_ref`**, e.g. **`http.spec.json`):** Intended for **runtime** — the interpreter MUST resolve **`$content_ref`** before interpolate-and-execute (read file, splice into object tree, continue).
+
 - May appear at **any depth** in the schema tree, including nested object properties.
-- **Authoring/tooling only:** tells editors and import tooling (e.g. n8n → DocRouter) where to find a default value. Does **not** affect the runtime parameter contract — parameters are always plain strings/objects/arrays in the saved workflow.
 - Do **not** place `$content_ref` on a node that also carries a JSON Schema `$ref` (schema composition reference) — the semantics conflict.
 
-**Schema `$ref` composition** (distinct from `$content_ref`): `parameter.schema.json` MAY use standard JSON Schema `$ref` to reference sibling schema fragments under the package (e.g. `”$ref”: “defs/common.json”`). Loaders that only support inlined schemas can run a `$ref`-flattening step in CI to emit a single bundle.
+**Schema `$ref` composition** (distinct from `$content_ref`): `parameter.schema.json` MAY use standard JSON Schema `$ref` to reference sibling schema fragments under the package (e.g. `"$ref": "defs/common.json"`). Loaders that only support inlined schemas can run a `$ref`-flattening step in CI to emit a single bundle.
 
 ---
 
@@ -166,7 +170,7 @@ The manifest-level `sidecars` block described in earlier drafts of this spec is 
 
 The manifest describes **what runs** without embedding Python or TypeScript. Two complementary strategies:
 
-### 6.1 `executor_kind: "python_class"`
+### 6.1 `executor.kind` `"python_class"`
 
 Points at an implementation already shipped in **`analytiq_data`**:
 
@@ -182,7 +186,7 @@ Points at an implementation already shipped in **`analytiq_data`**:
 
 Registration (at app startup or via a discovery plugin) **`import`**s the module and **`register()`**s an instance of **`class`**. The manifest then serves as **documentation + validation** that the Python class stays in sync with **`parameter_schema`**; CI checks can assert parity.
 
-### 6.2 `executor_kind: "declarative"`
+### 6.2 `executor.kind` `"declarative"`
 
 For nodes where behavior is entirely data-driven — HTTP integrations, transforms, static outputs — without a new Python class per vendor.
 
@@ -208,15 +212,17 @@ Keep the set small. Each runtime is one Python class implementing a fixed interp
 | `template_render_v1` | Renders a Jinja2 template over item data; emits strings |
 | `static_output_v1` | Emits a fixed JSON payload (constants, seed data, stubs) |
 
-Per-runtime JSON Schemas live under `schemas/runtimes/` (e.g. `schemas/runtimes/http_request_v1.schema.json`) and are used by the §8 validation pipeline.
+Per-runtime JSON Schemas live under [`schemas/runtimes/`](../schemas/runtimes/) (e.g. [`http_request_v1.schema.json`](../schemas/runtimes/http_request_v1.schema.json)) and are used by the §8 validation pipeline.
 
 #### `$content_ref` inside specs
 
-`$content_ref` works inside spec files by the same package-relative rules as inside parameter schemas — the runtime loader resolves them before executing. This keeps large bodies, scripts, and templates out of JSON strings.
+`$content_ref` works inside spec files by the same package-relative rules as in schemas. The declarative interpreter **must** resolve these before Jinja interpolation and execution (see **§4.3** — spec side is runtime resolution, parameter schema side is tooling defaults).
 
 #### Example 1 — HTTP integration (`http_request_v1`)
 
 **`node.manifest.json`:**
+*(Abbreviated — include `schema`, `manifest_version`, `type_version`, `description`, `category`, `is_trigger`, `is_merge`, and port fields as in §9 / §10.)*
+
 ```json
 {
   "key": "integrations.slack_post_message",
@@ -274,6 +280,8 @@ Per-runtime JSON Schemas live under `schemas/runtimes/` (e.g. `schemas/runtimes/
 #### Example 2 — Data transform (`jq_transform_v1`)
 
 **`node.manifest.json`:**
+*(Abbreviated — same required manifest keys as §10.)*
+
 ```json
 {
   "key": "flows.extract_line_items",
@@ -309,11 +317,13 @@ Per-runtime JSON Schemas live under `schemas/runtimes/` (e.g. `schemas/runtimes/
 **`transform.jq`:**
 ```
 .items[] | {
-  id:    .id,
-  name:  .name,
-  total: (if $parameters.include_tax then .price * .qty * 1.2 else .price * .qty end)
+  id: .id,
+  name: .name,
+  total: (if ($ARGS.named.include_tax == true) then .price * .qty * 1.2 else .price * .qty end)
 }
 ```
+
+The **`jq_transform_v1`** runtime must invoke jq so each eligible workflow primitive parameter appears as **`$ARGS.named.<parameter_name>`** (e.g. pass **`parameters.include_tax`** with **`jq --argjson include_tax`**). Do not rely on ad hoc jq globals.
 
 #### Example 3 — Static output (`static_output_v1`)
 
@@ -322,18 +332,36 @@ Useful for injecting constants or seed data into a flow without any Python:
 **`node.manifest.json`:**
 ```json
 {
+  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "manifest_version": 1,
   "key": "flows.seed_config",
+  "type_version": 1,
   "label": "Seed Config",
+  "description": "Emits fixed items from a sidecar JSON file.",
+  "category": "Generic",
   "is_trigger": true,
+  "is_merge": false,
   "min_inputs": 0,
   "max_inputs": 0,
   "outputs": 1,
   "output_labels": ["output"],
+  "icon_key": null,
+  "parameter_schema_ref": "parameter.schema.json",
   "executor": {
     "kind": "declarative",
     "runtime": "static_output_v1",
     "spec_ref": "output.spec.json"
   }
+}
+```
+
+**`parameter.schema.json`** (empty object if there are no user parameters):
+
+```json
+{
+  "type": "object",
+  "properties": {},
+  "additionalProperties": false
 }
 ```
 
@@ -344,9 +372,9 @@ Useful for injecting constants or seed data into a flow without any Python:
 }
 ```
 
-### 6.3 `executor_kind: "composite"`
+### 6.3 `executor.kind` `"composite"`
 
-(Optional) **`steps`** array referencing other declarative specs or builtins—only worth defining once you need it;otherwise start with **`python_class`** + one **`declarative`** runner.
+(Optional) **`steps`** array referencing other declarative specs or builtins — only worth defining once you need it; otherwise start with **`python_class`** + one **`declarative`** runner.
 
 ---
 
@@ -373,18 +401,18 @@ Do **not** put secrets in the manifest. Prefer:
 
 ## 8. Validation pipeline (recommended)
 
-1. **Structural:** Validate **`node.manifest.json`** against **`schemas/flow-node-manifest-v1.json`** (committed in-repo beside the loader).
+1. **Structural:** Validate **`node.manifest.json`** against [`schemas/flow-node-manifest-v1.json`](../schemas/flow-node-manifest-v1.json) at the repo root (stub — extend with stricter rules over time).
 2. **References:** Resolve **`parameter_schema_ref`**, **`spec_ref`**, and all **`$content_ref`** paths (in both the parameter schema and any spec files); ensure no traversal outside the package root.
 3. **`parameter.schema.json`:** Valid JSON Schema; optional CI step to **`jsonschema` validate** **`fixtures/**/*.json`**.
 4. **`executor`**:
    - For **`python_class`**, optionally **`python -c`** import smoke test or static analysis listing.
-   - For **`declarative`**, validate **`spec_ref`** against the matching per-runtime schema under **`schemas/runtimes/`** (e.g. `schemas/runtimes/http_request_v1.schema.json`).
+   - For **`declarative`**, validate **`spec_ref`** against the matching per-runtime schema under [`schemas/runtimes/`](../schemas/runtimes/) (e.g. [`http_request_v1.schema.json`](../schemas/runtimes/http_request_v1.schema.json)).
 
 ---
 
 ## 9. Manifest JSON Schema (informal outline)
 
-The formal schema should be committed as **`schemas/flow-node-manifest-v1.json`**. Informally, top-level properties are:
+The formal stub lives at [`schemas/flow-node-manifest-v1.json`](../schemas/flow-node-manifest-v1.json). Informally, top-level properties are:
 
 | Property | Required | Notes |
 |----------|----------|--------|
