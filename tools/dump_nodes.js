@@ -41,7 +41,7 @@ function parseArgs(argv) {
         console.error("error: --upstream-root requires a path");
         process.exit(2);
       }
-      upstreamRoot = path.resolve(next);
+      upstreamRoot = path.resolve(process.cwd(), next);
       continue;
     }
     if (a === "--subdir") {
@@ -77,7 +77,12 @@ function parseArgs(argv) {
     );
     process.exit(2);
   }
-  return { upstreamRoot, subdirs: resolvedSubdirs };
+  const root = upstreamRoot;
+  if (!fs.existsSync(root) || !fs.statSync(root).isDirectory()) {
+    console.error(`error: --upstream-root is not a directory: ${root}`);
+    process.exit(4);
+  }
+  return { upstreamRoot: root, subdirs: resolvedSubdirs };
 }
 
 function walkNodeFiles(root, subdir) {
@@ -156,9 +161,12 @@ function main() {
 
   if (files.length === 0) {
     console.error(
-      `warn: no *.node.js under ${upstreamRoot} for subdirs: ${subdirs.join(", ")}`,
+      `error: no *.node.js under ${upstreamRoot} for subdirs: ${subdirs.join(", ")}`,
     );
-    return;
+    console.error(
+      "  Build upstream (e.g. pnpm install && pnpm build), or extend FLOW_DUMP_SUBDIRS with paths that exist.",
+    );
+    process.exit(3);
   }
 
   const emitted = new Set();

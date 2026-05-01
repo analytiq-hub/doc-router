@@ -46,7 +46,7 @@ help:
 	@echo "Testing:"
 	@echo "  make tests                   - Run Python unit tests (fast, excludes kb_slow)"
 	@echo "  make tests-flow              - Run flow engine tests only"
-	@echo "  make flow-node-dump          - Dump upstream integration nodes to tools/flow_node_dump.jsonl"
+	@echo "  make flow-node-dump          - Dump upstream integration nodes to tools/flow_node_dump.jsonl (override UPSTREAM_NODES_ROOT, FLOW_DUMP_SUBDIRS)"
 	@echo "  make flow-node-port          - Emit DocRouter packages from tools/flow_node_dump.jsonl"
 	@echo "  make tests-kb                - Run slow KB integration tests (real search indexes)"
 	@echo "  make tests-scale             - Run Python scale tests"
@@ -231,12 +231,20 @@ tests: setup-python
 tests-flow: setup-python
 	. .venv/bin/activate && pytest -q packages/python/tests_flow/
 
-UPSTREAM_NODES_ROOT ?= ../n8n
+# Repository root (directory containing this makefile). Paths below work with `make -f /abs/path/makefile`.
+_DOC_ROUTER_ROOT := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
+
+# Sibling upstream checkout with a built packages/nodes-base/dist (pnpm install && pnpm build).
+UPSTREAM_NODES_ROOT ?= $(abspath $(_DOC_ROUTER_ROOT)/../n8n)
+
 FLOW_DUMP_SUBDIRS ?= packages/nodes-base/dist/nodes
 
-.PHONY: flow-node-dump flow-node-port
 flow-node-dump:
-	FLOW_DUMP_SUBDIRS="$(FLOW_DUMP_SUBDIRS)" node tools/dump_nodes.js --upstream-root "$(UPSTREAM_NODES_ROOT)" > tools/flow_node_dump.jsonl
+	mkdir -p tools
+	tmp=$$(mktemp); \
+	trap 'rm -f "$$tmp"' EXIT; \
+	FLOW_DUMP_SUBDIRS="$(FLOW_DUMP_SUBDIRS)" node tools/dump_nodes.js --upstream-root "$(UPSTREAM_NODES_ROOT)" > "$$tmp" && \
+	mv -f "$$tmp" tools/flow_node_dump.jsonl
 
 flow-node-port: setup-python
 	. .venv/bin/activate && python tools/port_nodes.py tools/flow_node_dump.jsonl --validate
@@ -299,4 +307,4 @@ dockerhub-push: dockerhub-push-frontend dockerhub-push-backend
 dockerhub-build-push: dockerhub-build dockerhub-push
 	@echo "✅ Build and push complete!"
 
-.PHONY: help deploy-dev tests tests-kb setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean
+.PHONY: help deploy-dev tests tests-kb setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean flow-node-dump flow-node-port

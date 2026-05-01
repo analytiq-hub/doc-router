@@ -37,11 +37,11 @@ FLOW_DUMP_SUBDIRS='packages/nodes-base/dist/nodes:packages/other-vendor-ai/dist/
   node tools/dump_nodes.js --upstream-root ../upstream_nodes > tools/flow_node_dump.jsonl
 ```
 
-`make flow-node-dump` sets **`FLOW_DUMP_SUBDIRS`** / **`UPSTREAM_NODES_ROOT`** (see top-level makefile). The converter reads **`tools/flow_node_dump.jsonl`**.
+`make flow-node-dump` passes **`FLOW_DUMP_SUBDIRS`** to **`dump_nodes.js`**. **`UPSTREAM_NODES_ROOT`** defaults to **`../n8n`** relative to the DocRouter makefile directory (`abspath` in the makefile), so the checkout can sit beside a sibling **`n8n`** tree without exporting env vars. **`make flow-node-port`** errors if zero packages are emitted unless **`tools/port_nodes.py --allow-empty`**. **`tools/flow_node_dump.jsonl`** updates only after a successful dump (write to temp file, then **`mv`**).
 
 ### Upstream toolchain and build (required)
 
-The sibling monorepo is **pnpm-based**. If `pnpm` is missing, install it (for example `corepack enable && corepack prepare pnpm@latest --activate`, or `npm install -g pnpm`, or an OS package). From the **upstream repository root**, run **`pnpm install`**, then **`pnpm build`** so compiled artifacts exist (including **`packages/nodes-base/dist/nodes/**/*.node.js`** and any other trees you list in **`FLOW_DUMP_SUBDIRS`**). Without a successful build, `make flow-node-dump` either warns that no `*.node.js` files were found or produces an incomplete JSONL.
+The sibling monorepo is **pnpm-based**. If `pnpm` is missing, install it (for example `corepack enable && corepack prepare pnpm@latest --activate`, or `npm install -g pnpm`, or an OS package). From the **upstream repository root**, run **`pnpm install`**, then **`pnpm build`** so compiled artifacts exist (including **`packages/nodes-base/dist/nodes/**/*.node.js`** and any other trees you list in **`FLOW_DUMP_SUBDIRS`**). Without that, **`make flow-node-dump`** fails (**`dump_nodes.js`** exits nonzero: missing upstream directory, zero `*.node.js` matches, etc.) and **`tools/flow_node_dump.jsonl`** is left unchanged (atomic rename from a temp file).
 
 ### Verifying the JSONL before `flow-node-port`
 

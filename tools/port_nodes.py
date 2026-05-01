@@ -61,6 +61,11 @@ def main() -> int:
         action="store_true",
         help="Validate against schemas/ (requires jsonschema)",
     )
+    p.add_argument(
+        "--allow-empty",
+        action="store_true",
+        help="Exit 0 when zero packages emitted (default: exit with error)",
+    )
     args = p.parse_args()
 
     jp = Path(args.jsonl)
@@ -79,6 +84,13 @@ def main() -> int:
         limit=args.limit,
         only_key_prefix=args.only_prefix,
     )
+    if not pkgs and not args.allow_empty:
+        print(
+            "error: no packages emitted — JSONL dump is empty, invalid, "
+            "or --only-prefix excluded every row. Run `make flow-node-dump` first.",
+            file=sys.stderr,
+        )
+        return 4
     print(f"Emitted {len(pkgs)} package(s) under {out}")
 
     if args.validate:
