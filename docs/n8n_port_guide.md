@@ -353,13 +353,15 @@ What follows blocks **executing** flows that use generated packages. **§12.7–
 
 #### 12.1 `$content_ref` resolver utility
 
-Not implemented anywhere in the codebase. Both the manifest loader (§12.2) and the declarative runtime (§12.3) need a shared utility that walks a schema or spec dict, finds `$content_ref` keys, loads the referenced files relative to the package root, and substitutes the content in place. Build this first — it is small and everything else depends on it.
+**Implemented.** [`analytiq_data.flows.content_ref.resolve_content_refs`](../packages/python/analytiq_data/flows/content_ref.py) walks dict/list trees, resolves **package-relative** paths (no `..`), and inlines **bare** `{"$content_ref": ...}` objects plus **JSON Schema-style** nodes with `type` in `string|object|array` and `$content_ref` (materializes `default`). JSON sidecars are parsed when unambiguous; files containing Jinja (`{{` / `{%`) stay as text for a later interpolation pass. Tests: [`packages/python/tests/test_content_ref.py`](../packages/python/tests/test_content_ref.py).
+
+The manifest loader (§12.2) and declarative runtime (§12.3) should call this helper after loading `parameter.schema.json` / `http.spec.json` from disk (**not** wired in yet — library only).
 
 #### 12.2 Node manifest loader
 
 Currently all nodes are hardcoded Python classes registered at startup. There is no mechanism to scan a `nodes/` directory, read `node.manifest.json` files, and register them as `NodeType` instances. Needed:
 
-- Walk `nodes/*/node.manifest.json`; resolve `parameter_schema_ref` and run the `$content_ref` resolver on the schema
+- Walk `nodes/*/node.manifest.json`; resolve `parameter_schema_ref` and run **`analytiq_data.flows.content_ref.resolve_content_refs`** on the loaded parameter schema
 - For `python_class` executors: dynamically import the specified module and class
 - For `declarative` executors: instantiate the appropriate runtime interpreter with the resolved spec
 
@@ -367,7 +369,7 @@ Currently all nodes are hardcoded Python classes registered at startup. There is
 
 No generic HTTP request node exists. The declarative track emits `http.spec.json` files that have nothing to run them. The runtime interpreter must:
 
-- Resolve `$content_ref` sidecars in the spec
+- Resolve `$content_ref` sidecars in the spec (**`resolve_content_refs`**, §12.1)
 - Interpolate Jinja2 `{{ parameters.* }}` and `{{ credentials.* }}` expressions
 - Make the HTTP call with the resolved method, URL, headers, and body
 - Map the response to output `FlowItem` objects via `response_jmespath`
@@ -418,11 +420,11 @@ Shortcut list — full **Status** table and notes are at the **end** of this doc
 
 ```
 ✓ Packaging: dump_nodes.js + analytiq_data.flows.port + port_nodes.py  (DONE — §12.7–§12.8)
+✓ $content_ref resolver (analytiq_data.flows.content_ref) — §12.1; wire into loader/runtime next
 
-1. $content_ref resolver utility
-2. Node manifest loader
-3. http_request_v1 runtime
-4. Credential storage + API + injection at execute time
+1. Node manifest loader
+2. http_request_v1 runtime
+3. Credential storage + API + injection at execute time
 Then: JSON Schema defaults (§12.6), richer parameter UI (§12.5)
 ```
 
@@ -437,7 +439,7 @@ Then: JSON Schema defaults (§12.6), richer parameter UI (§12.5)
 | **Package generator** (manifest, parameter schema, optional `http.spec.json`, `python_class` stubs) | **Done** | [`analytiq_data/flows/port/`](../packages/python/analytiq_data/flows/port/), [`tools/port_nodes.py`](../tools/port_nodes.py), `make flow-node-port` |
 | **Manifest / http spec JSON Schemas (stubs)** | **Done** | [`schemas/flow-node-manifest-v1.json`](../schemas/flow-node-manifest-v1.json), [`schemas/runtimes/http_request_v1.schema.json`](../schemas/runtimes/http_request_v1.schema.json) |
 | **Unit tests for the converter** | **Done** | [`packages/python/tests/test_flow_port_converter.py`](../packages/python/tests/test_flow_port_converter.py) — `pytest packages/python/tests/test_flow_port_converter.py` |
-| **`$content_ref` resolution** (schema + spec) | **Not started** | §12.1 — needed by loader + declarative runtime |
+| **`$content_ref` resolution** (schema + spec) | **Done** (library; not wired into loader/runtime yet) | [`content_ref.py`](../packages/python/analytiq_data/flows/content_ref.py), [`test_content_ref.py`](../packages/python/tests/test_content_ref.py) — §12.1 |
 | **Dynamic registration from `node.manifest.json`** | **Not started** | §12.2 — `NodeType`s are still hand-registered at startup |
 | **`http_request_v1` executor at runtime** | **Not started** | §12.3 — emitted `http.spec.json` is inert until an interpreter exists |
 | **Org credential store + runtime injection** | **Not started** | §12.4 |
@@ -452,14 +454,14 @@ Then: JSON Schema defaults (§12.6), richer parameter UI (§12.5)
 
 - Harden **`tools/dump_nodes.js`**: surface **`nodeVersions`** instantiation failures (stderr summary per file/version key), optionally stub dependencies or extract descriptions without constructing full upstream classes — so SaaS nodes do not degrade to empty **`properties`**.
 
-Then **runtime** (unchanged priority):
+Then **runtime**:
 
-1. **`$content_ref` resolver** — walk dicts, resolve paths relative to package root, inline loaded content (shared by schema load + declarative specs).
-2. **Manifest loader** — discover packages under `flows/port/generated_nodes/` (or configurable root), validate, register **`NodeType`** instances (`python_class` import + declarative wrapper).
+1. ~~**`$content_ref` resolver**~~ — **Done** (`analytiq_data.flows.content_ref`); **wire it** into the manifest loader and **`http_request_v1`** when those land.
+2. **Manifest loader** — discover packages under `flows/port/generated_nodes/` (or configurable root), validate, register **`NodeType`** instances (`python_class` import + declarative wrapper); run **`resolve_content_refs`** on loaded schema and spec JSON.
 3. **`http_request_v1` runtime** — HTTP client + Jinja2 for `parameters.*` / `credentials.*`, response shaping via `response_jmespath`; emit **`FlowItem`** outputs.
 4. **Credentials** — persistence + API + **`credential_slots`** wiring into the execution context.
 5. **Defaults + UI** — engine applies JSON Schema defaults before execute (§12.6); then **`multiOptions`** / collection editors (§12.5) as needed.
 
-Steps 1–3 unlock a **declarative** generated node end-to-end without hand-copied Python; step 4 unlocks typical SaaS integrations.
+Steps **2–3** (plus wiring **`resolve_content_refs`**) unlock a **declarative** generated node end-to-end without hand-copied Python; step **4** unlocks typical SaaS integrations.
 
-Packaging was implemented **early** so manifests accumulate under `schemas/` validation and **`test_flow_port_converter.py`**; runtime work (**1–3**) is still required before flows can call generated declarative nodes.
+Packaging was implemented **early** so manifests accumulate under `schemas/` validation and **`test_flow_port_converter.py`**; loader + **`http_request_v1`** (**items 2–3** above) are still required before flows can execute generated declarative nodes.
