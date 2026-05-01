@@ -230,8 +230,8 @@ const FlowEditor: React.FC<{
   const pendingEdgeInsertRef = useRef<EdgeInsertPayload | null>(null);
   const runData = executionForIo?.run_data as Record<string, unknown> | undefined;
   const canvasEdges = useMemo(
-    () => edgesWithRunDataItemCounts(toCanvasEdges(edges), runData),
-    [edges, runData],
+    () => edgesWithRunDataItemCounts(toCanvasEdges(edges), runData, pinData ?? undefined),
+    [edges, runData, pinData],
   );
 
   const nodesWithPinnedFlag = useMemo(() => {

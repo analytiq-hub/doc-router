@@ -720,6 +720,42 @@ async def test_run_flow_pin_data_coerces_raw_dict_items_to_flowitems() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_flow_pin_data_accepts_sdk_main_lane_shape() -> None:
+    """API / frontend store pins as `{ "main": [[ {json,...}, ... ]] }`; engine lane-0 must match list shape."""
+
+    nodes = [
+        _n("t1", "Start", "flows.trigger.manual", 0),
+        _n("p1", "Pinned", "tests.passthrough", 200),
+        _n("g1", "Tag", "tests.tag", 400, {"tag": "ok"}),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="p1", connection_type="main", index=0)]]},
+        "p1": {"main": [[ad.flows.NodeConnection(dest_node_id="g1", connection_type="main", index=0)]]},
+    }
+    pin_data = {"p1": {"main": [[{"json": {"hello": "from_pin"}, "binary": {}, "meta": {}, "paired_item": None}]]}}
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(
+        context=ctx,
+        revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": pin_data},
+    )
+    assert res["status"] == "success"
+    assert ctx.run_data["p1"]["data"]["main"][0][0].json["hello"] == "from_pin"
+    tagged = ctx.run_data["g1"]["data"]["main"][0]
+    assert tagged[0].json["path_tag"] == "ok"
+
+
+@pytest.mark.asyncio
 async def test_run_flow_pin_data_coerces_binary_ref_dicts() -> None:
     """Pinned dict binary refs must become `BinaryRef` objects in `FlowItem.binary`."""
 

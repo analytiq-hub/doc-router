@@ -465,7 +465,11 @@ async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, curr
     except ad.flows.RunDataSeedValidationError as e:
         raise HTTPException(status_code=422, detail=str(e)) from e
 
-    dirty_clean = [str(x) for x in (req.dirty_node_ids or []) if str(x) in known_node_ids]
+    dirty_clean = ad.flows.finalized_dirty_node_ids(
+        dirty_node_ids=req.dirty_node_ids,
+        target_node_id=req.target_node_id,
+        known_node_ids=known_node_ids,
+    )
 
     exec_doc = {
         "flow_id": flow_id,

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { FlowExecution, FlowNodeType, FlowRevision, FlowRfEdge, FlowRfNode } from '@docrouter/sdk';
+import type { FlowExecution, FlowNodeType, FlowPinData, FlowRevision, FlowRfEdge, FlowRfNode } from '@docrouter/sdk';
 import FlowToolbar from '@/components/flows/FlowToolbar';
 import FlowEditor from '@/components/flows/FlowEditor';
 import FlowCanvasViewTabs, { FlowWorkspaceTabStraddle, type FlowCanvasView } from '@/components/flows/FlowCanvasViewTabs';
@@ -65,6 +65,16 @@ export default function FlowDetailPageClient({
   const [editorOpenConfigNodeId, setEditorOpenConfigNodeId] = useState<string | null>(null);
 
   const logsPanelGroupRef = useRef<ImperativePanelGroupHandle | null>(null);
+  /** Latest graph + revision for async pin persist (queues so rapid toggles don’t 409). */
+  const persistCtxRef = useRef({
+    revision,
+    rfNodes,
+    rfEdges,
+    flowName,
+    latestFlowRevid,
+  });
+  persistCtxRef.current = { revision, rfNodes, rfEdges, flowName, latestFlowRevid };
+  const pinPersistChain = useRef(Promise.resolve());
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [logsExpandedPct, setLogsExpandedPct] = useState<number>(() => {
     if (typeof window === 'undefined') return 50;
@@ -254,6 +264,81 @@ export default function FlowDetailPageClient({
     }
   }, [api, flowId, flowName, latestFlowRevid, rfEdges, rfNodes, revision]);
 
+  /** Persist pin/unpin immediately so server matches the editor (no separate Save), like common workflow tooling. */
+  const persistPinDataToServer = useCallback(
+    async (mergedRevision: FlowRevision, pinData: FlowPinData | null) => {
+      const ctx = persistCtxRef.current;
+      setIsSaving(true);
+      setMessage('');
+      try {
+        const body = rfToRevision(
+          ctx.rfNodes as FlowRfNode[],
+          ctx.rfEdges as FlowRfEdge[],
+          mergedRevision,
+          ctx.flowName,
+        );
+        const res = await api.saveRevision(flowId, {
+          base_flow_revid: ctx.latestFlowRevid || '',
+          name: body.name,
+          nodes: body.nodes,
+          connections: body.connections,
+          settings: body.settings,
+          pin_data: pinData,
+        });
+        setFlowName(res.flow.name);
+        setFlowActive(Boolean(res.flow.active));
+        if (res.revision) {
+          setLatestFlowRevid(res.revision.flow_revid);
+          setRevision(res.revision);
+          setSavedContentFingerprint(
+            revisionContentFingerprint(res.flow.name, ctx.rfNodes as FlowRfNode[], ctx.rfEdges as FlowRfEdge[], res.revision),
+          );
+        } else {
+          setSavedContentFingerprint(
+            revisionContentFingerprint(res.flow.name, ctx.rfNodes as FlowRfNode[], ctx.rfEdges as FlowRfEdge[], mergedRevision),
+          );
+        }
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [api, flowId],
+  );
+
+  const onPinDataChange = useCallback(
+    (next: FlowPinData | null) => {
+      if (!revision) return;
+      const prev = revision.pin_data;
+      const removed =
+        prev && typeof prev === 'object'
+          ? Object.keys(prev).filter((id) => next == null || !Object.prototype.hasOwnProperty.call(next, id))
+          : [];
+      const rollbackPins = prev ?? null;
+      const mergedForSave = { ...revision, pin_data: next };
+
+      setRevision({ ...revision, pin_data: next });
+
+      if (removed.length > 0) {
+        setExecutionForIo((ex) => {
+          if (!ex?.run_data || typeof ex.run_data !== 'object') return ex;
+          const rd = { ...(ex.run_data as Record<string, unknown>) };
+          for (const id of removed) delete rd[id];
+          return { ...ex, run_data: rd };
+        });
+      }
+
+      pinPersistChain.current = pinPersistChain.current.then(async () => {
+        try {
+          await persistPinDataToServer(mergedForSave, next);
+        } catch (err: unknown) {
+          setMessage(err instanceof Error ? err.message : 'Failed to save pins');
+          setRevision((cur) => (cur ? { ...cur, pin_data: rollbackPins } : cur));
+        }
+      });
+    },
+    [persistPinDataToServer, revision],
+  );
+
   const onRun = useCallback(async () => {
     try {
       setMessage('');
@@ -400,9 +485,7 @@ export default function FlowDetailPageClient({
                         onExecuteStep={onExecuteFlowStep}
                         executionForIo={executionForIo}
                         pinData={revision?.pin_data ?? null}
-                        onPinDataChange={(next) => {
-                          setRevision((cur) => (cur ? { ...cur, pin_data: next } : cur));
-                        }}
+                        onPinDataChange={onPinDataChange}
                         openConfigNodeId={editorOpenConfigNodeId}
                         onOpenConfigNodeIdChange={setEditorOpenConfigNodeId}
                       />
@@ -426,6 +509,7 @@ export default function FlowDetailPageClient({
                         onToggleExpanded={toggleLogsExpanded}
                         graphNodes={rfNodes as Node<FlowRfNodeData>[]}
                         graphEdges={rfEdges}
+                        graphPinData={revision?.pin_data ?? null}
                       />
                     </div>
                   </Panel>

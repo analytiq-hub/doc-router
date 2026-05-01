@@ -14,7 +14,7 @@ import json
 import time
 from dataclasses import dataclass
 from datetime import datetime, UTC
-from typing import Any
+from typing import AbstractSet, Any
 
 from bson import ObjectId
 from jsonschema import Draft7Validator
@@ -247,6 +247,111 @@ def _bson_serialize_run_data(run_data: dict[str, Any]) -> dict[str, Any]:
     return {k: _bson_serialize_value(v) for k, v in run_data.items()}
 
 
+def apply_revision_pins_to_run_data(
+    run_data: dict[str, Any],
+    revision: dict[str, Any],
+    *,
+    allowed_node_ids: AbstractSet[str] | None = None,
+) -> set[str]:
+    """
+    Inject or replace ``run_data[node_id]`` with a pinned output snapshot **before** the engine loop.
+
+    Execute-step merges prior ``initial_run_data`` into ``run_data``; without this, seeded merge
+    (or branch) snapshots can contradict ``revision.pin_data``. Pinned lane-0 output wins for nodes
+    in scope (execute-step subgraph when ``allowed_node_ids`` is set; entire revision otherwise).
+
+    Returns ids of nodes whose snapshots were overwritten from ``pin_data``.
+    """
+
+    touched: set[str] = set()
+    pin_raw_all = revision.get("pin_data")
+    if not pin_raw_all or not isinstance(pin_raw_all, dict):
+        return touched
+    nodes_by_id = {str(n["id"]): n for n in (revision.get("nodes") or []) if n.get("id") is not None}
+    now = datetime.now(UTC)
+    for node_id_any, pin_entry in pin_raw_all.items():
+        nid = str(node_id_any)
+        if nid not in nodes_by_id:
+            continue
+        if allowed_node_ids is not None and nid not in allowed_node_ids:
+            continue
+        node = nodes_by_id[nid]
+        try:
+            nt = ad.flows.get(node["type"])
+        except Exception:
+            continue
+        outputs_count = int(nt.outputs)
+        try:
+            items = ad.flows.coerce_pin_data_node_output(pin_entry)
+        except Exception:
+            continue
+        out_lists = [items] + [[] for _ in range(max(0, outputs_count - 1))]
+        ser_main = [[_bson_serialize_value(x) for x in lane] for lane in out_lists]
+        run_data[nid] = {
+            "status": "success",
+            "start_time": now.isoformat(),
+            "execution_time_ms": 0,
+            "data": {"main": ser_main},
+            "error": None,
+        }
+        touched.add(nid)
+    return touched
+
+
+def invalidate_run_data_downstream_of_pins(
+    run_data: dict[str, Any],
+    connections: "ad.flows.Connections",
+    pin_overlay_sources: AbstractSet[str],
+    *,
+    limit_nodes: AbstractSet[str] | None = None,
+) -> None:
+    """
+    Drop seeded ``run_data`` for nodes downstream of pinned snapshots.
+
+    When inputs change (pins), successors must not reuse stale ``initial_run_data`` entries — otherwise
+    execute-step skips re-running the target while ``seed_entry_is_reusable`` returns true.
+
+    Nodes in ``pin_overlay_sources`` keep their overlays; only strict descendants are purged.
+
+    ``limit_nodes`` (execute-step subgraph) prevents touching ids outside the partial graph when provided.
+    """
+
+    if not pin_overlay_sources:
+        return
+    src_frozen = frozenset(str(x) for x in pin_overlay_sources)
+    q: collections.deque[str] = collections.deque()
+    seen_out: set[str] = set()
+    for src in src_frozen:
+        typed = (connections.get(src) or {})
+        for slot in typed.get("main") or []:
+            if not slot:
+                continue
+            for conn in slot:
+                d = conn.dest_node_id
+                if limit_nodes is not None and d not in limit_nodes:
+                    continue
+                if d in src_frozen or d in seen_out:
+                    continue
+                seen_out.add(d)
+                q.append(d)
+    while q:
+        cur = q.popleft()
+        if cur not in src_frozen:
+            run_data.pop(cur, None)
+        typed = (connections.get(cur) or {})
+        for slot in typed.get("main") or []:
+            if not slot:
+                continue
+            for conn in slot:
+                d = conn.dest_node_id
+                if limit_nodes is not None and d not in limit_nodes:
+                    continue
+                if d in seen_out:
+                    continue
+                seen_out.add(d)
+                q.append(d)
+
+
 def _upstream_nodes_reaching_target(
     target_id: str,
     connections: "ad.flows.Connections",
@@ -423,7 +528,7 @@ async def _execute_loop(
             out_lists = _empty_outputs(outputs_count)
             status = "skipped"
         elif pin_data and node["id"] in pin_data:
-            pinned = ad.flows.coerce_flow_item_list(pin_data[node["id"]] or [])
+            pinned = ad.flows.coerce_pin_data_node_output(pin_data[node["id"]])
             out_lists = [pinned] + [[] for _ in range(outputs_count - 1)]
         elif partial and _seed_entry_is_reusable(context.run_data.get(node["id"]), node["id"], dirty_node_ids):
             cached = context.run_data[node["id"]]

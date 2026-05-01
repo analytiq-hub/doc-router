@@ -9,8 +9,8 @@ import {
   DisclosurePanel,
 } from '@headlessui/react';
 import { Tab, TabGroup, TabList, TabPanel, TabPanels } from '@headlessui/react';
-import { BeakerIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import { BookmarkIcon, PencilSquareIcon, TrashIcon, XMarkIcon } from '@heroicons/react/24/solid';
+import { BeakerIcon, ChevronRightIcon, MapPinIcon as MapPinOutlineIcon } from '@heroicons/react/24/outline';
+import { MapPinIcon as MapPinSolidIcon, PencilSquareIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor from '@monaco-editor/react';
 import { IconButton, Menu, MenuItem } from '@mui/material';
@@ -174,12 +174,12 @@ const FlowNodeConfigModal: React.FC<{
     }
   }, [nodeId]);
 
+  const typedPinData = useMemo(() => pinData ?? null, [pinData]);
+
   const inputPreview = useMemo(() => {
     if (!node) return { slots: [] as { slot: number; fromNodeId: string; itemsJson: unknown[] }[], message: 'No node' };
-    return buildNodeInputPreview(node.id, edges, runData);
-  }, [node, edges, runData]);
-
-  const typedPinData = useMemo(() => pinData ?? null, [pinData]);
+    return buildNodeInputPreview(node.id, edges, runData, typedPinData);
+  }, [node, edges, runData, typedPinData]);
 
   const pinnedForNode = nodeId ? (typedPinData?.[nodeId] ?? null) : null;
   const pinnedItems = useMemo(() => {
@@ -212,15 +212,6 @@ const FlowNodeConfigModal: React.FC<{
     const itemsToPin = outputItems ?? [];
     const next: FlowPinData = { ...base, [nodeId]: pinNodeOutputFromItems(itemsToPin) };
     onPinDataChange(next);
-  };
-
-  const onClearPin = () => {
-    if (readOnly) return;
-    if (!onPinDataChange) return;
-    const base = (typedPinData ?? {}) as FlowPinData;
-    const { [nodeId]: removed, ...rest } = base;
-    void removed;
-    onPinDataChange(Object.keys(rest).length ? rest : null);
   };
 
   const onOpenEditPin = () => {
@@ -483,30 +474,25 @@ const FlowNodeConfigModal: React.FC<{
                           hasPin ? 'border-violet-200 bg-violet-50 text-violet-800' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50',
                           (readOnly || !onPinDataChange) ? 'cursor-not-allowed opacity-50' : '',
                         ].join(' ')}
-                        title={hasPin ? 'Unpin output' : 'Pin output'}
+                        title={hasPin ? 'Discard pinned output' : 'Pin current output for preview and execute step'}
+                        aria-pressed={hasPin}
                       >
-                        <BookmarkIcon className="h-4 w-4" aria-hidden />
-                        {hasPin ? 'Pinned' : 'Pin'}
+                        {hasPin ? (
+                          <MapPinSolidIcon className="h-4 w-4" aria-hidden />
+                        ) : (
+                          <MapPinOutlineIcon className="h-4 w-4" aria-hidden strokeWidth={1.75} />
+                        )}
+                        {hasPin ? 'Unpin' : 'Pin'}
                       </button>
                       <button
                         type="button"
                         onClick={onOpenEditPin}
                         disabled={readOnly || !onPinDataChange}
                         className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        title="Edit pinned output"
+                        title={hasPin ? 'Edit pinned output JSON' : 'Edit output JSON (saves as pin when you Save)'}
                       >
                         <PencilSquareIcon className="h-4 w-4" aria-hidden />
                         Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onClearPin}
-                        disabled={!hasPin || readOnly || !onPinDataChange}
-                        className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        title="Clear pin"
-                      >
-                        <TrashIcon className="h-4 w-4" aria-hidden />
-                        Clear
                       </button>
                     </div>
                   }

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import AbstractSet, Any
 
 
 class RunDataSeedValidationError(ValueError):
@@ -59,3 +59,25 @@ def validate_and_filter_run_data_seed(
         _validate_one_entry(k, v)
         out[k] = v
     return out
+
+
+def finalized_dirty_node_ids(
+    *,
+    dirty_node_ids: list[str] | None,
+    target_node_id: str | None,
+    known_node_ids: AbstractSet[str],
+) -> list[str]:
+    """
+    Normalize ``dirty_node_ids`` for queuing.
+
+    Entries not in ``known_node_ids`` are dropped. When ``target_node_id`` is set (execute step),
+    that node id is **always** included so ``initial_run_data`` never seeds a reusable snapshot for
+    the node the user chose to run — each **Execute step** actually executes it.
+    """
+
+    out = {str(x) for x in (dirty_node_ids or []) if str(x) in known_node_ids}
+    if target_node_id is not None:
+        tgt = str(target_node_id)
+        if tgt in known_node_ids:
+            out.add(tgt)
+    return sorted(out)

@@ -119,3 +119,34 @@ def coerce_flow_item_list(raw: Any) -> list[FlowItem]:
         return [coerce_flow_item(x) for x in raw]
     raise ValueError(f"FlowItem list must be a list, got {type(raw).__name__}")
 
+
+def coerce_pin_data_node_output(raw: Any) -> list[FlowItem]:
+    """
+    Coerce a revision ``pin_data`` entry into **lane ``main[0]``** output items.
+
+    Accepts:
+
+    - **List** of ``FlowItem`` / item-shaped dicts (legacy engine tests / hand-written revisons).
+    - **Dict** with ``main`` shaped like execution ``data.main`` (frontend / SDK: ``{ main: [[items]] }``).
+    """
+
+    if raw is None:
+        return []
+    if isinstance(raw, list):
+        return [coerce_flow_item(x) for x in raw]
+    if isinstance(raw, dict):
+        main = raw.get("main")
+        if main is None:
+            return []
+        if not isinstance(main, list):
+            raise ValueError(f"pin_data.main must be a list or null, got {type(main).__name__}")
+        if len(main) == 0:
+            return []
+        lane0 = main[0]
+        if lane0 is None:
+            return []
+        if not isinstance(lane0, list):
+            raise ValueError("pin_data.main[0] must be a list of items or null")
+        return [coerce_flow_item(x) for x in lane0]
+    raise ValueError(f"pin_data entry must be list or object with main, got {type(raw).__name__}")
+

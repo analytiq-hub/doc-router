@@ -70,6 +70,31 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
             continue
         run_data[k] = v
 
+    try:
+        revision_conns = ad.flows.coerce_json_connections_to_dataclasses(revision.get("connections"))
+    except Exception as e:
+        logger.warning("flow_run: failed to parse revision connections (%r); pin downstream invalidation may be incomplete", e)
+        revision_conns = {}
+
+    allowed_pins: frozenset[str] | None = None
+    tgt_any = exec_doc.get("target_node_id")
+    if tgt_any:
+        try:
+            nodes = revision.get("nodes") or []
+            trig = next(str(n["id"]) for n in nodes if ad.flows.get(n["type"]).is_trigger)
+            allowed_pins = frozenset(ad.flows.upstream_closure_for_target(trig, str(tgt_any), revision_conns))
+        except Exception as e:
+            logger.warning("flow_run: pin overlay subgraph failed (%r); applying all revision pins", e)
+            allowed_pins = None
+
+    pin_touched = ad.flows.apply_revision_pins_to_run_data(
+        run_data, revision, allowed_node_ids=allowed_pins
+    )
+    if pin_touched:
+        ad.flows.invalidate_run_data_downstream_of_pins(
+            run_data, revision_conns, pin_touched, limit_nodes=allowed_pins
+        )
+
     context = ad.flows.ExecutionContext(
         organization_id=org_id,
         execution_id=exec_id,

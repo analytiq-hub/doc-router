@@ -1,4 +1,5 @@
 import type { Edge } from 'reactflow';
+import type { FlowPinData, FlowPinNodeOutput } from '@docrouter/sdk';
 import { parseHandleIndex } from './flowRf';
 
 type RunData = Record<string, unknown> | null | undefined;
@@ -9,6 +10,10 @@ type NodeRun = {
   status?: string;
   error?: unknown;
 };
+
+function hasPinMainLane(pin: FlowPinNodeOutput | null | undefined): pin is FlowPinNodeOutput {
+  return pin != null && typeof pin === 'object' && 'main' in pin && Array.isArray(pin.main);
+}
 
 /** All `.json` values from output lane `main[0]` for a node's run entry. */
 export function laneMain0ItemsJson(runEntry: unknown): unknown[] {
@@ -30,12 +35,51 @@ export function laneMain0ItemsJson(runEntry: unknown): unknown[] {
   return out;
 }
 
+/** `.json` values from pin lane `main[0]` (`FlowPinNodeOutput` matches execution `data.main` shape without status wrapper). */
+export function laneMain0ItemsJsonFromPin(pinOutput: FlowPinNodeOutput | null | undefined): unknown[] {
+  if (!pinOutput?.main?.length) return [];
+  const lane = pinOutput.main[0];
+  if (!lane || !Array.isArray(lane)) return [];
+  const out: unknown[] = [];
+  for (const it of lane) {
+    if (it != null && typeof it === 'object' && 'json' in (it as object)) {
+      out.push((it as { json?: unknown }).json ?? null);
+    } else if (it != null) {
+      out.push(it);
+    } else {
+      out.push(null);
+    }
+  }
+  return out;
+}
+
+/** Preview items for upstream `fromNodeId`: prefer revision **pin** when present, else execution `run_data`. */
+export function upstreamOutputItemsPreview(
+  fromNodeId: string,
+  runData: RunData,
+  pinData: FlowPinData | null | undefined,
+): unknown[] {
+  const pinned = pinData?.[fromNodeId];
+  if (hasPinMainLane(pinned)) return laneMain0ItemsJsonFromPin(pinned);
+  if (!runData) return [];
+  return laneMain0ItemsJson(runData[fromNodeId]);
+}
+
 /**
  * Item count on the **source** node's output lane `main[0]` when that node exists in `run_data`.
  * `undefined` means there is no run snapshot for the source (hide the edge item badge).
  */
-export function edgeItemCountFromRunData(runData: RunData, sourceNodeId: string): number | undefined {
-  if (!runData || !sourceNodeId) return undefined;
+export function edgeItemCountFromRunData(
+  runData: RunData,
+  sourceNodeId: string,
+  pinData?: FlowPinData | null,
+): number | undefined {
+  if (!sourceNodeId) return undefined;
+  const pinned = pinData?.[sourceNodeId];
+  if (hasPinMainLane(pinned)) {
+    return laneMain0ItemsJsonFromPin(pinned).length;
+  }
+  if (!runData) return undefined;
   const rec = runData[sourceNodeId];
   if (rec == null || typeof rec !== 'object') return undefined;
   return laneMain0ItemsJson(rec).length;
@@ -115,12 +159,20 @@ function orderUpstreamByDistanceSinkward(sinkId: string, edges: Edge[], closure:
 }
 
 /** Strips any stale `itemCount` on edges, then sets it from `run_data` when the source node has a run entry. */
-export function edgesWithRunDataItemCounts(edges: Edge[], runData: RunData): Edge[] {
+export function edgesWithRunDataItemCounts(
+  edges: Edge[],
+  runData: RunData,
+  pinData?: FlowPinData | null,
+): Edge[] {
   return edges.map((e) => {
     const next: Record<string, unknown> =
       typeof e.data === 'object' && e.data != null ? { ...(e.data as Record<string, unknown>) } : {};
     delete next.itemCount;
-    const n = runData ? edgeItemCountFromRunData(runData, e.source) : undefined;
+    const src = typeof e.source === 'string' ? e.source : '';
+    const n =
+      src && (runData || pinData)
+        ? edgeItemCountFromRunData(runData, src, pinData ?? undefined)
+        : undefined;
     if (n !== undefined) next.itemCount = n;
     return { ...e, data: next };
   });
@@ -135,14 +187,16 @@ export function buildNodeInputPreview(
   nodeId: string,
   edges: Edge[],
   runData: RunData,
+  pinData?: FlowPinData | null,
 ): { slots: { slot: number; fromNodeId: string; itemsJson: unknown[] }[]; message: string | null } {
-  if (!runData) {
-    return { slots: [], message: 'Run the workflow to see input data for this node.' };
-  }
   const incoming = edges.filter((e) => e.target === nodeId);
   if (incoming.length === 0) {
-    const selfRec = runData[nodeId] as unknown;
-    const selfItems = laneMain0ItemsJson(selfRec);
+    const selfPinned = pinData?.[nodeId];
+    const selfItems = hasPinMainLane(selfPinned)
+      ? laneMain0ItemsJsonFromPin(selfPinned)
+      : runData
+        ? laneMain0ItemsJson(runData[nodeId])
+        : [];
     if (selfItems.length > 0) {
       return { slots: [{ slot: 0, fromNodeId: nodeId, itemsJson: selfItems }], message: null };
     }
@@ -158,14 +212,11 @@ export function buildNodeInputPreview(
     slotForDirectParent.set(e.source, parseHandleIndex(e.targetHandle, 'in-') ?? 0);
   }
 
-  const slots = ordered.map((fromNodeId) => {
-    const rec = runData[fromNodeId] as unknown;
-    return {
-      slot: slotForDirectParent.get(fromNodeId) ?? 0,
-      fromNodeId,
-      itemsJson: laneMain0ItemsJson(rec),
-    };
-  });
+  const slots = ordered.map((fromNodeId) => ({
+    slot: slotForDirectParent.get(fromNodeId) ?? 0,
+    fromNodeId,
+    itemsJson: upstreamOutputItemsPreview(fromNodeId, runData, pinData),
+  }));
 
   return { slots, message: null };
 }
@@ -174,7 +225,12 @@ export function buildNodeInputPreview(
 export function buildNodeOutputPreview(
   nodeId: string,
   runData: RunData,
+  pinData?: FlowPinData | null,
 ): { itemsJson: unknown[]; message: string | null } {
+  const pinned = pinData?.[nodeId];
+  if (hasPinMainLane(pinned)) {
+    return { itemsJson: laneMain0ItemsJsonFromPin(pinned), message: null };
+  }
   if (!runData) {
     return { itemsJson: [], message: 'Run the workflow to see output data for this node.' };
   }

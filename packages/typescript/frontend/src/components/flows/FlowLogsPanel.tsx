@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import type { FlowExecution } from '@docrouter/sdk';
+import type { FlowExecution, FlowPinData } from '@docrouter/sdk';
 import type { Edge, Node } from 'reactflow';
 import { CheckCircleIcon } from '@heroicons/react/24/solid';
 import { ExclamationCircleIcon, PencilSquareIcon } from '@heroicons/react/24/outline';
@@ -64,6 +64,8 @@ const FlowLogsPanel: React.FC<{
   /** Current canvas graph — used for node names and input wiring in log details. */
   graphNodes?: Node<FlowRfNodeData>[];
   graphEdges?: Edge[];
+  /** When set (editor), downstream input previews use pinned upstream overrides with execution data. */
+  graphPinData?: FlowPinData | null;
 }> = ({
   orgApi,
   flowId,
@@ -75,6 +77,7 @@ const FlowLogsPanel: React.FC<{
   onToggleExpanded,
   graphNodes,
   graphEdges,
+  graphPinData,
 }) => {
   const [execution, setExecution] = useState<FlowExecution | null>(null);
   const [activeTab, setActiveTab] = useState<LogsTab>('overview');
@@ -221,13 +224,13 @@ const FlowLogsPanel: React.FC<{
 
   const selectedInputPreview = useMemo(() => {
     if (!selectedNodeId) return null;
-    return buildNodeInputPreview(selectedNodeId, edges, runData);
-  }, [edges, runData, selectedNodeId]);
+    return buildNodeInputPreview(selectedNodeId, edges, runData, graphPinData ?? undefined);
+  }, [edges, graphPinData, runData, selectedNodeId]);
 
   const selectedOutputPreview = useMemo(() => {
     if (!selectedNodeId) return null;
-    return buildNodeOutputPreview(selectedNodeId, runData);
-  }, [runData, selectedNodeId]);
+    return buildNodeOutputPreview(selectedNodeId, runData, graphPinData ?? undefined);
+  }, [graphPinData, runData, selectedNodeId]);
 
   const selectedParametersValue = useMemo(() => {
     const flowNode = selectedNode?.data?.flowNode;
