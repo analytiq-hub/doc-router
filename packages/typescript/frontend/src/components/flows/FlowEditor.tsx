@@ -38,7 +38,8 @@ import './flows-canvas.css';
 import type { FlowExecution, FlowNode, FlowNodeType, FlowPinData } from '@docrouter/sdk';
 import FlowNodePalette from './FlowNodePalette';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
-import { FLOW_RF_LABELED_EDGE_TYPE, flowRfEdgeTypes, flowRfNodeTypes } from './flowRfCanvasTypes';
+import { FLOW_RF_LABELED_EDGE_TYPE } from './flowRfCanvasTypes';
+import { useStableFlowRfCanvasRegistration } from './useStableFlowRfCanvasRegistration';
 import {
   FlowCanvasActionsProvider,
   FlowExecutionVisualProvider,
@@ -53,6 +54,13 @@ const EXECUTE_BUTTON_BG = '#ff6d5a';
 const EXECUTE_BUTTON_BG_HOVER = '#e85d4d';
 
 const FLOW_EDGE_MARKER = { type: MarkerType.ArrowClosed } as const;
+
+const FLOW_EDITOR_RF_PRO_OPTIONS = { hideAttribution: true } as const;
+const FLOW_EDITOR_DEFAULT_EDGE_OPTIONS = {
+  type: FLOW_RF_LABELED_EDGE_TYPE,
+  style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
+  markerEnd: FLOW_EDGE_MARKER,
+} as const;
 
 function CanvasZoomControls({
   addFooterPadding,
@@ -220,6 +228,7 @@ const FlowEditor: React.FC<{
   onOpenConfigNodeIdChange,
   onExecuteStep,
 }) => {
+  const { rfCanvasNodeTypes, rfCanvasEdgeTypes } = useStableFlowRfCanvasRegistration();
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [configModalNodeId, setConfigModalNodeId] = useState<string | null>(null);
   const [executeStepBusy, setExecuteStepBusy] = useState(false);
@@ -616,8 +625,8 @@ const FlowEditor: React.FC<{
               className="h-full w-full"
               nodes={nodesWithPinnedFlag}
               edges={canvasEdges}
-              nodeTypes={flowRfNodeTypes}
-              edgeTypes={flowRfEdgeTypes}
+              nodeTypes={rfCanvasNodeTypes}
+              edgeTypes={rfCanvasEdgeTypes}
               onNodesChange={(changes: NodeChange[]) => {
                 onNodesChange(applyNodeChanges(changes, nodes));
               }}
@@ -628,14 +637,10 @@ const FlowEditor: React.FC<{
               onNodeDoubleClick={onNodeDoubleClick}
               snapToGrid
               snapGrid={[FLOW_CANVAS_GRID_PX, FLOW_CANVAS_GRID_PX]}
-              proOptions={{ hideAttribution: true }}
+              proOptions={FLOW_EDITOR_RF_PRO_OPTIONS}
               minZoom={0.15}
               maxZoom={1.5}
-              defaultEdgeOptions={{
-                type: FLOW_RF_LABELED_EDGE_TYPE,
-                style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
-                markerEnd: FLOW_EDGE_MARKER,
-              }}
+              defaultEdgeOptions={FLOW_EDITOR_DEFAULT_EDGE_OPTIONS}
               connectionLineStyle={{ stroke: '#94a3b8', strokeWidth: 1.5 }}
               elevateEdgesOnSelect
             >
