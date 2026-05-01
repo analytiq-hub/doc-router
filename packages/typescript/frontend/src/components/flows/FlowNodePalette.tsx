@@ -65,7 +65,11 @@ const FlowNodePalette: React.FC<{
                   <div
                     key={nt.key}
                     draggable
-                    onDragStart={(e) => e.dataTransfer.setData('application/flow-node-type', nt.key)}
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = 'copy';
+                      e.dataTransfer.setData('application/flow-node-type', nt.key);
+                      e.dataTransfer.setData('text/plain', nt.key);
+                    }}
                     onDoubleClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();

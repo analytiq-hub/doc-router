@@ -472,12 +472,26 @@ const FlowEditor: React.FC<{
     [closePalette, insertNodeOnSplitEdge, nodeTypesByKey, nodes, onNodesChange],
   );
 
-  const onDrop = useCallback(
+  /** Palette is over a full-screen backdrop while open; drops must be handled there, not only on the pane below. */
+  const handlePaletteNodeDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
-      pendingEdgeInsertRef.current = null;
-      const typeKey = event.dataTransfer.getData('application/flow-node-type');
+      const typeKey =
+        event.dataTransfer.getData('application/flow-node-type') ||
+        event.dataTransfer.getData('text/plain');
       if (!typeKey) return;
+
+      const pending = pendingEdgeInsertRef.current;
+      if (pending) {
+        pendingEdgeInsertRef.current = null;
+        const ok = insertNodeOnSplitEdge(pending, typeKey);
+        if (ok) {
+          closePalette();
+          return;
+        }
+        pendingEdgeInsertRef.current = pending;
+        return;
+      }
 
       const stf = screenToFlowPointRef.current;
       if (!stf) return;
@@ -503,16 +517,19 @@ const FlowEditor: React.FC<{
         id,
         type: 'flow-node',
         position: p,
+        selected: true,
         data: { flowNode, nodeType: nt },
       };
-      onNodesChange([...nodes, newNode]);
+      onNodesChange([...nodes.map((n) => ({ ...n, selected: false })), newNode]);
+      setConfigModalNodeId(id);
+      closePalette();
     },
-    [nodeTypesByKey, nodes, onNodesChange],
+    [closePalette, insertNodeOnSplitEdge, nodeTypesByKey, nodes, onNodesChange],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
-    event.dataTransfer.dropEffect = 'move';
+    event.dataTransfer.dropEffect = 'copy';
   }, []);
 
   const configRf = useMemo(() => {
@@ -561,7 +578,12 @@ const FlowEditor: React.FC<{
 
   return (
     <div className="docrouter-flow-canvas flex h-full min-h-[20rem] w-full min-w-0 flex-col overflow-hidden rounded-lg border border-[#e2e4e8] bg-[#f7f7f9]">
-      <div ref={wrapperRef} className="relative h-full min-h-[12rem] min-w-0" onDrop={onDrop} onDragOver={onDragOver}>
+      <div
+        ref={wrapperRef}
+        className="relative h-full min-h-[12rem] min-w-0"
+        onDrop={handlePaletteNodeDrop}
+        onDragOver={onDragOver}
+      >
         <FlowCanvasActionsProvider value={canvasActions}>
           <FlowExecutionVisualProvider execution={executionForIo}>
             <ReactFlow
@@ -688,7 +710,13 @@ const FlowEditor: React.FC<{
 
       {nodePaletteOpen && (
         <>
-          <div className="fixed inset-0 z-[150] bg-black/20" onClick={closePalette} aria-hidden />
+          <div
+            className="fixed inset-0 z-[150] bg-black/20"
+            onClick={closePalette}
+            onDragOver={onDragOver}
+            onDrop={handlePaletteNodeDrop}
+            aria-hidden
+          />
           <div
             className="fixed right-0 top-0 z-[160] flex h-full w-[min(100vw,300px)] min-w-0 flex-col border-l border-[#e2e4e8] bg-white shadow-xl"
             role="dialog"
