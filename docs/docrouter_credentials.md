@@ -11,7 +11,7 @@ Three concepts, mirroring the n8n model:
 | Concept | Where | Purpose |
 |---|---|---|
 | **Credential kind** | `schemas/credential-kinds/<key>.json` — loaded at startup | Global type definition: auth mode, fields the org fills in, injection rule |
-| **Org credential** | `org_credentials` MongoDB collection | One saved instance per org: kind reference + encrypted field values |
+| **Org credential** | `credentials` MongoDB collection | One saved instance per org: kind reference + encrypted field values |
 | **Node binding** | `flow_revisions.nodes[*].credentials` field | Maps a node's slot name → a saved org credential id |
 
 Runtime flow: before executing a node, the engine resolves its bindings → decrypts the referenced credential → builds a flat `credentials.*` dict → passes it into the node's execution context for Jinja2 substitution in `http.spec.json`.
@@ -267,7 +267,7 @@ from . import credential_kind_registry
 
 ---
 
-## 4. `org_credentials` MongoDB collection
+## 4. `credentials` MongoDB collection
 
 One document per saved credential instance:
 
@@ -445,7 +445,7 @@ async def create_credential(
     encrypted = ad.crypto.encrypt_token(json.dumps(req.fields))
     now = datetime.now(UTC)
     db = await ad.common.get_async_db()
-    res = await db.org_credentials.insert_one({
+    res = await db.credentials.insert_one({
         "organization_id": organization_id,
         "kind_key": req.kind_key,
         "name": req.name,
@@ -455,7 +455,7 @@ async def create_credential(
         "updated_at": now,
         "updated_by": current_user.user_id,
     })
-    doc = await db.org_credentials.find_one({"_id": res.inserted_id})
+    doc = await db.credentials.find_one({"_id": res.inserted_id})
     return _to_header(doc, kind)
 ```
 
@@ -469,8 +469,8 @@ async def list_credentials(
     current_user: User = Depends(get_org_user),
 ) -> ListCredentialsResponse:
     db = await ad.common.get_async_db()
-    total = await db.org_credentials.count_documents({"organization_id": organization_id})
-    docs = await db.org_credentials.find(
+    total = await db.credentials.count_documents({"organization_id": organization_id})
+    docs = await db.credentials.find(
         {"organization_id": organization_id}
     ).sort("updated_at", -1).to_list(1000)
     items = []
@@ -494,7 +494,7 @@ async def get_credential(
     current_user: User = Depends(get_org_user),
 ) -> CredentialHeader:
     db = await ad.common.get_async_db()
-    doc = await db.org_credentials.find_one(
+    doc = await db.credentials.find_one(
         {"_id": ObjectId(credential_id), "organization_id": organization_id}
     )
     if not doc:
@@ -515,7 +515,7 @@ async def update_credential(
     current_user: User = Depends(get_org_user),
 ) -> CredentialHeader:
     db = await ad.common.get_async_db()
-    doc = await db.org_credentials.find_one(
+    doc = await db.credentials.find_one(
         {"_id": ObjectId(credential_id), "organization_id": organization_id}
     )
     if not doc:
@@ -526,12 +526,12 @@ async def update_credential(
         raise HTTPException(status_code=400, detail=f"Unknown credential kind: {req.kind_key}")
     encrypted = ad.crypto.encrypt_token(json.dumps(req.fields))
     now = datetime.now(UTC)
-    await db.org_credentials.update_one(
+    await db.credentials.update_one(
         {"_id": ObjectId(credential_id)},
         {"$set": {"encrypted_payload": encrypted, "name": req.name,
                   "updated_at": now, "updated_by": current_user.user_id}},
     )
-    doc = await db.org_credentials.find_one({"_id": ObjectId(credential_id)})
+    doc = await db.credentials.find_one({"_id": ObjectId(credential_id)})
     return _to_header(doc, kind)
 ```
 
@@ -546,7 +546,7 @@ async def delete_credential(
     current_user: User = Depends(get_org_user),
 ) -> None:
     db = await ad.common.get_async_db()
-    res = await db.org_credentials.delete_one(
+    res = await db.credentials.delete_one(
         {"_id": ObjectId(credential_id), "organization_id": organization_id}
     )
     if res.deleted_count == 0:
@@ -567,7 +567,7 @@ async def test_credential(
     from jinja2 import Environment, Undefined
 
     db = await ad.common.get_async_db()
-    doc = await db.org_credentials.find_one(
+    doc = await db.credentials.find_one(
         {"_id": ObjectId(credential_id), "organization_id": organization_id}
     )
     if not doc:
@@ -618,7 +618,7 @@ Nodes are stored in `flow_revisions.nodes` as plain dicts. Extend each node dict
 }
 ```
 
-Key = slot name from the node type's `credential_slots`; value = `org_credentials._id` as a string.
+Key = slot name from the node type's `credential_slots`; value = `credentials._id` as a string.
 
 No schema changes are required: `nodes` is already stored as `list[dict[str, Any]]`. The bindings are validated at execution time, not at save time.
 
@@ -701,7 +701,7 @@ async def resolve_node_credentials(
             continue
 
         from bson import ObjectId
-        doc = await db.org_credentials.find_one(
+        doc = await db.credentials.find_one(
             {"_id": ObjectId(cred_id), "organization_id": organization_id}
         )
         if not doc:
@@ -902,7 +902,7 @@ Work in this order. Each step is independently testable.
    - `POST /v0/orgs/{orgId}/flows/credentials`
    - `GET /v0/orgs/{orgId}/flows/credentials`
    - `DELETE /v0/orgs/{orgId}/flows/credentials/{credId}`
-5. Create the MongoDB index on `org_credentials`.
+5. Create the MongoDB index on `credentials`.
 6. Verify with `curl` or the FastAPI `/docs` UI.
 
 **Phase 2 — Test endpoint**
