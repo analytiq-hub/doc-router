@@ -17,6 +17,7 @@ from .seed_validation import (
     validate_and_filter_run_data_seed,
 )
 from .code_runner import *
+from .credentials import *
 from .nodes import *
 from .register_builtin import *
 

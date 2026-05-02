@@ -8,7 +8,7 @@ The engine is kept DocRouter-independent; DocRouter-specific nodes can call into
 the context.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 ExecutionMode = Literal["manual", "trigger", "webhook", "schedule", "error"]
@@ -33,4 +33,6 @@ class ExecutionContext:
     analytiq_client: Any
     stop_requested: bool = False
     logger: Any | None = None
+    #: Per-node credential fields for integration nodes + HTTP Request (see docs/docrouter_credentials.md).
+    credentials: dict[str, Any] = field(default_factory=dict)
 

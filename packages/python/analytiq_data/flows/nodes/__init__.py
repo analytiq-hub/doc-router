@@ -1,5 +1,5 @@
 from .trigger_manual import FlowsManualTriggerNode
-from .webhook import FlowsWebhookNode
+from .http_request import FlowsHttpRequestNode
 from .branch import FlowsBranchNode
 from .merge import FlowsMergeNode
 from .code import FlowsCodeNode

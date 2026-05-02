@@ -549,6 +549,7 @@ async def _execute_loop(
                             execution_refs=_execution_refs,
                         ),
                     }
+                    context.credentials.clear()
                     out_lists = await node_type.execute(context, resolved_node, [])
                     if len(out_lists) != outputs_count:
                         raise RuntimeError(
@@ -571,6 +572,7 @@ async def _execute_loop(
                             execution_refs=_execution_refs,
                         ),
                     }
+                    context.credentials.clear()
                     out_lists = await node_type.execute(context, resolved_node, wi.inputs)
                     if len(out_lists) != outputs_count:
                         raise RuntimeError(
@@ -595,6 +597,7 @@ async def _execute_loop(
                             }
                             per_inputs = [[] for _ in range(len(wi.inputs))]
                             per_inputs[slot_idx] = [it]
+                            context.credentials.clear()
                             per_out = await node_type.execute(context, resolved_node, per_inputs)
                             if len(per_out) != outputs_count:
                                 raise RuntimeError(
