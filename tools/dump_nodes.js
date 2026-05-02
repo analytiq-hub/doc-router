@@ -142,6 +142,29 @@ function tryInstantiate(Ctor) {
   }
 }
 
+/**
+ * n8n `VersionedNodeType` sets `nodeVersions` values to instantiated nodes
+ * (`new SlackV2(base)`, …), not constructors. Older or custom nodes may still
+ * store a constructor reference.
+ */
+function descriptionFromVersionEntry(entry) {
+  if (!entry) {
+    return null;
+  }
+  if (typeof entry === "function") {
+    const subInst = tryInstantiate(entry);
+    const d = subInst?.description;
+    return typeof d === "object" && d !== null ? d : null;
+  }
+  if (typeof entry === "object") {
+    const d = entry.description;
+    if (typeof d === "object" && d !== null) {
+      return d;
+    }
+  }
+  return null;
+}
+
 function relativePosix(fromDir, absPath) {
   let rel = path.relative(fromDir, absPath);
   if (!rel.startsWith(".")) {
@@ -217,12 +240,8 @@ function main() {
         typeof versionsObj === "object" &&
         !Array.isArray(versionsObj)
       ) {
-        for (const [verKey, SubCtor] of Object.entries(versionsObj)) {
-          if (typeof SubCtor !== "function") {
-            continue;
-          }
-          const subInst = tryInstantiate(SubCtor);
-          const sd = subInst?.description;
+        for (const [verKey, entry] of Object.entries(versionsObj)) {
+          const sd = descriptionFromVersionEntry(entry);
           if (!sd || typeof sd !== "object") {
             continue;
           }
