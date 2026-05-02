@@ -188,6 +188,28 @@ def validate_revision(
         if extra:
             raise FlowValidationError(f"Invalid parameters for node {n['id']} ({nt.key}): {extra}")
 
+        creds = n.get("credentials")
+        if creds is not None:
+            if not isinstance(creds, dict):
+                raise FlowValidationError(f"Node {n['id']} credentials must be an object")
+            slots_raw = getattr(nt, "credential_slots", None) or []
+            allowed = {
+                str(s["slot"])
+                for s in slots_raw
+                if isinstance(s, dict) and s.get("slot") is not None
+            }
+            for slot_name, cred_id in creds.items():
+                if slot_name not in allowed:
+                    raise FlowValidationError(
+                        f"Unknown credential slot {slot_name!r} for node {n['id']} ({nt.key})"
+                    )
+                if cred_id is None or cred_id == "":
+                    continue
+                if not isinstance(cred_id, str):
+                    raise FlowValidationError(
+                        f"Credential binding for slot {slot_name!r} on node {n['id']} must be a string id"
+                    )
+
     if pin_data:
         for node_id in pin_data.keys():
             if node_id not in nodes_by_id:

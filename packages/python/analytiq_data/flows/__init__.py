@@ -18,6 +18,7 @@ from .seed_validation import (
 )
 from .code_runner import *
 from .credentials import *
+from .credential_kind_registry import *
 from .nodes import *
 from .register_builtin import *
 

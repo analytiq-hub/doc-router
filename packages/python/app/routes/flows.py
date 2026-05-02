@@ -133,6 +133,7 @@ async def list_node_types(organization_id: str, current_user: User = Depends(get
     # Node types are global; org is for auth scoping and future filtering.
     items = []
     for nt in ad.flows.list_all():
+        slots = getattr(nt, "credential_slots", None)
         items.append(
             {
                 "key": nt.key,
@@ -146,6 +147,7 @@ async def list_node_types(organization_id: str, current_user: User = Depends(get
                 "output_labels": nt.output_labels,
                 "parameter_schema": nt.parameter_schema,
                 "icon_key": nt.icon_key,
+                "credential_slots": slots if isinstance(slots, list) else [],
             }
         )
     return {"items": items, "total": len(items)}
