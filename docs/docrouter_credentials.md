@@ -296,13 +296,13 @@ One document per saved credential instance:
 
 ## 5. Backend API
 
-**File:** `packages/python/app/routes/credentials.py`
+**File:** `packages/python/app/routes/flows_credentials.py`
 
-Register in `packages/python/app/main.py` alongside existing routers:
+Credentials are a sub-concern of flows, so the router lives next to `flows.py` and its routes are all prefixed under `/flows/`. Register in `packages/python/app/main.py`:
 
 ```python
-from app.routes.credentials import credentials_router
-app.include_router(credentials_router)
+from app.routes.flows_credentials import flow_credentials_router
+app.include_router(flow_credentials_router)
 ```
 
 ### 5.1 Pydantic models
@@ -324,7 +324,7 @@ from app.auth import get_org_user
 from app.models import User
 
 logger = logging.getLogger(__name__)
-credentials_router = APIRouter(tags=["credentials"])
+flow_credentials_router = APIRouter(tags=["flows"])
 
 
 # ── Request / response models ──────────────────────────────────────────────
@@ -395,7 +395,7 @@ def _to_header(doc: dict, kind: dict) -> CredentialHeader:
 **List available kinds** — used to populate the "create credential" kind picker:
 
 ```python
-@credentials_router.get("/v0/orgs/{organization_id}/credential-kinds")
+@flow_credentials_router.get("/v0/orgs/{organization_id}/flows/credential-kinds")
 async def list_credential_kinds(
     organization_id: str,
     current_user: User = Depends(get_org_user),
@@ -421,7 +421,7 @@ async def list_credential_kinds(
 **Create a credential instance:**
 
 ```python
-@credentials_router.post("/v0/orgs/{organization_id}/credentials",
+@flow_credentials_router.post("/v0/orgs/{organization_id}/flows/credentials",
                          response_model=CredentialHeader)
 async def create_credential(
     organization_id: str,
@@ -462,7 +462,7 @@ async def create_credential(
 **List credentials for an org** (metadata only, no secrets):
 
 ```python
-@credentials_router.get("/v0/orgs/{organization_id}/credentials",
+@flow_credentials_router.get("/v0/orgs/{organization_id}/flows/credentials",
                         response_model=ListCredentialsResponse)
 async def list_credentials(
     organization_id: str,
@@ -486,7 +486,7 @@ async def list_credentials(
 **Get a single credential** (metadata only):
 
 ```python
-@credentials_router.get("/v0/orgs/{organization_id}/credentials/{credential_id}",
+@flow_credentials_router.get("/v0/orgs/{organization_id}/flows/credentials/{credential_id}",
                         response_model=CredentialHeader)
 async def get_credential(
     organization_id: str,
@@ -506,7 +506,7 @@ async def get_credential(
 **Update credential fields** (re-encrypt; useful when a token rotates):
 
 ```python
-@credentials_router.put("/v0/orgs/{organization_id}/credentials/{credential_id}",
+@flow_credentials_router.put("/v0/orgs/{organization_id}/flows/credentials/{credential_id}",
                         response_model=CredentialHeader)
 async def update_credential(
     organization_id: str,
@@ -538,7 +538,7 @@ async def update_credential(
 **Delete a credential:**
 
 ```python
-@credentials_router.delete("/v0/orgs/{organization_id}/credentials/{credential_id}",
+@flow_credentials_router.delete("/v0/orgs/{organization_id}/flows/credentials/{credential_id}",
                            status_code=204)
 async def delete_credential(
     organization_id: str,
@@ -556,7 +556,7 @@ async def delete_credential(
 **Test a credential** (for `api_key` kinds with a `test_request`):
 
 ```python
-@credentials_router.post("/v0/orgs/{organization_id}/credentials/{credential_id}/test",
+@flow_credentials_router.post("/v0/orgs/{organization_id}/flows/credentials/{credential_id}/test",
                          response_model=TestCredentialResponse)
 async def test_credential(
     organization_id: str,
@@ -793,14 +793,14 @@ headers = {
 
 ### 8.1 Credentials settings page
 
-**Route:** `/settings/organizations/[organizationId]/credentials/`
+**Route:** `/settings/organizations/[organizationId]/flows/credentials/`
 
-Follow the same structure as the existing organization settings pages.
+Credentials are a flows-specific configuration, so the page lives under a `flows/` segment in the org settings — alongside the existing `webhooks/` page which also relates to flows triggers.
 
 **Files to create:**
 
 ```
-packages/typescript/frontend/src/app/settings/organizations/[organizationId]/credentials/
+packages/typescript/frontend/src/app/settings/organizations/[organizationId]/flows/credentials/
 ├── page.tsx          ← list view (table of saved credentials)
 └── new/
     └── page.tsx      ← create form (kind picker + dynamic field form)
@@ -808,37 +808,38 @@ packages/typescript/frontend/src/app/settings/organizations/[organizationId]/cre
 
 **List page (`page.tsx`):**
 
-- Fetch `GET /v0/orgs/{orgId}/credential-kinds` to populate the "Add credential" kind picker.
-- Fetch `GET /v0/orgs/{orgId}/credentials` to list saved instances.
+- Fetch `GET /v0/orgs/{orgId}/flows/credential-kinds` to populate the "Add credential" kind picker.
+- Fetch `GET /v0/orgs/{orgId}/flows/credentials` to list saved instances.
 - Table columns: **Name**, **Kind** (display_name), **Created**, **Actions**.
 - Actions: **Test** (POST …/test, show ok/error snackbar), **Edit** (navigate to edit form or open inline), **Delete** (confirmation dialog, then DELETE).
 - "Add credential" button opens a kind-picker dialog.
 
 **Create form:**
 
-1. Step 1 — Kind picker: dropdown listing all kinds from `GET …/credential-kinds` grouped by `auth_mode`. On select, show the kind's description and field list.
+1. Step 1 — Kind picker: dropdown listing all kinds from `GET …/flows/credential-kinds` grouped by `auth_mode`. On select, show the kind's description and field list.
 2. Step 2 — Fill fields: render a dynamic form from the kind's `fields` array returned by the API:
    - `is_secret: true` fields → MUI `TextField` with `type="password"` and show/hide toggle.
    - `is_secret: false` fields → plain `TextField`.
    - `description` on a field → `helperText`.
    - Name field (free text) at the top, always present.
-3. Submit → `POST /v0/orgs/{orgId}/credentials` → redirect back to list with success snackbar.
+3. Submit → `POST /v0/orgs/{orgId}/flows/credentials` → redirect back to list with success snackbar.
 
 **API client additions** (in `packages/typescript/frontend/src/utils/api.ts` or the SDK):
 
 ```typescript
 // List credential kinds (for the create form)
-async function listCredentialKinds(orgId: string): Promise<CredentialKindSummary[]>
+// GET /v0/orgs/{orgId}/flows/credential-kinds
+async function listFlowCredentialKinds(orgId: string): Promise<CredentialKindSummary[]>
 
-// CRUD for org credentials
-async function listCredentials(orgId: string): Promise<ListCredentialsResponse>
-async function createCredential(orgId: string, req: CreateCredentialRequest): Promise<CredentialHeader>
-async function updateCredential(orgId: string, credId: string, req: CreateCredentialRequest): Promise<CredentialHeader>
-async function deleteCredential(orgId: string, credId: string): Promise<void>
-async function testCredential(orgId: string, credId: string): Promise<TestCredentialResponse>
+// CRUD  — all under /v0/orgs/{orgId}/flows/credentials
+async function listFlowCredentials(orgId: string): Promise<ListCredentialsResponse>
+async function createFlowCredential(orgId: string, req: CreateCredentialRequest): Promise<CredentialHeader>
+async function updateFlowCredential(orgId: string, credId: string, req: CreateCredentialRequest): Promise<CredentialHeader>
+async function deleteFlowCredential(orgId: string, credId: string): Promise<void>
+async function testFlowCredential(orgId: string, credId: string): Promise<TestCredentialResponse>
 ```
 
-**Navigation:** add "Credentials" to the organization settings sidebar alongside "Webhooks" and "Subscription".
+**Navigation:** add a "Flows" section to the organization settings sidebar (if not already present) and put "Credentials" under it, alongside "Webhooks" (which also belongs to flows).
 
 ### 8.2 Flow editor: credential slot binding
 
@@ -851,10 +852,10 @@ The section appears only when the selected node type has one or more `credential
 - Label from `slot_def.label`.
 - MUI `Select` dropdown:
   - Options: org credentials where `kind_key` matches the slot's `docrouter_binding` (strip the `organization_credential_kind:` prefix to get the kind key).
-  - Fetch `GET /v0/orgs/{orgId}/credentials` once and filter client-side by kind key.
+  - Fetch `GET /v0/orgs/{orgId}/flows/credentials` once and filter client-side by kind key.
   - Option labels: `credential.name` (kind display name shown as subtitle).
   - Placeholder: "Select credential…" for optional slots; "Required — select credential" for required ones.
-- "Manage credentials" link → opens `/settings/organizations/{orgId}/credentials/` in a new tab.
+- "Manage credentials" link → opens `/settings/organizations/{orgId}/flows/credentials/` in a new tab.
 
 **Saving bindings:** include the `credentials` map in the node's data when `PUT /v0/orgs/{orgId}/flows/{flowId}` is called (it is already included in the `nodes` array). No separate API call needed.
 
@@ -888,7 +889,7 @@ Defer this until the API-key flow is working end-to-end. What is needed:
 
 | Step | What to build |
 |---|---|
-| **Initiate** | `POST /v0/orgs/{orgId}/credentials/{credId}/oauth/initiate` — build the auth URL from `kind.oauth2.auth_url`, redirect the user's browser there with `state=<signed JWT encoding orgId+credId>` |
+| **Initiate** | `POST /v0/orgs/{orgId}/flows/credentials/{credId}/oauth/initiate` — build the auth URL from `kind.oauth2.auth_url`, redirect the user's browser there with `state=<signed JWT encoding orgId+credId>` |
 | **Callback** | `GET /v0/callback/oauth` — validate `state`, POST to `kind.oauth2.token_url` with the code, store `access_token` + `refresh_token` into `encrypted_payload` alongside existing fields |
 | **Refresh** | Before each execution: check `exp` claim on `access_token`; if expired, POST to `token_url` with `refresh_token`, update `encrypted_payload`, continue |
 | **Frontend** | "Connect" button in the create form for OAuth2 kinds instead of a text field; polls for completion after redirect |
@@ -908,17 +909,17 @@ Work in this order. Each step is independently testable.
 1. Write the starter kind JSON files: `slackApi.json`, `openAiApi.json`.
 2. Implement `packages/python/analytiq_data/flows/credential_kind_registry.py` (§3).
 3. Call `load_credential_kinds` in `main.py` startup.
-4. Create `packages/python/app/routes/credentials.py` with:
-   - `GET /v0/orgs/{orgId}/credential-kinds`
-   - `POST /v0/orgs/{orgId}/credentials`
-   - `GET /v0/orgs/{orgId}/credentials`
-   - `DELETE /v0/orgs/{orgId}/credentials/{credId}`
+4. Create `packages/python/app/routes/flows_credentials.py` with:
+   - `GET /v0/orgs/{orgId}/flows/credential-kinds`
+   - `POST /v0/orgs/{orgId}/flows/credentials`
+   - `GET /v0/orgs/{orgId}/flows/credentials`
+   - `DELETE /v0/orgs/{orgId}/flows/credentials/{credId}`
 5. Create the MongoDB index on `org_credentials`.
 6. Verify with `curl` or the FastAPI `/docs` UI.
 
 **Phase 2 — Test endpoint**
 
-7. Add `POST /v0/orgs/{orgId}/credentials/{credId}/test` (§5.3).
+7. Add `POST /v0/orgs/{orgId}/flows/credentials/{credId}/test` (§5.3).
 8. Test manually with a real Slack token.
 
 **Phase 3 — Runtime injection**
@@ -936,7 +937,7 @@ Work in this order. Each step is independently testable.
 
 **Phase 5 — Frontend credentials settings page**
 
-16. Create `/settings/organizations/[organizationId]/credentials/page.tsx` — list + delete.
+16. Create `/settings/organizations/[organizationId]/flows/credentials/page.tsx` — list + delete.
 17. Create the create form with kind picker and dynamic field form.
 18. Add navigation link in the org settings sidebar.
 19. Test end-to-end: create a Slack credential, list it, delete it.
