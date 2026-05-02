@@ -568,7 +568,7 @@ This produces correct slots but cannot fill in `secret_schema`, `auth_mode`, or 
 | **B — Kind dump from n8n** | `tools/dump_credentials.js`: walk compiled `*.credentials.js`, emit JSONL per type. | **Not started** |
 | **C — DocRouter kind files** | `tools/port_credentials.py`: JSONL → `schemas/credential-kinds/<key>.json` with `secret_schema`, `auth_mode`, `inject`. Check in base kinds (`oAuth2Api`, `slackApi`, `googleOAuth2Api`, …) manually for the most important integrations. | **Not started** |
 | **D — Storage + API** | Org-scoped encrypted store + CRUD (`POST /orgs/{org}/credentials`, `GET`, `DELETE`). Kind registry validates stored payload against `secret_schema`. | **Not started** |
-| **E — Flow bindings** | Flow nodes store `credentials: { “<slot>”: “<org_credential_id>” }`, validated against `credential_slots`. | **Not started** |
+| **E — Flow bindings** | Flow nodes store `credentials: { “<slot>”: “<credential_id>” }`, validated against `credential_slots`. | **Not started** |
 | **F — Frontend** | Per slot, a credential picker filtered by kind from `docrouter_binding`. | **Not started** |
 | **G — Runtime injection** | Resolve binding → decrypt → build `credentials.*` dict; call token refresh for OAuth kinds before Jinja substitution. | **Not started** |
 
@@ -769,7 +769,7 @@ Completely absent. No org-level credential store, no `credential_slots` binding,
 
 | Layer | What is needed |
 |---|---|
-| Storage | Org-scoped encrypted key-value store (e.g. `org_credentials` MongoDB collection, values encrypted at rest) |
+| Storage | Org-scoped encrypted key-value store (e.g. `credentials` MongoDB collection, values encrypted at rest) |
 | API | CRUD endpoints per org (`POST /orgs/{org}/credentials`, `GET`, `DELETE`) |
 | Runtime | At execution time, resolve `credential_slots` for the current node and inject as `credentials.*` into the Jinja2 / expression context |
 

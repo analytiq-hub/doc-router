@@ -153,7 +153,7 @@ async def test_http_header_auth_slot(
         return {"name": "Authorization", "value": "Bearer secret"}
 
     monkeypatch.setattr(
-        "analytiq_data.flows.fetch_org_credential_fields",
+        "analytiq_data.flows.fetch_credential_fields",
         fake_fetch,
     )
 
@@ -198,7 +198,7 @@ async def test_http_query_auth_slot(
         return {"name": "api_key", "value": "abc123"}
 
     monkeypatch.setattr(
-        "analytiq_data.flows.fetch_org_credential_fields",
+        "analytiq_data.flows.fetch_credential_fields",
         fake_fetch,
     )
 

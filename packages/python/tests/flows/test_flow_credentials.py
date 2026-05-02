@@ -16,7 +16,7 @@ import pytest
 from bson import ObjectId
 
 import analytiq_data as ad
-from analytiq_data.flows.credentials import fetch_org_credential_fields
+from analytiq_data.flows.credentials import fetch_credential_fields
 from analytiq_data.flows.nodes.http_request import FlowsHttpRequestNode
 
 _RealAsyncClient = httpx.AsyncClient
@@ -40,7 +40,7 @@ async def test_fetch_returns_decrypted_fields(test_db):
         }
     )
 
-    result = await fetch_org_credential_fields(TEST_ORG, str(cred_id))
+    result = await fetch_credential_fields(TEST_ORG, str(cred_id))
 
     assert result == {"name": "Authorization", "value": "Bearer tok"}
 
@@ -48,7 +48,7 @@ async def test_fetch_returns_decrypted_fields(test_db):
 @pytest.mark.asyncio
 async def test_fetch_missing_document_returns_empty(test_db):
     """No document with that id → empty dict, not an exception."""
-    result = await fetch_org_credential_fields(TEST_ORG, str(ObjectId()))
+    result = await fetch_credential_fields(TEST_ORG, str(ObjectId()))
 
     assert result == {}
 
@@ -65,7 +65,7 @@ async def test_fetch_wrong_org_returns_empty(test_db):
         }
     )
 
-    result = await fetch_org_credential_fields(TEST_ORG, str(cred_id))
+    result = await fetch_credential_fields(TEST_ORG, str(cred_id))
 
     assert result == {}
 
@@ -73,7 +73,7 @@ async def test_fetch_wrong_org_returns_empty(test_db):
 @pytest.mark.asyncio
 async def test_fetch_invalid_object_id_returns_empty(test_db):
     """Non-hex credential_id → empty dict, not an exception."""
-    result = await fetch_org_credential_fields(TEST_ORG, "not-an-objectid")
+    result = await fetch_credential_fields(TEST_ORG, "not-an-objectid")
 
     assert result == {}
 
@@ -86,7 +86,7 @@ async def test_fetch_missing_encrypted_payload_returns_empty(test_db):
         {"_id": cred_id, "organization_id": TEST_ORG}
     )
 
-    result = await fetch_org_credential_fields(TEST_ORG, str(cred_id))
+    result = await fetch_credential_fields(TEST_ORG, str(cred_id))
 
     assert result == {}
 

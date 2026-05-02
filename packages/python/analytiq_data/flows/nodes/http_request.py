@@ -188,14 +188,14 @@ class FlowsHttpRequestNode:
         bindings = node.get("credentials") or {}
         org_id = context.organization_id
         if bindings.get("httpHeaderAuth"):
-            hf = await ad.flows.fetch_org_credential_fields(
+            hf = await ad.flows.fetch_credential_fields(
                 org_id, str(bindings["httpHeaderAuth"])
             )
             hn, hv = hf.get("name"), hf.get("value")
             if hn and hv is not None:
                 headers[str(hn)] = str(hv)
         if bindings.get("httpQueryAuth"):
-            qf = await ad.flows.fetch_org_credential_fields(
+            qf = await ad.flows.fetch_credential_fields(
                 org_id, str(bindings["httpQueryAuth"])
             )
             qn, qv = qf.get("name"), qf.get("value")

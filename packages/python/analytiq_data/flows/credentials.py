@@ -1,7 +1,7 @@
 """
 Org-scoped credential lookup for flow nodes (see docs/docrouter_credentials.md).
 
-When ``org_credentials`` documents exist, decrypted payloads are returned per credential id.
+When ``credentials`` documents exist, decrypted payloads are returned per credential id.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import analytiq_data as ad
 logger = logging.getLogger(__name__)
 
 
-async def fetch_org_credential_fields(organization_id: str, credential_id: str) -> dict[str, Any]:
+async def fetch_credential_fields(organization_id: str, credential_id: str) -> dict[str, Any]:
     """
     Load and decrypt one saved credential by id.
 
@@ -48,5 +48,5 @@ async def fetch_org_credential_fields(organization_id: str, credential_id: str) 
         data = json.loads(decrypted)
         return data if isinstance(data, dict) else {}
     except Exception as e:
-        logger.warning("fetch_org_credential_fields failed for %s: %s", credential_id, e)
+        logger.warning("fetch_credential_fields failed for %s: %s", credential_id, e)
         return {}
