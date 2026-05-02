@@ -33,7 +33,7 @@ async def fetch_org_credential_fields(organization_id: str, credential_id: str) 
         return {}
 
     try:
-        db = await ad.common.get_async_db()
+        db = ad.common.get_async_db()
         doc = await db.credentials.find_one(
             {"_id": oid, "organization_id": organization_id}
         )
