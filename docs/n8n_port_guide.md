@@ -194,6 +194,49 @@ def map_credential(cred: dict) -> dict:
     }
 ```
 
+### 7.1 n8n credentials are separate from nodes
+
+In n8n, integration nodes only **reference** credential types:
+
+- **`INodeTypeDescription.credentials[]`** lists allowed types (`name`, `displayName`, `required`, optional `testedBy`, etc.). The **`name`** string (e.g. `slackApi`) keys into a **global credential type registry**.
+- The **fields** for that type (API token, OAuth client id, host, …) live in **credential definition modules** (typically `packages/nodes-base/credentials/*.credentials.ts`, compiled under `dist/`), not inside the node’s `description` JSON.
+- At **workflow runtime**, the workflow stores which **saved credential instance** (id) is attached to each node slot; secrets are decrypted only inside execution.
+
+So the node dump (`flow_node_dump.jsonl`) carries **which slots exist and their labels**, but **not** the full secret schema or property list for each type unless we add a **second extraction path** from compiled credential modules (see §7.3).
+
+### 7.2 Target DocRouter model (aligned with manifests)
+
+DocRouter should mirror the same separation: **kind** (type) vs **instance** (org-owned secret) vs **binding** (which instance fills which slot on a flow node). This matches the declarative hints already sketched in [`docrouter_nodes.md`](./docrouter_nodes.md) §7.
+
+| Concept | Role |
+|---|---|
+| **Credential kind** | Global catalog entry: stable key (see `docrouter_binding`), JSON Schema for secret fields + non-secret options, display metadata, optional auth mode (OAuth vs API key). |
+| **Organization credential** | One stored instance per org: references a **kind**, user-visible name, encrypted payload validated against the kind schema. |
+| **Flow node binding** | Per node, map **slot name** → saved credential id (or future inline ref), analogous to n8n’s node `credentials` map in workflow JSON. |
+| **Runtime context** | Resolved secrets exposed to **`http_request_v1`** / expressions as **`credentials.*`** (flat or nested per interpreter rules — decide once and document). |
+
+Manifest **`credential_slots`** already carries **`slot`**, **`label`**, **`required`**, and **`docrouter_binding`** (today `organization_credential_kind:<n8n_type_name>`). The **kind key** should stay **stable** and, where possible, **equal to n8n’s credential type `name`** to simplify migration.
+
+### 7.3 Phased plan: define credentials in DocRouter and map from n8n
+
+| Phase | Scope | Status |
+|---|---|---|
+| **A — Slot references from nodes** | For each dumped node, emit **`credential_slots`** from `description.credentials` ([`map_credentials`](../packages/python/analytiq_data/flows/port/converter.py)). | **Done** in port |
+| **B — Kind catalog from n8n** | New tooling (parallel to `dump_nodes.js`): load compiled **`*.credentials.js`** from the sibling repo (n8n places them under e.g. `packages/nodes-base/dist/` and `packages/nodes-base/dist/credentials/` after `pnpm build` — layout can change by version; discover both). Extract each credential type’s **name**, **displayName**, and **properties** (`INodeProperties`-style). Emit a machine-readable catalog (e.g. JSONL or one JSON file per kind) and derive **JSON Schema** for the stored secret payload (reuse the same mapping ideas as §5 for parameter types). Optional: dedupe by `name` across packages. | **Not started** |
+| **C — DocRouter kind registry** | Check in or generate **`schemas/credential-kinds/<key>.json`** (or a single registry index). Support **aliases** if DocRouter renames a kind. Wire **`docrouter_binding`** to this registry. | **Not started** |
+| **D — Storage + API** | Org-scoped encrypted store + CRUD; see §12.4. | **Not started** |
+| **E — Flow revision: bindings** | Extend stored flow nodes so each integration node can record **`credentials: { "<slot>": "<org_credential_id>" }`** (or equivalent), validated against that node type’s **`credential_slots`**. | **Not started** |
+| **F — Frontend** | Per slot, credential picker filtered by **kind** from **`docrouter_binding`**. | **Not started** |
+| **G — Runtime injection** | Before Jinja / HTTP: resolve bindings → decrypt → build **`credentials`** dict for the interpreter; match keys expected by **`http.spec.json`** (see §7.4). | **Not started** |
+
+**Recommended build order:** **B → C** (so kinds exist before bulk UI), then **D**, then **E + G** with **F** in parallel. Phase **A** already unblocks listing slots on ported nodes; phases **B–G** unblock **real** SaaS calls.
+
+### 7.4 Mapping pitfalls (information loss)
+
+- **Without phase B**, DocRouter knows **slot ids and labels** but not the **field list** for the OAuth/API form — users cannot safely create instances without manual docs or hand-authored kind schemas.
+- **Jinja keys in `http.spec.json`** (e.g. `{{ credentials.accessToken }}`) follow **n8n’s decrypted credential object shape**, which comes from the **credential type**, not from the node dump. The kind catalog (phase B) plus a small **normalization rule** (flatten nested objects vs dot keys) must align generated specs with resolved **`credentials.*`** at runtime.
+- **OAuth / refresh**: n8n credential types may include **automations** DocRouter does not port automatically; treat OAuth as “manual parity” until a DocRouter token refresh story exists.
+
 ---
 
 ## 8. Output layout
@@ -383,6 +426,8 @@ Completely absent. No org-level credential store, no `credential_slots` binding,
 | Storage | Org-scoped encrypted key-value store (e.g. `org_credentials` MongoDB collection, values encrypted at rest) |
 | API | CRUD endpoints per org (`POST /orgs/{org}/credentials`, `GET`, `DELETE`) |
 | Runtime | At execution time, resolve `credential_slots` for the current node and inject as `credentials.*` into the Jinja2 / expression context |
+
+Product-facing **phasing** (kind catalog from n8n, flow bindings, UI) is spelled out in **§7.3**; implement storage/API/runtime here in tandem with those steps.
 
 ### Important — most nodes degrade without these
 
