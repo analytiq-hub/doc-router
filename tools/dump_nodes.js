@@ -134,34 +134,55 @@ function collectConstructors(mod) {
   return out;
 }
 
-function tryInstantiate(Ctor) {
-  try {
-    return new Ctor();
-  } catch {
-    return null;
-  }
+/** @param {string} msg */
+function logWarn(msg) {
+  console.error(`[dump_nodes] ${msg}`);
 }
 
 /**
- * n8n `VersionedNodeType` sets `nodeVersions` values to instantiated nodes
- * (`new SlackV2(base)`, …), not constructors. Older or custom nodes may still
- * store a constructor reference.
+ * Extract version-slice description; log why it failed (stderr) instead of silent skip.
+ * @param {unknown} entry
+ * @param {{ rel: string, verKey: string }} ctx
+ * @returns {object | null}
  */
-function descriptionFromVersionEntry(entry) {
+function descriptionFromVersionEntryLogged(entry, ctx) {
+  const { rel, verKey } = ctx;
   if (!entry) {
+    logWarn(`${rel} nodeVersions[${verKey}]: null or undefined entry`);
     return null;
   }
   if (typeof entry === "function") {
-    const subInst = tryInstantiate(entry);
-    const d = subInst?.description;
-    return typeof d === "object" && d !== null ? d : null;
+    let subInst;
+    try {
+      subInst = new entry();
+    } catch (e) {
+      logWarn(
+        `${rel} nodeVersions[${verKey}]: new ${entry.name || "anonymous"}() failed: ${e.message}`,
+      );
+      return null;
+    }
+    const d = subInst && subInst.description;
+    if (typeof d === "object" && d !== null) {
+      return d;
+    }
+    logWarn(
+      `${rel} nodeVersions[${verKey}]: constructor produced no .description object`,
+    );
+    return null;
   }
   if (typeof entry === "object") {
     const d = entry.description;
     if (typeof d === "object" && d !== null) {
       return d;
     }
+    logWarn(
+      `${rel} nodeVersions[${verKey}]: prebuilt node missing .description object`,
+    );
+    return null;
   }
+  logWarn(
+    `${rel} nodeVersions[${verKey}]: unsupported entry type ${typeof entry}`,
+  );
   return null;
 }
 
@@ -193,6 +214,14 @@ function main() {
   }
 
   const emitted = new Set();
+  const stats = {
+    filesSeen: files.length,
+    rowsEmitted: 0,
+    requireFailures: 0,
+    topCtorFailures: 0,
+    versionSlicesEmitted: 0,
+    nodeVersionsFallbackToBase: 0,
+  };
 
   for (const absPath of files) {
     delete require.cache[require.resolve(absPath)];
@@ -200,6 +229,7 @@ function main() {
     try {
       mod = require(absPath);
     } catch (e) {
+      stats.requireFailures += 1;
       console.error(`skip require ${relativePosix(repoRoot, absPath)}: ${e.message}`);
       continue;
     }
@@ -222,13 +252,22 @@ function main() {
     const rel = relativePosix(repoRoot, absPath);
 
     for (const Ctor of uniqCtors) {
-      const inst = tryInstantiate(Ctor);
-      if (!inst) {
+      let inst;
+      try {
+        inst = new Ctor();
+      } catch (e) {
+        stats.topCtorFailures += 1;
+        logWarn(
+          `skip ${rel}: new ${Ctor.name || "anonymous"}() failed: ${e.message}`,
+        );
         continue;
       }
       const desc =
         typeof inst.description === "object" ? inst.description : null;
       if (!desc || typeof desc !== "object") {
+        logWarn(
+          `skip ${rel}: instance from ${Ctor.name || "anonymous"} has no .description object`,
+        );
         continue;
       }
 
@@ -240,8 +279,9 @@ function main() {
         typeof versionsObj === "object" &&
         !Array.isArray(versionsObj)
       ) {
+        const verKeys = Object.keys(versionsObj);
         for (const [verKey, entry] of Object.entries(versionsObj)) {
-          const sd = descriptionFromVersionEntry(entry);
+          const sd = descriptionFromVersionEntryLogged(entry, { rel, verKey });
           if (!sd || typeof sd !== "object") {
             continue;
           }
@@ -251,12 +291,20 @@ function main() {
           }
           emitted.add(fingerprint);
           versionEmitted = true;
+          stats.versionSlicesEmitted += 1;
+          stats.rowsEmitted += 1;
           process.stdout.write(
             JSON.stringify({
               source: rel,
               description: sd,
               integration_type_version_key: verKey,
             }) + "\n",
+          );
+        }
+        if (!versionEmitted && verKeys.length > 0) {
+          stats.nodeVersionsFallbackToBase += 1;
+          logWarn(
+            `${rel}: all ${verKeys.length} nodeVersions entries failed; emitting base class description only (parameter schema may be empty)`,
           );
         }
       }
@@ -269,11 +317,16 @@ function main() {
         continue;
       }
       emitted.add(fingerprint);
+      stats.rowsEmitted += 1;
       process.stdout.write(
         JSON.stringify({ source: rel, description: desc }) + "\n",
       );
     }
   }
+
+  logWarn(
+    `summary: files=${stats.filesSeen} rows=${stats.rowsEmitted} require_failures=${stats.requireFailures} top_ctor_failures=${stats.topCtorFailures} version_slices=${stats.versionSlicesEmitted} nodeVersions_fallback_to_base=${stats.nodeVersionsFallbackToBase}`,
+  );
 }
 
 main();
