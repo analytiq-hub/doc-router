@@ -791,43 +791,31 @@ headers = {
 
 ## 8. Frontend
 
-### 8.1 Credentials settings page
+### 8.1 Credentials list and create UI
 
-**Route:** `/settings/organizations/[organizationId]/flows/credentials/`
+**Route:** `/orgs/[organizationId]/flows?tab=credentials`
 
-Credentials are a flows-specific configuration, so the page lives under a `flows/` segment in the org settings — alongside the existing `webhooks/` page which also relates to flows triggers.
+The existing flows page (`packages/typescript/frontend/src/app/orgs/[organizationId]/flows/page.tsx`) already uses a tab pattern — "Flows" (`?tab=flows`) and "Create Flow" (`?tab=flow-create`). Credentials become a third tab in the same page. No new page file is needed, and users can reach credentials directly from wherever they are already working with flows.
 
-**Files to create:**
+**Change to `page.tsx`:** add a "Credentials" tab button and render `<FlowCredentials>` in the matching tab panel, following the existing pattern.
 
-```
-packages/typescript/frontend/src/app/settings/organizations/[organizationId]/flows/credentials/
-├── page.tsx          ← list view (table of saved credentials)
-└── new/
-    └── page.tsx      ← create form (kind picker + dynamic field form)
-```
+**New component:** `packages/typescript/frontend/src/components/flows/FlowCredentials.tsx`
 
-**List page (`page.tsx`):**
+This component owns the full credentials management UI:
 
-- Fetch `GET /v0/orgs/{orgId}/flows/credential-kinds` to populate the "Add credential" kind picker.
-- Fetch `GET /v0/orgs/{orgId}/flows/credentials` to list saved instances.
-- Table columns: **Name**, **Kind** (display_name), **Created**, **Actions**.
-- Actions: **Test** (POST …/test, show ok/error snackbar), **Edit** (navigate to edit form or open inline), **Delete** (confirmation dialog, then DELETE).
-- "Add credential" button opens a kind-picker dialog.
-
-**Create form:**
-
-1. Step 1 — Kind picker: dropdown listing all kinds from `GET …/flows/credential-kinds` grouped by `auth_mode`. On select, show the kind's description and field list.
-2. Step 2 — Fill fields: render a dynamic form from the kind's `fields` array returned by the API:
-   - `is_secret: true` fields → MUI `TextField` with `type="password"` and show/hide toggle.
-   - `is_secret: false` fields → plain `TextField`.
-   - `description` on a field → `helperText`.
-   - Name field (free text) at the top, always present.
-3. Submit → `POST /v0/orgs/{orgId}/flows/credentials` → redirect back to list with success snackbar.
+- **List view** (default): fetches `GET /v0/orgs/{orgId}/flows/credentials` and displays a table with columns **Name**, **Kind**, **Created**, **Actions**. Actions per row: **Test** (calls POST …/test, shows an inline ok/error chip), **Edit** (expands a form inline or opens a dialog), **Delete** (confirmation dialog, then DELETE).
+- **"Add credential" button**: opens a two-step dialog:
+  1. Kind picker — dropdown from `GET /v0/orgs/{orgId}/flows/credential-kinds`, grouped by `auth_mode` (`api_key`, `oauth2_…`).
+  2. Field form — rendered dynamically from the kind's `fields` array:
+     - `is_secret: true` → `TextField` with `type="password"` and a show/hide toggle.
+     - `is_secret: false` → plain `TextField`.
+     - `description` → `helperText`.
+     - Name field at the top (free text, always present).
+  3. Submit → `POST /v0/orgs/{orgId}/flows/credentials` → dialog closes, list refreshes.
 
 **API client additions** (in `packages/typescript/frontend/src/utils/api.ts` or the SDK):
 
 ```typescript
-// List credential kinds (for the create form)
 // GET /v0/orgs/{orgId}/flows/credential-kinds
 async function listFlowCredentialKinds(orgId: string): Promise<CredentialKindSummary[]>
 
@@ -839,7 +827,7 @@ async function deleteFlowCredential(orgId: string, credId: string): Promise<void
 async function testFlowCredential(orgId: string, credId: string): Promise<TestCredentialResponse>
 ```
 
-**Navigation:** add a "Flows" section to the organization settings sidebar (if not already present) and put "Credentials" under it, alongside "Webhooks" (which also belongs to flows).
+**No navigation change needed** — the tab appears on the existing flows page that users are already on when building flows.
 
 ### 8.2 Flow editor: credential slot binding
 
@@ -855,7 +843,7 @@ The section appears only when the selected node type has one or more `credential
   - Fetch `GET /v0/orgs/{orgId}/flows/credentials` once and filter client-side by kind key.
   - Option labels: `credential.name` (kind display name shown as subtitle).
   - Placeholder: "Select credential…" for optional slots; "Required — select credential" for required ones.
-- "Manage credentials" link → opens `/settings/organizations/{orgId}/flows/credentials/` in a new tab.
+- "Manage credentials" link → navigates to `/orgs/{orgId}/flows?tab=credentials` (same page, different tab).
 
 **Saving bindings:** include the `credentials` map in the node's data when `PUT /v0/orgs/{orgId}/flows/{flowId}` is called (it is already included in the `nodes` array). No separate API call needed.
 
@@ -935,12 +923,12 @@ Work in this order. Each step is independently testable.
 14. Include `credentials` in `SaveFlowRequest.nodes` (already transparent — `nodes` is `list[dict]`).
 15. Add binding validation in the execution path (§6.2).
 
-**Phase 5 — Frontend credentials settings page**
+**Phase 5 — Frontend credentials tab**
 
-16. Create `/settings/organizations/[organizationId]/flows/credentials/page.tsx` — list + delete.
-17. Create the create form with kind picker and dynamic field form.
-18. Add navigation link in the org settings sidebar.
-19. Test end-to-end: create a Slack credential, list it, delete it.
+16. Add "Credentials" tab button to `packages/typescript/frontend/src/app/orgs/[organizationId]/flows/page.tsx`.
+17. Create `packages/typescript/frontend/src/components/flows/FlowCredentials.tsx` — list + delete.
+18. Add the create dialog with kind picker and dynamic field form to `FlowCredentials`.
+19. Test end-to-end: open `/orgs/{orgId}/flows?tab=credentials`, create a Slack credential, list it, delete it.
 
 **Phase 6 — Frontend flow editor binding UI**
 
