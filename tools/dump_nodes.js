@@ -8,6 +8,9 @@
 //   FLOW_DUMP_SUBDIRS='packages/my-nodes/dist/nodes' \
 //     node tools/dump_nodes.js --upstream-root ../upstream_nodes > tools/flow_node_dump.jsonl
 //   node tools/dump_nodes.js --upstream-root DIR --subdir REL/PATH [--subdir REL2]
+//
+// If Node prints DEP0040 (deprecated built-in `punycode`), that comes from upstream
+// bundles — use `node --disable-warning=DEP0040 …` (see makefile `flow-node-dump`).
 "use strict";
 
 const fs = require("fs");

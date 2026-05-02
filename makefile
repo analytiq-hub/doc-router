@@ -243,7 +243,7 @@ flow-node-dump:
 	mkdir -p tools
 	tmp=$$(mktemp); \
 	trap 'rm -f "$$tmp"' EXIT; \
-	FLOW_DUMP_SUBDIRS="$(FLOW_DUMP_SUBDIRS)" node tools/dump_nodes.js --upstream-root "$(UPSTREAM_NODES_ROOT)" > "$$tmp" && \
+	FLOW_DUMP_SUBDIRS="$(FLOW_DUMP_SUBDIRS)" node --disable-warning=DEP0040 tools/dump_nodes.js --upstream-root "$(UPSTREAM_NODES_ROOT)" > "$$tmp" && \
 	mv -f "$$tmp" tools/flow_node_dump.jsonl
 
 flow-node-port: setup-python
