@@ -344,3 +344,48 @@ def test_validate_parameters_errors(http_node: FlowsHttpRequestNode):
     assert http_node.validate_parameters({"method": "GET", "url": ""})
     errs = http_node.validate_parameters({"method": "FOO", "url": "http://x"})
     assert errs and "method" in errs[0].lower()
+
+
+@pytest.mark.asyncio
+async def test_connect_error_propagates(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("connection refused", request=request)
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+        with pytest.raises(httpx.ConnectError):
+            await http_node.execute(
+                minimal_ctx,
+                {"id": "n1", "parameters": {"method": "GET", "url": "https://unreachable.invalid/"}},
+                [[item]],
+            )
+
+
+@pytest.mark.asyncio
+async def test_timeout_error_propagates(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise httpx.TimeoutException("timed out", request=request)
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+        with pytest.raises(httpx.TimeoutException):
+            await http_node.execute(
+                minimal_ctx,
+                {
+                    "id": "n1",
+                    "parameters": {
+                        "method": "GET",
+                        "url": "https://slow.invalid/",
+                        "timeout_seconds": 1,
+                    },
+                },
+                [[item]],
+            )
