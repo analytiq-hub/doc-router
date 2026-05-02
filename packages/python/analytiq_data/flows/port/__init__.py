@@ -9,6 +9,7 @@ from .converter import (
     DEFAULT_GENERATED_ROOT,
     convert_jsonl_file,
     emit_node_package,
+    iter_flow_node_dump_rows,
     validate_packages,
 )
 
@@ -16,5 +17,6 @@ __all__ = [
     "DEFAULT_GENERATED_ROOT",
     "convert_jsonl_file",
     "emit_node_package",
+    "iter_flow_node_dump_rows",
     "validate_packages",
 ]

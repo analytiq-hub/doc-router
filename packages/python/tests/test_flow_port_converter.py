@@ -5,7 +5,17 @@ from pathlib import Path
 
 import pytest
 
-from analytiq_data.flows.port.converter import emit_node_package, manifest_key
+from analytiq_data.flows.port.converter import emit_node_package, iter_flow_node_dump_rows, manifest_key
+
+
+def test_iter_flow_node_dump_rows_legacy_one_object_per_line() -> None:
+    text = '{"x": 1}\n{"x": 2}\n'
+    assert list(iter_flow_node_dump_rows(text)) == [{"x": 1}, {"x": 2}]
+
+
+def test_iter_flow_node_dump_rows_pretty_printed_blocks() -> None:
+    text = '{\n  "x": 1\n}\n\n{\n  "x": 2\n}\n\n'
+    assert list(iter_flow_node_dump_rows(text)) == [{"x": 1}, {"x": 2}]
 
 
 def test_manifest_key_slug() -> None:

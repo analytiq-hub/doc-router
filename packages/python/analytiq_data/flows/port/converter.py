@@ -4,7 +4,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 from .http_spec import build_http_request_spec
 from .properties import iter_integration_parameter_tree
@@ -391,6 +391,30 @@ def emit_node_package(
     return pkg
 
 
+def iter_flow_node_dump_rows(text: str) -> Iterator[dict[str, Any]]:
+    """
+    Parse ``tools/flow_node_dump.jsonl`` content: one JSON object per line (legacy)
+    or pretty-printed objects separated by whitespace (indent-aware ``JSONDecoder.raw_decode``).
+    """
+
+    dec = json.JSONDecoder()
+    i = 0
+    n = len(text)
+    while i < n:
+        while i < n and text[i].isspace():
+            i += 1
+        if i >= n:
+            break
+        try:
+            obj, end = dec.raw_decode(text, i)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Invalid JSON in flow node dump at offset {i}: {e}") from e
+        if not isinstance(obj, dict):
+            raise ValueError("Flow node dump rows must be JSON objects at top level")
+        i = end
+        yield obj
+
+
 def convert_jsonl_file(
     jsonl_path: Path,
     out_root: Path,
@@ -400,16 +424,12 @@ def convert_jsonl_file(
 ) -> list[Path]:
     """Read dump JSONL and write packages under out_root."""
 
-    lines = jsonl_path.read_text(encoding="utf-8").splitlines()
+    body = jsonl_path.read_text(encoding="utf-8")
     written: list[Path] = []
     warnings: list[str] = []
     slug_tracker: dict[str, int] = {}
 
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        row = json.loads(line)
+    for row in iter_flow_node_dump_rows(body):
         desc = row.get("description") or {}
         if only_key_prefix:
             if not manifest_key(desc).startswith(only_key_prefix):

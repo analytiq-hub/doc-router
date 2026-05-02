@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Emit JSON Lines of integration node descriptors from compiled "*.node.js" modules.
+// Emit flow node dump files (pretty-printed JSON objects, one record per block) from
+// compiled "*.node.js" modules. Default output path is still `tools/flow_node_dump.jsonl`.
 //
 // Prerequisites: sibling repo built so dist "*.node.js" files exist under subdirs you pass or
 //   set in FLOW_DUMP_SUBDIRS (POSIX path list, ':'-separated on Unix, ';' on Windows).
@@ -25,7 +26,8 @@ function usage() {
 
   If no --subdir: uses FLOW_DUMP_SUBDIRS (':' or ';' separated relative paths).
 
-Writes JSON Lines: {"source":"<path>","description":{...}[, "integration_type_version_key": ...]}
+Writes one JSON object per record (2-space indent, blank line between records). Fields:
+  source, description, optional integration_type_version_key.
 `);
 }
 
@@ -197,6 +199,13 @@ function relativePosix(fromDir, absPath) {
   return rel.split(path.sep).join("/");
 }
 
+const JSON_INDENT = 2;
+
+/** Pretty-printed JSON for human-readable `flow_node_dump.jsonl`. */
+function writeRecord(obj) {
+  process.stdout.write(JSON.stringify(obj, null, JSON_INDENT) + "\n\n");
+}
+
 function main() {
   const { upstreamRoot, subdirs } = parseArgs(process.argv);
   const repoRoot = path.resolve(__dirname, "..");
@@ -296,13 +305,11 @@ function main() {
           versionEmitted = true;
           stats.versionSlicesEmitted += 1;
           stats.rowsEmitted += 1;
-          process.stdout.write(
-            JSON.stringify({
-              source: rel,
-              description: sd,
-              integration_type_version_key: verKey,
-            }) + "\n",
-          );
+          writeRecord({
+            source: rel,
+            description: sd,
+            integration_type_version_key: verKey,
+          });
         }
         if (!versionEmitted && verKeys.length > 0) {
           stats.nodeVersionsFallbackToBase += 1;
@@ -321,9 +328,7 @@ function main() {
       }
       emitted.add(fingerprint);
       stats.rowsEmitted += 1;
-      process.stdout.write(
-        JSON.stringify({ source: rel, description: desc }) + "\n",
-      );
+      writeRecord({ source: rel, description: desc });
     }
   }
 
