@@ -23,7 +23,10 @@ import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor from '@monaco-editor/react';
 import type { Edge } from 'reactflow';
 import type { FlowNode, FlowNodeType, FlowPinData, FlowPinItem, FlowPinNodeOutput } from '@docrouter/sdk';
+import type { DocRouterOrgApi } from '@/utils/api';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
+import { FlowHttpRequestParameterFields } from './flowHttpRequestFields';
+import { FlowNodeCredentialSlots } from './flowNodeCredentialSlots';
 import { buildNodeInputPreview } from './flowNodeIoPreview';
 import { FlowInputUpstreamList } from './FlowInputUpstreamList';
 import { IoViewer } from './IoViewer';
@@ -148,6 +151,8 @@ const FlowNodeConfigModal: React.FC<{
   /** Run this node with upstream reuse (editor test `runData` as seed). */
   onExecuteStep?: () => void | Promise<void>;
   executeStepBusy?: boolean;
+  /** When set, credential slot pickers load saved org credentials. */
+  flowOrgApi?: DocRouterOrgApi | null;
 }> = ({
   open,
   onClose,
@@ -165,6 +170,7 @@ const FlowNodeConfigModal: React.FC<{
   readOnly = false,
   onExecuteStep,
   executeStepBusy = false,
+  flowOrgApi = null,
 }) => {
   const [tab, setTab] = useState(0);
   const [nameHover, setNameHover] = useState(false);
@@ -314,7 +320,7 @@ const FlowNodeConfigModal: React.FC<{
       <div className="fixed inset-0 flex w-screen items-center justify-center py-2 px-[calc(22px+3pt)]">
         <DialogPanel
           transition
-          className="relative flex h-[min(90vh,900px)] w-[min(1200px,90vw)] max-w-[90vw] flex-col overflow-visible rounded-lg border border-[#e2e4e8] bg-white shadow-2xl transition data-[closed]:scale-95 data-[closed]:opacity-0"
+          className="relative flex h-[min(90vh,900px)] max-h-[90vh] w-[min(1200px,90vw)] max-w-[90vw] flex-col overflow-hidden rounded-lg border border-[#e2e4e8] bg-white shadow-2xl transition data-[closed]:scale-95 data-[closed]:opacity-0"
         >
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#eceff2] py-2.5 pl-4 pr-2">
             <div
@@ -387,11 +393,11 @@ const FlowNodeConfigModal: React.FC<{
             {typeLabel} — {node.name}
           </DialogTitle>
 
-          <div className="relative z-0 min-h-0 flex-1">
-            <PanelGroup direction="horizontal" className="relative z-0 h-full w-full">
+          <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+            <PanelGroup direction="horizontal" className="relative z-0 flex min-h-0 flex-1 overflow-hidden">
               {!isTrigger && (
                 <>
-                  <Panel defaultSize={25} minSize={18} className="min-w-[260px]">
+                  <Panel defaultSize={25} minSize={18} className="flex min-h-0 min-w-[260px] overflow-hidden">
                     <IoBlock title="Input">
                       {inputPreview.message && <div className="mb-2 text-sm text-[#6b7280]">{inputPreview.message}</div>}
                       {!inputPreview.message && inputPreview.slots.length > 0 && (
@@ -422,9 +428,9 @@ const FlowNodeConfigModal: React.FC<{
                 </>
               )}
 
-              <Panel defaultSize={isTrigger ? 67 : 42} minSize={28} className="min-w-[320px]">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-                  <TabGroup selectedIndex={tab} onChange={setTab} className="flex min-h-0 flex-1 flex-col">
+              <Panel defaultSize={isTrigger ? 67 : 42} minSize={28} className="flex min-h-0 min-w-[320px] overflow-hidden">
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+                  <TabGroup selectedIndex={tab} onChange={setTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div className="shrink-0 border-b border-[#eceff2] bg-white px-1">
                       <div className="flex items-stretch gap-2">
                         <TabList className="flex min-w-0 flex-1">
@@ -453,9 +459,27 @@ const FlowNodeConfigModal: React.FC<{
                         ) : null}
                       </div>
                     </div>
-                    <TabPanels className="min-h-0 flex-1 overflow-y-auto p-3">
+                    <TabPanels className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable]">
                       <TabPanel>
-                        <FlowNodeParameterFields readOnly={readOnly} node={node} nodeType={nodeType} onChange={onChange} />
+                        <div className="space-y-4">
+                          {node && nodeType?.key === 'flows.http_request' ? (
+                            <FlowHttpRequestParameterFields readOnly={readOnly} node={node} onChange={onChange} />
+                          ) : (
+                            node && (
+                              <FlowNodeParameterFields readOnly={readOnly} node={node} nodeType={nodeType} onChange={onChange} />
+                            )
+                          )}
+                          {node && (
+                            <FlowNodeCredentialSlots
+                              key={`${node.id}-${nodeType?.key ?? ''}`}
+                              flowOrgApi={flowOrgApi}
+                              node={node}
+                              nodeType={nodeType}
+                              onChange={onChange}
+                              readOnly={readOnly}
+                            />
+                          )}
+                        </div>
                       </TabPanel>
                       <TabPanel>
                         <FlowNodeSettingsFields readOnly={readOnly} node={node} onChange={onChange} />
@@ -467,7 +491,7 @@ const FlowNodeConfigModal: React.FC<{
 
               <PanelResizeHandle className="w-px bg-[#e8eaee]" />
 
-              <Panel defaultSize={33} minSize={18} className="min-w-[260px]">
+              <Panel defaultSize={33} minSize={18} className="flex min-h-0 min-w-[260px] overflow-hidden">
                 <IoBlock
                   title="Output"
                   right={

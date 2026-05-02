@@ -503,6 +503,7 @@ export default function FlowDetailPageClient({
                         onPinDataChange={onPinDataChange}
                         openConfigNodeId={editorOpenConfigNodeId}
                         onOpenConfigNodeIdChange={setEditorOpenConfigNodeId}
+                        flowOrgApi={api}
                       />
                     </div>
                   </Panel>

@@ -108,6 +108,8 @@ import {
   CreateFlowParams,
   SaveRevisionParams,
   RunFlowParams,
+  FlowCredentialKindSummary,
+  ListFlowCredentialsResponse,
 } from './types';
 
 /**
@@ -899,6 +901,27 @@ export class DocRouterOrg {
 
   async listFlowNodeTypes(): Promise<ListNodeTypesResponse> {
     return this.http.get<ListNodeTypesResponse>(`/v0/orgs/${this.organizationId}/flows/node-types`);
+  }
+
+  async listFlowCredentialKinds(): Promise<FlowCredentialKindSummary[]> {
+    return this.http.get<FlowCredentialKindSummary[]>(
+      `/v0/orgs/${this.organizationId}/credential-kinds`,
+    );
+  }
+
+  async listFlowCredentials(params?: {
+    credential_kind?: string;
+  }): Promise<ListFlowCredentialsResponse> {
+    return this.http.get<ListFlowCredentialsResponse>(
+      `/v0/orgs/${this.organizationId}/credentials`,
+      {
+        params: {
+          ...(params?.credential_kind != null && params.credential_kind !== ''
+            ? { credential_kind: params.credential_kind }
+            : {}),
+        },
+      },
+    );
   }
 
   async createFlow(params: CreateFlowParams): Promise<{ flow: FlowHeader }> {

@@ -40,7 +40,7 @@ keeping it Python-native and much simpler. The table below maps the key concepts
 **Key differences from n8n:**
 - No TypeScript / JavaScript anywhere. Python is the only in-product code path.
 - Flows are **DAGs only** — no looping, no cycles.
-- No credentials system yet; credentials are passed through `analytiq_client`.
+- **Flow credentials:** org-scoped saved credentials (`credentials` collection), credential kinds under `schemas/credential-kinds/`, REST under `/v0/orgs/{org}/credentials` and `/credential-kinds`; nodes may declare `credential_slots` and store `credentials: { "<slot>": "<credential_id>" }` on each node (see `docs/docrouter_credentials.md`).
 - No real-time push (WebSocket/SSE) yet — clients poll the execution document.
 - Inbound **flow** webhooks: `POST /v0/webhooks/{webhook_id}` exists and enqueues a run when a `flow_webhook_routes` document is present. There is still no `flows.trigger.webhook` **node type** in the registry, and **activate/deactivate** do not create or delete `flow_webhook_routes` rows in the current code — routes must be inserted out-of-band (or a future API will do it). Schedule triggers and sub-flows / Wait nodes are not implemented.
 
@@ -190,9 +190,12 @@ execution. Items are coerced to `FlowItem` instances at runtime.
   "max_tries": 1,
   "wait_between_tries_ms": 1000,
   "notes": null,
-  "webhook_id": null
+  "webhook_id": null,
+  "credentials": {}
 }
 ```
+
+Optional **`credentials`** maps a node type’s **credential slot** name to a saved org credential document id (see `docs/docrouter_credentials.md`). Omit the field or use `{}` when no slots are bound.
 
 ### Connection map
 
@@ -251,7 +254,7 @@ Registered in `register_builtin.py` (five node types; **only one trigger: `flows
 | Key | `is_trigger` | `is_merge` | Inputs | Outputs | Description |
 |-----|:-----------:|:----------:|:------:|:-------:|-------------|
 | `flows.trigger.manual` | ✓ | ✗ | 0 | 1 | Emits the run seed item (used with manual and revision runs) |
-| `flows.webhook` | ✗ | ✗ | 1 | 1 | Outbound: POSTs each item’s JSON to a URL |
+| `flows.http_request` | ✗ | ✗ | 1 | 1 | Outbound HTTP (method, URL, body modes, optional header/query auth credentials) |
 | `flows.branch` | ✗ | ✗ | 1 | 2 | Routes items to `true`/`false` slot |
 | `flows.merge` | ✗ | ✓ | 2+ | 1 | Waits for all inputs, concatenates |
 | `flows.code` | ✗ | ✗ | 1 | 1 | Runs a Python snippet in a subprocess |
@@ -393,9 +396,11 @@ analytiq_data/flows/
   execution.py          NodeRunData helpers
   register_builtin.py   register_builtin_nodes() — registers five built-ins
   code_runner.py        run_python_code() — subprocess executor for flows.code
+  credential_kind_registry.py  load credential kind JSON from schemas/credential-kinds/
+  credentials.py        fetch_credential_fields — decrypt org credential by id
   nodes/
     trigger_manual.py   flows.trigger.manual
-    webhook.py          flows.webhook  (outbound HTTP)
+    http_request.py     flows.http_request  (outbound HTTP)
     branch.py           flows.branch
     merge.py            flows.merge
     code.py             flows.code
@@ -421,6 +426,7 @@ app/routes/flows.py     FastAPI routes (see `docs/flows.md`):
                           CRUD for flows + revisions, manual run, stop,
                           execution history, node-type list, and
                           `POST /v0/webhooks/{webhook_id}` (inbound flow trigger)
+app/routes/flows_credentials.py   credential kinds list + org credential CRUD (`/credential-kinds`, `/credentials` under the org)
 
 worker/worker.py        worker_flow_run — consumes flow_run queue messages
 
@@ -481,7 +487,7 @@ not yet create this row when a flow is activated).
 
 ## 8. Validation rules
 
-`validate_revision` enforces all 11 rules before execution starts (and also at
+`validate_revision` enforces all 12 rules before execution starts (and also at
 save / activate time):
 
 1. `nodes[].id` unique within the revision.
@@ -495,6 +501,7 @@ save / activate time):
 9. Every non-trigger node is reachable from the trigger node.
 10. Every node's `parameters` validate against its type's `parameter_schema`.
 11. `pin_data` keys refer to node ids that exist in `nodes`.
+12. If present, each node's `credentials` map uses only slot names declared on that node type's `credential_slots`, and values are strings (credential ids) or empty.
 
 Unknown node types raise `FlowValidationError` (not `KeyError`).
 
@@ -525,7 +532,7 @@ Engine tests run `run_flow` with `analytiq_client=None`, which causes
 | Validation: all 11 rules, `FlowValidationError` | ✓ Complete |
 | `FlowItem` / `BinaryRef` dataclasses + coercion | ✓ Complete |
 | `NodeType` protocol + in-memory registry | ✓ Complete |
-| Built-in nodes (five): `flows.trigger.manual`, `flows.webhook` (outbound), `flows.branch`, `flows.merge`, `flows.code` | ✓ Complete |
+| Built-in nodes (five): `flows.trigger.manual`, `flows.http_request` (outbound HTTP), `flows.branch`, `flows.merge`, `flows.code` | ✓ Complete |
 | Per-item `=` parameters and per-item `execute` for **non-merge** nodes (`engine._execute_loop`) | ✓ Complete |
 | `flows.code` subprocess runner (restricted builtins, JSON contract) | ✓ Complete |
 | Expression engine (`$json`, `$node`, AST safety) | ✓ Complete |

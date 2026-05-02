@@ -36,6 +36,7 @@ import 'reactflow/dist/style.css';
 import './flows-canvas.css';
 
 import type { FlowExecution, FlowNode, FlowNodeType, FlowPinData } from '@docrouter/sdk';
+import type { DocRouterOrgApi } from '@/utils/api';
 import FlowNodePalette from './FlowNodePalette';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import { FLOW_RF_LABELED_EDGE_TYPE } from './flowRfCanvasTypes';
@@ -214,6 +215,8 @@ const FlowEditor: React.FC<{
   onOpenConfigNodeIdChange?: (next: string | null) => void;
   /** Execute step (partial run): parent supplies API call with saved revision id. */
   onExecuteStep?: (args: { targetNodeId: string; seedRunData: Record<string, unknown> }) => void | Promise<void>;
+  /** Org API for flow credential pickers in the node modal. */
+  flowOrgApi?: DocRouterOrgApi | null;
 }> = ({
   nodeTypes,
   nodes,
@@ -227,6 +230,7 @@ const FlowEditor: React.FC<{
   openConfigNodeId,
   onOpenConfigNodeIdChange,
   onExecuteStep,
+  flowOrgApi = null,
 }) => {
   const { rfCanvasNodeTypes, rfCanvasEdgeTypes } = useStableFlowRfCanvasRegistration();
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
@@ -740,6 +744,7 @@ const FlowEditor: React.FC<{
         }}
         onExecuteStep={onExecuteStep ? onExecuteStepClick : undefined}
         executeStepBusy={executeStepBusy}
+        flowOrgApi={flowOrgApi}
       />
 
       {nodePaletteOpen && (

@@ -538,6 +538,7 @@ const FlowExecutionsView: React.FC<{
         open={configModalId != null && configRf.node != null}
         onClose={() => setConfigModalId(null)}
         readOnly
+        flowOrgApi={orgApi}
         node={configRf.node}
         nodeType={configRf.nodeType}
         allNodes={viewNodes.map((n) => (n as Node<FlowRfNodeData>).data.flowNode)}

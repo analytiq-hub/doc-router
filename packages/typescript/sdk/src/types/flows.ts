@@ -1,5 +1,13 @@
 // Flow engine types (v1)
 
+/** Declares an optional credential binding slot on a node type (`GET .../flows/node-types`). */
+export interface FlowCredentialSlot {
+  slot: string;
+  label: string;
+  required?: boolean;
+  docrouter_binding?: string;
+}
+
 export interface FlowNodeType {
   key: string;
   label: string;
@@ -13,6 +21,7 @@ export interface FlowNodeType {
   outputs: number;
   output_labels: string[];
   parameter_schema: Record<string, unknown>;
+  credential_slots?: FlowCredentialSlot[];
 }
 
 export interface ListNodeTypesResponse {
@@ -51,6 +60,8 @@ export interface FlowNode {
   on_error?: 'stop' | 'continue';
   notes?: string | null;
   webhook_id?: string | null;
+  /** Credential slot name → saved org credential id (see `FlowCredentialSlot`). */
+  credentials?: Record<string, string>;
 }
 
 export interface FlowNodeConnection {
@@ -145,5 +156,31 @@ export interface RunFlowParams {
   run_data?: Record<string, unknown>;
   /** Node ids to force re-run even if present in `run_data`. */
   dirty_node_ids?: string[];
+}
+
+/** One credential kind from `GET .../credential-kinds`. */
+export interface FlowCredentialKindSummary {
+  key: string;
+  display_name: string;
+  auth_mode: string;
+  fields: Array<Record<string, unknown>>;
+}
+
+/** Saved org credential metadata (no secrets) from `GET .../credentials`. */
+export interface FlowCredentialHeader {
+  credential_id: string;
+  organization_id: string;
+  kind_key: string;
+  name: string;
+  public_fields: Record<string, unknown>;
+  created_at: string;
+  created_by: string;
+  updated_at: string;
+  updated_by: string;
+}
+
+export interface ListFlowCredentialsResponse {
+  items: FlowCredentialHeader[];
+  total: number;
 }
 
