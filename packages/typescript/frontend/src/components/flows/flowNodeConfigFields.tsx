@@ -144,14 +144,14 @@ export const FlowNodeParameterFields: React.FC<{
 
   const renderParamField = (key: string, subschema: { type?: string; enum?: unknown[] } & Record<string, unknown>) => {
     const t = subschema?.type;
-    const uiHint = typeof subschema['x-docrouter-ui'] === 'string' ? (subschema['x-docrouter-ui'] as string) : '';
+    const uiHint = typeof subschema['x-display-ui'] === 'string' ? (subschema['x-display-ui'] as string) : '';
     const params = mergedParams;
     const v = params[key];
     const isCode =
       key === 'python_code' || key === 'js_code' || key === 'ts_code' || uiHint === 'code';
     const hasOneOf = Array.isArray((subschema as { oneOf?: unknown }).oneOf);
     const rawPlaceholder =
-      typeof subschema['x-docrouter-placeholder'] === 'string' ? (subschema['x-docrouter-placeholder'] as string) : '';
+      typeof subschema['x-display-placeholder'] === 'string' ? (subschema['x-display-placeholder'] as string) : '';
 
     if (uiHint === 'nameValueList') {
       if (readOnly) {
@@ -408,7 +408,7 @@ export const FlowNodeParameterFields: React.FC<{
   for (const key of orderedKeys) {
     if (!isPropertyVisible(key, schemaProps, mergedParams)) continue;
     const sub = schemaProps[key];
-    const groupRaw = sub['x-docrouter-group'];
+    const groupRaw = sub['x-display-group'];
     const group = typeof groupRaw === 'string' ? groupRaw.trim() || undefined : undefined;
 
     if (group) {

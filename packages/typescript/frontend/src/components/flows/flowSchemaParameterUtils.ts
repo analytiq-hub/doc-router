@@ -1,5 +1,5 @@
 /**
- * Pure helpers for JSON Schema–driven flow node parameters (`x-docrouter-*` extensions).
+ * Pure helpers for JSON Schema–driven flow node parameters (`x-display-*` UI extensions).
  * @see docs/flow_parameter_schema_ui_plan.md
  */
 
@@ -51,7 +51,7 @@ export function isPropertyVisible(
 ): boolean {
   const sub = schemaProps[key];
   if (!sub) return false;
-  return evalShowWhen(sub['x-docrouter-showWhen'], params);
+  return evalShowWhen(sub['x-display-showWhen'], params);
 }
 
 /**
@@ -64,7 +64,7 @@ export function getOrderedKeys(parameterSchema: unknown): string[] {
 }
 
 /**
- * Keys whose `x-docrouter-showWhen` passes for the given parameter snapshot.
+ * Keys whose `x-display-showWhen` passes for the given parameter snapshot.
  * Uses the same visibility rules as the form renderer.
  */
 export function getVisiblePropertyKeys(parameterSchema: unknown, params: Record<string, unknown>): string[] {

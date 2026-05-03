@@ -3,6 +3,26 @@ from __future__ import annotations
 from typing import Any
 
 
+def _apply_inode_display_extensions(p: dict[str, Any], sch: dict[str, Any]) -> dict[str, Any]:
+    """Map n8n `INodeProperty` UI hints onto JSON Schema vendor keys consumed by the flows UI."""
+    out = dict(sch)
+    ph = p.get("placeholder")
+    if isinstance(ph, str) and ph.strip():
+        out["x-display-placeholder"] = ph.strip()
+    t = p.get("type")
+    if t == "code":
+        out["x-display-ui"] = "code"
+    do = p.get("displayOptions")
+    if isinstance(do, dict):
+        show = do.get("show")
+        if isinstance(show, dict) and len(show) == 1:
+            field, values = next(iter(show.items()))
+            if isinstance(field, str) and isinstance(values, list) and len(values) >= 1:
+                out["x-display-showWhen"] = {"field": field, "in": list(values)}
+        # `hide` / multi-field `show` left unmapped until the UI supports richer predicates.
+    return out
+
+
 def build_top_level_parameter_schema(description: dict[str, Any]) -> dict[str, Any]:
     """Map top-level `description.properties` to a single JSON Schema object."""
 
@@ -84,7 +104,7 @@ def inode_property_to_schema(p: dict[str, Any]) -> dict[str, Any]:
 
     if p.get("default") is not None:
         sch = {**sch, "default": p["default"]}
-    return sch
+    return _apply_inode_display_extensions(p, sch)
 
 
 def _options_schema(p: dict[str, Any]) -> dict[str, Any]:

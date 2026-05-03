@@ -27,7 +27,7 @@ Non-goals for v1 of this plan: replacing Monaco for code nodes with a different 
 
 ### 2.2 Frontend
 
-- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks ordered properties, evaluates `x-docrouter-showWhen`, merges defaults, clears hidden fields via schema defaults, and picks widgets (`x-docrouter-ui` includes `nameValueList`, `textarea`; booleans → Headless `Switch`; enums with `x-enumNames`; code / object / array → Monaco unless overridden).
+- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks ordered properties, evaluates `x-display-showWhen`, merges defaults, clears hidden fields via schema defaults, and picks widgets (`x-display-ui` includes `nameValueList`, `textarea`; booleans → Headless `Switch`; enums with `x-enumNames`; code / object / array → Monaco unless overridden).
 - **`flows.http_request`** uses the same path; HTTP UX is driven by extensions on `FlowsHttpRequestNode.parameter_schema` in Python.
 
 ### 2.3 Gap (why HTTP is special-cased today)
@@ -39,7 +39,7 @@ The generic renderer does **not** yet support:
 | **Array of fixed-shape objects** | `query_params`, `headers`, `body_params` as `{ name, value }[]` with add/remove rows and drag-drop into value cells |
 | **Conditional visibility** | Show `body_json` only when `body_mode === 'json'`, etc. |
 | **`x-enumNames` display labels** | Enum `<option>` text rendered as raw value strings instead of human labels |
-| **Stable ordering** | Use **`properties` declaration order** in Python/JSON; optional **`x-docrouter-group`** for section labels |
+| **Stable ordering** | Use **`properties` declaration order** in Python/JSON; optional **`x-display-group`** for section labels |
 
 ---
 
@@ -50,7 +50,7 @@ The generic renderer does **not** yet support:
 - Always render parameters from `nodeType.parameter_schema` + current `node.parameters`.
 - **Widget selection** uses a small deterministic pipeline:
 
-  1. If property schema has **`x-docrouter-ui`** (see §4), use the registered widget for that hint.
+  1. If property schema has **`x-display-ui`** (see §4), use the registered widget for that hint.
   2. Else infer from JSON Schema: `type`, `enum`, `oneOf`, `format`, array `items` shape.
   3. Fallback: string input (with existing drag-drop for expressions).
 
@@ -59,8 +59,8 @@ The generic renderer does **not** yet support:
 - Central map: `(hint: string) => React component` or `(predicate: (key, subschema) => boolean) => component`.
 - Built-in widgets:
   - `boolean`, `string`, `number`/`integer`, `enum` (with `x-enumNames` for display labels — **this is a bug fix**: the current renderer ignores `x-enumNames` and renders raw enum values as option labels)
-  - **`nameValueList`**: pair editor with add/remove rows and drag-drop support in value cells (see §6 Phase A). This widget is **only activated by explicit `x-docrouter-ui: "nameValueList"`** — it is not inferred from item shape, to avoid silently applying pair-list UX to future array schemas that happen to have `name` and `value` fields.
-  - **`code`** / **`json`** (existing Monaco branches, keyed off property name or `x-docrouter-ui`)
+  - **`nameValueList`**: pair editor with add/remove rows and drag-drop support in value cells (see §6 Phase A). This widget is **only activated by explicit `x-display-ui: "nameValueList"`** — it is not inferred from item shape, to avoid silently applying pair-list UX to future array schemas that happen to have `name` and `value` fields.
+  - **`code`** / **`json`** (existing Monaco branches, keyed off property name or `x-display-ui`)
   - **`conditional`** wrapper: shows child fields when a sibling matches a predicate (see §4)
 
 - **Credential slots** stay separate (`FlowNodeCredentialSlots`)—they are not part of `parameter_schema` today; no change required for this plan.
@@ -76,18 +76,18 @@ The generic renderer does **not** yet support:
 
 All extensions are **optional**; schemas without them keep current inferred behavior.
 
-Namespace: **`x-docrouter-*`** on property schemas (not on the root object — root carries only `type`, `properties`, `required`, etc.).
+Namespace: **`x-display-*`** on property schemas (not on the root object — root carries only `type`, `properties`, `required`, etc.).
 
-**Field order:** The UI walks **`properties` in declaration order** (Python 3.7+ dict insertion order; JSON object key order round-trips the same). There is **no** `x-docrouter-order` list — a parallel array would duplicate that order and drift out of sync.
+**Field order:** The UI walks **`properties` in declaration order** (Python 3.7+ dict insertion order; JSON object key order round-trips the same). There is **no** second “order” list — a parallel array would duplicate that order and drift out of sync.
 
 | Keyword | Level | Purpose |
 |---------|--------|---------|
-| `x-docrouter-ui` | property | Widget id: e.g. `"nameValueList"`, `"monospace"`, `"textarea"`. Required for pair-list arrays (not inferred). |
-| `x-docrouter-group` | property | Short string label rendered as a subtle non-collapsible section divider above the field. Adjacent fields sharing the same group string are visually grouped. |
-| `x-docrouter-showWhen` | property | Object like `{ "field": "body_mode", "in": ["json"] }` or `{ "field": "body_mode", "equals": "raw" }` controlling visibility. When the condition becomes false the field value is cleared to its schema default (see §3.3). |
-| `x-docrouter-placeholder` | property | Optional short placeholder on string inputs. |
+| `x-display-ui` | property | Widget id: e.g. `"nameValueList"`, `"monospace"`, `"textarea"`. Required for pair-list arrays (not inferred). |
+| `x-display-group` | property | Short string label rendered as a subtle non-collapsible section divider above the field. Adjacent fields sharing the same group string are visually grouped. |
+| `x-display-showWhen` | property | Object like `{ "field": "body_mode", "in": ["json"] }` or `{ "field": "body_mode", "equals": "raw" }` controlling visibility. When the condition becomes false the field value is cleared to its schema default (see §3.3). |
+| `x-display-placeholder` | property | Optional short placeholder on string inputs. |
 
-**Conditional fields:** Implement `x-docrouter-showWhen` in the shared renderer only (no need to encode visibility in JSON Schema `if`/`then`/`else` for v1 unless we want one schema for both validation and UI).
+**Conditional fields:** Implement `x-display-showWhen` in the shared renderer only (no need to encode visibility in JSON Schema `if`/`then`/`else` for v1 unless we want one schema for both validation and UI).
 
 **`x-enumNames`:** Already written by `build_top_level_parameter_schema`. The generic renderer must be fixed to read this and render it as `<option>` labels (Phase B).
 
@@ -95,9 +95,9 @@ Namespace: **`x-docrouter-*`** on property schemas (not on the root object — r
 
 ## 5. Backend work (minimal)
 
-1. **Annotate** `flows.http_request` with per-field `x-docrouter-ui`, `x-docrouter-showWhen`, and `x-docrouter-group` where the UI needs hints beyond inference.
+1. **Annotate** `flows.http_request` with per-field `x-display-ui`, `x-display-showWhen`, and `x-display-group` where the UI needs hints beyond inference.
 2. **Confirm** `Draft7Validator` ignores unknown `x-*` keywords (it does for standard usage).
-3. **API:** Ensure `GET …/node-types` returns the enriched schema as-is (no stripping of `x-docrouter-*`).
+3. **API:** Ensure `GET …/node-types` returns the enriched schema as-is (no stripping of `x-display-*`).
 4. **Tests:** Add a unit test that loads the HTTP node type and asserts schema includes the expected extension keys.
 
 No change to execution logic if parameter shapes stay identical.
@@ -114,14 +114,14 @@ No change to execution logic if parameter shapes stay identical.
 ### Phase B — Extend `FlowNodeParameterFields`
 
 - Fix **`x-enumNames`** rendering: read the keyword and use its strings as `<option>` labels.
-- Support **`x-docrouter-showWhen`** evaluation against current `parameters`; clear hidden field values to schema defaults on condition change.
-- Support **`x-docrouter-group`** section dividers.
-- Support **`nameValueList`** widget via explicit `x-docrouter-ui` hint.
+- Support **`x-display-showWhen`** evaluation against current `parameters`; clear hidden field values to schema defaults on condition change.
+- Support **`x-display-group`** section dividers.
+- Support **`nameValueList`** widget via explicit `x-display-ui` hint.
 - **Unit tests** (TypeScript): `getVisibleFields(schema, params) → string[]` and `clearHiddenDefaults(schema, params, visibleKeys) → params` must be covered before Phase B is considered done.
 
 ### Phase C — Remove HTTP exception
 
-- Annotate `flows.http_request` backend schema with `x-docrouter-ui`, `x-docrouter-showWhen`, and `x-docrouter-group`.
+- Annotate `flows.http_request` backend schema with `x-display-ui`, `x-display-showWhen`, and `x-display-group`.
 - Delete the branch in `FlowNodeConfigModal` that selects `FlowHttpRequestParameterFields`; always use `FlowNodeParameterFields`.
 - Remove or shrink `flowHttpRequestFields.tsx` (delete file if fully inlined into generic components).
 - **Manual QA checklist** before merging Phase C:
@@ -151,7 +151,7 @@ No change to execution logic if parameter shapes stay identical.
 | Unit (TS) | `getVisibleFields(schema, params)`, `clearHiddenDefaults(schema, params, visibleKeys)` | Required before Phase B ships |
 | Unit (TS) | `x-enumNames` option label rendering | Required before Phase B ships |
 | Component | Pair list add/remove, drag-drop into value cell, `showWhen` toggles body fields, hidden field cleared on mode change | Phase B |
-| Python | Existing engine validation tests; schema snapshot test asserting `x-docrouter-*` keys present on HTTP node | Phase C |
+| Python | Existing engine validation tests; schema snapshot test asserting `x-display-*` keys present on HTTP node | Phase C |
 | Manual | Phase C QA checklist (§6 Phase C) | Phase C |
 
 ---
@@ -178,7 +178,7 @@ No change to execution logic if parameter shapes stay identical.
 
 ## 10. Open decisions
 
-- **Exact naming** of `x-docrouter-*` keys (freeze before widespread use in stored flows—note: extensions live on **node type** schema, not in saved flow JSON).
-- Whether to adopt JSON Schema **`if`/`then`** for visibility instead of custom `x-docrouter-showWhen` (more standard, harder for designers to read).
+- **Exact naming** of `x-display-*` keys (freeze before widespread use in stored flows—note: extensions live on **node type** schema, not in saved flow JSON).
+- Whether to adopt JSON Schema **`if`/`then`** for visibility instead of custom `x-display-showWhen` (more standard, harder for designers to read).
 
 Once these are decided, implement Phase A–C in order.

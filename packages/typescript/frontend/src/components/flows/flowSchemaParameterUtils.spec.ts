@@ -23,7 +23,7 @@ const httpLikeSchema = {
     body_json: {
       type: 'string',
       default: '',
-      'x-docrouter-showWhen': { field: 'body_mode', in: ['json'] },
+      'x-display-showWhen': { field: 'body_mode', in: ['json'] },
     },
   },
 };

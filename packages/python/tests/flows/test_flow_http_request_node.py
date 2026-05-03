@@ -20,13 +20,13 @@ def http_node() -> FlowsHttpRequestNode:
     return FlowsHttpRequestNode()
 
 
-def test_http_request_parameter_schema_docrouter_extensions(http_node: FlowsHttpRequestNode):
+def test_http_request_parameter_schema_display_extensions(http_node: FlowsHttpRequestNode):
     """UI hints are embedded for schema-driven parameter forms (see docs/flow_parameter_schema_ui_plan.md)."""
     schema = http_node.parameter_schema
     props = schema["properties"]
-    assert props["query_params"].get("x-docrouter-ui") == "nameValueList"
-    assert props["body_json"].get("x-docrouter-showWhen") == {"field": "body_mode", "in": ["json"]}
-    assert props["body_raw"].get("x-docrouter-showWhen") == {"field": "body_mode", "equals": "raw"}
+    assert props["query_params"].get("x-display-ui") == "nameValueList"
+    assert props["body_json"].get("x-display-showWhen") == {"field": "body_mode", "in": ["json"]}
+    assert props["body_raw"].get("x-display-showWhen") == {"field": "body_mode", "equals": "raw"}
     assert list(props.keys()) == [
         "method",
         "url",

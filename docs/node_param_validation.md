@@ -100,5 +100,5 @@ These are all already expressed in `FlowsHttpRequestNode.parameter_schema` and e
 ## What this does not cover
 
 - **Expression strings**: a field value of `=$json['url']` will fail `type: string` validation if AJV is strict about format, but expressions are valid at runtime. The validator should skip fields whose value starts with `=` or wrap expression-bearing params before validating.
-- **Cross-field constraints**: AJV handles JSON Schema `if`/`then`/`else` but DocRouter uses `x-docrouter-showWhen` for conditional visibility instead. Hidden fields are cleared to their defaults by `applyParameterPatch`, so they will not produce spurious errors as long as clearing runs before validation.
+- **Cross-field constraints**: AJV handles JSON Schema `if`/`then`/`else` but DocRouter uses `x-display-showWhen` for conditional visibility instead. Hidden fields are cleared to their defaults by `applyParameterPatch`, so they will not produce spurious errors as long as clearing runs before validation.
 - **Async validation** (e.g. checking that a URL is reachable): out of scope; handled at execution time.
