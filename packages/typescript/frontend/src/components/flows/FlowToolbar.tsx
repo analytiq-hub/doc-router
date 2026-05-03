@@ -53,8 +53,6 @@ const FlowToolbar: React.FC<{
   isDirty: boolean;
   isSaving: boolean;
   activationPending?: boolean;
-  /** When true, Save stays disabled even if the flow is dirty (e.g. invalid node parameters in the open modal). */
-  parametersInvalid?: boolean;
   onSave: () => void;
   onActivate: () => void;
   onDeactivate: () => void;
@@ -67,7 +65,6 @@ const FlowToolbar: React.FC<{
   isDirty,
   isSaving,
   activationPending = false,
-  parametersInvalid = false,
   onSave,
   onActivate,
   onDeactivate,
@@ -125,8 +122,7 @@ const FlowToolbar: React.FC<{
           type="button"
           className={flowToolbarBtnClass}
           onClick={onSave}
-          disabled={!isDirty || isSaving || parametersInvalid}
-          title={parametersInvalid ? 'Fix parameter validation errors in the node panel' : undefined}
+          disabled={!isDirty || isSaving}
         >
           {isSaving ? 'Saving…' : 'Save'}
         </button>

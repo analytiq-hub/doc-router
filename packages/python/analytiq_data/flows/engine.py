@@ -169,24 +169,14 @@ def validate_revision(
     # Acyclic.
     _toposort(nodes, connections or {})
 
-    # Parameter validation.
+    # Parameter schema validation is deferred to execution time (after expression
+    # resolution), so that expression-valued fields are not rejected by Draft7Validator.
+    # Only node-type-level structural checks run here.
     for n in nodes:
         try:
             nt = ad.flows.get(n["type"])
         except KeyError:
             raise FlowValidationError(f"Unknown node type: {n['type']}") from None
-        params = n.get("parameters") or {}
-        try:
-            Draft7Validator(nt.parameter_schema).validate(params)
-        except Exception as e:
-            raise FlowValidationError(f"Invalid parameters for node {n['id']} ({nt.key}): {e}") from e
-        extra = []
-        try:
-            extra = nt.validate_parameters(params) or []
-        except Exception as e:
-            raise FlowValidationError(f"validate_parameters failed for node {n['id']} ({nt.key}): {e}") from e
-        if extra:
-            raise FlowValidationError(f"Invalid parameters for node {n['id']} ({nt.key}): {extra}")
 
         creds = n.get("credentials")
         if creds is not None:
@@ -214,6 +204,22 @@ def validate_revision(
         for node_id in pin_data.keys():
             if node_id not in nodes_by_id:
                 raise FlowValidationError(f"pin_data references unknown node id: {node_id}")
+
+
+def _validate_resolved_params(node_id: str, node_type: Any) -> None:
+    """
+    Validate resolved (expression-free) parameters against the node's JSON Schema.
+    Called after `resolve_parameters()` so expressions have already been substituted
+    with their runtime values.
+    """
+    resolved = node_type.get("parameters") or {}
+    nt = ad.flows.get(node_type["type"])
+    try:
+        Draft7Validator(nt.parameter_schema).validate(resolved)
+    except Exception as e:
+        raise RuntimeError(
+            f"Parameter validation failed for node {node_id} ({nt.key}): {e}"
+        ) from e
 
 
 def _empty_outputs(outputs: int) -> list[list["ad.flows.FlowItem"]]:
@@ -571,6 +577,7 @@ async def _execute_loop(
                             execution_refs=_execution_refs,
                         ),
                     }
+                    _validate_resolved_params(node["id"], resolved_node)
                     context.credentials.clear()
                     out_lists = await node_type.execute(context, resolved_node, [])
                     if len(out_lists) != outputs_count:
@@ -594,6 +601,7 @@ async def _execute_loop(
                             execution_refs=_execution_refs,
                         ),
                     }
+                    _validate_resolved_params(node["id"], resolved_node)
                     context.credentials.clear()
                     out_lists = await node_type.execute(context, resolved_node, wi.inputs)
                     if len(out_lists) != outputs_count:
@@ -617,6 +625,8 @@ async def _execute_loop(
                                     execution_refs=_execution_refs,
                                 ),
                             }
+                            if slot_idx == 0 and item_idx == 0:
+                                _validate_resolved_params(node["id"], resolved_node)
                             per_inputs = [[] for _ in range(len(wi.inputs))]
                             per_inputs[slot_idx] = [it]
                             context.credentials.clear()

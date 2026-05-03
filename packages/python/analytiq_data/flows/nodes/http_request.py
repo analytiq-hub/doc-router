@@ -79,7 +79,7 @@ class FlowsHttpRequestNode:
                     "required": ["name", "value"],
                     "properties": {
                         "name": {"type": "string"},
-                        "value": {"type": "string"},
+                        "value": {},
                     },
                     "additionalProperties": False,
                 },
@@ -94,7 +94,7 @@ class FlowsHttpRequestNode:
                     "required": ["name", "value"],
                     "properties": {
                         "name": {"type": "string"},
-                        "value": {"type": "string"},
+                        "value": {},
                     },
                     "additionalProperties": False,
                 },
@@ -122,7 +122,7 @@ class FlowsHttpRequestNode:
                     "required": ["name", "value"],
                     "properties": {
                         "name": {"type": "string"},
-                        "value": {"type": "string"},
+                        "value": {},
                     },
                     "additionalProperties": False,
                 },

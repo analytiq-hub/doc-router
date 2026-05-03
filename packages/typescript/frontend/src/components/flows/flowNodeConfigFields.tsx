@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Switch } from '@headlessui/react';
 import Editor from '@monaco-editor/react';
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
@@ -19,7 +19,9 @@ import {
   isPropertyVisible,
   mergeParameterDefaults,
 } from './flowSchemaParameterUtils';
-import { compileParameterValidator, isExpressionValue, validateFlowParameters } from './flowParameterValidation';
+function isExpressionValue(value: unknown): boolean {
+  return typeof value === 'string' && value.startsWith('=');
+}
 
 function safeJsonStringify(value: unknown, fallback: string): string {
   try {
@@ -41,10 +43,6 @@ function parseDropPayload(e: React.DragEvent): FlowValueDragPayload | null {
   }
 }
 
-function ParamFieldError({ message }: { message?: string }) {
-  if (!message) return null;
-  return <p className="mt-1 text-xs text-red-600">{message}</p>;
-}
 
 export const FlowNodeSettingsFields: React.FC<{
   node: FlowNode;
@@ -115,51 +113,12 @@ export const FlowNodeParameterFields: React.FC<{
   nodeType: FlowNodeType | null;
   onChange: (patch: Partial<FlowNode>) => void;
   readOnly?: boolean;
-  onParametersValidityChange?: (valid: boolean) => void;
-}> = ({ node, nodeType, onChange, readOnly = false, onParametersValidityChange }) => {
+}> = ({ node, nodeType, onChange, readOnly = false }) => {
   const rootSchema = nodeType?.parameter_schema;
   const schemaProps = useMemo(() => getSchemaProperties(rootSchema), [rootSchema]);
   const mergedParams = useMemo(
     () => mergeParameterDefaults(rootSchema, (node.parameters || {}) as Record<string, unknown>),
     [rootSchema, node.parameters],
-  );
-
-  const paramValidator = useMemo(
-    () => compileParameterValidator(rootSchema as Record<string, unknown> | undefined),
-    [rootSchema],
-  );
-
-  const parameterValidation = useMemo(() => {
-    if (!rootSchema || nodeType?.is_trigger) {
-      return {
-        valid: true as const,
-        errorsByField: {} as Record<string, string>,
-        listRowErrorsByField: {} as Record<string, Record<number, string>>,
-      };
-    }
-    return validateFlowParameters(
-      paramValidator,
-      rootSchema as Record<string, unknown>,
-      mergedParams,
-    );
-  }, [rootSchema, nodeType?.is_trigger, paramValidator, mergedParams]);
-
-  useEffect(() => {
-    if (readOnly || nodeType?.is_trigger) {
-      onParametersValidityChange?.(true);
-      return;
-    }
-    onParametersValidityChange?.(parameterValidation.valid);
-  }, [readOnly, nodeType?.is_trigger, parameterValidation.valid, onParametersValidityChange]);
-
-  const fieldErr = useCallback(
-    (key: string) => (readOnly ? undefined : parameterValidation.errorsByField[key]),
-    [readOnly, parameterValidation.errorsByField],
-  );
-
-  const listRowErr = useCallback(
-    (key: string) => (readOnly ? undefined : parameterValidation.listRowErrorsByField[key]),
-    [readOnly, parameterValidation.listRowErrorsByField],
   );
 
   const applyPatch = useCallback(
@@ -216,10 +175,8 @@ export const FlowNodeParameterFields: React.FC<{
             label={key}
             value={v}
             readOnly={readOnly}
-            rowErrors={listRowErr(key)}
             onChange={(pairs: NameValuePair[]) => applyPatch({ [key]: pairs })}
           />
-          <ParamFieldError message={fieldErr(key)} />
         </div>
       );
     }
@@ -243,7 +200,6 @@ export const FlowNodeParameterFields: React.FC<{
           >
             <span className={flowSwitchThumbClass} aria-hidden />
           </Switch>
-          <ParamFieldError message={fieldErr(key)} />
         </div>
       );
     }
@@ -272,7 +228,6 @@ export const FlowNodeParameterFields: React.FC<{
             value={typeof v === 'number' ? v : (v as number | '') ?? ''}
             onChange={(e) => applyPatch({ [key]: Number(e.target.value) })}
           />
-          <ParamFieldError message={fieldErr(key)} />
         </div>
       );
     }
@@ -304,7 +259,6 @@ export const FlowNodeParameterFields: React.FC<{
               </option>
             ))}
           </select>
-          <ParamFieldError message={fieldErr(key)} />
         </div>
       );
     }
@@ -416,7 +370,6 @@ export const FlowNodeParameterFields: React.FC<{
               }}
             />
           </div>
-          <ParamFieldError message={fieldErr(key)} />
         </div>
       );
     }
@@ -449,7 +402,6 @@ export const FlowNodeParameterFields: React.FC<{
             value={tv}
             onChange={(e) => applyPatch({ [key]: e.target.value })}
           />
-          <ParamFieldError message={fieldErr(key)} />
         </div>
       );
     }
@@ -544,7 +496,6 @@ export const FlowNodeParameterFields: React.FC<{
               renderLineHighlight: 'none',
             }}
           />
-          {!readOnly ? <ParamFieldError message={fieldErr(key)} /> : null}
         </div>
       );
     }
@@ -576,7 +527,6 @@ export const FlowNodeParameterFields: React.FC<{
             applyPatch({ [key]: payloadToExpression(p) });
           }}
         />
-        <ParamFieldError message={fieldErr(key)} />
       </div>
     );
   };

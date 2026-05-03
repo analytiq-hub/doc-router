@@ -65,8 +65,6 @@ export default function FlowDetailPageClient({
   const [message, setMessage] = useState<string>('');
   const [logsFocusExecutionId, setLogsFocusExecutionId] = useState<string | null>(null);
   const [editorOpenConfigNodeId, setEditorOpenConfigNodeId] = useState<string | null>(null);
-  const [nodeParametersValid, setNodeParametersValid] = useState(true);
-
   const logsPanelGroupRef = useRef<ImperativePanelGroupHandle | null>(null);
   /** Latest graph + revision for async pin persist (queues so rapid toggles don’t 409). */
   const persistCtxRef = useRef({
@@ -459,7 +457,6 @@ export default function FlowDetailPageClient({
                   isDirty={isDirty}
                   isSaving={isSaving}
                   activationPending={activationPending}
-                  parametersInvalid={!nodeParametersValid}
                   onSave={onSave}
                   onActivate={onActivate}
                   onDeactivate={onDeactivate}
@@ -506,7 +503,6 @@ export default function FlowDetailPageClient({
                         openConfigNodeId={editorOpenConfigNodeId}
                         onOpenConfigNodeIdChange={setEditorOpenConfigNodeId}
                         flowOrgApi={api}
-                        onConfigParameterValidityChange={setNodeParametersValid}
                       />
                     </div>
                   </Panel>
