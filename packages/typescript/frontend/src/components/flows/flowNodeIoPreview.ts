@@ -236,7 +236,7 @@ export function buildNodeOutputPreview(
   }
   const rec = runData[nodeId] as NodeRun | undefined;
   if (rec == null) {
-    return { itemsJson: [], message: 'This node has not been executed in the latest run, or the run is still in progress.' };
+    return { itemsJson: [], message: null };
   }
   const itemsJson = laneMain0ItemsJson(rec);
   const msg = rec.status && rec.status !== 'success' ? `Status: ${rec.status}` : null;

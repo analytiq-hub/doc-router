@@ -26,6 +26,14 @@ function tabFromQuery(value: string | null): FlowCanvasView {
   return value === 'executions' ? 'executions' : 'editor';
 }
 
+function flowExecutionIsInFlight(status: FlowExecution['status']): boolean {
+  return status === 'queued' || status === 'running';
+}
+
+async function sleepMs(ms: number): Promise<void> {
+  await new Promise<void>((resolve) => setTimeout(resolve, ms));
+}
+
 function downloadBlobJson(filename: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -414,8 +422,45 @@ export default function FlowDetailPageClient({
           run_data: seedRunData,
           revision_snapshot,
         });
-        if (out.execution_id) {
-          setLogsFocusExecutionId(out.execution_id);
+        const execId = out.execution_id?.trim();
+        if (!execId) return;
+
+        setLogsFocusExecutionId(execId);
+
+        const POLL_MS = 600;
+        const MAX_WAIT_MS = 180_000;
+        const deadline = Date.now() + MAX_WAIT_MS;
+        let lastEx: FlowExecution | null = null;
+
+        const targetNodeShowsOutcome = (ex: FlowExecution): boolean => {
+          const rd = ex.run_data as Record<string, unknown> | undefined;
+          if (!rd || typeof rd !== 'object') return false;
+          const raw = rd[targetNodeId];
+          if (!raw || typeof raw !== 'object') return false;
+          const st = (raw as { status?: string }).status;
+          if (typeof st !== 'string' || !st.trim()) return false;
+          return st !== 'running';
+        };
+
+        while (Date.now() < deadline) {
+          try {
+            lastEx = await api.getExecution(flowId, execId);
+            if (!flowExecutionIsInFlight(lastEx.status)) {
+              break;
+            }
+            if (targetNodeShowsOutcome(lastEx)) {
+              break;
+            }
+          } catch {
+            // Transient failures: keep polling until deadline.
+          }
+          await sleepMs(POLL_MS);
+        }
+
+        try {
+          setExecutionForIo(await api.getExecution(flowId, execId));
+        } catch {
+          if (lastEx) setExecutionForIo(lastEx);
         }
       } catch (err: unknown) {
         setMessage(err instanceof Error ? err.message : 'Execute step failed');

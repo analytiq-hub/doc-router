@@ -26,7 +26,8 @@ import type { FlowNode, FlowNodeType, FlowPinData, FlowPinItem, FlowPinNodeOutpu
 import type { DocRouterOrgApi } from '@/utils/api';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
 import { FlowNodeCredentialSlots } from './flowNodeCredentialSlots';
-import { buildNodeInputPreview } from './flowNodeIoPreview';
+import { buildNodeInputPreview, buildNodeOutputPreview } from './flowNodeIoPreview';
+import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
 import { FlowInputUpstreamList } from './FlowInputUpstreamList';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
 import { IoViewer } from './IoViewer';
@@ -207,6 +208,19 @@ const FlowNodeConfigModal: React.FC<{
   const runItems = useMemo(() => (nodeId ? nodeItemsFromRunData(runData, nodeId) : null), [runData, nodeId]);
   const outputItems = pinnedItems ?? runItems;
   const outputValue = useMemo(() => (outputItems ? outputItems.map((i) => i.json) : null), [outputItems]);
+
+  const outputExecPreview = useMemo(
+    () =>
+      nodeId ? buildNodeOutputPreview(nodeId, runData, typedPinData) : { itemsJson: [] as unknown[], message: null as string | null },
+    [nodeId, runData, typedPinData],
+  );
+
+  const outputRunError = useMemo(() => {
+    if (!nodeId || !runData) return undefined;
+    const rec = runData[nodeId];
+    if (!rec || typeof rec !== 'object') return undefined;
+    return (rec as { error?: unknown }).error;
+  }, [nodeId, runData]);
 
   const isTrigger = Boolean(nodeType?.is_trigger);
 
@@ -468,14 +482,24 @@ const FlowNodeConfigModal: React.FC<{
                               type="button"
                               disabled={executeStepBusy || executeStepDisconnected}
                               onClick={() => void onExecuteStep()}
+                              aria-busy={executeStepBusy}
                               className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-red-200 bg-[#ff6d5a] px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
                               title={
                                 executeStepDisconnected
                                   ? 'Connect this node from at least one trigger with graph edges'
-                                  : 'Run this node; upstream outputs are reused from the latest test run when available'
+                                  : executeStepBusy
+                                    ? 'Running…'
+                                    : 'Run this node; upstream outputs are reused from the latest test run when available'
                               }
                             >
-                              <BeakerIcon className="h-3.5 w-3.5" aria-hidden />
+                              {executeStepBusy ? (
+                                <span
+                                  className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-white border-t-transparent"
+                                  aria-hidden
+                                />
+                              ) : (
+                                <BeakerIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                              )}
                               {executeStepBusy ? 'Running…' : 'Execute step'}
                             </button>
                           </div>
@@ -552,11 +576,17 @@ const FlowNodeConfigModal: React.FC<{
                     </div>
                   }
                 >
-                  {!runData && !hasPin && <div className="text-sm text-[#6b7280]">Run the workflow to see output data for this node.</div>}
                   {hasPin && <div className="mb-2 text-[11px] font-semibold text-violet-700">Using pinned output for preview</div>}
+                  {!hasPin && !runData && (
+                    <div className="mb-2 text-sm text-[#6b7280]">Run the workflow to see output data for this node.</div>
+                  )}
+                  {!hasPin && runData != null && outputExecPreview.message && (
+                    <div className="mb-2 text-sm text-amber-800">{outputExecPreview.message}</div>
+                  )}
+                  <NodeRunErrorDetails error={outputRunError} />
                   <IoViewer
                     title={node.name || typeLabel}
-                    value={outputValue ?? []}
+                    value={outputValue ?? outputExecPreview.itemsJson ?? []}
                     valueKind="executionItems"
                     dragSource={{ nodeId: node.id, source: 'nodeOutput' }}
                     defaultMode="schema"
