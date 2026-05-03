@@ -60,14 +60,7 @@ const IoBlock: React.FC<{
   </div>
 );
 
-function contextValuePreview(v: string | undefined): string {
-  if (v == null || v === '') return '[filled at execution time]';
-  return v.length > 48 ? `${v.slice(0, 45)}…` : v;
-}
-
-const VariablesAndContext: React.FC<{
-  execution?: { execution_id: string; flow_id: string; flow_revid: string } | null;
-}> = ({ execution }) => (
+const VariablesAndContext: React.FC = () => (
   <Disclosure as="div" defaultOpen={false} className="mb-3 rounded border border-[#eceff2] bg-white">
     <DisclosureButton className="flex w-full items-center gap-2 border-b border-gray-100 px-2 py-1.5 text-left outline-none hover:bg-gray-50">
       {({ open }) => (
@@ -90,11 +83,6 @@ const VariablesAndContext: React.FC<{
           [
             ['$json', 'Object'],
             ['$binary', 'Object'],
-            ['$start_time', 'string'],
-            ['$execution_time', 'number'],
-            ['$flow_id', contextValuePreview(execution?.flow_id)],
-            ['$flow_revid', contextValuePreview(execution?.flow_revid)],
-            ['$execution_id', contextValuePreview(execution?.execution_id)],
           ] as const
         ).map(([name, preview]) => (
           <div key={name} className="flex items-center gap-2 px-2 py-1.5">
@@ -516,7 +504,7 @@ const FlowNodeConfigModal: React.FC<{
                           onModeChange={setInputIoMode}
                         />
                       )}
-                      {inputIoMode === 'schema' && <VariablesAndContext execution={expressionExecution ?? null} />}
+                      {inputIoMode === 'schema' && <VariablesAndContext />}
                     </IoBlock>
                   </Panel>
 
