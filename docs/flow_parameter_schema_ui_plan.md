@@ -22,137 +22,128 @@ Non-goals for v1 of this plan: replacing Monaco for code nodes with a different 
 ### 2.1 Backend
 
 - Each registered node exposes `parameter_schema: dict` (JSON Schema draft-07 style object with `properties`, `required`, etc.).
-- Example: `packages/python/analytiq_data/flows/nodes/http_request.py` already defines a full schema for method, url, arrays of `{name, value}`, `body_mode`, conditionally relevant body fields, booleans, and `timeout_seconds`.
-- Ported / imported nodes may use `build_top_level_parameter_schema` (`analytiq_data/flows/port/schema.py`), which maps n8n-style descriptions into JSON Schema and already uses **vendor extensions** such as `x-ui-enum-names` and `x-source-type`.
+- `flows.http_request` carries full `x-ui-*` annotations (see §4) — groups, conditional visibility, widget hints — on every field.
+- The n8n port converter (`analytiq_data/flows/port/schema.py`) maps `INodeProperty` UI hints to `x-ui-*` keys: `placeholder` → `x-ui-placeholder`, `type: "code"` → `x-ui-widget: "code"`, single-field `displayOptions.show` → `x-ui-show-when`.
 
 ### 2.2 Frontend
 
-- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks ordered properties, evaluates `x-ui-show-when`, merges defaults, clears hidden fields via schema defaults, and picks widgets (`x-ui-widget` includes `nameValueList`, `textarea`; booleans → Headless `Switch`; enums with `x-ui-enum-names`; code / object / array → Monaco unless overridden).
-- **`flows.http_request`** uses the same path; HTTP UX is driven by extensions on `FlowsHttpRequestNode.parameter_schema` in Python.
+- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks properties in declaration order, evaluates `x-ui-show-when`, merges defaults, clears hidden fields via schema defaults, and picks widgets: `x-ui-widget` drives the widget (`name_value_list`, `textarea`, `code`); booleans → Headless `Switch`; enums with `x-ui-enum-names`; code / object / array → Monaco unless overridden.
+- **`flowSchemaParameterUtils.ts`** provides pure helpers: `evalShowWhen`, `getVisiblePropertyKeys`, `clearHiddenFieldsToDefaults`, `applyParameterPatch`, `mergeParameterDefaults`. These are unit-tested in `flowSchemaParameterUtils.spec.ts`.
+- **`FlowNameValueListField.tsx`** is the pair-editor component (add/remove rows, drag-drop into name and value cells).
+- **`flows.http_request`** uses the generic path; no special-case branch remains in `FlowNodeConfigModal`.
 
-### 2.3 Gap (why HTTP is special-cased today)
+### 2.3 What was special-cased (now resolved)
 
-The generic renderer does **not** yet support:
+The following gaps existed in the generic renderer when `flows.http_request` had its own `FlowHttpRequestParameterFields` component. All are now handled:
 
-| Need | Example in HTTP node |
-|------|----------------------|
-| **Array of fixed-shape objects** | `query_params`, `headers`, `body_params` as `{ name, value }[]` with add/remove rows and drag-drop into value cells |
-| **Conditional visibility** | Show `body_json` only when `body_mode === 'json'`, etc. |
-| **`x-ui-enum-names` display labels** | Enum `<option>` text rendered as raw value strings instead of human labels |
-| **Stable ordering** | Use **`properties` declaration order** in Python/JSON; optional **`x-ui-group`** for section labels |
+| Was missing | How it is handled now |
+|-------------|-----------------------|
+| Array of `{name, value}` objects | `x-ui-widget: "name_value_list"` → `FlowNameValueListField` |
+| Conditional field visibility | `x-ui-show-when` evaluated by `flowSchemaParameterUtils.ts` |
+| `x-ui-enum-names` display labels | Read in `renderParamField` enum branch |
+| Display order | `properties` declaration order (Python insertion order, JSON key order) |
+| Section labels | `x-ui-group` renders a non-collapsible divider above first field in each group |
 
 ---
 
-## 3. Target architecture
+## 3. Architecture
 
 ### 3.1 Single entry: `FlowNodeParameterFields`
 
-- Always render parameters from `nodeType.parameter_schema` + current `node.parameters`.
-- **Widget selection** uses a small deterministic pipeline:
+- Always renders parameters from `nodeType.parameter_schema` + current `node.parameters`.
+- **Widget selection** pipeline:
+  1. If property schema has `x-ui-widget`, use the registered widget for that hint.
+  2. Else infer from JSON Schema: `type`, `enum`, `oneOf`, array `items` shape.
+  3. Fallback: string input with drag-drop for expressions.
 
-  1. If property schema has **`x-ui-widget`** (see §4), use the registered widget for that hint.
-  2. Else infer from JSON Schema: `type`, `enum`, `oneOf`, `format`, array `items` shape.
-  3. Fallback: string input (with existing drag-drop for expressions).
+### 3.2 Widget registry
 
-### 3.2 Widget registry (frontend)
+Built-in widgets:
 
-- Central map: `(hint: string) => React component` or `(predicate: (key, subschema) => boolean) => component`.
-- Built-in widgets:
-  - `boolean`, `string`, `number`/`integer`, `enum` (with `x-ui-enum-names` for display labels — **this is a bug fix**: the current renderer ignores `x-ui-enum-names` and renders raw enum values as option labels)
-  - **`nameValueList`**: pair editor with add/remove rows and drag-drop support in value cells (see §6 Phase A). This widget is **only activated by explicit `x-ui-widget: "nameValueList"`** — it is not inferred from item shape, to avoid silently applying pair-list UX to future array schemas that happen to have `name` and `value` fields.
-  - **`code`** / **`json`** (existing Monaco branches, keyed off property name or `x-ui-widget`)
-  - **`conditional`** wrapper: shows child fields when a sibling matches a predicate (see §4)
+| Widget id | Activated by | Notes |
+|-----------|-------------|-------|
+| `name_value_list` | `x-ui-widget: "name_value_list"` | Pair editor; explicit only — not inferred from item shape |
+| `textarea` | `x-ui-widget: "textarea"` | Monospace textarea |
+| `code` | `x-ui-widget: "code"` or `python_code` / `js_code` / `ts_code` key | Monaco |
+| `boolean` | `type: "boolean"` | Headless Switch |
+| `enum` | `enum` array present | `<select>` with `x-ui-enum-names` labels |
+| `number` | `type: "number"` or `"integer"` | `<input type="number">` with `minimum` |
+| `string` | default | Text input with drag-drop |
 
-- **Credential slots** stay separate (`FlowNodeCredentialSlots`)—they are not part of `parameter_schema` today; no change required for this plan.
+Credential slots remain separate (`FlowNodeCredentialSlots`) and are not part of `parameter_schema`.
 
 ### 3.3 State updates and hidden field clearing
 
-- Continue merging `{ ...params, [key]: next }` through `onChange({ parameters: … })`.
-- **When a `showWhen` condition becomes false, the hidden field's value is cleared** (set to its schema `default`, or omitted). Rationale: stale values from a previous mode accumulate silently in saved flow JSON and make debugging harder. The trade-off (accidental data loss on mode switch) is acceptable because body content for different modes is rarely reused, and the user can see the field disappear as a signal that the value was cleared. This matches the behavior of the current `FlowHttpRequestParameterFields`.
+`applyParameterPatch(schema, currentMerged, patch)` merges the patch then calls `clearHiddenFieldsToDefaults`, which resets any field whose `x-ui-show-when` condition is false to its schema `default` (or type fallback). This ensures stale body content from a previous mode does not accumulate in saved flow JSON.
 
 ---
 
-## 4. Schema extensions (vendor keywords)
+## 4. Schema extensions (`x-ui-*` vendor keywords)
 
-All extensions are **optional**; schemas without them keep current inferred behavior.
+All extensions are **optional**; schemas without them use inferred behavior.
 
-Namespace: **`x-ui-*`** on property schemas (not on the root object — root carries only `type`, `properties`, `required`, etc.).
-
-**Field order:** The UI walks **`properties` in declaration order** (Python 3.7+ dict insertion order; JSON object key order round-trips the same). There is **no** second “order” list — a parallel array would duplicate that order and drift out of sync.
+**Field order:** The UI walks `properties` in **declaration order** — Python 3.7+ dict insertion order, preserved through JSON serialization. There is no separate order list.
 
 | Keyword | Level | Purpose |
-|---------|--------|---------|
-| `x-ui-widget` | property | Widget id: e.g. `"nameValueList"`, `"monospace"`, `"textarea"`. Required for pair-list arrays (not inferred). |
-| `x-ui-group` | property | Short string label rendered as a subtle non-collapsible section divider above the field. Adjacent fields sharing the same group string are visually grouped. |
-| `x-ui-show-when` | property | Object like `{ "field": "body_mode", "in": ["json"] }` or `{ "field": "body_mode", "equals": "raw" }` controlling visibility. When the condition becomes false the field value is cleared to its schema default (see §3.3). |
-| `x-ui-placeholder` | property | Optional short placeholder on string inputs. |
+|---------|-------|---------|
+| `x-ui-widget` | property | Widget id: `"name_value_list"`, `"textarea"`, `"code"`, `"monospace"`. Required for pair-list arrays (not inferred). |
+| `x-ui-group` | property | Short string rendered as a non-collapsible section divider. Adjacent fields with the same group string are visually grouped. |
+| `x-ui-show-when` | property | `{ "field": "body_mode", "in": ["json"] }` or `{ "field": "body_mode", "equals": "raw" }`. Hidden field values are cleared to schema defaults. |
+| `x-ui-placeholder` | property | Placeholder text for string inputs. |
+| `x-ui-enum-names` | property | Human-readable labels for `enum` values; rendered as `<option>` text. |
 
-**Conditional fields:** Implement `x-ui-show-when` in the shared renderer only (no need to encode visibility in JSON Schema `if`/`then`/`else` for v1 unless we want one schema for both validation and UI).
-
-**`x-ui-enum-names`:** Already written by `build_top_level_parameter_schema`. The generic renderer must be fixed to read this and render it as `<option>` labels (Phase B).
-
----
-
-## 5. Backend work (minimal)
-
-1. **Annotate** `flows.http_request` with per-field `x-ui-widget`, `x-ui-show-when`, and `x-ui-group` where the UI needs hints beyond inference.
-2. **Confirm** `Draft7Validator` ignores unknown `x-*` keywords (it does for standard usage).
-3. **API:** Ensure `GET …/node-types` returns the enriched schema as-is (no stripping of `x-ui-*`).
-4. **Tests:** Add a unit test that loads the HTTP node type and asserts schema includes the expected extension keys.
-
-No change to execution logic if parameter shapes stay identical.
+The port converter (`port/schema.py`) maps n8n `INodeProperty` fields to these keys automatically: `placeholder` → `x-ui-placeholder`, `type: "code"` → `x-ui-widget: "code"`, single-field `displayOptions.show` → `x-ui-show-when`. Multi-field `displayOptions` and `hide` are left unmapped until the UI supports richer predicates.
 
 ---
 
-## 6. Frontend work (phased)
+## 5. Backend
 
-### Phase A — Extract shared primitives
+- `Draft7Validator` ignores unknown `x-*` keywords (standard JSON Schema behaviour).
+- `GET …/node-types` returns the enriched schema as-is.
+- The Python test `test_http_request_parameter_schema_display_extensions` (in `tests/flows/test_flow_http_request_node.py`) asserts that `x-ui-widget` and `x-ui-show-when` are present on the expected fields, and that `list(props.keys())` matches the declared field order.
+- The Python test `test_flow_port_schema_display.py` asserts that `port/schema.py` maps n8n hints to `x-ui-*` keys correctly.
 
-- Move duplicated **switch row** (and any repeated label/input chrome) into `flowUiClasses.tsx` or a tiny `FlowSchemaFieldChrome.tsx`.
-- Extract **pair list** from `flowHttpRequestFields.tsx` into `FlowNameValueListField.tsx` driven by a prop schema fragment (`items`). **Drag-drop into value cells must be preserved**: the new component must accept the same `FLOW_VALUE_MIME` drag payloads that the current HTTP panel handles, injecting `=expression` strings into the value input.
+---
 
-### Phase B — Extend `FlowNodeParameterFields`
+## 6. Remaining work
 
-- Fix **`x-ui-enum-names`** rendering: read the keyword and use its strings as `<option>` labels.
-- Support **`x-ui-show-when`** evaluation against current `parameters`; clear hidden field values to schema defaults on condition change.
-- Support **`x-ui-group`** section dividers.
-- Support **`nameValueList`** widget via explicit `x-ui-widget` hint.
-- **Unit tests** (TypeScript): `getVisibleFields(schema, params) → string[]` and `clearHiddenDefaults(schema, params, visibleKeys) → params` must be covered before Phase B is considered done.
-
-### Phase C — Remove HTTP exception
-
-- Annotate `flows.http_request` backend schema with `x-ui-widget`, `x-ui-show-when`, and `x-ui-group`.
-- Delete the branch in `FlowNodeConfigModal` that selects `FlowHttpRequestParameterFields`; always use `FlowNodeParameterFields`.
-- Remove or shrink `flowHttpRequestFields.tsx` (delete file if fully inlined into generic components).
-- **Manual QA checklist** before merging Phase C:
-  - [ ] GET request: URL field, query params add/remove, drag IO value into query param value cell
-  - [ ] POST `json_keypair`: body params add/remove, drag IO value into body param value cell
-  - [ ] POST `json`: `body_json` field appears; switching to another mode clears `body_json`
-  - [ ] POST `raw`: `body_raw` and `body_content_type` appear; switching mode clears both
-  - [ ] POST `form_urlencoded`: body params list appears
-  - [ ] `none` body mode: no body fields visible
-  - [ ] `full_response`, `never_error`, `follow_redirects` boolean switches render and toggle correctly
-  - [ ] `timeout_seconds` number input renders and saves correctly
-  - [ ] Header auth credential slot visible and bindable
-  - [ ] Read-only mode: all fields non-editable, switches render as text
-  - [ ] Code node unaffected: Monaco editor still renders for `python_code`
+Phases A (extract primitives), B (extend generic renderer), and C (remove HTTP exception) are complete.
 
 ### Phase D — Hardening
 
-- **Read-only mode:** match existing read-only patterns for booleans (text vs switch) per field type.
+- **Read-only mode:** audit all widget branches for consistent non-editable rendering (text vs switch).
 - **Empty schema:** keep current "No parameters" message.
+
+### Phase E — Inline parameter validation
+
+See `docs/node_param_validation.md`. Use AJV in the frontend to validate `node.parameters` against `nodeType.parameter_schema` after each edit and surface inline errors. Expression strings (values starting with `=`) must be excluded before validation. Hidden fields are already cleared by `applyParameterPatch` so they will not produce spurious errors.
 
 ---
 
-## 7. Testing strategy
+## 7. Testing
 
-| Layer | What to test | When |
-|-------|----------------|------|
-| Unit (TS) | `getVisibleFields(schema, params)`, `clearHiddenDefaults(schema, params, visibleKeys)` | Required before Phase B ships |
-| Unit (TS) | `x-ui-enum-names` option label rendering | Required before Phase B ships |
-| Component | Pair list add/remove, drag-drop into value cell, `showWhen` toggles body fields, hidden field cleared on mode change | Phase B |
-| Python | Existing engine validation tests; schema snapshot test asserting `x-ui-*` keys present on HTTP node | Phase C |
-| Manual | Phase C QA checklist (§6 Phase C) | Phase C |
+| Layer | What | Status |
+|-------|------|--------|
+| Unit (TS) | `getVisiblePropertyKeys`, `clearHiddenFieldsToDefaults`, `applyParameterPatch`, `evalShowWhen` | Done (`flowSchemaParameterUtils.spec.ts`) |
+| Unit (TS) | `x-ui-enum-names` option labels | Done (enum branch in `flowNodeConfigFields.tsx`) |
+| Python | `x-ui-*` keys present on HTTP node schema; `list(props.keys())` order | Done (`test_flow_http_request_node.py`) |
+| Python | Port converter maps `placeholder`, `code` type, `displayOptions.show` to `x-ui-*` | Done (`test_flow_port_schema_display.py`) |
+| Manual | Phase C QA checklist (below) | Due before merge |
+| Unit (TS) | AJV inline validation errors per field | Phase E |
+
+**Phase C manual QA checklist:**
+
+- [ ] GET request: URL field, query params add/remove, drag IO value into query param value cell
+- [ ] POST `json_keypair`: body params add/remove, drag IO value into body param value cell
+- [ ] POST `json`: `body_json` appears; switching mode clears `body_json`
+- [ ] POST `raw`: `body_raw` and `body_content_type` appear; switching mode clears both
+- [ ] POST `form_urlencoded`: body params list appears
+- [ ] `none` body mode: no body fields visible
+- [ ] `full_response`, `never_error`, `follow_redirects` boolean switches render and toggle
+- [ ] `timeout_seconds` number input renders and saves
+- [ ] Header auth credential slot visible and bindable
+- [ ] Read-only mode: all fields non-editable, switches render as text
+- [ ] Code node unaffected: Monaco editor still renders for `python_code`
 
 ---
 
@@ -160,25 +151,14 @@ No change to execution logic if parameter shapes stay identical.
 
 | Risk | Mitigation |
 |------|------------|
-| Schema/UI drift | Single schema from API; UI hints only add presentation—validation unchanged. |
-| `showWhen` too weak | Start with `field` + `in` / `equals`; extend later (`not`, nested paths). |
-| Drag-drop regression in pair lists | Explicit Phase A requirement; Phase C checklist covers each pair-list field. |
-| Bundle size | Lazy-load Monaco only for fields that need it (already per-field). |
+| Schema/UI drift | Single schema from API; `x-ui-*` only adds presentation — validation unchanged. |
+| `show-when` too weak | Start with `field` + `in` / `equals`; extend later (`not`, nested paths). |
+| Drag-drop regression in pair lists | `FlowNameValueListField` handles both name and value cells; Phase C checklist covers each. |
+| Expression strings failing AJV | Exclude `=`-prefixed values before validating (Phase E). |
 
 ---
 
-## 9. Rollout
+## 9. Open decisions
 
-1. Land Phase A + B behind no feature flag (internal refactor).
-2. Annotate HTTP schema on backend.
-3. Phase C switch modal to unified renderer; manual QA checklist must pass before merge.
-4. Document extension vocabulary in this file and a short subsection in `docs/flows2.md` when the implementation lands.
-
----
-
-## 10. Open decisions
-
-- **Exact naming** of `x-ui-*` keys (freeze before widespread use in stored flows—note: extensions live on **node type** schema, not in saved flow JSON).
-- Whether to adopt JSON Schema **`if`/`then`** for visibility instead of custom `x-ui-show-when` (more standard, harder for designers to read).
-
-Once these are decided, implement Phase A–C in order.
+- Whether to adopt JSON Schema `if`/`then` for visibility instead of `x-ui-show-when` (more standard, harder for node authors to read).
+- Freeze the `x-ui-*` keyword set before widespread use in ported node schemas.

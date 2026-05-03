@@ -153,7 +153,7 @@ export const FlowNodeParameterFields: React.FC<{
     const rawPlaceholder =
       typeof subschema['x-ui-placeholder'] === 'string' ? (subschema['x-ui-placeholder'] as string) : '';
 
-    if (uiHint === 'nameValueList') {
+    if (uiHint === 'name_value_list') {
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
@@ -277,7 +277,7 @@ export const FlowNodeParameterFields: React.FC<{
       );
     }
 
-    if (isCode || hasOneOf || t === 'object' || (t === 'array' && uiHint !== 'nameValueList')) {
+    if (isCode || hasOneOf || t === 'object' || (t === 'array' && uiHint !== 'name_value_list')) {
       const lang = key === 'python_code' ? 'python' : key === 'ts_code' ? 'typescript' : key === 'js_code' ? 'javascript' : 'json';
       const textValue =
         typeof v === 'string'

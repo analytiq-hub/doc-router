@@ -69,7 +69,7 @@ class FlowsHttpRequestNode:
             },
             "query_params": {
                 "type": "array",
-                "x-ui-widget": "nameValueList",
+                "x-ui-widget": "name_value_list",
                 "x-ui-group": "Request",
                 "items": {
                     "type": "object",
@@ -84,7 +84,7 @@ class FlowsHttpRequestNode:
             },
             "headers": {
                 "type": "array",
-                "x-ui-widget": "nameValueList",
+                "x-ui-widget": "name_value_list",
                 "x-ui-group": "Request",
                 "items": {
                     "type": "object",
@@ -112,7 +112,7 @@ class FlowsHttpRequestNode:
             },
             "body_params": {
                 "type": "array",
-                "x-ui-widget": "nameValueList",
+                "x-ui-widget": "name_value_list",
                 "x-ui-group": "Body",
                 "x-ui-show-when": {"field": "body_mode", "in": ["json_keypair", "form_urlencoded"]},
                 "items": {
