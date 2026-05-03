@@ -906,3 +906,15 @@ async def test_manual_trigger_legacy_stored_payload_is_ignored() -> None:
     )
     assert out[0][0].json == {"trigger": {"type": "manual"}}
 
+
+def test_node_name_prefers_canvas_name() -> None:
+    assert (
+        ad.flows.node_name({"id": "6580d50a-7149-4fd9-b8c3-d19807eccc94", "name": "  My HTTP  ", "type": "tests.passthrough"})
+        == "My HTTP"
+    )
+
+
+def test_node_name_falls_back_to_id_when_name_empty() -> None:
+    nid = "6580d50a-7149-4fd9-b8c3-d19807eccc94"
+    assert ad.flows.node_name({"id": nid, "name": "", "type": "tests.passthrough"}) == nid
+

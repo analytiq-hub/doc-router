@@ -128,7 +128,7 @@ def validate_revision(
         if n["id"] == trigger_id:
             continue
         if n["id"] not in reachable:
-            raise FlowValidationError(f"Node {n['id']} is not reachable from trigger")
+            raise FlowValidationError(f"Node {ad.flows.node_name(n)} is not reachable from trigger")
 
     # Connection validation.
     for src, typed in (connections or {}).items():
@@ -141,7 +141,9 @@ def validate_revision(
         main_slots = (typed or {}).get("main") or []
         for out_idx, slot in enumerate(main_slots):
             if out_idx >= src_type.outputs:
-                raise FlowValidationError(f"Source node {src} output index out of range: {out_idx}")
+                raise FlowValidationError(
+                    f"Source node {ad.flows.node_name(nodes_by_id[src])} output index out of range: {out_idx}"
+                )
             if not slot:
                 continue
             for conn in slot:
@@ -157,13 +159,15 @@ def validate_revision(
                     raise FlowValidationError("Connection destination index must be >= 0")
                 if dst_type.max_inputs is not None and conn.index >= dst_type.max_inputs:
                     raise FlowValidationError(
-                        f"Connection destination index out of range for node {conn.dest_node_id}: {conn.index}"
+                        f"Connection destination index out of range for node "
+                        f"{ad.flows.node_name(nodes_by_id[conn.dest_node_id])}: {conn.index}"
                     )
                 if conn.index >= max(dst_type.min_inputs, (dst_type.max_inputs or conn.index + 1)):
                     # Best-effort; for unbounded max_inputs we accept any index >= 0.
                     if dst_type.max_inputs is not None:
                         raise FlowValidationError(
-                            f"Connection destination index out of range for node {conn.dest_node_id}: {conn.index}"
+                            f"Connection destination index out of range for node "
+                            f"{ad.flows.node_name(nodes_by_id[conn.dest_node_id])}: {conn.index}"
                         )
 
     # Acyclic.
@@ -181,7 +185,7 @@ def validate_revision(
         creds = n.get("credentials")
         if creds is not None:
             if not isinstance(creds, dict):
-                raise FlowValidationError(f"Node {n['id']} credentials must be an object")
+                raise FlowValidationError(f"Node {ad.flows.node_name(n)} credentials must be an object")
             slots_raw = getattr(nt, "credential_slots", None) or []
             allowed = {
                 str(s["slot"])
@@ -191,13 +195,13 @@ def validate_revision(
             for slot_name, cred_id in creds.items():
                 if slot_name not in allowed:
                     raise FlowValidationError(
-                        f"Unknown credential slot {slot_name!r} for node {n['id']} ({nt.key})"
+                        f"Unknown credential slot {slot_name!r} for node {ad.flows.node_name(n)} ({nt.key})"
                     )
                 if cred_id is None or cred_id == "":
                     continue
                 if not isinstance(cred_id, str):
                     raise FlowValidationError(
-                        f"Credential binding for slot {slot_name!r} on node {n['id']} must be a string id"
+                        f"Credential binding for slot {slot_name!r} on node {ad.flows.node_name(n)} must be a string id"
                     )
 
     if pin_data:
@@ -206,23 +210,24 @@ def validate_revision(
                 raise FlowValidationError(f"pin_data references unknown node id: {node_id}")
 
 
-def _validate_resolved_params(node_id: str, node_type: Any) -> None:
+def _validate_resolved_params(resolved_node: dict[str, Any]) -> None:
     """
     Validate resolved (expression-free) parameters against the node's JSON Schema
     and node-type-specific rules. Called after `resolve_parameters()`.
     """
-    resolved = node_type.get("parameters") or {}
-    nt = ad.flows.get(node_type["type"])
+    resolved = resolved_node.get("parameters") or {}
+    nt = ad.flows.get(resolved_node["type"])
+    label = ad.flows.node_name(resolved_node)
     try:
         Draft7Validator(nt.parameter_schema).validate(resolved)
     except Exception as e:
         raise RuntimeError(
-            f"Parameter validation failed for node {node_id} ({nt.key}): {e}"
+            f"Parameter validation failed for node {label} ({nt.key}): {e}"
         ) from e
     errs = nt.validate_parameters(resolved) or []
     if errs:
         raise RuntimeError(
-            f"Parameter validation failed for node {node_id} ({nt.key}): {'; '.join(errs)}"
+            f"Parameter validation failed for node {label} ({nt.key}): {'; '.join(errs)}"
         )
 
 
@@ -544,6 +549,7 @@ async def _execute_loop(
         wi = work.popleft()
         node = nodes_by_id[wi.node_id]
         node_type = ad.flows.get(node["type"])
+        node_label = ad.flows.node_name(node)
         outputs_count = node_type.outputs
         _execution_refs = {
             "execution_id": context.execution_id,
@@ -566,7 +572,7 @@ async def _execute_loop(
             cached = context.run_data[node["id"]]
             main_raw = cached["data"]["main"]
             if not isinstance(main_raw, list):
-                raise RuntimeError(f"Corrupt seed run_data for node {node['id']}: data.main must be a list")
+                raise RuntimeError(f"Corrupt seed run_data for node {node_label}: data.main must be a list")
             out_lists = _coerce_main_to_output_slots(main_raw, outputs_count)
         else:
             try:
@@ -581,12 +587,12 @@ async def _execute_loop(
                             execution_refs=_execution_refs,
                         ),
                     }
-                    _validate_resolved_params(node["id"], resolved_node)
+                    _validate_resolved_params(resolved_node)
                     context.credentials.clear()
                     out_lists = await node_type.execute(context, resolved_node, [])
                     if len(out_lists) != outputs_count:
                         raise RuntimeError(
-                            f"Node {node['id']} returned {len(out_lists)} output slots, expected {outputs_count}"
+                            f"Node {node_label} returned {len(out_lists)} output slots, expected {outputs_count}"
                         )
                 elif all(len(slot) == 0 for slot in wi.inputs):
                     out_lists = _empty_outputs(outputs_count)
@@ -605,12 +611,12 @@ async def _execute_loop(
                             execution_refs=_execution_refs,
                         ),
                     }
-                    _validate_resolved_params(node["id"], resolved_node)
+                    _validate_resolved_params(resolved_node)
                     context.credentials.clear()
                     out_lists = await node_type.execute(context, resolved_node, wi.inputs)
                     if len(out_lists) != outputs_count:
                         raise RuntimeError(
-                            f"Node {node['id']} returned {len(out_lists)} output slots, expected {outputs_count}"
+                            f"Node {node_label} returned {len(out_lists)} output slots, expected {outputs_count}"
                         )
                 else:
                     # n8n-style per-item parameter resolution: evaluate params against each input item.
@@ -630,14 +636,14 @@ async def _execute_loop(
                                 ),
                             }
                             if slot_idx == 0 and item_idx == 0:
-                                _validate_resolved_params(node["id"], resolved_node)
+                                _validate_resolved_params(resolved_node)
                             per_inputs = [[] for _ in range(len(wi.inputs))]
                             per_inputs[slot_idx] = [it]
                             context.credentials.clear()
                             per_out = await node_type.execute(context, resolved_node, per_inputs)
                             if len(per_out) != outputs_count:
                                 raise RuntimeError(
-                                    f"Node {node['id']} returned {len(per_out)} output slots, expected {outputs_count}"
+                                    f"Node {node_label} returned {len(per_out)} output slots, expected {outputs_count}"
                                 )
                             for oi in range(outputs_count):
                                 combined[oi].extend(per_out[oi])
@@ -648,12 +654,12 @@ async def _execute_loop(
                 error_env = {
                     "message": msg,
                     "node_id": node["id"],
-                    "node_name": node.get("name") or node_type.label,
+                    "node_name": node_label,
                     "stack": None,
                 }
                 if on_error == "continue":
                     out_lists = [
-                        [_error_item(node["id"], node.get("name") or node_type.label, msg)]
+                        [_error_item(node["id"], node_label, msg)]
                     ] + _empty_outputs(outputs_count - 1)
                     status = "error"
                 else:
@@ -754,7 +760,10 @@ async def run_flow(
             raise FlowValidationError(f"target_node_id not found in revision: {target_node_id}")
         closure = upstream_closure_for_target(trigger["id"], target_node_id, connections)
         if target_node_id not in closure:
-            raise FlowValidationError("target_node_id is not reachable from the trigger on this revision")
+            raise FlowValidationError(
+                f"target node {ad.flows.node_name(nodes_by_id[target_node_id])} is not reachable from the trigger "
+                "on this revision"
+            )
         coro = _execute_loop(
             context,
             nodes_by_id,

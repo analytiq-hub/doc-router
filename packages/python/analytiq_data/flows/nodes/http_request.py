@@ -248,11 +248,12 @@ class FlowsHttpRequestNode:
         url = str(params.get("url") or "").strip()
         exec_log = _exec_log(context)
         nid = node.get("id", "?")
+        n_disp = ad.flows.node_name(node)
 
         if not url:
             msg = "HTTP Request url is empty after evaluating parameters." + _inbound_row_hint(item)
             exec_log.error(
-                f"flows.http_request invalid url node_id={nid} execution_id={context.execution_id} "
+                f"flows.http_request invalid url node_name={n_disp!r} node_id={nid} execution_id={context.execution_id} "
                 f"flow_id={context.flow_id} organization_id={context.organization_id}: {msg}"
             )
             raise RuntimeError(msg)
@@ -263,7 +264,7 @@ class FlowsHttpRequestNode:
                 f"(after evaluation: {url[:500]!r})."
             ) + _inbound_row_hint(item)
             exec_log.error(
-                f"flows.http_request invalid url node_id={nid} execution_id={context.execution_id} "
+                f"flows.http_request invalid url node_name={n_disp!r} node_id={nid} execution_id={context.execution_id} "
                 f"flow_id={context.flow_id} organization_id={context.organization_id}: {msg}"
             )
             raise RuntimeError(msg)
@@ -352,14 +353,14 @@ class FlowsHttpRequestNode:
                 f"(request used {url!r}: {e})"
             )
             exec_log.error(
-                f"flows.http_request unsupported protocol node_id={nid} execution_id={context.execution_id} "
+                f"flows.http_request unsupported protocol node_name={n_disp!r} node_id={nid} execution_id={context.execution_id} "
                 f"flow_id={context.flow_id} organization_id={context.organization_id}: {msg}",
                 exc_info=True,
             )
             raise RuntimeError(msg) from None
         except httpx.RequestError as e:
             exec_log.error(
-                f"flows.http_request transport error node_id={nid} execution_id={context.execution_id} "
+                f"flows.http_request transport error node_name={n_disp!r} node_id={nid} execution_id={context.execution_id} "
                 f"flow_id={context.flow_id} organization_id={context.organization_id} "
                 f"method={method} url={url!r}: {e}",
                 exc_info=True,
@@ -370,7 +371,7 @@ class FlowsHttpRequestNode:
             detail = resp.text[:200]
             msg = f"HTTP {resp.status_code} from {method} {url}: {detail}"
             exec_log.error(
-                f"flows.http_request HTTP error node_id={nid} execution_id={context.execution_id} "
+                f"flows.http_request HTTP error node_name={n_disp!r} node_id={nid} execution_id={context.execution_id} "
                 f"flow_id={context.flow_id} organization_id={context.organization_id} "
                 f"status={resp.status_code} method={method} url={url!r} body_snippet={detail!r}"
             )
