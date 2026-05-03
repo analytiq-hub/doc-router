@@ -6,11 +6,14 @@ Expression / templating helpers for flows.
 Only a small subset is implemented today:
 - `materialize_node_data(run_data)` used to expose prior node outputs as plain JSON.
 - Expression evaluation and parameter resolution (`resolve_parameters`) for `=`-prefixed strings.
+- A guarded AST whitelist; function calls must be bare names allowlisted in ``_SAFE_CALL_IDS``
+  (e.g. ``str(...)``, ``len(...)``)—not arbitrary methods or lambdas.
 
 See `docs/flows.md` §20.3 / §20.4.
 """
 
 import ast
+import builtins as _builtins_module
 from typing import Any
 
 import analytiq_data as ad
@@ -20,6 +23,25 @@ class ExpressionError(ValueError):
     """Raised when an expression fails validation or evaluation."""
 
 
+# Builtins permitted as bare calls: ``str(...)``, ``len(...)``, etc.
+# Restricted subset so expressions stay sandboxed alongside ``eval(..., {'__builtins__': {}}, ...)``.
+_SAFE_CALL_IDS: frozenset[str] = frozenset(
+    {
+        "str",
+        "repr",
+        "len",
+        "int",
+        "float",
+        "bool",
+        "round",
+        "abs",
+        "min",
+        "max",
+        "sorted",
+        "sum",
+    }
+)
+
 _ALLOWED_AST_NODES: tuple[type[ast.AST], ...] = (
     ast.Expression,
     ast.Constant,
@@ -27,6 +49,7 @@ _ALLOWED_AST_NODES: tuple[type[ast.AST], ...] = (
     ast.Load,
     ast.Attribute,
     ast.Subscript,
+    ast.Call,
     ast.BinOp,
     ast.UnaryOp,
     ast.BoolOp,
@@ -206,6 +229,12 @@ def _rewrite_vars(expr: str) -> str:
     return "".join(out)
 
 
+def _safe_builtin_call_env() -> dict[str, Any]:
+    """Inject a tiny allowlisted slice of builtins for validated ``Call`` nodes."""
+
+    return {n: getattr(_builtins_module, n) for n in _SAFE_CALL_IDS}
+
+
 def _validate_expr_ast(tree: ast.AST) -> None:
     for node in ast.walk(tree):
         if not isinstance(node, _ALLOWED_AST_NODES):
@@ -213,6 +242,16 @@ def _validate_expr_ast(tree: ast.AST) -> None:
         if isinstance(node, ast.Name):
             if node.id.startswith("__"):
                 raise ExpressionError("Names starting with '__' are not allowed in expressions")
+        elif isinstance(node, ast.Call):
+            if not isinstance(node.func, ast.Name):
+                raise ExpressionError("Only direct calls like str(...) are allowed; methods and nested calls targets are forbidden")
+            if node.func.id not in _SAFE_CALL_IDS:
+                raise ExpressionError(f"Function {node.func.id!r} is not allowed in expressions")
+            if node.keywords:
+                raise ExpressionError("Keyword arguments are not supported in expression function calls")
+            for arg in node.args:
+                if isinstance(arg, ast.Starred):
+                    raise ExpressionError("Star unpacking is not allowed in expressions")
 
 
 def _materialize_binary(binary: dict[str, ad.flows.BinaryRef]) -> dict[str, Any]:
@@ -294,6 +333,7 @@ def eval_expression(
     refs = execution_refs if execution_refs is not None else {}
     src_start, src_exec_ms = timing_from_items_source_run(item, run_data)
     env = {
+        **_safe_builtin_call_env(),
         "_json": (item.json if item is not None else {}),
         "_binary": (_materialize_binary(item.binary or {}) if item is not None else {}),
         "_node": materialize_node_data(run_data),

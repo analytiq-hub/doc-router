@@ -475,6 +475,18 @@ def test_preview_parameter_expression_resolves_node_main_from_serialized_run_dat
     assert val == 40
 
 
+def test_expression_allowlists_safe_builtin_calls_like_str() -> None:
+    item = ad.flows.FlowItem(json={"foo": 42}, binary={}, meta={}, paired_item=None)
+    got = ad.flows.eval_expression('str($json["foo"])', item=item, run_data={})
+    assert got == "42"
+
+
+def test_expression_rejects_disallowed_builtin_calls() -> None:
+    item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+    with pytest.raises(ad.flows.ExpressionError, match="not allowed"):
+        ad.flows.eval_expression('open(".")', item=item, run_data={})
+
+
 @pytest.mark.asyncio
 async def test_expressions_resolve_per_item_including_binary() -> None:
     nodes = [
