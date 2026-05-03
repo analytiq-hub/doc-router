@@ -487,6 +487,19 @@ def test_expression_rejects_disallowed_builtin_calls() -> None:
         ad.flows.eval_expression('open(".")', item=item, run_data={})
 
 
+def test_expression_rejects_f_string_prefix_with_hint() -> None:
+    item = ad.flows.FlowItem(json={"x": 1}, binary={}, meta={}, paired_item=None)
+    with pytest.raises(ad.flows.ExpressionError, match="f-strings"):
+        ad.flows.eval_expression('f"{$json}"', item=item, run_data={})
+
+
+def test_expression_syntaxerror_fstring_maps_to_hint() -> None:
+    item = ad.flows.FlowItem(json={"x": 1}, binary={}, meta={}, paired_item=None)
+    with pytest.raises(ad.flows.ExpressionError, match="f-string syntax"):
+        # Does not start with ``f`` (prefix guard skipped), but still triggers the parser's f-string diagnostic.
+        ad.flows.eval_expression('""+f"{1+}"', item=item, run_data={})
+
+
 @pytest.mark.asyncio
 async def test_expressions_resolve_per_item_including_binary() -> None:
     nodes = [

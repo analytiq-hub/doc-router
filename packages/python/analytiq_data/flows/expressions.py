@@ -14,6 +14,7 @@ See `docs/flows.md` §20.3 / §20.4.
 
 import ast
 import builtins as _builtins_module
+import re
 from typing import Any
 
 import analytiq_data as ad
@@ -21,6 +22,19 @@ import analytiq_data as ad
 
 class ExpressionError(ValueError):
     """Raised when an expression fails validation or evaluation."""
+
+
+# Leading string prefixes that start an f-string (Python 3.12+); we reject these before ``ast.parse``
+# so users get a DocRouter-specific hint instead of "f-string: expecting …".
+_FSTRING_PREFIX_RE = re.compile(r'(?i)^(?:r[fF]|[fF]r|[fF])(?=[\'"])')
+
+
+def _reject_fstring_prefix(expr: str) -> None:
+    if _FSTRING_PREFIX_RE.match(expr.lstrip()):
+        raise ExpressionError(
+            "f-strings (f\"…\", rf'…', etc.) are not supported in flow expressions. "
+            "Use plain =$json['field'], =$json[\"field\"], or + to build strings — not n8n-style {{ }} or f\"…\"."
+        )
 
 
 # Builtins permitted as bare calls: ``str(...)``, ``len(...)``, etc.
@@ -322,8 +336,16 @@ def eval_expression(
 
     expr = expr.strip()
     rewritten = _rewrite_vars(expr)
+    _reject_fstring_prefix(rewritten)
     try:
         tree = ast.parse(rewritten, mode="eval")
+    except SyntaxError as e:
+        if "f-string" in str(e).lower():
+            raise ExpressionError(
+                "f-string syntax is not supported in flow expressions. "
+                "Use =$json['key'] or string concatenation (+), not f\"…{…}\" or n8n-style templates."
+            ) from e
+        raise ExpressionError(f"Invalid expression: {e}") from e
     except Exception as e:
         raise ExpressionError(f"Invalid expression: {e}") from e
 
