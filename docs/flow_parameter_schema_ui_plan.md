@@ -212,7 +212,7 @@ Parameters may contain strings starting with `=`. The remainder is evaluated as 
 | **`_json`** | JSON payload of the **current inbound item** (`FlowItem.json` for the item against which parameters are being resolved). |
 | **`_binary`** | Binary map of the **current inbound item**, materialized for expressions (metadata / refs; raw bytes are not exposed in the eval sandbox — same rules as today’s `_binary`). |
 | **`_input`** | The **entire multi-slot input structure** for the current node execution: all lanes, all items, plus `item` / `input_index` / `item_index` for the current row (see `materialize_input_context()`). |
-| **`_node`** | Access to **upstream node outputs**, keyed by the node’s **canvas name** (the `name` field on each node in the flow revision). **`_node['NodeName'].json`** and **`_node['NodeName'].binary`** refer to **output slot 0 only** (`main[0]`), at the **same `item_index`** as the current item. If slot 0 on that upstream node has **fewer items** than required for the current index, evaluation **errors** (no clamp, no `None`, no last-item fallback). For other output slots, authors use explicit indexing (e.g. **`_node['Name'].main[1][idx]`** once that shape exists) — not covered by the `.json` / `.binary` shortcuts. |
+| **`_node`** | Access to **upstream node outputs**, keyed by the node’s **canvas name** (`nodes[].name`). Each entry exposes **`output[slot_no]`** — a view of that **output handle’s lane** at the current **`item_index`** (same alignment rules as today’s per-item execution). Use **`_node['Name'].output[slot_no].json`** and **`.binary`** for that slot’s JSON / binary. **Shorthand:** **`_node['Name'].output[0]`** is the same object as **`_node['Name']`** (default first output). So **`_node['Name'].json`** / **`.binary`** mean **`_node['Name'].output[0].json`** / **`.binary`**. Other slots: **`_node['Name'].output[1].json`**, etc. If **`output[slot]`** has **fewer items** than **`item_index` + 1**, evaluation **errors** (no `None`, clamp, or last-item fallback). *(Implementation maps `output[k]` ↔ engine `data.main[k]`.)* |
 
 **Why underscore:** these names are valid Python identifiers and match the keys injected into `eval(..., env)` (`_json`, `_binary`, `_node`, `_input`, …).
 
@@ -224,7 +224,7 @@ Parameters may contain strings starting with `=`. The remainder is evaluated as 
 |------|---------|--------|
 | Authoring syntax in UI / drag hints | **`_json`**, **`_binary`** in Context + IO drag (done) | Same; document **`_input`**, **`_node`** everywhere (`flows2.md`, HTTP docs). |
 | `$` aliases in eval | **Removed** — expressions are plain Python using injected names only. | No change. |
-| `_node` shape | `materialize_node_data(run_data)` returns a dict keyed by **node id**, values `{ status, main: [ [ {…json per item} ], … ] }` — JSON only per cell, no `.json` / `.binary` attribute API | Dict (or small namespace type) keyed by **node name**; **`.json` / `.binary`** = **slot 0 only**, same **`item_index`** as current item; **short lane → error**. |
+| `_node` shape | `materialize_node_data(run_data)` is id-keyed with raw **`main[slot][row]`** lists | Name-keyed entries with **`.output[slot]`** views; **`_node['N']` ≡ `_node['N'].output[0]`**; **`.output[s].json` / `.binary`** at current **`item_index`**; **short lane → error**. |
 | Binary for prior nodes in `_node` | Not exposed per prior item in `_node` today (materialization is JSON-centric) | Define whether `.binary` is always present (empty map) or populated with the same ref-only shape as `_binary`; implement materialization accordingly. |
 | Eval context | `eval_expression(..., run_data, input_context)` has no revision `nodes` list | Building name-keyed `_node` needs **`id → name` map** (and possibly slot topology) from the **revision** at preview and execute time — **thread `nodes` (or a precomputed name index)** into `eval_expression` / `preview_parameter_expression` / `resolve_parameters` callers. |
 
@@ -237,7 +237,7 @@ Parameters may contain strings starting with `=`. The remainder is evaluated as 
 1. Add a helper, e.g. `materialize_node_outputs_by_name(run_data, nodes: list[dict]) -> dict[str, Any]`, that:  
    - Builds `node_id → name` from `nodes` (`ad.flows.node_name(n)` — align with engine uniqueness rules).  
    - For each completed upstream node in `run_data`, maps **id-keyed** `materialize_node_data` rows into **name-keyed** entries.  
-2. For each name, expose **aligned** `.json` / `.binary` from **`main[0]` only** for the current `input_context["item_index"]`; if **`len(main[0]) <= item_index`**, raise **`ExpressionError`** (or equivalent) so the node’s `on_error` policy applies.  
+2. For each upstream name, build a small **namespace object** (or equivalent) with **`.output`** indexed by slot: each **`output[s]`** resolves **`.json` / `.binary`** from **`run_data[..].data.main[s][item_index]`** (after materialization rules). If **`len(main[s]) <= item_index`**, raise **`ExpressionError`**. Implement **`_node['Name']` as alias for `_node['Name'].output[0]`** (same object or delegating proxy).  
 3. Replace the `_node` entry in `eval_expression`’s env with this structure in one release (no dual id/name layout).
 
 **Phase C — Call-site threading (medium risk)**  
@@ -252,10 +252,26 @@ Parameters may contain strings starting with `=`. The remainder is evaluated as 
 
 ### 9.4 Decided semantics (name-keyed `_node`; implement in Phase B)
 
-- **Item alignment:** If the referenced upstream node’s **output slot 0** has fewer items than needed for the current **`item_index`**, treat as **error** (deterministic failure; no `None`, clamp, or last-item fallback).
-- **`.json` / `.binary` shortcuts:** **`_node['Name'].json`** and **`_node['Name'].binary`** mean **output slot 0 only** (`main[0][item_index]`). Other slots require an explicit path (e.g. `_node['Name'].main[1][…]` when that API is added).
+- **Item alignment:** If **`_node['Name'].output[slot]`** (backed by **`main[slot]`**) has **fewer than `item_index + 1` items**, treat as **error** (deterministic failure; no `None`, clamp, or last-item fallback).
+- **Output API:** Use **`_node['Name'].output[slot_no].json`** / **`.binary`**. **Equivalence:** **`_node['Name'].output[0]`** is the same as **`_node['Name']`**; therefore **`_node['Name'].json`** means **`_node['Name'].output[0].json`** (and the same for **`.binary`**). Other slots use **`_node['Name'].output[1].json`**, etc.
 
 **Still open:** merge / batch nodes — how `_input` and “same index” interact when `item_index` is undefined or N:1 merges; document when implementing merge-aware preview and execution.
+
+### 9.5 Worked example: `.json` vs other output slots
+
+Imagine an upstream node whose **canvas name** is **`Parse`**. After it runs, the engine stores (conceptually) two output wires:
+
+| Output slot | `main[slot]` (list of items for that wire) |
+|---------------|--------------------------------------------|
+| **0** — “data” | `[ {"sku": "A1"}, {"sku": "B2"}, {"sku": "C3"} ]` — **3 rows** |
+| **1** — “errors” | `[ {"msg": "bad charset"}, {"msg": "timeout"} ]` — **2 rows** |
+
+You are configuring a downstream node that runs **once per inbound row** on the wire coming from **slot 0**. When the engine evaluates parameters for the **third** row, **`item_index` is `2`**.
+
+- **`_node['Parse'].json`** is sugar for “**slot 0**, **same row as me**”: the dict **`{"sku": "C3"}`** — i.e. `main[0][2]` as JSON. **`_node['Parse'].binary`** is the same cell’s binary map (same index, slot 0).
+- If **`main[0]`** only had **two** items (`[0]` and `[1]`) but your current **`item_index`** were **`2`**, that shortcut would be **out of range** → **error** (by design), not a silent `None`.
+
+The **`.json` / `.binary` shortcuts never mean slot 1**. To read the “errors” wire you must use an **explicit slot path**, e.g. **`_node['Parse'].main[1][0]`** for the first error-row (when that structure is implemented). Choosing the index on slot 1 is separate from the shortcut rules for slot 0; if you subscript out of range, that should fail the same way as normal Python.
 
 ---
 
