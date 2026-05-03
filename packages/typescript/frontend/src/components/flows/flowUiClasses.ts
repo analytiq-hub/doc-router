@@ -35,7 +35,7 @@ export const FLOW_RF_PANEL_CLEAR_BELOW_WORKSPACE_TABS = '!pt-7';
 
 /** Headless UI switch track (shared by node settings + schema-driven parameters). */
 export const flowSwitchTrackClass =
-  'group relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent bg-gray-200 transition-colors data-[checked]:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60';
+  'group relative inline-flex h-4 w-8 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent bg-gray-200 transition-colors data-[checked]:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60';
 
 export const flowSwitchThumbClass =
-  'inline-block h-3.5 w-3.5 translate-x-0.5 rounded-full bg-white shadow transition group-data-[checked]:translate-x-4';
+  'inline-block h-3 w-3 translate-x-0 rounded-full bg-white shadow transition group-data-[checked]:translate-x-4';

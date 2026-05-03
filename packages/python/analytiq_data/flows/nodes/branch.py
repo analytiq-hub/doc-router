@@ -39,8 +39,19 @@ class FlowsBranchNode:
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "field": {"type": "string"},
-            "equals": {},
+            "field": {
+                "type": "string",
+                "minLength": 1,
+                "default": "",
+                "description": "Key on each item's `json` object to read (e.g. `status`, `ok`).",
+                "x-ui-group": "Condition",
+                "x-ui-placeholder": "Field name in each item's JSON",
+            },
+            "equals": {
+                "description": "Compared to `json[field]` (loose equality for number vs string). Use a literal or expression.",
+                "x-ui-group": "Condition",
+                "x-ui-placeholder": "Value to match, or =expression",
+            },
         },
         "required": ["field", "equals"],
         "additionalProperties": False,

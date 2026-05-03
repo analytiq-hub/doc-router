@@ -21,7 +21,13 @@ class FlowsMergeNode:
     outputs = 1
     output_labels = ["output"]
     icon_key = "merge"
-    parameter_schema: dict[str, Any] = {"type": "object", "properties": {}, "additionalProperties": False}
+    parameter_schema: dict[str, Any] = {
+        "type": "object",
+        "title": "Merge",
+        "description": "No parameters. Items from all connected inputs are concatenated in input-slot order (0, 1, …).",
+        "properties": {},
+        "additionalProperties": False,
+    }
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
         """Validate node parameters beyond JSON Schema (none for this node)."""

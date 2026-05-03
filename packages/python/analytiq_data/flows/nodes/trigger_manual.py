@@ -24,6 +24,8 @@ class FlowsManualTriggerNode:
     # Triggers have no user-editable parameters; tolerate legacy keys in stored revisions.
     parameter_schema: dict[str, Any] = {
         "type": "object",
+        "title": "Manual trigger",
+        "description": "No editable parameters. Downstream Code nodes usually shape test data.",
         "properties": {},
         "additionalProperties": True,
     }

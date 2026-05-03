@@ -2,7 +2,22 @@
 
 This document describes how to move **all** node parameter editors—including `flows.http_request`—onto a **single schema-driven rendering layer**, while keeping **one authoritative JSON Schema per node** on the backend (already validated at execution time via `Draft7Validator`).
 
-**Related:** `docs/flows2.md` (architecture), `flowNodeConfigFields.tsx` (schema-driven `FlowNodeParameterFields`), `FlowNameValueListField.tsx` (pair lists + drag-drop), `flowSchemaParameterUtils.ts` (visibility and defaults).
+**Related:** `docs/flows2.md` (architecture), `docs/node_param_validation.md` (AJV + UI validation pipeline), `flowNodeConfigFields.tsx` (`FlowNodeParameterFields`), `flowParameterValidation.ts`, `FlowNameValueListField.tsx`, `flowSchemaParameterUtils.ts`.
+
+---
+
+## Progress snapshot (2026)
+
+| Area | Status |
+|------|--------|
+| Schema-driven parameters + `x-ui-show-when` / groups / widgets | Done |
+| Inline validation (AJV + expression sentinels + `x-ui-regex` + `x-ui-require-when`) | Done (`flowParameterValidation.ts`, `flowNodeConfigFields.tsx`) |
+| Save disabled when parameters invalid | Done (`FlowToolbar` ← `FlowEditor` ← modal) |
+| `flows.http_request` URL literals via `x-ui-regex`; backend `minLength` / Draft7 only | Done (`http_request.py`) |
+| Body JSON/raw empty when mode active | `x-ui-require-when` on `body_json` / `body_raw` |
+| List row errors (`name_value_list`) | Per-row messages via `listRowErrorsByField` + `FlowNameValueListField.rowErrors` |
+| Phase D read-only audit | Partial (textarea read-only branch aligned; full audit still optional) |
+| Flow credentials API | `get_async_db()` is synchronous — callers must not `await` it (`flows_credentials.py`, `docs/docrouter_credentials.md` examples) |
 
 ---
 
@@ -22,14 +37,15 @@ Non-goals for v1 of this plan: replacing Monaco for code nodes with a different 
 ### 2.1 Backend
 
 - Each registered node exposes `parameter_schema: dict` (JSON Schema draft-07 style object with `properties`, `required`, etc.).
-- `flows.http_request` carries full `x-ui-*` annotations (see §4) — groups, conditional visibility, widget hints — on every field.
+- `flows.http_request` carries full `x-ui-*` annotations (see §4) — groups, conditional visibility, widget hints, regex, require-when — on each field. Other built-ins use the same vocabulary where it applies: **`flows.code`** (`x-ui-widget: code`, groups), **`flows.branch`** (condition group, placeholders), **`flows.merge`** / **`flows.trigger.manual`** (schema `title` / `description` for empty parameter UIs and API consumers).
 - The n8n port converter (`analytiq_data/flows/port/schema.py`) maps `INodeProperty` UI hints to `x-ui-*` keys: `placeholder` → `x-ui-placeholder`, `type: "code"` → `x-ui-widget: "code"`, single-field `displayOptions.show` → `x-ui-show-when`.
 
 ### 2.2 Frontend
 
-- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks properties in declaration order, evaluates `x-ui-show-when`, merges defaults, clears hidden fields via schema defaults, and picks widgets: `x-ui-widget` drives the widget (`name_value_list`, `textarea`, `code`); booleans → Headless `Switch`; enums with `x-ui-enum-names`; code / object / array → Monaco unless overridden.
-- **`flowSchemaParameterUtils.ts`** provides pure helpers: `evalShowWhen`, `getVisiblePropertyKeys`, `clearHiddenFieldsToDefaults`, `applyParameterPatch`, `mergeParameterDefaults`. These are unit-tested in `flowSchemaParameterUtils.spec.ts`.
-- **`FlowNameValueListField.tsx`** is the pair-editor component (add/remove rows, drag-drop into name and value cells).
+- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks properties in declaration order, evaluates `x-ui-show-when`, merges defaults, clears hidden fields via schema defaults, and picks widgets: `x-ui-widget` drives the widget (`name_value_list`, `textarea`, `code`); booleans → Headless `Switch`; enums with `x-ui-enum-names`; structured `oneOf` on **`type: string`** stays a plain text field (not Monaco); object/array/code → Monaco when applicable.
+- **`flowParameterValidation.ts`**: compiles AJV once per schema; **substitutes** `=…` expression leaves with type-compatible sentinels before AJV; then applies **`x-ui-regex` / `x-ui-regex-message`** (literals only) and **`x-ui-require-when` / `x-ui-require-message`** for visible fields; maps nested/list paths to **row-level** errors for pair lists. Covered by `flowParameterValidation.spec.ts`.
+- **`flowSchemaParameterUtils.ts`** provides pure helpers: `evalShowWhen`, `getVisiblePropertyKeys`, `clearHiddenFieldsToDefaults`, `applyParameterPatch`, `mergeParameterDefaults`. Unit-tested in `flowSchemaParameterUtils.spec.ts`.
+- **`FlowNameValueListField.tsx`** — pair editor + optional **`rowErrors`** for validation messages under a row.
 - **`flows.http_request`** uses the generic path; no special-case branch remains in `FlowNodeConfigModal`.
 
 ### 2.3 What was special-cased (now resolved)
@@ -111,16 +127,12 @@ The port converter (`port/schema.py`) maps n8n `INodeProperty` fields to these k
 
 ## 6. Remaining work
 
-Phases A (extract primitives), B (extend generic renderer), and C (remove HTTP exception) are complete.
+Phases A–C (generic renderer, HTTP on schema path) are complete. **Phase E** (inline validation, sentinels, `x-ui-regex`, `x-ui-require-when`, save blocking, list row errors) is **implemented** — see §Progress snapshot and `docs/node_param_validation.md`.
 
-### Phase D — Hardening
+### Phase D — Hardening (optional follow-ups)
 
-- **Read-only mode:** audit all widget branches for consistent non-editable rendering (text vs switch).
-- **Empty schema:** keep current "No parameters" message.
-
-### Phase E — Inline parameter validation
-
-See `docs/node_param_validation.md`. Use AJV in the frontend to validate `node.parameters` against `nodeType.parameter_schema` after each edit and surface inline errors. Expression strings (values starting with `=`) must be excluded before validation. Hidden fields are already cleared by `applyParameterPatch` so they will not produce spurious errors.
+- **Read-only mode:** spot-check any new widget branches for consistent disabled/read-only styling (`flowUiClasses.ts` shared inputs).
+- **Empty schema:** keep current “No parameters for this node type.” message when `properties` is empty.
 
 ---
 
@@ -133,7 +145,7 @@ See `docs/node_param_validation.md`. Use AJV in the frontend to validate `node.p
 | Python | `x-ui-*` keys present on HTTP node schema; `list(props.keys())` order | Done (`test_flow_http_request_node.py`) |
 | Python | Port converter maps `placeholder`, `code` type, `displayOptions.show` to `x-ui-*` | Done (`test_flow_port_schema_display.py`) |
 | Manual | Phase C QA checklist (below) | Due before merge |
-| Unit (TS) | AJV inline validation errors per field | Done (`flowParameterValidation.spec.ts`, `flowNodeConfigFields.tsx`) |
+| Unit (TS) | AJV + sentinels + `x-ui-regex` + `x-ui-require-when` + list row mapping | Done (`flowParameterValidation.spec.ts`) |
 
 **Phase C manual QA checklist:**
 
@@ -158,7 +170,7 @@ See `docs/node_param_validation.md`. Use AJV in the frontend to validate `node.p
 | Schema/UI drift | Single schema from API; `x-ui-*` only adds presentation — validation unchanged. |
 | `show-when` too weak | Start with `field` + `in` / `equals`; extend later (`not`, nested paths). |
 | Drag-drop regression in pair lists | `FlowNameValueListField` handles both name and value cells; Phase C checklist covers each. |
-| Expression strings failing AJV | Exclude `=`-prefixed values before validating (Phase E). |
+| Expression strings vs schema types | UI substitutes expression leaves with sentinels before AJV; literals use full schema; URL shape for literals via `x-ui-regex`. |
 
 ---
 

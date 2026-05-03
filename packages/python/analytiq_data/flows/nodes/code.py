@@ -39,8 +39,23 @@ class FlowsCodeNode:
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {
-            "python_code": {"type": "string"},
-            "timeout_seconds": {"type": "number"},
+            "python_code": {
+                "type": "string",
+                "minLength": 1,
+                "default": "",
+                "description": "Must define def run(items: list[dict], context: dict) -> list[dict].",
+                "x-ui-widget": "code",
+                "x-ui-group": "Code",
+            },
+            "timeout_seconds": {
+                "type": "number",
+                "default": 2,
+                "minimum": 0.0001,
+                "maximum": 30,
+                "description": "Subprocess wall-clock limit in seconds (default 2, max 30).",
+                "x-ui-group": "Options",
+                "x-ui-placeholder": "e.g. 2",
+            },
         },
         "required": ["python_code"],
         "additionalProperties": False,
