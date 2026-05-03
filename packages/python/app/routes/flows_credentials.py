@@ -1,8 +1,4 @@
-"""Org-scoped credentials API — see ``docs/docrouter_credentials.md`` §5.
-
-Routes live under ``/v0/orgs/{org}/credentials`` (not under ``/flows/``) so they do not
-collide with ``GET .../flows/{flow_id}``.
-"""
+"""Org-scoped flow credentials API — see ``docs/docrouter_credentials.md`` §5."""
 
 from __future__ import annotations
 
@@ -179,7 +175,7 @@ async def list_credentials(
     current_user: User = Depends(get_org_user),
 ) -> ListCredentialsResponse:
     _ = current_user
-    db = ad.common.get_async_db()
+    db = await ad.common.get_async_db()
     query: dict[str, Any] = {"organization_id": organization_id}
     if credential_kind:
         query["kind_key"] = credential_kind
@@ -205,7 +201,7 @@ async def get_credential(
     current_user: User = Depends(get_org_user),
 ) -> CredentialHeader:
     _ = current_user
-    db = ad.common.get_async_db()
+    db = await ad.common.get_async_db()
     try:
         oid = ObjectId(credential_id)
     except Exception:
@@ -230,7 +226,7 @@ async def update_credential(
     req: UpdateCredentialRequest,
     current_user: User = Depends(get_org_user),
 ) -> CredentialHeader:
-    db = ad.common.get_async_db()
+    db = await ad.common.get_async_db()
     try:
         oid = ObjectId(credential_id)
     except Exception:
@@ -279,7 +275,7 @@ async def delete_credential(
     current_user: User = Depends(get_org_user),
 ) -> None:
     _ = current_user
-    db = ad.common.get_async_db()
+    db = await ad.common.get_async_db()
     try:
         oid = ObjectId(credential_id)
     except Exception:
@@ -301,7 +297,7 @@ async def test_credential(
     _ = current_user
     from jinja2 import Environment, Undefined
 
-    db = ad.common.get_async_db()
+    db = await ad.common.get_async_db()
     try:
         oid = ObjectId(credential_id)
     except Exception:
