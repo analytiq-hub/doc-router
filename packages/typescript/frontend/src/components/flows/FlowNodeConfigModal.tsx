@@ -319,9 +319,14 @@ const FlowNodeConfigModal: React.FC<{
       <div className="fixed inset-0 flex w-screen items-center justify-center py-2 px-[calc(22px+3pt)]">
         <DialogPanel
           transition
-          className="relative flex h-[min(90vh,900px)] max-h-[90vh] w-[min(1200px,90vw)] max-w-[90vw] flex-col overflow-hidden rounded-lg border border-[#e2e4e8] bg-white shadow-2xl transition data-[closed]:scale-95 data-[closed]:opacity-0"
+          className="relative flex h-[min(90vh,900px)] max-h-[90vh] w-[min(1200px,90vw)] max-w-[90vw] flex-col overflow-visible rounded-lg border border-[#e2e4e8] bg-white shadow-2xl transition data-[closed]:scale-95 data-[closed]:opacity-0"
         >
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#eceff2] py-2.5 pl-4 pr-2">
+          {/*
+            Outer panel stays overflow-visible so FlowModalSideNavStraddle buttons (±50% translate on the edge)
+            are not clipped; inner shell keeps overflow-hidden for layout + rounded chrome.
+          */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#eceff2] py-2.5 pl-4 pr-2">
             <div
               className="max-w-full shrink-0"
               onMouseEnter={() => !readOnly && setNameHover(true)}
@@ -387,12 +392,12 @@ const FlowNodeConfigModal: React.FC<{
                 <XMarkIcon className="h-5 w-5" />
               </button>
             </div>
-          </div>
-          <DialogTitle className="sr-only">
-            {typeLabel} — {node.name}
-          </DialogTitle>
+            </div>
+            <DialogTitle className="sr-only">
+              {typeLabel} — {node.name}
+            </DialogTitle>
 
-          <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden">
+            <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden">
             <PanelGroup direction="horizontal" className="relative z-0 flex min-h-0 flex-1 overflow-hidden">
               {!isTrigger && (
                 <>
@@ -542,6 +547,7 @@ const FlowNodeConfigModal: React.FC<{
                 </IoBlock>
               </Panel>
             </PanelGroup>
+          </div>
           </div>
           {onSelectNode && upstreamNodeIds.length > 0 && (
             <FlowModalSideNavStraddle side="left">

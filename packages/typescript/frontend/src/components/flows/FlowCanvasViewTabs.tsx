@@ -20,6 +20,8 @@ export function FlowWorkspaceTabStraddle({ children }: { children: React.ReactNo
  * Pins nav controls to the modal’s left/right border: `inset-y-0` follows the full panel height,
  * inner `translate-x ±50%` centers the control on the stroke (same idea as {@link FlowWorkspaceTabStraddle}).
  * Render as a direct child of a `relative` modal shell so `left-0` / `right-0` match the card edge.
+ * The shell must **not** use `overflow-hidden`, or siblings will clip the half-extent outside the panel
+ * ({@link FlowNodeConfigModal} wraps scrollable content in an inner overflow-hidden layer instead).
  */
 export function FlowModalSideNavStraddle({ side, children }: { side: 'left' | 'right'; children: React.ReactNode }) {
   const inset = side === 'left' ? 'left-0' : 'right-0';
