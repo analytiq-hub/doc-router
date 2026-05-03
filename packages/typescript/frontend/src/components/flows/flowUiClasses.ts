@@ -1,8 +1,13 @@
 /** Shared Tailwind classes for form controls in the flow editor. */
 export const flowLabelClass = 'mb-1 block text-xs font-medium text-gray-600';
-export const flowInputClass =
-  'w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 read-only:cursor-not-allowed read-only:bg-gray-100 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400/20';
-export const flowSelectClass = flowInputClass + ' cursor-pointer';
+
+/** Text inputs and textareas. Excludes read-only Tailwind modifiers on selects: native `<select>` matches `:read-only` in Chromium, which would wrongly apply `cursor-not-allowed`. */
+const flowControlBaseClass =
+  'w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-400/20';
+
+export const flowInputClass = flowControlBaseClass + ' read-only:cursor-not-allowed read-only:bg-gray-100';
+
+export const flowSelectClass = flowControlBaseClass + ' cursor-pointer';
 
 /** Monaco instances inside scrollable flex columns need a width-bounded shell (`min-w-0`) or the editor collapses horizontally. */
 export const flowMonacoParamShellClass =
