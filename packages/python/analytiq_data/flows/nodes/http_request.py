@@ -53,21 +53,6 @@ class FlowsHttpRequestNode:
         "type": "object",
         "additionalProperties": False,
         "required": ["method", "url"],
-        "x-docrouter-order": [
-            "method",
-            "url",
-            "query_params",
-            "headers",
-            "body_mode",
-            "body_json",
-            "body_params",
-            "body_raw",
-            "body_content_type",
-            "full_response",
-            "never_error",
-            "follow_redirects",
-            "timeout_seconds",
-        ],
         "properties": {
             "method": {
                 "type": "string",
