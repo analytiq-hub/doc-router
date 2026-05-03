@@ -11,8 +11,8 @@ This document describes how **all** node parameter editors share a **single sche
 | Area | Status |
 |------|--------|
 | Schema-driven parameters + groups / widgets | Done |
-| Conditional visibility (`x-ui-show-when`) | Done — preferred for all hand-authored nodes |
-| Legacy visibility (`allOf` + `if`/`then` on frontend) | Supported for port-converted nodes; hand-authored nodes use `x-ui-show-when` |
+| Conditional visibility (`x-ui-show-when`) | Done — **only** mechanism the frontend uses to show/hide fields |
+| Port `displayOptions` → UI visibility | Done — single-field `show` maps to `x-ui-show-when` in `port/schema.py`; multi-field `show` / `hide` stays unmapped (see §4) |
 | Frontend validation | **Removed** — no AJV, no sentinels, no save-blocking |
 | Backend validation at save time | **Removed** — Draft7Validator no longer runs on raw (pre-resolution) params |
 | Backend validation at execution time | Done — `_validate_resolved_params()` runs after `resolve_parameters()` in all three execution paths |
@@ -46,9 +46,9 @@ Non-goals for v1: replacing Monaco for code nodes; building a full visual expres
 
 ### 2.2 Frontend
 
-- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks properties in declaration order, evaluates visibility via `x-ui-show-when` (and legacy `allOf`/`if`/`then` for port-converted schemas), merges defaults, clears hidden fields via schema defaults, and picks widgets based on `x-ui-widget` and inferred JSON Schema type.
+- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks properties in declaration order (`getOrderedKeys`), evaluates visibility **only** via `x-ui-show-when` (`isPropertyVisible` / `evalShowWhen`), merges defaults, clears hidden fields via schema defaults, and picks widgets based on `x-ui-widget` and inferred JSON Schema type.
 - **No frontend validation**: `flowParameterValidation.ts` has been removed. No AJV, no sentinel substitution, no inline errors, no Save-button blocking. Parameter errors surface after the user runs the flow or executes a step.
-- **`flowSchemaParameterUtils.ts`**: `evalShowWhen`, `isPropertyVisible`, `getVisiblePropertyKeys`, `clearHiddenFieldsToDefaults`, `applyParameterPatch`, `mergeParameterDefaults`. Also supports `allOf`/`if`/`then` visibility for legacy port-converted schemas (`instanceMatchesIfSchema`, `getIfBranchesForPropertyKey`). Unit-tested in `flowSchemaParameterUtils.spec.ts`.
+- **`flowSchemaParameterUtils.ts`**: `evalShowWhen`, `isPropertyVisible`, `getOrderedKeys`, `getVisiblePropertyKeys`, `defaultFromSubschema`, `mergeParameterDefaults`, `clearHiddenFieldsToDefaults`, `applyParameterPatch`. The UI **does not** interpret root `allOf`/`if`/`then` for visibility — port-converted nodes rely on emitted `x-ui-show-when` where the mapper applies. Unit-tested in `flowSchemaParameterUtils.spec.ts`.
 - **`FlowNameValueListField.tsx`** — pair editor with add/remove rows and drag-drop into name and value cells.
 - **`flows.http_request`** uses the generic path; no special-case branch in `FlowNodeConfigModal`.
 
@@ -63,7 +63,7 @@ Runtime evaluation — resolving expressions against actual upstream data — is
 | Was missing | How it is handled now |
 |-------------|-----------------------|
 | Array of `{name, value}` objects | `x-ui-widget: "name_value_list"` → `FlowNameValueListField` |
-| Conditional field visibility | `x-ui-show-when` on the property (preferred), or legacy `allOf`/`if`/`then` for port-converted schemas |
+| Conditional field visibility | `x-ui-show-when` on each property; port converter fills it from simple `displayOptions.show` |
 | `x-ui-enum-names` display labels | Read in `renderParamField` enum branch |
 | Display order | `properties` declaration order (Python insertion order, JSON key order) |
 | Section labels | `x-ui-group` renders a non-collapsible section divider |
@@ -111,22 +111,23 @@ All extensions are **optional**; schemas without them use inferred behavior.
 |---------|-------|---------|
 | `x-ui-widget` | property | Widget id: `"name_value_list"`, `"textarea"`, `"json"`, `"code"`, `"monospace"`. Required for pair-list arrays (not inferred). |
 | `x-ui-group` | property | Short string rendered as a non-collapsible section divider. Adjacent fields with the same group label are visually grouped. |
-| `x-ui-show-when` | property | `{ "field": "body_mode", "in": ["json"] }` or `{ "field": "body_mode", "equals": "raw" }`. **Preferred for visibility in hand-authored nodes.** Hidden field values are cleared to schema defaults by `clearHiddenFieldsToDefaults`. |
+| `x-ui-show-when` | property | `{ "field": "body_mode", "in": ["json"] }` or `{ "field": "body_mode", "equals": "raw" }`. **Use whenever a field should be hidden unless its predicate matches** (frontend has no other visibility source). Hidden field values are cleared to schema defaults by `clearHiddenFieldsToDefaults`. |
 | `x-ui-placeholder` | property | Placeholder text for string inputs. |
 | `x-ui-enum-names` | property | Human-readable labels for `enum` values; rendered as `<option>` text. |
+| `x-ui-regex` / `x-ui-regex-message` | property | Used on some hand-authored schemas (e.g. HTTP URL); **not yet read by the flows UI** — validation still runs post-resolution only. |
 
 ### Visibility: `x-ui-show-when` vs `allOf`/`if`/`then`
 
 These two mechanisms serve different purposes and should not be conflated:
 
-- **`x-ui-show-when`** is a **display rule** — it tells the UI whether to render a field. It is ignored by `Draft7Validator`. Hand-authored nodes should use this for all visibility.
-- **`allOf`/`if`/`then`** is a **validation constraint** — it tells `Draft7Validator` whether to apply certain constraints conditionally. It says nothing about display. The frontend also reads it as a legacy visibility signal for port-converted nodes (via `getIfBranchesForPropertyKey`), but this is a secondary use.
+- **`x-ui-show-when`** is a **display rule** — it tells the UI whether to render a field (`isPropertyVisible`). Omitted or absent → field is shown. Ignored by `Draft7Validator`. Hand-authored and port-converted nodes should carry this wherever fields are conditionally shown.
+- **`allOf`/`if`/`then`** is a **validation constraint** — it tells `Draft7Validator` whether to apply certain constraints conditionally after resolution. The **frontend does not** walk `if`/`then` branches to decide visibility.
 
 For hand-authored nodes, use both independently:
 - `x-ui-show-when` on the property for display
 - `allOf`/`if`/`then` at the root for conditional backend validation (e.g. `minLength` when a field is active)
 
-Port-converted nodes (from n8n via `port/schema.py`) emit `x-ui-show-when` for single-field `displayOptions.show`. Multi-field conditions are left unmapped.
+Port-converted nodes (from n8n via `port/schema.py`): `_apply_inode_ui_extensions` emits `x-ui-show-when` when `displayOptions.show` has exactly one field key and a value list. Multi-field `show`, `hide`, and other shapes are left unmapped — those properties may appear even when an n8n editor would hide them until the mapper is extended.
 
 ---
 
@@ -165,7 +166,7 @@ Expressions use Python syntax (`$json['field']`, `$node['Name']['json']`, etc.) 
 
 | Layer | What | Status |
 |-------|------|--------|
-| Unit (TS) | `getVisiblePropertyKeys`, `clearHiddenFieldsToDefaults`, `applyParameterPatch`, `evalShowWhen` | Done (`flowSchemaParameterUtils.spec.ts`) |
+| Unit (TS) | `getOrderedKeys`, `getVisiblePropertyKeys`, `defaultFromSubschema`, `mergeParameterDefaults`, `clearHiddenFieldsToDefaults`, `applyParameterPatch`, `evalShowWhen` | Done (`flowSchemaParameterUtils.spec.ts`) |
 | Python | `x-ui-*` keys present on HTTP node schema; `list(props.keys())` order | Done (`test_flow_http_request_node.py`) |
 | Python | Port converter maps `placeholder`, `code` type, `displayOptions.show` to `x-ui-*` | Done (`test_flow_port_schema_display.py`) |
 | Python | E2E flow run with expressions in pair-list values | Done (`test_flows_e2e.py`) |
