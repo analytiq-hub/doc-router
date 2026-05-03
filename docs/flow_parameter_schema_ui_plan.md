@@ -212,7 +212,7 @@ Parameters may contain strings starting with `=`. The remainder is evaluated as 
 | **`_json`** | JSON payload of the **current inbound item** (`FlowItem.json` for the item against which parameters are being resolved). |
 | **`_binary`** | Binary map of the **current inbound item**, materialized for expressions (metadata / refs; raw bytes are not exposed in the eval sandbox — same rules as today’s `_binary`). |
 | **`_input`** | The **entire multi-slot input structure** for the current node execution: all lanes, all items, plus `item` / `input_index` / `item_index` for the current row (see `materialize_input_context()`). |
-| **`_node`** | Access to **upstream node outputs**, keyed by the node’s **canvas name** (the `name` field on each node in the flow revision). For a given key, **`_node['NodeName'].json`** and **`_node['NodeName'].binary`** are the JSON and binary of that upstream node’s output item on the **same logical item index** as the current item (parallel lane semantics), not arbitrary `main[slot][i]` navigation by the author. |
+| **`_node`** | Access to **upstream node outputs**, keyed by the node’s **canvas name** (the `name` field on each node in the flow revision). **`_node['NodeName'].json`** and **`_node['NodeName'].binary`** refer to **output slot 0 only** (`main[0]`), at the **same `item_index`** as the current item. If slot 0 on that upstream node has **fewer items** than required for the current index, evaluation **errors** (no clamp, no `None`, no last-item fallback). For other output slots, authors use explicit indexing (e.g. **`_node['Name'].main[1][idx]`** once that shape exists) — not covered by the `.json` / `.binary` shortcuts. |
 
 **Why underscore:** these names are valid Python identifiers and match the keys injected into `eval(..., env)` (`_json`, `_binary`, `_node`, `_input`, …).
 
@@ -224,7 +224,7 @@ Parameters may contain strings starting with `=`. The remainder is evaluated as 
 |------|---------|--------|
 | Authoring syntax in UI / drag hints | **`_json`**, **`_binary`** in Context + IO drag (done) | Same; document **`_input`**, **`_node`** everywhere (`flows2.md`, HTTP docs). |
 | `$` aliases in eval | **Removed** — expressions are plain Python using injected names only. | No change. |
-| `_node` shape | `materialize_node_data(run_data)` returns a dict keyed by **node id**, values `{ status, main: [ [ {…json per item} ], … ] }` — JSON only per cell, no `.json` / `.binary` attribute API | Dict (or small namespace type) keyed by **node name**, each entry exposes **`.json`** / **`.binary`** for the **aligned** item index. |
+| `_node` shape | `materialize_node_data(run_data)` returns a dict keyed by **node id**, values `{ status, main: [ [ {…json per item} ], … ] }` — JSON only per cell, no `.json` / `.binary` attribute API | Dict (or small namespace type) keyed by **node name**; **`.json` / `.binary`** = **slot 0 only**, same **`item_index`** as current item; **short lane → error**. |
 | Binary for prior nodes in `_node` | Not exposed per prior item in `_node` today (materialization is JSON-centric) | Define whether `.binary` is always present (empty map) or populated with the same ref-only shape as `_binary`; implement materialization accordingly. |
 | Eval context | `eval_expression(..., run_data, input_context)` has no revision `nodes` list | Building name-keyed `_node` needs **`id → name` map** (and possibly slot topology) from the **revision** at preview and execute time — **thread `nodes` (or a precomputed name index)** into `eval_expression` / `preview_parameter_expression` / `resolve_parameters` callers. |
 
@@ -237,7 +237,7 @@ Parameters may contain strings starting with `=`. The remainder is evaluated as 
 1. Add a helper, e.g. `materialize_node_outputs_by_name(run_data, nodes: list[dict]) -> dict[str, Any]`, that:  
    - Builds `node_id → name` from `nodes` (`ad.flows.node_name(n)` — align with engine uniqueness rules).  
    - For each completed upstream node in `run_data`, maps **id-keyed** `materialize_node_data` rows into **name-keyed** entries.  
-2. For each name, expose **aligned** `.json` / `.binary` for the current `input_context["item_index"]` (and define behaviour when upstream lane length differs — e.g. clamp, `None`, or last-item policy; document and test).  
+2. For each name, expose **aligned** `.json` / `.binary` from **`main[0]` only** for the current `input_context["item_index"]`; if **`len(main[0]) <= item_index`**, raise **`ExpressionError`** (or equivalent) so the node’s `on_error` policy applies.  
 3. Replace the `_node` entry in `eval_expression`’s env with this structure in one release (no dual id/name layout).
 
 **Phase C — Call-site threading (medium risk)**  
@@ -250,11 +250,12 @@ Parameters may contain strings starting with `=`. The remainder is evaluated as 
 - Frontend: regression on drag payload strings using `_json` roots.  
 - Manual: rename a node and confirm expressions / preview still resolve when using **name** keys.
 
-### 9.4 Open points to decide before coding Phase B
+### 9.4 Decided semantics (name-keyed `_node`; implement in Phase B)
 
-- **Item alignment:** If upstream slot 0 has fewer items than the current lane, pick `None`, last item, or error — must be deterministic.  
-- **Multi-output slots:** Whether `_node['Name'].json` means **slot 0 only** or requires explicit slot in the API (e.g. `_node['Name'].main[1]` vs flat `.json`). The table above assumes a **single primary JSON/binary pair** per named node for the common case.  
-- **Merge / batch nodes:** How `_input` and “same index” interact when `item_index` is undefined or N:1 merges; document special cases.
+- **Item alignment:** If the referenced upstream node’s **output slot 0** has fewer items than needed for the current **`item_index`**, treat as **error** (deterministic failure; no `None`, clamp, or last-item fallback).
+- **`.json` / `.binary` shortcuts:** **`_node['Name'].json`** and **`_node['Name'].binary`** mean **output slot 0 only** (`main[0][item_index]`). Other slots require an explicit path (e.g. `_node['Name'].main[1][…]` when that API is added).
+
+**Still open:** merge / batch nodes — how `_input` and “same index” interact when `item_index` is undefined or N:1 merges; document when implementing merge-aware preview and execution.
 
 ---
 
@@ -263,4 +264,4 @@ Parameters may contain strings starting with `=`. The remainder is evaluated as 
 - Freeze the `x-ui-*` keyword set before widespread use in ported node schemas.
 - Expression preview API design: dedicated endpoint vs. reusing the existing step-execution path.
 - Whether to validate on every per-item execution or only the first item (current: first item only, to avoid redundant work when all items share the same parameter structure).
-- **§9.4:** `_node['Name'].json` alignment and slot semantics before implementing name-keyed `_node`.
+- **§9.4 (remaining):** merge/batch interaction with `_input` / `item_index` for name-keyed `_node`.
