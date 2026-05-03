@@ -11,6 +11,7 @@ import { FLOW_WORKSPACE_HEADER_HEIGHT_CLASS, FLOW_WORKSPACE_TITLE_READ_CLASS } f
 import FlowLogsPanel from '@/components/flows/FlowLogsPanel';
 import { snapRfNodesPositions } from '@/components/flows/canvasGrid';
 import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNodeData } from '@/components/flows/flowRf';
+import { GRAPH_BLOCKED_MESSAGE, triggerReachabilityFromGraph } from '@/components/flows/flowTriggerReachability';
 import { useFlowApi } from '@/components/flows/useFlowApi';
 import type { Edge, Node } from 'reactflow';
 import FlowExecutionsView from '@/components/flows/FlowExecutionsView';
@@ -73,8 +74,11 @@ export default function FlowDetailPageClient({
     rfEdges,
     flowName,
     latestFlowRevid,
+    nodeTypesByKey: {} as Record<string, FlowNodeType | undefined>,
   });
-  persistCtxRef.current = { revision, rfNodes, rfEdges, flowName, latestFlowRevid };
+  const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
+
+  persistCtxRef.current = { revision, rfNodes, rfEdges, flowName, latestFlowRevid, nodeTypesByKey };
   const pinPersistChain = useRef(Promise.resolve());
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [logsExpandedPct, setLogsExpandedPct] = useState<number>(() => {
@@ -138,6 +142,14 @@ export default function FlowDetailPageClient({
     if (!revision) return null;
     return revisionContentFingerprint(flowName, rfNodes as FlowRfNode[], rfEdges as FlowRfEdge[], revision);
   }, [flowName, rfNodes, rfEdges, revision]);
+
+  const graphStructurallyValid = useMemo(() => {
+    if (rfNodes.length === 0) return true;
+    const flowNodes = (rfNodes as Node<FlowRfNodeData>[]).map((x) => x.data.flowNode);
+    return triggerReachabilityFromGraph(flowNodes, rfEdges, nodeTypesByKey).allReachable;
+  }, [nodeTypesByKey, rfEdges, rfNodes]);
+
+  const graphSaveBlockedReason = graphStructurallyValid ? null : GRAPH_BLOCKED_MESSAGE;
 
   const isDirty = useMemo(() => {
     if (graphFingerprint == null || savedContentFingerprint == null) return false;
@@ -231,6 +243,10 @@ export default function FlowDetailPageClient({
 
   const onSave = useCallback(async () => {
     if (!revision) return;
+    if (rfNodes.length > 0 && !graphStructurallyValid) {
+      setMessage(GRAPH_BLOCKED_MESSAGE);
+      return;
+    }
     try {
       setIsSaving(true);
       setMessage('');
@@ -265,12 +281,23 @@ export default function FlowDetailPageClient({
     } finally {
       setIsSaving(false);
     }
-  }, [api, flowId, flowName, latestFlowRevid, rfEdges, rfNodes, revision]);
+  }, [api, flowId, flowName, graphStructurallyValid, latestFlowRevid, rfEdges, rfNodes, revision]);
 
   /** Persist pin/unpin immediately so server matches the editor (no separate Save), like common workflow tooling. */
   const persistPinDataToServer = useCallback(
     async (mergedRevision: FlowRevision, pinData: FlowPinData | null) => {
       const ctx = persistCtxRef.current;
+      if (
+        ctx.rfNodes.length > 0 &&
+        !triggerReachabilityFromGraph(
+          (ctx.rfNodes as Node<FlowRfNodeData>[]).map((x) => x.data.flowNode),
+          ctx.rfEdges,
+          ctx.nodeTypesByKey,
+        ).allReachable
+      ) {
+        setMessage(GRAPH_BLOCKED_MESSAGE);
+        throw new Error(GRAPH_BLOCKED_MESSAGE);
+      }
       setIsSaving(true);
       setMessage('');
       try {
@@ -473,6 +500,7 @@ export default function FlowDetailPageClient({
                   isDirty={isDirty}
                   isSaving={isSaving}
                   activationPending={activationPending}
+                  graphSaveBlockedReason={graphSaveBlockedReason}
                   onSave={onSave}
                   onActivate={onActivate}
                   onDeactivate={onDeactivate}

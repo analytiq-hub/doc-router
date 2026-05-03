@@ -28,6 +28,8 @@ export type FlowRfNodeDataWithRun = FlowRfNodeData & {
   executionNodeStatus?: NodeRunStatusBadge;
   /** True when the node has pinned output in the current revision. */
   pinned?: boolean;
+  /** Editor: false when no directed path exists from any trigger to this node. Omitted elsewhere. */
+  reachableFromTriggers?: boolean;
 };
 
 export function applyExecutionStatusToNodes(

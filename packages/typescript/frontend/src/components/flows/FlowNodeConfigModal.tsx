@@ -42,6 +42,7 @@ import {
   flowWorkspaceMenuPanelClass,
   flowWorkspaceMenuTriggerIconBtnClass,
 } from './flowWorkspaceMenu';
+import { triggerReachabilityFromGraph } from './flowTriggerReachability';
 
 const IoBlock: React.FC<{
   title: string;
@@ -208,6 +209,19 @@ const FlowNodeConfigModal: React.FC<{
   const outputValue = useMemo(() => (outputItems ? outputItems.map((i) => i.json) : null), [outputItems]);
 
   const isTrigger = Boolean(nodeType?.is_trigger);
+
+  const nodeTypesByKeyModal = useMemo(
+    () => Object.fromEntries((nodeTypes ?? []).map((nt) => [nt.key, nt])),
+    [nodeTypes],
+  );
+
+  const reachFromTriggersModal = useMemo(() => {
+    const list = allNodes?.length ? allNodes : node ? [node] : [];
+    return triggerReachabilityFromGraph(list, edges, nodeTypesByKeyModal);
+  }, [allNodes, edges, node, nodeTypesByKeyModal]);
+
+  const executeStepDisconnected =
+    Boolean(node && !isTrigger && !reachFromTriggersModal.reachable.has(node.id));
 
   const [pinEditOpen, setPinEditOpen] = useState(false);
   const [pinEditText, setPinEditText] = useState('');
@@ -452,10 +466,14 @@ const FlowNodeConfigModal: React.FC<{
                           <div className="flex shrink-0 items-center pr-1">
                             <button
                               type="button"
-                              disabled={executeStepBusy}
+                              disabled={executeStepBusy || executeStepDisconnected}
                               onClick={() => void onExecuteStep()}
                               className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-red-200 bg-[#ff6d5a] px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
-                              title="Run this node; upstream outputs are reused from the latest test run when available"
+                              title={
+                                executeStepDisconnected
+                                  ? 'Connect this node from at least one trigger with graph edges'
+                                  : 'Run this node; upstream outputs are reused from the latest test run when available'
+                              }
                             >
                               <BeakerIcon className="h-3.5 w-3.5" aria-hidden />
                               {executeStepBusy ? 'Running…' : 'Execute step'}

@@ -50,6 +50,7 @@ import { FLOW_CANVAS_GRID_PX, snapToFlowGrid } from './canvasGrid';
 import { edgesWithRunDataItemCounts } from './flowNodeIoPreview';
 import { inputHandleCount } from './flowRf';
 import type { FlowRfNodeData } from './flowRf';
+import { triggerReachabilityFromGraph } from './flowTriggerReachability';
 
 const EXECUTE_BUTTON_BG = '#ff6d5a';
 const EXECUTE_BUTTON_BG_HOVER = '#e85d4d';
@@ -247,6 +248,11 @@ const FlowEditor: React.FC<{
     [edges, runData, pinData],
   );
 
+  const nodesReachFromTriggers = useMemo(
+    () => triggerReachabilityFromGraph(nodes.map((n) => n.data.flowNode), edges, nodeTypesByKey).reachable,
+    [edges, nodeTypesByKey, nodes],
+  );
+
   const nodesWithPinnedFlag = useMemo(() => {
     // Keep node identity stable; only enrich the `data` payload for rendering.
     return nodes.map((n) => ({
@@ -254,9 +260,10 @@ const FlowEditor: React.FC<{
       data: {
         ...n.data,
         pinned: Boolean(pinData?.[n.id]),
+        reachableFromTriggers: nodesReachFromTriggers.has(n.id),
       },
     }));
-  }, [nodes, pinData]);
+  }, [nodes, nodesReachFromTriggers, pinData]);
 
   useEffect(() => {
     if (configModalNodeId && !nodes.some((n) => n.id === configModalNodeId)) {

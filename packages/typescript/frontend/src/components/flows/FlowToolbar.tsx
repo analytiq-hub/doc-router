@@ -53,6 +53,8 @@ const FlowToolbar: React.FC<{
   isDirty: boolean;
   isSaving: boolean;
   activationPending?: boolean;
+  /** When set, Save is blocked (tooltip + banner) until the graph is valid. */
+  graphSaveBlockedReason?: string | null;
   onSave: () => void;
   onActivate: () => void;
   onDeactivate: () => void;
@@ -65,6 +67,7 @@ const FlowToolbar: React.FC<{
   isDirty,
   isSaving,
   activationPending = false,
+  graphSaveBlockedReason = null,
   onSave,
   onActivate,
   onDeactivate,
@@ -74,8 +77,9 @@ const FlowToolbar: React.FC<{
   const [nameFocus, setNameFocus] = useState(false);
   const showNameField = nameHover || nameFocus;
   const measure = useInlineNameWidthPx(name, 'Flow name');
-  const activateDisabled = isDirty || activationPending;
+  const activateDisabled = isDirty || activationPending || Boolean(graphSaveBlockedReason);
   const deactivateDisabled = activationPending;
+  const saveDisabled = !isDirty || isSaving || Boolean(graphSaveBlockedReason);
 
   return (
     <div className={`flex ${FLOW_WORKSPACE_HEADER_HEIGHT_CLASS} shrink-0 items-center justify-between border-b border-gray-200 bg-white px-3`}>
@@ -115,14 +119,14 @@ const FlowToolbar: React.FC<{
             </span>
           )}
         </div>
-        {isDirty && <div className="shrink-0 text-xs text-amber-700">Unsaved changes</div>}
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <button
           type="button"
           className={flowToolbarBtnClass}
           onClick={onSave}
-          disabled={!isDirty || isSaving}
+          disabled={saveDisabled}
+          title={graphSaveBlockedReason ?? undefined}
         >
           {isSaving ? 'Saving…' : 'Save'}
         </button>
@@ -132,7 +136,7 @@ const FlowToolbar: React.FC<{
             className={flowToolbarBtnClass}
             onClick={onActivate}
             disabled={activateDisabled}
-            title={isDirty ? 'Save before activating' : undefined}
+            title={graphSaveBlockedReason ? graphSaveBlockedReason : isDirty ? 'Save before activating' : undefined}
           >
             {activationPending ? 'Activating…' : 'Activate'}
           </button>
