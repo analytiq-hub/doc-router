@@ -24,9 +24,9 @@ def test_http_request_parameter_schema_display_extensions(http_node: FlowsHttpRe
     """UI hints are embedded for schema-driven parameter forms (see docs/flow_parameter_schema_ui_plan.md)."""
     schema = http_node.parameter_schema
     props = schema["properties"]
-    assert props["query_params"].get("x-display-ui") == "nameValueList"
-    assert props["body_json"].get("x-display-showWhen") == {"field": "body_mode", "in": ["json"]}
-    assert props["body_raw"].get("x-display-showWhen") == {"field": "body_mode", "equals": "raw"}
+    assert props["query_params"].get("x-ui-widget") == "nameValueList"
+    assert props["body_json"].get("x-ui-show-when") == {"field": "body_mode", "in": ["json"]}
+    assert props["body_raw"].get("x-ui-show-when") == {"field": "body_mode", "equals": "raw"}
     assert list(props.keys()) == [
         "method",
         "url",

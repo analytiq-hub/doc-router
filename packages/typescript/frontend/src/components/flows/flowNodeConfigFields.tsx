@@ -144,14 +144,14 @@ export const FlowNodeParameterFields: React.FC<{
 
   const renderParamField = (key: string, subschema: { type?: string; enum?: unknown[] } & Record<string, unknown>) => {
     const t = subschema?.type;
-    const uiHint = typeof subschema['x-display-ui'] === 'string' ? (subschema['x-display-ui'] as string) : '';
+    const uiHint = typeof subschema['x-ui-widget'] === 'string' ? (subschema['x-ui-widget'] as string) : '';
     const params = mergedParams;
     const v = params[key];
     const isCode =
       key === 'python_code' || key === 'js_code' || key === 'ts_code' || uiHint === 'code';
     const hasOneOf = Array.isArray((subschema as { oneOf?: unknown }).oneOf);
     const rawPlaceholder =
-      typeof subschema['x-display-placeholder'] === 'string' ? (subschema['x-display-placeholder'] as string) : '';
+      typeof subschema['x-ui-placeholder'] === 'string' ? (subschema['x-ui-placeholder'] as string) : '';
 
     if (uiHint === 'nameValueList') {
       if (readOnly) {
@@ -227,7 +227,7 @@ export const FlowNodeParameterFields: React.FC<{
     }
 
     if (subschema?.enum && Array.isArray(subschema.enum)) {
-      const enumNames = (subschema['x-enumNames'] as unknown[] | undefined) ?? undefined;
+      const enumNames = (subschema['x-ui-enum-names'] as unknown[] | undefined) ?? undefined;
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
@@ -408,7 +408,7 @@ export const FlowNodeParameterFields: React.FC<{
   for (const key of orderedKeys) {
     if (!isPropertyVisible(key, schemaProps, mergedParams)) continue;
     const sub = schemaProps[key];
-    const groupRaw = sub['x-display-group'];
+    const groupRaw = sub['x-ui-group'];
     const group = typeof groupRaw === 'string' ? groupRaw.trim() || undefined : undefined;
 
     if (group) {

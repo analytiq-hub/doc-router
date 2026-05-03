@@ -245,7 +245,7 @@ class NodeType(Protocol):
     def validate_parameters(self, params: dict) -> list[str]: ...
 ```
 
-`parameter_schema` may include **`x-display-*`** vendor keys for the flow editor (groups, visibility, widget hints; see `docs/flow_parameter_schema_ui_plan.md`). The engine’s Draft 7 validator still applies to saved node **`parameters`** only; extra `x-*` entries on the schema object are ignored by validation.
+`parameter_schema` may include **`x-ui-*`** vendor keys for the flow editor (groups, visibility, widget hints; see `docs/flow_parameter_schema_ui_plan.md`). The engine’s Draft 7 validator still applies to saved node **`parameters`** only; extra `x-*` entries on the schema object are ignored by validation.
 
 Register a node type with `ad.flows.register(MyNodeType())`.
 

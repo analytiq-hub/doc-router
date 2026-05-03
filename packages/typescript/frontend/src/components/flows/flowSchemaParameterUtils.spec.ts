@@ -23,7 +23,7 @@ const httpLikeSchema = {
     body_json: {
       type: 'string',
       default: '',
-      'x-display-showWhen': { field: 'body_mode', in: ['json'] },
+      'x-ui-show-when': { field: 'body_mode', in: ['json'] },
     },
   },
 };

@@ -115,7 +115,7 @@ Build a single `parameter.schema.json` `object` whose `properties` are the top-l
 | `string` | `{"type": "string"}` | |
 | `number` | `{"type": "number"}` | |
 | `boolean` | `{"type": "boolean"}` | |
-| `options` | `{"type": "string", "enum": [...]}` | `options[].value` → enum values; `options[].name` → **`x-enumNames`** (UI hint array, same order as `enum`) |
+| `options` | `{"type": "string", "enum": [...]}` | `options[].value` → enum values; `options[].name` → **`x-ui-enum-names`** (UI hint array, same order as `enum`) |
 | `multiOptions` | `{"type": "array", "items": {"type": "string", "enum": [...]}}` | |
 | `collection` | `{"type": "object", "properties": {...}}` | Recurse into `options` |
 | `fixedCollection` | `{"type": "object", "properties": {...}}` | Flatten `values` arrays into properties |
@@ -129,13 +129,13 @@ Build a single `parameter.schema.json` `object` whose `properties` are the top-l
 
 **`default` values:** carry through as JSON Schema `default` on the property.
 
-**UI extensions (`x-display-*`):** `analytiq_data/flows/port/schema.py` (`inode_property_to_schema`) attaches DocRouter UI hints alongside validation shape (see `docs/flow_parameter_schema_ui_plan.md`):
+**UI extensions (`x-ui-*`):** `analytiq_data/flows/port/schema.py` (`inode_property_to_schema`) attaches DocRouter UI hints alongside validation shape (see `docs/flow_parameter_schema_ui_plan.md`):
 
 | n8n source | Schema extension |
 |---|---|
-| `placeholder` | **`x-display-placeholder`** |
-| `type: "code"` | **`x-display-ui": "code"`** (Monaco code path in the flows editor) |
-| `displayOptions.show` with **exactly one** key | **`x-display-showWhen`**: `{ "field": "<that key>", "in": [<allowed values>] }` |
+| `placeholder` | **`x-ui-placeholder`** |
+| `type: "code"` | **`x-ui-widget": "code"`** (Monaco code path in the flows editor) |
+| `displayOptions.show` with **exactly one** key | **`x-ui-show-when`**: `{ "field": "<that key>", "in": [<allowed values>] }` |
 
 If `show` lists multiple keys (conjunctive n8n visibility) or uses **`hide`**, nothing is emitted yet — those fields stay visible until the mapper is extended.
 
@@ -666,7 +666,7 @@ class ExtPostgresQueryNode:
 
 | Gap | Impact | Mitigation |
 |---|---|---|
-| `displayOptions` partial mapping | Only single-key `show` maps to **`x-display-showWhen`**; multi-key / `hide` unchanged | Extend `port/schema.py` or hand-annotate manifests |
+| `displayOptions` partial mapping | Only single-key `show` maps to **`x-ui-show-when`**; multi-key / `hide` unchanged | Extend `port/schema.py` or hand-annotate manifests |
 | `loadOptions` / `listSearch` methods | Dynamic dropdowns become plain `string` fields | Schema gets `{"type": "string"}`; user types value manually |
 | Binary data nodes (files, images) | Cannot be ported declaratively | `python_class` stub; manual Python port |
 | Sub-workflow nodes (`ExecuteWorkflow`) | DocRouter has a different sub-flow model | Stub only |
