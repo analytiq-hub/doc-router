@@ -129,7 +129,7 @@ See `docs/node_param_validation.md`. Use AJV in the frontend to validate `node.p
 | Python | `x-ui-*` keys present on HTTP node schema; `list(props.keys())` order | Done (`test_flow_http_request_node.py`) |
 | Python | Port converter maps `placeholder`, `code` type, `displayOptions.show` to `x-ui-*` | Done (`test_flow_port_schema_display.py`) |
 | Manual | Phase C QA checklist (below) | Due before merge |
-| Unit (TS) | AJV inline validation errors per field | Phase E |
+| Unit (TS) | AJV inline validation errors per field | Done (`flowParameterValidation.spec.ts`, `flowNodeConfigFields.tsx`) |
 
 **Phase C manual QA checklist:**
 

@@ -217,6 +217,8 @@ const FlowEditor: React.FC<{
   onExecuteStep?: (args: { targetNodeId: string; seedRunData: Record<string, unknown> }) => void | Promise<void>;
   /** Org API for flow credential pickers in the node modal. */
   flowOrgApi?: DocRouterOrgApi | null;
+  /** Fired when the node config modal is closed (always `true`) or when parameter validity changes while open. */
+  onConfigParameterValidityChange?: (valid: boolean) => void;
 }> = ({
   nodeTypes,
   nodes,
@@ -231,6 +233,7 @@ const FlowEditor: React.FC<{
   onOpenConfigNodeIdChange,
   onExecuteStep,
   flowOrgApi = null,
+  onConfigParameterValidityChange,
 }) => {
   const { rfCanvasNodeTypes, rfCanvasEdgeTypes } = useStableFlowRfCanvasRegistration();
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
@@ -281,6 +284,12 @@ const FlowEditor: React.FC<{
       return () => clearTimeout(t);
     }
   }, [nodePaletteOpen]);
+
+  useEffect(() => {
+    if (configModalNodeId == null) {
+      onConfigParameterValidityChange?.(true);
+    }
+  }, [configModalNodeId, onConfigParameterValidityChange]);
 
   const closePalette = useCallback(() => {
     pendingEdgeInsertRef.current = null;
@@ -745,6 +754,7 @@ const FlowEditor: React.FC<{
         onExecuteStep={onExecuteStep ? onExecuteStepClick : undefined}
         executeStepBusy={executeStepBusy}
         flowOrgApi={flowOrgApi}
+        onParametersValidityChange={onConfigParameterValidityChange}
       />
 
       {nodePaletteOpen && (

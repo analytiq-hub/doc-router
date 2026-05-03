@@ -152,6 +152,8 @@ const FlowNodeConfigModal: React.FC<{
   executeStepBusy?: boolean;
   /** When set, credential slot pickers load saved org credentials. */
   flowOrgApi?: DocRouterOrgApi | null;
+  /** Report whether current parameters satisfy JSON Schema (for disabling Save). */
+  onParametersValidityChange?: (valid: boolean) => void;
 }> = ({
   open,
   onClose,
@@ -170,6 +172,7 @@ const FlowNodeConfigModal: React.FC<{
   onExecuteStep,
   executeStepBusy = false,
   flowOrgApi = null,
+  onParametersValidityChange,
 }) => {
   const [tab, setTab] = useState(0);
   const [nameHover, setNameHover] = useState(false);
@@ -462,7 +465,13 @@ const FlowNodeConfigModal: React.FC<{
                       <TabPanel>
                         <div className="space-y-4">
                           {node && (
-                            <FlowNodeParameterFields readOnly={readOnly} node={node} nodeType={nodeType} onChange={onChange} />
+                            <FlowNodeParameterFields
+                              readOnly={readOnly}
+                              node={node}
+                              nodeType={nodeType}
+                              onChange={onChange}
+                              onParametersValidityChange={onParametersValidityChange}
+                            />
                           )}
                           {node && (
                             <FlowNodeCredentialSlots
