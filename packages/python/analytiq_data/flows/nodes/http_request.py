@@ -169,21 +169,6 @@ class FlowsHttpRequestNode:
                 "x-ui-group": "Options",
             },
         },
-        "allOf": [
-            {
-                "if": {"properties": {"body_mode": {"enum": ["json"]}}},
-                "then": {"properties": {"body_json": {"type": "string", "minLength": 1}}},
-            },
-            {
-                "if": {"properties": {"body_mode": {"const": "raw"}}},
-                "then": {
-                    "properties": {
-                        "body_raw": {"type": "string", "minLength": 1},
-                        "body_content_type": {"type": "string", "minLength": 1},
-                    }
-                },
-            },
-        ],
     }
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
@@ -194,6 +179,14 @@ class FlowsHttpRequestNode:
         ts = params.get("timeout_seconds")
         if ts is not None and (not isinstance(ts, (int, float)) or ts <= 0):
             errs.append("timeout_seconds must be a positive number")
+        body_mode = params.get("body_mode", "none")
+        if body_mode == "json" and not str(params.get("body_json") or "").strip():
+            errs.append("body_json must not be empty when body mode is json")
+        if body_mode == "raw":
+            if not str(params.get("body_raw") or "").strip():
+                errs.append("body_raw must not be empty when body mode is raw")
+            if not str(params.get("body_content_type") or "").strip():
+                errs.append("body_content_type must not be empty when body mode is raw")
         return errs
 
     async def execute(

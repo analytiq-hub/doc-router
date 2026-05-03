@@ -208,9 +208,8 @@ def validate_revision(
 
 def _validate_resolved_params(node_id: str, node_type: Any) -> None:
     """
-    Validate resolved (expression-free) parameters against the node's JSON Schema.
-    Called after `resolve_parameters()` so expressions have already been substituted
-    with their runtime values.
+    Validate resolved (expression-free) parameters against the node's JSON Schema
+    and node-type-specific rules. Called after `resolve_parameters()`.
     """
     resolved = node_type.get("parameters") or {}
     nt = ad.flows.get(node_type["type"])
@@ -220,6 +219,11 @@ def _validate_resolved_params(node_id: str, node_type: Any) -> None:
         raise RuntimeError(
             f"Parameter validation failed for node {node_id} ({nt.key}): {e}"
         ) from e
+    errs = nt.validate_parameters(resolved) or []
+    if errs:
+        raise RuntimeError(
+            f"Parameter validation failed for node {node_id} ({nt.key}): {'; '.join(errs)}"
+        )
 
 
 def _empty_outputs(outputs: int) -> list[list["ad.flows.FlowItem"]]:
