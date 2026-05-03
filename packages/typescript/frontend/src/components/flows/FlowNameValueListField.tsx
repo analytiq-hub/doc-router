@@ -2,7 +2,8 @@
 
 import React from 'react';
 import { flowInputClass, flowLabelClass } from './flowUiClasses';
-import { FLOW_VALUE_MIME, type FlowValueDragPayload } from './IoViewer';
+import { FLOW_VALUE_MIME, payloadToExpression, type FlowValueDragPayload } from './IoViewer';
+import { FlowExpressionPreviewLine, type ExpressionPreviewContext } from './FlowExpressionPreviewLine';
 
 export type NameValuePair = { name: string; value: string };
 
@@ -17,14 +18,6 @@ function parseDropPayload(e: React.DragEvent): FlowValueDragPayload | null {
   } catch {
     return null;
   }
-}
-
-export function payloadToExpression(p: FlowValueDragPayload): string {
-  let expr = `_node["${p.nodeId}"]["json"]`;
-  for (const seg of p.path) {
-    expr += typeof seg === 'number' ? `[${seg}]` : `["${String(seg)}"]`;
-  }
-  return `=${expr}`;
 }
 
 export function coerceNameValuePairs(raw: unknown): NameValuePair[] {
@@ -44,10 +37,13 @@ export const FlowNameValueListField: React.FC<{
   label: string;
   value: unknown;
   readOnly: boolean;
+  /** Modal node id — used to choose `$json` vs `_node[…].main` when dropping from IO. */
+  configuringNodeId?: string;
+  expressionPreview?: ExpressionPreviewContext | null;
   onChange: (next: NameValuePair[]) => void;
   /** Per-row validation messages (e.g. from JSON Schema / AJV on list items). */
   rowErrors?: Record<number, string>;
-}> = ({ label, value, readOnly, onChange, rowErrors }) => {
+}> = ({ label, value, readOnly, configuringNodeId, expressionPreview, onChange, rowErrors }) => {
   const pairs = coerceNameValuePairs(value);
 
   return (
@@ -68,30 +64,33 @@ export const FlowNameValueListField: React.FC<{
                   onChange(n);
                 }}
               />
-              <input
-                className={flowInputClass + ' min-w-0 flex-1'}
-                placeholder="value or =expression"
-                value={row.value}
-                readOnly={readOnly}
-                onChange={(e) => {
-                  const n = [...pairs];
-                  n[i] = { ...n[i], value: e.target.value };
-                  onChange(n);
-                }}
-                onDragOver={(e) => {
-                  if (readOnly) return;
-                  if (e.dataTransfer.types.includes(FLOW_VALUE_MIME)) e.preventDefault();
-                }}
-                onDrop={(e) => {
-                  if (readOnly) return;
-                  const p = parseDropPayload(e);
-                  if (!p) return;
-                  e.preventDefault();
-                  const n = [...pairs];
-                  n[i] = { ...n[i], value: payloadToExpression(p) };
-                  onChange(n);
-                }}
-              />
+              <div className="min-w-0 flex-1 space-y-0">
+                <input
+                  className={flowInputClass + ' min-w-0 w-full'}
+                  placeholder="value or =expression"
+                  value={row.value}
+                  readOnly={readOnly}
+                  onChange={(e) => {
+                    const n = [...pairs];
+                    n[i] = { ...n[i], value: e.target.value };
+                    onChange(n);
+                  }}
+                  onDragOver={(e) => {
+                    if (readOnly) return;
+                    if (e.dataTransfer.types.includes(FLOW_VALUE_MIME)) e.preventDefault();
+                  }}
+                  onDrop={(e) => {
+                    if (readOnly) return;
+                    const p = parseDropPayload(e);
+                    if (!p) return;
+                    e.preventDefault();
+                    const n = [...pairs];
+                    n[i] = { ...n[i], value: payloadToExpression(p, configuringNodeId) };
+                    onChange(n);
+                  }}
+                />
+                {expressionPreview ? <FlowExpressionPreviewLine expression={row.value} preview={expressionPreview} /> : null}
+              </div>
               {!readOnly && (
                 <button
                   type="button"

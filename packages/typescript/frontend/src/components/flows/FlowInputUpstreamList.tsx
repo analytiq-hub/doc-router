@@ -25,7 +25,8 @@ export const FlowInputUpstreamList: React.FC<{
   upstreamNodeIcons?: ReadonlyMap<string, UpstreamNodeIconMeta | undefined>;
   mode: 'schema' | 'table' | 'json';
   onModeChange: (next: 'schema' | 'table' | 'json') => void;
-}> = ({ slots, nodeLabelById, upstreamNodeIcons, mode, onModeChange }) => {
+  expressionConfigNodeId?: string;
+}> = ({ slots, nodeLabelById, upstreamNodeIcons, mode, onModeChange, expressionConfigNodeId }) => {
   if (slots.length === 0) return null;
 
   return (
@@ -84,6 +85,7 @@ export const FlowInputUpstreamList: React.FC<{
                     value={s.itemsJson}
                     valueKind="executionItems"
                     dragSource={{ nodeId: s.fromNodeId, source: 'nodeOutput' }}
+                    expressionConfigNodeId={expressionConfigNodeId}
                     defaultMode="schema"
                     mode={mode}
                     onModeChange={onModeChange}

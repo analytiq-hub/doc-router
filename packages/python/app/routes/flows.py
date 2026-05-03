@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Flow CRUD + execution routes (v1 scaffolding) as defined in `docs/flows.md`."""
 
+import json
 import logging
 from datetime import datetime, UTC
 from typing import Any, Optional, List, Literal
@@ -144,6 +145,24 @@ class ListExecutionsResponse(BaseModel):
     total: int
 
 
+class PreviewFlowExpressionRequest(BaseModel):
+    expression: str = Field(..., max_length=16_384)
+    run_data: dict[str, Any] = Field(default_factory=dict)
+    """Plain JSON rows for inbound slot 0 (same shape as INPUT tab / ``itemsJson`` previews)."""
+
+    input_items: list[dict[str, Any]] = Field(default_factory=list)
+    preview_item_index: int = Field(0, ge=0, le=50_000)
+    execution_refs: dict[str, Any] | None = None
+
+
+class PreviewFlowExpressionResponse(BaseModel):
+    skipped: bool = False
+    ok: bool
+    preview_text: str | None = None
+    value: Any | None = None
+    error: str | None = None
+
+
 async def _get_db():
     return ad.common.get_async_db()
 
@@ -175,6 +194,44 @@ async def list_node_types(organization_id: str, current_user: User = Depends(get
             }
         )
     return {"items": items, "total": len(items)}
+
+
+@flows_router.post(
+    "/v0/orgs/{organization_id}/flows/preview-expression",
+    response_model=PreviewFlowExpressionResponse,
+)
+async def preview_flow_expression(
+    organization_id: str,
+    req: PreviewFlowExpressionRequest,
+    current_user: User = Depends(get_org_user),
+):
+    # Auth only (org scoped); evaluator is sandboxed in analytiq_data.
+    if len(req.run_data) > 120:
+        raise HTTPException(status_code=400, detail="run_data has too many node entries for preview")
+
+    val, err = ad.flows.preview_parameter_expression(
+        req.expression,
+        run_data=req.run_data,
+        input_items_json=req.input_items,
+        preview_item_index=req.preview_item_index,
+        execution_refs=req.execution_refs,
+    )
+    if val is None and err is None:
+        return PreviewFlowExpressionResponse(skipped=True, ok=True)
+
+    if err is not None:
+        return PreviewFlowExpressionResponse(skipped=False, ok=False, error=err)
+
+    preview_body: str
+    try:
+        preview_body = json.dumps(val, default=str)
+    except TypeError:
+        preview_body = str(val)
+    max_len = 4000
+    if len(preview_body) > max_len:
+        preview_body = f"{preview_body[:max_len]}…"
+
+    return PreviewFlowExpressionResponse(skipped=False, ok=True, preview_text=preview_body, value=val)
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows", response_model=CreateFlowResponse)

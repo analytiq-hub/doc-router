@@ -386,8 +386,13 @@ def materialize_node_data(run_data: dict[str, Any]) -> dict[str, Any]:
                 if isinstance(it, ad.flows.FlowItem):
                     items_json.append(it.json)
                 elif isinstance(it, dict):
-                    # Best-effort fallback if something already serialized items earlier.
-                    items_json.append(it)
+                    ji = it.get("json")
+                    if isinstance(ji, dict):
+                        # Serialized `FlowItem` from API/browser seed (`{"json": {...}}`).
+                        items_json.append(ji)
+                    else:
+                        # Plain snapshot dict (already item-shaped).
+                        items_json.append(it)
             slots_json.append(items_json)
 
         row: dict[str, Any] = {"status": status, "main": slots_json}
@@ -398,4 +403,48 @@ def materialize_node_data(run_data: dict[str, Any]) -> dict[str, Any]:
         out[node_id] = row
 
     return out
+
+
+def preview_parameter_expression(
+    raw: str,
+    *,
+    run_data: dict[str, Any],
+    input_items_json: list[dict[str, Any]],
+    preview_item_index: int = 0,
+    execution_refs: dict[str, Any] | None = None,
+) -> tuple[Any | None, str | None]:
+    """
+    Evaluate **one** parameter string for interactive UI preview.
+
+    Mirrors ``resolve_parameters`` for a top-level string: if ``raw.strip()`` starts with ``=``,
+    evaluates the trailing expression against a synthetic inbound lane built from ``input_items_json``.
+    """
+
+    text = raw.strip()
+    if not text.startswith("="):
+        return (None, None)
+
+    lane_dicts = [dict(x) for x in input_items_json] if input_items_json else [{}]
+    idx = max(0, min(preview_item_index, len(lane_dicts) - 1))
+    lane: list[ad.flows.FlowItem] = []
+    for d in lane_dicts:
+        lane.append(ad.flows.FlowItem(json=d, binary={}, meta={}, paired_item=None))
+    item = lane[idx]
+    input_context = materialize_input_context([lane], input_index=0, item_index=idx)
+
+    try:
+        return (
+            resolve_parameters(
+                text,
+                item=item,
+                run_data=run_data or {},
+                input_context=input_context,
+                execution_refs=execution_refs,
+            ),
+            None,
+        )
+    except (ExpressionError, TypeError, KeyError, ValueError, ArithmeticError, ZeroDivisionError) as e:
+        return (None, str(e))
+    except Exception as e:
+        return (None, str(e))
 

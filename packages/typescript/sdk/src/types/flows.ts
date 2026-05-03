@@ -163,6 +163,23 @@ export interface RunFlowParams {
   revision_snapshot?: RevisionSnapshotPayload;
 }
 
+export interface PreviewFlowExpressionParams {
+  expression: string;
+  run_data?: Record<string, unknown>;
+  /** Inbound slot 0 rows (plain objects), same shape as the editor INPUT tab. */
+  input_items?: Record<string, unknown>[];
+  preview_item_index?: number;
+  execution_refs?: Record<string, string | undefined>;
+}
+
+export interface PreviewFlowExpressionResponse {
+  skipped: boolean;
+  ok: boolean;
+  preview_text?: string | null;
+  value?: unknown;
+  error?: string | null;
+}
+
 /** One credential kind from `GET .../credential-kinds`. */
 export interface FlowCredentialKindSummary {
   key: string;

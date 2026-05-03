@@ -14,6 +14,43 @@ export type FlowValueDragPayload = {
 
 export const FLOW_VALUE_MIME = 'application/docrouter-flow-value';
 
+/** Append JSON path segments to a base identifier (already valid in flow expressions after `$` rewrite). */
+function appendPathToExpr(base: string, path: JsonPath): string {
+  let expr = base;
+  for (const seg of path) {
+    expr += typeof seg === 'number' ? `[${seg}]` : `["${String(seg)}"]`;
+  }
+  return expr;
+}
+
+/**
+ * Build the `=` expression inserted when dragging a field from INPUT/OUTPUT previews.
+ *
+ * `_node[<id>]` is shaped like `materialize_node_data(run_data)` in the Python engine: `{ main: [[ {...}, … ], … ] }`
+ * — there is no `.json`; item bodies sit under `main[slot][idx]`.
+ *
+ * When configuring node `configuringNodeId`, drags whose payload references a **different** node id (upstream on the
+ * left) or **`nodeInput`** use `$json`, i.e. the current inbound item (`item.json`), which matches the schema preview for that edge.
+ *
+ * `@param outputSlotIndex` defaults to first output handle (matches current single-slot wiring in the modal).
+ */
+export function payloadToExpression(
+  p: FlowValueDragPayload,
+  configuringNodeId?: string,
+  outputSlotIndex = 0,
+): string {
+  const inbound =
+    configuringNodeId != null &&
+    (p.source === 'nodeInput' || p.nodeId !== configuringNodeId);
+
+  if (inbound) {
+    return `=${appendPathToExpr('$json', p.path)}`;
+  }
+
+  const base = `_node["${p.nodeId}"]["main"][${outputSlotIndex}][0]`;
+  return `=${appendPathToExpr(base, p.path)}`;
+}
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return Boolean(v) && typeof v === 'object' && !Array.isArray(v);
 }
@@ -124,14 +161,6 @@ function convertToTableLikeN8n(items: unknown[], maxItems: number): TableData | 
     rows,
     omittedTailItemCount: omittedTailItemCount > 0 ? omittedTailItemCount : undefined,
   };
-}
-
-function pathToExpression(nodeId: string, path: JsonPath): string {
-  let expr = `_node["${nodeId}"]["json"]`;
-  for (const seg of path) {
-    expr += typeof seg === 'number' ? `[${seg}]` : `["${seg}"]`;
-  }
-  return `=${expr}`;
 }
 
 function stringifyJson(v: unknown): string {
@@ -345,6 +374,8 @@ export const IoViewer: React.FC<{
   valueKind?: 'executionItems' | 'json';
   /** When true, only the schema/table/json body is rendered (parent supplies chrome). */
   hideHeader?: boolean;
+  /** When set, drag hints and payloads use inbound `$json` vs `_node[id].main…` consistently with the modal node. */
+  expressionConfigNodeId?: string;
 }> = ({
   title,
   value,
@@ -354,6 +385,7 @@ export const IoViewer: React.FC<{
   onModeChange,
   valueKind = 'json',
   hideHeader = false,
+  expressionConfigNodeId,
 }) => {
   const [uncontrolledMode, setUncontrolledMode] = useState<'schema' | 'table' | 'json'>(defaultMode);
   const mode = controlledMode ?? uncontrolledMode;
@@ -482,7 +514,16 @@ export const IoViewer: React.FC<{
                           className="border-b border-gray-200 px-2 py-1.5 text-left font-semibold text-gray-700"
                           draggable
                           onDragStart={(e) => startDrag(e, [c])}
-                          title={`Drag to insert expression: ${pathToExpression(dragSource.nodeId, [c])}`}
+                          title={`Drag to insert expression: ${payloadToExpression(
+                              {
+                                kind: 'jsonPath',
+                                source: dragSource.source,
+                                nodeId: dragSource.nodeId,
+                                path: [c],
+                                exampleValue: null,
+                              },
+                              expressionConfigNodeId,
+                            )}`}
                         >
                           <span className="cursor-grab active:cursor-grabbing">{c}</span>
                         </th>

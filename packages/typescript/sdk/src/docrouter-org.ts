@@ -108,6 +108,8 @@ import {
   CreateFlowParams,
   SaveRevisionParams,
   RunFlowParams,
+  PreviewFlowExpressionParams,
+  PreviewFlowExpressionResponse,
   FlowCredentialKindSummary,
   ListFlowCredentialsResponse,
 } from './types';
@@ -991,6 +993,19 @@ export class DocRouterOrg {
       dirty_node_ids: params?.dirty_node_ids ?? null,
       revision_snapshot: params?.revision_snapshot ?? null,
     });
+  }
+
+  async previewFlowExpression(params: PreviewFlowExpressionParams): Promise<PreviewFlowExpressionResponse> {
+    return this.http.post<PreviewFlowExpressionResponse>(
+      `/v0/orgs/${this.organizationId}/flows/preview-expression`,
+      {
+        expression: params.expression,
+        run_data: params.run_data ?? {},
+        input_items: params.input_items ?? [],
+        preview_item_index: params.preview_item_index ?? 0,
+        execution_refs: params.execution_refs ?? null,
+      },
+    );
   }
 
   async listExecutions(flowId: string, params?: { limit?: number; offset?: number }): Promise<ListExecutionsResponse> {

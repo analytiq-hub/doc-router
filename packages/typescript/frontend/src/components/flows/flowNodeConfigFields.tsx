@@ -10,8 +10,9 @@ import {
   flowSwitchThumbClass,
   flowSwitchTrackClass,
 } from './flowUiClasses';
-import { FlowNameValueListField, payloadToExpression, type NameValuePair } from './FlowNameValueListField';
-import { FLOW_VALUE_MIME, type FlowValueDragPayload } from './IoViewer';
+import { FlowNameValueListField, type NameValuePair } from './FlowNameValueListField';
+import { FLOW_VALUE_MIME, payloadToExpression, type FlowValueDragPayload } from './IoViewer';
+import { FlowExpressionPreviewLine, type ExpressionPreviewContext } from './FlowExpressionPreviewLine';
 import {
   applyParameterPatch,
   getOrderedKeys,
@@ -113,7 +114,9 @@ export const FlowNodeParameterFields: React.FC<{
   nodeType: FlowNodeType | null;
   onChange: (patch: Partial<FlowNode>) => void;
   readOnly?: boolean;
-}> = ({ node, nodeType, onChange, readOnly = false }) => {
+  /** Live `=` expression preview (server-evaluated Python subset). */
+  expressionPreview?: ExpressionPreviewContext | null;
+}> = ({ node, nodeType, onChange, readOnly = false, expressionPreview = null }) => {
   const rootSchema = nodeType?.parameter_schema;
   const schemaProps = useMemo(() => getSchemaProperties(rootSchema), [rootSchema]);
   const mergedParams = useMemo(
@@ -171,10 +174,12 @@ export const FlowNodeParameterFields: React.FC<{
       }
       return (
         <div key={key} className="mb-3">
-          <FlowNameValueListField
+            <FlowNameValueListField
             label={key}
             value={v}
             readOnly={readOnly}
+            configuringNodeId={node.id}
+            expressionPreview={expressionPreview}
             onChange={(pairs: NameValuePair[]) => applyPatch({ [key]: pairs })}
           />
         </div>
@@ -296,6 +301,9 @@ export const FlowNodeParameterFields: React.FC<{
                 }}
               />
             </div>
+            {expressionPreview && isExpressionValue(tv) ? (
+              <FlowExpressionPreviewLine expression={tv} preview={expressionPreview} />
+            ) : null}
           </div>
         );
       }
@@ -336,7 +344,7 @@ export const FlowNodeParameterFields: React.FC<{
                     parsed = null;
                   }
                   if (!parsed || parsed.kind !== 'jsonPath') return;
-                  const insert = payloadToExpression(parsed);
+                  const insert = payloadToExpression(parsed, node.id);
                   const pos = editor.getTargetAtClientPoint(ev.clientX, ev.clientY)?.position ?? editor.getPosition();
                   if (!pos) return;
                   const model = editor.getModel();
@@ -370,6 +378,9 @@ export const FlowNodeParameterFields: React.FC<{
               }}
             />
           </div>
+          {expressionPreview && isExpressionValue(tv) ? (
+            <FlowExpressionPreviewLine expression={tv} preview={expressionPreview} />
+          ) : null}
         </div>
       );
     }
@@ -387,6 +398,7 @@ export const FlowNodeParameterFields: React.FC<{
               className={flowInputClass + ' min-h-[120px] cursor-default font-mono text-[11px]'}
               value={tv}
             />
+            {expressionPreview ? <FlowExpressionPreviewLine expression={tv} preview={expressionPreview} /> : null}
           </div>
         );
       }
@@ -402,6 +414,7 @@ export const FlowNodeParameterFields: React.FC<{
             value={tv}
             onChange={(e) => applyPatch({ [key]: e.target.value })}
           />
+          {expressionPreview ? <FlowExpressionPreviewLine expression={tv} preview={expressionPreview} /> : null}
         </div>
       );
     }
@@ -463,7 +476,7 @@ export const FlowNodeParameterFields: React.FC<{
                 if (!parsed || parsed.kind !== 'jsonPath') return;
                 const insert =
                   isCode || uiHint === 'code'
-                    ? payloadToExpression(parsed).replace(/^=/, '')
+                    ? payloadToExpression(parsed, node.id).replace(/^=/, '')
                     : JSON.stringify(parsed.exampleValue ?? null, null, 2);
                 const pos = editor.getTargetAtClientPoint(ev.clientX, ev.clientY)?.position ?? editor.getPosition();
                 if (!pos) return;
@@ -503,6 +516,8 @@ export const FlowNodeParameterFields: React.FC<{
     const monoClass = uiHint === 'monospace' ? ' font-mono text-[11px]' : '';
     const placeholder = rawPlaceholder || undefined;
 
+    const strVal = typeof v === 'string' ? v : (v as string) ?? '';
+
     return (
       <div key={key} className="mb-3">
         <label className={flowLabelClass} htmlFor={`param-str-${key}`}>
@@ -511,7 +526,7 @@ export const FlowNodeParameterFields: React.FC<{
         <input
           id={`param-str-${key}`}
           className={flowInputClass + monoClass}
-          value={typeof v === 'string' ? v : (v as string) ?? ''}
+          value={strVal}
           placeholder={placeholder}
           onChange={(e) => applyPatch({ [key]: e.target.value })}
           readOnly={readOnly}
@@ -524,9 +539,10 @@ export const FlowNodeParameterFields: React.FC<{
             const p = parseDropPayload(e);
             if (!p) return;
             e.preventDefault();
-            applyPatch({ [key]: payloadToExpression(p) });
+            applyPatch({ [key]: payloadToExpression(p, node.id) });
           }}
         />
+        {expressionPreview ? <FlowExpressionPreviewLine expression={strVal} preview={expressionPreview} /> : null}
       </div>
     );
   };

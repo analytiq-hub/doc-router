@@ -439,6 +439,42 @@ def test_materialize_node_data_preserves_timing_fields() -> None:
     assert m["n1"]["execution_time_ms"] == 52
 
 
+def test_materialize_node_data_unwraps_json_wrapped_items() -> None:
+    rd = {
+        "c1": {
+            "status": "success",
+            "data": {"main": [[{"json": {"url": "https://mit.edu"}, "binary": {}}]]},
+        },
+    }
+    m = ad.flows.expressions.materialize_node_data(rd)
+    assert m["c1"]["main"][0][0]["url"] == "https://mit.edu"
+
+
+def test_preview_parameter_expression_resolves_dollar_json() -> None:
+    val, err = ad.flows.preview_parameter_expression(
+        "=$json['url']",
+        run_data={},
+        input_items_json=[{"url": "https://mit.edu"}],
+        preview_item_index=0,
+        execution_refs=None,
+    )
+    assert err is None
+    assert val == "https://mit.edu"
+
+
+def test_preview_parameter_expression_resolves_node_main_from_serialized_run_data() -> None:
+    run_data = {"c1": {"status": "success", "data": {"main": [[{"json": {"x": 40}, "binary": {}}]]}}}
+    val, err = ad.flows.preview_parameter_expression(
+        '=$node["c1"]["main"][0][0]["x"]',
+        run_data=run_data,
+        input_items_json=[{}],
+        preview_item_index=0,
+        execution_refs=None,
+    )
+    assert err is None
+    assert val == 40
+
+
 @pytest.mark.asyncio
 async def test_expressions_resolve_per_item_including_binary() -> None:
     nodes = [

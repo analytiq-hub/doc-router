@@ -36,6 +36,7 @@ import {
   flowInlineNameMeasureClass,
   flowInlineNameReadClass,
 } from './flowUiClasses';
+import type { ExpressionPreviewContext } from './FlowExpressionPreviewLine';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 import { FlowModalSideNavStraddle } from './FlowCanvasViewTabs';
 import {
@@ -179,6 +180,7 @@ const FlowNodeConfigModal: React.FC<{
   const [nameFocus, setNameFocus] = useState(false);
   const [inputIoMode, setInputIoMode] = useState<'schema' | 'table' | 'json'>('schema');
   const [outputIoMode, setOutputIoMode] = useState<'schema' | 'table' | 'json'>('schema');
+  const [expressionPreviewItemIndex, setExpressionPreviewItemIndex] = useState(0);
   const measure = useInlineNameWidthPx(node?.name ?? '', 'Node name');
   const nodeId = node?.id ?? '';
 
@@ -189,6 +191,7 @@ const FlowNodeConfigModal: React.FC<{
       setNameFocus(false);
       setInputIoMode('schema');
       setOutputIoMode('schema');
+      setExpressionPreviewItemIndex(0);
     }
   }, [nodeId]);
 
@@ -198,6 +201,46 @@ const FlowNodeConfigModal: React.FC<{
     if (!node) return { slots: [] as { slot: number; fromNodeId: string; itemsJson: unknown[] }[], message: 'No node' };
     return buildNodeInputPreview(node.id, edges, runData, typedPinData);
   }, [node, edges, runData, typedPinData]);
+
+  const expressionPreviewSlots0Count = inputPreview.slots[0]?.itemsJson?.length ?? 0;
+  useEffect(() => {
+    if (expressionPreviewSlots0Count === 0) return;
+    if (expressionPreviewItemIndex > expressionPreviewSlots0Count - 1) {
+      setExpressionPreviewItemIndex(Math.max(0, expressionPreviewSlots0Count - 1));
+    }
+  }, [expressionPreviewSlots0Count, expressionPreviewItemIndex]);
+
+  const expressionPreview = useMemo((): ExpressionPreviewContext | null => {
+    if (!node) return null;
+    const raw = inputPreview.slots[0]?.itemsJson ?? [];
+    const inputItems = raw.map((x) =>
+      x != null && typeof x === 'object' && !Array.isArray(x) ? ({ ...x } as Record<string, unknown>) : {},
+    );
+    return {
+      flowOrgApi,
+      runData: (runData ?? {}) as Record<string, unknown>,
+      inputItems,
+      previewItemIndex: expressionPreviewItemIndex,
+      onPreviewItemIndexChange: setExpressionPreviewItemIndex,
+      forceFirstInputItem: nodeType?.key === 'flows.http_request',
+      executionRefs:
+        expressionExecution != null
+          ? {
+              execution_id: expressionExecution.execution_id,
+              flow_id: expressionExecution.flow_id,
+              flow_revid: expressionExecution.flow_revid,
+            }
+          : undefined,
+    };
+  }, [
+    node,
+    flowOrgApi,
+    runData,
+    inputPreview.slots,
+    expressionPreviewItemIndex,
+    nodeType?.key,
+    expressionExecution,
+  ]);
 
   const pinnedForNode = nodeId ? (typedPinData?.[nodeId] ?? null) : null;
   const pinnedItems = useMemo(() => {
@@ -440,6 +483,7 @@ const FlowNodeConfigModal: React.FC<{
                           upstreamNodeIcons={upstreamNodeIcons}
                           mode={inputIoMode}
                           onModeChange={setInputIoMode}
+                          expressionConfigNodeId={node.id}
                         />
                       )}
                       {!inputPreview.message && inputPreview.slots.length === 0 && (
@@ -448,6 +492,7 @@ const FlowNodeConfigModal: React.FC<{
                           value={[]}
                           valueKind="executionItems"
                           dragSource={{ nodeId: node.id, source: 'nodeInput' }}
+                          expressionConfigNodeId={node.id}
                           defaultMode="schema"
                           mode={inputIoMode}
                           onModeChange={setInputIoMode}
@@ -515,6 +560,7 @@ const FlowNodeConfigModal: React.FC<{
                               node={node}
                               nodeType={nodeType}
                               onChange={onChange}
+                              expressionPreview={expressionPreview}
                             />
                           )}
                           {node && (
@@ -589,6 +635,7 @@ const FlowNodeConfigModal: React.FC<{
                     value={outputValue ?? outputExecPreview.itemsJson ?? []}
                     valueKind="executionItems"
                     dragSource={{ nodeId: node.id, source: 'nodeOutput' }}
+                    expressionConfigNodeId={node.id}
                     defaultMode="schema"
                     mode={outputIoMode}
                     onModeChange={setOutputIoMode}
