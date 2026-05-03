@@ -62,10 +62,13 @@ class FlowsHttpRequestNode:
             },
             "url": {
                 "type": "string",
-                "description": "Static URL or =expression. Evaluated per item.",
+                "minLength": 1,
+                "description": "Absolute http(s) URL or =expression. Evaluated per item.",
                 "default": "",
                 "x-ui-group": "Request",
                 "x-ui-placeholder": "https://… or =expression",
+                "x-ui-regex": "^https?://\\S+$",
+                "x-ui-regex-message": "Must be a valid HTTP/S URL",
             },
             "query_params": {
                 "type": "array",
@@ -109,6 +112,8 @@ class FlowsHttpRequestNode:
                 "x-ui-widget": "textarea",
                 "x-ui-group": "Body",
                 "x-ui-show-when": {"field": "body_mode", "in": ["json"]},
+                "x-ui-require-when": {"field": "body_mode", "in": ["json"]},
+                "x-ui-require-message": "JSON body cannot be empty for this mode",
             },
             "body_params": {
                 "type": "array",
@@ -132,6 +137,8 @@ class FlowsHttpRequestNode:
                 "x-ui-widget": "textarea",
                 "x-ui-group": "Body",
                 "x-ui-show-when": {"field": "body_mode", "equals": "raw"},
+                "x-ui-require-when": {"field": "body_mode", "equals": "raw"},
+                "x-ui-require-message": "Raw body cannot be empty for this mode",
             },
             "body_content_type": {
                 "type": "string",
@@ -171,9 +178,6 @@ class FlowsHttpRequestNode:
         method = params.get("method") or "GET"
         if method not in ("GET", "POST", "PUT", "PATCH", "DELETE"):
             errs.append(f"method must be one of GET POST PUT PATCH DELETE, got {method!r}")
-        url = params.get("url")
-        if not isinstance(url, str) or not url.strip():
-            errs.append("url must be a non-empty string")
         ts = params.get("timeout_seconds")
         if ts is not None and (not isinstance(ts, (int, float)) or ts <= 0):
             errs.append("timeout_seconds must be a positive number")

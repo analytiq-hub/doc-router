@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 import httpx
 import pytest
+from jsonschema import Draft7Validator
 
 import analytiq_data as ad
 from analytiq_data.flows.nodes.http_request import FlowsHttpRequestNode
@@ -365,9 +366,17 @@ async def test_full_response_includes_headers(
 
 
 def test_validate_parameters_errors(http_node: FlowsHttpRequestNode):
-    assert http_node.validate_parameters({"method": "GET", "url": ""})
+    assert not http_node.validate_parameters({"method": "GET", "url": "https://x"})
     errs = http_node.validate_parameters({"method": "FOO", "url": "http://x"})
     assert errs and "method" in errs[0].lower()
+
+
+def test_http_request_url_json_schema_minlength(http_node: FlowsHttpRequestNode):
+    v = Draft7Validator(http_node.parameter_schema)
+    v.validate({"method": "GET", "url": "https://example.com/x"})
+    v.validate({"method": "GET", "url": "=$json.url"})
+    with pytest.raises(Exception):
+        v.validate({"method": "GET", "url": ""})
 
 
 @pytest.mark.asyncio

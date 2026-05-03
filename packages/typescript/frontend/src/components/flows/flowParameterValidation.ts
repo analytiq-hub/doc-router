@@ -1,10 +1,19 @@
 /**
- * AJV validation for flow node `parameters` against `parameter_schema`.
+ * Parameter validation: AJV on expression-substituted payloads, plus frontend-only
+ * `x-ui-regex`, `x-ui-require-when`, and row-level errors for name_value_list.
  * @see docs/node_param_validation.md
  */
 import Ajv, { type ErrorObject, type ValidateFunction } from 'ajv';
+import {
+  evalShowWhen,
+  getOrderedKeys,
+  getSchemaProperties,
+  isPropertyVisible,
+} from './flowSchemaParameterUtils';
 
 const ajv = new Ajv({ allErrors: true, strict: false });
+
+const EXPR_STRING_SENTINEL = '__EXPR__';
 
 export function isExpressionValue(value: unknown): boolean {
   return typeof value === 'string' && value.startsWith('=');
@@ -30,12 +39,67 @@ export function getValueAtInstancePath(data: unknown, instancePath: string): unk
   return cur;
 }
 
-function errorTouchesExpressionValue(err: ErrorObject, rootData: Record<string, unknown>): boolean {
-  if (err.keyword === 'required') {
-    return false;
+function sentinelForLeafSchema(sub: Record<string, unknown>): unknown {
+  const t = sub.type;
+  if (t === 'string') return EXPR_STRING_SENTINEL;
+  if (t === 'number' || t === 'integer') return 0;
+  if (t === 'boolean') return false;
+  if (t === 'array') return [];
+  if (t === 'object') return {};
+  return EXPR_STRING_SENTINEL;
+}
+
+/** Replace expression strings with type-compatible sentinels so AJV can validate literals normally. */
+export function substituteExpressionsForAjv(
+  value: unknown,
+  schemaFragment: Record<string, unknown> | undefined,
+): unknown {
+  if (schemaFragment == null || typeof schemaFragment !== 'object') {
+    return value;
   }
-  const v = getValueAtInstancePath(rootData, err.instancePath ?? '');
-  return isExpressionValue(v);
+  const sub = schemaFragment as Record<string, unknown>;
+  if (isExpressionValue(value)) {
+    return sentinelForLeafSchema(sub);
+  }
+  const t = sub.type;
+  if (t === 'array' && Array.isArray(value) && sub.items) {
+    return value.map((el) => substituteExpressionsForAjv(el, sub.items as Record<string, unknown>));
+  }
+  if (t === 'object' && value && typeof value === 'object' && !Array.isArray(value) && sub.properties) {
+    const props = sub.properties as Record<string, unknown>;
+    const obj = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const k of Object.keys(obj)) {
+      out[k] = substituteExpressionsForAjv(obj[k], props[k] as Record<string, unknown> | undefined);
+    }
+    return out;
+  }
+  return value;
+}
+
+export function substituteRootParametersForAjv(
+  mergedParams: Record<string, unknown>,
+  rootSchema: Record<string, unknown>,
+): Record<string, unknown> {
+  const props = (rootSchema.properties || {}) as Record<string, Record<string, unknown>>;
+  const out: Record<string, unknown> = {};
+  for (const key of Object.keys(mergedParams)) {
+    const sub = props[key];
+    out[key] = sub ? substituteExpressionsForAjv(mergedParams[key], sub) : mergedParams[key];
+  }
+  return out;
+}
+
+function requiredChildInstancePath(parentInstancePath: string, missingProperty: string): string {
+  const base = parentInstancePath === '' || parentInstancePath === '/' ? '' : parentInstancePath;
+  return `${base}/${missingProperty}`.replace(/\/{2,}/g, '/');
+}
+
+function matchListRow(instancePath: string): { field: string; row: number } | null {
+  const p = instancePath.startsWith('/') ? instancePath : `/${instancePath}`;
+  const m = p.match(/^\/([^/]+)\/(\d+)(?:\/|$)/);
+  if (!m) return null;
+  return { field: m[1], row: Number(m[2]) };
 }
 
 function fieldKeyForUi(err: ErrorObject): string | null {
@@ -54,10 +118,21 @@ function fieldKeyForUi(err: ErrorObject): string | null {
   return segments[0] ?? null;
 }
 
+function isEmptyForRequireWhen(value: unknown, subschema: Record<string, unknown>): boolean {
+  const t = subschema.type;
+  if (t === 'string') return typeof value !== 'string' || value.trim() === '';
+  if (t === 'number' || t === 'integer') return value === null || value === undefined;
+  if (t === 'boolean') return value === null || value === undefined;
+  if (t === 'array') return !Array.isArray(value) || value.length === 0;
+  if (t === 'object') return !value || typeof value !== 'object' || Array.isArray(value);
+  return value === null || value === undefined;
+}
+
 export type ParameterValidationResult = {
   valid: boolean;
-  /** First message per top-level schema property key (for inline UI). */
   errorsByField: Record<string, string>;
+  /** name_value_list fields: row index → message */
+  listRowErrorsByField: Record<string, Record<number, string>>;
 };
 
 export function compileParameterValidator(
@@ -71,33 +146,113 @@ export function compileParameterValidator(
   }
 }
 
-export function validateMergedParametersWithValidator(
-  validate: ValidateFunction | null,
-  mergedParams: Record<string, unknown>,
-): ParameterValidationResult {
-  if (!validate) {
-    return { valid: true, errorsByField: {} };
+function collectAjvErrors(
+  validate: ValidateFunction,
+  errorsByField: Record<string, string>,
+  listRowErrorsByField: Record<string, Record<number, string>>,
+): void {
+  for (const err of validate.errors ?? []) {
+    const msg = err.message ?? 'Invalid value';
+    let pathForRow = err.instancePath ?? '';
+    if (err.keyword === 'required') {
+      const mp =
+        err.params && typeof err.params === 'object' && 'missingProperty' in err.params
+          ? (err.params as { missingProperty?: string }).missingProperty
+          : undefined;
+      if (typeof mp === 'string') {
+        pathForRow = requiredChildInstancePath(err.instancePath ?? '', mp);
+      }
+    }
+    const lr = matchListRow(pathForRow);
+    if (lr) {
+      if (!listRowErrorsByField[lr.field]) listRowErrorsByField[lr.field] = {};
+      const rowMsg = `Row ${lr.row + 1}: ${msg}`;
+      listRowErrorsByField[lr.field][lr.row] = rowMsg;
+      if (!errorsByField[lr.field]) errorsByField[lr.field] = rowMsg;
+    } else {
+      const fk = fieldKeyForUi(err);
+      if (fk && !errorsByField[fk]) errorsByField[fk] = msg;
+    }
   }
-  const ok = validate(mergedParams);
-  if (ok || !validate.errors?.length) {
-    return { valid: true, errorsByField: {} };
-  }
-
-  const errorsByField: Record<string, string> = {};
-  for (const err of validate.errors) {
-    if (errorTouchesExpressionValue(err, mergedParams)) continue;
-    const key = fieldKeyForUi(err);
-    if (!key) continue;
-    if (errorsByField[key]) continue;
-    errorsByField[key] = err.message ?? 'Invalid value';
-  }
-  return { valid: false, errorsByField };
 }
 
-/** One-shot validate (prefer compiled validator + {@link validateMergedParametersWithValidator} in UI). */
-export function validateMergedParameters(
-  parameterSchema: Record<string, unknown> | null | undefined,
+function applyUiRegexAndRequireWhen(
+  rootSchema: Record<string, unknown>,
+  mergedParams: Record<string, unknown>,
+  errorsByField: Record<string, string>,
+): void {
+  const schemaProps = getSchemaProperties(rootSchema);
+  const orderedKeys = getOrderedKeys(rootSchema);
+  for (const key of orderedKeys) {
+    if (!isPropertyVisible(key, schemaProps, mergedParams)) continue;
+    const sub = schemaProps[key];
+    const v = mergedParams[key];
+
+    const regexRaw = sub['x-ui-regex'];
+    if (typeof regexRaw === 'string' && regexRaw.length > 0) {
+      const msg =
+        typeof sub['x-ui-regex-message'] === 'string'
+          ? (sub['x-ui-regex-message'] as string)
+          : 'Invalid format';
+      if (typeof v === 'string' && !isExpressionValue(v)) {
+        try {
+          const re = new RegExp(regexRaw);
+          if (!re.test(v) && !errorsByField[key]) {
+            errorsByField[key] = msg;
+          }
+        } catch {
+          /* ignore invalid regex */
+        }
+      }
+    }
+
+    const reqWhen = sub['x-ui-require-when'];
+    if (reqWhen != null && evalShowWhen(reqWhen, mergedParams)) {
+      if (isEmptyForRequireWhen(v, sub)) {
+        const reqMsg =
+          typeof sub['x-ui-require-message'] === 'string'
+            ? (sub['x-ui-require-message'] as string)
+            : 'Required';
+        if (!errorsByField[key]) errorsByField[key] = reqMsg;
+      }
+    }
+  }
+}
+
+function countListErrors(listRowErrorsByField: Record<string, Record<number, string>>): number {
+  let n = 0;
+  for (const k of Object.keys(listRowErrorsByField)) {
+    n += Object.keys(listRowErrorsByField[k]).length;
+  }
+  return n;
+}
+
+/** Full validation used by the node parameter form. */
+export function validateFlowParameters(
+  validate: ValidateFunction | null,
+  rootSchema: Record<string, unknown> | undefined,
   mergedParams: Record<string, unknown>,
 ): ParameterValidationResult {
-  return validateMergedParametersWithValidator(compileParameterValidator(parameterSchema), mergedParams);
+  const errorsByField: Record<string, string> = {};
+  const listRowErrorsByField: Record<string, Record<number, string>> = {};
+
+  if (!rootSchema || typeof rootSchema !== 'object') {
+    return { valid: true, errorsByField, listRowErrorsByField };
+  }
+
+  const subst = substituteRootParametersForAjv(mergedParams, rootSchema);
+
+  if (validate) {
+    const ok = validate(subst);
+    if (!ok) {
+      collectAjvErrors(validate, errorsByField, listRowErrorsByField);
+    }
+  }
+
+  applyUiRegexAndRequireWhen(rootSchema, mergedParams, errorsByField);
+
+  const valid =
+    Object.keys(errorsByField).length === 0 && countListErrors(listRowErrorsByField) === 0;
+
+  return { valid, errorsByField, listRowErrorsByField };
 }

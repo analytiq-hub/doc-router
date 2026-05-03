@@ -99,6 +99,6 @@ These are all already expressed in `FlowsHttpRequestNode.parameter_schema` and e
 
 ## What this does not cover
 
-- **Expression strings**: a field value of `=$json['url']` will fail `type: string` validation if AJV is strict about format, but expressions are valid at runtime. The validator should skip fields whose value starts with `=` or wrap expression-bearing params before validating.
-- **Cross-field constraints**: AJV handles JSON Schema `if`/`then`/`else` but DocRouter uses `x-ui-show-when` for conditional visibility instead. Hidden fields are cleared to their defaults by `applyParameterPatch`, so they will not produce spurious errors as long as clearing runs before validation.
+- **Expression strings**: before AJV, the UI replaces `=…` values with type-compatible sentinels (e.g. strings → `__EXPR__`, numbers → `0`) so standard JSON Schema applies to **literal** edits only. URL shape for literals is often enforced with `x-ui-regex` (frontend-only), while Draft7 on the backend keeps a minimal contract (`type`, `minLength`, etc.) that still accepts expression strings.
+- **Cross-field constraints (UI)**: `x-ui-require-when` after AJV for “field must be non-empty when mode is X” without duplicating that logic in backend JSON Schema. The engine still validates the **resolved** parameter object at execution.
 - **Async validation** (e.g. checking that a URL is reachable): out of scope; handled at execution time.

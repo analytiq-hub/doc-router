@@ -444,7 +444,7 @@ async def create_credential(
 
     encrypted = ad.crypto.encrypt_token(json.dumps(req.fields))
     now = datetime.now(UTC)
-    db = await ad.common.get_async_db()
+    db = ad.common.get_async_db()
     res = await db.credentials.insert_one({
         "organization_id": organization_id,
         "kind_key": req.kind_key,
@@ -468,7 +468,7 @@ async def list_credentials(
     organization_id: str,
     current_user: User = Depends(get_org_user),
 ) -> ListCredentialsResponse:
-    db = await ad.common.get_async_db()
+    db = ad.common.get_async_db()
     total = await db.credentials.count_documents({"organization_id": organization_id})
     docs = await db.credentials.find(
         {"organization_id": organization_id}
@@ -493,7 +493,7 @@ async def get_credential(
     credential_id: str,
     current_user: User = Depends(get_org_user),
 ) -> CredentialHeader:
-    db = await ad.common.get_async_db()
+    db = ad.common.get_async_db()
     doc = await db.credentials.find_one(
         {"_id": ObjectId(credential_id), "organization_id": organization_id}
     )
@@ -514,7 +514,7 @@ async def update_credential(
     req: CreateCredentialRequest,
     current_user: User = Depends(get_org_user),
 ) -> CredentialHeader:
-    db = await ad.common.get_async_db()
+    db = ad.common.get_async_db()
     doc = await db.credentials.find_one(
         {"_id": ObjectId(credential_id), "organization_id": organization_id}
     )
@@ -545,7 +545,7 @@ async def delete_credential(
     credential_id: str,
     current_user: User = Depends(get_org_user),
 ) -> None:
-    db = await ad.common.get_async_db()
+    db = ad.common.get_async_db()
     res = await db.credentials.delete_one(
         {"_id": ObjectId(credential_id), "organization_id": organization_id}
     )
@@ -566,7 +566,7 @@ async def test_credential(
     import httpx
     from jinja2 import Environment, Undefined
 
-    db = await ad.common.get_async_db()
+    db = ad.common.get_async_db()
     doc = await db.credentials.find_one(
         {"_id": ObjectId(credential_id), "organization_id": organization_id}
     )
@@ -691,7 +691,7 @@ async def resolve_node_credentials(
     if not credential_slots or not bindings:
         return {}
 
-    db = await ad.common.get_async_db()
+    db = ad.common.get_async_db()
     merged: dict[str, Any] = {}
 
     for slot_def in credential_slots:

@@ -18,7 +18,7 @@ import {
   isPropertyVisible,
   mergeParameterDefaults,
 } from './flowSchemaParameterUtils';
-import { compileParameterValidator, validateMergedParametersWithValidator } from './flowParameterValidation';
+import { compileParameterValidator, validateFlowParameters } from './flowParameterValidation';
 
 function safeJsonStringify(value: unknown, fallback: string): string {
   try {
@@ -130,9 +130,17 @@ export const FlowNodeParameterFields: React.FC<{
 
   const parameterValidation = useMemo(() => {
     if (!rootSchema || nodeType?.is_trigger) {
-      return { valid: true as const, errorsByField: {} as Record<string, string> };
+      return {
+        valid: true as const,
+        errorsByField: {} as Record<string, string>,
+        listRowErrorsByField: {} as Record<string, Record<number, string>>,
+      };
     }
-    return validateMergedParametersWithValidator(paramValidator, mergedParams);
+    return validateFlowParameters(
+      paramValidator,
+      rootSchema as Record<string, unknown>,
+      mergedParams,
+    );
   }, [rootSchema, nodeType?.is_trigger, paramValidator, mergedParams]);
 
   useEffect(() => {
@@ -146,6 +154,11 @@ export const FlowNodeParameterFields: React.FC<{
   const fieldErr = useCallback(
     (key: string) => (readOnly ? undefined : parameterValidation.errorsByField[key]),
     [readOnly, parameterValidation.errorsByField],
+  );
+
+  const listRowErr = useCallback(
+    (key: string) => (readOnly ? undefined : parameterValidation.listRowErrorsByField[key]),
+    [readOnly, parameterValidation.listRowErrorsByField],
   );
 
   const applyPatch = useCallback(
@@ -181,7 +194,9 @@ export const FlowNodeParameterFields: React.FC<{
     const v = params[key];
     const isCode =
       key === 'python_code' || key === 'js_code' || key === 'ts_code' || uiHint === 'code';
-    const hasOneOf = Array.isArray((subschema as { oneOf?: unknown }).oneOf);
+    /** `oneOf` used only for string alternate patterns (e.g. URL vs expression) still renders as a text field. */
+    const monacoOneOf =
+      Array.isArray((subschema as { oneOf?: unknown }).oneOf) && t !== 'string';
     const rawPlaceholder =
       typeof subschema['x-ui-placeholder'] === 'string' ? (subschema['x-ui-placeholder'] as string) : '';
 
@@ -200,6 +215,7 @@ export const FlowNodeParameterFields: React.FC<{
             label={key}
             value={v}
             readOnly={readOnly}
+            rowErrors={listRowErr(key)}
             onChange={(pairs: NameValuePair[]) => applyPatch({ [key]: pairs })}
           />
           <ParamFieldError message={fieldErr(key)} />
@@ -325,7 +341,7 @@ export const FlowNodeParameterFields: React.FC<{
       );
     }
 
-    if (isCode || hasOneOf || t === 'object' || (t === 'array' && uiHint !== 'name_value_list')) {
+    if (isCode || monacoOneOf || t === 'object' || (t === 'array' && uiHint !== 'name_value_list')) {
       const lang = key === 'python_code' ? 'python' : key === 'ts_code' ? 'typescript' : key === 'js_code' ? 'javascript' : 'json';
       const textValue =
         typeof v === 'string'

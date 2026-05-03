@@ -45,7 +45,9 @@ export const FlowNameValueListField: React.FC<{
   value: unknown;
   readOnly: boolean;
   onChange: (next: NameValuePair[]) => void;
-}> = ({ label, value, readOnly, onChange }) => {
+  /** Per-row validation messages (e.g. from JSON Schema / AJV on list items). */
+  rowErrors?: Record<number, string>;
+}> = ({ label, value, readOnly, onChange, rowErrors }) => {
   const pairs = coerceNameValuePairs(value);
 
   return (
@@ -53,51 +55,54 @@ export const FlowNameValueListField: React.FC<{
       <div className={flowLabelClass}>{label}</div>
       <div className="space-y-1.5">
         {pairs.map((row, i) => (
-          <div key={i} className="flex gap-2">
-            <input
-              className={flowInputClass + ' min-w-0 flex-1'}
-              placeholder="name"
-              value={row.name}
-              readOnly={readOnly}
-              onChange={(e) => {
-                const n = [...pairs];
-                n[i] = { ...n[i], name: e.target.value };
-                onChange(n);
-              }}
-            />
-            <input
-              className={flowInputClass + ' min-w-0 flex-1'}
-              placeholder="value or =expression"
-              value={row.value}
-              readOnly={readOnly}
-              onChange={(e) => {
-                const n = [...pairs];
-                n[i] = { ...n[i], value: e.target.value };
-                onChange(n);
-              }}
-              onDragOver={(e) => {
-                if (readOnly) return;
-                if (e.dataTransfer.types.includes(FLOW_VALUE_MIME)) e.preventDefault();
-              }}
-              onDrop={(e) => {
-                if (readOnly) return;
-                const p = parseDropPayload(e);
-                if (!p) return;
-                e.preventDefault();
-                const n = [...pairs];
-                n[i] = { ...n[i], value: payloadToExpression(p) };
-                onChange(n);
-              }}
-            />
-            {!readOnly && (
-              <button
-                type="button"
-                className="shrink-0 rounded border border-gray-200 px-2 text-[11px] text-gray-600 hover:bg-gray-50"
-                onClick={() => onChange(pairs.filter((_, j) => j !== i))}
-              >
-                ×
-              </button>
-            )}
+          <div key={i} className="space-y-0.5">
+            <div className="flex gap-2">
+              <input
+                className={flowInputClass + ' min-w-0 flex-1'}
+                placeholder="name"
+                value={row.name}
+                readOnly={readOnly}
+                onChange={(e) => {
+                  const n = [...pairs];
+                  n[i] = { ...n[i], name: e.target.value };
+                  onChange(n);
+                }}
+              />
+              <input
+                className={flowInputClass + ' min-w-0 flex-1'}
+                placeholder="value or =expression"
+                value={row.value}
+                readOnly={readOnly}
+                onChange={(e) => {
+                  const n = [...pairs];
+                  n[i] = { ...n[i], value: e.target.value };
+                  onChange(n);
+                }}
+                onDragOver={(e) => {
+                  if (readOnly) return;
+                  if (e.dataTransfer.types.includes(FLOW_VALUE_MIME)) e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  if (readOnly) return;
+                  const p = parseDropPayload(e);
+                  if (!p) return;
+                  e.preventDefault();
+                  const n = [...pairs];
+                  n[i] = { ...n[i], value: payloadToExpression(p) };
+                  onChange(n);
+                }}
+              />
+              {!readOnly && (
+                <button
+                  type="button"
+                  className="shrink-0 rounded border border-gray-200 px-2 text-[11px] text-gray-600 hover:bg-gray-50"
+                  onClick={() => onChange(pairs.filter((_, j) => j !== i))}
+                >
+                  ×
+                </button>
+              )}
+            </div>
+            {rowErrors?.[i] ? <p className="text-xs text-red-600">{rowErrors[i]}</p> : null}
           </div>
         ))}
       </div>

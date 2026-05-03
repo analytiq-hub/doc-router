@@ -91,6 +91,10 @@ All extensions are **optional**; schemas without them use inferred behavior.
 | `x-ui-show-when` | property | `{ "field": "body_mode", "in": ["json"] }` or `{ "field": "body_mode", "equals": "raw" }`. Hidden field values are cleared to schema defaults. |
 | `x-ui-placeholder` | property | Placeholder text for string inputs. |
 | `x-ui-enum-names` | property | Human-readable labels for `enum` values; rendered as `<option>` text. |
+| `x-ui-regex` | property | ECMAScript regex string (checked **only in the UI**). Literal values are tested after AJV; strings starting with `=` are skipped (expressions). Use with standard JSON Schema (`minLength`, etc.) on the backend so Draft7 stays expression-safe. |
+| `x-ui-regex-message` | property | Message when `x-ui-regex` fails. |
+| `x-ui-require-when` | property | Same predicate shape as `x-ui-show-when`. When true **and** the field is visible, the control must be non-empty (string trimmed, non-empty array, etc.). Enforced **only in the UI** (cross-field rules stay out of Draft7 unless expressed as JSON Schema `if`/`then`). |
+| `x-ui-require-message` | property | Message when `x-ui-require-when` fails. |
 
 The port converter (`port/schema.py`) maps n8n `INodeProperty` fields to these keys automatically: `placeholder` → `x-ui-placeholder`, `type: "code"` → `x-ui-widget: "code"`, single-field `displayOptions.show` → `x-ui-show-when`. Multi-field `displayOptions` and `hide` are left unmapped until the UI supports richer predicates.
 
