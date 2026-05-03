@@ -53,18 +53,39 @@ class FlowsHttpRequestNode:
         "type": "object",
         "additionalProperties": False,
         "required": ["method", "url"],
+        "x-docrouter-order": [
+            "method",
+            "url",
+            "query_params",
+            "headers",
+            "body_mode",
+            "body_json",
+            "body_params",
+            "body_raw",
+            "body_content_type",
+            "full_response",
+            "never_error",
+            "follow_redirects",
+            "timeout_seconds",
+        ],
         "properties": {
             "method": {
                 "type": "string",
                 "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
                 "default": "GET",
+                "x-docrouter-group": "Request",
             },
             "url": {
                 "type": "string",
                 "description": "Static URL or =expression. Evaluated per item.",
+                "default": "",
+                "x-docrouter-group": "Request",
+                "x-docrouter-placeholder": "https://… or =expression",
             },
             "query_params": {
                 "type": "array",
+                "x-docrouter-ui": "nameValueList",
+                "x-docrouter-group": "Request",
                 "items": {
                     "type": "object",
                     "required": ["name", "value"],
@@ -78,6 +99,8 @@ class FlowsHttpRequestNode:
             },
             "headers": {
                 "type": "array",
+                "x-docrouter-ui": "nameValueList",
+                "x-docrouter-group": "Request",
                 "items": {
                     "type": "object",
                     "required": ["name", "value"],
@@ -93,10 +116,20 @@ class FlowsHttpRequestNode:
                 "type": "string",
                 "enum": ["none", "json", "json_keypair", "form_urlencoded", "raw"],
                 "default": "none",
+                "x-docrouter-group": "Body",
             },
-            "body_json": {"type": "string", "default": ""},
+            "body_json": {
+                "type": "string",
+                "default": "",
+                "x-docrouter-ui": "textarea",
+                "x-docrouter-group": "Body",
+                "x-docrouter-showWhen": {"field": "body_mode", "in": ["json"]},
+            },
             "body_params": {
                 "type": "array",
+                "x-docrouter-ui": "nameValueList",
+                "x-docrouter-group": "Body",
+                "x-docrouter-showWhen": {"field": "body_mode", "in": ["json_keypair", "form_urlencoded"]},
                 "items": {
                     "type": "object",
                     "required": ["name", "value"],
@@ -108,24 +141,43 @@ class FlowsHttpRequestNode:
                 },
                 "default": [],
             },
-            "body_raw": {"type": "string", "default": ""},
+            "body_raw": {
+                "type": "string",
+                "default": "",
+                "x-docrouter-ui": "textarea",
+                "x-docrouter-group": "Body",
+                "x-docrouter-showWhen": {"field": "body_mode", "equals": "raw"},
+            },
             "body_content_type": {
                 "type": "string",
                 "default": "text/plain",
                 "description": "Content-Type header for raw body mode.",
+                "x-docrouter-group": "Body",
+                "x-docrouter-showWhen": {"field": "body_mode", "equals": "raw"},
             },
             "full_response": {
                 "type": "boolean",
                 "default": False,
                 "description": "Include status_code and headers in the output item.",
+                "x-docrouter-group": "Options",
             },
             "never_error": {
                 "type": "boolean",
                 "default": False,
                 "description": "Treat non-2xx responses as normal output instead of errors.",
+                "x-docrouter-group": "Options",
             },
-            "follow_redirects": {"type": "boolean", "default": True},
-            "timeout_seconds": {"type": "number", "default": 30},
+            "follow_redirects": {
+                "type": "boolean",
+                "default": True,
+                "x-docrouter-group": "Options",
+            },
+            "timeout_seconds": {
+                "type": "number",
+                "default": 30,
+                "minimum": 1,
+                "x-docrouter-group": "Options",
+            },
         },
     }
 

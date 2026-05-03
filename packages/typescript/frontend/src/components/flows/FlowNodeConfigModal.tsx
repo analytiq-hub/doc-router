@@ -25,7 +25,6 @@ import type { Edge } from 'reactflow';
 import type { FlowNode, FlowNodeType, FlowPinData, FlowPinItem, FlowPinNodeOutput } from '@docrouter/sdk';
 import type { DocRouterOrgApi } from '@/utils/api';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
-import { FlowHttpRequestParameterFields } from './flowHttpRequestFields';
 import { FlowNodeCredentialSlots } from './flowNodeCredentialSlots';
 import { buildNodeInputPreview } from './flowNodeIoPreview';
 import { FlowInputUpstreamList } from './FlowInputUpstreamList';
@@ -462,12 +461,8 @@ const FlowNodeConfigModal: React.FC<{
                     <TabPanels className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable]">
                       <TabPanel>
                         <div className="space-y-4">
-                          {node && nodeType?.key === 'flows.http_request' ? (
-                            <FlowHttpRequestParameterFields readOnly={readOnly} node={node} onChange={onChange} />
-                          ) : (
-                            node && (
-                              <FlowNodeParameterFields readOnly={readOnly} node={node} nodeType={nodeType} onChange={onChange} />
-                            )
+                          {node && (
+                            <FlowNodeParameterFields readOnly={readOnly} node={node} nodeType={nodeType} onChange={onChange} />
                           )}
                           {node && (
                             <FlowNodeCredentialSlots

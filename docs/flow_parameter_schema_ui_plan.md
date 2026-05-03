@@ -2,7 +2,7 @@
 
 This document describes how to move **all** node parameter editors—including `flows.http_request`—onto a **single schema-driven rendering layer**, while keeping **one authoritative JSON Schema per node** on the backend (already validated at execution time via `Draft7Validator`).
 
-**Related:** `docs/flows2.md` (architecture), `packages/typescript/frontend/src/components/flows/flowNodeConfigFields.tsx` (current generic renderer), `packages/typescript/frontend/src/components/flows/flowHttpRequestFields.tsx` (current HTTP-specific panel).
+**Related:** `docs/flows2.md` (architecture), `flowNodeConfigFields.tsx` (schema-driven `FlowNodeParameterFields`), `FlowNameValueListField.tsx` (pair lists + drag-drop), `flowSchemaParameterUtils.ts` (visibility and defaults).
 
 ---
 
@@ -27,8 +27,8 @@ Non-goals for v1 of this plan: replacing Monaco for code nodes with a different 
 
 ### 2.2 Frontend
 
-- **Generic path:** `FlowNodeParameterFields` reads `nodeType.parameter_schema`, walks `properties`, and picks a control from a small matrix: boolean → Headless `Switch`, enum → `<select>`, number → `<input type="number">`, code / object / array / `oneOf` → Monaco, default → string input with optional drag-drop.
-- **Exception:** `flows.http_request` uses `FlowHttpRequestParameterFields`, which duplicates labels, defaults, pair-list UX, and boolean switches.
+- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks ordered properties, evaluates `x-docrouter-showWhen`, merges defaults, clears hidden fields via schema defaults, and picks widgets (`x-docrouter-ui` includes `nameValueList`, `textarea`; booleans → Headless `Switch`; enums with `x-enumNames`; code / object / array → Monaco unless overridden).
+- **`flows.http_request`** uses the same path; HTTP UX is driven by extensions on `FlowsHttpRequestNode.parameter_schema` in Python.
 
 ### 2.3 Gap (why HTTP is special-cased today)
 

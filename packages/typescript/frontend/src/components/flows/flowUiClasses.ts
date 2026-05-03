@@ -32,3 +32,10 @@ export const FLOW_WORKSPACE_TITLE_READ_CLASS =
  * this top padding keeps status text from sitting under the pill.
  */
 export const FLOW_RF_PANEL_CLEAR_BELOW_WORKSPACE_TABS = '!pt-7';
+
+/** Headless UI switch track (shared by node settings + schema-driven parameters). */
+export const flowSwitchTrackClass =
+  'group relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent bg-gray-200 transition-colors data-[checked]:bg-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-60';
+
+export const flowSwitchThumbClass =
+  'inline-block h-3.5 w-3.5 translate-x-0.5 rounded-full bg-white shadow transition group-data-[checked]:translate-x-4';

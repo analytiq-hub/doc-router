@@ -1,9 +1,23 @@
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Switch } from '@headlessui/react';
 import Editor from '@monaco-editor/react';
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
-import { flowInputClass, flowLabelClass, flowSelectClass } from './flowUiClasses';
+import {
+  flowInputClass,
+  flowLabelClass,
+  flowSelectClass,
+  flowSwitchThumbClass,
+  flowSwitchTrackClass,
+} from './flowUiClasses';
+import { FlowNameValueListField, payloadToExpression, type NameValuePair } from './FlowNameValueListField';
 import { FLOW_VALUE_MIME, type FlowValueDragPayload } from './IoViewer';
+import {
+  applyParameterPatch,
+  getOrderedKeys,
+  getSchemaProperties,
+  isPropertyVisible,
+  mergeParameterDefaults,
+} from './flowSchemaParameterUtils';
 
 function safeJsonStringify(value: unknown, fallback: string): string {
   try {
@@ -11,24 +25,6 @@ function safeJsonStringify(value: unknown, fallback: string): string {
   } catch {
     return fallback;
   }
-}
-
-function getSchemaProps(schema: unknown): Record<string, unknown> {
-  const props = (schema as { properties?: unknown } | null | undefined)?.properties;
-  return props && typeof props === 'object' ? (props as Record<string, unknown>) : {};
-}
-
-const switchTrackClass =
-  'group relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent bg-gray-200 transition-colors data-[checked]:bg-violet-600 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-1';
-const switchThumbClass =
-  'inline-block h-3.5 w-3.5 translate-x-0.5 rounded-full bg-white shadow transition group-data-[checked]:translate-x-4';
-
-function payloadToExpression(p: FlowValueDragPayload): string {
-  let expr = `_node["${p.nodeId}"]["json"]`;
-  for (const seg of p.path) {
-    expr += typeof seg === 'number' ? `[${seg}]` : `["${String(seg)}"]`;
-  }
-  return `=${expr}`;
 }
 
 function parseDropPayload(e: React.DragEvent): FlowValueDragPayload | null {
@@ -84,9 +80,9 @@ export const FlowNodeSettingsFields: React.FC<{
         <Switch
           checked={Boolean(node.disabled)}
           onChange={(checked) => onChange({ disabled: checked })}
-          className={switchTrackClass}
+          className={flowSwitchTrackClass}
         >
-          <span className={switchThumbClass} aria-hidden />
+          <span className={flowSwitchThumbClass} aria-hidden />
         </Switch>
       </div>
       <div>
@@ -113,8 +109,25 @@ export const FlowNodeParameterFields: React.FC<{
   onChange: (patch: Partial<FlowNode>) => void;
   readOnly?: boolean;
 }> = ({ node, nodeType, onChange, readOnly = false }) => {
-  const schemaProps = useMemo(() => getSchemaProps(nodeType?.parameter_schema), [nodeType]);
-  const params = node.parameters || {};
+  const rootSchema = nodeType?.parameter_schema;
+  const schemaProps = useMemo(() => getSchemaProperties(rootSchema), [rootSchema]);
+  const mergedParams = useMemo(
+    () => mergeParameterDefaults(rootSchema, (node.parameters || {}) as Record<string, unknown>),
+    [rootSchema, node.parameters],
+  );
+
+  const applyPatch = useCallback(
+    (patch: Record<string, unknown>) => {
+      if (!rootSchema) {
+        onChange({ parameters: { ...mergedParams, ...patch } });
+        return;
+      }
+      onChange({ parameters: applyParameterPatch(rootSchema, mergedParams, patch) });
+    },
+    [rootSchema, mergedParams, onChange],
+  );
+
+  const orderedKeys = useMemo(() => getOrderedKeys(rootSchema), [rootSchema]);
 
   if (nodeType?.is_trigger) {
     return (
@@ -131,11 +144,140 @@ export const FlowNodeParameterFields: React.FC<{
 
   const renderParamField = (key: string, subschema: { type?: string; enum?: unknown[] } & Record<string, unknown>) => {
     const t = subschema?.type;
-    const v = (params as Record<string, unknown>)[key];
-    const isCode = key === 'python_code' || key === 'js_code' || key === 'ts_code';
+    const uiHint = typeof subschema['x-docrouter-ui'] === 'string' ? (subschema['x-docrouter-ui'] as string) : '';
+    const params = mergedParams;
+    const v = params[key];
+    const isCode =
+      key === 'python_code' || key === 'js_code' || key === 'ts_code' || uiHint === 'code';
     const hasOneOf = Array.isArray((subschema as { oneOf?: unknown }).oneOf);
+    const rawPlaceholder =
+      typeof subschema['x-docrouter-placeholder'] === 'string' ? (subschema['x-docrouter-placeholder'] as string) : '';
 
-    if (isCode || hasOneOf || t === 'object' || t === 'array') {
+    if (uiHint === 'nameValueList') {
+      if (readOnly) {
+        return (
+          <div key={key} className="mb-3">
+            <span className={flowLabelClass}>{key}</span>
+            <input readOnly className={flowInputClass} value={safeJsonStringify(v, '[]')} />
+          </div>
+        );
+      }
+      return (
+        <div key={key} className="mb-3">
+          <FlowNameValueListField
+            label={key}
+            value={v}
+            readOnly={readOnly}
+            onChange={(pairs: NameValuePair[]) => applyPatch({ [key]: pairs })}
+          />
+        </div>
+      );
+    }
+
+    if (t === 'boolean') {
+      if (readOnly) {
+        return (
+          <div key={key} className="mb-3">
+            <span className={flowLabelClass}>{key}</span>
+            <input readOnly className={flowInputClass} value={Boolean(v) ? 'true' : 'false'} />
+          </div>
+        );
+      }
+      return (
+        <div key={key} className="mb-3 flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
+          <span className="text-sm text-gray-800">{key}</span>
+          <Switch
+            checked={Boolean(v)}
+            onChange={(checked) => applyPatch({ [key]: checked })}
+            disabled={readOnly}
+            className={flowSwitchTrackClass}
+          >
+            <span className={flowSwitchThumbClass} aria-hidden />
+          </Switch>
+        </div>
+      );
+    }
+
+    if (t === 'number' || t === 'integer') {
+      const minVal = (subschema as { minimum?: number }).minimum;
+      const inputMin = typeof minVal === 'number' ? minVal : undefined;
+      if (readOnly) {
+        return (
+          <div key={key} className="mb-3">
+            <span className={flowLabelClass}>{key}</span>
+            <input readOnly className={flowInputClass} value={v == null || v === '' ? '' : String(v)} />
+          </div>
+        );
+      }
+      return (
+        <div key={key} className="mb-3">
+          <label className={flowLabelClass} htmlFor={`param-${key}`}>
+            {key}
+          </label>
+          <input
+            id={`param-${key}`}
+            type="number"
+            min={inputMin}
+            className={flowInputClass}
+            value={typeof v === 'number' ? v : (v as number | '') ?? ''}
+            onChange={(e) => applyPatch({ [key]: Number(e.target.value) })}
+          />
+        </div>
+      );
+    }
+
+    if (subschema?.enum && Array.isArray(subschema.enum)) {
+      const enumNames = (subschema['x-enumNames'] as unknown[] | undefined) ?? undefined;
+      if (readOnly) {
+        return (
+          <div key={key} className="mb-3">
+            <span className={flowLabelClass}>{key}</span>
+            <input readOnly className={flowInputClass} value={v == null ? '' : String(v)} />
+          </div>
+        );
+      }
+      return (
+        <div key={key} className="mb-3">
+          <label className={flowLabelClass} htmlFor={`param-enum-${key}`}>
+            {key}
+          </label>
+          <select
+            id={`param-enum-${key}`}
+            className={flowSelectClass}
+            value={v == null || typeof v === 'object' ? '' : String(v)}
+            onChange={(e) => applyPatch({ [key]: e.target.value })}
+          >
+            {subschema.enum.map((opt: unknown, idx: number) => (
+              <option key={String(opt)} value={String(opt)}>
+                {enumNames != null && enumNames[idx] != null ? String(enumNames[idx]) : String(opt)}
+              </option>
+            ))}
+          </select>
+        </div>
+      );
+    }
+
+    if (t === 'string' && uiHint === 'textarea') {
+      const placeholder =
+        rawPlaceholder || (typeof subschema.description === 'string' ? subschema.description : '') || undefined;
+      return (
+        <div key={key} className="mb-3">
+          <label className={flowLabelClass} htmlFor={`param-textarea-${key}`}>
+            {key}
+          </label>
+          <textarea
+            id={`param-textarea-${key}`}
+            className={flowInputClass + ' min-h-[120px] font-mono text-[11px]'}
+            readOnly={readOnly}
+            placeholder={placeholder}
+            value={typeof v === 'string' ? v : (v as string) ?? ''}
+            onChange={(e) => applyPatch({ [key]: e.target.value })}
+          />
+        </div>
+      );
+    }
+
+    if (isCode || hasOneOf || t === 'object' || (t === 'array' && uiHint !== 'nameValueList')) {
       const lang = key === 'python_code' ? 'python' : key === 'ts_code' ? 'typescript' : key === 'js_code' ? 'javascript' : 'json';
       const textValue =
         typeof v === 'string'
@@ -147,20 +289,20 @@ export const FlowNodeParameterFields: React.FC<{
             : safeJsonStringify(v, '');
       return (
         <div key={key} className="min-h-0 flex-1">
-          <div className="text-xs font-semibold text-gray-600 mb-1">{key}</div>
+          <div className="mb-1 text-xs font-semibold text-gray-600">{key}</div>
           <Editor
             height="400px"
             language={lang}
             value={textValue}
             onChange={(val) => {
               if (readOnly) return;
-              if (isCode) {
-                onChange({ parameters: { ...params, [key]: val ?? '' } });
+              if (isCode || uiHint === 'code') {
+                applyPatch({ [key]: val ?? '' });
                 return;
               }
               try {
                 const parsed = JSON.parse(val ?? 'null');
-                onChange({ parameters: { ...params, [key]: parsed } });
+                applyPatch({ [key]: parsed });
               } catch {
                 // ignore until valid
               }
@@ -191,8 +333,8 @@ export const FlowNodeParameterFields: React.FC<{
                 }
                 if (!parsed || parsed.kind !== 'jsonPath') return;
                 const insert =
-                  isCode
-                    ? payloadToExpression(parsed).replace(/^=/, '') // code nodes want the snippet, not `=...`
+                  isCode || uiHint === 'code'
+                    ? payloadToExpression(parsed).replace(/^=/, '')
                     : JSON.stringify(parsed.exampleValue ?? null, null, 2);
                 const pos = editor.getTargetAtClientPoint(ev.clientX, ev.clientY)?.position ?? editor.getPosition();
                 if (!pos) return;
@@ -229,83 +371,8 @@ export const FlowNodeParameterFields: React.FC<{
       );
     }
 
-    if (t === 'boolean') {
-      if (readOnly) {
-        return (
-          <div key={key} className="mb-3">
-            <span className={flowLabelClass}>{key}</span>
-            <input readOnly className={flowInputClass} value={Boolean(v) ? 'true' : 'false'} />
-          </div>
-        );
-      }
-      return (
-        <div key={key} className="mb-3 flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
-          <span className="text-sm text-gray-800">{key}</span>
-          <Switch
-            checked={Boolean(v)}
-            onChange={(checked) => onChange({ parameters: { ...params, [key]: checked } })}
-            className={switchTrackClass}
-          >
-            <span className={switchThumbClass} aria-hidden />
-          </Switch>
-        </div>
-      );
-    }
-
-    if (t === 'number' || t === 'integer') {
-      if (readOnly) {
-        return (
-          <div key={key} className="mb-3">
-            <span className={flowLabelClass}>{key}</span>
-            <input readOnly className={flowInputClass} value={v == null || v === '' ? '' : String(v)} />
-          </div>
-        );
-      }
-      return (
-        <div key={key} className="mb-3">
-          <label className={flowLabelClass} htmlFor={`param-${key}`}>
-            {key}
-          </label>
-          <input
-            id={`param-${key}`}
-            type="number"
-            className={flowInputClass}
-            value={typeof v === 'number' ? v : (v as number | '') ?? ''}
-            onChange={(e) => onChange({ parameters: { ...params, [key]: Number(e.target.value) } })}
-          />
-        </div>
-      );
-    }
-
-    if (subschema?.enum && Array.isArray(subschema.enum)) {
-      if (readOnly) {
-        return (
-          <div key={key} className="mb-3">
-            <span className={flowLabelClass}>{key}</span>
-            <input readOnly className={flowInputClass} value={v == null ? '' : String(v)} />
-          </div>
-        );
-      }
-      return (
-        <div key={key} className="mb-3">
-          <label className={flowLabelClass} htmlFor={`param-enum-${key}`}>
-            {key}
-          </label>
-          <select
-            id={`param-enum-${key}`}
-            className={flowSelectClass}
-            value={v == null || typeof v === 'object' ? '' : String(v)}
-            onChange={(e) => onChange({ parameters: { ...params, [key]: e.target.value } })}
-          >
-            {subschema.enum.map((opt: unknown) => (
-              <option key={String(opt)} value={String(opt)}>
-                {String(opt)}
-              </option>
-            ))}
-          </select>
-        </div>
-      );
-    }
+    const monoClass = uiHint === 'monospace' ? ' font-mono text-[11px]' : '';
+    const placeholder = rawPlaceholder || undefined;
 
     return (
       <div key={key} className="mb-3">
@@ -314,9 +381,10 @@ export const FlowNodeParameterFields: React.FC<{
         </label>
         <input
           id={`param-str-${key}`}
-          className={flowInputClass}
+          className={flowInputClass + monoClass}
           value={typeof v === 'string' ? v : (v as string) ?? ''}
-          onChange={(e) => onChange({ parameters: { ...params, [key]: e.target.value } })}
+          placeholder={placeholder}
+          onChange={(e) => applyPatch({ [key]: e.target.value })}
           readOnly={readOnly}
           onDragOver={(e) => {
             if (readOnly) return;
@@ -327,16 +395,44 @@ export const FlowNodeParameterFields: React.FC<{
             const p = parseDropPayload(e);
             if (!p) return;
             e.preventDefault();
-            onChange({ parameters: { ...params, [key]: payloadToExpression(p) } });
+            applyPatch({ [key]: payloadToExpression(p) });
           }}
         />
       </div>
     );
   };
 
+  const blocks: React.ReactNode[] = [];
+  let lastGroupLabel: string | null | undefined;
+
+  for (const key of orderedKeys) {
+    if (!isPropertyVisible(key, schemaProps, mergedParams)) continue;
+    const sub = schemaProps[key];
+    const groupRaw = sub['x-docrouter-group'];
+    const group = typeof groupRaw === 'string' ? groupRaw.trim() || undefined : undefined;
+
+    if (group) {
+      if (group !== lastGroupLabel) {
+        blocks.push(
+          <div
+            key={`group-${group}-${key}`}
+            className="pt-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500 first:pt-0"
+          >
+            {group}
+          </div>,
+        );
+        lastGroupLabel = group;
+      }
+    } else {
+      lastGroupLabel = undefined;
+    }
+
+    blocks.push(renderParamField(key, sub as { type?: string; enum?: unknown[] } & Record<string, unknown>));
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1">
-      {Object.entries(schemaProps).map(([k, subschema]) => renderParamField(k, subschema as { type?: string; enum?: unknown[] }))}
+      {blocks}
       {Object.keys(schemaProps).length === 0 && <div className="text-sm text-[#6b7280]">No parameters for this node type.</div>}
     </div>
   );
