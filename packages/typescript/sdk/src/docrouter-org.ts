@@ -989,6 +989,7 @@ export class DocRouterOrg {
       target_node_id: params?.target_node_id ?? null,
       run_data: params?.run_data ?? null,
       dirty_node_ids: params?.dirty_node_ids ?? null,
+      revision_snapshot: params?.revision_snapshot ?? null,
     });
   }
 

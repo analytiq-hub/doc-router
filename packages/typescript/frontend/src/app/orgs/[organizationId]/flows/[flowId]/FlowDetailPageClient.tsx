@@ -343,33 +343,49 @@ export default function FlowDetailPageClient({
     [persistPinDataToServer, revision],
   );
 
+  const buildRevisionSnapshotForRun = useCallback(() => {
+    if (!revision) return null;
+    const body = rfToRevision(rfNodes as FlowRfNode[], rfEdges as FlowRfEdge[], revision, flowName);
+    return {
+      nodes: body.nodes,
+      connections: body.connections,
+      settings: body.settings ?? {},
+      pin_data: body.pin_data ?? null,
+    };
+  }, [revision, rfNodes, rfEdges, flowName]);
+
   const onRun = useCallback(async () => {
+    const revision_snapshot = buildRevisionSnapshotForRun();
+    if (!revision_snapshot) return;
     try {
       setMessage('');
-      const rev = latestFlowRevid || undefined;
-      const out = await api.runFlow(flowId, { flow_revid: rev, document_id: undefined });
+      const rid = latestFlowRevid?.trim();
+      const out = await api.runFlow(flowId, {
+        flow_revid: rid || undefined,
+        document_id: undefined,
+        revision_snapshot,
+      });
       if (out.execution_id) {
         setLogsFocusExecutionId(out.execution_id);
       }
     } catch (err: unknown) {
       setMessage(err instanceof Error ? err.message : 'Failed to run');
     }
-  }, [api, flowId, latestFlowRevid]);
+  }, [api, buildRevisionSnapshotForRun, flowId, latestFlowRevid]);
 
   const onExecuteFlowStep = useCallback(
     async ({ targetNodeId, seedRunData }: { targetNodeId: string; seedRunData: Record<string, unknown> }) => {
-      const rev = latestFlowRevid?.trim();
-      if (!rev) {
-        setMessage('Save the flow once before running a single step.');
-        return;
-      }
+      const revision_snapshot = buildRevisionSnapshotForRun();
+      if (!revision_snapshot) return;
       try {
         setMessage('');
+        const rid = latestFlowRevid?.trim();
         const out = await api.runFlow(flowId, {
-          flow_revid: rev,
+          flow_revid: rid || undefined,
           document_id: undefined,
           target_node_id: targetNodeId,
           run_data: seedRunData,
+          revision_snapshot,
         });
         if (out.execution_id) {
           setLogsFocusExecutionId(out.execution_id);
@@ -378,7 +394,7 @@ export default function FlowDetailPageClient({
         setMessage(err instanceof Error ? err.message : 'Execute step failed');
       }
     },
-    [api, flowId, latestFlowRevid],
+    [api, buildRevisionSnapshotForRun, flowId, latestFlowRevid],
   );
 
   const onDownloadFlowJson = useCallback(async () => {

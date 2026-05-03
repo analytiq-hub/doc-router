@@ -82,6 +82,14 @@ class ActivateFlowRequest(BaseModel):
     flow_revid: str | None = None
 
 
+class FlowRevisionSnapshotRequest(BaseModel):
+    """Immutable graph copied from the editor (like n8n's `workflowData` on `/run`)."""
+    nodes: list[dict[str, Any]]
+    connections: dict[str, Any]
+    settings: dict[str, Any] = Field(default_factory=dict)
+    pin_data: dict[str, Any] | None = None
+
+
 class RunFlowRequest(BaseModel):
     flow_revid: str | None = None
     document_id: str | None = None
@@ -92,6 +100,22 @@ class RunFlowRequest(BaseModel):
     run_data: dict[str, Any] | None = None
     """Node ids whose seed entries are ignored so those nodes re-execute."""
     dirty_node_ids: list[str] | None = None
+    """Editor graph to execute immediately (unsaved or dirty). Overrides DB revision when present."""
+    revision_snapshot: FlowRevisionSnapshotRequest | None = None
+
+
+async def _resolve_flow_revid_lineage(flow_id: str, flow_revid: str | None, db: Any) -> str:
+    """Return `flow_revid` only if it is a valid revision id on this flow; else empty (e.g. never saved yet)."""
+
+    fid = (flow_revid or "").strip()
+    if not fid:
+        return ""
+    try:
+        oid = ObjectId(fid)
+    except Exception:
+        return ""
+    doc = await db.flow_revisions.find_one({"_id": oid, "flow_id": flow_id})
+    return fid if doc else ""
 
 
 class FlowExecution(BaseModel):
@@ -441,18 +465,46 @@ async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, curr
     h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not h:
         raise HTTPException(status_code=404, detail="Flow not found")
-    flow_revid = req.flow_revid
-    if not flow_revid:
-        latest = await db.flow_revisions.find_one({"flow_id": flow_id}, sort=[("flow_version", -1)])
-        if not latest:
-            raise HTTPException(status_code=400, detail="Flow has no revisions")
-        flow_revid = str(latest["_id"])
 
-    rev = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
-    if not rev:
-        raise HTTPException(status_code=404, detail="Revision not found")
+    rev: dict[str, Any] | None = None
+    revision_snapshot: dict[str, Any] | None = None
+    flow_revid_linage: str = ""
 
-    known_node_ids = {str(n["id"]) for n in (rev.get("nodes") or []) if n.get("id")}
+    if req.revision_snapshot is not None:
+        snap = req.revision_snapshot
+        nodes = snap.nodes
+        try:
+            conns_dc = ad.flows.coerce_json_connections_to_dataclasses(snap.connections)
+        except (KeyError, TypeError, ValueError) as e:
+            raise HTTPException(status_code=400, detail=f"Invalid connections: {e}") from e
+        settings = snap.settings or {}
+        pin_data = snap.pin_data
+        try:
+            ad.flows.validate_revision(nodes, conns_dc, settings, pin_data)
+        except ad.flows.FlowValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        revision_snapshot = {
+            "nodes": nodes,
+            "connections": snap.connections,
+            "settings": settings,
+            "pin_data": pin_data,
+        }
+        flow_revid_linage = await _resolve_flow_revid_lineage(flow_id, req.flow_revid, db)
+    else:
+        flow_revid = (req.flow_revid or "").strip()
+        if not flow_revid:
+            latest = await db.flow_revisions.find_one({"flow_id": flow_id}, sort=[("flow_version", -1)])
+            if not latest:
+                raise HTTPException(status_code=400, detail="Flow has no revisions")
+            flow_revid = str(latest["_id"])
+
+        rev = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
+        if not rev:
+            raise HTTPException(status_code=404, detail="Revision not found")
+        flow_revid_linage = flow_revid
+
+    known_nodes = (revision_snapshot or rev or {}).get("nodes") or []
+    known_node_ids = {str(n["id"]) for n in known_nodes if n.get("id")}
     if req.target_node_id and req.target_node_id not in known_node_ids:
         raise HTTPException(status_code=400, detail="target_node_id is not a node on the selected revision")
 
@@ -475,7 +527,7 @@ async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, curr
 
     exec_doc = {
         "flow_id": flow_id,
-        "flow_revid": flow_revid,
+        "flow_revid": flow_revid_linage,
         "organization_id": organization_id,
         "mode": "manual",
         "status": "queued",
@@ -494,12 +546,14 @@ async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, curr
         "initial_run_data": seed_filtered or None,
         "dirty_node_ids": dirty_clean or None,
     }
-    res = await db.flow_executions.insert_one(exec_doc)
-    exec_id = str(res.inserted_id)
+    if revision_snapshot is not None:
+        exec_doc["revision_snapshot"] = revision_snapshot
+    res_ins = await db.flow_executions.insert_one(exec_doc)
+    exec_id = str(res_ins.inserted_id)
 
     await ad.queue.send_msg(ad.common.get_analytiq_client(), "flow_run", msg={
         "flow_id": flow_id,
-        "flow_revid": flow_revid,
+        "flow_revid": flow_revid_linage or "",
         "execution_id": exec_id,
         "organization_id": organization_id,
         "trigger": exec_doc["trigger"],

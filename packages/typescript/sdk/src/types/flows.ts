@@ -147,6 +147,9 @@ export interface SaveRevisionParams {
   pin_data?: FlowPinData | null;
 }
 
+/** Graph sent with `POST .../run` to execute the editor state without saving (matches n8n-style test runs). */
+export type RevisionSnapshotPayload = Pick<SaveRevisionParams, 'nodes' | 'connections' | 'settings' | 'pin_data'>;
+
 export interface RunFlowParams {
   flow_revid?: string;
   document_id?: string;
@@ -156,6 +159,8 @@ export interface RunFlowParams {
   run_data?: Record<string, unknown>;
   /** Node ids to force re-run even if present in `run_data`. */
   dirty_node_ids?: string[];
+  /** When set, this graph is executed; `flow_revid` is lineage only (expressions / UI), not the source of truth for the run. */
+  revision_snapshot?: RevisionSnapshotPayload;
 }
 
 /** One credential kind from `GET .../credential-kinds`. */

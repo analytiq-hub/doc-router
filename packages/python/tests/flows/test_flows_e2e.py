@@ -199,6 +199,64 @@ async def test_post_run_enqueues_queued_flow_run_message(test_db, mock_auth):
 
 
 @pytest.mark.asyncio
+async def test_post_run_revision_snapshot_without_saved_revision(test_db, mock_auth):
+    """POST /run with `revision_snapshot` works when the flow has no saved revisions yet."""
+
+    r0 = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows",
+        json={"name": "Snapshot-only run"},
+        headers=get_auth_headers(),
+    )
+    assert r0.status_code == 200, r0.text
+    flow_id = r0.json()["flow"]["flow_id"]
+
+    nodes = [
+        _std_node("t1", "Start", "flows.trigger.manual", 0),
+        _std_node(
+            "c1",
+            "Code",
+            "flows.code",
+            200,
+            {"python_code": _CODE_SNIPPET, "timeout_seconds": 5},
+        ),
+    ]
+    conns = {
+        "t1": {
+            "main": [
+                [{"dest_node_id": "c1", "connection_type": "main", "index": 0}],
+            ],
+        }
+    }
+
+    db = ad.common.get_async_db()
+    rv_count = await db.flow_revisions.count_documents({"flow_id": flow_id})
+    assert rv_count == 0
+
+    r2 = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}/run",
+        json={
+            "revision_snapshot": {
+                "nodes": nodes,
+                "connections": conns,
+                "settings": {},
+                "pin_data": None,
+            }
+        },
+        headers=get_auth_headers(),
+    )
+    assert r2.status_code == 200, r2.text
+    exec_id = r2.json()["execution_id"]
+
+    exec_doc = await db.flow_executions.find_one({"_id": ObjectId(exec_id)})
+    assert exec_doc is not None
+    assert exec_doc["status"] == "queued"
+    assert exec_doc.get("flow_revid") == ""
+    snap = exec_doc.get("revision_snapshot")
+    assert isinstance(snap, dict)
+    assert len(snap.get("nodes") or []) == 2
+
+
+@pytest.mark.asyncio
 async def test_delete_flow_header_removes_flow(test_db, mock_auth):
     """DELETE /flows/{flow_id} deletes the flow header; subsequent GET returns 404."""
 

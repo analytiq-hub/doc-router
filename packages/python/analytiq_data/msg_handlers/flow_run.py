@@ -41,7 +41,7 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
     msg_id = str(msg["_id"])
     payload = msg.get("msg") or {}
     flow_id = payload["flow_id"]
-    flow_revid = payload["flow_revid"]
+    flow_revid_payload = payload.get("flow_revid") or ""
     exec_id = payload["execution_id"]
     org_id = payload["organization_id"]
     trigger = payload.get("trigger") or {"type": "manual", "document_id": None}
@@ -53,14 +53,37 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
         await ad.queue.delete_msg(analytiq_client, "flow_run", msg_id)
         return
 
-    revision = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
-    if not revision:
-        await db.flow_executions.update_one(
-            {"_id": ObjectId(exec_id)},
-            {"$set": {"status": "error", "finished_at": datetime.now(UTC), "error": {"message": "Revision not found", "node_id": None, "node_name": None, "stack": None}}},
-        )
-        await ad.queue.delete_msg(analytiq_client, "flow_run", msg_id)
-        return
+    revision_raw = exec_doc.get("revision_snapshot")
+    revision: dict | None = dict(revision_raw) if isinstance(revision_raw, dict) else None
+    if revision is None:
+        fr = flow_revid_payload.strip() or exec_doc.get("flow_revid")
+        fr = fr.strip() if isinstance(fr, str) else ""
+        if not fr:
+            await db.flow_executions.update_one(
+                {"_id": ObjectId(exec_id)},
+                {
+                    "$set": {
+                        "status": "error",
+                        "finished_at": datetime.now(UTC),
+                        "error": {
+                            "message": "Execution has no revision_snapshot and empty flow_revid",
+                            "node_id": None,
+                            "node_name": None,
+                            "stack": None,
+                        },
+                    }
+                },
+            )
+            await ad.queue.delete_msg(analytiq_client, "flow_run", msg_id)
+            return
+        revision = await db.flow_revisions.find_one({"_id": ObjectId(fr), "flow_id": flow_id})
+        if not revision:
+            await db.flow_executions.update_one(
+                {"_id": ObjectId(exec_id)},
+                {"$set": {"status": "error", "finished_at": datetime.now(UTC), "error": {"message": "Revision not found", "node_id": None, "node_name": None, "stack": None}}},
+            )
+            await ad.queue.delete_msg(analytiq_client, "flow_run", msg_id)
+            return
 
     run_data: dict = dict(exec_doc.get("run_data") or {})
     initial = exec_doc.get("initial_run_data") or {}
@@ -95,11 +118,13 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
             run_data, revision_conns, pin_touched, limit_nodes=allowed_pins
         )
 
+    lineage_revid = str(exec_doc.get("flow_revid") or flow_revid_payload or "")
+
     context = ad.flows.ExecutionContext(
         organization_id=org_id,
         execution_id=exec_id,
         flow_id=flow_id,
-        flow_revid=flow_revid,
+        flow_revid=lineage_revid,
         mode=exec_doc.get("mode") or "manual",
         trigger_data=trigger,
         run_data=run_data,
