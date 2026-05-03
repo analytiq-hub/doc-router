@@ -472,7 +472,7 @@ export const FlowNodeParameterFields: React.FC<{
   let lastGroupLabel: string | null | undefined;
 
   for (const key of orderedKeys) {
-    if (!isPropertyVisible(key, schemaProps, mergedParams)) continue;
+    if (!isPropertyVisible(key, rootSchema, mergedParams)) continue;
     const sub = schemaProps[key];
     const groupRaw = sub['x-ui-group'];
     const group = typeof groupRaw === 'string' ? groupRaw.trim() || undefined : undefined;

@@ -82,31 +82,33 @@ describe('flowParameterValidation', () => {
     expect(okLit.errorsByField.url).toBeUndefined();
   });
 
-  it('applies x-ui-require-when for visible empty strings', () => {
+  it('enforces conditional non-empty body via JSON Schema minLength in allOf then (AJV)', () => {
     const schema = {
       type: 'object',
       properties: {
         body_mode: { type: 'string', default: 'none' },
-        body_json: {
-          type: 'string',
-          default: '',
-          'x-ui-show-when': { field: 'body_mode', in: ['json'] },
-          'x-ui-require-when': { field: 'body_mode', in: ['json'] },
-          'x-ui-require-message': 'Need JSON',
-        },
+        body_json: { type: 'string', default: '' },
       },
+      allOf: [
+        {
+          if: { properties: { body_mode: { enum: ['json'] } } },
+          then: { properties: { body_json: { type: 'string', minLength: 1 } } },
+        },
+      ],
     };
     const validate = compileParameterValidator(schema);
     const bad = validateFlowParameters(validate, schema as Record<string, unknown>, {
       body_mode: 'json',
       body_json: '',
     });
-    expect(bad.errorsByField.body_json).toBe('Need JSON');
+    expect(bad.errorsByField.body_json).toMatch(/1/i);
+    expect(bad.valid).toBe(false);
     const okHidden = validateFlowParameters(validate, schema as Record<string, unknown>, {
       body_mode: 'none',
       body_json: '',
     });
     expect(okHidden.errorsByField.body_json).toBeUndefined();
+    expect(okHidden.valid).toBe(true);
   });
 
   it('maps nested list item errors to row keys', () => {

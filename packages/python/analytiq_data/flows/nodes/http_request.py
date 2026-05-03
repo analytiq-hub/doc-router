@@ -109,17 +109,14 @@ class FlowsHttpRequestNode:
             "body_json": {
                 "type": "string",
                 "default": "",
+                "description": "JSON text when body mode is JSON. Required (non-empty) in that mode; use =expression for dynamic values.",
                 "x-ui-widget": "textarea",
                 "x-ui-group": "Body",
-                "x-ui-show-when": {"field": "body_mode", "in": ["json"]},
-                "x-ui-require-when": {"field": "body_mode", "in": ["json"]},
-                "x-ui-require-message": "JSON body cannot be empty for this mode",
             },
             "body_params": {
                 "type": "array",
                 "x-ui-widget": "name_value_list",
                 "x-ui-group": "Body",
-                "x-ui-show-when": {"field": "body_mode", "in": ["json_keypair", "form_urlencoded"]},
                 "items": {
                     "type": "object",
                     "required": ["name", "value"],
@@ -134,18 +131,15 @@ class FlowsHttpRequestNode:
             "body_raw": {
                 "type": "string",
                 "default": "",
+                "description": "Raw body bytes when body mode is raw. Required (non-empty) in that mode.",
                 "x-ui-widget": "textarea",
                 "x-ui-group": "Body",
-                "x-ui-show-when": {"field": "body_mode", "equals": "raw"},
-                "x-ui-require-when": {"field": "body_mode", "equals": "raw"},
-                "x-ui-require-message": "Raw body cannot be empty for this mode",
             },
             "body_content_type": {
                 "type": "string",
                 "default": "text/plain",
                 "description": "Content-Type header for raw body mode.",
                 "x-ui-group": "Body",
-                "x-ui-show-when": {"field": "body_mode", "equals": "raw"},
             },
             "full_response": {
                 "type": "boolean",
@@ -171,6 +165,25 @@ class FlowsHttpRequestNode:
                 "x-ui-group": "Options",
             },
         },
+        "allOf": [
+            {
+                "if": {"properties": {"body_mode": {"enum": ["json"]}}},
+                "then": {"properties": {"body_json": {"type": "string", "minLength": 1}}},
+            },
+            {
+                "if": {"properties": {"body_mode": {"enum": ["json_keypair", "form_urlencoded"]}}},
+                "then": {"properties": {"body_params": {}}},
+            },
+            {
+                "if": {"properties": {"body_mode": {"const": "raw"}}},
+                "then": {
+                    "properties": {
+                        "body_raw": {"type": "string", "minLength": 1},
+                        "body_content_type": {"type": "string", "minLength": 1},
+                    }
+                },
+            },
+        ],
     }
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:

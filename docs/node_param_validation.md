@@ -8,7 +8,7 @@ Authoritative server-side validation remains **`Draft7Validator`** on `node.para
 
 **Primary implementation file:** `packages/typescript/frontend/src/components/flows/flowParameterValidation.ts` (`validateFlowParameters`).
 
-**Docs:** `docs/flow_parameter_schema_ui_plan.md` (`x-ui-regex`, `x-ui-require-when`, progress snapshot).
+**Docs:** `docs/flow_parameter_schema_ui_plan.md` (`x-ui-regex`, `allOf`/`if`/`then` visibility, progress snapshot).
 
 ## Why JSON Schema helps
 
@@ -16,23 +16,25 @@ DocRouter uses one schema for both backend and UI. Node authors avoid maintainin
 
 ## Pipeline (frontend)
 
-1. **Merge defaults** — `mergeParameterDefaults` / `applyParameterPatch` (hidden fields cleared to defaults per `x-ui-show-when`).
-2. **Expression substitution** — Before AJV, string values starting with `=` are replaced with type-compatible **sentinels** (e.g. string → `__EXPR__`, number → `0`) recursively through objects and **arrays** (e.g. `name_value_list` rows). AJV then validates **literal** edits without per-field “skip expression” rules in error filtering.
-3. **AJV** — Compile once per `parameter_schema`; run on the substituted snapshot.
-4. **UI-only rules** (after AJV):
-   - **`x-ui-regex` / `x-ui-regex-message`** — applied to non-expression string literals.
-   - **`x-ui-require-when` / `x-ui-require-message`** — same predicate shape as `x-ui-show-when`; when the predicate holds and the field is visible, value must be non-empty (trimmed string, non-empty array, etc.).
-5. **Errors** — Top-level field messages plus **`listRowErrorsByField`** for nested list paths (e.g. “Row 2: …”) consumed by `FlowNameValueListField`.
+1. **Merge defaults** — `mergeParameterDefaults` / `applyParameterPatch` (hidden fields cleared to defaults when not **visible**).
+2. **Visibility** — `flowSchemaParameterUtils.isPropertyVisible`: prefers root **`allOf`** entries whose **`then.properties`** includes the field key (evaluate **`if`** against full merged params with AJV); falls back to legacy **`x-ui-show-when`** on the property (port converter).
+3. **Expression substitution** — Before AJV, string values starting with `=` are replaced with type-compatible **sentinels** recursively through objects and arrays. AJV then validates **literal** edits.
+4. **AJV** — Compile once per `parameter_schema`; run on the substituted snapshot (includes standard **`if`/`then`** from `allOf` at save time).
+5. **UI-only rules** (after AJV):
+   - **`x-ui-regex` / `x-ui-regex-message`** — non-expression string literals.
+   Conditional non-empty fields (e.g. HTTP body in JSON mode) use standard schema in **`allOf`/`then`** (`minLength`, `required`) so AJV and **`Draft7Validator`** agree — no separate UI keyword.
+6. **Errors** — Top-level field messages plus **`listRowErrorsByField`** for nested list paths.
 
 ## Backend
 
-`Draft7Validator` in `engine.py` validates saved parameters. Optional **`validate_parameters`** on node classes adds extra checks; HTTP URL **shape** for literals is **not** duplicated in Python — use **`minLength`** / types on the schema and **`x-ui-regex`** in the UI for http(s) literals. Expressions remain valid at save time because they satisfy base string constraints.
+`Draft7Validator` in `engine.py` validates saved parameters. Optional **`validate_parameters`** on node classes adds extra checks.
 
 ## Unit tests
 
-- `packages/typescript/frontend/src/components/flows/flowParameterValidation.spec.ts` — substitution, AJV, regex, require-when, list rows.
+- `packages/typescript/frontend/src/components/flows/flowParameterValidation.spec.ts`
+- `packages/typescript/frontend/src/components/flows/flowSchemaParameterUtils.spec.ts`
 
 ## Out of scope
 
 - **Async checks** (URL reachable, etc.) — execution time.
-- **Duplicating every cross-field rule in JSON Schema `if`/`then`** — use `x-ui-require-when` in the UI where backend resolution validates the real payload.
+- **Importer** emitting **`allOf`** instead of **`x-ui-show-when`** — optional follow-up (see plan §9).

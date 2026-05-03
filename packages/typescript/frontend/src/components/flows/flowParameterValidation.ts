@@ -1,15 +1,11 @@
 /**
  * Parameter validation: AJV on expression-substituted payloads, plus frontend-only
- * `x-ui-regex`, `x-ui-require-when`, and row-level errors for name_value_list.
+ * `x-ui-regex` (URL-like literals) and row-level errors for name_value_list.
+ * Conditional non-empty rules use JSON Schema (`minLength`, `allOf`/`if`/`then`).
  * @see docs/node_param_validation.md
  */
 import Ajv, { type ErrorObject, type ValidateFunction } from 'ajv';
-import {
-  evalShowWhen,
-  getOrderedKeys,
-  getSchemaProperties,
-  isPropertyVisible,
-} from './flowSchemaParameterUtils';
+import { getOrderedKeys, getSchemaProperties, isPropertyVisible } from './flowSchemaParameterUtils';
 
 const ajv = new Ajv({ allErrors: true, strict: false });
 
@@ -118,16 +114,6 @@ function fieldKeyForUi(err: ErrorObject): string | null {
   return segments[0] ?? null;
 }
 
-function isEmptyForRequireWhen(value: unknown, subschema: Record<string, unknown>): boolean {
-  const t = subschema.type;
-  if (t === 'string') return typeof value !== 'string' || value.trim() === '';
-  if (t === 'number' || t === 'integer') return value === null || value === undefined;
-  if (t === 'boolean') return value === null || value === undefined;
-  if (t === 'array') return !Array.isArray(value) || value.length === 0;
-  if (t === 'object') return !value || typeof value !== 'object' || Array.isArray(value);
-  return value === null || value === undefined;
-}
-
 export type ParameterValidationResult = {
   valid: boolean;
   errorsByField: Record<string, string>;
@@ -176,7 +162,7 @@ function collectAjvErrors(
   }
 }
 
-function applyUiRegexAndRequireWhen(
+function applyUiRegexExtensions(
   rootSchema: Record<string, unknown>,
   mergedParams: Record<string, unknown>,
   errorsByField: Record<string, string>,
@@ -184,7 +170,7 @@ function applyUiRegexAndRequireWhen(
   const schemaProps = getSchemaProperties(rootSchema);
   const orderedKeys = getOrderedKeys(rootSchema);
   for (const key of orderedKeys) {
-    if (!isPropertyVisible(key, schemaProps, mergedParams)) continue;
+    if (!isPropertyVisible(key, rootSchema, mergedParams)) continue;
     const sub = schemaProps[key];
     const v = mergedParams[key];
 
@@ -203,17 +189,6 @@ function applyUiRegexAndRequireWhen(
         } catch {
           /* ignore invalid regex */
         }
-      }
-    }
-
-    const reqWhen = sub['x-ui-require-when'];
-    if (reqWhen != null && evalShowWhen(reqWhen, mergedParams)) {
-      if (isEmptyForRequireWhen(v, sub)) {
-        const reqMsg =
-          typeof sub['x-ui-require-message'] === 'string'
-            ? (sub['x-ui-require-message'] as string)
-            : 'Required';
-        if (!errorsByField[key]) errorsByField[key] = reqMsg;
       }
     }
   }
@@ -249,7 +224,7 @@ export function validateFlowParameters(
     }
   }
 
-  applyUiRegexAndRequireWhen(rootSchema, mergedParams, errorsByField);
+  applyUiRegexExtensions(rootSchema, mergedParams, errorsByField);
 
   const valid =
     Object.keys(errorsByField).length === 0 && countListErrors(listRowErrorsByField) === 0;

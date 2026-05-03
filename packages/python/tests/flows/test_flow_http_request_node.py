@@ -26,8 +26,12 @@ def test_http_request_parameter_schema_display_extensions(http_node: FlowsHttpRe
     schema = http_node.parameter_schema
     props = schema["properties"]
     assert props["query_params"].get("x-ui-widget") == "name_value_list"
-    assert props["body_json"].get("x-ui-show-when") == {"field": "body_mode", "in": ["json"]}
-    assert props["body_raw"].get("x-ui-show-when") == {"field": "body_mode", "equals": "raw"}
+    assert isinstance(schema.get("allOf"), list) and len(schema["allOf"]) >= 3
+    json_branch = next(
+        b for b in schema["allOf"] if b.get("if", {}).get("properties", {}).get("body_mode", {}).get("enum") == ["json"]
+    )
+    assert json_branch["then"]["properties"]["body_json"]["minLength"] == 1
+    assert "x-ui-show-when" not in props["body_json"]
     assert list(props.keys()) == [
         "method",
         "url",
@@ -377,6 +381,38 @@ def test_http_request_url_json_schema_minlength(http_node: FlowsHttpRequestNode)
     v.validate({"method": "GET", "url": "=$json.url"})
     with pytest.raises(Exception):
         v.validate({"method": "GET", "url": ""})
+
+
+def test_http_request_body_json_minlength_when_mode_json(http_node: FlowsHttpRequestNode):
+    v = Draft7Validator(http_node.parameter_schema)
+    ok = {
+        "method": "POST",
+        "url": "https://example.com/x",
+        "headers": [],
+        "query_params": [],
+        "body_mode": "json",
+        "body_json": '{"x": 1}',
+    }
+    v.validate(ok)
+    v.validate({**ok, "body_json": "=$json.payload"})
+    with pytest.raises(Exception):
+        v.validate({**ok, "body_json": ""})
+
+
+def test_http_request_body_raw_minlength_when_mode_raw(http_node: FlowsHttpRequestNode):
+    v = Draft7Validator(http_node.parameter_schema)
+    ok = {
+        "method": "POST",
+        "url": "https://example.com/x",
+        "headers": [],
+        "query_params": [],
+        "body_mode": "raw",
+        "body_raw": "x",
+        "body_content_type": "text/plain",
+    }
+    v.validate(ok)
+    with pytest.raises(Exception):
+        v.validate({**ok, "body_raw": ""})
 
 
 @pytest.mark.asyncio

@@ -7,10 +7,35 @@ import {
   getOrderedKeys,
   getVisiblePropertyKeys,
   mergeParameterDefaults,
+  instanceMatchesIfSchema,
 } from './flowSchemaParameterUtils';
 
-/** Keys ordered as declared — matches hand-authored schema order (no parallel order list). */
+/** Same ordering as before — visibility via `allOf` / `if` / `then` (HTTP-style). */
 const httpLikeSchema = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    url: { type: 'string', default: '' },
+    body_mode: {
+      type: 'string',
+      enum: ['none', 'json', 'raw'],
+      default: 'none',
+    },
+    body_json: {
+      type: 'string',
+      default: '',
+    },
+  },
+  allOf: [
+    {
+      if: { properties: { body_mode: { enum: ['json'] } } },
+      then: { properties: { body_json: {} } },
+    },
+  ],
+};
+
+/** Legacy port-style schema still using `x-ui-show-when`. */
+const legacyShowWhenSchema = {
   type: 'object',
   additionalProperties: false,
   properties: {
@@ -40,11 +65,27 @@ describe('flowSchemaParameterUtils', () => {
     expect(evalShowWhen({ field: 'body_mode', equals: 'raw' }, { body_mode: 'json' })).toBe(false);
   });
 
-  it('getVisiblePropertyKeys lists only visible keys in declaration order', () => {
+  it('instanceMatchesIfSchema validates full params against if fragment', () => {
+    expect(
+      instanceMatchesIfSchema({ properties: { body_mode: { enum: ['json'] } } }, { body_mode: 'json' }),
+    ).toBe(true);
+    expect(
+      instanceMatchesIfSchema({ properties: { body_mode: { enum: ['json'] } } }, { body_mode: 'none' }),
+    ).toBe(false);
+  });
+
+  it('getVisiblePropertyKeys lists only visible keys (JSON Schema allOf if/then)', () => {
     const params = mergeParameterDefaults(httpLikeSchema, { body_mode: 'none' });
     expect(getVisiblePropertyKeys(httpLikeSchema, params)).toEqual(['url', 'body_mode']);
     const paramsJson = mergeParameterDefaults(httpLikeSchema, { body_mode: 'json' });
     expect(getVisiblePropertyKeys(httpLikeSchema, paramsJson)).toEqual(['url', 'body_mode', 'body_json']);
+  });
+
+  it('getVisiblePropertyKeys lists only visible keys (legacy x-ui-show-when)', () => {
+    const params = mergeParameterDefaults(legacyShowWhenSchema, { body_mode: 'none' });
+    expect(getVisiblePropertyKeys(legacyShowWhenSchema, params)).toEqual(['url', 'body_mode']);
+    const paramsJson = mergeParameterDefaults(legacyShowWhenSchema, { body_mode: 'json' });
+    expect(getVisiblePropertyKeys(legacyShowWhenSchema, paramsJson)).toEqual(['url', 'body_mode', 'body_json']);
   });
 
   it('clearHiddenFieldsToDefaults resets hidden fields to schema defaults', () => {
