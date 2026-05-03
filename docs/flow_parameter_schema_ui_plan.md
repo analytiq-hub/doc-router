@@ -18,7 +18,7 @@ This document describes how **all** node parameter editors share a **single sche
 | Backend validation at execution time | Done — `_validate_resolved_params()` runs after `resolve_parameters()` in all three execution paths |
 | Pair-list `value` schema | `{}` (any type) — expressions resolve to any Python type; node coerces to string |
 | Expression preview in UI | Done (debounced `preview-expression` + `FlowExpressionPreviewLine`) |
-| Expression variables: `_json` / `_binary` / `_input` / `_node` (see §9) | **Planned** — UI today still teaches `$`-prefixed aliases where applicable |
+| Expression variables: `_json` / `_binary` / … (see §9) | **Partial** — no `$` aliases in eval; UI/drag use `_json`/`_binary`; name-keyed `_node['…'].json` still **planned** (§9.2–§9.3) |
 | `flows.http_request` on generic schema path | Done |
 | Phase D read-only audit | Partial (optional) |
 
