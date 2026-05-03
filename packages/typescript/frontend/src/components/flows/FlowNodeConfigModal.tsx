@@ -28,6 +28,7 @@ import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfi
 import { FlowNodeCredentialSlots } from './flowNodeCredentialSlots';
 import { buildNodeInputPreview } from './flowNodeIoPreview';
 import { FlowInputUpstreamList } from './FlowInputUpstreamList';
+import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
 import { IoViewer } from './IoViewer';
 import {
   flowInlineNameInputClass,
@@ -551,32 +552,46 @@ const FlowNodeConfigModal: React.FC<{
           </div>
           {onSelectNode && upstreamNodeIds.length > 0 && (
             <FlowModalSideNavStraddle side="left">
-              {upstreamNodeIds.map((nid) => (
-                <button
-                  key={`up-${nid}`}
-                  type="button"
-                  title={nodeLabelById.get(nid) ?? nid}
-                  onClick={() => onSelectNode(nid)}
-                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#e2e4e8] bg-white shadow-md ring-1 ring-black/5 transition hover:scale-105"
-                >
-                  <ChevronRightIcon className="h-3 w-3 shrink-0 rotate-180 text-gray-500" strokeWidth={1.5} aria-hidden />
-                </button>
-              ))}
+              {upstreamNodeIds.map((nid) => {
+                const meta = upstreamNodeIcons?.get(nid);
+                return (
+                  <button
+                    key={`up-${nid}`}
+                    type="button"
+                    title={nodeLabelById.get(nid) ?? nid}
+                    onClick={() => onSelectNode(nid)}
+                    className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#e2e4e8] bg-white shadow-md ring-1 ring-black/5 transition hover:scale-105"
+                  >
+                    <FlowNodeTypeIcon
+                      iconKey={meta?.iconKey}
+                      fallback={meta?.isTrigger ? 'trigger' : 'process'}
+                      className="h-5 w-5 shrink-0 text-gray-600"
+                    />
+                  </button>
+                );
+              })}
             </FlowModalSideNavStraddle>
           )}
           {onSelectNode && downstreamNodeIds.length > 0 && (
             <FlowModalSideNavStraddle side="right">
-              {downstreamNodeIds.map((nid) => (
-                <button
-                  key={`dn-${nid}`}
-                  type="button"
-                  title={nodeLabelById.get(nid) ?? nid}
-                  onClick={() => onSelectNode(nid)}
-                  className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#e2e4e8] bg-white shadow-md ring-1 ring-black/5 transition hover:scale-105"
-                >
-                  <ChevronRightIcon className="h-3 w-3 shrink-0 text-gray-500" strokeWidth={1.5} aria-hidden />
-                </button>
-              ))}
+              {downstreamNodeIds.map((nid) => {
+                const meta = upstreamNodeIcons?.get(nid);
+                return (
+                  <button
+                    key={`dn-${nid}`}
+                    type="button"
+                    title={nodeLabelById.get(nid) ?? nid}
+                    onClick={() => onSelectNode(nid)}
+                    className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#e2e4e8] bg-white shadow-md ring-1 ring-black/5 transition hover:scale-105"
+                  >
+                    <FlowNodeTypeIcon
+                      iconKey={meta?.iconKey}
+                      fallback={meta?.isTrigger ? 'trigger' : 'process'}
+                      className="h-5 w-5 shrink-0 text-gray-600"
+                    />
+                  </button>
+                );
+              })}
             </FlowModalSideNavStraddle>
           )}
         </DialogPanel>
