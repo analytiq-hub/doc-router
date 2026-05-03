@@ -402,6 +402,72 @@ def test_validate_parameters_body_raw_required(http_node: FlowsHttpRequestNode):
 
 
 @pytest.mark.asyncio
+async def test_rejects_empty_url_after_parameters(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
+    item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+    with pytest.raises(RuntimeError, match="empty"):
+        await http_node.execute(
+            minimal_ctx,
+            {"id": "n1", "parameters": {"method": "GET", "url": "", "body_mode": "none"}},
+            [[item]],
+        )
+
+
+@pytest.mark.asyncio
+async def test_invalid_url_error_includes_upstream_row_hint(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"ok": True}, request=request)
+    )
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        item = ad.flows.FlowItem(
+            json={"name": "not-a-url"},
+            binary={},
+            meta={"source_node_id": "c1", "item_index": 2},
+            paired_item=None,
+        )
+        with pytest.raises(RuntimeError, match="upstream output row index 2"):
+            await http_node.execute(
+                minimal_ctx,
+                {
+                    "id": "n1",
+                    "parameters": {
+                        "method": "GET",
+                        "url": '=$json["name"]',
+                        "body_mode": "none",
+                    },
+                },
+                [[item]],
+            )
+
+
+@pytest.mark.asyncio
+async def test_rejects_schemeless_url(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"ok": True}, request=request)
+    )
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        item = ad.flows.FlowItem(json={"host": "example.com"}, binary={}, meta={}, paired_item=None)
+        with pytest.raises(RuntimeError, match="http:// or https://"):
+            await http_node.execute(
+                minimal_ctx,
+                {
+                    "id": "n1",
+                    "parameters": {
+                        "method": "GET",
+                        "url": "=$json[\"host\"]",
+                        "body_mode": "none",
+                    },
+                },
+                [[item]],
+            )
+
+
+@pytest.mark.asyncio
 async def test_connect_error_propagates(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
     def handler(request: httpx.Request) -> httpx.Response:
         raise httpx.ConnectError("connection refused", request=request)

@@ -3,12 +3,38 @@ from __future__ import annotations
 """Outbound HTTP Request node (`flows.http_request`)."""
 
 import json
+import logging
 import urllib.parse
 from typing import Any
 
 import httpx
 
 import analytiq_data as ad
+
+logger = logging.getLogger(__name__)
+
+
+def _exec_log(ctx: "ad.flows.ExecutionContext") -> logging.Logger:
+    """Prefer the flow worker logger when attached so errors land with other flow_run lines."""
+
+    return ctx.logger if ctx.logger is not None else logger
+
+
+def _lane_index_of_item(lane: list["ad.flows.FlowItem"], target: "ad.flows.FlowItem") -> int:
+    for i, it in enumerate(lane):
+        if it is target:
+            return i
+    return 0
+
+
+def _inbound_row_hint(item: "ad.flows.FlowItem") -> str:
+    """Explain which upstream row this invocation uses (engine runs HTTP once per inbound item)."""
+
+    meta = item.meta if isinstance(item.meta, dict) else {}
+    ix = meta.get("item_index")
+    if isinstance(ix, int):
+        return f" This invocation is for upstream output row index {ix} (HTTP Request runs once per inbound item; each row must yield a valid http(s) URL)."
+    return " This node runs once per inbound item; ensure the URL resolves to http(s) for every row or filter upstream."
 
 
 def _json_keypair_value(value: Any) -> Any:
@@ -63,7 +89,7 @@ class FlowsHttpRequestNode:
             "url": {
                 "type": "string",
                 "minLength": 1,
-                "description": "Absolute http(s) URL or =expression. Evaluated per item.",
+                "description": "Absolute http(s) URL or =expression ($json, etc.). Evaluated once per inbound item: if the upstream node emits N rows, this node issues up to N requests using each row's JSON.",
                 "default": "",
                 "x-ui-group": "Request",
                 "x-ui-placeholder": "https://… or =expression",
@@ -200,13 +226,16 @@ class FlowsHttpRequestNode:
         if not slot0:
             return [[]]
         item = slot0[0]
+        lane_ix = _lane_index_of_item(slot0, item)
 
         params = ad.flows.resolve_parameters(
             params_raw,
             item=item,
             run_data=context.run_data,
             input_context=ad.flows.materialize_input_context(
-                inputs, input_index=0, item_index=0
+                inputs,
+                input_index=0,
+                item_index=lane_ix,
             ),
             execution_refs={
                 "execution_id": context.execution_id,
@@ -217,6 +246,28 @@ class FlowsHttpRequestNode:
 
         method = str(params.get("method") or "GET").upper()
         url = str(params.get("url") or "").strip()
+        exec_log = _exec_log(context)
+        nid = node.get("id", "?")
+
+        if not url:
+            msg = "HTTP Request url is empty after evaluating parameters." + _inbound_row_hint(item)
+            exec_log.error(
+                f"flows.http_request invalid url node_id={nid} execution_id={context.execution_id} "
+                f"flow_id={context.flow_id} organization_id={context.organization_id}: {msg}"
+            )
+            raise RuntimeError(msg)
+        url_lc = url.lower()
+        if not (url_lc.startswith("http://") or url_lc.startswith("https://")):
+            msg = (
+                "HTTP Request url must be an absolute URL with http:// or https:// "
+                f"(after evaluation: {url[:500]!r})."
+            ) + _inbound_row_hint(item)
+            exec_log.error(
+                f"flows.http_request invalid url node_id={nid} execution_id={context.execution_id} "
+                f"flow_id={context.flow_id} organization_id={context.organization_id}: {msg}"
+            )
+            raise RuntimeError(msg)
+
         timeout = float(params.get("timeout_seconds") or 30)
         follow_redirects = bool(params.get("follow_redirects", True))
         never_error = bool(params.get("never_error", False))
@@ -282,22 +333,48 @@ class FlowsHttpRequestNode:
             content_type = str(params.get("body_content_type") or "text/plain")
             headers.setdefault("Content-Type", content_type)
 
-        async with httpx.AsyncClient(
-            timeout=timeout,
-            follow_redirects=follow_redirects,
-        ) as client:
-            resp = await client.request(
-                method=method,
-                url=url,
-                params=query or None,
-                headers=headers or None,
-                content=content,
+        try:
+            async with httpx.AsyncClient(
+                timeout=timeout,
+                follow_redirects=follow_redirects,
+            ) as client:
+                resp = await client.request(
+                    method=method,
+                    url=url,
+                    params=query or None,
+                    headers=headers or None,
+                    content=content,
+                )
+        except httpx.UnsupportedProtocol as e:
+            # Should be rare after preflight validation; normalize message for callers.
+            msg = (
+                "HTTP Request url must use http:// or https:// "
+                f"(request used {url!r}: {e})"
             )
+            exec_log.error(
+                f"flows.http_request unsupported protocol node_id={nid} execution_id={context.execution_id} "
+                f"flow_id={context.flow_id} organization_id={context.organization_id}: {msg}",
+                exc_info=True,
+            )
+            raise RuntimeError(msg) from None
+        except httpx.RequestError as e:
+            exec_log.error(
+                f"flows.http_request transport error node_id={nid} execution_id={context.execution_id} "
+                f"flow_id={context.flow_id} organization_id={context.organization_id} "
+                f"method={method} url={url!r}: {e}",
+                exc_info=True,
+            )
+            raise
 
         if not never_error and resp.status_code >= 400:
-            raise RuntimeError(
-                f"HTTP {resp.status_code} from {method} {url}: {resp.text[:200]}"
+            detail = resp.text[:200]
+            msg = f"HTTP {resp.status_code} from {method} {url}: {detail}"
+            exec_log.error(
+                f"flows.http_request HTTP error node_id={nid} execution_id={context.execution_id} "
+                f"flow_id={context.flow_id} organization_id={context.organization_id} "
+                f"status={resp.status_code} method={method} url={url!r} body_snippet={detail!r}"
             )
+            raise RuntimeError(msg)
 
         resp_body: Any
         ct = resp.headers.get("content-type", "")
