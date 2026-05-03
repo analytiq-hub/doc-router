@@ -26,13 +26,16 @@ def test_http_request_parameter_schema_display_extensions(http_node: FlowsHttpRe
     schema = http_node.parameter_schema
     props = schema["properties"]
     assert props["query_params"].get("x-ui-widget") == "name_value_list"
-    assert isinstance(schema.get("allOf"), list) and len(schema["allOf"]) >= 3
+    assert isinstance(schema.get("allOf"), list) and len(schema["allOf"]) == 2
     json_branch = next(
         b for b in schema["allOf"] if b.get("if", {}).get("properties", {}).get("body_mode", {}).get("enum") == ["json"]
     )
     assert json_branch["then"]["properties"]["body_json"]["minLength"] == 1
     assert props["body_json"].get("x-ui-widget") == "json"
-    assert "x-ui-show-when" not in props["body_json"]
+    assert props["body_json"].get("x-ui-show-when") == {"field": "body_mode", "in": ["json"]}
+    assert props["body_params"].get("x-ui-show-when") == {"field": "body_mode", "in": ["json_keypair", "form_urlencoded"]}
+    assert props["body_raw"].get("x-ui-show-when") == {"field": "body_mode", "equals": "raw"}
+    assert props["body_content_type"].get("x-ui-show-when") == {"field": "body_mode", "equals": "raw"}
     assert list(props.keys()) == [
         "method",
         "url",

@@ -1,8 +1,8 @@
 # Plan: Schema-driven flow node parameters (UI)
 
-This document describes how to move **all** node parameter editors—including `flows.http_request`—onto a **single schema-driven rendering layer**, while keeping **one authoritative JSON Schema per node** on the backend (already validated at execution time via `Draft7Validator`).
+This document describes how **all** node parameter editors share a **single schema-driven rendering layer**, while keeping **one authoritative JSON Schema per node** on the backend (validated at execution time via `Draft7Validator` after expression resolution).
 
-**Related:** `docs/flows2.md` (architecture), `docs/node_param_validation.md` (AJV + UI validation pipeline), `flowNodeConfigFields.tsx` (`FlowNodeParameterFields`), `flowParameterValidation.ts`, `FlowNameValueListField.tsx`, `flowSchemaParameterUtils.ts`.
+**Related:** `docs/flows2.md` (architecture), `flowNodeConfigFields.tsx` (`FlowNodeParameterFields`), `FlowNameValueListField.tsx`, `flowSchemaParameterUtils.ts`.
 
 ---
 
@@ -11,25 +11,26 @@ This document describes how to move **all** node parameter editors—including `
 | Area | Status |
 |------|--------|
 | Schema-driven parameters + groups / widgets | Done |
-| Conditional visibility | **Preferred:** root `allOf` + `if` / `then` (`then.properties` lists conditional keys). **Legacy:** `x-ui-show-when` on the property (port converter). |
-| Inline validation (AJV + sentinels + `x-ui-regex`; conditional rules via `allOf`/`then`) | Done (`flowParameterValidation.ts`, `flowNodeConfigFields.tsx`) |
-| Save disabled when parameters invalid | Done (`FlowToolbar` ← `FlowEditor` ← modal) |
-| `flows.http_request` URL literals via `x-ui-regex`; backend `minLength` / Draft7 only | Done (`http_request.py`) |
-| Body JSON/raw non-empty when mode active | `minLength` / `allOf`/`then` + visibility (`http_request.py`) |
-| List row errors (`name_value_list`) | Per-row messages via `listRowErrorsByField` + `FlowNameValueListField.rowErrors` |
-| Phase D read-only audit | Partial (textarea read-only branch aligned; full audit still optional) |
-| Flow credentials API | `get_async_db()` is synchronous — callers must not `await` it (`flows_credentials.py`, `docs/docrouter_credentials.md` examples) |
+| Conditional visibility (`x-ui-show-when`) | Done — preferred for all hand-authored nodes |
+| Legacy visibility (`allOf` + `if`/`then` on frontend) | Supported for port-converted nodes; hand-authored nodes use `x-ui-show-when` |
+| Frontend validation | **Removed** — no AJV, no sentinels, no save-blocking |
+| Backend validation at save time | **Removed** — Draft7Validator no longer runs on raw (pre-resolution) params |
+| Backend validation at execution time | Done — `_validate_resolved_params()` runs after `resolve_parameters()` in all three execution paths |
+| Pair-list `value` schema | `{}` (any type) — expressions resolve to any Python type; node coerces to string |
+| Expression preview in UI | **Not yet implemented** — next major feature |
+| `flows.http_request` on generic schema path | Done |
+| Phase D read-only audit | Partial (optional) |
 
 ---
 
 ## 1. Goals
 
-1. **One code path** in the node config modal for parameters: no `nodeType.key === 'flows.http_request'` branch in `FlowNodeConfigModal`.
+1. **One code path** in the node config modal for parameters: no per-node-type branch in `FlowNodeConfigModal`.
 2. **Visual and behavioral consistency**: booleans, enums, strings with drag-from-IO, and structured fields use shared components.
-3. **Backend remains source of truth**: `NodeType.parameter_schema` continues to drive validation in `engine.py`; the UI consumes the **same** schema (via `GET …/node-types`).
-4. **Extensible without forked node files**: new widget types register once; nodes only extend JSON Schema (plus optional UI hints).
+3. **Backend remains source of truth**: `NodeType.parameter_schema` drives validation at execution time; the UI consumes the same schema (via `GET …/node-types`).
+4. **Extensible without forked node files**: new widget types register once; nodes extend JSON Schema plus optional `x-ui-*` hints.
 
-Non-goals for v1 of this plan: replacing Monaco for code nodes with a different editor; building a full visual "expression builder" beyond existing `=expression` strings.
+Non-goals for v1: replacing Monaco for code nodes; building a full visual expression builder beyond existing `=expression` strings.
 
 ---
 
@@ -37,29 +38,35 @@ Non-goals for v1 of this plan: replacing Monaco for code nodes with a different 
 
 ### 2.1 Backend
 
-- Each registered node exposes `parameter_schema: dict` (JSON Schema draft-07 style object with `properties`, `required`, etc.).
-- `flows.http_request` uses root **`allOf`** with **`if` / `then`** for body-field visibility and conditional **`minLength`** (Draft 7), plus `x-ui-*` for presentation (`x-ui-group`, `x-ui-regex`, etc.). Other built-ins use the same vocabulary where it applies: **`flows.code`**, **`flows.branch`**, **`flows.merge`** / **`flows.trigger.manual`** (see §2.1 earlier snapshot).
-- The n8n port converter (`analytiq_data/flows/port/schema.py`) still maps single-field `displayOptions.show` → **`x-ui-show-when`** (legacy); hand-authored nodes should prefer **`allOf` / `if` / `then`** so visibility is part of standard JSON Schema.
+- Each registered node exposes `parameter_schema: dict` (JSON Schema draft-07 object with `properties`, `required`, etc.).
+- **Save time** (`validate_revision`): structural checks only — unique IDs, one trigger, DAG, connection bounds, credential slot names. `Draft7Validator` is **not** run here because parameters may contain unresolved `=expression` strings that would be incorrectly rejected.
+- **Execution time**: `resolve_parameters()` substitutes all `=expression` strings with their runtime values (Python `eval` in a sandboxed environment). `_validate_resolved_params()` then runs `Draft7Validator` on the resolved parameters — catching type errors, missing required fields, and enum violations on actual values.
+- `flows.http_request` uses `x-ui-show-when` for display hints and `allOf`/`if`/`then` for conditional backend constraints (e.g. `minLength` on `body_json` when `body_mode == "json"`). The `if`/`then` branches fire correctly post-resolution because hidden fields are cleared to their schema defaults by `clearHiddenFieldsToDefaults` before the flow is saved.
+- Pair-list item schema (`query_params`, `headers`, `body_params`): `value` is `{}` (any type). Expressions resolve to arbitrary Python values; the node coerces to `str` when building the HTTP request.
 
 ### 2.2 Frontend
 
-- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks properties in declaration order, evaluates **visibility** via `allOf`/`if`/`then` (see `flowSchemaParameterUtils.isPropertyVisible`) with legacy fallback to `x-ui-show-when`, merges defaults, clears hidden fields via schema defaults, and picks widgets: `x-ui-widget` drives the widget (`name_value_list`, `textarea`, `code`); booleans → Headless `Switch`; enums with `x-ui-enum-names`; structured `oneOf` on **`type: string`** stays a plain text field (not Monaco); object/array/code → Monaco when applicable.
-- **`flowParameterValidation.ts`**: compiles AJV once per schema; **substitutes** `=…` expression leaves with type-compatible sentinels before AJV; then applies **`x-ui-regex` / `x-ui-regex-message`** (literals only); maps nested/list paths to **row-level** errors for pair lists. Covered by `flowParameterValidation.spec.ts`.
-- **`flowSchemaParameterUtils.ts`**: `instanceMatchesIfSchema`, `getIfBranchesForPropertyKey`, `isPropertyVisible`, `evalShowWhen` (legacy), `getVisiblePropertyKeys`, `clearHiddenFieldsToDefaults`, `applyParameterPatch`, `mergeParameterDefaults`. Unit-tested in `flowSchemaParameterUtils.spec.ts`.
-- **`FlowNameValueListField.tsx`** — pair editor + optional **`rowErrors`** for validation messages under a row.
-- **`flows.http_request`** uses the generic path; no special-case branch remains in `FlowNodeConfigModal`.
+- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks properties in declaration order, evaluates visibility via `x-ui-show-when` (and legacy `allOf`/`if`/`then` for port-converted schemas), merges defaults, clears hidden fields via schema defaults, and picks widgets based on `x-ui-widget` and inferred JSON Schema type.
+- **No frontend validation**: `flowParameterValidation.ts` has been removed. No AJV, no sentinel substitution, no inline errors, no Save-button blocking. Parameter errors surface after the user runs the flow or executes a step.
+- **`flowSchemaParameterUtils.ts`**: `evalShowWhen`, `isPropertyVisible`, `getVisiblePropertyKeys`, `clearHiddenFieldsToDefaults`, `applyParameterPatch`, `mergeParameterDefaults`. Also supports `allOf`/`if`/`then` visibility for legacy port-converted schemas (`instanceMatchesIfSchema`, `getIfBranchesForPropertyKey`). Unit-tested in `flowSchemaParameterUtils.spec.ts`.
+- **`FlowNameValueListField.tsx`** — pair editor with add/remove rows and drag-drop into name and value cells.
+- **`flows.http_request`** uses the generic path; no special-case branch in `FlowNodeConfigModal`.
 
-### 2.3 What was special-cased (now resolved)
+### 2.3 Why frontend validation was removed
 
-The following gaps existed in the generic renderer when `flows.http_request` had its own `FlowHttpRequestParameterFields` component. All are now handled:
+Static validation against raw parameters (containing `=expression` strings) requires sentinel substitution — replacing expression strings with type-compatible placeholders before running AJV. Sentinels are inherently imprecise: they satisfy `type: string` but not `minLength`, they can't satisfy `pattern`, and they make `if`/`then` conditions misfire. The fundamental problem is that the schema is written for resolved values (what the backend sees), not for expression strings (what the UI stores).
+
+Runtime evaluation — resolving expressions against actual upstream data — is the correct approach. Validation then runs on real values, not approximations.
+
+### 2.4 What was special-cased (now resolved)
 
 | Was missing | How it is handled now |
 |-------------|-----------------------|
 | Array of `{name, value}` objects | `x-ui-widget: "name_value_list"` → `FlowNameValueListField` |
-| Conditional field visibility | Root `allOf` + `if`/`then` (`then.properties` includes the key), or legacy `x-ui-show-when` — see `isPropertyVisible` |
+| Conditional field visibility | `x-ui-show-when` on the property (preferred), or legacy `allOf`/`if`/`then` for port-converted schemas |
 | `x-ui-enum-names` display labels | Read in `renderParamField` enum branch |
 | Display order | `properties` declaration order (Python insertion order, JSON key order) |
-| Section labels | `x-ui-group` renders a non-collapsible divider above first field in each group |
+| Section labels | `x-ui-group` renders a non-collapsible section divider |
 
 ---
 
@@ -75,13 +82,11 @@ The following gaps existed in the generic renderer when `flows.http_request` had
 
 ### 3.2 Widget registry
 
-Built-in widgets:
-
 | Widget id | Activated by | Notes |
 |-----------|-------------|-------|
 | `name_value_list` | `x-ui-widget: "name_value_list"` | Pair editor; explicit only — not inferred from item shape |
 | `textarea` | `x-ui-widget: "textarea"` | Monospace textarea |
-| `json` | `x-ui-widget: "json"` (`type: "string"`) | Monaco JSON (`plaintext` when value is an `=expression`) |
+| `json` | `x-ui-widget: "json"` (`type: "string"`) | Monaco JSON; `plaintext` language when value starts with `=` |
 | `code` | `x-ui-widget: "code"` or `python_code` / `js_code` / `ts_code` key | Monaco |
 | `boolean` | `type: "boolean"` | Headless Switch |
 | `enum` | `enum` array present | `<select>` with `x-ui-enum-names` labels |
@@ -92,7 +97,7 @@ Credential slots remain separate (`FlowNodeCredentialSlots`) and are not part of
 
 ### 3.3 State updates and hidden field clearing
 
-`applyParameterPatch(schema, currentMerged, patch)` merges the patch then calls `clearHiddenFieldsToDefaults`, which resets any field that is **not visible** (per `allOf`/`if`/`then` or legacy `x-ui-show-when`) to its schema `default` (or type fallback). This ensures stale body content from a previous mode does not accumulate in saved flow JSON.
+`applyParameterPatch(schema, currentMerged, patch)` merges the patch then calls `clearHiddenFieldsToDefaults`, which resets any field whose visibility condition is false to its schema `default` (or type fallback). This ensures hidden fields are cleared before save, which in turn ensures `allOf`/`if`/`then` backend constraints fire correctly post-resolution.
 
 ---
 
@@ -104,16 +109,24 @@ All extensions are **optional**; schemas without them use inferred behavior.
 
 | Keyword | Level | Purpose |
 |---------|-------|---------|
-| `x-ui-widget` | property | Widget id: `"name_value_list"`, `"textarea"`, `"code"`, `"monospace"`. Required for pair-list arrays (not inferred). |
-| `x-ui-group` | property | Short string rendered as a non-collapsible section divider. Adjacent fields with the same group string are visually grouped. |
-| *(prefer)* **`allOf` + `if` / `then`** | root | Standard Draft 7: each item may have `if` and `then`. If `then.properties` contains key **K**, **K** is visible only when the full parameter object validates against **`if`**. Multiple branches for one key are OR’d. |
-| `x-ui-show-when` | property | **Legacy** (n8n port): `{ "field": "body_mode", "in": ["json"] }` or `{ "field": "body_mode", "equals": "raw" }`. Hidden field values are cleared to schema defaults. Used when `allOf` is absent for that key. |
+| `x-ui-widget` | property | Widget id: `"name_value_list"`, `"textarea"`, `"json"`, `"code"`, `"monospace"`. Required for pair-list arrays (not inferred). |
+| `x-ui-group` | property | Short string rendered as a non-collapsible section divider. Adjacent fields with the same group label are visually grouped. |
+| `x-ui-show-when` | property | `{ "field": "body_mode", "in": ["json"] }` or `{ "field": "body_mode", "equals": "raw" }`. **Preferred for visibility in hand-authored nodes.** Hidden field values are cleared to schema defaults by `clearHiddenFieldsToDefaults`. |
 | `x-ui-placeholder` | property | Placeholder text for string inputs. |
 | `x-ui-enum-names` | property | Human-readable labels for `enum` values; rendered as `<option>` text. |
-| `x-ui-regex` | property | ECMAScript regex string (checked **only in the UI**). Literal values are tested after AJV; strings starting with `=` are skipped (expressions). Use with standard JSON Schema (`minLength`, `pattern`, `allOf`/`if`/`then`) on the backend so Draft7 matches the editor. |
-| `x-ui-regex-message` | property | Message when `x-ui-regex` fails. |
 
-The port converter (`port/schema.py`) maps n8n `INodeProperty` fields to these keys automatically: `placeholder` → `x-ui-placeholder`, `type: "code"` → `x-ui-widget: "code"`, single-field `displayOptions.show` → **`x-ui-show-when`** (legacy). Multi-field `displayOptions` and `hide` are left unmapped until the importer emits `allOf`/`if`/`then`.
+### Visibility: `x-ui-show-when` vs `allOf`/`if`/`then`
+
+These two mechanisms serve different purposes and should not be conflated:
+
+- **`x-ui-show-when`** is a **display rule** — it tells the UI whether to render a field. It is ignored by `Draft7Validator`. Hand-authored nodes should use this for all visibility.
+- **`allOf`/`if`/`then`** is a **validation constraint** — it tells `Draft7Validator` whether to apply certain constraints conditionally. It says nothing about display. The frontend also reads it as a legacy visibility signal for port-converted nodes (via `getIfBranchesForPropertyKey`), but this is a secondary use.
+
+For hand-authored nodes, use both independently:
+- `x-ui-show-when` on the property for display
+- `allOf`/`if`/`then` at the root for conditional backend validation (e.g. `minLength` when a field is active)
+
+Port-converted nodes (from n8n via `port/schema.py`) emit `x-ui-show-when` for single-field `displayOptions.show`. Multi-field conditions are left unmapped.
 
 ---
 
@@ -121,19 +134,30 @@ The port converter (`port/schema.py`) maps n8n `INodeProperty` fields to these k
 
 - `Draft7Validator` ignores unknown `x-*` keywords (standard JSON Schema behaviour).
 - `GET …/node-types` returns the enriched schema as-is.
-- The Python test `test_http_request_parameter_schema_display_extensions` (in `tests/flows/test_flow_http_request_node.py`) asserts UI-oriented keys, root **`allOf`** for conditional body fields, and that `list(props.keys())` matches the declared field order.
+- **Validation timing**: `_validate_resolved_params(node_id, resolved_node)` in `engine.py` runs `Draft7Validator` on fully-resolved parameters in all three execution paths (trigger-only, batch, per-item first item). Errors raise `RuntimeError` and are caught by the node's `on_error` handler.
+- The Python test `test_http_request_parameter_schema_display_extensions` (in `tests/flows/test_flow_http_request_node.py`) asserts UI-oriented keys and `list(props.keys())` field order.
 - The Python test `test_flow_port_schema_display.py` asserts that `port/schema.py` maps n8n hints to `x-ui-*` keys correctly.
 
 ---
 
 ## 6. Remaining work
 
-Phases A–C (generic renderer, HTTP on schema path) are complete. **Phase E** (inline validation, sentinels, `x-ui-regex`, save blocking, list row errors) is **implemented** — see §Progress snapshot and `docs/node_param_validation.md`.
+Phases A–C (generic renderer, HTTP node on schema path) are complete. Frontend AJV validation (formerly Phase E) has been removed in favour of runtime evaluation.
 
-### Phase D — Hardening (optional follow-ups)
+### Expression preview (next major feature)
 
-- **Read-only mode:** spot-check any new widget branches for consistent disabled/read-only styling (`flowUiClasses.ts` shared inputs).
-- **Empty schema:** keep current “No parameters for this node type.” message when `properties` is empty.
+When the node config modal is open and upstream `runData` or `pinData` is available, resolve `=expression` fields against that data and show the resolved value inline below the field. This requires:
+
+1. A backend API endpoint (e.g. `POST /orgs/{org_id}/flows/evaluate-expression`) that accepts `{ expression, run_data, item_index }` and returns `{ result } | { error }`. The backend runs `eval_expression()` from `expressions.py`.
+2. Passing upstream run/pin data into `FlowNodeParameterFields` (already available in `FlowNodeConfigModal` via `runData`/`pinData` props).
+3. Showing a small gray preview text below expression-valued inputs, and a red error text if `eval_expression` fails.
+
+Expressions use Python syntax (`$json['field']`, `$node['Name']['json']`, etc.) and are evaluated server-side — a JavaScript port is not feasible for the full expression set.
+
+### Phase D — Hardening (optional)
+
+- **Read-only mode:** spot-check all widget branches for consistent non-editable rendering.
+- **Empty schema:** keep current "No parameters for this node type." message.
 
 ---
 
@@ -142,11 +166,10 @@ Phases A–C (generic renderer, HTTP on schema path) are complete. **Phase E** (
 | Layer | What | Status |
 |-------|------|--------|
 | Unit (TS) | `getVisiblePropertyKeys`, `clearHiddenFieldsToDefaults`, `applyParameterPatch`, `evalShowWhen` | Done (`flowSchemaParameterUtils.spec.ts`) |
-| Unit (TS) | `x-ui-enum-names` option labels | Done (enum branch in `flowNodeConfigFields.tsx`) |
 | Python | `x-ui-*` keys present on HTTP node schema; `list(props.keys())` order | Done (`test_flow_http_request_node.py`) |
 | Python | Port converter maps `placeholder`, `code` type, `displayOptions.show` to `x-ui-*` | Done (`test_flow_port_schema_display.py`) |
+| Python | E2E flow run with expressions in pair-list values | Done (`test_flows_e2e.py`) |
 | Manual | Phase C QA checklist (below) | Due before merge |
-| Unit (TS) | AJV + sentinels + `x-ui-regex` + list row mapping | Done (`flowParameterValidation.spec.ts`) |
 
 **Phase C manual QA checklist:**
 
@@ -169,13 +192,15 @@ Phases A–C (generic renderer, HTTP on schema path) are complete. **Phase E** (
 | Risk | Mitigation |
 |------|------------|
 | Schema/UI drift | Single schema from API; `x-ui-*` only adds presentation — validation unchanged. |
-| `show-when` too weak | Start with `field` + `in` / `equals`; extend later (`not`, nested paths). |
+| `x-ui-show-when` too weak | Supports `field` + `in` / `equals`; extend later (`not`, nested paths) if needed. |
 | Drag-drop regression in pair lists | `FlowNameValueListField` handles both name and value cells; Phase C checklist covers each. |
-| Expression strings vs schema types | UI substitutes expression leaves with sentinels before AJV; literals use full schema; URL shape for literals via `x-ui-regex`. |
+| Expression errors silent until run | Expression preview API (planned) will surface errors at edit time when upstream data is available. |
+| Post-resolution validation too strict | Pair-list `value` fields use `{}` schema; node coerces to `str` internally. Other type constraints are correct post-resolution. |
 
 ---
 
 ## 9. Open decisions
 
 - Freeze the `x-ui-*` keyword set before widespread use in ported node schemas.
-- Optionally extend the n8n port converter to emit **`allOf` / `if` / `then`** instead of **`x-ui-show-when`** where `displayOptions.show` is single-field (needs top-level schema aggregation).
+- Expression preview API design: dedicated endpoint vs. reusing the existing step-execution path.
+- Whether to validate on every per-item execution or only the first item (current: first item only, to avoid redundant work when all items share the same parameter structure).

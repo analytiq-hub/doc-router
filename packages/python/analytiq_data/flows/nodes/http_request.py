@@ -112,11 +112,13 @@ class FlowsHttpRequestNode:
                 "description": "JSON text when body mode is JSON. Required (non-empty) in that mode; use =expression for dynamic values.",
                 "x-ui-widget": "json",
                 "x-ui-group": "Body",
+                "x-ui-show-when": {"field": "body_mode", "in": ["json"]},
             },
             "body_params": {
                 "type": "array",
                 "x-ui-widget": "name_value_list",
                 "x-ui-group": "Body",
+                "x-ui-show-when": {"field": "body_mode", "in": ["json_keypair", "form_urlencoded"]},
                 "items": {
                     "type": "object",
                     "required": ["name", "value"],
@@ -134,12 +136,14 @@ class FlowsHttpRequestNode:
                 "description": "Raw body bytes when body mode is raw. Required (non-empty) in that mode.",
                 "x-ui-widget": "textarea",
                 "x-ui-group": "Body",
+                "x-ui-show-when": {"field": "body_mode", "equals": "raw"},
             },
             "body_content_type": {
                 "type": "string",
                 "default": "text/plain",
                 "description": "Content-Type header for raw body mode.",
                 "x-ui-group": "Body",
+                "x-ui-show-when": {"field": "body_mode", "equals": "raw"},
             },
             "full_response": {
                 "type": "boolean",
@@ -169,10 +173,6 @@ class FlowsHttpRequestNode:
             {
                 "if": {"properties": {"body_mode": {"enum": ["json"]}}},
                 "then": {"properties": {"body_json": {"type": "string", "minLength": 1}}},
-            },
-            {
-                "if": {"properties": {"body_mode": {"enum": ["json_keypair", "form_urlencoded"]}}},
-                "then": {"properties": {"body_params": {}}},
             },
             {
                 "if": {"properties": {"body_mode": {"const": "raw"}}},
