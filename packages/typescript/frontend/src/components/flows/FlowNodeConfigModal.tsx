@@ -176,7 +176,7 @@ const FlowNodeConfigModal: React.FC<{
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
   const [inputIoMode, setInputIoMode] = useState<'schema' | 'table' | 'json'>('schema');
-  const [outputIoMode, setOutputIoMode] = useState<'schema' | 'table' | 'json'>('table');
+  const [outputIoMode, setOutputIoMode] = useState<'schema' | 'table' | 'json'>('schema');
   const measure = useInlineNameWidthPx(node?.name ?? '', 'Node name');
   const nodeId = node?.id ?? '';
 
@@ -186,7 +186,7 @@ const FlowNodeConfigModal: React.FC<{
       setNameHover(false);
       setNameFocus(false);
       setInputIoMode('schema');
-      setOutputIoMode('table');
+      setOutputIoMode('schema');
     }
   }, [nodeId]);
 
@@ -541,7 +541,7 @@ const FlowNodeConfigModal: React.FC<{
                     value={outputValue ?? []}
                     valueKind="executionItems"
                     dragSource={{ nodeId: node.id, source: 'nodeOutput' }}
-                    defaultMode="table"
+                    defaultMode="schema"
                     mode={outputIoMode}
                     onModeChange={setOutputIoMode}
                   />

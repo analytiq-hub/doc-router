@@ -36,6 +36,44 @@ type RunDataEntry = {
   error?: unknown;
 };
 
+/** Backend `engine.py` persists `run_data[node_id].error` as `{ message, node_id, node_name, stack }`. */
+function NodeRunErrorDetails({ error }: { error: unknown }) {
+  if (!error || typeof error !== 'object') return null;
+  const rec = error as Record<string, unknown>;
+  const message = typeof rec.message === 'string' ? rec.message : null;
+  if (message == null || message === '') return null;
+  const nodeName = typeof rec.node_name === 'string' ? rec.node_name : null;
+  const stack = typeof rec.stack === 'string' && rec.stack.trim() !== '' ? rec.stack : null;
+  const title = nodeName ? `${nodeName}` : 'Error details';
+  return (
+    <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-red-950">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-red-800">{title}</div>
+      <pre className="mt-1.5 whitespace-pre-wrap break-words font-mono text-xs leading-snug">{message}</pre>
+      {stack && (
+        <>
+          <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-red-700">Stack trace</div>
+          <pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-snug text-red-900">
+            {stack}
+          </pre>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Top-level execution failure (`flow_executions.error`), when the worker/engine recorded one. */
+function ExecutionErrorBanner({ error }: { error: Record<string, unknown> | null | undefined }) {
+  if (!error || typeof error !== 'object') return null;
+  const message = typeof error.message === 'string' ? error.message : null;
+  if (message == null || message === '') return null;
+  return (
+    <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-950">
+      <div className="text-[11px] font-semibold uppercase tracking-wide text-red-800">Execution failed</div>
+      <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-snug">{message}</pre>
+    </div>
+  );
+}
+
 function formatExecutionMs(ms: number | undefined): string {
   if (ms == null || !Number.isFinite(ms)) return '—';
   if (ms < 1000) return `${Math.round(ms)}ms`;
@@ -322,7 +360,10 @@ const FlowLogsPanel: React.FC<{
               <>
                 {activeTab === 'overview' && (
                   <div className="mb-3 flex items-baseline justify-between gap-2 border-b border-[#eceff2] pb-2">
-                    <div className="flex-none whitespace-nowrap text-sm font-semibold text-gray-900">{summaryLine}</div>
+                    <div className="min-w-0 flex-1 space-y-2">
+                      <div className="flex-none whitespace-nowrap text-sm font-semibold text-gray-900">{summaryLine}</div>
+                      <ExecutionErrorBanner error={execution.error} />
+                    </div>
                     <div className="inline-flex flex-none rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
                       {(['overview', 'details'] as const).map((t) => (
                         <button
@@ -438,7 +479,10 @@ const FlowLogsPanel: React.FC<{
                           <div className="group relative min-w-0">
                             {/* Buttons must live inside this strip (details mode). */}
                             <div className="mb-3 flex items-baseline justify-between gap-2 border-b border-[#eceff2] pb-2 pr-2">
-                              <div className="flex-none whitespace-nowrap text-sm font-semibold text-gray-900">{summaryLine}</div>
+                              <div className="min-w-0 flex-1 space-y-2">
+                                <div className="flex-none whitespace-nowrap text-sm font-semibold text-gray-900">{summaryLine}</div>
+                                <ExecutionErrorBanner error={execution.error} />
+                              </div>
                               <div className="pointer-events-none opacity-0 transition group-hover:opacity-100">
                                 <div className="pointer-events-auto inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px] shadow-sm">
                                   {(['overview', 'details'] as const).map((t) => (
@@ -568,6 +612,7 @@ const FlowLogsPanel: React.FC<{
                                       {selectedOutputPreview?.message && (
                                         <div className="mb-2 text-sm text-amber-800">{selectedOutputPreview.message}</div>
                                       )}
+                                      <NodeRunErrorDetails error={selectedRunEntry?.error} />
                                       {selectedOutputPreview ? (
                                         <IoViewer
                                           value={selectedOutputPreview.itemsJson}
