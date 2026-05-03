@@ -54,24 +54,13 @@ export function isPropertyVisible(
   return evalShowWhen(sub['x-docrouter-showWhen'], params);
 }
 
-/** Ordered property keys: optional `x-docrouter-order` on the root schema, then any remaining keys. */
+/**
+ * Property keys in schema iteration order. Matches declaration order in hand-authored Python dicts
+ * (insertion order) and JSON `properties` key order from the API — no separate order list is used.
+ */
 export function getOrderedKeys(parameterSchema: unknown): string[] {
   const props = getSchemaProperties(parameterSchema);
-  const keys = Object.keys(props);
-  const order = (parameterSchema as { 'x-docrouter-order'?: string[] } | null | undefined)?.['x-docrouter-order'];
-  if (!Array.isArray(order) || order.length === 0) return keys;
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const k of order) {
-    if (props[k] != null && !seen.has(k)) {
-      out.push(k);
-      seen.add(k);
-    }
-  }
-  for (const k of keys) {
-    if (!seen.has(k)) out.push(k);
-  }
-  return out;
+  return Object.keys(props);
 }
 
 /**

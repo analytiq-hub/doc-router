@@ -9,10 +9,10 @@ import {
   mergeParameterDefaults,
 } from './flowSchemaParameterUtils';
 
+/** Keys ordered as declared — matches hand-authored schema order (no parallel order list). */
 const httpLikeSchema = {
   type: 'object',
   additionalProperties: false,
-  'x-docrouter-order': ['body_mode', 'body_json', 'url'],
   properties: {
     url: { type: 'string', default: '' },
     body_mode: {
@@ -29,8 +29,8 @@ const httpLikeSchema = {
 };
 
 describe('flowSchemaParameterUtils', () => {
-  it('getOrderedKeys respects x-docrouter-order then appends remaining', () => {
-    expect(getOrderedKeys(httpLikeSchema)).toEqual(['body_mode', 'body_json', 'url']);
+  it('getOrderedKeys follows properties declaration order', () => {
+    expect(getOrderedKeys(httpLikeSchema)).toEqual(['url', 'body_mode', 'body_json']);
   });
 
   it('evalShowWhen handles in and equals', () => {
@@ -40,11 +40,11 @@ describe('flowSchemaParameterUtils', () => {
     expect(evalShowWhen({ field: 'body_mode', equals: 'raw' }, { body_mode: 'json' })).toBe(false);
   });
 
-  it('getVisiblePropertyKeys lists only visible keys in order', () => {
+  it('getVisiblePropertyKeys lists only visible keys in declaration order', () => {
     const params = mergeParameterDefaults(httpLikeSchema, { body_mode: 'none' });
-    expect(getVisiblePropertyKeys(httpLikeSchema, params)).toEqual(['body_mode', 'url']);
+    expect(getVisiblePropertyKeys(httpLikeSchema, params)).toEqual(['url', 'body_mode']);
     const paramsJson = mergeParameterDefaults(httpLikeSchema, { body_mode: 'json' });
-    expect(getVisiblePropertyKeys(httpLikeSchema, paramsJson)).toEqual(['body_mode', 'body_json', 'url']);
+    expect(getVisiblePropertyKeys(httpLikeSchema, paramsJson)).toEqual(['url', 'body_mode', 'body_json']);
   });
 
   it('clearHiddenFieldsToDefaults resets hidden fields to schema defaults', () => {

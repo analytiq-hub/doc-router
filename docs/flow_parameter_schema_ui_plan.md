@@ -39,7 +39,7 @@ The generic renderer does **not** yet support:
 | **Array of fixed-shape objects** | `query_params`, `headers`, `body_params` as `{ name, value }[]` with add/remove rows and drag-drop into value cells |
 | **Conditional visibility** | Show `body_json` only when `body_mode === 'json'`, etc. |
 | **`x-enumNames` display labels** | Enum `<option>` text rendered as raw value strings instead of human labels |
-| **Stable ordering** | Optional section labels without separate React trees |
+| **Stable ordering** | Use **`properties` declaration order** in Python/JSON; optional **`x-docrouter-group`** for section labels |
 
 ---
 
@@ -76,13 +76,16 @@ The generic renderer does **not** yet support:
 
 All extensions are **optional**; schemas without them keep current inferred behavior.
 
-Namespace: **`x-docrouter-*`** on property schemas or on the root parameter object.
+Namespace: **`x-docrouter-*`** on property schemas (not on the root object — root carries only `type`, `properties`, `required`, etc.).
+
+**Field order:** The UI walks **`properties` in declaration order** (Python 3.7+ dict insertion order; JSON object key order round-trips the same). There is **no** `x-docrouter-order` list — a parallel array would duplicate that order and drift out of sync.
 
 | Keyword | Level | Purpose |
 |---------|--------|---------|
 | `x-docrouter-ui` | property | Widget id: e.g. `"nameValueList"`, `"monospace"`, `"textarea"`. Required for pair-list arrays (not inferred). |
 | `x-docrouter-group` | property | Short string label rendered as a subtle non-collapsible section divider above the field. Adjacent fields sharing the same group string are visually grouped. |
 | `x-docrouter-showWhen` | property | Object like `{ "field": "body_mode", "in": ["json"] }` or `{ "field": "body_mode", "equals": "raw" }` controlling visibility. When the condition becomes false the field value is cleared to its schema default (see §3.3). |
+| `x-docrouter-placeholder` | property | Optional short placeholder on string inputs. |
 
 **Conditional fields:** Implement `x-docrouter-showWhen` in the shared renderer only (no need to encode visibility in JSON Schema `if`/`then`/`else` for v1 unless we want one schema for both validation and UI).
 

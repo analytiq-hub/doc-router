@@ -23,11 +23,25 @@ def http_node() -> FlowsHttpRequestNode:
 def test_http_request_parameter_schema_docrouter_extensions(http_node: FlowsHttpRequestNode):
     """UI hints are embedded for schema-driven parameter forms (see docs/flow_parameter_schema_ui_plan.md)."""
     schema = http_node.parameter_schema
-    assert isinstance(schema.get("x-docrouter-order"), list)
     props = schema["properties"]
     assert props["query_params"].get("x-docrouter-ui") == "nameValueList"
     assert props["body_json"].get("x-docrouter-showWhen") == {"field": "body_mode", "in": ["json"]}
     assert props["body_raw"].get("x-docrouter-showWhen") == {"field": "body_mode", "equals": "raw"}
+    assert list(props.keys()) == [
+        "method",
+        "url",
+        "query_params",
+        "headers",
+        "body_mode",
+        "body_json",
+        "body_params",
+        "body_raw",
+        "body_content_type",
+        "full_response",
+        "never_error",
+        "follow_redirects",
+        "timeout_seconds",
+    ]
 
 
 @pytest.fixture
