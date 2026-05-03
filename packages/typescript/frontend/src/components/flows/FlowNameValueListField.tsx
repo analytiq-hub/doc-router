@@ -39,7 +39,7 @@ export function coerceNameValuePairs(raw: unknown): NameValuePair[] {
   return out;
 }
 
-/** Array-of-{name,value} editor with drag-from-IO into name or value cells. */
+/** Array-of-{name,value} editor; drag-from-IO applies only to the value cell (drops on name are ignored). */
 export const FlowNameValueListField: React.FC<{
   label: string;
   value: unknown;
@@ -62,20 +62,6 @@ export const FlowNameValueListField: React.FC<{
               onChange={(e) => {
                 const n = [...pairs];
                 n[i] = { ...n[i], name: e.target.value };
-                onChange(n);
-              }}
-              onDragOver={(e) => {
-                if (readOnly) return;
-                if (e.dataTransfer.types.includes(FLOW_VALUE_MIME)) e.preventDefault();
-              }}
-              onDrop={(e) => {
-                if (readOnly) return;
-                const p = parseDropPayload(e);
-                if (!p) return;
-                e.preventDefault();
-                const n = [...pairs];
-                const nameVal = (e.currentTarget as HTMLInputElement).value;
-                n[i] = { ...n[i], name: nameVal || n[i].name, value: payloadToExpression(p) };
                 onChange(n);
               }}
             />
