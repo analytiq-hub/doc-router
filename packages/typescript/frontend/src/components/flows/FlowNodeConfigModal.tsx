@@ -461,9 +461,9 @@ const FlowNodeConfigModal: React.FC<{
                         ) : null}
                       </div>
                     </div>
-                    <TabPanels className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable]">
+                    <TabPanels className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable]">
                       <TabPanel>
-                        <div className="space-y-4">
+                        <div className="min-w-0 space-y-4">
                           {node && (
                             <FlowNodeParameterFields
                               readOnly={readOnly}

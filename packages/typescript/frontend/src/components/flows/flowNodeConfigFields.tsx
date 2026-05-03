@@ -5,6 +5,7 @@ import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
 import {
   flowInputClass,
   flowLabelClass,
+  flowMonacoParamShellClass,
   flowSelectClass,
   flowSwitchThumbClass,
   flowSwitchTrackClass,
@@ -315,93 +316,106 @@ export const FlowNodeParameterFields: React.FC<{
         rawPlaceholder || (typeof subschema.description === 'string' ? subschema.description : '') || undefined;
       if (readOnly) {
         return (
-          <div key={key} className="mb-3">
+          <div key={key} className="mb-3 w-full min-w-0">
             <label className={flowLabelClass} htmlFor={`param-json-${key}`}>
               {key}
             </label>
-            <Editor
-              height="200px"
-              language={monacoLang}
-              value={tv}
-              options={{
-                minimap: { enabled: false },
-                fontSize: 12,
-                scrollBeyondLastLine: false,
-                readOnly: true,
-                folding: true,
-                wordWrap: 'on',
-                tabSize: 2,
-              }}
-            />
+            <div className={flowMonacoParamShellClass}>
+              <Editor
+                width="100%"
+                height="200px"
+                language={monacoLang}
+                value={tv}
+                onMount={(editor) => {
+                  requestAnimationFrame(() => editor.layout());
+                }}
+                options={{
+                  minimap: { enabled: false },
+                  overviewRulerLanes: 0,
+                  fontSize: 12,
+                  scrollBeyondLastLine: false,
+                  readOnly: true,
+                  folding: true,
+                  wordWrap: 'on',
+                  tabSize: 2,
+                  automaticLayout: true,
+                }}
+              />
+            </div>
           </div>
         );
       }
       return (
-        <div key={key} className="mb-3">
+        <div key={key} className="mb-3 w-full min-w-0">
           <label className={flowLabelClass} htmlFor={`param-json-${key}`} title={title}>
             {key}
           </label>
-          <Editor
-            height="200px"
-            language={monacoLang}
-            theme="vs"
-            value={tv}
-            onChange={(val) => applyPatch({ [key]: val ?? '' })}
-            onMount={(editor) => {
-              const dom = editor.getDomNode();
-              if (!dom) return;
-              if ((dom as HTMLElement).dataset.flowDropInstalled === '1') return;
-              (dom as HTMLElement).dataset.flowDropInstalled = '1';
-              const onDragOver = (ev: DragEvent) => {
-                if (ev.dataTransfer?.types?.includes(FLOW_VALUE_MIME)) {
+          <div className={flowMonacoParamShellClass}>
+            <Editor
+              width="100%"
+              height="200px"
+              language={monacoLang}
+              theme="vs"
+              value={tv}
+              onChange={(val) => applyPatch({ [key]: val ?? '' })}
+              onMount={(editor) => {
+                requestAnimationFrame(() => editor.layout());
+                const dom = editor.getDomNode();
+                if (!dom) return;
+                if ((dom as HTMLElement).dataset.flowDropInstalled === '1') return;
+                (dom as HTMLElement).dataset.flowDropInstalled = '1';
+                const onDragOver = (ev: DragEvent) => {
+                  if (ev.dataTransfer?.types?.includes(FLOW_VALUE_MIME)) {
+                    ev.preventDefault();
+                    ev.dataTransfer.dropEffect = 'copy';
+                  }
+                };
+                const onDrop = (ev: DragEvent) => {
+                  if (!ev.dataTransfer) return;
+                  const raw = ev.dataTransfer.getData(FLOW_VALUE_MIME);
+                  if (!raw) return;
                   ev.preventDefault();
-                  ev.dataTransfer.dropEffect = 'copy';
-                }
-              };
-              const onDrop = (ev: DragEvent) => {
-                if (!ev.dataTransfer) return;
-                const raw = ev.dataTransfer.getData(FLOW_VALUE_MIME);
-                if (!raw) return;
-                ev.preventDefault();
-                let parsed: FlowValueDragPayload | null = null;
-                try {
-                  parsed = JSON.parse(raw) as FlowValueDragPayload;
-                } catch {
-                  parsed = null;
-                }
-                if (!parsed || parsed.kind !== 'jsonPath') return;
-                const insert = payloadToExpression(parsed);
-                const pos = editor.getTargetAtClientPoint(ev.clientX, ev.clientY)?.position ?? editor.getPosition();
-                if (!pos) return;
-                const model = editor.getModel();
-                if (!model) return;
-                editor.executeEdits('flow-drop', [
-                  {
-                    range: {
-                      startLineNumber: pos.lineNumber,
-                      startColumn: pos.column,
-                      endLineNumber: pos.lineNumber,
-                      endColumn: pos.column,
+                  let parsed: FlowValueDragPayload | null = null;
+                  try {
+                    parsed = JSON.parse(raw) as FlowValueDragPayload;
+                  } catch {
+                    parsed = null;
+                  }
+                  if (!parsed || parsed.kind !== 'jsonPath') return;
+                  const insert = payloadToExpression(parsed);
+                  const pos = editor.getTargetAtClientPoint(ev.clientX, ev.clientY)?.position ?? editor.getPosition();
+                  if (!pos) return;
+                  const model = editor.getModel();
+                  if (!model) return;
+                  editor.executeEdits('flow-drop', [
+                    {
+                      range: {
+                        startLineNumber: pos.lineNumber,
+                        startColumn: pos.column,
+                        endLineNumber: pos.lineNumber,
+                        endColumn: pos.column,
+                      },
+                      text: insert,
+                      forceMoveMarkers: true,
                     },
-                    text: insert,
-                    forceMoveMarkers: true,
-                  },
-                ]);
-              };
-              dom.addEventListener('dragover', onDragOver);
-              dom.addEventListener('drop', onDrop);
-            }}
-            options={{
-              minimap: { enabled: false },
-              fontSize: 12,
-              scrollBeyondLastLine: false,
-              readOnly: false,
-              folding: true,
-              wordWrap: 'on',
-              tabSize: 2,
-              automaticLayout: true,
-            }}
-          />
+                  ]);
+                };
+                dom.addEventListener('dragover', onDragOver);
+                dom.addEventListener('drop', onDrop);
+              }}
+              options={{
+                minimap: { enabled: false },
+                overviewRulerLanes: 0,
+                fontSize: 12,
+                scrollBeyondLastLine: false,
+                readOnly: false,
+                folding: true,
+                wordWrap: 'on',
+                tabSize: 2,
+                automaticLayout: true,
+              }}
+            />
+          </div>
           <ParamFieldError message={fieldErr(key)} />
         </div>
       );
@@ -596,7 +610,7 @@ export const FlowNodeParameterFields: React.FC<{
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-1">
+    <div className="flex min-h-0 min-w-0 w-full flex-1 flex-col gap-1">
       {blocks}
       {Object.keys(schemaProps).length === 0 && <div className="text-sm text-[#6b7280]">No parameters for this node type.</div>}
     </div>
