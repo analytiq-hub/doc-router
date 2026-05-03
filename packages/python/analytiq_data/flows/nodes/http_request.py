@@ -89,7 +89,7 @@ class FlowsHttpRequestNode:
             "url": {
                 "type": "string",
                 "minLength": 1,
-                "description": "Absolute http(s) URL or =expression ($json, etc.). Evaluated once per inbound item: if the upstream node emits N rows, this node issues up to N requests using each row's JSON.",
+                "description": "Absolute http(s) URL or =expression (_json, etc.). Evaluated once per inbound item: if the upstream node emits N rows, this node issues up to N requests using each row's JSON.",
                 "default": "",
                 "x-ui-group": "Request",
                 "x-ui-placeholder": "https://… or =expression",

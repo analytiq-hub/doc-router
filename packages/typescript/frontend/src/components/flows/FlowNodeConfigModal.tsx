@@ -81,8 +81,8 @@ const VariablesAndContext: React.FC = () => (
       <div className="divide-y divide-gray-100">
         {(
           [
-            ['$json', 'Object'],
-            ['$binary', 'Object'],
+            ['_json', 'Object'],
+            ['_binary', 'Object'],
           ] as const
         ).map(([name, preview]) => (
           <div key={name} className="flex items-center gap-2 px-2 py-1.5">
@@ -150,7 +150,7 @@ const FlowNodeConfigModal: React.FC<{
   nodeTypes?: FlowNodeType[];
   edges: Edge[];
   runData: Record<string, unknown> | null | undefined;
-  /** When set (e.g. executions viewer), show ids under $execution_* hints. */
+  /** When set (e.g. executions viewer), pass execution ids into expression preview (`_execution`, …). */
   expressionExecution?: { execution_id: string; flow_id: string; flow_revid: string } | null;
   pinData?: FlowPinData | null;
   onPinDataChange?: (next: FlowPinData | null) => void;

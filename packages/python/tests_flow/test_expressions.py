@@ -205,7 +205,7 @@ def _register_nodes() -> None:
 async def test_expression_resolves_json() -> None:
     nodes = [
         _n("t1", "Start", "flows.trigger.manual", 0),
-        _n("e1", "Echo", "tests.echo_param", 200, {"value": "=$json['trigger']['x']"}),
+        _n("e1", "Echo", "tests.echo_param", 200, {"value": "=_json['trigger']['x']"}),
     ]
     conns = {"t1": {"main": [[ad.flows.NodeConnection(dest_node_id="e1", connection_type="main", index=0)]]}}
     ctx = ad.flows.ExecutionContext(
@@ -237,7 +237,7 @@ async def test_merge_node_expression_can_reference_all_inputs() -> None:
             "MergeEcho",
             "tests.merge_echo_param",
             400,
-            {"value": "=$input['all'][1][0]['json']['x']"},
+            {"value": "=_input['all'][1][0]['json']['x']"},
         ),
     ]
     conns = {
@@ -274,7 +274,7 @@ async def test_merge_node_expression_can_reference_all_inputs() -> None:
 async def test_per_item_expression_can_access_current_input_item_via_input_item() -> None:
     nodes = [
         _n("t1", "Start", "tests.trigger.multi", 0),
-        _n("e1", "Echo", "tests.echo_param", 200, {"value": "=$input['item']['json']['x']"}),
+        _n("e1", "Echo", "tests.echo_param", 200, {"value": "=_input['item']['json']['x']"}),
     ]
     conns = {"t1": {"main": [[ad.flows.NodeConnection(dest_node_id="e1", connection_type="main", index=0)]]}}
     ctx = ad.flows.ExecutionContext(
@@ -300,7 +300,7 @@ async def test_expression_resolves_node_from_prior_run_data() -> None:
     nodes = [
         _n("t1", "Start", "flows.trigger.manual", 0),
         _n("c1", "Code", "flows.code", 200, {"python_code": "def run(items, context):\n    return [{'x': items[0]['trigger']['x']}]\n", "timeout_seconds": 2}),
-        _n("e1", "Echo", "tests.echo_param", 400, {"value": "=$node['c1']['main'][0][0]['x']"}),
+        _n("e1", "Echo", "tests.echo_param", 400, {"value": "=_node['c1']['main'][0][0]['x']"}),
     ]
     conns = {
         "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="c1", connection_type="main", index=0)]]},
@@ -328,7 +328,7 @@ async def test_expression_resolves_node_from_prior_run_data() -> None:
 async def test_expression_undefined_key_respects_on_error_continue() -> None:
     nodes = [
         _n("t1", "Start", "flows.trigger.manual", 0),
-        {**_n("e1", "Echo", "tests.echo_param", 200, {"value": "=$json['nope']"}), "on_error": "continue"},
+        {**_n("e1", "Echo", "tests.echo_param", 200, {"value": "=_json['nope']"}), "on_error": "continue"},
     ]
     conns = {"t1": {"main": [[ad.flows.NodeConnection(dest_node_id="e1", connection_type="main", index=0)]]}}
     ctx = ad.flows.ExecutionContext(
@@ -379,7 +379,7 @@ async def test_expression_can_see_pin_data_outputs_via_node() -> None:
     nodes = [
         _n("t1", "Start", "flows.trigger.manual", 0),
         _n("p1", "Pinned", "tests.echo_param", 200, {"value": "literal"}),
-        _n("e1", "Echo", "tests.echo_param", 400, {"value": "=$node['p1']['main'][0][0]['a']"}),
+        _n("e1", "Echo", "tests.echo_param", 400, {"value": "=_node['p1']['main'][0][0]['a']"}),
     ]
     conns = {
         "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="p1", connection_type="main", index=0)]]},
@@ -402,26 +402,6 @@ async def test_expression_can_see_pin_data_outputs_via_node() -> None:
     assert res["status"] == "success"
     out = ctx.run_data["e1"]["data"]["main"][0][0]
     assert out.json["value"] == 9
-
-
-def test_rewrite_vars_does_not_touch_string_literals() -> None:
-    # `$json` inside quotes should remain literal; outside should be rewritten.
-    rewritten = ad.flows.expressions._rewrite_vars("'$json' + $json['x']")
-    assert rewritten == "'$json' + _json['x']"
-
-
-def test_rewrite_vars_execution_tokens_longest_first() -> None:
-    rewritten = ad.flows.expressions._rewrite_vars("$execution_id == $execution['flow_id']")
-    assert rewritten == "_execution['execution_id'] == _execution['flow_id']"
-
-
-def test_rewrite_vars_execution_time_before_execution_object() -> None:
-    rewritten = ad.flows.expressions._rewrite_vars("$execution_time == $execution['flow_id']")
-    assert rewritten == "_execution_time == _execution['flow_id']"
-
-
-def test_rewrite_vars_start_time() -> None:
-    assert ad.flows.expressions._rewrite_vars("$start_time") == "_start_time"
 
 
 def test_materialize_node_data_preserves_timing_fields() -> None:
@@ -450,9 +430,9 @@ def test_materialize_node_data_unwraps_json_wrapped_items() -> None:
     assert m["c1"]["main"][0][0]["url"] == "https://mit.edu"
 
 
-def test_preview_parameter_expression_resolves_dollar_json() -> None:
+def test_preview_parameter_expression_resolves_json() -> None:
     val, err = ad.flows.preview_parameter_expression(
-        "=$json['url']",
+        "=_json['url']",
         run_data={},
         input_items_json=[{"url": "https://mit.edu"}],
         preview_item_index=0,
@@ -465,7 +445,7 @@ def test_preview_parameter_expression_resolves_dollar_json() -> None:
 def test_preview_parameter_expression_resolves_node_main_from_serialized_run_data() -> None:
     run_data = {"c1": {"status": "success", "data": {"main": [[{"json": {"x": 40}, "binary": {}}]]}}}
     val, err = ad.flows.preview_parameter_expression(
-        '=$node["c1"]["main"][0][0]["x"]',
+        '=_node["c1"]["main"][0][0]["x"]',
         run_data=run_data,
         input_items_json=[{}],
         preview_item_index=0,
@@ -477,7 +457,7 @@ def test_preview_parameter_expression_resolves_node_main_from_serialized_run_dat
 
 def test_expression_allowlists_safe_builtin_calls_like_str() -> None:
     item = ad.flows.FlowItem(json={"foo": 42}, binary={}, meta={}, paired_item=None)
-    got = ad.flows.eval_expression('str($json["foo"])', item=item, run_data={})
+    got = ad.flows.eval_expression('str(_json["foo"])', item=item, run_data={})
     assert got == "42"
 
 
@@ -490,7 +470,7 @@ def test_expression_rejects_disallowed_builtin_calls() -> None:
 def test_expression_rejects_f_string_prefix_with_hint() -> None:
     item = ad.flows.FlowItem(json={"x": 1}, binary={}, meta={}, paired_item=None)
     with pytest.raises(ad.flows.ExpressionError, match="f-strings"):
-        ad.flows.eval_expression('f"{$json}"', item=item, run_data={})
+        ad.flows.eval_expression('f"{_json}"', item=item, run_data={})
 
 
 def test_expression_syntaxerror_fstring_maps_to_hint() -> None:
@@ -504,8 +484,8 @@ def test_expression_syntaxerror_fstring_maps_to_hint() -> None:
 async def test_expressions_resolve_per_item_including_binary() -> None:
     nodes = [
         _n("t1", "Start", "tests.trigger.multi", 0),
-        _n("j1", "EchoJson", "tests.echo_param", 200, {"value": "=$json['x']"}),
-        _n("b1", "EchoBin", "tests.echo_param", 400, {"value": "=$binary['f']['file_name']"}),
+        _n("j1", "EchoJson", "tests.echo_param", 200, {"value": "=_json['x']"}),
+        _n("b1", "EchoBin", "tests.echo_param", 400, {"value": "=_binary['f']['file_name']"}),
     ]
     conns = {
         "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="j1", connection_type="main", index=0)]]},
@@ -542,7 +522,7 @@ async def test_expression_can_read_execution_refs() -> None:
             "Echo",
             "tests.echo_param",
             200,
-            {"value": "=$execution_id + '|' + $flow_id + '|' + $flow_revid"},
+            {"value": "=_execution['execution_id'] + '|' + _execution['flow_id'] + '|' + _execution['flow_revid']"},
         ),
     ]
     conns = {"t1": {"main": [[ad.flows.NodeConnection(dest_node_id="e1", connection_type="main", index=0)]]}}
@@ -564,11 +544,11 @@ async def test_expression_can_read_execution_refs() -> None:
 
 
 @pytest.mark.asyncio
-async def test_expression_reads_source_run_timing_via_dollar_aliases() -> None:
+async def test_expression_reads_source_run_timing() -> None:
     nodes = [
         _n("t1", "Start", "flows.trigger.manual", 0),
-        _n("e_st", "EchoStart", "tests.echo_param", 200, {"value": "=$start_time"}),
-        _n("e_et", "EchoMs", "tests.echo_param", 400, {"value": "=$execution_time"}),
+        _n("e_st", "EchoStart", "tests.echo_param", 200, {"value": "=_start_time"}),
+        _n("e_et", "EchoMs", "tests.echo_param", 400, {"value": "=_execution_time"}),
     ]
     conns = {
         "t1": {

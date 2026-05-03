@@ -599,7 +599,7 @@ async def _execute_loop(
                     status = "skipped"
                 elif node_type.is_merge or bool(getattr(node_type, "batch_execute_inputs", False)):
                     # Batch nodes (`is_merge`, or types with batch_execute_inputs): resolve expressions
-                    # once per node execution. Provide an n8n-ish `$input` object containing all items
+                    # once per node execution. Provide ``_input`` (see ``materialize_input_context``) with all items
                     # across input slots (see `materialize_input_context`).
                     resolved_node = {
                         **node,

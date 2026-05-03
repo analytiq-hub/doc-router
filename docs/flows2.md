@@ -29,7 +29,7 @@ keeping it Python-native and much simpler. The table below maps the key concepts
 | `runData[nodeName]` / `ITaskData` | `Interfaces.ts` | `context.run_data[node_id]` / `NodeRunData` | Written after each node; persisted incrementally to MongoDB |
 | `pinData` | `Interfaces.ts` | `pin_data` in `flow_revisions` | Per-node output overrides; coerced to `FlowItem` at runtime |
 | `continueOnFail` / `onError` | `INode` | `on_error: "stop" \| "continue"` on node shape | `"continue"` emits an error-envelope item and proceeds |
-| `WorkflowDataProxy` (`$json`, `$node`) | `workflow-data-proxy.ts` | `expressions.py` (`$json` → `_json`, `$node` → `_node`) | AST-validated Python eval; no JS/TypeScript |
+| `WorkflowDataProxy` (`$json`, `$node`) | `workflow-data-proxy.ts` | `expressions.py` (`_json`, `_node`, … injected into eval env) | AST-validated Python eval; no JS/TypeScript |
 | JS/Python Code node (subprocess) | `Code.node.ts`, task runner | `flows.code` + `code_runner.py` | Subprocess with JSON stdin/stdout; restricted builtins |
 | `WorkflowExecuteMode` | `Interfaces.ts` | `ExecutionMode` literal | `"manual" \| "trigger" \| "webhook" \| "schedule" \| "error"` |
 | Bull queue job | `scaling.service.ts` | `queues.flow_run` (MongoDB-backed) | Same role: decouple HTTP trigger from execution worker (no Bull in DocRouter) |
@@ -316,27 +316,27 @@ equivalent of n8n's `WorkflowDataProxy`.
 
 **Per-item resolution (default path):** for nodes that are **not** merge nodes, `_execute_loop` in `engine.py` evaluates `=` parameters **once per input `FlowItem`**, calls `execute` for that single item, then concatenates output lists across items (n8n-style).
 
-**Merge nodes:** merge nodes resolve `=` parameters **once per node execution** (not per item). Expressions can access *all* incoming items via `$input["all"]`.
+**Merge nodes:** merge nodes resolve `=` parameters **once per node execution** (not per item). Expressions can access *all* incoming items via `_input["all"]`.
 
 ```python
 # In a node's parameters:
-{"value": "=$json['amount']"}          # per input item: that item’s json
-{"label": "=$node['ocr1']['main'][0][0]['text']"}  # reads prior node output
-{"x": "=$input['item']['json']['amount']"}         # same as $json for non-merge nodes
-{"x": "=$input['all'][1][0]['json']['amount']"}    # merge node: slot 1, item 0
+{"value": "=_json['amount']"}          # per input item: that item’s json
+{"label": "=_node['ocr1']['main'][0][0]['text']"}  # reads prior node output (id-keyed today; name-keyed planned)
+{"x": "=_input['item']['json']['amount']"}         # same as _json for non-merge nodes
+{"x": "=_input['all'][1][0]['json']['amount']"}    # merge node: slot 1, item 0
 ```
 
-Variables in scope for each evaluation:
-- `$json` — the current item's `.json` dict (for non-merge nodes in per-item mode; `{}` for merge-node parameter resolution).
-- `$binary` — current item's binary metadata (no raw bytes).
-- `$item` — the full current item object: `{"json", "binary", "meta", "paired_item"}` (non-merge per-item mode only; `None` for merge-node parameter resolution).
-- `$input` — input context object:
+Variables in scope for each evaluation (Python identifiers; **no** `$` prefix):
+- `_json` — the current item's `.json` dict (for non-merge nodes in per-item mode; `{}` for merge-node parameter resolution).
+- `_binary` — current item's binary metadata (no raw bytes).
+- `_item` — the full current item object: `{"json", "binary", "meta", "paired_item"}` (non-merge per-item mode only; `None` for merge-node parameter resolution).
+- `_input` — input context object:
   - `all`: `list[list[item]]` across input slots, where each `item` is `{"json","binary","meta","paired_item"}`
-  - `item`: the current item (same shape as `$item`) in per-item mode
+  - `item`: the current item (same shape as `_item`) in per-item mode
   - `input_index`, `item_index`: indices for the current item in per-item mode
-- `$node` — dict of completed node outputs, keyed by node id (JSON-only).
+- `_node` — dict of completed node outputs, keyed by node id (JSON-only).
   Shape: `{node_id: {"status": "...", "main": [[item_json, ...], ...]}}`.
-- `$items` — alias for the JSON-only `$node` view (convenience).
+- `_items` — alias for the JSON-only `_node` view (convenience).
 
 Safety: expressions are parsed with `ast.parse(mode="eval")`. Any AST node type
 not in an explicit allow-set raises `ExpressionError`. Function calls (`ast.Call`)
@@ -366,7 +366,7 @@ Context dict available inside the snippet:
     "trigger":          {...},    # trigger_data from the execution context
     "node_id":          "...",
     "mode":             "manual",
-    "nodes":            {...},    # materialized prior node outputs (same shape as $node)
+    "nodes":            {...},    # materialized prior node outputs (same shape as _node in expressions)
     "organization_id":  "...",
     "execution_id":     "...",
     "flow_id":          "...",
@@ -435,7 +435,7 @@ worker/worker.py        worker_flow_run — consumes flow_run queue messages
 tests_flow/
   conftest.py           sys.path setup
   test_flows_engine.py  Validation + run_flow (code, branch, merge, pin_data)
-  test_expressions.py   $json/$node resolution, on_error, unsafe-call rejection
+  test_expressions.py   _json/_node resolution, on_error, unsafe-call rejection
 
 tests/
   test_flows_e2e.py     HTTP + MongoDB integration test (TestClient + real Mongo)
@@ -537,7 +537,7 @@ Engine tests run `run_flow` with `analytiq_client=None`, which causes
 | Built-in nodes (five): `flows.trigger.manual`, `flows.http_request` (outbound HTTP), `flows.branch`, `flows.merge`, `flows.code` | ✓ Complete |
 | Per-item `=` parameters and per-item `execute` for **non-merge** nodes (`engine._execute_loop`) | ✓ Complete |
 | `flows.code` subprocess runner (restricted builtins, JSON contract) | ✓ Complete |
-| Expression engine (`$json`, `$node`, AST safety) | ✓ Complete |
+| Expression engine (`_json`, `_node`, AST safety) | ✓ Complete |
 | `resolve_parameters` + `materialize_node_data` for expressions and code context | ✓ Complete |
 | `pin_data` coercion (`coerce_flow_item_list`) | ✓ Complete |
 | `_bson_serialize_value` — FlowItem/BinaryRef → BSON-safe for Mongo | ✓ Complete |
@@ -564,10 +564,10 @@ Engine tests run `run_flow` with `analytiq_client=None`, which causes
 ### Known limitations (by design for v1)
 
 - **Merge nodes** resolve `=` parameters **once** per node execution (not per item).
-  Expressions can access all inputs via `$input["all"][slot_idx][item_idx]["json"]`
-  (and `$input["all"][...]["binary"/"meta"]`). **Non-merge** nodes get per-item `=`
+  Expressions can access all inputs via `_input["all"][slot_idx][item_idx]["json"]`
+  (and `_input["all"][...]["binary"/"meta"]`). **Non-merge** nodes get per-item `=`
   evaluation and one `execute` per item; the “current item” is also exposed as
-  `$input["item"]` / `$item`.
+  `_input["item"]` / `_item`.
 - `flows.code` is **not** a full multi-tenant sandbox. The subprocess boundary and
   restricted builtins are a v1 precaution; seccomp / WASM isolation is a later
   concern.

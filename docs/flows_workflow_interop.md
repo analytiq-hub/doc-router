@@ -12,7 +12,7 @@ definitions should be importable and runnable** in DocRouter with minimal transl
 ## Current answer: not yet 1:1
 
 We are closer on **execution semantics** (stack/waiting-map, branch/merge, run-data recording)
-and now have a more n8n-like **expression context** (added `$input`, `$item`, `$items`).
+and now have a more n8n-like **expression context** (`_input`, `_item`, `_items`, `_json`, `_node`, … — Python identifiers, not n8n’s `$…` syntax).
 
 However, n8n workflow JSON and node definitions still will not “drop in” without a
 translation/compatibility layer.
@@ -26,9 +26,9 @@ translation/compatibility layer.
 - **Branch/merge/skip semantics**: we model “empty output skips downstream” and merge waiting in
   a similar way.
 - **Expressions (partial)**:
-  - `$json`, `$node` are supported.
-  - `$input`, `$item`, `$items` are supported (recently added), which is a step toward n8n’s
-    `WorkflowDataProxy` model.
+  - `_json`, `_node` (and `_items`) cover the common “current item + prior outputs” cases.
+  - `_input`, `_item`, `_items` support merge / multi-lane access — a step toward n8n’s
+    `WorkflowDataProxy` model (n8n uses `$…`; DocRouter does **not** rewrite `$` aliases).
 
 ## What is still missing for true 1:1 n8n JSON + nodes
 
@@ -56,7 +56,7 @@ translation/compatibility layer.
 
 ### 3) Expression compatibility (`WorkflowDataProxy`)
 
-We improved merge semantics and added `$input/$item/$items`, but n8n expressions provide much
+We improved merge semantics and added `_input` / `_item` / `_items`, but n8n expressions provide much
 more surface area and semantics:
 
 - `$env`, `$vars`, `$parameter`, `$prevNode`, `$workflow`, `$now`, `$jmespath`, etc.

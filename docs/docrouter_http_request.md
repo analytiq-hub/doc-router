@@ -443,7 +443,7 @@ When the response body is not JSON, `body` is a plain string.
 }
 ```
 
-Downstream nodes reference these via `=expression` syntax: `=$json["body"]["ok"]`, `=$json["status_code"]`.
+Downstream nodes reference these via `=expression` syntax: `=_json["body"]["ok"]`, `=_json["status_code"]`.
 
 ---
 
@@ -454,14 +454,14 @@ All string parameter values starting with `=` are evaluated per item via `ad.flo
 ```json
 {
   "method": "POST",
-  "url": "=`https://api.example.com/users/${$json['user_id']}`",
+  "url": "='https://api.example.com/users/' + str(_json['user_id'])",
   "headers": [
-    {"name": "X-Request-Id", "value": "=$json['request_id']"}
+    {"name": "X-Request-Id", "value": "=_json['request_id']"}
   ],
   "body_mode": "json_keypair",
   "body_params": [
-    {"name": "email", "value": "=$json['email']"},
-    {"name": "name",  "value": "=$json['full_name']"}
+    {"name": "email", "value": "=_json['email']"},
+    {"name": "name",  "value": "=_json['full_name']"}
   ]
 }
 ```
@@ -504,13 +504,13 @@ Key cases to cover:
 |---|---|
 | GET with static URL | Response body in `item.json["body"]` |
 | POST with `json_keypair` body | Correct JSON body sent; `Content-Type: application/json` |
-| POST with `body_json` expression `=$json["payload"]` | Expression resolved from input item |
+| POST with `body_json` expression `=_json["payload"]` | Expression resolved from input item |
 | `httpHeaderAuth` credential injected | Header present in outgoing request |
 | `httpQueryAuth` credential injected | Query param present in outgoing request |
 | Non-2xx with `never_error: false` | `RuntimeError` raised |
 | Non-2xx with `never_error: true` | Item emitted with `status_code: 404` (when `full_response: true`) |
 | `full_response: true` | `status_code` and `headers` in output |
-| URL expression | `=$json["endpoint"]` resolved before request |
+| URL expression | `=_json["endpoint"]` resolved before request |
 | `validate_parameters` | Missing `url` → error; invalid method → error |
 Use `respx` (httpx mock library) to intercept HTTP calls in tests without network access.
 

@@ -161,7 +161,7 @@ async def test_body_json_from_expression(http_node: FlowsHttpRequestNode, minima
                     "headers": [],
                     "query_params": [],
                     "body_mode": "json",
-                    "body_json": "=$json['payload']",
+                    "body_json": "=_json['payload']",
                 },
             },
             [[item]],
@@ -378,7 +378,7 @@ def test_validate_parameters_errors(http_node: FlowsHttpRequestNode):
 def test_http_request_url_json_schema_minlength(http_node: FlowsHttpRequestNode):
     v = Draft7Validator(http_node.parameter_schema)
     v.validate({"method": "GET", "url": "https://example.com/x"})
-    v.validate({"method": "GET", "url": "=$json.url"})
+    v.validate({"method": "GET", "url": "=_json['url']"})
     with pytest.raises(Exception):
         v.validate({"method": "GET", "url": ""})
 
@@ -434,7 +434,7 @@ async def test_invalid_url_error_includes_upstream_row_hint(http_node: FlowsHttp
                     "id": "n1",
                     "parameters": {
                         "method": "GET",
-                        "url": '=$json["name"]',
+                        "url": '=_json["name"]',
                         "body_mode": "none",
                     },
                 },
@@ -459,7 +459,7 @@ async def test_rejects_schemeless_url(http_node: FlowsHttpRequestNode, minimal_c
                     "id": "n1",
                     "parameters": {
                         "method": "GET",
-                        "url": "=$json[\"host\"]",
+                        "url": "=_json[\"host\"]",
                         "body_mode": "none",
                     },
                 },

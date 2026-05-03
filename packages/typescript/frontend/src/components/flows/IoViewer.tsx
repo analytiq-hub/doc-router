@@ -14,7 +14,7 @@ export type FlowValueDragPayload =
     }
   | {
       kind: 'contextVar';
-      /** e.g. `$json`, `$flow_id` — must match backend `$` → `_` rewrite rules */
+      /** Root identifier for drag-insert, e.g. `_json` — must match ``expressions.eval_expression`` env names */
       varName: string;
       path: JsonPath;
       exampleValue: unknown;
@@ -43,7 +43,7 @@ export function parseFlowValueDragPayload(raw: string): FlowValueDragPayload | n
   }
 }
 
-/** Append JSON path segments to a base identifier (already valid in flow expressions after `$` rewrite). */
+/** Append JSON path segments to a base identifier (valid in flow expressions, e.g. ``_json``, ``_node[...]``). */
 function appendPathToExpr(base: string, path: JsonPath): string {
   let expr = base;
   for (const seg of path) {
@@ -59,7 +59,7 @@ function appendPathToExpr(base: string, path: JsonPath): string {
  * — there is no `.json`; item bodies sit under `main[slot][idx]`.
  *
  * When configuring node `configuringNodeId`, drags whose payload references a **different** node id (upstream on the
- * left) or **`nodeInput`** use `$json`, i.e. the current inbound item (`item.json`), which matches the schema preview for that edge.
+ * left) or **`nodeInput`** use `_json`, i.e. the current inbound item (`item.json`), which matches the schema preview for that edge.
  *
  * `@param outputSlotIndex` defaults to first output handle (matches current single-slot wiring in the modal).
  */
@@ -77,7 +77,7 @@ export function payloadToExpression(
     (p.source === 'nodeInput' || p.nodeId !== configuringNodeId);
 
   if (inbound) {
-    return `=${appendPathToExpr('$json', p.path)}`;
+    return `=${appendPathToExpr('_json', p.path)}`;
   }
 
   const base = `_node["${p.nodeId}"]["main"][${outputSlotIndex}][0]`;
@@ -329,7 +329,7 @@ const SchemaAccordion: React.FC<{
   );
 };
 
-/** n8n-style schema: item count lives in header; body shows fields of the first item only — no `$json` root row. */
+/** n8n-style schema: item count lives in header; body shows fields of the first item only — no `_json` root row. */
 function SchemaFirstItemFields({
   schemaRoot,
   startDrag,
@@ -407,7 +407,7 @@ export const IoViewer: React.FC<{
   valueKind?: 'executionItems' | 'json';
   /** When true, only the schema/table/json body is rendered (parent supplies chrome). */
   hideHeader?: boolean;
-  /** When set, drag hints and payloads use inbound `$json` vs `_node[id].main…` consistently with the modal node. */
+  /** When set, drag hints and payloads use inbound `_json` vs `_node[id].main…` consistently with the modal node. */
   expressionConfigNodeId?: string;
 }> = ({
   title,

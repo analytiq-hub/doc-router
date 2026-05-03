@@ -5,7 +5,7 @@ Expression / templating helpers for flows.
 
 Only a small subset is implemented today:
 - `materialize_node_data(run_data)` used to expose prior node outputs as plain JSON.
-- Expression evaluation and parameter resolution (`resolve_parameters`) for `=`-prefixed strings.
+- Expression evaluation and parameter resolution (`resolve_parameters`) for `=`-prefixed strings (Python using injected names such as ``_json``, ``_node`` — no ``$`` aliases).
 - A guarded AST whitelist; function calls must be bare names allowlisted in ``_SAFE_CALL_IDS``
   (e.g. ``str(...)``, ``len(...)``)—not arbitrary methods or lambdas.
 
@@ -33,7 +33,7 @@ def _reject_fstring_prefix(expr: str) -> None:
     if _FSTRING_PREFIX_RE.match(expr.lstrip()):
         raise ExpressionError(
             "f-strings (f\"…\", rf'…', etc.) are not supported in flow expressions. "
-            "Use plain =$json['field'], =$json[\"field\"], or + to build strings — not n8n-style {{ }} or f\"…\"."
+            "Use plain =_json['field'], =_json[\"field\"], or + to build strings — not n8n-style {{ }} or f\"…\"."
         )
 
 
@@ -122,127 +122,6 @@ def timing_from_items_source_run(
     return (entry.get("start_time"), entry.get("execution_time_ms"))
 
 
-def _rewrite_vars(expr: str) -> str:
-    """
-    Rewrite n8n-ish `$json` / `$node` to valid Python identifiers, but only when
-    those sequences appear *outside* Python string literals.
-
-    We intentionally do not try to be a full Python lexer; the goal is simply to
-    avoid rewriting inside quoted strings (e.g. "literal $json").
-    """
-
-    out: list[str] = []
-    i = 0
-    n = len(expr)
-
-    quote: str | None = None  # "'" | '"' when inside a string
-    triple = False
-    while i < n:
-        ch = expr[i]
-
-        if quote is None:
-            if ch in ("'", '"'):
-                # Enter string; detect triple quotes.
-                if i + 2 < n and expr[i : i + 3] == ch * 3:
-                    quote = ch
-                    triple = True
-                    out.append(ch * 3)
-                    i += 3
-                    continue
-                quote = ch
-                triple = False
-                out.append(ch)
-                i += 1
-                continue
-
-            if expr.startswith("$execution_id", i):
-                out.append("_execution['execution_id']")
-                i += len("$execution_id")
-                continue
-            if expr.startswith("$flow_revid", i):
-                out.append("_execution['flow_revid']")
-                i += len("$flow_revid")
-                continue
-            if expr.startswith("$flow_id", i):
-                out.append("_execution['flow_id']")
-                i += len("$flow_id")
-                continue
-            if expr.startswith("$execution_time", i):
-                out.append("_execution_time")
-                i += len("$execution_time")
-                continue
-            if expr.startswith("$execution", i):
-                out.append("_execution")
-                i += len("$execution")
-                continue
-            if expr.startswith("$start_time", i):
-                out.append("_start_time")
-                i += len("$start_time")
-                continue
-            if expr.startswith("$json", i):
-                out.append("_json")
-                i += 5
-                continue
-            if expr.startswith("$node", i):
-                out.append("_node")
-                i += 5
-                continue
-            if expr.startswith("$binary", i):
-                out.append("_binary")
-                i += 7
-                continue
-            if expr.startswith("$input", i):
-                out.append("_input")
-                i += 6
-                continue
-            if expr.startswith("$item", i):
-                out.append("_item")
-                i += 5
-                continue
-            if expr.startswith("$items", i):
-                out.append("_items")
-                i += 6
-                continue
-
-            out.append(ch)
-            i += 1
-            continue
-
-        # Inside a string.
-        if not triple and ch == "\\":
-            # Preserve escapes in normal strings.
-            if i + 1 < n:
-                out.append(expr[i : i + 2])
-                i += 2
-            else:
-                out.append(ch)
-                i += 1
-            continue
-
-        if triple:
-            if i + 2 < n and expr[i : i + 3] == quote * 3:
-                out.append(quote * 3)
-                i += 3
-                quote = None
-                triple = False
-                continue
-            out.append(ch)
-            i += 1
-            continue
-
-        # Single-quoted string end.
-        if ch == quote:
-            out.append(ch)
-            i += 1
-            quote = None
-            continue
-
-        out.append(ch)
-        i += 1
-
-    return "".join(out)
-
-
 def _safe_builtin_call_env() -> dict[str, Any]:
     """Inject a tiny allowlisted slice of builtins for validated ``Call`` nodes."""
 
@@ -297,7 +176,7 @@ def materialize_input_context(
     item_index: int | None = None,
 ) -> dict[str, Any]:
     """
-    Build an n8n-ish `$input` object for expression evaluation.
+    Build the ``_input`` dict bound into flow parameter expressions.
 
     Shape:
     {
@@ -335,7 +214,7 @@ def eval_expression(
     """
 
     expr = expr.strip()
-    rewritten = _rewrite_vars(expr)
+    rewritten = expr
     _reject_fstring_prefix(rewritten)
     try:
         tree = ast.parse(rewritten, mode="eval")
@@ -343,7 +222,7 @@ def eval_expression(
         if "f-string" in str(e).lower():
             raise ExpressionError(
                 "f-string syntax is not supported in flow expressions. "
-                "Use =$json['key'] or string concatenation (+), not f\"…{…}\" or n8n-style templates."
+                "Use =_json['key'] or string concatenation (+), not f\"…{…}\" or n8n-style templates."
             ) from e
         raise ExpressionError(f"Invalid expression: {e}") from e
     except Exception as e:
@@ -362,7 +241,7 @@ def eval_expression(
         "_execution": dict(refs) if refs else {},
         "_start_time": src_start,
         "_execution_time": src_exec_ms,
-        # n8n-ish additions:
+        # Multi-lane / current-row context (see ``materialize_input_context``):
         "_input": (input_context or {"all": [], "item": None, "input_index": None, "item_index": None}),
         "_item": (_materialize_item(item) if item is not None else None),
         # Convenience: a JSON-only view of prior node outputs by node id.
