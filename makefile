@@ -54,6 +54,7 @@ help:
 	@echo "  make tests-ui                - Run UI tests"
 	@echo "  make tests-ui-debug          - Run UI tests in debug mode"
 	@echo "  make tests-ts                - Run TypeScript SDK and MCP tests"
+	@echo "  make vitest                  - Run frontend Vitest unit tests (flows schema helpers, etc.)"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean                   - Remove Python virtual environment"
@@ -270,6 +271,9 @@ tests-ts:
 	cd packages/typescript/sdk && npm install && npm run test:all
 	cd packages/typescript/mcp && npm install && npm run test
 
+vitest:
+	cd packages/typescript/frontend && npm install && npm test
+
 clean:
 	rm -rf .venv
 
@@ -307,4 +311,4 @@ dockerhub-push: dockerhub-push-frontend dockerhub-push-backend
 dockerhub-build-push: dockerhub-build dockerhub-push
 	@echo "✅ Build and push complete!"
 
-.PHONY: help deploy-dev tests tests-kb setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean flow-node-dump flow-node-port
+.PHONY: help deploy-dev tests tests-kb setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts vitest deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean flow-node-dump flow-node-port
