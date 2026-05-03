@@ -17,7 +17,8 @@ This document describes how **all** node parameter editors share a **single sche
 | Backend validation at save time | **Removed** — Draft7Validator no longer runs on raw (pre-resolution) params |
 | Backend validation at execution time | Done — `_validate_resolved_params()` runs after `resolve_parameters()` in all three execution paths |
 | Pair-list `value` schema | `{}` (any type) — expressions resolve to any Python type; node coerces to string |
-| Expression preview in UI | **Not yet implemented** — next major feature |
+| Expression preview in UI | Done (debounced `preview-expression` + `FlowExpressionPreviewLine`) |
+| Expression variables: `_json` / `_binary` / `_input` / `_node` (see §9) | **Planned** — UI today still teaches `$`-prefixed aliases where applicable |
 | `flows.http_request` on generic schema path | Done |
 | Phase D read-only audit | Partial (optional) |
 
@@ -135,7 +136,7 @@ Port-converted nodes (from n8n via `port/schema.py`): `_apply_inode_ui_extension
 
 - `Draft7Validator` ignores unknown `x-*` keywords (standard JSON Schema behaviour).
 - `GET …/node-types` returns the enriched schema as-is.
-- **Validation timing**: `_validate_resolved_params(node_id, resolved_node)` in `engine.py` runs `Draft7Validator` on fully-resolved parameters in all three execution paths (trigger-only, batch, per-item first item). Errors raise `RuntimeError` and are caught by the node's `on_error` handler.
+- **Validation timing**: `_validate_resolved_params(resolved_node)` in `engine.py` runs `Draft7Validator` on fully-resolved parameters in all three execution paths (trigger-only, batch, per-item first item). Errors raise `RuntimeError` and are caught by the node's `on_error` handler.
 - The Python test `test_http_request_parameter_schema_display_extensions` (in `tests/flows/test_flow_http_request_node.py`) asserts UI-oriented keys and `list(props.keys())` field order.
 - The Python test `test_flow_port_schema_display.py` asserts that `port/schema.py` maps n8n hints to `x-ui-*` keys correctly.
 
@@ -153,7 +154,7 @@ When the node config modal is open and upstream `runData` or `pinData` is availa
 2. Passing upstream run/pin data into `FlowNodeParameterFields` (already available in `FlowNodeConfigModal` via `runData`/`pinData` props).
 3. Showing a small gray preview text below expression-valued inputs, and a red error text if `eval_expression` fails.
 
-Expressions use Python syntax (`$json['field']`, `$node['Name']['json']`, etc.) and are evaluated server-side — a JavaScript port is not feasible for the full expression set.
+Expressions use Python syntax after a leading `=` (see **§9** for the canonical `_json` / `_node` model). They are evaluated server-side — a JavaScript port is not feasible for the full expression set.
 
 ### Phase D — Hardening (optional)
 
@@ -200,8 +201,72 @@ Expressions use Python syntax (`$json['field']`, `$node['Name']['json']`, etc.) 
 
 ---
 
-## 9. Open decisions
+## 9. Expression context variables (`_json`, `_binary`, `_input`, `_node`)
+
+Parameters may contain strings starting with `=`. The remainder is evaluated as a **restricted Python expression** (`packages/python/analytiq_data/flows/expressions.py`). The engine injects a small set of **top-level names** into the eval environment. We want authors and the UI to refer to those names **exactly as they appear in Python** — with a **leading underscore** — so snippets copy-paste cleanly and match what appears after the legacy `$…` rewrite.
+
+### 9.1 Canonical semantics (target)
+
+| Name | Meaning |
+|------|--------|
+| **`_json`** | JSON payload of the **current inbound item** (`FlowItem.json` for the item against which parameters are being resolved). |
+| **`_binary`** | Binary map of the **current inbound item**, materialized for expressions (metadata / refs; raw bytes are not exposed in the eval sandbox — same rules as today’s `_binary`). |
+| **`_input`** | The **entire multi-slot input structure** for the current node execution: all lanes, all items, plus `item` / `input_index` / `item_index` for the current row (see `materialize_input_context()`). |
+| **`_node`** | Access to **upstream node outputs**, keyed by the node’s **canvas name** (the `name` field on each node in the flow revision). For a given key, **`_node['NodeName'].json`** and **`_node['NodeName'].binary`** are the JSON and binary of that upstream node’s output item on the **same logical item index** as the current item (parallel lane semantics), not arbitrary `main[slot][i]` navigation by the author. |
+
+**Why underscore:** these names are valid Python identifiers and match the keys already injected into `eval(..., env)` (`_json`, `_binary`, `_node`, `_input`, …). Teaching `$json` in the UI was a carry-over from n8n-style templates; the backend still rewrites `$json` → `_json` outside string literals for backward compatibility.
+
+**Node names as keys:** `validate_revision` already requires **unique** `nodes[].name`. That makes `_node['My HTTP Request']` unambiguous. Renaming a node updates the key authors must use — same as renaming a symbol in code.
+
+### 9.2 Current behaviour vs target (gap)
+
+| Topic | Current | Target |
+|------|---------|--------|
+| Authoring syntax in UI / drag hints | Often `$json`, `$binary` | Prefer **`_json`**, **`_binary`** (and document `_input`, `_node`). |
+| `_rewrite_vars()` | Rewrites `$json` → `_json`, `$node` → `_node`, etc., outside quotes | Keep rewrites as **compat layer**; optionally allow authors to type `_json` directly (already passes through). |
+| `_node` shape | `materialize_node_data(run_data)` returns a dict keyed by **node id**, values `{ status, main: [ [ {…json per item} ], … ] }` — JSON only per cell, no `.json` / `.binary` attribute API | Dict (or small namespace type) keyed by **node name**, each entry exposes **`.json`** / **`.binary`** for the **aligned** item index. |
+| Binary for prior nodes in `_node` | Not exposed per prior item in `_node` today (materialization is JSON-centric) | Define whether `.binary` is always present (empty map) or populated with the same ref-only shape as `_binary`; implement materialization accordingly. |
+| Eval context | `eval_expression(..., run_data, input_context)` has no revision `nodes` list | Building name-keyed `_node` needs **`id → name` map** (and possibly slot topology) from the **revision** at preview and execute time — **thread `nodes` (or a precomputed name index)** into `eval_expression` / `preview_parameter_expression` / `resolve_parameters` callers. |
+
+### 9.3 Implementation plan (phased)
+
+**Phase A — Documentation and UI copy (low risk)**  
+- Context panel, tooltips, and drag-insert snippets in `FlowNodeConfigModal`, `IoViewer`, `FlowNameValueListField` / Monaco helpers: show **`_json`**, **`_binary`** as the primary tokens; mention that **`$json`** / **`$binary`** remain accepted aliases at eval time.  
+- Update user-facing error strings in `expressions.py` (e.g. f-string hints) to cite `_json` instead of `$json` where appropriate.
+
+**Phase B — Backend: name-keyed `_node` shell (medium risk)**  
+1. Add a helper, e.g. `materialize_node_outputs_by_name(run_data, nodes: list[dict]) -> dict[str, Any]`, that:  
+   - Builds `node_id → name` from `nodes` (`ad.flows.node_name(n)` or raw `name` strip — align with engine uniqueness rules).  
+   - For each completed upstream node in `run_data`, maps **id-keyed** `materialize_node_data` rows into **name-keyed** entries.  
+2. For each name, expose **aligned** `.json` / `.binary` for the current `input_context["item_index"]` (and define behaviour when upstream lane length differs — e.g. clamp, `None`, or last-item policy; document and test).  
+3. Replace or augment the `_node` entry in `eval_expression`’s env with this structure **without** breaking existing expressions that use `_node['<uuid>']['main'][0][…]` until Phase D.
+
+**Phase C — Call-site threading (medium risk)**  
+- **Engine:** when calling `resolve_parameters`, pass the revision’s `nodes` (or a compact map) into `eval_expression` / `resolve_parameters` so Phase B can run.  
+- **Preview API** (`preview-expression` route) and **SDK**: extend payload with `nodes` (or `node_id_to_name`) alongside `run_data` / `input_items_json` so preview matches execute.  
+- **Worker / any other** `resolve_parameters` callers: same contract.
+
+**Phase D — Deprecate id-shaped `_node` access (breaking; schedule explicitly)**  
+- Migrate docs, samples, and tests to **`_node['Canvas Name'].json`**.  
+- Remove or gate `_node` id-keyed layout behind a feature flag or major version if any production flows still use UUID subscripts.  
+- Align `_items` (if kept) with the same naming story or document it as “id-keyed legacy convenience”.
+
+**Phase E — Tests and QA**  
+- Python: unit tests for `_rewrite_vars` with literal `_json[…]`; integration tests for `_node['Named Node'].json` under per-item execution with multiple inbound rows.  
+- Frontend: snapshot / unit tests for drag payload strings using `_json` roots.  
+- Manual: rename a node and confirm expressions / preview still resolve when using **name** keys.
+
+### 9.4 Open points to decide before coding Phase B
+
+- **Item alignment:** If upstream slot 0 has fewer items than the current lane, pick `None`, last item, or error — must be deterministic.  
+- **Multi-output slots:** Whether `_node['Name'].json` means **slot 0 only** or requires explicit slot in the API (e.g. `_node['Name'].main[1]` vs flat `.json`). The table above assumes a **single primary JSON/binary pair** per named node for the common case.  
+- **Merge / batch nodes:** How `_input` and “same index” interact when `item_index` is undefined or N:1 merges; document special cases.
+
+---
+
+## 10. Open decisions
 
 - Freeze the `x-ui-*` keyword set before widespread use in ported node schemas.
 - Expression preview API design: dedicated endpoint vs. reusing the existing step-execution path.
 - Whether to validate on every per-item execution or only the first item (current: first item only, to avoid redundant work when all items share the same parameter structure).
+- **§9.4:** `_node['Name'].json` alignment and slot semantics before implementing name-keyed `_node`.
