@@ -2,17 +2,46 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 
-type JsonPath = Array<string | number>;
+export type JsonPath = Array<string | number>;
 
-export type FlowValueDragPayload = {
-  kind: 'jsonPath';
-  source: 'nodeOutput' | 'nodeInput';
-  nodeId: string;
-  path: JsonPath;
-  exampleValue: unknown;
-};
+export type FlowValueDragPayload =
+  | {
+      kind: 'jsonPath';
+      source: 'nodeOutput' | 'nodeInput';
+      nodeId: string;
+      path: JsonPath;
+      exampleValue: unknown;
+    }
+  | {
+      kind: 'contextVar';
+      /** e.g. `$json`, `$flow_id` — must match backend `$` → `_` rewrite rules */
+      varName: string;
+      path: JsonPath;
+      exampleValue: unknown;
+    };
 
 export const FLOW_VALUE_MIME = 'application/docrouter-flow-value';
+
+/** Parse MIME payload from `FLOW_VALUE_MIME`; rejects malformed or unknown shapes. */
+export function parseFlowValueDragPayload(raw: string): FlowValueDragPayload | null {
+  try {
+    const parsed = JSON.parse(raw) as FlowValueDragPayload | null;
+    if (!parsed || typeof parsed !== 'object') return null;
+    if (parsed.kind === 'contextVar') {
+      if (typeof (parsed as { varName?: unknown }).varName !== 'string') return null;
+      if (!Array.isArray((parsed as { path?: unknown }).path)) return null;
+      return parsed;
+    }
+    if (parsed.kind === 'jsonPath') {
+      const j = parsed as { nodeId?: unknown; path?: unknown };
+      if (typeof j.nodeId !== 'string' || !Array.isArray(j.path)) return null;
+      return parsed;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 /** Append JSON path segments to a base identifier (already valid in flow expressions after `$` rewrite). */
 function appendPathToExpr(base: string, path: JsonPath): string {
@@ -39,6 +68,10 @@ export function payloadToExpression(
   configuringNodeId?: string,
   outputSlotIndex = 0,
 ): string {
+  if (p.kind === 'contextVar') {
+    return `=${appendPathToExpr(p.varName, p.path)}`;
+  }
+
   const inbound =
     configuringNodeId != null &&
     (p.source === 'nodeInput' || p.nodeId !== configuringNodeId);
@@ -363,7 +396,7 @@ function SchemaFirstItemFields({
 export const IoViewer: React.FC<{
   title?: string;
   value: unknown;
-  dragSource: { nodeId: string; source: FlowValueDragPayload['source'] };
+  dragSource: { nodeId: string; source: 'nodeOutput' | 'nodeInput' };
   defaultMode?: 'schema' | 'table' | 'json';
   mode?: 'schema' | 'table' | 'json';
   onModeChange?: (next: 'schema' | 'table' | 'json') => void;

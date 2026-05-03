@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { flowInputClass, flowLabelClass } from './flowUiClasses';
-import { FLOW_VALUE_MIME, payloadToExpression, type FlowValueDragPayload } from './IoViewer';
+import { FLOW_VALUE_MIME, parseFlowValueDragPayload, payloadToExpression, type FlowValueDragPayload } from './IoViewer';
 import { FlowExpressionPreviewLine, type ExpressionPreviewContext } from './FlowExpressionPreviewLine';
 
 export type NameValuePair = { name: string; value: string };
@@ -10,14 +10,7 @@ export type NameValuePair = { name: string; value: string };
 function parseDropPayload(e: React.DragEvent): FlowValueDragPayload | null {
   const raw = e.dataTransfer.getData(FLOW_VALUE_MIME);
   if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as FlowValueDragPayload;
-    if (!parsed || parsed.kind !== 'jsonPath' || typeof parsed.nodeId !== 'string' || !Array.isArray(parsed.path))
-      return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+  return parseFlowValueDragPayload(raw);
 }
 
 export function coerceNameValuePairs(raw: unknown): NameValuePair[] {

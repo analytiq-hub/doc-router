@@ -11,7 +11,7 @@ import {
   flowSwitchTrackClass,
 } from './flowUiClasses';
 import { FlowNameValueListField, type NameValuePair } from './FlowNameValueListField';
-import { FLOW_VALUE_MIME, payloadToExpression, type FlowValueDragPayload } from './IoViewer';
+import { FLOW_VALUE_MIME, parseFlowValueDragPayload, payloadToExpression, type FlowValueDragPayload } from './IoViewer';
 import { FlowExpressionPreviewLine, type ExpressionPreviewContext } from './FlowExpressionPreviewLine';
 import {
   applyParameterPatch,
@@ -35,13 +35,7 @@ function safeJsonStringify(value: unknown, fallback: string): string {
 function parseDropPayload(e: React.DragEvent): FlowValueDragPayload | null {
   const raw = e.dataTransfer.getData(FLOW_VALUE_MIME);
   if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw) as FlowValueDragPayload;
-    if (!parsed || parsed.kind !== 'jsonPath' || typeof parsed.nodeId !== 'string' || !Array.isArray(parsed.path)) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
+  return parseFlowValueDragPayload(raw);
 }
 
 
@@ -337,13 +331,8 @@ export const FlowNodeParameterFields: React.FC<{
                   const raw = ev.dataTransfer.getData(FLOW_VALUE_MIME);
                   if (!raw) return;
                   ev.preventDefault();
-                  let parsed: FlowValueDragPayload | null = null;
-                  try {
-                    parsed = JSON.parse(raw) as FlowValueDragPayload;
-                  } catch {
-                    parsed = null;
-                  }
-                  if (!parsed || parsed.kind !== 'jsonPath') return;
+                  const parsed = parseFlowValueDragPayload(raw);
+                  if (!parsed) return;
                   const insert = payloadToExpression(parsed, node.id);
                   const pos = editor.getTargetAtClientPoint(ev.clientX, ev.clientY)?.position ?? editor.getPosition();
                   if (!pos) return;
@@ -467,17 +456,15 @@ export const FlowNodeParameterFields: React.FC<{
                 const raw = ev.dataTransfer.getData(FLOW_VALUE_MIME);
                 if (!raw) return;
                 ev.preventDefault();
-                let parsed: FlowValueDragPayload | null = null;
-                try {
-                  parsed = JSON.parse(raw) as FlowValueDragPayload;
-                } catch {
-                  parsed = null;
-                }
-                if (!parsed || parsed.kind !== 'jsonPath') return;
+                const parsed = parseFlowValueDragPayload(raw);
+                if (!parsed) return;
+                const expr = payloadToExpression(parsed, node.id);
                 const insert =
                   isCode || uiHint === 'code'
-                    ? payloadToExpression(parsed, node.id).replace(/^=/, '')
-                    : JSON.stringify(parsed.exampleValue ?? null, null, 2);
+                    ? expr.replace(/^=/, '')
+                    : parsed.kind === 'contextVar'
+                      ? expr
+                      : JSON.stringify(parsed.exampleValue ?? null, null, 2);
                 const pos = editor.getTargetAtClientPoint(ev.clientX, ev.clientY)?.position ?? editor.getPosition();
                 if (!pos) return;
                 const model = editor.getModel();

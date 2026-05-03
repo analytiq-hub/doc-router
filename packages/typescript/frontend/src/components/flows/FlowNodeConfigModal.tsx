@@ -30,7 +30,7 @@ import { buildNodeInputPreview, buildNodeOutputPreview } from './flowNodeIoPrevi
 import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
 import { FlowInputUpstreamList } from './FlowInputUpstreamList';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
-import { IoViewer } from './IoViewer';
+import { FLOW_VALUE_MIME, IoViewer } from './IoViewer';
 import {
   flowInlineNameInputClass,
   flowInlineNameMeasureClass,
@@ -100,7 +100,25 @@ const VariablesAndContext: React.FC<{
           <div key={name} className="flex items-center gap-2 px-2 py-1.5">
             <div className="h-4 w-4 shrink-0" aria-hidden />
             <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
-              <div className="min-w-0 truncate font-mono font-semibold text-gray-900">{name}</div>
+              <div
+                className="min-w-0 cursor-grab truncate font-mono font-semibold text-gray-900 active:cursor-grabbing"
+                draggable
+                title={`Drag to insert ${name} into a parameter`}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData(
+                    FLOW_VALUE_MIME,
+                    JSON.stringify({
+                      kind: 'contextVar',
+                      varName: name,
+                      path: [],
+                      exampleValue: null,
+                    }),
+                  );
+                  e.dataTransfer.effectAllowed = 'copy';
+                }}
+              >
+                {name}
+              </div>
               <div className="min-w-0 truncate text-right font-mono text-gray-600">{preview}</div>
             </div>
           </div>
