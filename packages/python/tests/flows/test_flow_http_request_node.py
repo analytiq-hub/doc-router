@@ -31,6 +31,7 @@ def test_http_request_parameter_schema_display_extensions(http_node: FlowsHttpRe
         b for b in schema["allOf"] if b.get("if", {}).get("properties", {}).get("body_mode", {}).get("enum") == ["json"]
     )
     assert json_branch["then"]["properties"]["body_json"]["minLength"] == 1
+    assert props["body_json"].get("x-ui-widget") == "json"
     assert "x-ui-show-when" not in props["body_json"]
     assert list(props.keys()) == [
         "method",

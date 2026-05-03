@@ -110,7 +110,7 @@ class FlowsHttpRequestNode:
                 "type": "string",
                 "default": "",
                 "description": "JSON text when body mode is JSON. Required (non-empty) in that mode; use =expression for dynamic values.",
-                "x-ui-widget": "textarea",
+                "x-ui-widget": "json",
                 "x-ui-group": "Body",
             },
             "body_params": {

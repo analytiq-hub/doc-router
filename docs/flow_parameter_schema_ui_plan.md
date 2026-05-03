@@ -81,6 +81,7 @@ Built-in widgets:
 |-----------|-------------|-------|
 | `name_value_list` | `x-ui-widget: "name_value_list"` | Pair editor; explicit only — not inferred from item shape |
 | `textarea` | `x-ui-widget: "textarea"` | Monospace textarea |
+| `json` | `x-ui-widget: "json"` (`type: "string"`) | Monaco JSON (`plaintext` when value is an `=expression`) |
 | `code` | `x-ui-widget: "code"` or `python_code` / `js_code` / `ts_code` key | Monaco |
 | `boolean` | `type: "boolean"` | Headless Switch |
 | `enum` | `enum` array present | `<select>` with `x-ui-enum-names` labels |

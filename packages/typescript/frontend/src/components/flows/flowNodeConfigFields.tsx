@@ -18,7 +18,7 @@ import {
   isPropertyVisible,
   mergeParameterDefaults,
 } from './flowSchemaParameterUtils';
-import { compileParameterValidator, validateFlowParameters } from './flowParameterValidation';
+import { compileParameterValidator, isExpressionValue, validateFlowParameters } from './flowParameterValidation';
 
 function safeJsonStringify(value: unknown, fallback: string): string {
   try {
@@ -303,6 +303,105 @@ export const FlowNodeParameterFields: React.FC<{
               </option>
             ))}
           </select>
+          <ParamFieldError message={fieldErr(key)} />
+        </div>
+      );
+    }
+
+    if (t === 'string' && uiHint === 'json') {
+      const tv = typeof v === 'string' ? v : (v as string) ?? '';
+      const monacoLang = isExpressionValue(tv) ? 'plaintext' : 'json';
+      const title =
+        rawPlaceholder || (typeof subschema.description === 'string' ? subschema.description : '') || undefined;
+      if (readOnly) {
+        return (
+          <div key={key} className="mb-3">
+            <label className={flowLabelClass} htmlFor={`param-json-${key}`}>
+              {key}
+            </label>
+            <Editor
+              height="200px"
+              language={monacoLang}
+              value={tv}
+              options={{
+                minimap: { enabled: false },
+                fontSize: 12,
+                scrollBeyondLastLine: false,
+                readOnly: true,
+                folding: true,
+                wordWrap: 'on',
+                tabSize: 2,
+              }}
+            />
+          </div>
+        );
+      }
+      return (
+        <div key={key} className="mb-3">
+          <label className={flowLabelClass} htmlFor={`param-json-${key}`} title={title}>
+            {key}
+          </label>
+          <Editor
+            height="200px"
+            language={monacoLang}
+            theme="vs"
+            value={tv}
+            onChange={(val) => applyPatch({ [key]: val ?? '' })}
+            onMount={(editor) => {
+              const dom = editor.getDomNode();
+              if (!dom) return;
+              if ((dom as HTMLElement).dataset.flowDropInstalled === '1') return;
+              (dom as HTMLElement).dataset.flowDropInstalled = '1';
+              const onDragOver = (ev: DragEvent) => {
+                if (ev.dataTransfer?.types?.includes(FLOW_VALUE_MIME)) {
+                  ev.preventDefault();
+                  ev.dataTransfer.dropEffect = 'copy';
+                }
+              };
+              const onDrop = (ev: DragEvent) => {
+                if (!ev.dataTransfer) return;
+                const raw = ev.dataTransfer.getData(FLOW_VALUE_MIME);
+                if (!raw) return;
+                ev.preventDefault();
+                let parsed: FlowValueDragPayload | null = null;
+                try {
+                  parsed = JSON.parse(raw) as FlowValueDragPayload;
+                } catch {
+                  parsed = null;
+                }
+                if (!parsed || parsed.kind !== 'jsonPath') return;
+                const insert = payloadToExpression(parsed);
+                const pos = editor.getTargetAtClientPoint(ev.clientX, ev.clientY)?.position ?? editor.getPosition();
+                if (!pos) return;
+                const model = editor.getModel();
+                if (!model) return;
+                editor.executeEdits('flow-drop', [
+                  {
+                    range: {
+                      startLineNumber: pos.lineNumber,
+                      startColumn: pos.column,
+                      endLineNumber: pos.lineNumber,
+                      endColumn: pos.column,
+                    },
+                    text: insert,
+                    forceMoveMarkers: true,
+                  },
+                ]);
+              };
+              dom.addEventListener('dragover', onDragOver);
+              dom.addEventListener('drop', onDrop);
+            }}
+            options={{
+              minimap: { enabled: false },
+              fontSize: 12,
+              scrollBeyondLastLine: false,
+              readOnly: false,
+              folding: true,
+              wordWrap: 'on',
+              tabSize: 2,
+              automaticLayout: true,
+            }}
+          />
           <ParamFieldError message={fieldErr(key)} />
         </div>
       );
