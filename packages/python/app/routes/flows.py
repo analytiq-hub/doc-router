@@ -20,6 +20,51 @@ from app.models import User
 logger = logging.getLogger(__name__)
 flows_router = APIRouter(tags=["flows"])
 
+# Preview: cap serialized JSON per run_data node entry to limit memory/CPU from pathological payloads.
+_MAX_PREVIEW_RUN_DATA_ENTRY_BYTES = 512_000
+
+_REDACT_TRIGGER_HEADER_KEYS = frozenset(
+    {
+        "authorization",
+        "proxy-authorization",
+        "cookie",
+        "set-cookie",
+        "x-api-key",
+        "x-auth-token",
+        "x-amz-security-token",
+        "x-amzn-authorization",
+    }
+)
+
+
+def _sanitize_inbound_webhook_headers(request: Request) -> dict[str, str]:
+    """Avoid persisting secrets from inbound webhook HTTP headers into execution documents."""
+
+    out: dict[str, str] = {}
+    for k, v in request.headers.items():
+        lk = k.lower()
+        if lk in _REDACT_TRIGGER_HEADER_KEYS or lk.startswith("x-amz-") or lk.startswith("x-forwarded-authorization"):
+            out[k] = "[redacted]"
+        else:
+            out[k] = v
+    return out
+
+
+def _raise_if_run_data_entries_oversized(run_data: dict[str, Any]) -> None:
+    for nid, entry in run_data.items():
+        try:
+            blob = json.dumps(entry, default=str).encode("utf-8")
+        except TypeError:
+            blob = repr(entry).encode("utf-8")
+        if len(blob) > _MAX_PREVIEW_RUN_DATA_ENTRY_BYTES:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"run_data entry for node {nid!r} exceeds maximum size "
+                    f"({_MAX_PREVIEW_RUN_DATA_ENTRY_BYTES} bytes) for preview"
+                ),
+            )
+
 
 class FlowHeader(BaseModel):
     flow_id: str
@@ -213,6 +258,7 @@ async def preview_flow_expression(
         raise HTTPException(status_code=400, detail="run_data has too many node entries for preview")
     if len(req.nodes) > 400:
         raise HTTPException(status_code=400, detail="nodes list is too large for preview")
+    _raise_if_run_data_entries_oversized(req.run_data)
 
     val, err = ad.flows.preview_parameter_expression(
         req.expression,
@@ -426,12 +472,13 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
 
     ghash = ad.flows.canonical_graph_hash(nodes, req.connections, settings)
 
-    # Name-only update if graph unchanged.
-    if latest and latest.get("graph_hash") == ghash and req.name != h.get("name"):
-        await db.flows.update_one(
-            {"_id": ObjectId(flow_id)},
-            {"$set": {"name": req.name, "updated_at": _now(), "updated_by": current_user.user_id}},
-        )
+    # No new revision when graph unchanged (name-only edit or full idempotent save).
+    if latest and latest.get("graph_hash") == ghash:
+        if req.name != h.get("name"):
+            await db.flows.update_one(
+                {"_id": ObjectId(flow_id)},
+                {"$set": {"name": req.name, "updated_at": _now(), "updated_by": current_user.user_id}},
+            )
         h2 = await db.flows.find_one({"_id": ObjectId(flow_id)})
         _raw = {k: h2[k] for k in h2 if k != "_id"}
         hdr = {k: (v.replace(tzinfo=UTC) if isinstance(v, datetime) else v) for k, v in _raw.items()}
@@ -738,7 +785,13 @@ async def inbound_webhook(webhook_id: str, request: Request):
         "parent_execution_id": None,
         "run_data": {},
         "error": None,
-        "trigger": {"type": "webhook", "webhook_id": webhook_id, "method": request.method, "headers": dict(request.headers), "body": body},
+        "trigger": {
+            "type": "webhook",
+            "webhook_id": webhook_id,
+            "method": request.method,
+            "headers": _sanitize_inbound_webhook_headers(request),
+            "body": body,
+        },
     }
     res = await db.flow_executions.insert_one(exec_doc)
     exec_id = str(res.inserted_id)

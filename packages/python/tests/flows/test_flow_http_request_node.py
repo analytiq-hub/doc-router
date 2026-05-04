@@ -64,6 +64,28 @@ def minimal_ctx() -> ad.flows.ExecutionContext:
 
 
 @pytest.mark.asyncio
+async def test_execute_rejects_ssrf_loopback_before_http(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
+    """SSRF guard blocks 127.0.0.1 before httpx runs (no network)."""
+
+    item = ad.flows.FlowItem(json={"x": 1}, binary={}, meta={}, paired_item=None)
+    with pytest.raises(RuntimeError, match="blocked"):
+        await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "n1",
+                "parameters": {
+                    "method": "GET",
+                    "url": "http://127.0.0.1/",
+                    "headers": [],
+                    "query_params": [],
+                    "body_mode": "none",
+                },
+            },
+            [[item]],
+        )
+
+
+@pytest.mark.asyncio
 async def test_get_static_url(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
     transport = httpx.MockTransport(
         lambda request: httpx.Response(200, json={"ok": True}, request=request)
@@ -161,7 +183,8 @@ async def test_body_json_from_expression(http_node: FlowsHttpRequestNode, minima
                     "headers": [],
                     "query_params": [],
                     "body_mode": "json",
-                    "body_json": "=_json['payload']",
+                    # Resolved by the engine in production; execute() receives literals only.
+                    "body_json": '{"hello": "world"}',
                 },
             },
             [[item]],
@@ -434,7 +457,8 @@ async def test_invalid_url_error_includes_upstream_row_hint(http_node: FlowsHttp
                     "id": "n1",
                     "parameters": {
                         "method": "GET",
-                        "url": '=_json["name"]',
+                        # Resolved expression value (non-URL) triggers invalid-url path + hint.
+                        "url": "not-a-url",
                         "body_mode": "none",
                     },
                 },
@@ -459,7 +483,8 @@ async def test_rejects_schemeless_url(http_node: FlowsHttpRequestNode, minimal_c
                     "id": "n1",
                     "parameters": {
                         "method": "GET",
-                        "url": "=_json[\"host\"]",
+                        # Resolved: upstream string without scheme.
+                        "url": "example.com",
                         "body_mode": "none",
                     },
                 },
@@ -481,7 +506,7 @@ async def test_connect_error_propagates(http_node: FlowsHttpRequestNode, minimal
         with pytest.raises(httpx.ConnectError):
             await http_node.execute(
                 minimal_ctx,
-                {"id": "n1", "parameters": {"method": "GET", "url": "https://unreachable.invalid/"}},
+                {"id": "n1", "parameters": {"method": "GET", "url": "http://8.8.8.8/"}},
                 [[item]],
             )
 
@@ -504,7 +529,7 @@ async def test_timeout_error_propagates(http_node: FlowsHttpRequestNode, minimal
                     "id": "n1",
                     "parameters": {
                         "method": "GET",
-                        "url": "https://slow.invalid/",
+                        "url": "http://8.8.8.8/",
                         "timeout_seconds": 1,
                     },
                 },

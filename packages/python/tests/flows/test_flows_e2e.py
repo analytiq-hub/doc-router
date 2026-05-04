@@ -137,6 +137,82 @@ def _register_e2e_context_seed_node():
 
 
 @pytest.mark.asyncio
+async def test_put_flow_unchanged_graph_and_name_does_not_create_revision(test_db, mock_auth):
+    """Same graph + same name + latest base_revid → revision None; no extra row in flow_revisions."""
+
+    r0 = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows",
+        json={"name": "Idempotent save"},
+        headers=get_auth_headers(),
+    )
+    assert r0.status_code == 200, r0.text
+    flow_id = r0.json()["flow"]["flow_id"]
+
+    nodes = [_std_node("t1", "Start", "flows.trigger.manual", 0)]
+    conns: dict = {}
+    r1 = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        json={
+            "base_flow_revid": "",
+            "name": "Idempotent save",
+            "nodes": nodes,
+            "connections": conns,
+            "settings": {},
+            "pin_data": None,
+        },
+        headers=get_auth_headers(),
+    )
+    assert r1.status_code == 200, r1.text
+    assert r1.json()["revision"] is not None
+    rev_id = r1.json()["revision"]["flow_revid"]
+
+    db = ad.common.get_async_db()
+    count_before = await db.flow_revisions.count_documents({"flow_id": flow_id})
+
+    r2 = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        json={
+            "base_flow_revid": rev_id,
+            "name": "Idempotent save",
+            "nodes": nodes,
+            "connections": conns,
+            "settings": {},
+            "pin_data": None,
+        },
+        headers=get_auth_headers(),
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["revision"] is None
+    count_after = await db.flow_revisions.count_documents({"flow_id": flow_id})
+    assert count_after == count_before
+
+
+@pytest.mark.asyncio
+async def test_preview_expression_rejects_oversized_run_data_entry(test_db, mock_auth):
+    """Per-entry size cap on preview-expression protects the evaluator from huge blobs."""
+
+    huge = "x" * 600_000
+    r = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/preview-expression",
+        json={
+            "expression": "=_json",
+            "run_data": {
+                "n1": {
+                    "status": "success",
+                    "data": {"main": [[{"json": {"h": huge}, "binary": {}}]]},
+                }
+            },
+            "input_items": [{}],
+            "preview_item_index": 0,
+            "nodes": [],
+        },
+        headers=get_auth_headers(),
+    )
+    assert r.status_code == 400
+    assert "exceeds maximum size" in r.json()["detail"]
+
+
+@pytest.mark.asyncio
 async def test_post_run_enqueues_queued_flow_run_message(test_db, mock_auth):
     """POST /run creates a queued execution and a `queues.flow_run` message."""
 

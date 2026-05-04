@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Switch } from '@headlessui/react';
 import Editor from '@monaco-editor/react';
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
@@ -113,6 +113,7 @@ export const FlowNodeParameterFields: React.FC<{
   /** Single inbound edge source id — upstream drops from that node use `_json` instead of `_node[…].json`. */
   soleInboundParentNodeId?: string | null;
 }> = ({ node, nodeType, onChange, readOnly = false, expressionPreview = null, soleInboundParentNodeId = null }) => {
+  const [fieldRegexErrors, setFieldRegexErrors] = useState<Record<string, string>>({});
   const rootSchema = nodeType?.parameter_schema;
   const schemaProps = useMemo(() => getSchemaProperties(rootSchema), [rootSchema]);
   const mergedParams = useMemo(
@@ -505,8 +506,42 @@ export const FlowNodeParameterFields: React.FC<{
 
     const monoClass = uiHint === 'monospace' ? ' font-mono text-[11px]' : '';
     const placeholder = rawPlaceholder || undefined;
+    const regexUi = typeof subschema['x-ui-regex'] === 'string' ? (subschema['x-ui-regex'] as string) : '';
+    const regexMsg =
+      typeof subschema['x-ui-regex-message'] === 'string'
+        ? (subschema['x-ui-regex-message'] as string)
+        : 'Value does not match the required pattern';
 
     const strVal = typeof v === 'string' ? v : (v as string) ?? '';
+
+    const validateRegexUi = (raw: string) => {
+      if (!regexUi || readOnly) return;
+      const t = raw.trim();
+      if (!t || isExpressionValue(t)) {
+        setFieldRegexErrors((prev) => {
+          if (!(key in prev)) return prev;
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        });
+        return;
+      }
+      try {
+        const re = new RegExp(regexUi);
+        if (!re.test(raw)) {
+          setFieldRegexErrors((prev) => ({ ...prev, [key]: regexMsg }));
+        } else {
+          setFieldRegexErrors((prev) => {
+            if (!(key in prev)) return prev;
+            const next = { ...prev };
+            delete next[key];
+            return next;
+          });
+        }
+      } catch {
+        setFieldRegexErrors((prev) => ({ ...prev, [key]: 'Invalid x-ui-regex pattern in schema' }));
+      }
+    };
 
     return (
       <div key={key} className="mb-3">
@@ -518,7 +553,17 @@ export const FlowNodeParameterFields: React.FC<{
           className={flowInputClass + monoClass}
           value={strVal}
           placeholder={placeholder}
-          onChange={(e) => applyPatch({ [key]: e.target.value })}
+          onChange={(e) => {
+            applyPatch({ [key]: e.target.value });
+            if (fieldRegexErrors[key]) {
+              setFieldRegexErrors((prev) => {
+                const next = { ...prev };
+                delete next[key];
+                return next;
+              });
+            }
+          }}
+          onBlur={() => validateRegexUi(strVal)}
           readOnly={readOnly}
           onDragOver={(e) => {
             if (readOnly) return;
@@ -532,6 +577,7 @@ export const FlowNodeParameterFields: React.FC<{
             applyPatch({ [key]: payloadToExpression(p, node.id, 0, { soleInboundParentNodeId }) });
           }}
         />
+        {fieldRegexErrors[key] ? <p className="mt-0.5 text-xs text-red-600">{fieldRegexErrors[key]}</p> : null}
         {expressionPreview ? <FlowExpressionPreviewLine expression={strVal} preview={expressionPreview} /> : null}
       </div>
     );

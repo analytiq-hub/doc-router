@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 
 import analytiq_data as ad
+from analytiq_data.flows.url_ssrf_guard import assert_http_url_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -18,13 +19,6 @@ def _exec_log(ctx: "ad.flows.ExecutionContext") -> logging.Logger:
     """Prefer the flow worker logger when attached so errors land with other flow_run lines."""
 
     return ctx.logger if ctx.logger is not None else logger
-
-
-def _lane_index_of_item(lane: list["ad.flows.FlowItem"], target: "ad.flows.FlowItem") -> int:
-    for i, it in enumerate(lane):
-        if it is target:
-            return i
-    return 0
 
 
 def _inbound_row_hint(item: "ad.flows.FlowItem") -> str:
@@ -221,29 +215,12 @@ class FlowsHttpRequestNode:
         node: dict[str, Any],
         inputs: list[list["ad.flows.FlowItem"]],
     ) -> list[list["ad.flows.FlowItem"]]:
-        params_raw = node.get("parameters") or {}
+        # Parameters are already resolved by the engine (per-item ``resolve_parameters``).
+        params = node.get("parameters") or {}
         slot0 = inputs[0] if inputs else []
         if not slot0:
             return [[]]
         item = slot0[0]
-        lane_ix = _lane_index_of_item(slot0, item)
-
-        params = ad.flows.resolve_parameters(
-            params_raw,
-            item=item,
-            run_data=context.run_data,
-            input_context=ad.flows.materialize_input_context(
-                inputs,
-                input_index=0,
-                item_index=lane_ix,
-            ),
-            execution_refs={
-                "execution_id": context.execution_id,
-                "flow_id": context.flow_id,
-                "flow_revid": context.flow_revid,
-            },
-            revision_nodes=context.revision_nodes,
-        )
 
         method = str(params.get("method") or "GET").upper()
         url = str(params.get("url") or "").strip()
@@ -269,6 +246,8 @@ class FlowsHttpRequestNode:
                 f"flow_id={context.flow_id} organization_id={context.organization_id}: {msg}"
             )
             raise RuntimeError(msg)
+
+        assert_http_url_allowed(url, purpose="HTTP Request")
 
         timeout = float(params.get("timeout_seconds") or 30)
         follow_redirects = bool(params.get("follow_redirects", True))
