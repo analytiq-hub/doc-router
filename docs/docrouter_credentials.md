@@ -1,157 +1,83 @@
-# DocRouter Credentials — Implementation Plan
+# DocRouter Credentials
 
-This document covers how to build the credential system in DocRouter from scratch — kind definitions, org-scoped storage, API, runtime injection, and frontend UI. It is self-contained: it does not depend on n8n credential import tooling (see §7 of [`n8n_port_guide.md`](./n8n_port_guide.md) for that).
+This document describes the credential system in DocRouter: kind definitions, org-scoped storage, backend API, runtime injection, and frontend UI. It is self-contained and does not depend on n8n credential import tooling.
 
 ---
 
 ## 1. Architecture
 
-Three concepts, mirroring the n8n model:
+Three concepts:
 
 | Concept | Where | Purpose |
 |---|---|---|
-| **Credential kind** | `schemas/credential-kinds/<key>.json` — loaded at startup | Global type definition: auth mode, fields the org fills in, injection rule |
-| **Org credential** | `credentials` MongoDB collection | One saved instance per org: kind reference + encrypted field values |
+| **Credential kind** | `schemas/credential-kinds/<key>.json` — loaded at startup via `lru_cache` | Global type definition: auth mode, field schema, inject rules |
+| **Org credential** | `credentials` MongoDB collection | One saved instance per org: kind reference + AES-encrypted field values |
 | **Node binding** | `flow_revisions.nodes[*].credentials` field | Maps a node's slot name → a saved org credential id |
 
-Runtime flow: before executing a node, the engine resolves its bindings → decrypts the referenced credential → builds a flat `credentials.*` dict → passes it into the node's execution context for Jinja2 substitution in `http.spec.json`.
+Runtime flow: before executing a node, the engine resolves its slot bindings → decrypts the referenced credential → populates `context.credentials` → the node reads `context.credentials` to inject headers or query params.
 
 ---
 
 ## 2. Credential kind file format
 
-Kind definitions live in `schemas/credential-kinds/<key>.json`. These are hand-authored for the initial set and later auto-generated from the n8n dump (see `n8n_port_guide.md §7.5`).
+Kind definitions live in `schemas/credential-kinds/<key>.json`. They are loaded automatically at import time (no startup call required).
 
 **Fields:**
 
 | Field | Type | Required | Purpose |
 |---|---|---|---|
-| `key` | string | yes | Stable identifier; must match the filename stem and equals n8n's credential `name` where applicable |
+| `key` | string | yes | Stable identifier; must match the filename stem |
 | `display_name` | string | yes | Human-readable label shown in the UI |
 | `auth_mode` | enum | yes | `"api_key"`, `"oauth2_authorization_code"`, `"oauth2_client_credentials"`, `"basic_auth"`, `"custom"` |
-| `extends` | string | no | Key of a base kind; inherits `secret_schema`, `inject`, and `oauth2` config |
-| `secret_schema` | JSON Schema object | yes (unless `extends` covers it) | JSON Schema for the fields the org fills in; `"x-secret": true` marks fields that must never appear in API responses |
-| `oauth2` | object | oauth2 modes only | `auth_url`, `token_url`, `auth_query_params`, `token_endpoint_auth_method`, `default_scopes` |
-| `runtime_fields` | object | oauth2 modes | Fields written by DocRouter at token-exchange time (e.g. `access_token`, `refresh_token`); not in `secret_schema` because the user does not fill them in |
-| `inject` | object | no | Describes how to attach decrypted fields to HTTP requests: `inject.headers`, `inject.query_params`. Values are Jinja2 templates using `{{ credentials.<field> }}` |
+| `secret_schema` | JSON Schema object | yes | JSON Schema for the fields the org fills in; `"x-secret": true` marks fields whose values are never returned in API responses |
+| `inject` | object | no | How to attach decrypted fields to HTTP requests: `inject.headers` and/or `inject.query_params`. Values are Jinja2 templates using `{{ credentials.<field> }}` |
 | `test_request` | object | no | `{ "method": "GET", "url": "…" }` — called by the `/test` endpoint to verify a credential |
 
-**Example — Slack API (API key):**
+**Implemented kind files:**
 
+`schemas/credential-kinds/httpHeaderAuth.json` — injects an arbitrary header:
 ```json
 {
-  "key": "slackApi",
-  "display_name": "Slack API",
+  "key": "httpHeaderAuth",
+  "display_name": "Header Auth",
   "auth_mode": "api_key",
   "secret_schema": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["accessToken"],
+    "required": ["name", "value"],
     "properties": {
-      "accessToken": {
-        "type": "string",
-        "title": "Access Token",
-        "x-secret": true,
-        "description": "Slack Bot or User OAuth token (starts with xoxb- or xoxp-)"
-      }
+      "name":  { "type": "string", "title": "Header Name",  "description": "e.g. Authorization" },
+      "value": { "type": "string", "title": "Header Value", "x-secret": true, "description": "e.g. Bearer sk-…" }
     }
   },
   "inject": {
-    "headers": {
-      "Authorization": "Bearer {{ credentials.accessToken }}"
-    }
-  },
-  "test_request": {
-    "method": "GET",
-    "url": "https://slack.com/api/auth.test"
+    "headers": { "{{ credentials.name }}": "{{ credentials.value }}" }
   }
 }
 ```
 
-**Example — OpenAI API (API key):**
-
+`schemas/credential-kinds/httpQueryAuth.json` — injects an arbitrary query parameter:
 ```json
 {
-  "key": "openAiApi",
-  "display_name": "OpenAI API",
+  "key": "httpQueryAuth",
+  "display_name": "Query Auth",
   "auth_mode": "api_key",
   "secret_schema": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["apiKey"],
+    "required": ["name", "value"],
     "properties": {
-      "apiKey": {
-        "type": "string",
-        "title": "API Key",
-        "x-secret": true,
-        "description": "OpenAI API key (sk-…)"
-      },
-      "organizationId": {
-        "type": "string",
-        "title": "Organization ID",
-        "description": "Optional: leave blank to use your default org"
-      }
+      "name":  { "type": "string", "title": "Parameter Name",  "description": "e.g. api_key" },
+      "value": { "type": "string", "title": "Parameter Value", "x-secret": true }
     }
   },
   "inject": {
-    "headers": {
-      "Authorization": "Bearer {{ credentials.apiKey }}",
-      "OpenAI-Organization": "{{ credentials.organizationId }}"
-    }
-  },
-  "test_request": {
-    "method": "GET",
-    "url": "https://api.openai.com/v1/models"
+    "query_params": { "{{ credentials.name }}": "{{ credentials.value }}" }
   }
 }
 ```
 
-**Example — Google OAuth2 base kind (OAuth2, authorization code):**
 
-See §7.4 of `n8n_port_guide.md` for the full Google kind chain. The base `oAuth2Api` kind:
-
-```json
-{
-  "key": "oAuth2Api",
-  "display_name": "OAuth2 API",
-  "auth_mode": "oauth2_authorization_code",
-  "secret_schema": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": ["clientId", "clientSecret"],
-    "properties": {
-      "clientId":     { "type": "string", "title": "Client ID" },
-      "clientSecret": { "type": "string", "title": "Client Secret", "x-secret": true },
-      "scope":        { "type": "string", "title": "Scope", "default": "" }
-    }
-  },
-  "runtime_fields": {
-    "access_token":  { "x-secret": true },
-    "refresh_token": { "x-secret": true }
-  },
-  "inject": {
-    "headers": {
-      "Authorization": "Bearer {{ credentials.access_token }}"
-    }
-  }
-}
-```
-
-The Google-specific extension hard-codes the OAuth endpoints:
-
-```json
-{
-  "key": "googleOAuth2Api",
-  "display_name": "Google OAuth2 API",
-  "extends": "oAuth2Api",
-  "oauth2": {
-    "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-    "token_url": "https://oauth2.googleapis.com/token",
-    "auth_query_params": "access_type=offline&prompt=consent",
-    "token_endpoint_auth_method": "client_secret_post"
-  }
-}
-```
 
 ---
 
@@ -159,111 +85,19 @@ The Google-specific extension hard-codes the OAuth endpoints:
 
 **File:** `packages/python/analytiq_data/flows/credential_kind_registry.py`
 
-Loaded once at startup from `schemas/credential-kinds/`. Resolves `extends` chains so callers always get a fully-merged kind.
+Loaded lazily at first access via `lru_cache`. Scans `schemas/credential-kinds/*.json` relative to the repo root. No startup call is needed.
 
-```python
-from __future__ import annotations
+**Public API:**
 
-import json
-import os
-from typing import Any
+| Function | Purpose |
+|---|---|
+| `list_credential_kinds() → list[dict]` | All loaded kind documents (mutable copies) |
+| `get_credential_kind(key: str) → dict` | One kind by key; raises `KeyError` if unknown |
+| `credential_secret_field_names(kind: dict) → set[str]` | Property names marked `x-secret` in `secret_schema` |
 
-_registry: dict[str, dict[str, Any]] = {}
+Exposed through the `analytiq_data.flows` namespace. Accessible as `ad.flows.list_credential_kinds()`, `ad.flows.get_credential_kind(key)`, `ad.flows.credential_secret_field_names(kind)`.
 
-
-def load_credential_kinds(kinds_dir: str) -> None:
-    """Read all *.json files from kinds_dir into the in-memory registry."""
-    global _registry
-    _registry = {}
-    for fname in os.listdir(kinds_dir):
-        if not fname.endswith(".json"):
-            continue
-        with open(os.path.join(kinds_dir, fname)) as f:
-            kind = json.load(f)
-        key = kind["key"]
-        _registry[key] = kind
-
-
-def _resolve(key: str, seen: set[str] | None = None) -> dict[str, Any]:
-    """Return a fully-merged kind dict (base fields overridden by extension)."""
-    seen = seen or set()
-    if key in seen:
-        raise ValueError(f"Circular extends chain: {key}")
-    seen.add(key)
-
-    kind = dict(_registry[key])
-    base_key = kind.get("extends")
-    if not base_key:
-        return kind
-
-    base = _resolve(base_key, seen)
-
-    # Merge secret_schema properties (extension adds to or overrides base)
-    merged_schema = dict(base.get("secret_schema") or {})
-    ext_schema = kind.get("secret_schema") or {}
-    if ext_schema.get("properties"):
-        merged_props = dict((merged_schema.get("properties") or {}))
-        merged_props.update(ext_schema["properties"])
-        merged_schema["properties"] = merged_props
-    kind["secret_schema"] = merged_schema
-
-    # Merge runtime_fields
-    merged_rf = dict(base.get("runtime_fields") or {})
-    merged_rf.update(kind.get("runtime_fields") or {})
-    kind["runtime_fields"] = merged_rf
-
-    # Merge inject (extension overrides base per-key)
-    merged_inject = dict(base.get("inject") or {})
-    for section, vals in (kind.get("inject") or {}).items():
-        merged_inject[section] = {**(merged_inject.get(section) or {}), **vals}
-    kind["inject"] = merged_inject
-
-    # Merge oauth2 config
-    merged_oauth2 = {**(base.get("oauth2") or {}), **(kind.get("oauth2") or {})}
-    if merged_oauth2:
-        kind["oauth2"] = merged_oauth2
-
-    # auth_mode defaults to base if not set in extension
-    if "auth_mode" not in kind:
-        kind["auth_mode"] = base.get("auth_mode", "custom")
-
-    return kind
-
-
-def get_kind(key: str) -> dict[str, Any]:
-    if key not in _registry:
-        raise KeyError(f"Unknown credential kind: {key}")
-    return _resolve(key)
-
-
-def list_kinds() -> list[dict[str, Any]]:
-    return [_resolve(k) for k in sorted(_registry)]
-
-
-def secret_field_names(kind: dict[str, Any]) -> set[str]:
-    """Return field names marked x-secret in the kind's merged schema + runtime_fields."""
-    props = (kind.get("secret_schema") or {}).get("properties") or {}
-    secret = {k for k, v in props.items() if v.get("x-secret")}
-    secret |= set(kind.get("runtime_fields") or {})
-    return secret
-```
-
-Call `load_credential_kinds` during app startup in `packages/python/app/main.py` after the existing startup block:
-
-```python
-import analytiq_data as ad
-
-# Near the top of lifespan() or startup handler:
-kinds_dir = os.path.join(os.path.dirname(__file__), "../../../schemas/credential-kinds")
-if os.path.isdir(kinds_dir):
-    ad.flows.credential_kind_registry.load_credential_kinds(kinds_dir)
-```
-
-Expose through the `analytiq_data.flows` namespace by adding to `packages/python/analytiq_data/flows/__init__.py`:
-
-```python
-from . import credential_kind_registry
-```
+**Note:** The `extends` field described in early design docs is not implemented. If inheritance across kinds is needed, add `_resolve(key, seen)` merge logic to the registry.
 
 ---
 
@@ -273,24 +107,21 @@ One document per saved credential instance:
 
 ```python
 {
-    "_id":             ObjectId,          # credential id
-    "organization_id": str,               # org scope
-    "kind_key":        str,               # e.g. "slackApi"
-    "name":            str,               # user-chosen label, e.g. "Slack – Marketing bot"
+    "_id":              ObjectId,          # credential id
+    "organization_id":  str,               # org scope
+    "kind_key":         str,               # e.g. "httpHeaderAuth"
+    "name":             str,               # user-chosen label
     "encrypted_payload": str,             # AES-encrypted JSON blob of all field values
-                                          # (both secret and non-secret fields together)
-    "created_at":      datetime,
-    "created_by":      str,               # user_id
-    "updated_at":      datetime,
-    "updated_by":      str,
+    "created_at":       datetime,
+    "created_by":       str,               # user_id
+    "updated_at":       datetime,
+    "updated_by":       str,
 }
 ```
 
 `encrypted_payload` is `ad.crypto.encrypt_token(json.dumps(fields_dict))`. Decryption returns the full dict; secret fields are stripped before any API response.
 
-**Index:** compound `{ organization_id: 1, kind_key: 1 }` for efficient filtering by org + kind when looking up bindings.
-
-> **Encryption note:** `ad.crypto.encrypt_token` currently uses a fixed IV derived from the secret key, meaning identical plaintext always produces identical ciphertext. For credentials this is acceptable at launch (the payload is a JSON dict whose field ordering varies), but a random-IV variant should be added before storing high-value secrets like OAuth client secrets. Track this as a follow-up.
+**Index:** add a compound index `{ organization_id: 1, kind_key: 1 }` for efficient filtering.
 
 ---
 
@@ -298,305 +129,37 @@ One document per saved credential instance:
 
 **File:** `packages/python/app/routes/flows_credentials.py`
 
-Credentials are a sub-concern of flows, so the router lives next to `flows.py` and its routes are all prefixed under `/flows/`. Register in `packages/python/app/main.py`:
-
-```python
-from app.routes.flows_credentials import flow_credentials_router
-app.include_router(flow_credentials_router)
-```
+Router registered in `packages/python/app/main.py` as `flow_credentials_router`.
 
 ### 5.1 Pydantic models
 
-```python
-from __future__ import annotations
+| Model | Purpose |
+|---|---|
+| `CredentialKindSummary` | Kind metadata + field list (no secrets) |
+| `CreateCredentialRequest` | `{ kind_key, name, fields }` — all field values, encrypted server-side |
+| `UpdateCredentialRequest` | `{ name, fields }` — kind_key is immutable after creation |
+| `CredentialHeader` | Saved credential metadata + `public_fields` (secret fields omitted) |
+| `ListCredentialsResponse` | `{ items, total }` |
+| `TestCredentialResponse` | `{ ok, status_code?, error? }` |
 
-import json
-import logging
-from datetime import datetime, UTC
-from typing import Any
+### 5.2 Routes
 
-from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+| Method | Path | Description |
+|---|---|---|
+| `GET` | `/v0/orgs/{orgId}/credential-kinds` | List all available credential kinds |
+| `POST` | `/v0/orgs/{orgId}/credentials` | Create a credential instance |
+| `GET` | `/v0/orgs/{orgId}/credentials` | List org credentials; optional `?credential_kind=<key>` filter |
+| `GET` | `/v0/orgs/{orgId}/credentials/{credId}` | Get one credential (no secrets) |
+| `PUT` | `/v0/orgs/{orgId}/credentials/{credId}` | Update name and fields (re-encrypts) |
+| `DELETE` | `/v0/orgs/{orgId}/credentials/{credId}` | Delete a credential |
+| `POST` | `/v0/orgs/{orgId}/credentials/{credId}/test` | Test a credential against its `test_request` |
 
-import analytiq_data as ad
-from app.auth import get_org_user
-from app.models import User
-
-logger = logging.getLogger(__name__)
-flow_credentials_router = APIRouter(tags=["flows"])
-
-
-# ── Request / response models ──────────────────────────────────────────────
-
-class CredentialKindSummary(BaseModel):
-    key: str
-    display_name: str
-    auth_mode: str
-    # non-secret property names and their schema (for building the create form)
-    fields: list[dict[str, Any]]
-
-
-class CreateCredentialRequest(BaseModel):
-    kind_key: str
-    name: str
-    fields: dict[str, Any]   # all fields (secret + non-secret); encrypted server-side
-
-
-class CredentialHeader(BaseModel):
-    credential_id: str
-    organization_id: str
-    kind_key: str
-    name: str
-    # non-secret field values only (secret fields omitted)
-    public_fields: dict[str, Any]
-    created_at: datetime
-    created_by: str
-    updated_at: datetime
-    updated_by: str
-
-
-class ListCredentialsResponse(BaseModel):
-    items: list[CredentialHeader]
-    total: int
-
-
-class TestCredentialResponse(BaseModel):
-    ok: bool
-    status_code: int | None = None
-    error: str | None = None
-```
-
-### 5.2 Helper: serialize a MongoDB document to `CredentialHeader`
-
-```python
-def _to_header(doc: dict, kind: dict) -> CredentialHeader:
-    secret_names = ad.flows.credential_kind_registry.secret_field_names(kind)
-    try:
-        all_fields = json.loads(ad.crypto.decrypt_token(doc["encrypted_payload"]))
-    except Exception:
-        all_fields = {}
-    public_fields = {k: v for k, v in all_fields.items() if k not in secret_names}
-    return CredentialHeader(
-        credential_id=str(doc["_id"]),
-        organization_id=doc["organization_id"],
-        kind_key=doc["kind_key"],
-        name=doc["name"],
-        public_fields=public_fields,
-        created_at=doc["created_at"].replace(tzinfo=UTC),
-        created_by=doc["created_by"],
-        updated_at=doc["updated_at"].replace(tzinfo=UTC),
-        updated_by=doc["updated_by"],
-    )
-```
-
-### 5.3 Routes
-
-**List available kinds** — used to populate the "create credential" kind picker:
-
-```python
-@flow_credentials_router.get("/v0/orgs/{organization_id}/credential-kinds")
-async def list_credential_kinds(
-    organization_id: str,
-    current_user: User = Depends(get_org_user),
-) -> list[CredentialKindSummary]:
-    result = []
-    for kind in ad.flows.credential_kind_registry.list_kinds():
-        schema_props = (kind.get("secret_schema") or {}).get("properties") or {}
-        secret_names = ad.flows.credential_kind_registry.secret_field_names(kind)
-        fields = [
-            {"name": k, **{fk: fv for fk, fv in v.items() if fk != "x-secret"},
-             "is_secret": k in secret_names}
-            for k, v in schema_props.items()
-        ]
-        result.append(CredentialKindSummary(
-            key=kind["key"],
-            display_name=kind["display_name"],
-            auth_mode=kind["auth_mode"],
-            fields=fields,
-        ))
-    return result
-```
-
-**Create a credential instance:**
-
-```python
-@flow_credentials_router.post("/v0/orgs/{organization_id}/credentials",
-                         response_model=CredentialHeader)
-async def create_credential(
-    organization_id: str,
-    req: CreateCredentialRequest,
-    current_user: User = Depends(get_org_user),
-) -> CredentialHeader:
-    try:
-        kind = ad.flows.credential_kind_registry.get_kind(req.kind_key)
-    except KeyError:
-        raise HTTPException(status_code=400, detail=f"Unknown credential kind: {req.kind_key}")
-
-    # Validate req.fields against kind's secret_schema
-    schema = kind.get("secret_schema")
-    if schema:
-        from jsonschema import Draft7Validator, ValidationError
-        try:
-            Draft7Validator(schema).validate(req.fields)
-        except ValidationError as e:
-            raise HTTPException(status_code=422, detail=e.message)
-
-    encrypted = ad.crypto.encrypt_token(json.dumps(req.fields))
-    now = datetime.now(UTC)
-    db = ad.common.get_async_db()
-    res = await db.credentials.insert_one({
-        "organization_id": organization_id,
-        "kind_key": req.kind_key,
-        "name": req.name,
-        "encrypted_payload": encrypted,
-        "created_at": now,
-        "created_by": current_user.user_id,
-        "updated_at": now,
-        "updated_by": current_user.user_id,
-    })
-    doc = await db.credentials.find_one({"_id": res.inserted_id})
-    return _to_header(doc, kind)
-```
-
-**List credentials for an org** (metadata only, no secrets):
-
-```python
-@flow_credentials_router.get("/v0/orgs/{organization_id}/credentials",
-                        response_model=ListCredentialsResponse)
-async def list_credentials(
-    organization_id: str,
-    current_user: User = Depends(get_org_user),
-) -> ListCredentialsResponse:
-    db = ad.common.get_async_db()
-    total = await db.credentials.count_documents({"organization_id": organization_id})
-    docs = await db.credentials.find(
-        {"organization_id": organization_id}
-    ).sort("updated_at", -1).to_list(1000)
-    items = []
-    for doc in docs:
-        try:
-            kind = ad.flows.credential_kind_registry.get_kind(doc["kind_key"])
-        except KeyError:
-            kind = {"secret_schema": {}, "runtime_fields": {}}
-        items.append(_to_header(doc, kind))
-    return ListCredentialsResponse(items=items, total=total)
-```
-
-**Get a single credential** (metadata only):
-
-```python
-@flow_credentials_router.get("/v0/orgs/{organization_id}/credentials/{credential_id}",
-                        response_model=CredentialHeader)
-async def get_credential(
-    organization_id: str,
-    credential_id: str,
-    current_user: User = Depends(get_org_user),
-) -> CredentialHeader:
-    db = ad.common.get_async_db()
-    doc = await db.credentials.find_one(
-        {"_id": ObjectId(credential_id), "organization_id": organization_id}
-    )
-    if not doc:
-        raise HTTPException(status_code=404, detail="Credential not found")
-    kind = ad.flows.credential_kind_registry.get_kind(doc["kind_key"])
-    return _to_header(doc, kind)
-```
-
-**Update credential fields** (re-encrypt; useful when a token rotates):
-
-```python
-@flow_credentials_router.put("/v0/orgs/{organization_id}/credentials/{credential_id}",
-                        response_model=CredentialHeader)
-async def update_credential(
-    organization_id: str,
-    credential_id: str,
-    req: CreateCredentialRequest,
-    current_user: User = Depends(get_org_user),
-) -> CredentialHeader:
-    db = ad.common.get_async_db()
-    doc = await db.credentials.find_one(
-        {"_id": ObjectId(credential_id), "organization_id": organization_id}
-    )
-    if not doc:
-        raise HTTPException(status_code=404, detail="Credential not found")
-    try:
-        kind = ad.flows.credential_kind_registry.get_kind(req.kind_key)
-    except KeyError:
-        raise HTTPException(status_code=400, detail=f"Unknown credential kind: {req.kind_key}")
-    encrypted = ad.crypto.encrypt_token(json.dumps(req.fields))
-    now = datetime.now(UTC)
-    await db.credentials.update_one(
-        {"_id": ObjectId(credential_id)},
-        {"$set": {"encrypted_payload": encrypted, "name": req.name,
-                  "updated_at": now, "updated_by": current_user.user_id}},
-    )
-    doc = await db.credentials.find_one({"_id": ObjectId(credential_id)})
-    return _to_header(doc, kind)
-```
-
-**Delete a credential:**
-
-```python
-@flow_credentials_router.delete("/v0/orgs/{organization_id}/credentials/{credential_id}",
-                           status_code=204)
-async def delete_credential(
-    organization_id: str,
-    credential_id: str,
-    current_user: User = Depends(get_org_user),
-) -> None:
-    db = ad.common.get_async_db()
-    res = await db.credentials.delete_one(
-        {"_id": ObjectId(credential_id), "organization_id": organization_id}
-    )
-    if res.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Credential not found")
-```
-
-**Test a credential** (for `api_key` kinds with a `test_request`):
-
-```python
-@flow_credentials_router.post("/v0/orgs/{organization_id}/credentials/{credential_id}/test",
-                         response_model=TestCredentialResponse)
-async def test_credential(
-    organization_id: str,
-    credential_id: str,
-    current_user: User = Depends(get_org_user),
-) -> TestCredentialResponse:
-    import httpx
-    from jinja2 import Environment, Undefined
-
-    db = ad.common.get_async_db()
-    doc = await db.credentials.find_one(
-        {"_id": ObjectId(credential_id), "organization_id": organization_id}
-    )
-    if not doc:
-        raise HTTPException(status_code=404, detail="Credential not found")
-    kind = ad.flows.credential_kind_registry.get_kind(doc["kind_key"])
-    test_req = kind.get("test_request")
-    if not test_req:
-        return TestCredentialResponse(ok=True, error="No test_request defined for this kind")
-
-    fields = json.loads(ad.crypto.decrypt_token(doc["encrypted_payload"]))
-    inject = kind.get("inject") or {}
-    jinja_env = Environment(undefined=Undefined)
-    headers = {
-        k: jinja_env.from_string(v).render(credentials=fields)
-        for k, v in (inject.get("headers") or {}).items()
-    }
-    try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            resp = await client.request(
-                method=test_req.get("method", "GET"),
-                url=test_req["url"],
-                headers=headers,
-            )
-        ok = resp.status_code < 400
-        return TestCredentialResponse(ok=ok, status_code=resp.status_code,
-                                      error=None if ok else resp.text[:200])
-    except Exception as e:
-        return TestCredentialResponse(ok=False, error=str(e))
-```
+The `/test` endpoint:
+- Decrypts field values.
+- Renders `kind.inject.headers` and `kind.inject.query_params` via Jinja2.
+- Makes the `test_request` HTTP call.
+- Returns `ok: true` with a message if the kind has no `test_request` defined.
+- SSRF protection is not yet applied here — add `assert_http_url_allowed(url)` before the httpx call.
 
 ---
 
@@ -604,56 +167,49 @@ async def test_credential(
 
 ### 6.1 Node document structure
 
-Nodes are stored in `flow_revisions.nodes` as plain dicts. Extend each node dict with an optional `credentials` map:
+Nodes are stored in `flow_revisions.nodes` as plain dicts. Each node optionally carries a `credentials` map:
 
 ```json
 {
-  "id": "node-abc",
-  "type": "ext.slack_post_message",
-  "name": "Post to Slack",
-  "parameters": { "channel": "#general", "text": "Hello" },
+  "id": "3",
+  "type": "http_request",
+  "name": "Call API",
+  "parameters": { "method": "GET", "url": "https://example.com/api" },
   "credentials": {
-    "slackApi": "64f3a1b2c3d4e5f6a7b8c9d0"
+    "httpHeaderAuth": "64f3a1b2c3d4e5f6a7b8c9d0"
   }
 }
 ```
 
 Key = slot name from the node type's `credential_slots`; value = `credentials._id` as a string.
 
-No schema changes are required: `nodes` is already stored as `list[dict[str, Any]]`. The bindings are validated at execution time, not at save time.
+### 6.2 Node type declaration
 
-### 6.2 Validation at execution time
-
-Before calling `node_type.execute()`, check that all required slots are bound:
+Node types declare their credential slots via a `credential_slots` class attribute:
 
 ```python
-def validate_credential_bindings(
-    node: dict,
-    node_type,
-    bound_ids: dict[str, str],      # slot → cred_id (from node["credentials"])
-) -> list[str]:
-    """Return a list of error strings; empty means ok."""
-    errors = []
-    for slot in (node_type.credential_slots or []):
-        if slot["required"] and slot["slot"] not in bound_ids:
-            errors.append(f"Node '{node.get('name')}': required credential slot '{slot['slot']}' is not bound")
-    return errors
+# In http_request.py
+credential_slots = [
+    {
+        "slot": "httpHeaderAuth",
+        "label": "Header Auth",
+        "required": False,
+        "docrouter_binding": "organization_credential_kind:httpHeaderAuth",
+    },
+    {
+        "slot": "httpQueryAuth",
+        "label": "Query Auth",
+        "required": False,
+        "docrouter_binding": "organization_credential_kind:httpQueryAuth",
+    },
+]
 ```
 
-Add `credential_slots: list[dict] = []` to the `NodeType` protocol (duck-typed attribute on each node class). Generated nodes already have this in their manifests; built-in nodes default to `[]`.
+`GET /v0/orgs/{orgId}/flows/node-types` includes `credential_slots` in each node type's response so the frontend can render the binding UI.
 
-### 6.3 API: update bindings without a full save
+### 6.3 Validation at execution time
 
-Add a lightweight PATCH endpoint for credential bindings so the flow editor can update them without creating a new revision:
-
-```
-PATCH /v0/orgs/{org_id}/flows/{flow_id}/revisions/{revid}/nodes/{node_id}/credentials
-Body: { "credentials": { "slackApi": "64f3a1b2c3d4e5f6a7b8c9d0" } }
-```
-
-This writes `credentials` into the node dict inside the stored revision. Alternatively, bindings can be sent as part of the existing `PUT /v0/orgs/{org_id}/flows/{flow_id}` save payload (simpler: just include `credentials` in each node dict).
-
-The simpler approach — include `credentials` in every `SaveFlowRequest.nodes` entry — is preferred. No extra endpoint needed.
+`engine.py` `validate_revision()` checks that `credentials` on each node is either absent or a `dict[str, str]`. It also validates that each slot name in the binding map is a known slot for that node type.
 
 ---
 
@@ -664,280 +220,156 @@ The simpler approach — include `credentials` in every `SaveFlowRequest.nodes` 
 **File:** `packages/python/analytiq_data/flows/credentials.py`
 
 ```python
-from __future__ import annotations
-
-import json
-import logging
-from typing import Any
-
-import analytiq_data as ad
-
-logger = logging.getLogger(__name__)
-
-
-async def resolve_node_credentials(
-    organization_id: str,
-    node: dict[str, Any],
-    node_type,
-) -> dict[str, Any]:
-    """
-    Return a flat dict of decrypted credential fields for a node.
-
-    Keys are field names from the credential kind's secret_schema and runtime_fields.
-    Returns {} if the node has no credential_slots or no bindings.
-    """
-    credential_slots = getattr(node_type, "credential_slots", [])
-    bindings: dict[str, str] = node.get("credentials") or {}
-    if not credential_slots or not bindings:
-        return {}
-
-    db = ad.common.get_async_db()
-    merged: dict[str, Any] = {}
-
-    for slot_def in credential_slots:
-        slot = slot_def["slot"]
-        cred_id = bindings.get(slot)
-        if not cred_id:
-            continue
-
-        from bson import ObjectId
-        doc = await db.credentials.find_one(
-            {"_id": ObjectId(cred_id), "organization_id": organization_id}
-        )
-        if not doc:
-            logger.warning("Credential %s not found for slot %s", cred_id, slot)
-            continue
-
-        try:
-            fields = json.loads(ad.crypto.decrypt_token(doc["encrypted_payload"]))
-        except Exception as e:
-            logger.error("Failed to decrypt credential %s: %s", cred_id, e)
-            continue
-
-        # Merge all fields; later slots overwrite earlier ones on collision
-        merged.update(fields)
-
-    return merged
+async def fetch_credential_fields(organization_id: str, credential_id: str) -> dict[str, Any]:
+    """Load and decrypt one saved credential by id. Returns {} on failure."""
 ```
 
-### 7.2 Wiring into the execution engine
+Called directly by nodes that need credentials. Returns the full decrypted field dict (including secret fields) — for use inside the execution engine only, never exposed externally.
 
-`ExecutionContext` currently carries `organization_id` and `analytiq_client` but no credential resolver. Add a `credentials_resolver` field:
+### 7.2 Execution context
+
+`ExecutionContext` carries a `credentials` field (plain dict) that the engine clears and repopulates before each node execution:
 
 ```python
-# packages/python/analytiq_data/flows/context.py
-
-from typing import Any, Callable, Coroutine, Literal
-
 @dataclass
 class ExecutionContext:
-    organization_id: str
-    execution_id: str
-    flow_id: str
-    flow_revid: str
-    mode: ExecutionMode
-    trigger_data: dict[str, Any]
-    run_data: dict[str, Any]
-    analytiq_client: Any
-    stop_requested: bool = False
-    logger: Any | None = None
-    # New: callable that resolves credentials for a given node
-    credentials_resolver: Callable[..., Coroutine] | None = None
+    ...
+    credentials: dict[str, Any] = field(default_factory=dict)
 ```
 
-In `packages/python/analytiq_data/flows/engine.py`, before calling `node_type.execute()`, resolve credentials:
+The engine clears `context.credentials` at the start of each node call. Nodes that have credential slots call `fetch_credential_fields` directly from their `execute()` method and use the result immediately.
+
+### 7.3 Usage in `http_request` executor
+
+The HTTP Request node (`packages/python/analytiq_data/flows/nodes/http_request.py`) reads its credential bindings at execution time:
 
 ```python
-# Inside the node execution loop (wherever execute() is called today):
-credentials: dict[str, Any] = {}
-if context.credentials_resolver:
-    credentials = await context.credentials_resolver(
-        organization_id=context.organization_id,
-        node=node,
-        node_type=node_type,
-    )
-# Pass credentials into execute() via a keyword arg, OR store on context per-node
-```
+bindings = node.get("credentials") or {}
 
-The cleanest approach: pass `credentials` as an extra keyword arg to `execute()` so nodes can use it directly. Since the `NodeType` protocol is duck-typed, existing built-in nodes just ignore the kwarg if they don't declare it. Add `**_` to existing `execute()` signatures to absorb it silently, or use `inspect` to detect whether the node accepts a `credentials` param.
+# Header auth slot
+hf = await ad.flows.fetch_credential_fields(org_id, bindings.get("httpHeaderAuth", ""))
+if hf:
+    headers[hf["name"]] = hf["value"]
 
-Alternatively, add `credentials: dict[str, Any]` to the `ExecutionContext` dataclass and set it before each node execution:
-
-```python
-context.credentials = credentials   # set per-node before execute()
-```
-
-This is simpler and avoids touching all existing node signatures.
-
-### 7.3 Usage in `http_request_v1` executor
-
-When the `http_request_v1` runtime is built (see `n8n_port_guide.md §12.3`), it will read `context.credentials` and use Jinja2 to substitute `{{ credentials.<field> }}` into the spec:
-
-```python
-from jinja2 import Environment, StrictUndefined
-
-env = Environment(undefined=StrictUndefined)
-url = env.from_string(spec["url"]).render(
-    parameters=node_parameters,
-    credentials=context.credentials,
-)
-headers = {
-    k: env.from_string(v).render(parameters=node_parameters, credentials=context.credentials)
-    for k, v in (spec.get("headers") or {}).items()
-}
+# Query auth slot
+qf = await ad.flows.fetch_credential_fields(org_id, bindings.get("httpQueryAuth", ""))
+if qf:
+    params[qf["name"]] = qf["value"]
 ```
 
 ---
 
 ## 8. Frontend
 
-### 8.1 Credentials list and create UI
+### 8.1 Node config panel — credential slot binding (implemented)
+
+**File:** `packages/typescript/frontend/src/components/flows/flowNodeCredentialSlots.tsx`
+
+`<FlowNodeCredentialSlots>` renders per-slot `<select>` dropdowns in the node config panel for any node type that has `credential_slots`. It:
+
+- Fetches `GET /v0/orgs/{orgId}/credentials` once when a node with slots is selected.
+- Filters options by `kind_key` using `slot.docrouter_binding` (strips the `organization_credential_kind:` prefix).
+- Stores the selected credential id in `node.credentials[slot.slot]` and calls `onChange({ credentials: ... })`.
+- Shows a "— None —" option (clears the slot) for optional slots.
+
+The binding is saved as part of the node's data in the next `PUT` save.
+
+### 8.2 Credentials management tab (not yet implemented)
 
 **Route:** `/orgs/[organizationId]/flows?tab=credentials`
 
-The existing flows page (`packages/typescript/frontend/src/app/orgs/[organizationId]/flows/page.tsx`) already uses a tab pattern — "Flows" (`?tab=flows`) and "Create Flow" (`?tab=flow-create`). Credentials become a third tab in the same page. No new page file is needed, and users can reach credentials directly from wherever they are already working with flows.
+The flows page (`page.tsx`) currently has two tabs: `flows` and `flow-create`. A "Credentials" tab needs to be added.
 
-**Change to `page.tsx`:** add a "Credentials" tab button and render `<FlowCredentials>` in the matching tab panel, following the existing pattern.
+**To implement:**
 
-**New component:** `packages/typescript/frontend/src/components/flows/FlowCredentials.tsx`
-
-This component owns the full credentials management UI:
-
-- **List view** (default): fetches `GET /v0/orgs/{orgId}/credentials` and displays a table with columns **Name**, **Kind**, **Created**, **Actions**. Actions per row: **Test** (calls POST …/test, shows an inline ok/error chip), **Edit** (expands a form inline or opens a dialog), **Delete** (confirmation dialog, then DELETE).
-- **"Add credential" button**: opens a two-step dialog:
-  1. Kind picker — dropdown from `GET /v0/orgs/{orgId}/credential-kinds`, grouped by `auth_mode` (`api_key`, `oauth2_…`).
-  2. Field form — rendered dynamically from the kind's `fields` array:
-     - `is_secret: true` → `TextField` with `type="password"` and a show/hide toggle.
-     - `is_secret: false` → plain `TextField`.
-     - `description` → `helperText`.
-     - Name field at the top (free text, always present).
-  3. Submit → `POST /v0/orgs/{orgId}/credentials` → dialog closes, list refreshes.
-
-**API client additions** (in `packages/typescript/frontend/src/utils/api.ts` or the SDK):
-
-```typescript
-// GET /v0/orgs/{orgId}/credential-kinds
-async function listFlowCredentialKinds(orgId: string): Promise<CredentialKindSummary[]>
-
-// CRUD  — all under /v0/orgs/{orgId}/credentials
-async function listFlowCredentials(orgId: string): Promise<ListCredentialsResponse>
-async function createFlowCredential(orgId: string, req: CreateCredentialRequest): Promise<CredentialHeader>
-async function updateFlowCredential(orgId: string, credId: string, req: CreateCredentialRequest): Promise<CredentialHeader>
-async function deleteFlowCredential(orgId: string, credId: string): Promise<void>
-async function testFlowCredential(orgId: string, credId: string): Promise<TestCredentialResponse>
-```
-
-**No navigation change needed** — the tab appears on the existing flows page that users are already on when building flows.
-
-### 8.2 Flow editor: credential slot binding
-
-In the node configuration panel (the side panel that opens when a node is selected in the React Flow canvas), add a **Credentials** section below the node parameters form.
-
-The section appears only when the selected node type has one or more `credential_slots`.
-
-**Per slot:**
-
-- Label from `slot_def.label`.
-- MUI `Select` dropdown:
-  - Options: org credentials where `kind_key` matches the slot's `docrouter_binding` (strip the `organization_credential_kind:` prefix to get the kind key).
-  - Fetch `GET /v0/orgs/{orgId}/credentials` once and filter client-side by kind key.
-  - Option labels: `credential.name` (kind display name shown as subtitle).
-  - Placeholder: "Select credential…" for optional slots; "Required — select credential" for required ones.
-- "Manage credentials" link → navigates to `/orgs/{orgId}/flows?tab=credentials` (same page, different tab).
-
-**Saving bindings:** include the `credentials` map in the node's data when `PUT /v0/orgs/{orgId}/flows/{flowId}` is called (it is already included in the `nodes` array). No separate API call needed.
-
-**Node type metadata:** the flow editor needs access to each node type's `credential_slots`. The existing `GET /v0/orgs/{orgId}/flows/node-types` endpoint returns node type metadata; extend its response to include `credential_slots` from the node type object.
+1. Add a "Credentials" tab button to `packages/typescript/frontend/src/app/orgs/[organizationId]/flows/page.tsx`.
+2. Create `packages/typescript/frontend/src/components/flows/FlowCredentials.tsx` with:
+   - **List view:** table with columns **Name**, **Kind**, **Created**, **Actions** (Test / Edit / Delete).
+   - **"Add credential" button:** two-step dialog:
+     1. Kind picker from `GET .../credential-kinds`, grouped by `auth_mode`.
+     2. Field form rendered from `kind.fields`: `is_secret: true` → password input with show/hide; `description` → `helperText`. Name field always at top.
+   - Submit → `POST .../credentials` → dialog closes, list refreshes.
+3. Add SDK client methods (already partially in `docrouter-org.ts` — verify completeness):
+   - `listFlowCredentialKinds()`
+   - `listFlowCredentials({ credential_kind? })`
+   - `createFlowCredential(req)`
+   - `updateFlowCredential(credId, req)`
+   - `deleteFlowCredential(credId)`
+   - `testFlowCredential(credId)`
 
 ---
 
-## 9. Starter hand-authored kind files
+## 9. OAuth2 credential flow (not yet implemented)
 
-Check in these files first so the credential UI works end-to-end before any n8n import tooling exists.
-
-**File list:**
-
-```
-schemas/credential-kinds/
-├── slackApi.json           (see §2 example above)
-├── openAiApi.json          (see §2 example above)
-├── oAuth2Api.json          (base OAuth2 — see §2 and n8n_port_guide §7.4)
-├── googleOAuth2Api.json    (extends oAuth2Api — see n8n_port_guide §7.4)
-```
-
-Add more kinds by hand as integrations are prioritized, or auto-generate them via `tools/dump_credentials.js` + `tools/port_credentials.py` (n8n_port_guide §7.5, Phase B/C).
-
----
-
-## 10. OAuth2 credential flow (deferred)
-
-OAuth2 kinds (`auth_mode: "oauth2_authorization_code"`) require a browser redirect to the provider's consent screen and a server-side callback to exchange the code for tokens. This is different from API-key kinds, which are fully self-contained.
-
-Defer this until the API-key flow is working end-to-end. What is needed:
+OAuth2 kinds (`auth_mode: "oauth2_authorization_code"`) require a browser redirect to the provider's consent screen and a server-side callback to exchange the code for tokens.
 
 | Step | What to build |
 |---|---|
-| **Initiate** | `POST /v0/orgs/{orgId}/credentials/{credId}/oauth/initiate` — build the auth URL from `kind.oauth2.auth_url`, redirect the user's browser there with `state=<signed JWT encoding orgId+credId>` |
-| **Callback** | `GET /v0/callback/oauth` — validate `state`, POST to `kind.oauth2.token_url` with the code, store `access_token` + `refresh_token` into `encrypted_payload` alongside existing fields |
-| **Refresh** | Before each execution: check `exp` claim on `access_token`; if expired, POST to `token_url` with `refresh_token`, update `encrypted_payload`, continue |
-| **Frontend** | "Connect" button in the create form for OAuth2 kinds instead of a text field; polls for completion after redirect |
+| **Base kind file** | `schemas/credential-kinds/oAuth2Api.json` with `auth_url`, `token_url`, `runtime_fields` (`access_token`, `refresh_token`) |
+| **Initiate** | `POST /v0/orgs/{orgId}/credentials/{credId}/oauth/initiate` — build the auth URL, redirect user's browser with `state=<signed JWT encoding orgId+credId>` |
+| **Callback** | `GET /v0/callback/oauth` — validate `state`, POST to `token_url` with the code, store `access_token` + `refresh_token` into `encrypted_payload` |
+| **Refresh** | Before each execution: check expiry on `access_token`; if expired, POST to `token_url` with `refresh_token`, update `encrypted_payload` |
+| **Frontend** | "Connect" button in the create form for OAuth2 kinds; polls for completion after redirect |
 
 Until this is built:
-- OAuth2 credential instances can be created by manually supplying an `access_token` as a string field (treating it like an API key for testing purposes).
+- OAuth2 credential instances can be created by manually supplying an `access_token` as a string field (treating it like an API key for testing).
 - Mark OAuth2 kinds with `"status": "manual_token_only"` in the kind file so the UI can show a warning.
 
 ---
 
-## 11. Build order
+## 10. What is implemented vs. what remains
 
-Work in this order. Each step is independently testable.
+### Implemented (on `flows20` branch)
 
-**Phase 1 — Kind registry + stub API (backend only)**
+| Component | Status |
+|---|---|
+| Kind registry (`credential_kind_registry.py`) | Done — auto-discovers from `schemas/credential-kinds/` via `lru_cache` |
+| Kind files: `httpHeaderAuth`, `httpQueryAuth` | Done |
+| Credentials API (CRUD + test endpoint) | Done — all 7 routes in `flows_credentials.py` |
+| `credentials` MongoDB collection | Done — used by API; index not yet created |
+| Runtime resolver (`credentials.py` → `fetch_credential_fields`) | Done |
+| `ExecutionContext.credentials` field | Done |
+| HTTP Request node credential slots | Done — `httpHeaderAuth` and `httpQueryAuth` slots |
+| Engine binding validation | Done — validates slot names in `validate_revision()` |
+| Frontend: node config credential slot picker | Done — `flowNodeCredentialSlots.tsx` |
+| SDK TypeScript types for credentials | Done — `FlowCredentialSlot`, `FlowCredentialHeader`, etc. |
+| Tests | Done — `test_flow_credentials.py` |
 
-1. Write the starter kind JSON files: `slackApi.json`, `openAiApi.json`.
-2. Implement `packages/python/analytiq_data/flows/credential_kind_registry.py` (§3).
-3. Call `load_credential_kinds` in `main.py` startup.
-4. Create `packages/python/app/routes/flows_credentials.py` with:
-   - `GET /v0/orgs/{orgId}/credential-kinds`
-   - `POST /v0/orgs/{orgId}/credentials`
-   - `GET /v0/orgs/{orgId}/credentials`
-   - `DELETE /v0/orgs/{orgId}/credentials/{credId}`
-5. Create the MongoDB index on `credentials`.
-6. Verify with `curl` or the FastAPI `/docs` UI.
+### Not yet implemented
 
-**Phase 2 — Test endpoint**
+| Component | Notes |
+|---|---|
+| Frontend credentials management tab | `FlowCredentials.tsx` and "Credentials" tab in `page.tsx` not created |
+| Additional kind files | `slackApi`, `openAiApi`, `googleOAuth2Api`, etc. |
+| `extends` chain resolution in registry | Registry does not merge base + extension kinds |
+| SSRF guard in `/test` endpoint | `assert_http_url_allowed()` not called before the test httpx request |
+| MongoDB index on `credentials` | Compound `{ organization_id: 1, kind_key: 1 }` not yet created |
+| OAuth2 flow | Initiate / callback / refresh (see §9) |
 
-7. Add `POST /v0/orgs/{orgId}/credentials/{credId}/test` (§5.3).
-8. Test manually with a real Slack token.
+---
 
-**Phase 3 — Runtime injection**
+## 11. Build order for remaining work
 
-9. Add `credentials_resolver` field to `ExecutionContext` (§7.2).
-10. Implement `packages/python/analytiq_data/flows/credentials.py` (§7.1).
-11. Wire the resolver into the engine's node execution loop (§7.2).
-12. Add `context.credentials` so it is available to the `http_request_v1` executor when it is built.
+**Step 1 — Kind files**
 
-**Phase 4 — Flow bindings**
+Add additional kind JSON files under `schemas/credential-kinds/` as integrations are prioritized. They are picked up automatically without any code changes.
 
-13. Extend `GET /v0/orgs/{orgId}/flows/node-types` to include `credential_slots` per type.
-14. Include `credentials` in `SaveFlowRequest.nodes` (already transparent — `nodes` is `list[dict]`).
-15. Add binding validation in the execution path (§6.2).
+**Step 2 — SSRF guard in test endpoint**
 
-**Phase 5 — Frontend credentials tab**
+In `test_credential()` in `flows_credentials.py`, call `assert_http_url_allowed(url)` (from `analytiq_data.flows.url_ssrf_guard`) before the `httpx.AsyncClient.request()` call.
 
-16. Add "Credentials" tab button to `packages/typescript/frontend/src/app/orgs/[organizationId]/flows/page.tsx`.
-17. Create `packages/typescript/frontend/src/components/flows/FlowCredentials.tsx` — list + delete.
-18. Add the create dialog with kind picker and dynamic field form to `FlowCredentials`.
-19. Test end-to-end: open `/orgs/{orgId}/flows?tab=credentials`, create a Slack credential, list it, delete it.
+**Step 3 — MongoDB index**
 
-**Phase 6 — Frontend flow editor binding UI**
+Add a migration or startup check to ensure `{ organization_id: 1, kind_key: 1 }` index exists on `credentials`.
 
-20. Fetch `credential_slots` alongside node type metadata.
-21. Render the per-slot credential picker in the node config panel.
-22. Verify bindings survive a save/load round-trip.
+**Step 4 — Frontend credentials tab**
 
-**Phase 7 — OAuth2 (separate milestone)**
+See §8.2 above. Implement `FlowCredentials.tsx` and wire it into the flows page.
 
-23. Implement initiate + callback endpoints (§10).
-24. Add token refresh loop in the resolver (§7.1).
-25. Update the frontend create form for OAuth2 kinds.
+**Step 5 — `extends` registry support**
+
+If multi-level kind inheritance is needed (e.g. `googleOAuth2Api` extending `oAuth2Api`), add `_resolve(key, seen)` merge logic to `credential_kind_registry.py`.
+
+**Step 6 — OAuth2 (separate milestone)**
+
+See §9 above.

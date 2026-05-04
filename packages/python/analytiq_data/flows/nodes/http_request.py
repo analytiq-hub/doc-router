@@ -247,8 +247,6 @@ class FlowsHttpRequestNode:
             )
             raise RuntimeError(msg)
 
-        assert_http_url_allowed(url, purpose="HTTP Request")
-
         timeout = float(params.get("timeout_seconds") or 30)
         follow_redirects = bool(params.get("follow_redirects", True))
         never_error = bool(params.get("never_error", False))
@@ -314,10 +312,16 @@ class FlowsHttpRequestNode:
             content_type = str(params.get("body_content_type") or "text/plain")
             headers.setdefault("Content-Type", content_type)
 
+        async def _ssrf_guard_each_request(request: httpx.Request) -> None:
+            """Run SSRF blocklist on every outbound URL, including each redirect hop."""
+
+            assert_http_url_allowed(str(request.url), purpose="HTTP Request")
+
         try:
             async with httpx.AsyncClient(
                 timeout=timeout,
                 follow_redirects=follow_redirects,
+                event_hooks={"request": [_ssrf_guard_each_request]},
             ) as client:
                 resp = await client.request(
                     method=method,

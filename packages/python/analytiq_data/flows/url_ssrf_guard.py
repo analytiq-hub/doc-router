@@ -36,7 +36,9 @@ def assert_http_url_allowed(url: str, *, purpose: str = "HTTP Request") -> None:
     Resolve the request hostname and reject blocked addresses before ``httpx`` runs.
 
     Covers numeric IPs directly and all ``socket.getaddrinfo`` results for hostnames.
-    Redirect targets are not re-checked (see node ``follow_redirects``).
+
+    When used as an ``httpx.AsyncClient`` **request** event hook, every hop including redirects
+    is validated before the connection is opened.
     """
 
     parsed = urlparse(url)
