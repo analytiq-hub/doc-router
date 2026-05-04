@@ -213,7 +213,15 @@ credential_slots = [
 
 ---
 
-## 7. Runtime credential injection
+## 7. Code nodes and credentials
+
+Code nodes (`flows.code`) execute arbitrary user-supplied Python in a subprocess. Because decrypted credential values passed into that sandbox would be readable by whoever writes the flow — defeating the purpose of keeping secrets from non-admin users — **code nodes do not have credential slots and credentials are never injected into the subprocess context**.
+
+If a flow author needs to make an authenticated HTTP call from a code node, the correct pattern is to place an HTTP Request node (with the credential bound there) before the code node and pass the response data forward through normal item flow. The credential stays inside the trusted, auditable HTTP Request executor and is never visible to user-written code.
+
+---
+
+## 8. Runtime credential injection
 
 ### 7.1 Resolver utility
 
@@ -259,9 +267,9 @@ if qf:
 
 ---
 
-## 8. Frontend
+## 9. Frontend
 
-### 8.1 Node config panel — credential slot binding (implemented)
+### 9.1 Node config panel — credential slot binding (implemented)
 
 **File:** `packages/typescript/frontend/src/components/flows/flowNodeCredentialSlots.tsx`
 
@@ -274,7 +282,7 @@ if qf:
 
 The binding is saved as part of the node's data in the next `PUT` save.
 
-### 8.2 Credentials management tab (not yet implemented)
+### 9.2 Credentials management tab (not yet implemented)
 
 **Route:** `/orgs/[organizationId]/flows?tab=credentials`
 
@@ -299,7 +307,7 @@ The flows page (`page.tsx`) currently has two tabs: `flows` and `flow-create`. A
 
 ---
 
-## 9. OAuth2 credential flow (not yet implemented)
+## 10. OAuth2 credential flow (not yet implemented)
 
 OAuth2 kinds (`auth_mode: "oauth2_authorization_code"`) require a browser redirect to the provider's consent screen and a server-side callback to exchange the code for tokens.
 
@@ -317,7 +325,7 @@ Until this is built:
 
 ---
 
-## 10. What is implemented vs. what remains
+## 11. What is implemented vs. what remains
 
 ### Implemented (on `flows20` branch)
 
@@ -344,11 +352,11 @@ Until this is built:
 | `extends` chain resolution in registry | Registry does not merge base + extension kinds |
 | SSRF guard in `/test` endpoint | `assert_http_url_allowed()` not called before the test httpx request |
 | MongoDB index on `credentials` | Compound `{ organization_id: 1, kind_key: 1 }` not yet created |
-| OAuth2 flow | Initiate / callback / refresh (see §9) |
+| OAuth2 flow | Initiate / callback / refresh (see §10) |
 
 ---
 
-## 11. Build order for remaining work
+## 12. Build order for remaining work
 
 **Step 1 — Kind files**
 
@@ -372,4 +380,4 @@ If multi-level kind inheritance is needed (e.g. `googleOAuth2Api` extending `oAu
 
 **Step 6 — OAuth2 (separate milestone)**
 
-See §9 above.
+See §10 above.
