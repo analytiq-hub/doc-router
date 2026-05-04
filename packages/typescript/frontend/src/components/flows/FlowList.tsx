@@ -104,7 +104,7 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
               <th className={th}>Status</th>
               <th className={th}>Version</th>
               <th className={th}>Updated</th>
-              <th className={`${th} w-[140px] text-right`} aria-label="actions" />
+              <th className={`${th} w-[140px] text-right`}>Actions</th>
             </tr>
           </thead>
           <tbody>

@@ -1,11 +1,26 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
+import { Menu, MenuButton, MenuItem, MenuItems, MenuSeparator } from '@headlessui/react';
+import {
+  BeakerIcon,
+  EllipsisVerticalIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  PencilSquareIcon,
+  TrashIcon,
+} from '@heroicons/react/24/outline';
 import type { FlowCredentialHeader, FlowCredentialKindSummary } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
 import { useFlowApi } from './useFlowApi';
+import {
+  flowWorkspaceDropdownDividerClass,
+  flowWorkspaceDropdownItemClass,
+  flowWorkspaceDropdownItemDestructiveClass,
+  flowWorkspaceMenuPanelClass,
+  flowWorkspaceMenuTriggerIconBtnClass,
+} from './flowWorkspaceMenu';
 import { flowInputClass, flowLabelClass, flowSelectClass } from './flowUiClasses';
 
 type FieldRow = {
@@ -34,8 +49,6 @@ const btnPrimary =
   'rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50';
 const btnDanger =
   'rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50';
-const btnTable =
-  'rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
 
 function FlowModal({
   open,
@@ -305,7 +318,7 @@ const FlowCredentials: React.FC<{
               <th className={th}>Name</th>
               <th className={th}>Kind</th>
               <th className={th}>Created</th>
-              <th className={`${th} w-[280px]`}>Actions</th>
+              <th className={`${th} w-[140px] text-right`}>Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -331,38 +344,87 @@ const FlowCredentials: React.FC<{
                   <td className={`${td} font-medium`}>{row.name}</td>
                   <td className={td}>{kindLabel}</td>
                   <td className={td}>{formatLocalDate(row.created_at)}</td>
-                  <td className={td}>
-                    <div className="flex flex-wrap items-center gap-2">
+                  <td className={`${td} text-right`}>
+                    <div className="inline-flex max-w-full flex-wrap items-center justify-end gap-2">
                       {chip && (
                         <span
                           className={
                             chip.ok
-                              ? 'inline-flex max-w-[220px] truncate rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-900'
-                              : 'inline-flex max-w-[220px] truncate rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-900'
+                              ? 'inline-flex max-w-[min(220px,100%)] truncate rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-900'
+                              : 'inline-flex max-w-[min(220px,100%)] truncate rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-900'
                           }
                           title={chip.detail}
                         >
                           {chip.detail}
                         </span>
                       )}
-                      <button
-                        type="button"
-                        className={btnTable}
-                        disabled={testLoadingId === row.credential_id}
-                        onClick={() => void runTest(row)}
-                      >
-                        {testLoadingId === row.credential_id ? 'Test…' : 'Test'}
-                      </button>
-                      <button type="button" className={btnTable} onClick={() => openEdit(row)}>
-                        Edit
-                      </button>
-                      <button
-                        type="button"
-                        className={`${btnTable} border-red-200 text-red-700 hover:bg-red-50`}
-                        onClick={() => setDeleteRow(row)}
-                      >
-                        Delete
-                      </button>
+                      <div className="inline-flex shrink-0 items-center justify-end gap-0.5">
+                        <button
+                          type="button"
+                          title="Test connection"
+                          aria-label="Test connection"
+                          disabled={testLoadingId === row.credential_id}
+                          onClick={() => void runTest(row)}
+                          className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <BeakerIcon className="h-5 w-5" aria-hidden />
+                        </button>
+                        <button
+                          type="button"
+                          title="Edit"
+                          aria-label="Edit"
+                          onClick={() => openEdit(row)}
+                          className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100"
+                        >
+                          <PencilSquareIcon className="h-5 w-5" aria-hidden />
+                        </button>
+                        <Menu as="div" className="relative inline-flex">
+                          <MenuButton
+                            className={flowWorkspaceMenuTriggerIconBtnClass}
+                            title="More"
+                            aria-label="More"
+                          >
+                            <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
+                          </MenuButton>
+                          <MenuItems anchor="bottom end" portal className={flowWorkspaceMenuPanelClass}>
+                            <MenuItem>
+                              {({ focus }) => (
+                                <button
+                                  type="button"
+                                  disabled={testLoadingId === row.credential_id}
+                                  className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''} disabled:cursor-not-allowed disabled:opacity-50`}
+                                  onClick={() => void runTest(row)}
+                                >
+                                  <BeakerIcon className="h-4 w-4 shrink-0" aria-hidden /> Test
+                                </button>
+                              )}
+                            </MenuItem>
+                            <MenuItem>
+                              {({ focus }) => (
+                                <button
+                                  type="button"
+                                  className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                                  onClick={() => openEdit(row)}
+                                >
+                                  <PencilSquareIcon className="h-4 w-4 shrink-0" aria-hidden /> Edit
+                                </button>
+                              )}
+                            </MenuItem>
+                            <MenuSeparator className={flowWorkspaceDropdownDividerClass} />
+                            <MenuItem>
+                              {({ focus }) => (
+                                <button
+                                  type="button"
+                                  className={`${flowWorkspaceDropdownItemDestructiveClass} w-full ${focus ? 'bg-red-50' : ''}`}
+                                  onClick={() => setDeleteRow(row)}
+                                >
+                                  <TrashIcon className="h-4 w-4 shrink-0" aria-hidden /> Delete
+                                </button>
+                              )}
+                            </MenuItem>
+                          </MenuItems>
+                        </Menu>
+                      </div>
                     </div>
                   </td>
                 </tr>
