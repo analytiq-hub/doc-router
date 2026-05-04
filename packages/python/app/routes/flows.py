@@ -319,11 +319,30 @@ async def list_flows(
 ):
     db = await _get_db()
     total = await db.flows.count_documents({"organization_id": organization_id})
-    headers = await db.flows.find({"organization_id": organization_id}).sort([("updated_at", -1)]).skip(offset).limit(limit).to_list(limit)
+    pipeline = [
+        {"$match": {"organization_id": organization_id}},
+        {"$sort": {"updated_at": -1}},
+        {"$skip": offset},
+        {"$limit": limit},
+        {
+            "$lookup": {
+                "from": "flow_revisions",
+                "let": {"fid": {"$toString": "$_id"}},
+                "pipeline": [
+                    {"$match": {"$expr": {"$eq": ["$flow_id", "$$fid"]}}},
+                    {"$sort": {"flow_version": -1}},
+                    {"$limit": 1},
+                    {"$project": {"_id": 1, "flow_version": 1, "graph_hash": 1}},
+                ],
+                "as": "_latest",
+            }
+        },
+    ]
+    rows = await db.flows.aggregate(pipeline).to_list(limit)
     items: list[dict[str, Any]] = []
-    for h in headers:
+    for h in rows:
         fid = str(h["_id"])
-        latest = await db.flow_revisions.find_one({"flow_id": fid}, sort=[("flow_version", -1)])
+        latest = h["_latest"][0] if h.get("_latest") else None
         items.append(
             {
                 "flow": {
@@ -342,7 +361,11 @@ async def list_flows(
                     else h["updated_at"],
                     "updated_by": h["updated_by"],
                 },
-                "latest_revision": None if not latest else {"flow_revid": str(latest["_id"]), "flow_version": latest["flow_version"], "graph_hash": latest.get("graph_hash")},
+                "latest_revision": None if not latest else {
+                    "flow_revid": str(latest["_id"]),
+                    "flow_version": latest["flow_version"],
+                    "graph_hash": latest.get("graph_hash"),
+                },
             }
         )
     return {"items": items, "total": total}
@@ -472,8 +495,13 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
 
     ghash = ad.flows.canonical_graph_hash(nodes, req.connections, settings)
 
-    # No new revision when graph unchanged (name-only edit or full idempotent save).
-    if latest and latest.get("graph_hash") == ghash:
+    def _stable_pin_json(p: Any) -> str:
+        return json.dumps(p, sort_keys=True, separators=(",", ":"), default=str)
+
+    pin_same = latest is not None and _stable_pin_json(latest.get("pin_data")) == _stable_pin_json(pin_data)
+
+    # graph_hash excludes pin_data; require matching pin_data so pin-only edits still persist as a new revision.
+    if latest and latest.get("graph_hash") == ghash and pin_same:
         if req.name != h.get("name"):
             await db.flows.update_one(
                 {"_id": ObjectId(flow_id)},

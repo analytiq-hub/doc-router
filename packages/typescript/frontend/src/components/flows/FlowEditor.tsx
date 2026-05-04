@@ -359,6 +359,15 @@ const FlowEditor: React.FC<{
       const maxIn = inputHandleCount(dstType);
       if (inIdx < 0 || inIdx >= maxIn) return;
 
+      const duplicate = edges.some(
+        (e) =>
+          e.source === params.source &&
+          e.target === params.target &&
+          (e.sourceHandle ?? '') === (params.sourceHandle ?? '') &&
+          (e.targetHandle ?? '') === (params.targetHandle ?? ''),
+      );
+      if (duplicate) return;
+
       onEdgesChange(
         addEdge(
           {

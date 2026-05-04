@@ -86,6 +86,42 @@ async def test_execute_rejects_ssrf_loopback_before_http(http_node: FlowsHttpReq
 
 
 @pytest.mark.asyncio
+async def test_follow_redirect_rejected_when_location_is_blocked(
+    http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext,
+):
+    """Each redirect target is validated (blocks SSRF via Location to loopback)."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        u = str(request.url)
+        if u.startswith("http://8.8.8.8"):
+            return httpx.Response(302, headers={"location": "http://127.0.0.1/evil"}, request=request)
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        item = ad.flows.FlowItem(json={"x": 1}, binary={}, meta={}, paired_item=None)
+        with pytest.raises(RuntimeError, match="blocked"):
+            await http_node.execute(
+                minimal_ctx,
+                {
+                    "id": "n1",
+                    "parameters": {
+                        "method": "GET",
+                        "url": "http://8.8.8.8/start",
+                        "headers": [],
+                        "query_params": [],
+                        "body_mode": "none",
+                        "follow_redirects": True,
+                    },
+                },
+                [[item]],
+            )
+
+
+@pytest.mark.asyncio
 async def test_get_static_url(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
     transport = httpx.MockTransport(
         lambda request: httpx.Response(200, json={"ok": True}, request=request)
