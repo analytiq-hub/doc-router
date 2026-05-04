@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pymongo.errors import DuplicateKeyError
 from jsonschema import Draft7Validator
 from pydantic import BaseModel
 
@@ -61,6 +62,32 @@ class TestCredentialResponse(BaseModel):
     ok: bool
     status_code: int | None = None
     error: str | None = None
+
+
+_DUPLICATE_NAME_DETAIL = "A credential with this name already exists for this organization."
+
+
+def _normalize_credential_name(name: str) -> str:
+    """Trim whitespace; stored names use this form so uniqueness is predictable."""
+
+    return name.strip()
+
+
+async def _credential_name_taken(
+    db,
+    organization_id: str,
+    name: str,
+    *,
+    exclude_id: ObjectId | None = None,
+) -> bool:
+    norm = _normalize_credential_name(name)
+    if not norm:
+        return False
+    q: dict[str, Any] = {"organization_id": organization_id, "name": norm}
+    if exclude_id is not None:
+        q["_id"] = {"$ne": exclude_id}
+    doc = await db.credentials.find_one(q)
+    return doc is not None
 
 
 def _to_header(doc: dict[str, Any], kind: dict[str, Any]) -> CredentialHeader:
@@ -144,21 +171,30 @@ async def create_credential(
         except Exception as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
+    norm_name = _normalize_credential_name(req.name)
+    if not norm_name:
+        raise HTTPException(status_code=422, detail="Credential name cannot be empty")
+
     encrypted = ad.crypto.encrypt_token(json.dumps(req.fields))
     now = datetime.now(UTC)
     db = ad.common.get_async_db()
-    res = await db.credentials.insert_one(
-        {
-            "organization_id": organization_id,
-            "kind_key": req.kind_key,
-            "name": req.name,
-            "encrypted_payload": encrypted,
-            "created_at": now,
-            "created_by": current_user.user_id,
-            "updated_at": now,
-            "updated_by": current_user.user_id,
-        }
-    )
+    if await _credential_name_taken(db, organization_id, norm_name):
+        raise HTTPException(status_code=409, detail=_DUPLICATE_NAME_DETAIL)
+    try:
+        res = await db.credentials.insert_one(
+            {
+                "organization_id": organization_id,
+                "kind_key": req.kind_key,
+                "name": norm_name,
+                "encrypted_payload": encrypted,
+                "created_at": now,
+                "created_by": current_user.user_id,
+                "updated_at": now,
+                "updated_by": current_user.user_id,
+            }
+        )
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail=_DUPLICATE_NAME_DETAIL) from None
     doc = await db.credentials.find_one({"_id": res.inserted_id})
     if not doc:
         raise HTTPException(status_code=500, detail="Failed to read credential after insert")
@@ -246,19 +282,28 @@ async def update_credential(
         except Exception as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
+    norm_name = _normalize_credential_name(req.name)
+    if not norm_name:
+        raise HTTPException(status_code=422, detail="Credential name cannot be empty")
+    if await _credential_name_taken(db, organization_id, norm_name, exclude_id=oid):
+        raise HTTPException(status_code=409, detail=_DUPLICATE_NAME_DETAIL)
+
     encrypted = ad.crypto.encrypt_token(json.dumps(req.fields))
     now = datetime.now(UTC)
-    await db.credentials.update_one(
-        {"_id": oid},
-        {
-            "$set": {
-                "encrypted_payload": encrypted,
-                "name": req.name,
-                "updated_at": now,
-                "updated_by": current_user.user_id,
-            }
-        },
-    )
+    try:
+        await db.credentials.update_one(
+            {"_id": oid},
+            {
+                "$set": {
+                    "encrypted_payload": encrypted,
+                    "name": norm_name,
+                    "updated_at": now,
+                    "updated_by": current_user.user_id,
+                }
+            },
+        )
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail=_DUPLICATE_NAME_DETAIL) from None
     doc = await db.credentials.find_one({"_id": oid})
     if not doc:
         raise HTTPException(status_code=500, detail="Credential missing after update")
