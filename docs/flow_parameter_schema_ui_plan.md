@@ -17,10 +17,9 @@ This document describes how **all** node parameter editors share a **single sche
 | Backend validation at save time | **Removed** — Draft7Validator no longer runs on raw (pre-resolution) params |
 | Backend validation at execution time | Done — `_validate_resolved_params()` runs after `resolve_parameters()` in all three execution paths |
 | Pair-list `value` schema | `{}` (any type) — expressions resolve to any Python type; node coerces to string |
-| Expression preview in UI | Done (debounced `POST …/preview-expression` + `FlowExpressionPreviewLine`; request includes **`nodes`** so `_node` matches execute — §9) |
-| Expression variables: `_json` / `_binary` / `_node` / … (see §9) | **Done** — name-keyed `_node['Display'].json` / `.output[slot].json` (backend); **`_items`** remains id-keyed (`materialize_node_data`); editor rewrites `_node[…]` on rename/delete (**§9.6**) |
+| Expression preview in UI | Done (debounced `POST …/preview-expression` + `FlowExpressionPreviewLine`; request includes **`nodes`** so `_node` matches execute — §8) |
+| Expression variables: `_json` / `_binary` / `_node` / … (see §8) | **Done** — name-keyed `_node['Display'].json` / `.output[slot].json` (backend); **`_items`** remains id-keyed (`materialize_node_data`); editor rewrites `_node[…]` on rename/delete (**§8.6**) |
 | `flows.http_request` on generic schema path | Done |
-| Phase D read-only audit | Partial (optional) |
 
 ---
 
@@ -142,24 +141,7 @@ Port-converted nodes (from n8n via `port/schema.py`): `_apply_inode_ui_extension
 
 ---
 
-## 6. Remaining work
-
-Phases A–C (generic renderer, HTTP node on schema path) are complete. Frontend AJV validation (formerly Phase E) has been removed in favour of runtime evaluation.
-
-### Expression preview (shipped)
-
-The modal shows debounced inline previews for `=` parameters via **`POST /v0/orgs/{org_id}/flows/preview-expression`** (`PreviewFlowExpressionRequest`: `expression`, `run_data`, `input_items`, `preview_item_index`, **`nodes`** (revision nodes for `_node`), `execution_refs`). **`FlowExpressionPreviewLine`** calls the org SDK; **`FlowNodeConfigModal`** passes **`allNodes`** into the preview context.
-
-Optional future work: a dedicated “evaluate only” endpoint name or richer error UX — not required for parity with execute-time evaluation.
-
-### Phase D — Hardening (optional)
-
-- **Read-only mode:** spot-check all widget branches for consistent non-editable rendering.
-- **Empty schema:** keep current "No parameters for this node type." message.
-
----
-
-## 7. Testing
+## 6. Testing
 
 | Layer | What | Status |
 |-------|------|--------|
@@ -167,41 +149,28 @@ Optional future work: a dedicated “evaluate only” endpoint name or richer er
 | Python | `x-ui-*` keys present on HTTP node schema; `list(props.keys())` order | Done (`test_flow_http_request_node.py`) |
 | Python | Port converter maps `placeholder`, `code` type, `displayOptions.show` to `x-ui-*` | Done (`test_flow_port_schema_display.py`) |
 | Python | E2E flow run with expressions in pair-list values | Done (`test_flows_e2e.py`) |
-| Manual | Phase C QA checklist (below) | Due before merge |
-
-**Phase C manual QA checklist:**
-
-- [ ] GET request: URL field, query params add/remove, drag IO value into query param value cell
-- [ ] POST `json_keypair`: body params add/remove, drag IO value into body param value cell
-- [ ] POST `json`: `body_json` appears; switching mode clears `body_json`
-- [ ] POST `raw`: `body_raw` and `body_content_type` appear; switching mode clears both
-- [ ] POST `form_urlencoded`: body params list appears
-- [ ] `none` body mode: no body fields visible
-- [ ] `full_response`, `never_error`, `follow_redirects` boolean switches render and toggle
-- [ ] `timeout_seconds` number input renders and saves
-- [ ] Header auth credential slot visible and bindable
-- [ ] Read-only mode: all fields non-editable, switches render as text
-- [ ] Code node unaffected: Monaco editor still renders for `python_code`
+| Python | Expression / `_node` / preview (`revision_nodes`) | Done (`tests_flow/test_expressions.py`) |
+| TS | `_node` string rewrite helpers | Done (`flowExpressionNodeRefs.spec.ts`) |
 
 ---
 
-## 8. Risks and mitigations
+## 7. Risks and mitigations
 
 | Risk | Mitigation |
 |------|------------|
 | Schema/UI drift | Single schema from API; `x-ui-*` only adds presentation — validation unchanged. |
 | `x-ui-show-when` too weak | Supports `field` + `in` / `equals`; extend later (`not`, nested paths) if needed. |
-| Drag-drop regression in pair lists | `FlowNameValueListField` handles both name and value cells; Phase C checklist covers each. |
+| Drag-drop regression in pair lists | `FlowNameValueListField` handles both name and value cells; regression-test HTTP flows manually when touching drag handlers. |
 | Expression errors silent until run | Mitigated where upstream **`run_data`** / INPUT preview exists — **`preview-expression`** surfaces errors; empty graph still needs a run for sample data. |
 | Post-resolution validation too strict | Pair-list `value` fields use `{}` schema; node coerces to `str` internally. Other type constraints are correct post-resolution. |
 
 ---
 
-## 9. Expression context variables (`_json`, `_binary`, `_input`, `_node`)
+## 8. Expression context variables (`_json`, `_binary`, `_input`, `_node`)
 
 Parameters may contain strings starting with `=`. The remainder is evaluated as a **restricted Python expression** (`packages/python/analytiq_data/flows/expressions.py`). The engine injects a small set of **top-level names** into the eval environment. Authors and the UI use those names **verbatim** (leading underscore) — there is **no** `$json`-style alias layer; `$` tokens are not rewritten.
 
-### 9.1 Canonical semantics
+### 8.1 Canonical semantics
 
 | Name | Meaning |
 |------|--------|
@@ -212,9 +181,9 @@ Parameters may contain strings starting with `=`. The remainder is evaluated as 
 
 **Why underscore:** these names are valid Python identifiers and match the keys injected into `eval(..., env)` (`_json`, `_binary`, `_node`, `_input`, …).
 
-**Node names as keys:** `validate_revision` requires **unique** `nodes[].name`. That makes `_node['My HTTP Request']` unambiguous. **Stable node `id`** remains the technical key for graph edges, `run_data`, and storage (see §9.6).
+**Node names as keys:** `validate_revision` requires **unique** `nodes[].name`. That makes `_node['My HTTP Request']` unambiguous. **Stable node `id`** remains the technical key for graph edges, `run_data`, and storage (see §8.7).
 
-### 9.2 Implementation status (backend + UI)
+### 8.2 Implementation status (backend + UI)
 
 | Topic | Status |
 |------|--------|
@@ -224,35 +193,23 @@ Parameters may contain strings starting with `=`. The remainder is evaluated as 
 | **`_items`** | Still **`materialize_node_data(run_data)`** — **id-keyed** JSON rows (for authors who want stable id-based access). |
 | **`revision_nodes` / `nodes` in preview** | **`ExecutionContext.revision_nodes`**, engine + **`http_request`** pass through **`resolve_parameters`**; preview API + SDK + modal send **`nodes`**. |
 
-### 9.3 Phased implementation (completed)
+### 8.3 Implementation notes
 
-**Phase A — Naming in UI strings**  
-- Context panel, IO drag-insert, tests use **`_json`** / **`_binary`** / **`_input`** / **`_node`** / **`_execution`** / **`_item`** / **`_items`** — no `$` rewrite.
+- **Eval / UI:** Injected names only — no `$` aliases. Drag and Context use **`_json`**, **`_binary`**, **`_input`**, **`_node`**, **`_execution`**, **`_item`**, **`_items`**.
+- **Backend:** `materialize_node_outputs_by_name` and related proxies in `expressions.py`; **`revision_nodes`** on **`ExecutionContext`** and all **`resolve_parameters`** call sites (**`run_flow`**, **`http_request`**). When **`item_index`** is unset (merge/batch), **`_node[…].json`** / **`.binary`** raise **`ExpressionError`** — see §8.4–§8.5.
+- **Preview:** **`POST …/preview-expression`** takes **`nodes`**; org SDK and **`FlowNodeConfigModal`** pass the current revision.
+- **Editor:** **`flowExpressionNodeRefs.ts`** + **`FlowEditor`**: debounced rewrites on rename, sentinel substitution on delete (**§8.6**).
 
-**Phase B — Backend (shipped)**  
-- **`materialize_node_outputs_by_name`**, **`_SlotOutputView`**, **`_NamedNodeExprRoot`** in `packages/python/analytiq_data/flows/expressions.py`.  
-- **`eval_expression` / `resolve_parameters` / `preview_parameter_expression`** accept **`revision_nodes`**.  
-- Merge/batch resolution: **`item_index`** unset → accessing **`.json` / `.binary`** on **`_node`** raises **`ExpressionError`** (see §9.4–§9.5).
-
-**Phase C — Call-site threading (shipped)**  
-- **`run_flow`** sets **`context.revision_nodes`**; **`engine`** and **`flows.http_request`** pass **`revision_nodes`** into **`resolve_parameters`**.  
-- **`preview-expression`** + TypeScript SDK **`nodes`** field; **`FlowExpressionPreviewLine`** sends revision nodes from the modal.
-
-**Phase D — Tests / QA**  
-- Python: **`tests_flow/test_expressions.py`** covers name-keyed `_node`, preview with **`revision_nodes`**, merge **`item_index`** behavior.  
-- Frontend: **`flowExpressionNodeRefs.spec.ts`** for rewrite helpers.  
-- Manual: rename/delete covered by editor sync (**§9.6**).
-
-### 9.4 Decided semantics (name-keyed `_node`)
+### 8.4 Decided semantics (name-keyed `_node`)
 
 - **Item alignment:** If **`_node['Name'].output[slot]`** (backed by **`main[slot]`**) has **fewer than `item_index + 1` items**, treat as **error** (deterministic failure; no `None`, clamp, or last-item fallback).
 - **Output API:** Use **`_node['Name'].output[slot_no].json`** / **`.binary`**. **Equivalence:** **`_node['Name'].output[0]`** is the same as **`_node['Name']`**; therefore **`_node['Name'].json`** means **`_node['Name'].output[0].json`** (and the same for **`.binary`**). Other slots use **`_node['Name'].output[1].json`**, etc.
 
-### 9.5 Merge / batch vs `_node` row access
+### 8.5 Merge / batch vs `_node` row access
 
 For nodes that resolve parameters **once** with **`item_index` unset** (merge and other batch paths), **`_node['…'].json`** / **`.binary`** are **not** available — use **`_input['all']`**, **`_items`** (id-keyed), or expressions that do not read row-scoped prior-node output. Per-item nodes align **`item_index`** with the current row as today.
 
-### 9.6 Editor: keep `_node[…]` strings in sync (frontend)
+### 8.6 Editor: keep `_node[…]` strings in sync (frontend)
 
 Expression parameters are plain text; renames would otherwise **orphan** `_node['Old Name']` references (cf. n8n `Workflow.renameNodeInParameterValue`).
 
@@ -264,11 +221,11 @@ Expression parameters are plain text; renames would otherwise **orphan** `_node[
 
 Display name rule matches the backend: **trimmed `name`**, else **`node.id`** (unnamed nodes use **`id`** inside **`_node[…]`** in dragged hints and rewrites).
 
-### 9.7 Why node `id` remains
+### 8.7 Why node `id` remains
 
 **Name** is the primary handle in **`_node['…']`** for humans; **`id`** is still required as the **stable** key for **`run_data`**, connections, execution continuity across **renames**, React Flow **`source`/`target`**, and **`_items[node_id]`**. The engine joins **`run_data[id]`** to **`node_name(revision_node)`** to build name-keyed **`_node`**.
 
-### 9.8 Worked example: `.json` vs other output slots
+### 8.8 Worked example: `.json` vs other output slots
 
 Imagine an upstream node whose **canvas name** is **`Parse`**. After it runs, the engine stores (conceptually) two output wires:
 
@@ -284,10 +241,3 @@ You are configuring a downstream node that runs **once per inbound row** on the 
 
 The **`.json` / `.binary` shortcuts never mean slot 1**. To read the “errors” wire use **`_node['Parse'].output[1].json`** (first row of slot 1 when **`item_index == 0`**), or **`_node['Parse'].output[1]`** then **`.json`** / **`.binary`** for the current **`item_index`** row. Out-of-range indices fail with **`ExpressionError`**, same as other lane faults.
 
----
-
-## 10. Open decisions
-
-- Freeze the `x-ui-*` keyword set before widespread use in ported node schemas.
-- Whether to validate on every per-item execution or only the first item (current: first item only, to avoid redundant work when all items share the same parameter structure).
-- Optional: backend **`ExpressionError`** message when authors reference **`__docrouter_removed_node__`** (sentinel after node deletion in the editor).
