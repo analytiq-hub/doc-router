@@ -30,7 +30,7 @@ export const FlowNameValueListField: React.FC<{
   label: string;
   value: unknown;
   readOnly: boolean;
-  /** Modal node id — used to choose `_json` vs `_node[…].json` when dropping from IO. */
+  /** Modal node id — `_json` only when the drag payload is this node's `nodeInput`; upstream outputs use `_node[…].json`. */
   configuringNodeId?: string;
   expressionPreview?: ExpressionPreviewContext | null;
   onChange: (next: NameValuePair[]) => void;

@@ -15,6 +15,23 @@ function hasPinMainLane(pin: FlowPinNodeOutput | null | undefined): pin is FlowP
   return pin != null && typeof pin === 'object' && 'main' in pin && Array.isArray(pin.main);
 }
 
+/**
+ * Merge revision pin outputs into the execution `run_data` shape so backend `_node[…]` preview
+ * matches the INPUT panel (which prefers pin over `run_data` per {@link upstreamOutputItemsPreview}).
+ */
+export function runDataMergedWithPins(
+  runData: RunData,
+  pinData: FlowPinData | null | undefined,
+): Record<string, unknown> {
+  const out = { ...(runData ?? {}) } as Record<string, unknown>;
+  if (!pinData) return out;
+  for (const [nodeId, pin] of Object.entries(pinData)) {
+    if (!hasPinMainLane(pin)) continue;
+    out[nodeId] = { status: 'success', data: pin };
+  }
+  return out;
+}
+
 /** All `.json` values from output lane `main[0]` for a node's run entry. */
 export function laneMain0ItemsJson(runEntry: unknown): unknown[] {
   if (!runEntry || typeof runEntry !== 'object') return [];

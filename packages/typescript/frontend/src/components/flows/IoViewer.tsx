@@ -60,8 +60,10 @@ function appendPathToExpr(base: string, path: JsonPath): string {
  * Upstream output fields use name-keyed ``_node`` (Python): ``_node[<display>].json`` for slot 0 or
  * ``_node[<display>].output[slot].json``, matching ``materialize_node_outputs_by_name`` at execute time.
  *
- * When configuring node `configuringNodeId`, drags whose payload references a **different** node id (upstream on the
- * left) or **`nodeInput`** use `_json`, i.e. the current inbound item (`item.json`), which matches the schema preview for that edge.
+ * When configuring node `configuringNodeId`:
+ * - **`source === 'nodeInput'`** and **`nodeId === configuringNodeId`** → **`_json`** (this node's inbound item row).
+ * - **`source === 'nodeOutput'`** (any node, including upstream) → **`_node[display].json`** so the expression names the
+ *   node whose preview you dragged from — not `_json`, which would lose which upstream produced the field when multiple exist.
  *
  * `@param outputSlotIndex` defaults to first output handle (matches current single-slot wiring in the modal).
  */
@@ -74,11 +76,12 @@ export function payloadToExpression(
     return `=${appendPathToExpr(p.varName, p.path)}`;
   }
 
-  const inbound =
+  const useInboundJson =
     configuringNodeId != null &&
-    (p.source === 'nodeInput' || p.nodeId !== configuringNodeId);
+    p.source === 'nodeInput' &&
+    p.nodeId === configuringNodeId;
 
-  if (inbound) {
+  if (useInboundJson) {
     return `=${appendPathToExpr('_json', p.path)}`;
   }
 

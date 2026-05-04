@@ -26,7 +26,7 @@ import type { FlowNode, FlowNodeType, FlowPinData, FlowPinItem, FlowPinNodeOutpu
 import type { DocRouterOrgApi } from '@/utils/api';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
 import { FlowNodeCredentialSlots } from './flowNodeCredentialSlots';
-import { buildNodeInputPreview, buildNodeOutputPreview } from './flowNodeIoPreview';
+import { buildNodeInputPreview, buildNodeOutputPreview, runDataMergedWithPins } from './flowNodeIoPreview';
 import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
 import { FlowInputUpstreamList } from './FlowInputUpstreamList';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
@@ -224,7 +224,7 @@ const FlowNodeConfigModal: React.FC<{
     );
     return {
       flowOrgApi,
-      runData: (runData ?? {}) as Record<string, unknown>,
+      runData: runDataMergedWithPins(runData, typedPinData),
       inputItems,
       previewItemIndex: expressionPreviewItemIndex,
       onPreviewItemIndexChange: setExpressionPreviewItemIndex,
@@ -243,6 +243,7 @@ const FlowNodeConfigModal: React.FC<{
     node,
     flowOrgApi,
     runData,
+    typedPinData,
     inputPreview.slots,
     expressionPreviewItemIndex,
     nodeType?.key,
