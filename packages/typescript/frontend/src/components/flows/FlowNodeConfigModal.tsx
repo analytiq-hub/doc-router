@@ -237,6 +237,7 @@ const FlowNodeConfigModal: React.FC<{
               flow_revid: expressionExecution.flow_revid,
             }
           : undefined,
+      revisionNodes: (allNodes ?? []).map((n) => ({ ...n }) as Record<string, unknown>),
     };
   }, [
     node,
@@ -246,6 +247,7 @@ const FlowNodeConfigModal: React.FC<{
     expressionPreviewItemIndex,
     nodeType?.key,
     expressionExecution,
+    allNodes,
   ]);
 
   const pinnedForNode = nodeId ? (typedPinData?.[nodeId] ?? null) : null;
@@ -497,7 +499,11 @@ const FlowNodeConfigModal: React.FC<{
                           title="Input"
                           value={[]}
                           valueKind="executionItems"
-                          dragSource={{ nodeId: node.id, source: 'nodeInput' }}
+                          dragSource={{
+                            nodeId: node.id,
+                            source: 'nodeInput',
+                            ...((node.name ?? '').trim() ? { nodeDisplayName: (node.name ?? '').trim() } : {}),
+                          }}
                           expressionConfigNodeId={node.id}
                           defaultMode="schema"
                           mode={inputIoMode}
@@ -640,7 +646,11 @@ const FlowNodeConfigModal: React.FC<{
                     title={node.name || typeLabel}
                     value={outputValue ?? outputExecPreview.itemsJson ?? []}
                     valueKind="executionItems"
-                    dragSource={{ nodeId: node.id, source: 'nodeOutput' }}
+                    dragSource={{
+                      nodeId: node.id,
+                      source: 'nodeOutput',
+                      ...((node.name ?? '').trim() ? { nodeDisplayName: (node.name ?? '').trim() } : {}),
+                    }}
                     expressionConfigNodeId={node.id}
                     defaultMode="schema"
                     mode={outputIoMode}

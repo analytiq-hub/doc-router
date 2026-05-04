@@ -153,6 +153,9 @@ class PreviewFlowExpressionRequest(BaseModel):
     input_items: list[dict[str, Any]] = Field(default_factory=list)
     preview_item_index: int = Field(0, ge=0, le=50_000)
     execution_refs: dict[str, Any] | None = None
+    """Revision ``nodes`` for name-keyed ``_node`` in expressions (same shape as flow revision nodes)."""
+
+    nodes: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class PreviewFlowExpressionResponse(BaseModel):
@@ -208,6 +211,8 @@ async def preview_flow_expression(
     # Auth only (org scoped); evaluator is sandboxed in analytiq_data.
     if len(req.run_data) > 120:
         raise HTTPException(status_code=400, detail="run_data has too many node entries for preview")
+    if len(req.nodes) > 400:
+        raise HTTPException(status_code=400, detail="nodes list is too large for preview")
 
     val, err = ad.flows.preview_parameter_expression(
         req.expression,
@@ -215,6 +220,7 @@ async def preview_flow_expression(
         input_items_json=req.input_items,
         preview_item_index=req.preview_item_index,
         execution_refs=req.execution_refs,
+        revision_nodes=req.nodes,
     )
     if val is None and err is None:
         return PreviewFlowExpressionResponse(skipped=True, ok=True)

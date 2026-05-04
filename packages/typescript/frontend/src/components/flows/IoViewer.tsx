@@ -9,6 +9,8 @@ export type FlowValueDragPayload =
       kind: 'jsonPath';
       source: 'nodeOutput' | 'nodeInput';
       nodeId: string;
+      /** Canvas display name when non-empty; matches Python ``node_name`` (else expressions use ``nodeId``). */
+      nodeDisplayName?: string;
       path: JsonPath;
       exampleValue: unknown;
     }
@@ -55,8 +57,8 @@ function appendPathToExpr(base: string, path: JsonPath): string {
 /**
  * Build the `=` expression inserted when dragging a field from INPUT/OUTPUT previews.
  *
- * `_node[<id>]` is shaped like `materialize_node_data(run_data)` in the Python engine: `{ main: [[ {...}, … ], … ] }`
- * — there is no `.json`; item bodies sit under `main[slot][idx]`.
+ * Upstream output fields use name-keyed ``_node`` (Python): ``_node[<display>].json`` for slot 0 or
+ * ``_node[<display>].output[slot].json``, matching ``materialize_node_outputs_by_name`` at execute time.
  *
  * When configuring node `configuringNodeId`, drags whose payload references a **different** node id (upstream on the
  * left) or **`nodeInput`** use `_json`, i.e. the current inbound item (`item.json`), which matches the schema preview for that edge.
@@ -80,7 +82,11 @@ export function payloadToExpression(
     return `=${appendPathToExpr('_json', p.path)}`;
   }
 
-  const base = `_node["${p.nodeId}"]["main"][${outputSlotIndex}][0]`;
+  const display =
+    typeof p.nodeDisplayName === 'string' && p.nodeDisplayName.trim() !== '' ? p.nodeDisplayName.trim() : p.nodeId;
+  const keyLit = JSON.stringify(display);
+  const base =
+    outputSlotIndex === 0 ? `_node[${keyLit}].json` : `_node[${keyLit}].output[${outputSlotIndex}].json`;
   return `=${appendPathToExpr(base, p.path)}`;
 }
 
@@ -396,7 +402,7 @@ function SchemaFirstItemFields({
 export const IoViewer: React.FC<{
   title?: string;
   value: unknown;
-  dragSource: { nodeId: string; source: 'nodeOutput' | 'nodeInput' };
+  dragSource: { nodeId: string; source: 'nodeOutput' | 'nodeInput'; nodeDisplayName?: string };
   defaultMode?: 'schema' | 'table' | 'json';
   mode?: 'schema' | 'table' | 'json';
   onModeChange?: (next: 'schema' | 'table' | 'json') => void;
@@ -407,7 +413,7 @@ export const IoViewer: React.FC<{
   valueKind?: 'executionItems' | 'json';
   /** When true, only the schema/table/json body is rendered (parent supplies chrome). */
   hideHeader?: boolean;
-  /** When set, drag hints and payloads use inbound `_json` vs `_node[id].main…` consistently with the modal node. */
+  /** When set, drag hints and payloads use inbound `_json` vs `_node[…].json` consistently with the modal node. */
   expressionConfigNodeId?: string;
 }> = ({
   title,
@@ -475,10 +481,12 @@ export const IoViewer: React.FC<{
   }, [executionItems, value, valueKind]);
 
   const startDrag = (e: React.DragEvent, path: JsonPath) => {
+    const dn = dragSource.nodeDisplayName?.trim();
     const payload: FlowValueDragPayload = {
       kind: 'jsonPath',
       source: dragSource.source,
       nodeId: dragSource.nodeId,
+      ...(dn ? { nodeDisplayName: dn } : {}),
       path,
       exampleValue: getAtPath(schemaRoot ?? null, path),
     };
@@ -552,6 +560,9 @@ export const IoViewer: React.FC<{
                                 kind: 'jsonPath',
                                 source: dragSource.source,
                                 nodeId: dragSource.nodeId,
+                                ...(dragSource.nodeDisplayName?.trim()
+                                  ? { nodeDisplayName: dragSource.nodeDisplayName.trim() }
+                                  : {}),
                                 path: [c],
                                 exampleValue: null,
                               },

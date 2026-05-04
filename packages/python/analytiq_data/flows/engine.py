@@ -585,6 +585,7 @@ async def _execute_loop(
                             run_data=context.run_data,
                             input_context=ad.flows.materialize_input_context([]),
                             execution_refs=_execution_refs,
+                            revision_nodes=context.revision_nodes,
                         ),
                     }
                     _validate_resolved_params(resolved_node)
@@ -609,6 +610,7 @@ async def _execute_loop(
                             run_data=context.run_data,
                             input_context=ad.flows.materialize_input_context(wi.inputs),
                             execution_refs=_execution_refs,
+                            revision_nodes=context.revision_nodes,
                         ),
                     }
                     _validate_resolved_params(resolved_node)
@@ -633,6 +635,7 @@ async def _execute_loop(
                                         wi.inputs, input_index=slot_idx, item_index=item_idx
                                     ),
                                     execution_refs=_execution_refs,
+                                    revision_nodes=context.revision_nodes,
                                 ),
                             }
                             if slot_idx == 0 and item_idx == 0:
@@ -747,6 +750,8 @@ async def run_flow(
     pin_data: dict[str, Any] | None = revision.get("pin_data")
 
     validate_revision(nodes, connections, settings, pin_data)
+
+    context.revision_nodes = nodes
 
     nodes_by_id = {n["id"]: n for n in nodes}
     trigger = next(n for n in nodes if ad.flows.get(n["type"]).is_trigger)

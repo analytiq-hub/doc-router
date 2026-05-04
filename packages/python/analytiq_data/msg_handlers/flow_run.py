@@ -131,6 +131,7 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
         analytiq_client=analytiq_client,
         stop_requested=bool(exec_doc.get("stop_requested")),
         logger=logger,
+        revision_nodes=list(revision.get("nodes") or []),
     )
 
     try:

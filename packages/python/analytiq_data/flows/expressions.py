@@ -4,7 +4,8 @@ from __future__ import annotations
 Expression / templating helpers for flows.
 
 Only a small subset is implemented today:
-- `materialize_node_data(run_data)` used to expose prior node outputs as plain JSON.
+- `materialize_node_data(run_data)` exposes prior node outputs by **node id** (``_items`` in expressions).
+- Name-keyed ``_node`` uses ``materialize_node_outputs_by_name`` (revision ``nodes`` + ``item_index`` row).
 - Expression evaluation and parameter resolution (`resolve_parameters`) for `=`-prefixed strings (Python using injected names such as ``_json``, ``_node`` — no ``$`` aliases).
 - A guarded AST whitelist; function calls must be bare names allowlisted in ``_SAFE_CALL_IDS``
   (e.g. ``str(...)``, ``len(...)``)—not arbitrary methods or lambdas.
@@ -201,6 +202,145 @@ def materialize_input_context(
     }
 
 
+def _json_from_flow_cell(cell: Any) -> Any:
+    if isinstance(cell, ad.flows.FlowItem):
+        return cell.json
+    if isinstance(cell, dict):
+        ji = cell.get("json")
+        if isinstance(ji, dict):
+            return ji
+        return cell
+    return {}
+
+
+def _binary_from_flow_cell(cell: Any) -> dict[str, Any]:
+    if isinstance(cell, ad.flows.FlowItem):
+        return _materialize_binary(cell.binary or {})
+    if isinstance(cell, dict):
+        b = cell.get("binary")
+        if not isinstance(b, dict):
+            return {}
+        out: dict[str, Any] = {}
+        for k, v in b.items():
+            if isinstance(v, ad.flows.BinaryRef):
+                out[k] = {
+                    "mime_type": v.mime_type,
+                    "file_name": v.file_name,
+                    "data": None,
+                    "storage_id": v.storage_id,
+                }
+            elif isinstance(v, dict):
+                out[k] = {
+                    kk: v.get(kk)
+                    for kk in ("mime_type", "file_name", "data", "storage_id")
+                    if kk in v
+                }
+            else:
+                out[k] = v
+        return out
+    return {}
+
+
+class _SlotOutputView:
+    """Per output slot: ``.json`` / ``.binary`` for the current ``item_index`` row."""
+
+    def __init__(self, lane: list[Any], *, item_index: int | None):
+        self._lane = lane
+        self._item_index = item_index
+
+    @property
+    def json(self) -> Any:
+        ii = self._item_index
+        if ii is None:
+            raise ExpressionError(
+                "_node[...].output[...].json is not available when item_index is unset "
+                "(batch/merge parameter resolution). Use _input['all'], _items, or avoid row-scoped _node access."
+            )
+        if ii < 0 or ii >= len(self._lane):
+            raise ExpressionError(
+                f"_node output row index {ii} is out of range for this slot ({len(self._lane)} items)"
+            )
+        return _json_from_flow_cell(self._lane[ii])
+
+    @property
+    def binary(self) -> dict[str, Any]:
+        ii = self._item_index
+        if ii is None:
+            raise ExpressionError(
+                "_node[...].output[...].binary is not available when item_index is unset "
+                "(batch/merge parameter resolution). Use _input['all'], _items, or avoid row-scoped _node access."
+            )
+        if ii < 0 or ii >= len(self._lane):
+            raise ExpressionError(
+                f"_node output row index {ii} is out of range for this slot ({len(self._lane)} items)"
+            )
+        return _binary_from_flow_cell(self._lane[ii])
+
+
+class _OutputSlotsIndexer:
+    def __init__(self, slots: list[_SlotOutputView]):
+        self._slots = slots
+
+    def __getitem__(self, idx: int) -> _SlotOutputView:
+        if idx < 0 or idx >= len(self._slots):
+            raise ExpressionError(
+                f"_node output slot index {idx} is out of range (this node has {len(self._slots)} output slots in run_data)"
+            )
+        return self._slots[idx]
+
+
+class _NamedNodeExprRoot:
+    """Name-keyed upstream view: ``.json`` / ``.binary`` ≡ slot 0; ``.output[i]`` for other slots."""
+
+    def __init__(self, slot_views: list[_SlotOutputView]):
+        self._slots = slot_views
+
+    @property
+    def output(self) -> _OutputSlotsIndexer:
+        return _OutputSlotsIndexer(self._slots)
+
+    @property
+    def json(self) -> Any:
+        return self.output[0].json
+
+    @property
+    def binary(self) -> dict[str, Any]:
+        return self.output[0].binary
+
+
+def materialize_node_outputs_by_name(
+    revision_nodes: list[dict[str, Any]] | None,
+    run_data: dict[str, Any],
+    item_index: int | None,
+) -> dict[str, Any]:
+    """
+    Build the ``_node`` mapping for parameter expressions: **display name** → row/slot views.
+
+    Requires ``revision_nodes`` to map node ids to names; ``run_data`` supplies ``data.main`` lanes.
+    Row selection uses ``item_index`` (per-item mode); when it is ``None``, accessing ``.json`` / ``.binary``
+    on a slot raises ``ExpressionError`` (merge/batch resolution).
+    """
+
+    out: dict[str, Any] = {}
+    for n in revision_nodes or []:
+        if not isinstance(n, dict):
+            continue
+        nid = n.get("id")
+        if not isinstance(nid, str) or not nid:
+            continue
+        entry = run_data.get(nid)
+        if not isinstance(entry, dict):
+            continue
+        display = ad.flows.node_name(n)
+        data = entry.get("data") or {}
+        main = data.get("main") if isinstance(data, dict) else None
+        if not isinstance(main, list):
+            main = []
+        slot_views = [_SlotOutputView(s if isinstance(s, list) else [], item_index=item_index) for s in main]
+        out[display] = _NamedNodeExprRoot(slot_views)
+    return out
+
+
 def eval_expression(
     expr: str,
     *,
@@ -208,6 +348,7 @@ def eval_expression(
     run_data: dict[str, Any],
     input_context: dict[str, Any] | None = None,
     execution_refs: dict[str, Any] | None = None,
+    revision_nodes: list[dict[str, Any]] | None = None,
 ) -> Any:
     """
     Evaluate a single expression string (without leading '=') against the current item and run_data.
@@ -233,11 +374,16 @@ def eval_expression(
 
     refs = execution_refs if execution_refs is not None else {}
     src_start, src_exec_ms = timing_from_items_source_run(item, run_data)
+    row_ix: int | None = None
+    if input_context is not None:
+        raw_ix = input_context.get("item_index")
+        if raw_ix is not None:
+            row_ix = int(raw_ix)
     env = {
         **_safe_builtin_call_env(),
         "_json": (item.json if item is not None else {}),
         "_binary": (_materialize_binary(item.binary or {}) if item is not None else {}),
-        "_node": materialize_node_data(run_data),
+        "_node": materialize_node_outputs_by_name(revision_nodes, run_data, row_ix),
         "_execution": dict(refs) if refs else {},
         "_start_time": src_start,
         "_execution_time": src_exec_ms,
@@ -260,6 +406,7 @@ def resolve_parameters(
     run_data: dict[str, Any],
     input_context: dict[str, Any] | None = None,
     execution_refs: dict[str, Any] | None = None,
+    revision_nodes: list[dict[str, Any]] | None = None,
 ) -> Any:
     """
     Recursively resolve parameters, evaluating any string value that starts with '='.
@@ -273,16 +420,31 @@ def resolve_parameters(
                 run_data=run_data,
                 input_context=input_context,
                 execution_refs=execution_refs,
+                revision_nodes=revision_nodes,
             )
         return params
     if isinstance(params, list):
         return [
-            resolve_parameters(x, item=item, run_data=run_data, input_context=input_context, execution_refs=execution_refs)
+            resolve_parameters(
+                x,
+                item=item,
+                run_data=run_data,
+                input_context=input_context,
+                execution_refs=execution_refs,
+                revision_nodes=revision_nodes,
+            )
             for x in params
         ]
     if isinstance(params, dict):
         return {
-            k: resolve_parameters(v, item=item, run_data=run_data, input_context=input_context, execution_refs=execution_refs)
+            k: resolve_parameters(
+                v,
+                item=item,
+                run_data=run_data,
+                input_context=input_context,
+                execution_refs=execution_refs,
+                revision_nodes=revision_nodes,
+            )
             for k, v in params.items()
         }
     return params
@@ -353,6 +515,7 @@ def preview_parameter_expression(
     input_items_json: list[dict[str, Any]],
     preview_item_index: int = 0,
     execution_refs: dict[str, Any] | None = None,
+    revision_nodes: list[dict[str, Any]] | None = None,
 ) -> tuple[Any | None, str | None]:
     """
     Evaluate **one** parameter string for interactive UI preview.
@@ -381,6 +544,7 @@ def preview_parameter_expression(
                 run_data=run_data or {},
                 input_context=input_context,
                 execution_refs=execution_refs,
+                revision_nodes=revision_nodes,
             ),
             None,
         )

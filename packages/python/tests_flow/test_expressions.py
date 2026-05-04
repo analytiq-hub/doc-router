@@ -300,7 +300,7 @@ async def test_expression_resolves_node_from_prior_run_data() -> None:
     nodes = [
         _n("t1", "Start", "flows.trigger.manual", 0),
         _n("c1", "Code", "flows.code", 200, {"python_code": "def run(items, context):\n    return [{'x': items[0]['trigger']['x']}]\n", "timeout_seconds": 2}),
-        _n("e1", "Echo", "tests.echo_param", 400, {"value": "=_node['c1']['main'][0][0]['x']"}),
+        _n("e1", "Echo", "tests.echo_param", 400, {"value": "=_node['Code'].json['x']"}),
     ]
     conns = {
         "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="c1", connection_type="main", index=0)]]},
@@ -379,7 +379,7 @@ async def test_expression_can_see_pin_data_outputs_via_node() -> None:
     nodes = [
         _n("t1", "Start", "flows.trigger.manual", 0),
         _n("p1", "Pinned", "tests.echo_param", 200, {"value": "literal"}),
-        _n("e1", "Echo", "tests.echo_param", 400, {"value": "=_node['p1']['main'][0][0]['a']"}),
+        _n("e1", "Echo", "tests.echo_param", 400, {"value": "=_node['Pinned'].json['a']"}),
     ]
     conns = {
         "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="p1", connection_type="main", index=0)]]},
@@ -445,14 +445,69 @@ def test_preview_parameter_expression_resolves_json() -> None:
 def test_preview_parameter_expression_resolves_node_main_from_serialized_run_data() -> None:
     run_data = {"c1": {"status": "success", "data": {"main": [[{"json": {"x": 40}, "binary": {}}]]}}}
     val, err = ad.flows.preview_parameter_expression(
-        '=_node["c1"]["main"][0][0]["x"]',
+        '=_node["Code"].json["x"]',
         run_data=run_data,
         input_items_json=[{}],
         preview_item_index=0,
         execution_refs=None,
+        revision_nodes=[_n("c1", "Code", "flows.code", 0)],
     )
     assert err is None
     assert val == 40
+
+
+def test_eval_expression_errors_on_node_json_when_item_index_unset() -> None:
+    run_data = {
+        "c1": {
+            "status": "success",
+            "data": {"main": [[{"json": {"x": 1}, "binary": {}}]]},
+        }
+    }
+    rev = [_n("c1", "Code", "flows.code", 0)]
+    with pytest.raises(ad.flows.ExpressionError, match="item_index"):
+        ad.flows.eval_expression(
+            "_node['Code'].json['x']",
+            item=None,
+            run_data=run_data,
+            input_context={"all": [], "item": None, "input_index": None, "item_index": None},
+            revision_nodes=rev,
+        )
+
+
+@pytest.mark.asyncio
+async def test_merge_node_parameter_resolution_errors_on_node_json_without_item_index() -> None:
+    nodes = [
+        _n("t1", "Start", "flows.trigger.manual", 0),
+        _n("a1", "LaneA", "tests.set_x", 200, {"x": 1}),
+        _n("b1", "LaneB", "tests.set_x", 200, {"x": 2}),
+        _n("m1", "MergeEcho", "tests.merge_echo_param", 400, {"value": "=_node['LaneA'].json['x']"}),
+    ]
+    conns = {
+        "t1": {
+            "main": [
+                [
+                    ad.flows.NodeConnection(dest_node_id="a1", connection_type="main", index=0),
+                    ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0),
+                ]
+            ]
+        },
+        "a1": {"main": [[ad.flows.NodeConnection(dest_node_id="m1", connection_type="main", index=0)]]},
+        "b1": {"main": [[ad.flows.NodeConnection(dest_node_id="m1", connection_type="main", index=1)]]},
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    with pytest.raises(ad.flows.ExpressionError, match="item_index"):
+        await ad.flows.run_flow(context=ctx, revision={"nodes": nodes, "connections": conns, "settings": {}, "pin_data": None})
 
 
 def test_expression_allowlists_safe_builtin_calls_like_str() -> None:

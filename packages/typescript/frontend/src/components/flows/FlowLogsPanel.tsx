@@ -593,7 +593,11 @@ const FlowLogsPanel: React.FC<{
                                         <IoViewer
                                           value={selectedOutputPreview.itemsJson}
                                           valueKind="executionItems"
-                                          dragSource={{ nodeId: selectedNodeId, source: 'nodeOutput' }}
+                                          dragSource={{
+                                            nodeId: selectedNodeId,
+                                            source: 'nodeOutput',
+                                            nodeDisplayName: nodeLabel(nodes, selectedNodeId),
+                                          }}
                                           defaultMode="schema"
                                         />
                                       ) : null}
@@ -615,7 +619,11 @@ const FlowLogsPanel: React.FC<{
                                         <IoViewer
                                           value={selectedParametersValue}
                                           valueKind="json"
-                                          dragSource={{ nodeId: selectedNodeId, source: 'nodeInput' }}
+                                          dragSource={{
+                                            nodeId: selectedNodeId,
+                                            source: 'nodeInput',
+                                            nodeDisplayName: nodeLabel(nodes, selectedNodeId),
+                                          }}
                                           defaultMode="schema"
                                         />
                                       )}
@@ -635,7 +643,12 @@ const FlowLogsPanel: React.FC<{
                                                   title={`in ${s.slot} ← ${nodeLabel(nodes, s.fromNodeId)}`}
                                                   value={s.itemsJson}
                                                   valueKind="executionItems"
-                                                  dragSource={{ nodeId: selectedNodeId, source: 'nodeInput' }}
+                                                  dragSource={{
+                                                    nodeId: s.fromNodeId,
+                                                    source: 'nodeOutput',
+                                                    nodeDisplayName: nodeLabel(nodes, s.fromNodeId),
+                                                  }}
+                                                  expressionConfigNodeId={selectedNodeId}
                                                   defaultMode="schema"
                                                 />
                                               ))}

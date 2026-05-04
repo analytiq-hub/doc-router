@@ -36,6 +36,11 @@ import 'reactflow/dist/style.css';
 import './flows-canvas.css';
 
 import type { FlowExecution, FlowNode, FlowNodeType, FlowPinData } from '@docrouter/sdk';
+import {
+  flowCanvasDisplayName,
+  rewriteRfNodesDisplayRefsRemove,
+  rewriteRfNodesDisplayRefsRename,
+} from './flowExpressionNodeRefs';
 import type { DocRouterOrgApi } from '@/utils/api';
 import FlowNodePalette from './FlowNodePalette';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
@@ -242,6 +247,10 @@ const FlowEditor: React.FC<{
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const screenToFlowPointRef = useRef<((p: { x: number; y: number }) => { x: number; y: number }) | null>(null);
   const pendingEdgeInsertRef = useRef<EdgeInsertPayload | null>(null);
+  const nodesRef = useRef(nodes);
+  nodesRef.current = nodes;
+  const renameAnchorRef = useRef<Map<string, string>>(new Map());
+  const renameDebounceRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const runData = executionForIo?.run_data as Record<string, unknown> | undefined;
   const canvasEdges = useMemo(
     () => edgesWithRunDataItemCounts(toCanvasEdges(edges), runData, pinData ?? undefined),
@@ -308,6 +317,33 @@ const FlowEditor: React.FC<{
     return () => window.removeEventListener('keydown', onKey);
   }, [nodePaletteOpen, closePalette]);
 
+  useEffect(() => {
+    return () => {
+      for (const t of renameDebounceRef.current.values()) clearTimeout(t);
+      renameDebounceRef.current.clear();
+      renameAnchorRef.current.clear();
+    };
+  }, []);
+
+  const flushRenameRewrite = useCallback(
+    (nodeId: string) => {
+      const anchor = renameAnchorRef.current.get(nodeId);
+      renameAnchorRef.current.delete(nodeId);
+      const tid = renameDebounceRef.current.get(nodeId);
+      if (tid) {
+        clearTimeout(tid);
+        renameDebounceRef.current.delete(nodeId);
+      }
+      if (anchor === undefined) return;
+      const latest = nodesRef.current.find((n) => n.id === nodeId);
+      if (!latest) return;
+      const finalDisplay = flowCanvasDisplayName(latest.data.flowNode);
+      if (anchor === finalDisplay) return;
+      onNodesChange(rewriteRfNodesDisplayRefsRename(nodesRef.current, anchor, finalDisplay));
+    },
+    [onNodesChange],
+  );
+
   const onConnect = useCallback(
     (params: Connection) => {
       const outIdx = parseHandleIndex(params.sourceHandle, 'out-');
@@ -349,6 +385,11 @@ const FlowEditor: React.FC<{
   const onPatchNodeById = useCallback(
     (id: string, patch: Partial<FlowNode>) => {
       if (!id) return;
+      const prevRf = nodes.find((n) => n.id === id);
+      if (patch.name !== undefined && prevRf && !renameAnchorRef.current.has(id)) {
+        renameAnchorRef.current.set(id, flowCanvasDisplayName(prevRf.data.flowNode));
+      }
+
       const next = nodes.map((n) => {
         if (n.id !== id) return n;
         const flowNode = { ...n.data.flowNode, ...patch, parameters: patch.parameters ?? n.data.flowNode.parameters };
@@ -362,8 +403,49 @@ const FlowEditor: React.FC<{
         };
       });
       onNodesChange(next);
+
+      if (patch.name !== undefined && prevRf) {
+        const prevTimer = renameDebounceRef.current.get(id);
+        if (prevTimer) clearTimeout(prevTimer);
+        renameDebounceRef.current.set(
+          id,
+          setTimeout(() => {
+            renameDebounceRef.current.delete(id);
+            flushRenameRewrite(id);
+          }, 350),
+        );
+      }
     },
-    [nodeTypesByKey, nodes, onNodesChange],
+    [flushRenameRewrite, nodeTypesByKey, nodes, onNodesChange],
+  );
+
+  const handleRfNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      const removedIds = changes
+        .filter((c): c is NodeChange & { type: 'remove'; id: string } => c.type === 'remove')
+        .map((c) => c.id);
+      for (const rid of removedIds) {
+        const tid = renameDebounceRef.current.get(rid);
+        if (tid) clearTimeout(tid);
+        renameDebounceRef.current.delete(rid);
+        renameAnchorRef.current.delete(rid);
+      }
+      const applied = applyNodeChanges(changes, nodes);
+      if (removedIds.length === 0) {
+        onNodesChange(applied);
+        return;
+      }
+      let next = applied;
+      for (const rid of removedIds) {
+        const victim = nodes.find((n) => n.id === rid);
+        const d = victim ? flowCanvasDisplayName(victim.data.flowNode) : '';
+        if (d.length > 0) {
+          next = rewriteRfNodesDisplayRefsRemove(next, d);
+        }
+      }
+      onNodesChange(next);
+    },
+    [nodes, onNodesChange],
   );
 
   const insertNodeOnSplitEdge = useCallback(
@@ -604,7 +686,16 @@ const FlowEditor: React.FC<{
         );
       },
       onDeleteNode: (nodeId: string) => {
-        onNodesChange(nodes.filter((n) => n.id !== nodeId));
+        const tid = renameDebounceRef.current.get(nodeId);
+        if (tid) clearTimeout(tid);
+        renameDebounceRef.current.delete(nodeId);
+        renameAnchorRef.current.delete(nodeId);
+        const victim = nodes.find((n) => n.id === nodeId);
+        const removedDisplay = victim ? flowCanvasDisplayName(victim.data.flowNode) : '';
+        const remaining = nodes.filter((n) => n.id !== nodeId);
+        const nextNodes =
+          removedDisplay.length > 0 ? rewriteRfNodesDisplayRefsRemove(remaining, removedDisplay) : remaining;
+        onNodesChange(nextNodes);
         onEdgesChange(edges.filter((e) => e.source !== nodeId && e.target !== nodeId));
       },
       onOpenNodeSettings: (nodeId: string) => {
@@ -638,9 +729,7 @@ const FlowEditor: React.FC<{
               edges={canvasEdges}
               nodeTypes={rfCanvasNodeTypes}
               edgeTypes={rfCanvasEdgeTypes}
-              onNodesChange={(changes: NodeChange[]) => {
-                onNodesChange(applyNodeChanges(changes, nodes));
-              }}
+              onNodesChange={handleRfNodesChange}
               onEdgesChange={(changes: EdgeChange[]) => {
                 onEdgesChange(applyEdgeChanges(changes, edges));
               }}

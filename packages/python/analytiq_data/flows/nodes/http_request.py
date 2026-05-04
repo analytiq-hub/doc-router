@@ -242,6 +242,7 @@ class FlowsHttpRequestNode:
                 "flow_id": context.flow_id,
                 "flow_revid": context.flow_revid,
             },
+            revision_nodes=context.revision_nodes,
         )
 
         method = str(params.get("method") or "GET").upper()

@@ -170,6 +170,8 @@ export interface PreviewFlowExpressionParams {
   input_items?: Record<string, unknown>[];
   preview_item_index?: number;
   execution_refs?: Record<string, string | undefined>;
+  /** Revision nodes for name-keyed `_node` in expressions (same shape as flow revision `nodes`). */
+  nodes?: Record<string, unknown>[];
 }
 
 export interface PreviewFlowExpressionResponse {

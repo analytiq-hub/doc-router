@@ -17,8 +17,8 @@ This document describes how **all** node parameter editors share a **single sche
 | Backend validation at save time | **Removed** — Draft7Validator no longer runs on raw (pre-resolution) params |
 | Backend validation at execution time | Done — `_validate_resolved_params()` runs after `resolve_parameters()` in all three execution paths |
 | Pair-list `value` schema | `{}` (any type) — expressions resolve to any Python type; node coerces to string |
-| Expression preview in UI | Done (debounced `preview-expression` + `FlowExpressionPreviewLine`) |
-| Expression variables: `_json` / `_binary` / … (see §9) | **Partial** — no `$` aliases in eval; UI/drag use `_json`/`_binary`; name-keyed `_node['…'].json` still **planned** (§9.2–§9.3) |
+| Expression preview in UI | Done (debounced `POST …/preview-expression` + `FlowExpressionPreviewLine`; request includes **`nodes`** so `_node` matches execute — §9) |
+| Expression variables: `_json` / `_binary` / `_node` / … (see §9) | **Done** — name-keyed `_node['Display'].json` / `.output[slot].json` (backend); **`_items`** remains id-keyed (`materialize_node_data`); editor rewrites `_node[…]` on rename/delete (**§9.6**) |
 | `flows.http_request` on generic schema path | Done |
 | Phase D read-only audit | Partial (optional) |
 
@@ -146,15 +146,11 @@ Port-converted nodes (from n8n via `port/schema.py`): `_apply_inode_ui_extension
 
 Phases A–C (generic renderer, HTTP node on schema path) are complete. Frontend AJV validation (formerly Phase E) has been removed in favour of runtime evaluation.
 
-### Expression preview (next major feature)
+### Expression preview (shipped)
 
-When the node config modal is open and upstream `runData` or `pinData` is available, resolve `=expression` fields against that data and show the resolved value inline below the field. This requires:
+The modal shows debounced inline previews for `=` parameters via **`POST /v0/orgs/{org_id}/flows/preview-expression`** (`PreviewFlowExpressionRequest`: `expression`, `run_data`, `input_items`, `preview_item_index`, **`nodes`** (revision nodes for `_node`), `execution_refs`). **`FlowExpressionPreviewLine`** calls the org SDK; **`FlowNodeConfigModal`** passes **`allNodes`** into the preview context.
 
-1. A backend API endpoint (e.g. `POST /orgs/{org_id}/flows/evaluate-expression`) that accepts `{ expression, run_data, item_index }` and returns `{ result } | { error }`. The backend runs `eval_expression()` from `expressions.py`.
-2. Passing upstream run/pin data into `FlowNodeParameterFields` (already available in `FlowNodeConfigModal` via `runData`/`pinData` props).
-3. Showing a small gray preview text below expression-valued inputs, and a red error text if `eval_expression` fails.
-
-Expressions use Python syntax after a leading `=` (see **§9** for the canonical `_json` / `_node` model). They are evaluated server-side — a JavaScript port is not feasible for the full expression set.
+Optional future work: a dedicated “evaluate only” endpoint name or richer error UX — not required for parity with execute-time evaluation.
 
 ### Phase D — Hardening (optional)
 
@@ -196,7 +192,7 @@ Expressions use Python syntax after a leading `=` (see **§9** for the canonical
 | Schema/UI drift | Single schema from API; `x-ui-*` only adds presentation — validation unchanged. |
 | `x-ui-show-when` too weak | Supports `field` + `in` / `equals`; extend later (`not`, nested paths) if needed. |
 | Drag-drop regression in pair lists | `FlowNameValueListField` handles both name and value cells; Phase C checklist covers each. |
-| Expression errors silent until run | Expression preview API (planned) will surface errors at edit time when upstream data is available. |
+| Expression errors silent until run | Mitigated where upstream **`run_data`** / INPUT preview exists — **`preview-expression`** surfaces errors; empty graph still needs a run for sample data. |
 | Post-resolution validation too strict | Pair-list `value` fields use `{}` schema; node coerces to `str` internally. Other type constraints are correct post-resolution. |
 
 ---
@@ -205,7 +201,7 @@ Expressions use Python syntax after a leading `=` (see **§9** for the canonical
 
 Parameters may contain strings starting with `=`. The remainder is evaluated as a **restricted Python expression** (`packages/python/analytiq_data/flows/expressions.py`). The engine injects a small set of **top-level names** into the eval environment. Authors and the UI use those names **verbatim** (leading underscore) — there is **no** `$json`-style alias layer; `$` tokens are not rewritten.
 
-### 9.1 Canonical semantics (target)
+### 9.1 Canonical semantics
 
 | Name | Meaning |
 |------|--------|
@@ -216,48 +212,63 @@ Parameters may contain strings starting with `=`. The remainder is evaluated as 
 
 **Why underscore:** these names are valid Python identifiers and match the keys injected into `eval(..., env)` (`_json`, `_binary`, `_node`, `_input`, …).
 
-**Node names as keys:** `validate_revision` already requires **unique** `nodes[].name`. That makes `_node['My HTTP Request']` unambiguous once name-keyed `_node` is implemented. Renaming a node updates the key authors must use — same as renaming a symbol in code.
+**Node names as keys:** `validate_revision` requires **unique** `nodes[].name`. That makes `_node['My HTTP Request']` unambiguous. **Stable node `id`** remains the technical key for graph edges, `run_data`, and storage (see §9.6).
 
-### 9.2 Current behaviour vs target (gap)
+### 9.2 Implementation status (backend + UI)
 
-| Topic | Current | Target |
-|------|---------|--------|
-| Authoring syntax in UI / drag hints | **`_json`**, **`_binary`** in Context + IO drag (done) | Same; document **`_input`**, **`_node`** everywhere (`flows2.md`, HTTP docs). |
-| `$` aliases in eval | **Removed** — expressions are plain Python using injected names only. | No change. |
-| `_node` shape | `materialize_node_data(run_data)` is id-keyed with raw **`main[slot][row]`** lists | Name-keyed entries with **`.output[slot]`** views; **`_node['N']` ≡ `_node['N'].output[0]`**; **`.output[s].json` / `.binary`** at current **`item_index`**; **short lane → error**. |
-| Binary for prior nodes in `_node` | Not exposed per prior item in `_node` today (materialization is JSON-centric) | Define whether `.binary` is always present (empty map) or populated with the same ref-only shape as `_binary`; implement materialization accordingly. |
-| Eval context | `eval_expression(..., run_data, input_context)` has no revision `nodes` list | Building name-keyed `_node` needs **`id → name` map** (and possibly slot topology) from the **revision** at preview and execute time — **thread `nodes` (or a precomputed name index)** into `eval_expression` / `preview_parameter_expression` / `resolve_parameters` callers. |
+| Topic | Status |
+|------|--------|
+| Authoring / drag | **`_json`**, **`_binary`** in Context + IO drag; upstream output drags insert **`_node[JSON.stringify(displayName)].json`** (display name = trimmed canvas name, else node **`id`** — matches Python `node_name`). |
+| `$` aliases | **Not supported** — expressions use injected names only. |
+| **`_node` shape** | **`materialize_node_outputs_by_name`** in `expressions.py`: name-keyed proxies; **`_node['Name'].output[s].json` / `.binary`**; **`_node['Name']` ≡ slot 0**; lane shorter than **`item_index`** → **`ExpressionError`**. |
+| **`_items`** | Still **`materialize_node_data(run_data)`** — **id-keyed** JSON rows (for authors who want stable id-based access). |
+| **`revision_nodes` / `nodes` in preview** | **`ExecutionContext.revision_nodes`**, engine + **`http_request`** pass through **`resolve_parameters`**; preview API + SDK + modal send **`nodes`**. |
 
-### 9.3 Implementation plan (phased)
+### 9.3 Phased implementation (completed)
 
-**Phase A — Done for naming**  
-- Context panel, IO drag-insert, tests, and `expressions.py` user strings use **`_json`** / **`_binary`** / **`_input`** / **`_node`** / **`_execution`** / **`_item`** / **`_items`** — no `$` rewrite.
+**Phase A — Naming in UI strings**  
+- Context panel, IO drag-insert, tests use **`_json`** / **`_binary`** / **`_input`** / **`_node`** / **`_execution`** / **`_item`** / **`_items`** — no `$` rewrite.
 
-**Phase B — Backend: name-keyed `_node` shell (medium risk)**  
-1. Add a helper, e.g. `materialize_node_outputs_by_name(run_data, nodes: list[dict]) -> dict[str, Any]`, that:  
-   - Builds `node_id → name` from `nodes` (`ad.flows.node_name(n)` — align with engine uniqueness rules).  
-   - For each completed upstream node in `run_data`, maps **id-keyed** `materialize_node_data` rows into **name-keyed** entries.  
-2. For each upstream name, build a small **namespace object** (or equivalent) with **`.output`** indexed by slot: each **`output[s]`** resolves **`.json` / `.binary`** from **`run_data[..].data.main[s][item_index]`** (after materialization rules). If **`len(main[s]) <= item_index`**, raise **`ExpressionError`**. Implement **`_node['Name']` as alias for `_node['Name'].output[0]`** (same object or delegating proxy).  
-3. Replace the `_node` entry in `eval_expression`’s env with this structure in one release (no dual id/name layout).
+**Phase B — Backend (shipped)**  
+- **`materialize_node_outputs_by_name`**, **`_SlotOutputView`**, **`_NamedNodeExprRoot`** in `packages/python/analytiq_data/flows/expressions.py`.  
+- **`eval_expression` / `resolve_parameters` / `preview_parameter_expression`** accept **`revision_nodes`**.  
+- Merge/batch resolution: **`item_index`** unset → accessing **`.json` / `.binary`** on **`_node`** raises **`ExpressionError`** (see §9.4–§9.5).
 
-**Phase C — Call-site threading (medium risk)**  
-- **Engine:** when calling `resolve_parameters`, pass the revision’s `nodes` (or a compact map) into `eval_expression` / `resolve_parameters` so Phase B can run.  
-- **Preview API** (`preview-expression` route) and **SDK**: extend payload with `nodes` (or `node_id_to_name`) alongside `run_data` / `input_items_json` so preview matches execute.  
-- **Worker / any other** `resolve_parameters` callers: same contract.
+**Phase C — Call-site threading (shipped)**  
+- **`run_flow`** sets **`context.revision_nodes`**; **`engine`** and **`flows.http_request`** pass **`revision_nodes`** into **`resolve_parameters`**.  
+- **`preview-expression`** + TypeScript SDK **`nodes`** field; **`FlowExpressionPreviewLine`** sends revision nodes from the modal.
 
-**Phase D — Tests and QA**  
-- Python: integration tests for `_node['Named Node'].json` under per-item execution with multiple inbound rows.  
-- Frontend: regression on drag payload strings using `_json` roots.  
-- Manual: rename a node and confirm expressions / preview still resolve when using **name** keys.
+**Phase D — Tests / QA**  
+- Python: **`tests_flow/test_expressions.py`** covers name-keyed `_node`, preview with **`revision_nodes`**, merge **`item_index`** behavior.  
+- Frontend: **`flowExpressionNodeRefs.spec.ts`** for rewrite helpers.  
+- Manual: rename/delete covered by editor sync (**§9.6**).
 
-### 9.4 Decided semantics (name-keyed `_node`; implement in Phase B)
+### 9.4 Decided semantics (name-keyed `_node`)
 
 - **Item alignment:** If **`_node['Name'].output[slot]`** (backed by **`main[slot]`**) has **fewer than `item_index + 1` items**, treat as **error** (deterministic failure; no `None`, clamp, or last-item fallback).
 - **Output API:** Use **`_node['Name'].output[slot_no].json`** / **`.binary`**. **Equivalence:** **`_node['Name'].output[0]`** is the same as **`_node['Name']`**; therefore **`_node['Name'].json`** means **`_node['Name'].output[0].json`** (and the same for **`.binary`**). Other slots use **`_node['Name'].output[1].json`**, etc.
 
-**Still open:** merge / batch nodes — how `_input` and “same index” interact when `item_index` is undefined or N:1 merges; document when implementing merge-aware preview and execution.
+### 9.5 Merge / batch vs `_node` row access
 
-### 9.5 Worked example: `.json` vs other output slots
+For nodes that resolve parameters **once** with **`item_index` unset** (merge and other batch paths), **`_node['…'].json`** / **`.binary`** are **not** available — use **`_input['all']`**, **`_items`** (id-keyed), or expressions that do not read row-scoped prior-node output. Per-item nodes align **`item_index`** with the current row as today.
+
+### 9.6 Editor: keep `_node[…]` strings in sync (frontend)
+
+Expression parameters are plain text; renames would otherwise **orphan** `_node['Old Name']` references (cf. n8n `Workflow.renameNodeInParameterValue`).
+
+| Event | Behaviour (`flowExpressionNodeRefs.ts`, `FlowEditor.tsx`) |
+|------|-----------------------------------------------------------|
+| **Rename** | Debounced (~350ms) after **`name`** edits: rewrite **`_node['…']` / `_node["…"]`** where the inner string equals the **anchor display name** (pre-edit **`flowCanvasDisplayName`**) to the **new** display name; replacement uses **`_node[` + `JSON.stringify(newName)` + `]`**. |
+| **Delete** | Replace references to the removed node’s display name with **`_node['__docrouter_removed_node__']`** (sentinel) so evaluation fails clearly. |
+| **Reconnect edges only** | **No** expression rewrite — names unchanged; topology does not alter **`_node`** spellings. |
+
+Display name rule matches the backend: **trimmed `name`**, else **`node.id`** (unnamed nodes use **`id`** inside **`_node[…]`** in dragged hints and rewrites).
+
+### 9.7 Why node `id` remains
+
+**Name** is the primary handle in **`_node['…']`** for humans; **`id`** is still required as the **stable** key for **`run_data`**, connections, execution continuity across **renames**, React Flow **`source`/`target`**, and **`_items[node_id]`**. The engine joins **`run_data[id]`** to **`node_name(revision_node)`** to build name-keyed **`_node`**.
+
+### 9.8 Worked example: `.json` vs other output slots
 
 Imagine an upstream node whose **canvas name** is **`Parse`**. After it runs, the engine stores (conceptually) two output wires:
 
@@ -271,13 +282,12 @@ You are configuring a downstream node that runs **once per inbound row** on the 
 - **`_node['Parse'].json`** is sugar for “**slot 0**, **same row as me**”: the dict **`{"sku": "C3"}`** — i.e. `main[0][2]` as JSON. **`_node['Parse'].binary`** is the same cell’s binary map (same index, slot 0).
 - If **`main[0]`** only had **two** items (`[0]` and `[1]`) but your current **`item_index`** were **`2`**, that shortcut would be **out of range** → **error** (by design), not a silent `None`.
 
-The **`.json` / `.binary` shortcuts never mean slot 1**. To read the “errors” wire you must use an **explicit slot path**, e.g. **`_node['Parse'].main[1][0]`** for the first error-row (when that structure is implemented). Choosing the index on slot 1 is separate from the shortcut rules for slot 0; if you subscript out of range, that should fail the same way as normal Python.
+The **`.json` / `.binary` shortcuts never mean slot 1**. To read the “errors” wire use **`_node['Parse'].output[1].json`** (first row of slot 1 when **`item_index == 0`**), or **`_node['Parse'].output[1]`** then **`.json`** / **`.binary`** for the current **`item_index`** row. Out-of-range indices fail with **`ExpressionError`**, same as other lane faults.
 
 ---
 
 ## 10. Open decisions
 
 - Freeze the `x-ui-*` keyword set before widespread use in ported node schemas.
-- Expression preview API design: dedicated endpoint vs. reusing the existing step-execution path.
 - Whether to validate on every per-item execution or only the first item (current: first item only, to avoid redundant work when all items share the same parameter structure).
-- **§9.4 (remaining):** merge/batch interaction with `_input` / `item_index` for name-keyed `_node`.
+- Optional: backend **`ExpressionError`** message when authors reference **`__docrouter_removed_node__`** (sentinel after node deletion in the editor).

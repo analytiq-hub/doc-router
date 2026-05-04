@@ -84,7 +84,11 @@ export const FlowInputUpstreamList: React.FC<{
                     hideHeader
                     value={s.itemsJson}
                     valueKind="executionItems"
-                    dragSource={{ nodeId: s.fromNodeId, source: 'nodeOutput' }}
+                    dragSource={{
+                      nodeId: s.fromNodeId,
+                      source: 'nodeOutput',
+                      nodeDisplayName: label,
+                    }}
                     expressionConfigNodeId={expressionConfigNodeId}
                     defaultMode="schema"
                     mode={mode}

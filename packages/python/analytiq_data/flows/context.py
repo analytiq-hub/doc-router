@@ -35,4 +35,6 @@ class ExecutionContext:
     logger: Any | None = None
     #: Per-node credential fields for integration nodes + HTTP Request (see docs/docrouter_credentials.md).
     credentials: dict[str, Any] = field(default_factory=dict)
+    #: Revision ``nodes`` for name-keyed ``_node`` in parameter expressions (see ``expressions.materialize_node_outputs_by_name``).
+    revision_nodes: list[dict[str, Any]] | None = None
 

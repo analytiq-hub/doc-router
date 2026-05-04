@@ -1004,6 +1004,7 @@ export class DocRouterOrg {
         input_items: params.input_items ?? [],
         preview_item_index: params.preview_item_index ?? 0,
         execution_refs: params.execution_refs ?? null,
+        nodes: params.nodes ?? [],
       },
     );
   }

@@ -15,6 +15,8 @@ export type ExpressionPreviewContext = {
   /** Match `flows.http_request`: executor binds expressions to inbound slot item 0 only. */
   forceFirstInputItem?: boolean;
   executionRefs?: Record<string, string | undefined>;
+  /** Revision nodes for name-keyed `_node` (must match execute-time revision). */
+  revisionNodes?: Record<string, unknown>[];
 };
 
 /** Debounced backend preview for `=` flow expressions (Python evaluator; matches runtime). */
@@ -38,7 +40,8 @@ export const FlowExpressionPreviewLine: React.FC<{
       setError(null);
       return;
     }
-    if (!preview.flowOrgApi) {
+    const flowOrgApi = preview.flowOrgApi;
+    if (!flowOrgApi) {
       setLoading(false);
       setPreviewText(null);
       setError(null);
@@ -52,12 +55,13 @@ export const FlowExpressionPreviewLine: React.FC<{
         setError(null);
         setPreviewText(null);
         try {
-          const res = await preview.flowOrgApi.previewFlowExpression({
+          const res = await flowOrgApi.previewFlowExpression({
             expression,
             run_data: preview.runData,
             input_items: preview.inputItems.length ? preview.inputItems : [{}],
             preview_item_index: preview.forceFirstInputItem ? 0 : safeIx,
             execution_refs: preview.executionRefs,
+            nodes: preview.revisionNodes ?? [],
           });
           if (cancelled) return;
           if (res.skipped) {
