@@ -1,26 +1,12 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import Button from '@mui/material/Button';
-import Chip from '@mui/material/Chip';
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogTitle from '@mui/material/DialogTitle';
-import FormControl from '@mui/material/FormControl';
-import IconButton from '@mui/material/IconButton';
-import InputAdornment from '@mui/material/InputAdornment';
-import InputLabel from '@mui/material/InputLabel';
-import MenuItem from '@mui/material/MenuItem';
-import Select from '@mui/material/Select';
-import TextField from '@mui/material/TextField';
-import Visibility from '@mui/icons-material/Visibility';
-import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import { EyeIcon, EyeSlashIcon } from '@heroicons/react/24/outline';
 import type { FlowCredentialHeader, FlowCredentialKindSummary } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
 import { useFlowApi } from './useFlowApi';
-import { flowInputClass, flowLabelClass } from './flowUiClasses';
+import { flowInputClass, flowLabelClass, flowSelectClass } from './flowUiClasses';
 
 type FieldRow = {
   name: string;
@@ -40,6 +26,61 @@ function fieldRows(kind: FlowCredentialKindSummary | null): FieldRow[] {
     const is_secret = f.is_secret === true;
     return { name, title, description, type, is_secret };
   });
+}
+
+const btnSecondary =
+  'rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
+const btnPrimary =
+  'rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50';
+const btnDanger =
+  'rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50';
+const btnTable =
+  'rounded-md border border-gray-300 bg-white px-2.5 py-1 text-xs font-semibold text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
+
+function FlowModal({
+  open,
+  title,
+  titleAccessory,
+  onClose,
+  children,
+  footer,
+}: {
+  open: boolean;
+  title: string;
+  /** Shown on the same row as the title (e.g. credential kind badge). */
+  titleAccessory?: React.ReactNode;
+  onClose: () => void;
+  children: React.ReactNode;
+  footer: React.ReactNode;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[280] flex items-center justify-center p-4" role="presentation">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/50"
+        aria-label="Close dialog"
+        onClick={onClose}
+      />
+      <div
+        className="relative z-10 flex max-h-[min(85vh,36rem)] w-full max-w-md flex-col rounded-lg border border-gray-200 bg-white shadow-xl"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="flow-cred-modal-title"
+      >
+        <div className="shrink-0 border-b border-gray-100 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h2 id="flow-cred-modal-title" className="min-w-0 text-base font-semibold text-gray-900">
+              {title}
+            </h2>
+            {titleAccessory != null ? <div className="shrink-0">{titleAccessory}</div> : null}
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">{children}</div>
+        <div className="flex shrink-0 justify-end gap-2 border-t border-gray-100 px-4 py-3">{footer}</div>
+      </div>
+    </div>
+  );
 }
 
 const FlowCredentials: React.FC<{
@@ -236,6 +277,17 @@ const FlowCredentials: React.FC<{
   const editKind = editRow ? kindByKey[editRow.kind_key] : null;
   const editFieldDefs = useMemo(() => fieldRows(editKind), [editKind]);
 
+  const renderSecretToggle = (key: string) => (
+    <button
+      type="button"
+      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+      aria-label={showSecret[key] ? 'Hide value' : 'Show value'}
+      onClick={() => setShowSecret((s) => ({ ...s, [key]: !s[key] }))}
+    >
+      {showSecret[key] ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+    </button>
+  );
+
   return (
     <div className="rounded-lg border border-gray-200 bg-white">
       {message && <div className="px-4 py-3 text-sm text-red-600">{message}</div>}
@@ -275,27 +327,35 @@ const FlowCredentials: React.FC<{
                   <td className={td}>
                     <div className="flex flex-wrap items-center gap-2">
                       {chip && (
-                        <Chip
-                          size="small"
-                          label={chip.detail}
-                          color={chip.ok ? 'success' : 'error'}
-                          variant="outlined"
-                        />
+                        <span
+                          className={
+                            chip.ok
+                              ? 'inline-flex max-w-[220px] truncate rounded border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-900'
+                              : 'inline-flex max-w-[220px] truncate rounded border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-medium text-red-900'
+                          }
+                          title={chip.detail}
+                        >
+                          {chip.detail}
+                        </span>
                       )}
-                      <Button
-                        size="small"
-                        variant="outlined"
+                      <button
+                        type="button"
+                        className={btnTable}
                         disabled={testLoadingId === row.credential_id}
                         onClick={() => void runTest(row)}
                       >
                         {testLoadingId === row.credential_id ? 'Test…' : 'Test'}
-                      </Button>
-                      <Button size="small" variant="outlined" onClick={() => openEdit(row)}>
+                      </button>
+                      <button type="button" className={btnTable} onClick={() => openEdit(row)}>
                         Edit
-                      </Button>
-                      <Button size="small" color="error" variant="outlined" onClick={() => setDeleteRow(row)}>
+                      </button>
+                      <button
+                        type="button"
+                        className={`${btnTable} border-red-200 text-red-700 hover:bg-red-50`}
+                        onClick={() => setDeleteRow(row)}
+                      >
                         Delete
-                      </Button>
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -305,24 +365,39 @@ const FlowCredentials: React.FC<{
         </table>
       </div>
 
-      <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>New credential</DialogTitle>
-        <DialogContent className="flex flex-col gap-3 pt-1">
-          <FormControl fullWidth size="small" sx={{ mt: 1 }}>
-            <InputLabel id="cred-kind-label">Kind</InputLabel>
-            <Select
-              labelId="cred-kind-label"
-              label="Kind"
+      <FlowModal
+        open={createOpen}
+        title="New credential"
+        onClose={() => setCreateOpen(false)}
+        footer={
+          <>
+            <button type="button" className={btnSecondary} onClick={() => setCreateOpen(false)}>
+              Cancel
+            </button>
+            <button type="button" className={btnPrimary} onClick={() => void submitCreate()}>
+              Save
+            </button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
+          <div>
+            <label className={flowLabelClass} htmlFor="cred-create-kind">
+              Kind
+            </label>
+            <select
+              id="cred-create-kind"
+              className={flowSelectClass}
               value={createKindKey}
               onChange={(e) => setCreateKindKey(e.target.value)}
             >
               {kinds.map((k) => (
-                <MenuItem key={k.key} value={k.key}>
+                <option key={k.key} value={k.key}>
                   {k.display_name}
-                </MenuItem>
+                </option>
               ))}
-            </Select>
-          </FormControl>
+            </select>
+          </div>
           <div>
             <label className={flowLabelClass} htmlFor="cred-create-name">
               Name
@@ -336,51 +411,55 @@ const FlowCredentials: React.FC<{
             />
           </div>
           {createFieldDefs.map((f) => (
-            <TextField
-              key={f.name}
-              fullWidth
-              size="small"
-              label={f.title || f.name}
-              helperText={f.description}
-              type={f.is_secret && !showSecret[f.name] ? 'password' : 'text'}
-              value={createFields[f.name] ?? ''}
-              onChange={(e) => setCreateFields((prev) => ({ ...prev, [f.name]: e.target.value }))}
-              InputProps={
-                f.is_secret
-                  ? {
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <IconButton
-                            aria-label="toggle visibility"
-                            onClick={() =>
-                              setShowSecret((s) => ({ ...s, [f.name]: !s[f.name] }))
-                            }
-                            edge="end"
-                          >
-                            {showSecret[f.name] ? <VisibilityOff /> : <Visibility />}
-                          </IconButton>
-                        </InputAdornment>
-                      ),
-                    }
-                  : undefined
-              }
-            />
+            <div key={f.name}>
+              <label className={flowLabelClass} htmlFor={`cred-create-${f.name}`}>
+                {f.title || f.name}
+              </label>
+              <div className="relative">
+                <input
+                  id={`cred-create-${f.name}`}
+                  className={f.is_secret ? `${flowInputClass} pr-10` : flowInputClass}
+                  type={f.is_secret && !showSecret[f.name] ? 'password' : 'text'}
+                  value={createFields[f.name] ?? ''}
+                  onChange={(e) =>
+                    setCreateFields((prev) => ({ ...prev, [f.name]: e.target.value }))
+                  }
+                  autoComplete="off"
+                />
+                {f.is_secret ? renderSecretToggle(f.name) : null}
+              </div>
+              {f.description ? (
+                <p className="mt-1 text-xs text-gray-500">{f.description}</p>
+              ) : null}
+            </div>
           ))}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCreateOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={() => void submitCreate()}>
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </div>
+      </FlowModal>
 
-      <Dialog open={editRow != null} onClose={() => setEditRow(null)} maxWidth="sm" fullWidth>
-        <DialogTitle>Edit credential</DialogTitle>
-        <DialogContent className="flex flex-col gap-3 pt-1">
-          <div className="text-xs text-gray-500">
-            Kind: <strong>{editKind?.display_name || editRow?.kind_key}</strong> (cannot change)
-          </div>
+      <FlowModal
+        open={editRow != null}
+        title="Edit credential"
+        titleAccessory={
+          <span
+            className="inline-block max-w-[14rem] truncate rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-800"
+            title={editKind?.display_name || editRow?.kind_key}
+          >
+            {editKind?.display_name || editRow?.kind_key}
+          </span>
+        }
+        onClose={() => setEditRow(null)}
+        footer={
+          <>
+            <button type="button" className={btnSecondary} onClick={() => setEditRow(null)}>
+              Cancel
+            </button>
+            <button type="button" className={btnPrimary} onClick={() => void submitEdit()}>
+              Save
+            </button>
+          </>
+        }
+      >
+        <div className="flex flex-col gap-4">
           <div>
             <label className={flowLabelClass} htmlFor="cred-edit-name">
               Name
@@ -394,67 +473,55 @@ const FlowCredentials: React.FC<{
             />
           </div>
           {editFieldDefs.map((f) => (
-            <TextField
-              key={f.name}
-              fullWidth
-              size="small"
-              label={f.title || f.name}
-              helperText={
-                f.is_secret
-                  ? `${f.description ? `${f.description} ` : ''}(re-enter to replace; required to save)`
-                  : f.description
-              }
-              type={f.is_secret && !showSecret[`edit-${f.name}`] ? 'password' : 'text'}
-              value={editFields[f.name] ?? ''}
-              onChange={(e) => setEditFields((prev) => ({ ...prev, [f.name]: e.target.value }))}
-              InputProps={
-                f.is_secret
-                  ? {
-                      endAdornment: (
-                        <InputAdornment position="end">
-                          <IconButton
-                            aria-label="toggle visibility"
-                            onClick={() =>
-                              setShowSecret((s) => ({
-                                ...s,
-                                [`edit-${f.name}`]: !s[`edit-${f.name}`],
-                              }))
-                            }
-                            edge="end"
-                          >
-                            {showSecret[`edit-${f.name}`] ? <VisibilityOff /> : <Visibility />}
-                          </IconButton>
-                        </InputAdornment>
-                      ),
-                    }
-                  : undefined
-              }
-            />
+            <div key={f.name}>
+              <label className={flowLabelClass} htmlFor={`cred-edit-${f.name}`}>
+                {f.title || f.name}
+              </label>
+              <div className="relative">
+                <input
+                  id={`cred-edit-${f.name}`}
+                  className={f.is_secret ? `${flowInputClass} pr-10` : flowInputClass}
+                  type={f.is_secret && !showSecret[`edit-${f.name}`] ? 'password' : 'text'}
+                  value={editFields[f.name] ?? ''}
+                  onChange={(e) =>
+                    setEditFields((prev) => ({ ...prev, [f.name]: e.target.value }))
+                  }
+                  autoComplete="off"
+                />
+                {f.is_secret ? renderSecretToggle(`edit-${f.name}`) : null}
+              </div>
+              {f.is_secret ? (
+                <p className="mt-1 text-xs text-gray-500">
+                  {f.description ? `${f.description} ` : ''}(re-enter to replace; required to save)
+                </p>
+              ) : f.description ? (
+                <p className="mt-1 text-xs text-gray-500">{f.description}</p>
+              ) : null}
+            </div>
           ))}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setEditRow(null)}>Cancel</Button>
-          <Button variant="contained" onClick={() => void submitEdit()}>
-            Save
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </div>
+      </FlowModal>
 
-      <Dialog open={deleteRow != null} onClose={() => setDeleteRow(null)}>
-        <DialogTitle>Delete credential?</DialogTitle>
-        <DialogContent>
-          <p className="m-0 text-sm text-gray-700">
-            Delete “{deleteRow?.name}”? Flow nodes that reference it may fail until you choose another
-            credential.
-          </p>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteRow(null)}>Cancel</Button>
-          <Button color="error" variant="contained" onClick={() => void confirmDelete()}>
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <FlowModal
+        open={deleteRow != null}
+        title="Delete credential?"
+        onClose={() => setDeleteRow(null)}
+        footer={
+          <>
+            <button type="button" className={btnSecondary} onClick={() => setDeleteRow(null)}>
+              Cancel
+            </button>
+            <button type="button" className={btnDanger} onClick={() => void confirmDelete()}>
+              Delete
+            </button>
+          </>
+        }
+      >
+        <p className="m-0 text-sm leading-relaxed text-gray-700">
+          Delete “{deleteRow?.name}”? Flow nodes that reference it may fail until you choose another
+          credential.
+        </p>
+      </FlowModal>
     </div>
   );
 };
