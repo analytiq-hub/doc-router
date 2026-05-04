@@ -4,6 +4,15 @@ import { parseHandleIndex } from './flowRf';
 
 type RunData = Record<string, unknown> | null | undefined;
 
+/**
+ * When exactly one canvas edge targets `nodeId`, return that source id. Used for sole-parent → `_json` drags
+ * in the node modal; `null` if merge (multiple sources) or no inbound edge.
+ */
+export function soleInboundParentFromEdges(nodeId: string, edges: Edge[]): string | null {
+  const inc = edges.filter((e) => e.target === nodeId && typeof e.source === 'string');
+  return inc.length === 1 ? inc[0].source : null;
+}
+
 type NodeRun = {
   /** `main[slot][item]` — executed node output lanes. */
   data?: { main?: unknown };

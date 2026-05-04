@@ -18,6 +18,11 @@ describe('flowCanvasDisplayName', () => {
 });
 
 describe('rewriteNodePrimaryRefsInExpression', () => {
+  it('does not change expressions that only use _json (no _node refs)', () => {
+    const body = `_json["url"] + _json['path'][0]`;
+    expect(rewriteNodePrimaryRefsInExpression(body, 'Parse', 'Renamed')).toBe(body);
+  });
+
   it('rewrites matching _node bracket keys', () => {
     const body = `_node['Lane A'].json['x'] + _node["Lane A"].output[1].json`;
     const next = rewriteNodePrimaryRefsInExpression(body, 'Lane A', 'Renamed');
@@ -41,6 +46,15 @@ describe('rewriteNodePrimaryRefsRemove', () => {
 });
 
 describe('rewriteExpressionFieldsDeep', () => {
+  it('leaves _json-only expression bodies unchanged when rewriting unrelated node names', () => {
+    const params = { url: '=_json["name"]', plain: 'literal _node["Parse"]' };
+    const out = rewriteExpressionFieldsDeep(params, (b) =>
+      rewriteNodePrimaryRefsInExpression(b, 'Parse', 'X'),
+    ) as typeof params;
+    expect(out.url).toBe('=_json["name"]');
+    expect(out.plain).toBe('literal _node["Parse"]');
+  });
+
   it('only touches strings starting with =', () => {
     const params = {
       url: '=_node["Up"].json',

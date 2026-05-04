@@ -26,7 +26,12 @@ import type { FlowNode, FlowNodeType, FlowPinData, FlowPinItem, FlowPinNodeOutpu
 import type { DocRouterOrgApi } from '@/utils/api';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
 import { FlowNodeCredentialSlots } from './flowNodeCredentialSlots';
-import { buildNodeInputPreview, buildNodeOutputPreview, runDataMergedWithPins } from './flowNodeIoPreview';
+import {
+  buildNodeInputPreview,
+  buildNodeOutputPreview,
+  runDataMergedWithPins,
+  soleInboundParentFromEdges,
+} from './flowNodeIoPreview';
 import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
 import { FlowInputUpstreamList } from './FlowInputUpstreamList';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
@@ -344,11 +349,10 @@ const FlowNodeConfigModal: React.FC<{
   }, [edges, node]);
 
   /** Exactly one inbound edge → upstream field drags from that parent use `_json` instead of `_node["…"].json`. */
-  const soleInboundParentNodeId = useMemo(() => {
-    if (!node) return null;
-    const inc = edges.filter((e) => e.target === node.id && typeof e.source === 'string');
-    return inc.length === 1 ? inc[0].source : null;
-  }, [edges, node?.id]);
+  const soleInboundParentNodeId = useMemo(
+    () => (node ? soleInboundParentFromEdges(node.id, edges) : null),
+    [edges, node],
+  );
 
   const downstreamNodeIds = useMemo(() => {
     if (!node) return [];
