@@ -123,6 +123,8 @@ export interface FlowExecution {
   run_data: Record<string, unknown>;
   error: Record<string, unknown> | null;
   trigger: Record<string, unknown>;
+  /** Populated on org-wide execution list responses when the flow header exists. */
+  flow_name?: string | null;
   /** Set for execute-step / partial manual runs. */
   target_node_id?: string | null;
   /** Client-supplied seed snapshot at queue time (optional). */

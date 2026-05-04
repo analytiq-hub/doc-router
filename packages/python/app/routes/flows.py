@@ -183,6 +183,8 @@ class FlowExecution(BaseModel):
     trigger: dict[str, Any]
     target_node_id: str | None = None
     initial_run_data: dict[str, Any] | None = None
+    #: Present on list responses when joined from ``flows`` (org-wide execution views).
+    flow_name: str | None = None
 
 
 class ListExecutionsResponse(BaseModel):
@@ -218,6 +220,7 @@ async def _get_db():
 def _execution_doc_to_list_item(d: dict[str, Any]) -> FlowExecution:
     """Serialize a `flow_executions` document for list responses (ISO timestamps for JSON)."""
 
+    fn = d.get("flow_name")
     return FlowExecution(
         execution_id=str(d["_id"]),
         flow_id=d["flow_id"],
@@ -245,6 +248,7 @@ def _execution_doc_to_list_item(d: dict[str, Any]) -> FlowExecution:
         trigger=d.get("trigger") or {},
         target_node_id=d.get("target_node_id"),
         initial_run_data=d.get("initial_run_data"),
+        flow_name=str(fn) if fn is not None else None,
     )
 
 
@@ -754,7 +758,36 @@ async def list_executions(
     if mode:
         query["mode"] = mode
     total = await db.flow_executions.count_documents(query)
-    docs = await db.flow_executions.find(query).sort([("started_at", -1)]).skip(offset).limit(limit).to_list(limit)
+    pipeline: list[dict[str, Any]] = [
+        {"$match": query},
+        {"$sort": {"started_at": -1}},
+        {"$skip": offset},
+        {"$limit": limit},
+        {
+            "$lookup": {
+                "from": "flows",
+                "let": {"fid": "$flow_id"},
+                "pipeline": [
+                    {"$match": {"$expr": {"$eq": [{"$toString": "$_id"}, "$$fid"]}}},
+                    {"$limit": 1},
+                    {"$project": {"_id": 0, "name": 1}},
+                ],
+                "as": "_flow_join",
+            }
+        },
+        {
+            "$set": {
+                "flow_name": {
+                    "$let": {
+                        "vars": {"fn": {"$arrayElemAt": ["$_flow_join.name", 0]}},
+                        "in": "$$fn",
+                    }
+                }
+            }
+        },
+        {"$project": {"_flow_join": 0}},
+    ]
+    docs = await db.flow_executions.aggregate(pipeline).to_list(limit)
     items = [_execution_doc_to_list_item(d) for d in docs]
     return {"items": items, "total": total}
 

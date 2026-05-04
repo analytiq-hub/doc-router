@@ -917,11 +917,15 @@ export class DocRouterOrg {
 
   async listFlowCredentials(params?: {
     credential_kind?: string;
+    limit?: number;
+    offset?: number;
   }): Promise<ListFlowCredentialsResponse> {
     return this.http.get<ListFlowCredentialsResponse>(
       `/v0/orgs/${this.organizationId}/credentials`,
       {
         params: {
+          limit: params?.limit ?? 50,
+          offset: params?.offset ?? 0,
           ...(params?.credential_kind != null && params.credential_kind !== ''
             ? { credential_kind: params.credential_kind }
             : {}),

@@ -121,6 +121,7 @@ const FlowExecutionsView: React.FC<{
   const [total, setTotal] = useState(0);
   const [err, setErr] = useState('');
   const [listLoading, setListLoading] = useState(true);
+  const [listPagination, setListPagination] = useState({ page: 0, pageSize: 20 });
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<FlowExecution | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -183,8 +184,13 @@ const FlowExecutionsView: React.FC<{
 
   const loadList = useCallback(async () => {
     try {
+      setListLoading(true);
       setErr('');
-      const res = await orgApi.listExecutions({ flowId, limit: 100, offset: 0 });
+      const res = await orgApi.listExecutions({
+        flowId,
+        limit: listPagination.pageSize,
+        offset: listPagination.page * listPagination.pageSize,
+      });
       setList(res.items);
       setTotal(res.total);
     } catch (e: unknown) {
@@ -192,7 +198,11 @@ const FlowExecutionsView: React.FC<{
     } finally {
       setListLoading(false);
     }
-  }, [orgApi, flowId]);
+  }, [orgApi, flowId, listPagination.page, listPagination.pageSize]);
+
+  useLayoutEffect(() => {
+    setListPagination({ page: 0, pageSize: 20 });
+  }, [flowId]);
 
   useEffect(() => {
     void loadList();
@@ -286,6 +296,7 @@ const FlowExecutionsView: React.FC<{
   }, [configModalId, nodeTypesByKey, viewNodes]);
 
   const runDataForModal = detail?.run_data as Record<string, unknown> | undefined;
+  const listPageCount = Math.max(1, Math.ceil(total / listPagination.pageSize));
 
   return (
     <div
@@ -329,7 +340,7 @@ const FlowExecutionsView: React.FC<{
         <div className="min-h-0 flex-1 overflow-y-auto p-0">
           {err && <div className="border-b border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">{err}</div>}
           {listLoading && <div className="p-3 text-sm text-gray-500">Loading…</div>}
-          {!listLoading && list.length === 0 && (
+          {!listLoading && list.length === 0 && total === 0 && (
             <div className="p-3 text-sm text-gray-600">No runs yet. Use <strong>Editor</strong> to execute the workflow.</div>
           )}
           <ul className="py-0">
@@ -402,8 +413,32 @@ const FlowExecutionsView: React.FC<{
             })}
           </ul>
         </div>
-        <div className="shrink-0 border-t border-[#eceff2] px-3 py-1.5 text-[10px] text-gray-400">
-          {list.length} of {total} runs
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-1 border-t border-[#eceff2] px-2 py-1.5 text-[10px] text-gray-500">
+          <span className="min-w-0 truncate">
+            {total} run{total === 1 ? '' : 's'} · p.{listPagination.page + 1}/{listPageCount}
+          </span>
+          <div className="flex shrink-0 items-center gap-0.5">
+            <button
+              type="button"
+              className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium disabled:opacity-40"
+              disabled={listPagination.page <= 0}
+              onClick={() => setListPagination((p) => ({ ...p, page: Math.max(0, p.page - 1) }))}
+              title="Previous page"
+            >
+              ‹
+            </button>
+            <button
+              type="button"
+              className="rounded border border-gray-200 bg-white px-1 py-0.5 text-[10px] font-medium disabled:opacity-40"
+              disabled={listPagination.page >= listPageCount - 1}
+              onClick={() =>
+                setListPagination((p) => ({ ...p, page: Math.min(listPageCount - 1, p.page + 1) }))
+              }
+              title="Next page"
+            >
+              ›
+            </button>
+          </div>
         </div>
           </aside>
         </Panel>

@@ -145,3 +145,40 @@ async def test_same_name_allowed_in_different_orgs(org_and_users, test_db):
         headers=get_token_headers(token_plain),
     )
     assert r2.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_list_credentials_pagination(org_and_users, test_db):
+    org_id = org_and_users["org_id"]
+    headers = get_token_headers(org_and_users["member"]["token"])
+    for i in range(3):
+        r = client.post(
+            f"/v0/orgs/{org_id}/credentials",
+            json={
+                "kind_key": "httpHeaderAuth",
+                "name": f"Cred {i}",
+                "fields": {"name": "Authorization", "value": f"Bearer {i}"},
+            },
+            headers=headers,
+        )
+        assert r.status_code == 200, r.text
+
+    p1 = client.get(
+        f"/v0/orgs/{org_id}/credentials",
+        params={"limit": 2, "offset": 0},
+        headers=headers,
+    )
+    assert p1.status_code == 200
+    j1 = p1.json()
+    assert j1["total"] == 3
+    assert len(j1["items"]) == 2
+
+    p2 = client.get(
+        f"/v0/orgs/{org_id}/credentials",
+        params={"limit": 2, "offset": 2},
+        headers=headers,
+    )
+    assert p2.status_code == 200
+    j2 = p2.json()
+    assert j2["total"] == 3
+    assert len(j2["items"]) == 1

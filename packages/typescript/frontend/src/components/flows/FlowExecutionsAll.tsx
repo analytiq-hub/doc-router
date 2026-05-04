@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { FlowExecution, FlowListItem } from '@docrouter/sdk';
+import type { FlowExecution } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
 import { useFlowApi } from './useFlowApi';
@@ -42,42 +42,28 @@ const FlowExecutionsAll: React.FC<{ organizationId: string }> = ({ organizationI
   const router = useRouter();
   const api = useFlowApi(organizationId);
   const [list, setList] = useState<FlowExecution[]>([]);
-  const [flowNames, setFlowNames] = useState<Record<string, string>>({});
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [stopLoadingId, setStopLoadingId] = useState<string | null>(null);
+  const [pagination, setPagination] = useState({ page: 0, pageSize: 20 });
 
   const load = useCallback(async () => {
     try {
       setLoading(true);
       setMessage('');
-      const pageSize = 200;
-      const [execRes, firstFlows] = await Promise.all([
-        api.listExecutions({ limit: 100, offset: 0 }),
-        api.listFlows({ limit: pageSize, offset: 0 }),
-      ]);
+      const execRes = await api.listExecutions({
+        limit: pagination.pageSize,
+        offset: pagination.page * pagination.pageSize,
+      });
       setList(execRes.items);
-      const m: Record<string, string> = {};
-      for (const row of firstFlows.items as FlowListItem[]) {
-        m[row.flow.flow_id] = row.flow.name;
-      }
-      let offset = firstFlows.items.length;
-      const totalFlows = firstFlows.total;
-      while (offset < totalFlows) {
-        const next = await api.listFlows({ limit: pageSize, offset });
-        if (next.items.length === 0) break;
-        for (const row of next.items as FlowListItem[]) {
-          m[row.flow.flow_id] = row.flow.name;
-        }
-        offset += next.items.length;
-      }
-      setFlowNames(m);
+      setTotal(execRes.total);
     } catch (err) {
       setMessage(getApiErrorMsg(err) || 'Failed to load executions');
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, pagination.page, pagination.pageSize]);
 
   useEffect(() => {
     void load();
@@ -101,7 +87,8 @@ const FlowExecutionsAll: React.FC<{ organizationId: string }> = ({ organizationI
   const th = 'border-b border-gray-200 bg-gray-50 px-3 py-2 text-left text-xs font-semibold text-gray-600';
   const td = 'border-b border-gray-100 px-3 py-2 text-sm text-gray-800';
 
-  const empty = useMemo(() => !loading && list.length === 0, [loading, list.length]);
+  const empty = useMemo(() => !loading && list.length === 0 && total === 0, [loading, list.length, total]);
+  const pageCount = Math.max(1, Math.ceil(total / pagination.pageSize));
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white">
@@ -133,7 +120,7 @@ const FlowExecutionsAll: React.FC<{ organizationId: string }> = ({ organizationI
               </tr>
             )}
             {list.map((e) => {
-              const fname = flowNames[e.flow_id] || e.flow_id;
+              const fname = e.flow_name?.trim() || e.flow_id;
               const running = statusRunning(e);
               const stopping = stopLoadingId === e.execution_id;
               return (
@@ -182,6 +169,47 @@ const FlowExecutionsAll: React.FC<{ organizationId: string }> = ({ organizationI
             })}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 px-3 py-2 text-sm text-gray-600">
+        <div>
+          {total} execution{total === 1 ? '' : 's'} total · page {pagination.page + 1} of {pageCount}
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="inline-flex items-center gap-1">
+            <span className="text-xs">Rows</span>
+            <select
+              className="rounded border border-gray-300 bg-white px-2 py-1 text-sm"
+              value={pagination.pageSize}
+              onChange={(e) => {
+                const pageSize = Number(e.target.value);
+                setPagination({ page: 0, pageSize });
+              }}
+            >
+              {[10, 20, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="rounded border border-gray-300 bg-white px-2 py-1 text-sm disabled:opacity-40"
+            disabled={pagination.page <= 0}
+            onClick={() => setPagination((p) => ({ ...p, page: Math.max(0, p.page - 1) }))}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            className="rounded border border-gray-300 bg-white px-2 py-1 text-sm disabled:opacity-40"
+            disabled={pagination.page >= pageCount - 1}
+            onClick={() => setPagination((p) => ({ ...p, page: Math.min(pageCount - 1, p.page + 1) }))}
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );

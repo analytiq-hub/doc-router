@@ -91,8 +91,10 @@ const FlowCredentials: React.FC<{
   const api = useFlowApi(organizationId);
   const [kinds, setKinds] = useState<FlowCredentialKindSummary[]>([]);
   const [items, setItems] = useState<FlowCredentialHeader[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
+  const [pagination, setPagination] = useState({ page: 0, pageSize: 20 });
 
   const [createOpen, setCreateOpen] = useState(false);
   const [editRow, setEditRow] = useState<FlowCredentialHeader | null>(null);
@@ -117,16 +119,20 @@ const FlowCredentials: React.FC<{
       setMessage('');
       const [kRes, cRes] = await Promise.all([
         api.listFlowCredentialKinds(),
-        api.listFlowCredentials(),
+        api.listFlowCredentials({
+          limit: pagination.pageSize,
+          offset: pagination.page * pagination.pageSize,
+        }),
       ]);
       setKinds(kRes);
       setItems(cRes.items);
+      setTotal(cRes.total);
     } catch (err) {
       setMessage(getApiErrorMsg(err) || 'Failed to load credentials');
     } finally {
       setLoading(false);
     }
-  }, [api]);
+  }, [api, pagination.page, pagination.pageSize]);
 
   useEffect(() => {
     void load();
@@ -276,6 +282,7 @@ const FlowCredentials: React.FC<{
 
   const editKind = editRow ? kindByKey[editRow.kind_key] : null;
   const editFieldDefs = useMemo(() => fieldRows(editKind), [editKind]);
+  const pageCount = Math.max(1, Math.ceil(total / pagination.pageSize));
 
   const renderSecretToggle = (key: string) => (
     <button
@@ -309,7 +316,7 @@ const FlowCredentials: React.FC<{
                 </td>
               </tr>
             )}
-            {!loading && items.length === 0 && (
+            {!loading && items.length === 0 && total === 0 && (
               <tr>
                 <td colSpan={4} className="px-3 py-8 text-center text-sm text-gray-500">
                   No credentials yet. Add one to use in flow nodes.
@@ -363,6 +370,47 @@ const FlowCredentials: React.FC<{
             })}
           </tbody>
         </table>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-gray-200 px-3 py-2 text-sm text-gray-600">
+        <div>
+          {total} credential{total === 1 ? '' : 's'} total · page {pagination.page + 1} of {pageCount}
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="inline-flex items-center gap-1">
+            <span className="text-xs">Rows</span>
+            <select
+              className="rounded border border-gray-300 bg-white px-2 py-1 text-sm"
+              value={pagination.pageSize}
+              onChange={(e) => {
+                const pageSize = Number(e.target.value);
+                setPagination({ page: 0, pageSize });
+              }}
+            >
+              {[10, 20, 50].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="rounded border border-gray-300 bg-white px-2 py-1 text-sm disabled:opacity-40"
+            disabled={pagination.page <= 0}
+            onClick={() => setPagination((p) => ({ ...p, page: Math.max(0, p.page - 1) }))}
+          >
+            Previous
+          </button>
+          <button
+            type="button"
+            className="rounded border border-gray-300 bg-white px-2 py-1 text-sm disabled:opacity-40"
+            disabled={pagination.page >= pageCount - 1}
+            onClick={() => setPagination((p) => ({ ...p, page: Math.min(pageCount - 1, p.page + 1) }))}
+          >
+            Next
+          </button>
+        </div>
       </div>
 
       <FlowModal

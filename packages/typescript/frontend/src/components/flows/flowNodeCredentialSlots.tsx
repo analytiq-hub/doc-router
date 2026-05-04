@@ -54,18 +54,28 @@ export const FlowNodeCredentialSlots: React.FC<{
   useEffect(() => {
     if (!organizationId || !slots?.length) return;
     let cancelled = false;
-    /** Use shared `apiClient` (same baseURL + auth interceptors as the rest of the flows UI). */
-    void apiClient
-      .get<ListFlowCredentialsResponse>(`/v0/orgs/${organizationId}/credentials`)
-      .then((res) => {
+    const pageSize = 200;
+    void (async () => {
+      const acc: FlowCredentialHeader[] = [];
+      let offset = 0;
+      try {
+        for (;;) {
+          const res = await apiClient.get<ListFlowCredentialsResponse>(
+            `/v0/orgs/${organizationId}/credentials`,
+            { params: { limit: pageSize, offset } },
+          );
+          acc.push(...res.data.items);
+          if (acc.length >= res.data.total || res.data.items.length === 0) break;
+          offset += res.data.items.length;
+        }
         if (!cancelled) {
-          setItems(res.data.items);
+          setItems(acc);
           setErr(null);
         }
-      })
-      .catch((e: unknown) => {
+      } catch (e: unknown) {
         if (!cancelled) setErr(formatCredentialLoadError(e));
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };

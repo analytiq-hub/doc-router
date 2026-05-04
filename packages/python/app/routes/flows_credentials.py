@@ -208,6 +208,8 @@ async def create_credential(
 async def list_credentials(
     organization_id: str,
     credential_kind: str | None = Query(None, description="Filter by kind key"),
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     current_user: User = Depends(get_org_user),
 ) -> ListCredentialsResponse:
     _ = current_user
@@ -216,7 +218,13 @@ async def list_credentials(
     if credential_kind:
         query["kind_key"] = credential_kind
     total = await db.credentials.count_documents(query)
-    docs = await db.credentials.find(query).sort("updated_at", -1).to_list(1000)
+    docs = (
+        await db.credentials.find(query)
+        .sort("updated_at", -1)
+        .skip(offset)
+        .limit(limit)
+        .to_list(limit)
+    )
     items: list[CredentialHeader] = []
     for doc in docs:
         try:
