@@ -217,8 +217,6 @@ credential_slots = [
 
 Code nodes (`flows.code`) execute arbitrary user-supplied Python in a subprocess. Because decrypted credential values passed into that sandbox would be readable by whoever writes the flow — defeating the purpose of keeping secrets from non-admin users — **code nodes do not have credential slots and credentials are never injected into the subprocess context**.
 
-If a flow author needs to make an authenticated HTTP call from a code node, the correct pattern is to place an HTTP Request node (with the credential bound there) before the code node and pass the response data forward through normal item flow. The credential stays inside the trusted, auditable HTTP Request executor and is never visible to user-written code.
-
 ---
 
 ## 8. Runtime credential injection
@@ -286,24 +284,72 @@ The binding is saved as part of the node's data in the next `PUT` save.
 
 **Route:** `/orgs/[organizationId]/flows?tab=credentials`
 
-The flows page (`page.tsx`) currently has two tabs: `flows` and `flow-create`. A "Credentials" tab needs to be added.
+#### Flows page layout changes
 
-**To implement:**
+The flows page (`page.tsx`) currently has two tabs — **Flows** and **Create Flow** — plus no top-level create button. The redesign (modelled on the n8n flows list page) makes three changes:
 
-1. Add a "Credentials" tab button to `packages/typescript/frontend/src/app/orgs/[organizationId]/flows/page.tsx`.
-2. Create `packages/typescript/frontend/src/components/flows/FlowCredentials.tsx` with:
-   - **List view:** table with columns **Name**, **Kind**, **Created**, **Actions** (Test / Edit / Delete).
-   - **"Add credential" button:** two-step dialog:
-     1. Kind picker from `GET .../credential-kinds`, grouped by `auth_mode`.
-     2. Field form rendered from `kind.fields`: `is_secret: true` → password input with show/hide; `description` → `helperText`. Name field always at top.
-   - Submit → `POST .../credentials` → dialog closes, list refreshes.
-3. Add SDK client methods (already partially in `docrouter-org.ts` — verify completeness):
-   - `listFlowCredentialKinds()`
-   - `listFlowCredentials({ credential_kind? })`
-   - `createFlowCredential(req)`
-   - `updateFlowCredential(credId, req)`
-   - `deleteFlowCredential(credId)`
-   - `testFlowCredential(credId)`
+1. **Replace the "Create Flow" tab with a split button** in the top-right corner: primary action is "Create flow"; a dropdown chevron reveals a secondary option "Create credential". This keeps the tab bar clean and matches the pattern users expect from n8n.
+
+2. **Add a "Credentials" tab** alongside the existing "Flows" tab.
+
+3. **Add an "Executions" tab** for an org-wide view of all flow executions.
+
+The tab bar becomes: **Flows** | **Credentials** | **Executions**.
+
+Concretely in `packages/typescript/frontend/src/app/orgs/[organizationId]/flows/page.tsx`:
+- Remove the `flow-create` tab value; replace with a `<Button>` + dropdown (MUI `ButtonGroup` with a `<Menu>` on the chevron, or a single split-button component).
+- Clicking "Create flow" navigates directly to the flow editor for a new flow (or opens the existing create dialog inline).
+- Clicking "Create credential" switches to `?tab=credentials` with the create dialog pre-opened.
+- Add `credentials` as a valid tab value; render `<FlowCredentials>` in its panel.
+- Add `executions` as a valid tab value; render `<FlowExecutionsAll>` in its panel.
+
+#### `FlowCredentials` component
+
+**New file:** `packages/typescript/frontend/src/components/flows/FlowCredentials.tsx`
+
+- **List view** (default): fetches `GET /v0/orgs/{orgId}/credentials` and renders a table with columns **Name**, **Kind**, **Created**, **Actions**.
+  - Actions per row: **Test** (calls `POST .../test`, shows an inline ok/error chip), **Edit** (opens the field form in a dialog), **Delete** (confirmation dialog, then `DELETE`).
+- **Create dialog** (opened by "Create credential" from the split button, or an "Add" button in the tab):
+  1. Kind picker — dropdown from `GET .../credential-kinds`.
+  2. Field form rendered from `kind.fields`: `is_secret: true` → password input with show/hide toggle; `description` → helper text. Name field always at top.
+  3. Submit → `POST .../credentials` → dialog closes, list refreshes.
+
+### 9.3 Org-wide executions tab (not yet implemented)
+
+**Route:** `/orgs/[organizationId]/flows?tab=executions`
+
+#### Backend: new org-wide executions endpoint
+
+The existing endpoint `GET /v0/orgs/{orgId}/flows/{flowId}/executions` filters by a single flow. The global view needs a new endpoint that queries across all flows:
+
+```
+GET /v0/orgs/{orgId}/executions?limit=50&offset=0&status=<optional>
+```
+
+Implementation in `flows.py`: query `flow_executions` with only `organization_id` in the filter (no `flow_id`), sort by `started_at` descending. To show the flow name alongside each execution, join against the `flows` collection — either with a `$lookup` aggregation (same pattern as `list_flows`) or by fetching a name map up front. The response reuses the existing `ListExecutionsResponse` / `FlowExecution` models; `flow_id` is already present in each `FlowExecution` document.
+
+Add a corresponding SDK method in `docrouter-org.ts`:
+```typescript
+listAllExecutions(params?: { limit?: number; offset?: number; status?: string }): Promise<ListExecutionsResponse>
+```
+
+#### Frontend: `FlowExecutionsAll` component
+
+**New file:** `packages/typescript/frontend/src/components/flows/FlowExecutionsAll.tsx`
+
+Reuse the existing `FlowExecutionsView` component as a reference (`flowNodeCredentialSlots.tsx` → `FlowExecutionsView.tsx`). The org-wide version adds one column — **Flow** — showing the flow name (looked up from `flow_id`). Everything else (status chip, started/finished times, duration, stop button, row click → execution detail) is identical to the per-flow view.
+
+The flow name lookup can be done by fetching `GET /v0/orgs/{orgId}/flows` once and building a `flowId → name` map client-side, since the executions list already contains `flow_id`.
+
+#### SDK client methods
+
+Already partially present in `docrouter-org.ts` — verify these all exist:
+- `listFlowCredentialKinds()`
+- `listFlowCredentials({ credential_kind? })`
+- `createFlowCredential(req)`
+- `updateFlowCredential(credId, req)`
+- `deleteFlowCredential(credId)`
+- `testFlowCredential(credId)`
 
 ---
 
@@ -347,7 +393,9 @@ Until this is built:
 
 | Component | Notes |
 |---|---|
-| Frontend credentials management tab | `FlowCredentials.tsx` and "Credentials" tab in `page.tsx` not created |
+| Frontend flows page redesign | Split button + "Credentials" and "Executions" tabs not yet added to `page.tsx` |
+| Frontend credentials management tab | `FlowCredentials.tsx` not yet created |
+| Frontend org-wide executions tab | `FlowExecutionsAll.tsx` and `GET /v0/orgs/{orgId}/executions` endpoint not yet created |
 | Additional kind files | `slackApi`, `openAiApi`, `googleOAuth2Api`, etc. |
 | `extends` chain resolution in registry | Registry does not merge base + extension kinds |
 | SSRF guard in `/test` endpoint | `assert_http_url_allowed()` not called before the test httpx request |
@@ -370,9 +418,13 @@ In `test_credential()` in `flows_credentials.py`, call `assert_http_url_allowed(
 
 Add a migration or startup check to ensure `{ organization_id: 1, kind_key: 1 }` index exists on `credentials`.
 
-**Step 4 — Frontend credentials tab**
+**Step 4 — Frontend flows page redesign + Credentials tab**
 
-See §8.2 above. Implement `FlowCredentials.tsx` and wire it into the flows page.
+See §9.2 above. Replace the "Create Flow" tab with a split button, add the "Credentials" and "Executions" tabs to `page.tsx`, and implement `FlowCredentials.tsx`.
+
+**Step 4b — Org-wide executions tab**
+
+See §9.3 above. Add `GET /v0/orgs/{orgId}/executions` endpoint in `flows.py`, add SDK method, and implement `FlowExecutionsAll.tsx` reusing the per-flow executions view with an added Flow name column.
 
 **Step 5 — `extends` registry support**
 
