@@ -62,8 +62,8 @@ function appendPathToExpr(base: string, path: JsonPath): string {
  *
  * When configuring node `configuringNodeId`:
  * - **`source === 'nodeInput'`** and **`nodeId === configuringNodeId`** → **`_json`** (this node's inbound item row).
- * - **`source === 'nodeOutput'`** (any node, including upstream) → **`_node[display].json`** so the expression names the
- *   node whose preview you dragged from — not `_json`, which would lose which upstream produced the field when multiple exist.
+ * - **`source === 'nodeOutput'`** → **`_node[display].json`** when multiple inbound parents exist or the drag is not from the sole parent.
+ *   When **exactly one edge** feeds this node and you drag from **that parent's** output, use **`_json`** — same row as execute-time inbound data.
  *
  * `@param outputSlotIndex` defaults to first output handle (matches current single-slot wiring in the modal).
  */
@@ -71,6 +71,7 @@ export function payloadToExpression(
   p: FlowValueDragPayload,
   configuringNodeId?: string,
   outputSlotIndex = 0,
+  opts?: { soleInboundParentNodeId?: string | null },
 ): string {
   if (p.kind === 'contextVar') {
     return `=${appendPathToExpr(p.varName, p.path)}`;
@@ -82,6 +83,18 @@ export function payloadToExpression(
     p.nodeId === configuringNodeId;
 
   if (useInboundJson) {
+    return `=${appendPathToExpr('_json', p.path)}`;
+  }
+
+  const sole = opts?.soleInboundParentNodeId;
+  const useSoleParentInboundJson =
+    sole != null &&
+    configuringNodeId != null &&
+    p.source === 'nodeOutput' &&
+    p.nodeId === sole &&
+    p.nodeId !== configuringNodeId;
+
+  if (useSoleParentInboundJson) {
     return `=${appendPathToExpr('_json', p.path)}`;
   }
 
@@ -418,6 +431,11 @@ export const IoViewer: React.FC<{
   hideHeader?: boolean;
   /** When set, drag hints and payloads use inbound `_json` vs `_node[…].json` consistently with the modal node. */
   expressionConfigNodeId?: string;
+  /**
+   * Node id of the only inbound edge source for `expressionConfigNodeId`. When set, drags from **that** node's output
+   * use `_json` (same as runtime inbound row); other upstream sections still use `_node[…]`.
+   */
+  soleInboundParentNodeId?: string | null;
 }> = ({
   title,
   value,
@@ -428,6 +446,7 @@ export const IoViewer: React.FC<{
   valueKind = 'json',
   hideHeader = false,
   expressionConfigNodeId,
+  soleInboundParentNodeId = null,
 }) => {
   const [uncontrolledMode, setUncontrolledMode] = useState<'schema' | 'table' | 'json'>(defaultMode);
   const mode = controlledMode ?? uncontrolledMode;
@@ -570,6 +589,8 @@ export const IoViewer: React.FC<{
                                 exampleValue: null,
                               },
                               expressionConfigNodeId,
+                              0,
+                              { soleInboundParentNodeId },
                             )}`}
                         >
                           <span className="cursor-grab active:cursor-grabbing">{c}</span>

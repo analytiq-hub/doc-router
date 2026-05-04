@@ -110,7 +110,9 @@ export const FlowNodeParameterFields: React.FC<{
   readOnly?: boolean;
   /** Live `=` expression preview (server-evaluated Python subset). */
   expressionPreview?: ExpressionPreviewContext | null;
-}> = ({ node, nodeType, onChange, readOnly = false, expressionPreview = null }) => {
+  /** Single inbound edge source id — upstream drops from that node use `_json` instead of `_node[…].json`. */
+  soleInboundParentNodeId?: string | null;
+}> = ({ node, nodeType, onChange, readOnly = false, expressionPreview = null, soleInboundParentNodeId = null }) => {
   const rootSchema = nodeType?.parameter_schema;
   const schemaProps = useMemo(() => getSchemaProperties(rootSchema), [rootSchema]);
   const mergedParams = useMemo(
@@ -173,6 +175,7 @@ export const FlowNodeParameterFields: React.FC<{
             value={v}
             readOnly={readOnly}
             configuringNodeId={node.id}
+            soleInboundParentNodeId={soleInboundParentNodeId}
             expressionPreview={expressionPreview}
             onChange={(pairs: NameValuePair[]) => applyPatch({ [key]: pairs })}
           />
@@ -333,7 +336,7 @@ export const FlowNodeParameterFields: React.FC<{
                   ev.preventDefault();
                   const parsed = parseFlowValueDragPayload(raw);
                   if (!parsed) return;
-                  const insert = payloadToExpression(parsed, node.id);
+                  const insert = payloadToExpression(parsed, node.id, 0, { soleInboundParentNodeId });
                   const pos = editor.getTargetAtClientPoint(ev.clientX, ev.clientY)?.position ?? editor.getPosition();
                   if (!pos) return;
                   const model = editor.getModel();
@@ -458,7 +461,7 @@ export const FlowNodeParameterFields: React.FC<{
                 ev.preventDefault();
                 const parsed = parseFlowValueDragPayload(raw);
                 if (!parsed) return;
-                const expr = payloadToExpression(parsed, node.id);
+                const expr = payloadToExpression(parsed, node.id, 0, { soleInboundParentNodeId });
                 const insert =
                   isCode || uiHint === 'code'
                     ? expr.replace(/^=/, '')
@@ -526,7 +529,7 @@ export const FlowNodeParameterFields: React.FC<{
             const p = parseDropPayload(e);
             if (!p) return;
             e.preventDefault();
-            applyPatch({ [key]: payloadToExpression(p, node.id) });
+            applyPatch({ [key]: payloadToExpression(p, node.id, 0, { soleInboundParentNodeId }) });
           }}
         />
         {expressionPreview ? <FlowExpressionPreviewLine expression={strVal} preview={expressionPreview} /> : null}

@@ -26,7 +26,9 @@ export const FlowInputUpstreamList: React.FC<{
   mode: 'schema' | 'table' | 'json';
   onModeChange: (next: 'schema' | 'table' | 'json') => void;
   expressionConfigNodeId?: string;
-}> = ({ slots, nodeLabelById, upstreamNodeIcons, mode, onModeChange, expressionConfigNodeId }) => {
+  /** When the configured node has a single inbound wire, drags from that source use `_json` (see `payloadToExpression`). */
+  soleInboundParentNodeId?: string | null;
+}> = ({ slots, nodeLabelById, upstreamNodeIcons, mode, onModeChange, expressionConfigNodeId, soleInboundParentNodeId = null }) => {
   if (slots.length === 0) return null;
 
   return (
@@ -90,6 +92,7 @@ export const FlowInputUpstreamList: React.FC<{
                       nodeDisplayName: label,
                     }}
                     expressionConfigNodeId={expressionConfigNodeId}
+                    soleInboundParentNodeId={soleInboundParentNodeId}
                     defaultMode="schema"
                     mode={mode}
                     onModeChange={onModeChange}

@@ -343,6 +343,13 @@ const FlowNodeConfigModal: React.FC<{
     return Array.from(ids);
   }, [edges, node]);
 
+  /** Exactly one inbound edge → upstream field drags from that parent use `_json` instead of `_node["…"].json`. */
+  const soleInboundParentNodeId = useMemo(() => {
+    if (!node) return null;
+    const inc = edges.filter((e) => e.target === node.id && typeof e.source === 'string');
+    return inc.length === 1 ? inc[0].source : null;
+  }, [edges, node?.id]);
+
   const downstreamNodeIds = useMemo(() => {
     if (!node) return [];
     const ids = new Set<string>();
@@ -493,6 +500,7 @@ const FlowNodeConfigModal: React.FC<{
                           mode={inputIoMode}
                           onModeChange={setInputIoMode}
                           expressionConfigNodeId={node.id}
+                          soleInboundParentNodeId={soleInboundParentNodeId}
                         />
                       )}
                       {!inputPreview.message && inputPreview.slots.length === 0 && (
@@ -574,6 +582,7 @@ const FlowNodeConfigModal: React.FC<{
                               nodeType={nodeType}
                               onChange={onChange}
                               expressionPreview={expressionPreview}
+                              soleInboundParentNodeId={soleInboundParentNodeId}
                             />
                           )}
                           {node && (

@@ -32,11 +32,13 @@ export const FlowNameValueListField: React.FC<{
   readOnly: boolean;
   /** Modal node id — `_json` only when the drag payload is this node's `nodeInput`; upstream outputs use `_node[…].json`. */
   configuringNodeId?: string;
+  /** Single inbound parent — drags from that node's output use `_json` (same as `payloadToExpression`). */
+  soleInboundParentNodeId?: string | null;
   expressionPreview?: ExpressionPreviewContext | null;
   onChange: (next: NameValuePair[]) => void;
   /** Per-row validation messages (e.g. from JSON Schema / AJV on list items). */
   rowErrors?: Record<number, string>;
-}> = ({ label, value, readOnly, configuringNodeId, expressionPreview, onChange, rowErrors }) => {
+}> = ({ label, value, readOnly, configuringNodeId, soleInboundParentNodeId = null, expressionPreview, onChange, rowErrors }) => {
   const pairs = coerceNameValuePairs(value);
 
   return (
@@ -78,7 +80,7 @@ export const FlowNameValueListField: React.FC<{
                     if (!p) return;
                     e.preventDefault();
                     const n = [...pairs];
-                    n[i] = { ...n[i], value: payloadToExpression(p, configuringNodeId) };
+                    n[i] = { ...n[i], value: payloadToExpression(p, configuringNodeId, 0, { soleInboundParentNodeId }) };
                     onChange(n);
                   }}
                 />
