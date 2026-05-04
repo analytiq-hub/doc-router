@@ -22,6 +22,7 @@ from .credentials import *
 from .credential_kind_registry import *
 from .nodes import *
 from .register_builtin import *
+from .url_ssrf_guard import *
 
 
 def register_docrouter_nodes() -> None:

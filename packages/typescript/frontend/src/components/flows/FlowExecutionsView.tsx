@@ -184,7 +184,7 @@ const FlowExecutionsView: React.FC<{
   const loadList = useCallback(async () => {
     try {
       setErr('');
-      const res = await orgApi.listExecutions(flowId, { limit: 100, offset: 0 });
+      const res = await orgApi.listExecutions({ flowId, limit: 100, offset: 0 });
       setList(res.items);
       setTotal(res.total);
     } catch (e: unknown) {

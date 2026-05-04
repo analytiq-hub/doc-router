@@ -208,3 +208,21 @@ export interface ListFlowCredentialsResponse {
   total: number;
 }
 
+export interface CreateFlowCredentialParams {
+  kind_key: string;
+  name: string;
+  fields: Record<string, unknown>;
+}
+
+export interface UpdateFlowCredentialParams {
+  name: string;
+  fields: Record<string, unknown>;
+}
+
+/** Response from `POST .../credentials/{id}/test`. */
+export interface TestFlowCredentialResponse {
+  ok: boolean;
+  status_code?: number | null;
+  error?: string | null;
+}
+

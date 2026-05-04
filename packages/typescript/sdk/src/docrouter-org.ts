@@ -111,7 +111,11 @@ import {
   PreviewFlowExpressionParams,
   PreviewFlowExpressionResponse,
   FlowCredentialKindSummary,
+  FlowCredentialHeader,
   ListFlowCredentialsResponse,
+  CreateFlowCredentialParams,
+  UpdateFlowCredentialParams,
+  TestFlowCredentialResponse,
 } from './types';
 
 /**
@@ -926,6 +930,34 @@ export class DocRouterOrg {
     );
   }
 
+  async createFlowCredential(params: CreateFlowCredentialParams): Promise<FlowCredentialHeader> {
+    return this.http.post<FlowCredentialHeader>(
+      `/v0/orgs/${this.organizationId}/credentials`,
+      params,
+    );
+  }
+
+  async updateFlowCredential(
+    credentialId: string,
+    params: UpdateFlowCredentialParams,
+  ): Promise<FlowCredentialHeader> {
+    return this.http.put<FlowCredentialHeader>(
+      `/v0/orgs/${this.organizationId}/credentials/${credentialId}`,
+      params,
+    );
+  }
+
+  async deleteFlowCredential(credentialId: string): Promise<void> {
+    await this.http.delete(`/v0/orgs/${this.organizationId}/credentials/${credentialId}`);
+  }
+
+  async testFlowCredential(credentialId: string): Promise<TestFlowCredentialResponse> {
+    return this.http.post<TestFlowCredentialResponse>(
+      `/v0/orgs/${this.organizationId}/credentials/${credentialId}/test`,
+      {},
+    );
+  }
+
   async createFlow(params: CreateFlowParams): Promise<{ flow: FlowHeader }> {
     return this.http.post<{ flow: FlowHeader }>(`/v0/orgs/${this.organizationId}/flows`, params);
   }
@@ -1009,11 +1041,20 @@ export class DocRouterOrg {
     );
   }
 
-  async listExecutions(flowId: string, params?: { limit?: number; offset?: number }): Promise<ListExecutionsResponse> {
-    return this.http.get<ListExecutionsResponse>(`/v0/orgs/${this.organizationId}/flows/${flowId}/executions`, {
+  async listExecutions(params?: {
+    flowId?: string;
+    limit?: number;
+    offset?: number;
+    status?: string;
+    mode?: string;
+  }): Promise<ListExecutionsResponse> {
+    return this.http.get<ListExecutionsResponse>(`/v0/orgs/${this.organizationId}/executions`, {
       params: {
         limit: params?.limit ?? 50,
         offset: params?.offset ?? 0,
+        ...(params?.flowId ? { flow_id: params.flowId } : {}),
+        ...(params?.status ? { status: params.status } : {}),
+        ...(params?.mode ? { mode: params.mode } : {}),
       },
     });
   }

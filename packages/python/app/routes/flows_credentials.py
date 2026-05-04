@@ -338,6 +338,11 @@ async def test_credential(
         return TestCredentialResponse(ok=False, error="test_request.url missing")
 
     try:
+        ad.flows.assert_http_url_allowed(url, purpose="Credential test request")
+    except RuntimeError as e:
+        return TestCredentialResponse(ok=False, error=str(e))
+
+    try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.request(method, url, headers=headers or None, params=qs or None)
         ok = 200 <= resp.status_code < 300

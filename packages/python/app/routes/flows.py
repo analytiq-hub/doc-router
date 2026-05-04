@@ -215,6 +215,39 @@ async def _get_db():
     return ad.common.get_async_db()
 
 
+def _execution_doc_to_list_item(d: dict[str, Any]) -> FlowExecution:
+    """Serialize a `flow_executions` document for list responses (ISO timestamps for JSON)."""
+
+    return FlowExecution(
+        execution_id=str(d["_id"]),
+        flow_id=d["flow_id"],
+        flow_revid=d["flow_revid"],
+        organization_id=d["organization_id"],
+        mode=d["mode"],
+        status=d["status"],
+        started_at=d["started_at"].replace(tzinfo=UTC).isoformat()
+        if isinstance(d["started_at"], datetime)
+        else d["started_at"],
+        finished_at=(
+            d["finished_at"].replace(tzinfo=UTC).isoformat()
+            if isinstance(d.get("finished_at"), datetime)
+            else d.get("finished_at")
+        ),
+        last_heartbeat_at=(
+            d["last_heartbeat_at"].replace(tzinfo=UTC).isoformat()
+            if isinstance(d.get("last_heartbeat_at"), datetime)
+            else d.get("last_heartbeat_at")
+        ),
+        stop_requested=bool(d.get("stop_requested")),
+        last_node_executed=d.get("last_node_executed"),
+        run_data=d.get("run_data") or {},
+        error=d.get("error"),
+        trigger=d.get("trigger") or {},
+        target_node_id=d.get("target_node_id"),
+        initial_run_data=d.get("initial_run_data"),
+    )
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -699,49 +732,30 @@ async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, curr
     return {"execution_id": exec_id}
 
 
-@flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}/executions", response_model=ListExecutionsResponse)
+@flows_router.get("/v0/orgs/{organization_id}/executions", response_model=ListExecutionsResponse)
 async def list_executions(
     organization_id: str,
-    flow_id: str,
+    flow_id: str | None = Query(None, description="When set, only executions for this flow"),
+    status: str | None = Query(None, description="Filter by execution status"),
+    mode: str | None = Query(None, description="Filter by execution mode"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     current_user: User = Depends(get_org_user),
 ):
+    """List flow executions for the organization; optionally narrow by flow and filters."""
+
+    _ = current_user
     db = await _get_db()
-    total = await db.flow_executions.count_documents({"flow_id": flow_id, "organization_id": organization_id})
-    docs = await db.flow_executions.find({"flow_id": flow_id, "organization_id": organization_id}).sort([("started_at", -1)]).skip(offset).limit(limit).to_list(limit)
-    items = []
-    for d in docs:
-        items.append(
-            FlowExecution(
-                execution_id=str(d["_id"]),
-                flow_id=d["flow_id"],
-                flow_revid=d["flow_revid"],
-                organization_id=d["organization_id"],
-                mode=d["mode"],
-                status=d["status"],
-                started_at=d["started_at"].replace(tzinfo=UTC).isoformat()
-                if isinstance(d["started_at"], datetime)
-                else d["started_at"],
-                finished_at=(
-                    d["finished_at"].replace(tzinfo=UTC).isoformat()
-                    if isinstance(d.get("finished_at"), datetime)
-                    else d.get("finished_at")
-                ),
-                last_heartbeat_at=(
-                    d["last_heartbeat_at"].replace(tzinfo=UTC).isoformat()
-                    if isinstance(d.get("last_heartbeat_at"), datetime)
-                    else d.get("last_heartbeat_at")
-                ),
-                stop_requested=bool(d.get("stop_requested")),
-                last_node_executed=d.get("last_node_executed"),
-                run_data=d.get("run_data") or {},
-                error=d.get("error"),
-                trigger=d.get("trigger") or {},
-                target_node_id=d.get("target_node_id"),
-                initial_run_data=d.get("initial_run_data"),
-            )
-        )
+    query: dict[str, Any] = {"organization_id": organization_id}
+    if flow_id:
+        query["flow_id"] = flow_id
+    if status:
+        query["status"] = status
+    if mode:
+        query["mode"] = mode
+    total = await db.flow_executions.count_documents(query)
+    docs = await db.flow_executions.find(query).sort([("started_at", -1)]).skip(offset).limit(limit).to_list(limit)
+    items = [_execution_doc_to_list_item(d) for d in docs]
     return {"items": items, "total": total}
 
 
