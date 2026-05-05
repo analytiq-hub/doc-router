@@ -310,10 +310,14 @@ class FlowsWebhookTriggerNode:
             fname = bp.get("file_name")
             if fname is not None and not isinstance(fname, str):
                 fname = str(fname)
+            fsize = bp.get("file_size")
+            if fsize is not None and not isinstance(fsize, int):
+                fsize = None
             binary_out[name] = ad.flows.BinaryRef(
                 mime_type=mime,
                 file_name=fname,
                 storage_id=sid,
+                file_size=fsize,
             )
 
         item = ad.flows.FlowItem(

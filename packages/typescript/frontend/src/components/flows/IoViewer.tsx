@@ -1,6 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
+import type { FlowExecutionBlobContext } from './flowExecutionBlob';
+import { fetchFlowExecutionBlob } from './flowExecutionBlob';
 
 export type JsonPath = Array<string | number>;
 
@@ -166,7 +168,7 @@ function convertToTableLikeN8n(items: unknown[], maxItems: number): TableData | 
       entryColumns = entryColumns.slice(0, TABLE_MAX_KEYS_PER_ROW);
     }
 
-    let leftEntryColumns = [...entryColumns];
+    const leftEntryColumns = [...entryColumns];
     const entryRows: unknown[] = [];
 
     for (const key of tableColumns) {
@@ -251,34 +253,203 @@ function shortValuePreview(v: unknown): string {
   return String(v);
 }
 
-/** Shared Schema / Table / JSON toggle (n8n-style input/output toolbar). */
+export type IoDataMode = 'schema' | 'table' | 'json' | 'binary';
+
+/** Shared Schema / Table / JSON / Binary toggle (n8n-style; Binary appears only when `showBinary`). */
 export function IoDataModeTabs({
   mode,
   onChange,
+  showBinary = false,
 }: {
-  mode: 'schema' | 'table' | 'json';
-  onChange: (next: 'schema' | 'table' | 'json') => void;
+  mode: IoDataMode;
+  onChange: (next: IoDataMode) => void;
+  showBinary?: boolean;
 }) {
+  const modes: IoDataMode[] = showBinary ? ['schema', 'table', 'json', 'binary'] : ['schema', 'table', 'json'];
+  const label = (m: IoDataMode) =>
+    m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : m === 'json' ? 'JSON' : 'Binary';
   return (
     <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
-      {(['schema', 'table', 'json'] as const).map((m) => (
+      {modes.map((m) => (
         <button
           key={m}
           type="button"
           onClick={() => onChange(m)}
-          title={m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : 'JSON'}
-          aria-label={m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : 'JSON'}
+          title={label(m)}
+          aria-label={label(m)}
           className={[
             'rounded px-2 py-1 text-[10px] font-semibold leading-none',
             mode === m ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
           ].join(' ')}
         >
-          {m === 'schema' ? 'Schema' : m === 'table' ? 'Table' : 'JSON'}
+          {label(m)}
         </button>
       ))}
     </div>
   );
 }
+
+function formatFileSizeBytes(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return '—';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10_240 ? 2 : 1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(n < 10_485_760 ? 2 : 1)} MB`;
+}
+
+function fileExtensionFromName(name: string | undefined): string {
+  if (!name || typeof name !== 'string') return '—';
+  const i = name.lastIndexOf('.');
+  if (i <= 0 || i === name.length - 1) return '—';
+  return name.slice(i + 1).toLowerCase();
+}
+
+type BinaryRefLike = {
+  mime_type?: string;
+  file_name?: string;
+  storage_id?: string;
+  file_size?: number;
+};
+
+function coerceBinaryRefLike(v: unknown): BinaryRefLike | null {
+  if (v == null || typeof v !== 'object' || Array.isArray(v)) return null;
+  const o = v as Record<string, unknown>;
+  const storage_id = o.storage_id;
+  if (typeof storage_id !== 'string' || !storage_id.trim()) return null;
+  const mime_type = typeof o.mime_type === 'string' ? o.mime_type : undefined;
+  const file_name = typeof o.file_name === 'string' ? o.file_name : undefined;
+  const fs = o.file_size;
+  const file_size = typeof fs === 'number' && Number.isFinite(fs) ? fs : undefined;
+  return { mime_type, file_name, storage_id: storage_id.trim(), file_size };
+}
+
+function binaryAttachmentRows(itemsBinaries: Array<Record<string, unknown>>): Array<{
+  itemIndex: number;
+  propertyName: string;
+  ref: BinaryRefLike;
+}> {
+  const rows: Array<{ itemIndex: number; propertyName: string; ref: BinaryRefLike }> = [];
+  itemsBinaries.forEach((bin, itemIndex) => {
+    if (!bin || typeof bin !== 'object') return;
+    for (const [propertyName, raw] of Object.entries(bin)) {
+      const ref = coerceBinaryRefLike(raw);
+      if (ref) rows.push({ itemIndex, propertyName, ref });
+    }
+  });
+  return rows;
+}
+
+const IoBinaryPanel: React.FC<{
+  itemsBinaries: Array<Record<string, unknown>>;
+  itemCount: number;
+  flowBlobDownloadContext: FlowExecutionBlobContext | null;
+}> = ({ itemsBinaries, itemCount, flowBlobDownloadContext }) => {
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const rows = useMemo(() => binaryAttachmentRows(itemsBinaries), [itemsBinaries]);
+
+  const openBlob = useCallback(
+    async (key: string, storageId: string, download: boolean, fallbackName: string | undefined) => {
+      if (!flowBlobDownloadContext) {
+        setError('Run the workflow and select an execution to download binaries.');
+        return;
+      }
+      setError(null);
+      setBusyKey(key);
+      try {
+        const { blob, downloadName } = await fetchFlowExecutionBlob(flowBlobDownloadContext, storageId);
+        const url = URL.createObjectURL(blob);
+        if (download) {
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = (downloadName && downloadName.trim()) || fallbackName || 'attachment';
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        } else {
+          window.open(url, '_blank', 'noopener,noreferrer');
+          window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
+        }
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to load binary');
+      } finally {
+        setBusyKey(null);
+      }
+    },
+    [flowBlobDownloadContext],
+  );
+
+  if (rows.length === 0) {
+    return <div className="p-3 text-sm text-gray-500">No binary attachments on these items.</div>;
+  }
+
+  const showItemLabels = itemCount > 1;
+
+  return (
+    <div className="max-h-[360px] space-y-3 overflow-auto">
+      {error ? <div className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-900">{error}</div> : null}
+      {!flowBlobDownloadContext ? (
+        <div className="text-[11px] text-gray-500">
+          View and Download need a saved execution context (run the flow from the editor or open an execution).
+        </div>
+      ) : null}
+      {rows.map((r) => {
+        const cardKey = `${r.itemIndex}:${r.propertyName}:${r.ref.storage_id}`;
+        const ext = fileExtensionFromName(r.ref.file_name);
+        const mime = r.ref.mime_type && r.ref.mime_type.trim() ? r.ref.mime_type : '—';
+        const sizeLabel = r.ref.file_size != null ? formatFileSizeBytes(r.ref.file_size) : '—';
+        const displayName = r.ref.file_name?.trim() || r.propertyName;
+        const canFetch = Boolean(flowBlobDownloadContext && r.ref.storage_id.startsWith('flow_blobs:'));
+        const busy = busyKey === cardKey;
+        return (
+          <div key={cardKey} className="rounded-md border border-[#eceff2] bg-white p-3 shadow-sm">
+            {showItemLabels ? (
+              <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                Item {r.itemIndex + 1}
+                <span className="font-mono normal-case text-gray-600"> · {r.propertyName}</span>
+              </div>
+            ) : (
+              <div className="mb-2 text-[11px] font-semibold text-gray-800">{r.propertyName}</div>
+            )}
+            <dl className="grid grid-cols-[8.5rem_1fr] gap-x-2 gap-y-1 text-[11px]">
+              <dt className="text-gray-500">File Name</dt>
+              <dd className="min-w-0 truncate font-mono text-gray-900" title={displayName}>
+                {displayName}
+              </dd>
+              <dt className="text-gray-500">File Extension</dt>
+              <dd className="font-mono text-gray-900">{ext}</dd>
+              <dt className="text-gray-500">Mime Type</dt>
+              <dd className="min-w-0 truncate font-mono text-gray-900" title={mime}>
+                {mime}
+              </dd>
+              <dt className="text-gray-500">File Size</dt>
+              <dd className="font-mono text-gray-900">{sizeLabel}</dd>
+            </dl>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                disabled={!canFetch || busy}
+                onClick={() => void openBlob(cardKey, r.ref.storage_id!, false, r.ref.file_name)}
+                className="rounded-md bg-rose-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy ? '…' : 'View'}
+              </button>
+              <button
+                type="button"
+                disabled={!canFetch || busy}
+                onClick={() => void openBlob(cardKey, r.ref.storage_id!, true, r.ref.file_name)}
+                className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {busy ? '…' : 'Download'}
+              </button>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
 
 const SchemaAccordion: React.FC<{
   label: string;
@@ -419,14 +590,20 @@ export const IoViewer: React.FC<{
   title?: string;
   value: unknown;
   dragSource: { nodeId: string; source: 'nodeOutput' | 'nodeInput'; nodeDisplayName?: string };
-  defaultMode?: 'schema' | 'table' | 'json';
-  mode?: 'schema' | 'table' | 'json';
-  onModeChange?: (next: 'schema' | 'table' | 'json') => void;
+  defaultMode?: IoDataMode;
+  mode?: IoDataMode;
+  onModeChange?: (next: IoDataMode) => void;
   /**
    * `executionItems`: value is treated as `FlowItem[].json` only (often an array). Schema uses the first item;
    * table one row per item; JSON renders a top-level `[...]` (or `[]`).
    */
   valueKind?: 'executionItems' | 'json';
+  /**
+   * When `valueKind` is `executionItems`, parallel `FlowItem.binary` maps (same length as rows; omit or pad with `{}`).
+   */
+  executionItemsBinaries?: Array<Record<string, unknown>> | null;
+  /** Enables View/Download using `fetchFlowExecutionBlob` for `flow_blobs:` refs. */
+  flowBlobDownloadContext?: FlowExecutionBlobContext | null;
   /** When true, only the schema/table/json body is rendered (parent supplies chrome). */
   hideHeader?: boolean;
   /** When set, drag hints and payloads use inbound `_json` vs `_node[…].json` consistently with the modal node. */
@@ -444,13 +621,15 @@ export const IoViewer: React.FC<{
   mode: controlledMode,
   onModeChange,
   valueKind = 'json',
+  executionItemsBinaries = null,
+  flowBlobDownloadContext = null,
   hideHeader = false,
   expressionConfigNodeId,
   soleInboundParentNodeId = null,
 }) => {
-  const [uncontrolledMode, setUncontrolledMode] = useState<'schema' | 'table' | 'json'>(defaultMode);
+  const [uncontrolledMode, setUncontrolledMode] = useState<IoDataMode>(defaultMode);
   const mode = controlledMode ?? uncontrolledMode;
-  const setMode = (next: 'schema' | 'table' | 'json') => {
+  const setMode = (next: IoDataMode) => {
     onModeChange?.(next);
     if (controlledMode == null) setUncontrolledMode(next);
   };
@@ -459,6 +638,37 @@ export const IoViewer: React.FC<{
     () => (valueKind === 'executionItems' ? coerceExecutionItems(value) : []),
     [value, valueKind],
   );
+
+  const paddedItemBinaries = useMemo(() => {
+    if (valueKind !== 'executionItems') return [];
+    const n = executionItems.length;
+    const src = executionItemsBinaries ?? [];
+    const out: Record<string, unknown>[] = [];
+    for (let i = 0; i < n; i++) {
+      const b = src[i];
+      out.push(b != null && typeof b === 'object' && !Array.isArray(b) ? (b as Record<string, unknown>) : {});
+    }
+    return out;
+  }, [valueKind, executionItems.length, executionItemsBinaries]);
+
+  const showBinaryTab = useMemo(() => {
+    if (valueKind !== 'executionItems') return false;
+    return paddedItemBinaries.some((b) => Object.keys(b).length > 0);
+  }, [valueKind, paddedItemBinaries]);
+
+  useEffect(() => {
+    if (mode !== 'binary' || showBinaryTab) return;
+    let cancelled = false;
+    const id = requestAnimationFrame(() => {
+      if (cancelled) return;
+      onModeChange?.('json');
+      if (controlledMode == null) setUncontrolledMode('json');
+    });
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(id);
+    };
+  }, [mode, showBinaryTab, controlledMode, onModeChange]);
 
   const schemaRoot = useMemo(() => {
     if (valueKind === 'executionItems') {
@@ -537,7 +747,7 @@ export const IoViewer: React.FC<{
             {title && <div className="truncate text-[11px] font-semibold text-gray-700">{title}</div>}
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            <IoDataModeTabs mode={mode} onChange={setMode} />
+            <IoDataModeTabs mode={mode} onChange={setMode} showBinary={showBinaryTab} />
             {itemsCountLabel != null ? (
               <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-gray-500">{itemsCountLabel}</span>
             ) : null}
@@ -690,6 +900,16 @@ export const IoViewer: React.FC<{
               foldingHighlight: true,
               renderLineHighlight: 'none',
             }}
+          />
+        </div>
+      )}
+
+      {mode === 'binary' && showBinaryTab && (
+        <div className="rounded border border-[#eceff2] bg-[#fafbfc]/60 p-2">
+          <IoBinaryPanel
+            itemsBinaries={paddedItemBinaries}
+            itemCount={executionItems.length}
+            flowBlobDownloadContext={flowBlobDownloadContext ?? null}
           />
         </div>
       )}

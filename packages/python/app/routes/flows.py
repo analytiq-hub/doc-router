@@ -128,6 +128,7 @@ async def _webhook_finalize_pending_uploads(
                 "mime_type": mime,
                 "file_name": fname,
                 "storage_id": f"flow_blobs:{gfs_key}",
+                "file_size": len(blob_bytes),
             }
         )
     merged = {**trigger, "binary_properties": binary_props}
@@ -1122,6 +1123,55 @@ async def get_execution(organization_id: str, flow_id: str, exec_id: str, curren
         target_node_id=d.get("target_node_id"),
         initial_run_data=d.get("initial_run_data"),
     )
+
+
+@flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}/executions/{exec_id}/blob")
+async def get_execution_blob(
+    organization_id: str,
+    flow_id: str,
+    exec_id: str,
+    storage_id: str = Query(..., min_length=1, description='BinaryRef.storage_id (bucket:key), e.g. flow_blobs:execId/node/item/prop'),
+    current_user: User = Depends(get_org_user),
+):
+    """Return bytes for an item binary stored under this execution (`flow_blobs` GridFS keys are scoped per execution)."""
+
+    _ = current_user
+    try:
+        oid = ObjectId(exec_id)
+    except InvalidId:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    db = await _get_db()
+    doc = await db.flow_executions.find_one({"_id": oid, "flow_id": flow_id, "organization_id": organization_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    sid = storage_id.strip()
+    parts = sid.split(":", 1)
+    if len(parts) != 2 or parts[0] != "flow_blobs" or not parts[1]:
+        raise HTTPException(status_code=400, detail="Invalid storage_id")
+    key = parts[1]
+    if not key.startswith(f"{exec_id}/"):
+        raise HTTPException(status_code=403, detail="Blob key does not belong to this execution")
+
+    aq_client = ad.common.get_analytiq_client()
+    result = await ad.mongodb.blob.get_blob_async(aq_client, bucket="flow_blobs", key=key)
+    if not result:
+        raise HTTPException(status_code=404, detail="Blob not found")
+    blob_raw = result.get("blob")
+    if blob_raw is None:
+        raise HTTPException(status_code=404, detail="Blob payload missing")
+    blob = blob_raw if isinstance(blob_raw, (bytes, bytearray)) else bytes(blob_raw)
+
+    meta_raw = result.get("metadata") or {}
+    meta: dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
+    mime = meta.get("mime_type") if isinstance(meta.get("mime_type"), str) else "application/octet-stream"
+    fname = meta.get("file_name") if isinstance(meta.get("file_name"), str) else ""
+    headers: dict[str, str] = {}
+    if fname.strip():
+        safe = "".join(ch if ch.isascii() and ch not in {'\\', '"'} else "_" for ch in fname.strip())[:240]
+        headers["Content-Disposition"] = f'attachment; filename="{safe}"'
+    return Response(content=blob, media_type=mime, headers=headers)
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/executions/{exec_id}/stop")

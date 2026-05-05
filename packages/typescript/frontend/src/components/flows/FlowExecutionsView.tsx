@@ -26,6 +26,7 @@ import { FLOW_RF_LABELED_EDGE_TYPE } from './flowRfCanvasTypes';
 import { useStableFlowRfCanvasRegistration } from './useStableFlowRfCanvasRegistration';
 import { FLOW_RF_PANEL_CLEAR_BELOW_WORKSPACE_TABS } from './flowUiClasses';
 import FlowLogsPanel from './FlowLogsPanel';
+import type { FlowExecutionBlobContext } from './flowExecutionBlob';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import { applyExecutionStatusToNodes } from './flowNodeRunStatus';
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelGroupHandle } from 'react-resizable-panels';
@@ -587,6 +588,15 @@ const FlowExecutionsView: React.FC<{
                 flow_id: detail.flow_id,
                 flow_revid: detail.flow_revid,
               }
+            : null
+        }
+        flowBlobDownloadContext={
+          detail?.execution_id && detail.flow_id
+            ? ({
+                organizationId: orgApi.organizationId,
+                flowId: detail.flow_id,
+                executionId: detail.execution_id,
+              } satisfies FlowExecutionBlobContext)
             : null
         }
         onSelectNode={(nodeId) => setConfigModalId(nodeId)}

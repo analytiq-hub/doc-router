@@ -151,13 +151,16 @@ def _validate_expr_ast(tree: ast.AST) -> None:
 def _materialize_binary(binary: dict[str, ad.flows.BinaryRef]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for k, v in (binary or {}).items():
-        out[k] = {
+        cell: dict[str, Any] = {
             "mime_type": v.mime_type,
             "file_name": v.file_name,
             # Intentionally omit raw `data` bytes from expression context.
             "data": None,
             "storage_id": v.storage_id,
         }
+        if v.file_size is not None:
+            cell["file_size"] = v.file_size
+        out[k] = cell
     return out
 
 
@@ -223,16 +226,19 @@ def _binary_from_flow_cell(cell: Any) -> dict[str, Any]:
         out: dict[str, Any] = {}
         for k, v in b.items():
             if isinstance(v, ad.flows.BinaryRef):
-                out[k] = {
+                br: dict[str, Any] = {
                     "mime_type": v.mime_type,
                     "file_name": v.file_name,
                     "data": None,
                     "storage_id": v.storage_id,
                 }
+                if v.file_size is not None:
+                    br["file_size"] = v.file_size
+                out[k] = br
             elif isinstance(v, dict):
                 out[k] = {
                     kk: v.get(kk)
-                    for kk in ("mime_type", "file_name", "data", "storage_id")
+                    for kk in ("mime_type", "file_name", "data", "storage_id", "file_size")
                     if kk in v
                 }
             else:

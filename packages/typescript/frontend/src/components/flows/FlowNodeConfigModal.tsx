@@ -35,7 +35,8 @@ import {
 import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
 import { FlowInputUpstreamList } from './FlowInputUpstreamList';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
-import { FLOW_VALUE_MIME, IoViewer } from './IoViewer';
+import type { FlowExecutionBlobContext } from './flowExecutionBlob';
+import { FLOW_VALUE_MIME, IoViewer, type IoDataMode } from './IoViewer';
 import {
   flowInlineNameInputClass,
   flowInlineNameMeasureClass,
@@ -352,6 +353,8 @@ const FlowNodeConfigModal: React.FC<{
   webhookTestListening?: boolean;
   webhookTestListeningLeaf?: string | null;
   webhookTestListenBusy?: boolean;
+  /** When set, Binary tab View/Download can resolve `flow_blobs:` payloads for this execution. */
+  flowBlobDownloadContext?: FlowExecutionBlobContext | null;
 }> = ({
   open,
   onClose,
@@ -375,12 +378,13 @@ const FlowNodeConfigModal: React.FC<{
   webhookTestListening = false,
   webhookTestListeningLeaf = null,
   webhookTestListenBusy = false,
+  flowBlobDownloadContext = null,
 }) => {
   const [tab, setTab] = useState(0);
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
-  const [inputIoMode, setInputIoMode] = useState<'schema' | 'table' | 'json'>('schema');
-  const [outputIoMode, setOutputIoMode] = useState<'schema' | 'table' | 'json'>('schema');
+  const [inputIoMode, setInputIoMode] = useState<IoDataMode>('schema');
+  const [outputIoMode, setOutputIoMode] = useState<IoDataMode>('schema');
   const [expressionPreviewItemIndex, setExpressionPreviewItemIndex] = useState(0);
   const measure = useInlineNameWidthPx(node?.name ?? '', 'Node name');
   const nodeId = node?.id ?? '';
@@ -399,7 +403,17 @@ const FlowNodeConfigModal: React.FC<{
   const typedPinData = useMemo(() => pinData ?? null, [pinData]);
 
   const inputPreview = useMemo(() => {
-    if (!node) return { slots: [] as { slot: number; fromNodeId: string; itemsJson: unknown[] }[], message: 'No node' };
+    if (!node) {
+      return {
+        slots: [] as {
+          slot: number;
+          fromNodeId: string;
+          itemsJson: unknown[];
+          itemsBinaries: Record<string, unknown>[];
+        }[],
+        message: 'No node',
+      };
+    }
     return buildNodeInputPreview(node.id, edges, runData, typedPinData);
   }, [node, edges, runData, typedPinData]);
 
@@ -454,11 +468,16 @@ const FlowNodeConfigModal: React.FC<{
 
   const runItems = useMemo(() => (nodeId ? nodeItemsFromRunData(runData, nodeId) : null), [runData, nodeId]);
   const outputItems = pinnedItems ?? runItems;
-  const outputValue = useMemo(() => (outputItems ? outputItems.map((i) => i.json) : null), [outputItems]);
 
   const outputExecPreview = useMemo(
     () =>
-      nodeId ? buildNodeOutputPreview(nodeId, runData, typedPinData) : { itemsJson: [] as unknown[], message: null as string | null },
+      nodeId
+        ? buildNodeOutputPreview(nodeId, runData, typedPinData)
+        : {
+            itemsJson: [] as unknown[],
+            itemsBinaries: [] as Record<string, unknown>[],
+            message: null as string | null,
+          },
     [nodeId, runData, typedPinData],
   );
 
@@ -695,6 +714,7 @@ const FlowNodeConfigModal: React.FC<{
                           onModeChange={setInputIoMode}
                           expressionConfigNodeId={node.id}
                           soleInboundParentNodeId={soleInboundParentNodeId}
+                          flowBlobDownloadContext={flowBlobDownloadContext ?? null}
                         />
                       )}
                       {!inputPreview.message && inputPreview.slots.length === 0 && (
@@ -702,6 +722,8 @@ const FlowNodeConfigModal: React.FC<{
                           title="Input"
                           value={[]}
                           valueKind="executionItems"
+                          executionItemsBinaries={[]}
+                          flowBlobDownloadContext={flowBlobDownloadContext ?? null}
                           dragSource={{
                             nodeId: node.id,
                             source: 'nodeInput',
@@ -861,8 +883,10 @@ const FlowNodeConfigModal: React.FC<{
                   <NodeRunErrorDetails error={outputRunError} />
                   <IoViewer
                     title={node.name || typeLabel}
-                    value={outputValue ?? outputExecPreview.itemsJson ?? []}
+                    value={outputExecPreview.itemsJson}
                     valueKind="executionItems"
+                    executionItemsBinaries={outputExecPreview.itemsBinaries}
+                    flowBlobDownloadContext={flowBlobDownloadContext ?? null}
                     dragSource={{
                       nodeId: node.id,
                       source: 'nodeOutput',

@@ -1,12 +1,18 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
-import { IoDataModeTabs, IoViewer } from './IoViewer';
+import type { FlowExecutionBlobContext } from './flowExecutionBlob';
+import { IoDataModeTabs, IoViewer, type IoDataMode } from './IoViewer';
 
-export type UpstreamInputSlot = { slot: number; fromNodeId: string; itemsJson: unknown[] };
+export type UpstreamInputSlot = {
+  slot: number;
+  fromNodeId: string;
+  itemsJson: unknown[];
+  itemsBinaries: Record<string, unknown>[];
+};
 
 export type UpstreamNodeIconMeta = { iconKey?: string | null; isTrigger?: boolean };
 
@@ -23,18 +29,33 @@ export const FlowInputUpstreamList: React.FC<{
   nodeLabelById: Map<string, string>;
   /** When set, shows a preset icon per upstream node id (from flow node type). */
   upstreamNodeIcons?: ReadonlyMap<string, UpstreamNodeIconMeta | undefined>;
-  mode: 'schema' | 'table' | 'json';
-  onModeChange: (next: 'schema' | 'table' | 'json') => void;
+  mode: IoDataMode;
+  onModeChange: (next: IoDataMode) => void;
   expressionConfigNodeId?: string;
   /** When the configured node has a single inbound wire, drags from that source use `_json` (see `payloadToExpression`). */
   soleInboundParentNodeId?: string | null;
-}> = ({ slots, nodeLabelById, upstreamNodeIcons, mode, onModeChange, expressionConfigNodeId, soleInboundParentNodeId = null }) => {
+  flowBlobDownloadContext?: FlowExecutionBlobContext | null;
+}> = ({
+  slots,
+  nodeLabelById,
+  upstreamNodeIcons,
+  mode,
+  onModeChange,
+  expressionConfigNodeId,
+  soleInboundParentNodeId = null,
+  flowBlobDownloadContext = null,
+}) => {
   if (slots.length === 0) return null;
+
+  const showBinaryAggregate = useMemo(
+    () => slots.some((s) => (s.itemsBinaries ?? []).some((b) => b && typeof b === 'object' && Object.keys(b).length > 0)),
+    [slots],
+  );
 
   return (
     <div className="min-w-0">
       <div className="mb-2 flex items-center justify-end gap-2">
-        <IoDataModeTabs mode={mode} onChange={onModeChange} />
+        <IoDataModeTabs mode={mode} onChange={onModeChange} showBinary={showBinaryAggregate} />
       </div>
       <div className="divide-y divide-gray-100 overflow-hidden rounded border border-[#eceff2] bg-white">
         {slots.map((s, i) => {
@@ -86,6 +107,8 @@ export const FlowInputUpstreamList: React.FC<{
                     hideHeader
                     value={s.itemsJson}
                     valueKind="executionItems"
+                    executionItemsBinaries={s.itemsBinaries}
+                    flowBlobDownloadContext={flowBlobDownloadContext ?? null}
                     dragSource={{
                       nodeId: s.fromNodeId,
                       source: 'nodeOutput',

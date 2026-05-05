@@ -721,6 +721,7 @@ export default function FlowDetailPageClient({
                   <Panel defaultSize={100 - LOGS_COLLAPSED_PCT} minSize={25} className="min-h-0">
                     <div className="h-full min-h-0 min-w-0 overflow-hidden">
                       <FlowEditor
+                        flowId={flowId}
                         nodeTypes={nodeTypes}
                         nodes={rfNodes as Node<FlowRfNodeData>[]}
                         edges={rfEdges}

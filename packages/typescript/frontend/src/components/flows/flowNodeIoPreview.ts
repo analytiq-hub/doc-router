@@ -20,6 +20,63 @@ type NodeRun = {
   error?: unknown;
 };
 
+/** One lane-0 execution item as JSON preview + opaque binary refs (serialized `BinaryRef` dicts per property). */
+export type LaneItemSnapshot = { json: unknown; binary: Record<string, unknown> };
+
+function binaryMapFromLaneItem(it: unknown): Record<string, unknown> {
+  if (it != null && typeof it === 'object' && 'binary' in it) {
+    const b = (it as { binary?: unknown }).binary;
+    if (b != null && typeof b === 'object' && !Array.isArray(b)) {
+      return b as Record<string, unknown>;
+    }
+  }
+  return {};
+}
+
+/** Lane `main[0]` item snapshots (`json` + `binary`) for run_data / execution entries. */
+export function laneMain0Snapshots(runEntry: unknown): LaneItemSnapshot[] {
+  if (!runEntry || typeof runEntry !== 'object') return [];
+  const main = (runEntry as NodeRun).data?.main;
+  if (!Array.isArray(main) || main.length === 0) return [];
+  const lane = main[0];
+  if (!Array.isArray(lane)) return [];
+  const out: LaneItemSnapshot[] = [];
+  for (const it of lane) {
+    if (it != null && typeof it === 'object' && 'json' in (it as object)) {
+      out.push({
+        json: (it as { json?: unknown }).json ?? null,
+        binary: binaryMapFromLaneItem(it),
+      });
+    } else if (it != null) {
+      out.push({ json: it, binary: {} });
+    } else {
+      out.push({ json: null, binary: {} });
+    }
+  }
+  return out;
+}
+
+/** Pin lane snapshots (binary is present only if callers stored it alongside `json`). */
+export function laneMain0SnapshotsFromPin(pinOutput: FlowPinNodeOutput | null | undefined): LaneItemSnapshot[] {
+  if (!pinOutput?.main?.length) return [];
+  const lane = pinOutput.main[0];
+  if (!lane || !Array.isArray(lane)) return [];
+  const out: LaneItemSnapshot[] = [];
+  for (const it of lane) {
+    if (it != null && typeof it === 'object' && 'json' in (it as object)) {
+      out.push({
+        json: (it as { json?: unknown }).json ?? null,
+        binary: binaryMapFromLaneItem(it),
+      });
+    } else if (it != null) {
+      out.push({ json: it, binary: {} });
+    } else {
+      out.push({ json: null, binary: {} });
+    }
+  }
+  return out;
+}
+
 function hasPinMainLane(pin: FlowPinNodeOutput | null | undefined): pin is FlowPinNodeOutput {
   return pin != null && typeof pin === 'object' && 'main' in pin && Array.isArray(pin.main);
 }
@@ -43,40 +100,32 @@ export function runDataMergedWithPins(
 
 /** All `.json` values from output lane `main[0]` for a node's run entry. */
 export function laneMain0ItemsJson(runEntry: unknown): unknown[] {
-  if (!runEntry || typeof runEntry !== 'object') return [];
-  const main = (runEntry as NodeRun).data?.main;
-  if (!Array.isArray(main) || main.length === 0) return [];
-  const lane = main[0];
-  if (!Array.isArray(lane)) return [];
-  const out: unknown[] = [];
-  for (const it of lane) {
-    if (it != null && typeof it === 'object' && 'json' in (it as object)) {
-      out.push((it as { json?: unknown }).json ?? null);
-    } else if (it != null) {
-      out.push(it);
-    } else {
-      out.push(null);
-    }
-  }
-  return out;
+  return laneMain0Snapshots(runEntry).map((s) => s.json);
 }
 
 /** `.json` values from pin lane `main[0]` (`FlowPinNodeOutput` matches execution `data.main` shape without status wrapper). */
 export function laneMain0ItemsJsonFromPin(pinOutput: FlowPinNodeOutput | null | undefined): unknown[] {
-  if (!pinOutput?.main?.length) return [];
-  const lane = pinOutput.main[0];
-  if (!lane || !Array.isArray(lane)) return [];
-  const out: unknown[] = [];
-  for (const it of lane) {
-    if (it != null && typeof it === 'object' && 'json' in (it as object)) {
-      out.push((it as { json?: unknown }).json ?? null);
-    } else if (it != null) {
-      out.push(it);
-    } else {
-      out.push(null);
-    }
-  }
-  return out;
+  return laneMain0SnapshotsFromPin(pinOutput).map((s) => s.json);
+}
+
+/** Parallel {@link upstreamOutputItemsPreview} binary maps keyed by attachment name. */
+export function upstreamOutputBinariesPreview(
+  fromNodeId: string,
+  runData: RunData,
+  pinData: FlowPinData | null | undefined,
+): Record<string, unknown>[] {
+  return upstreamOutputSnapshotsPreview(fromNodeId, runData, pinData).map((s) => s.binary);
+}
+
+export function upstreamOutputSnapshotsPreview(
+  fromNodeId: string,
+  runData: RunData,
+  pinData: FlowPinData | null | undefined,
+): LaneItemSnapshot[] {
+  const pinned = pinData?.[fromNodeId];
+  if (hasPinMainLane(pinned)) return laneMain0SnapshotsFromPin(pinned);
+  if (!runData) return [];
+  return laneMain0Snapshots(runData[fromNodeId]);
 }
 
 /** Preview items for upstream `fromNodeId`: prefer revision **pin** when present, else execution `run_data`. */
@@ -85,10 +134,7 @@ export function upstreamOutputItemsPreview(
   runData: RunData,
   pinData: FlowPinData | null | undefined,
 ): unknown[] {
-  const pinned = pinData?.[fromNodeId];
-  if (hasPinMainLane(pinned)) return laneMain0ItemsJsonFromPin(pinned);
-  if (!runData) return [];
-  return laneMain0ItemsJson(runData[fromNodeId]);
+  return upstreamOutputSnapshotsPreview(fromNodeId, runData, pinData).map((s) => s.json);
 }
 
 /**
@@ -214,17 +260,30 @@ export function buildNodeInputPreview(
   edges: Edge[],
   runData: RunData,
   pinData?: FlowPinData | null,
-): { slots: { slot: number; fromNodeId: string; itemsJson: unknown[] }[]; message: string | null } {
+): {
+  slots: { slot: number; fromNodeId: string; itemsJson: unknown[]; itemsBinaries: Record<string, unknown>[] }[];
+  message: string | null;
+} {
   const incoming = edges.filter((e) => e.target === nodeId);
   if (incoming.length === 0) {
     const selfPinned = pinData?.[nodeId];
-    const selfItems = hasPinMainLane(selfPinned)
-      ? laneMain0ItemsJsonFromPin(selfPinned)
+    const selfSnaps = hasPinMainLane(selfPinned)
+      ? laneMain0SnapshotsFromPin(selfPinned)
       : runData
-        ? laneMain0ItemsJson(runData[nodeId])
+        ? laneMain0Snapshots(runData[nodeId])
         : [];
-    if (selfItems.length > 0) {
-      return { slots: [{ slot: 0, fromNodeId: nodeId, itemsJson: selfItems }], message: null };
+    if (selfSnaps.length > 0) {
+      return {
+        slots: [
+          {
+            slot: 0,
+            fromNodeId: nodeId,
+            itemsJson: selfSnaps.map((s) => s.json),
+            itemsBinaries: selfSnaps.map((s) => s.binary),
+          },
+        ],
+        message: null,
+      };
     }
     return { slots: [], message: 'This node has no input connections (trigger / source nodes have no wire in).' };
   }
@@ -238,11 +297,15 @@ export function buildNodeInputPreview(
     slotForDirectParent.set(e.source, parseHandleIndex(e.targetHandle, 'in-') ?? 0);
   }
 
-  const slots = ordered.map((fromNodeId) => ({
-    slot: slotForDirectParent.get(fromNodeId) ?? 0,
-    fromNodeId,
-    itemsJson: upstreamOutputItemsPreview(fromNodeId, runData, pinData),
-  }));
+  const slots = ordered.map((fromNodeId) => {
+    const snaps = upstreamOutputSnapshotsPreview(fromNodeId, runData, pinData);
+    return {
+      slot: slotForDirectParent.get(fromNodeId) ?? 0,
+      fromNodeId,
+      itemsJson: snaps.map((s) => s.json),
+      itemsBinaries: snaps.map((s) => s.binary),
+    };
+  });
 
   return { slots, message: null };
 }
@@ -252,19 +315,26 @@ export function buildNodeOutputPreview(
   nodeId: string,
   runData: RunData,
   pinData?: FlowPinData | null,
-): { itemsJson: unknown[]; message: string | null } {
+): { itemsJson: unknown[]; itemsBinaries: Record<string, unknown>[]; message: string | null } {
   const pinned = pinData?.[nodeId];
   if (hasPinMainLane(pinned)) {
-    return { itemsJson: laneMain0ItemsJsonFromPin(pinned), message: null };
+    const snaps = laneMain0SnapshotsFromPin(pinned);
+    return {
+      itemsJson: snaps.map((s) => s.json),
+      itemsBinaries: snaps.map((s) => s.binary),
+      message: null,
+    };
   }
   if (!runData) {
-    return { itemsJson: [], message: 'Run the workflow to see output data for this node.' };
+    return { itemsJson: [], itemsBinaries: [], message: 'Run the workflow to see output data for this node.' };
   }
   const rec = runData[nodeId] as NodeRun | undefined;
   if (rec == null) {
-    return { itemsJson: [], message: null };
+    return { itemsJson: [], itemsBinaries: [], message: null };
   }
-  const itemsJson = laneMain0ItemsJson(rec);
+  const snaps = laneMain0Snapshots(rec);
+  const itemsJson = snaps.map((s) => s.json);
+  const itemsBinaries = snaps.map((s) => s.binary);
   const msg = rec.status && rec.status !== 'success' ? `Status: ${rec.status}` : null;
-  return { itemsJson, message: msg };
+  return { itemsJson, itemsBinaries, message: msg };
 }

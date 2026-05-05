@@ -42,6 +42,7 @@ import {
   rewriteRfNodesDisplayRefsRename,
 } from './flowExpressionNodeRefs';
 import type { DocRouterOrgApi } from '@/utils/api';
+import type { FlowExecutionBlobContext } from './flowExecutionBlob';
 import FlowNodePalette from './FlowNodePalette';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import { FLOW_RF_LABELED_EDGE_TYPE } from './flowRfCanvasTypes';
@@ -222,6 +223,8 @@ const FlowEditor: React.FC<{
   onStopWebhookTestListen?: (leaf: string) => void | Promise<void>;
   webhookTestListeningLeaf?: string | null;
   webhookTestListenBusy?: boolean;
+  /** Flow id for execution-scoped binary download URLs in the node modal. */
+  flowId?: string | null;
   /** Latest execution to drive Input / Output columns in the node modal (e.g. from logs panel). */
   executionForIo?: FlowExecution | null;
   /** Revision pin data keyed by node id. */
@@ -245,6 +248,7 @@ const FlowEditor: React.FC<{
   onStopWebhookTestListen,
   webhookTestListeningLeaf = null,
   webhookTestListenBusy = false,
+  flowId = null,
   executionForIo,
   pinData,
   onPinDataChange,
@@ -267,6 +271,14 @@ const FlowEditor: React.FC<{
   const renameAnchorRef = useRef<Map<string, string>>(new Map());
   const renameDebounceRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const runData = executionForIo?.run_data as Record<string, unknown> | undefined;
+
+  const flowBlobDownloadContext = useMemo((): FlowExecutionBlobContext | null => {
+    const eid = executionForIo?.execution_id?.trim();
+    const oid = flowOrgApi?.organizationId?.trim();
+    const fid = flowId?.trim();
+    if (!eid || !oid || !fid) return null;
+    return { organizationId: oid, flowId: fid, executionId: eid };
+  }, [executionForIo?.execution_id, flowId, flowOrgApi?.organizationId]);
   const canvasEdges = useMemo(
     () => edgesWithRunDataItemCounts(toCanvasEdges(edges), runData, pinData ?? undefined),
     [edges, runData, pinData],
@@ -870,6 +882,7 @@ const FlowEditor: React.FC<{
         webhookTestListeningLeaf={webhookTestListeningLeaf}
         webhookTestListenBusy={webhookTestListenBusy}
         flowOrgApi={flowOrgApi}
+        flowBlobDownloadContext={flowBlobDownloadContext}
       />
 
       {nodePaletteOpen && (

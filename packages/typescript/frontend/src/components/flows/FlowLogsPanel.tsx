@@ -9,6 +9,7 @@ import { DocRouterOrgApi } from '@/utils/api';
 import { formatLocalDate } from '@/utils/date';
 import { ChevronDownIcon, ChevronUpIcon, TrashIcon } from '@heroicons/react/24/outline';
 import type { FlowRfNodeData } from './flowRf';
+import type { FlowExecutionBlobContext } from './flowExecutionBlob';
 import { buildNodeInputPreview, buildNodeOutputPreview } from './flowNodeIoPreview';
 import { IoViewer } from './IoViewer';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
@@ -249,6 +250,12 @@ const FlowLogsPanel: React.FC<{
     if (!selectedNodeId) return null;
     return buildNodeOutputPreview(selectedNodeId, runData, graphPinData ?? undefined);
   }, [graphPinData, runData, selectedNodeId]);
+
+  const flowBlobDownloadContext = useMemo((): FlowExecutionBlobContext | null => {
+    const eid = execution?.execution_id?.trim();
+    if (!eid) return null;
+    return { organizationId: orgApi.organizationId, flowId, executionId: eid };
+  }, [execution?.execution_id, orgApi.organizationId, flowId]);
 
   const selectedParametersValue = useMemo(() => {
     const flowNode = selectedNode?.data?.flowNode;
@@ -593,6 +600,8 @@ const FlowLogsPanel: React.FC<{
                                         <IoViewer
                                           value={selectedOutputPreview.itemsJson}
                                           valueKind="executionItems"
+                                          executionItemsBinaries={selectedOutputPreview.itemsBinaries}
+                                          flowBlobDownloadContext={flowBlobDownloadContext}
                                           dragSource={{
                                             nodeId: selectedNodeId,
                                             source: 'nodeOutput',
@@ -643,6 +652,8 @@ const FlowLogsPanel: React.FC<{
                                                   title={`in ${s.slot} ← ${nodeLabel(nodes, s.fromNodeId)}`}
                                                   value={s.itemsJson}
                                                   valueKind="executionItems"
+                                                  executionItemsBinaries={s.itemsBinaries}
+                                                  flowBlobDownloadContext={flowBlobDownloadContext}
                                                   dragSource={{
                                                     nodeId: s.fromNodeId,
                                                     source: 'nodeOutput',

@@ -93,6 +93,35 @@ async def test_webhook_trigger_flat_json_test_mode_form_body_and_url() -> None:
     assert j["query"] == {}
 
 
+@pytest.mark.asyncio
+async def test_parse_webhook_text_csv_stashes_binary() -> None:
+    async def endpoint(request: Request) -> JSONResponse:
+        p = await ad.flows.webhook_parse.parse_webhook_request(request, binary_property_name="data")
+        return JSONResponse(
+            {
+                "body": p.body,
+                "stashed": p.body_stashed_as_binary,
+                "pending": [(k, bytes(b).decode(), m, f) for k, b, m, f in p.pending_binaries],
+            }
+        )
+
+    app = Starlette(routes=[Route("/t", endpoint, methods=["POST"])])
+    client = TestClient(app)
+    csv_bytes = (
+        "Respiratory - Nebulizers, \nBathroom Aids, \nCHERRY,\n".encode("utf-8")
+    )
+    res = client.post("/t", content=csv_bytes, headers={"Content-Type": "text/csv"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["body"] is None
+    assert data["stashed"] is True
+    assert len(data["pending"]) == 1
+    _, text, mime, fname = data["pending"][0]
+    assert mime == "text/csv"
+    assert fname is None
+    assert text == csv_bytes.decode("utf-8")
+
+
 def test_parse_webhook_json_body() -> None:
     async def endpoint(request: Request) -> JSONResponse:
         p = await ad.flows.webhook_parse.parse_webhook_request(request)

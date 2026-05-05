@@ -19,6 +19,7 @@ class BinaryRef:
     file_name: str | None = None
     data: bytes | None = None
     storage_id: str | None = None
+    file_size: int | None = None  # byte length when known (offload / webhook finalize); for UI/API
 
 
 @dataclass
@@ -91,11 +92,16 @@ def coerce_binary_ref(raw: Any) -> BinaryRef:
     if storage_id is not None and not isinstance(storage_id, str):
         raise ValueError("BinaryRef.storage_id must be str | None")
 
+    file_size = raw.get("file_size")
+    if file_size is not None and not isinstance(file_size, int):
+        raise ValueError("BinaryRef.file_size must be int | None")
+
     return BinaryRef(
         mime_type=mime_type,
         file_name=file_name,
         data=bytes(data) if isinstance(data, bytearray) else data,
         storage_id=storage_id,
+        file_size=file_size,
     )
 
 

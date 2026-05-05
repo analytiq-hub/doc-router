@@ -277,11 +277,14 @@ def _bson_serialize_value(obj: Any) -> Any:
             raise RuntimeError(
                 f"BinaryRef.storage_id must be set before persistence (file={obj.file_name!r})"
             )
-        return {
+        out: dict[str, Any] = {
             "mime_type": obj.mime_type,
             "file_name": obj.file_name,
             "storage_id": obj.storage_id,
         }
+        if obj.file_size is not None:
+            out["file_size"] = obj.file_size
+        return out
     if isinstance(obj, list):
         return [_bson_serialize_value(x) for x in obj]
     if isinstance(obj, dict):
@@ -523,12 +526,17 @@ async def _offload_binary_refs(
                     if ref.data is None or ref.storage_id:
                         continue
                     key = f"{execution_id}/{node_id}/{item_idx}/{prop}"
+                    ref.file_size = len(ref.data)
                     await ad.mongodb.blob.save_blob_async(
                         analytiq_client,
                         bucket="flow_blobs",
                         key=key,
                         blob=ref.data,
-                        metadata={"mime_type": ref.mime_type, "file_name": ref.file_name or ""},
+                        metadata={
+                            "mime_type": ref.mime_type,
+                            "file_name": ref.file_name or "",
+                            "file_size": ref.file_size,
+                        },
                     )
                     ref.storage_id = f"flow_blobs:{key}"
                     ref.data = None

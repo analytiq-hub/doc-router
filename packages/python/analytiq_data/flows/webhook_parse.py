@@ -41,6 +41,41 @@ def inbound_content_type_looks_binary(content_type_header: str) -> bool:
     return any(marker in h for marker in _INBOUND_BINARY_CONTENT_TYPE_MARKERS)
 
 
+def _webhook_primary_mime(content_type_header: str) -> str:
+    return (content_type_header or "").split(";")[0].strip().lower()
+
+
+def inbound_content_type_allow_unicode_json_body(content_type_header: str) -> bool:
+    """
+    Request bodies we decode to ``str`` or ``dict`` and place on ``ParsedWebhookBody.body``.
+
+    n8n's Webhook node routes **most** payloads through JSON/form parsing unless **binary data** mode is enabled,
+    in which case the entire stream becomes a binary file. DocRouter splits the difference automatically:
+    structured JSON / plain / HTML / XML MIME types stay in ``body``; file-like types (CSV, spreadsheets as
+    ``text/*`` except plain/html/XML, opaque ``application/*``, etc.) behave like binary mode—the raw bytes go
+    to ``pending_binaries`` only.
+    """
+
+    primary = _webhook_primary_mime(content_type_header)
+    # Unknown / missing — backward compatible: attempt UTF-8 + JSON decode.
+    if not primary:
+        return True
+
+    # JSON (incl. ``application/vnd.*+json``).
+    if "application/json" in primary or primary.endswith("+json"):
+        return True
+
+    # XML family (often inspected as Unicode text rather than opaque bytes).
+    if primary.endswith("+xml") or primary in ("text/xml", "application/xml"):
+        return True
+
+    # Typical small text payloads surfaced in expressions.
+    if primary in ("text/plain", "text/html"):
+        return True
+
+    return False
+
+
 def _raw_body_sniffs_opaque_binary(raw: bytes) -> bool:
     """
     When ``Content-Type`` is ambiguous, avoid UTF-8 decoding opaque bytes into ``json.body``.
@@ -138,47 +173,47 @@ async def parse_webhook_request(
     if not raw:
         return ParsedWebhookBody(query=query, body=None, form=None, pending_binaries=[])
 
+    mime_top = ct.split(";")[0].strip() or "application/octet-stream"
+
     if raw_body:
-        mime = ct.split(";")[0].strip() or "application/octet-stream"
         return ParsedWebhookBody(
             query=query,
             body=None,
             form=None,
-            pending_binaries=[(bp, raw, mime, None)],
+            pending_binaries=[(bp, raw, mime_top, None)],
             body_stashed_as_binary=True,
         )
 
-    if "application/json" in ct_l:
-        try:
-            body = json.loads(raw.decode("utf-8"))
-        except Exception:
-            logger.debug("Inbound webhook claimed JSON but parse failed; using string body")
-            body = raw.decode("utf-8", errors="replace")
-        return ParsedWebhookBody(query=query, body=body, form=None, pending_binaries=[])
-
     if inbound_content_type_looks_binary(ct):
-        mime = ct.split(";")[0].strip() or "application/octet-stream"
         return ParsedWebhookBody(
             query=query,
             body=None,
             form=None,
-            pending_binaries=[(bp, raw, mime, None)],
+            pending_binaries=[(bp, raw, mime_top, None)],
             body_stashed_as_binary=True,
         )
 
     if _raw_body_sniffs_opaque_binary(raw):
-        mime = ct.split(";")[0].strip() or "application/octet-stream"
         return ParsedWebhookBody(
             query=query,
             body=None,
             form=None,
-            pending_binaries=[(bp, raw, mime, None)],
+            pending_binaries=[(bp, raw, mime_top, None)],
             body_stashed_as_binary=True,
         )
 
-    try:
-        body = json.loads(raw.decode("utf-8"))
-    except Exception:
-        body = raw.decode("utf-8", errors="replace")
+    if inbound_content_type_allow_unicode_json_body(ct):
+        try:
+            body = json.loads(raw.decode("utf-8"))
+        except Exception:
+            logger.debug(f"Inbound webhook body allows UTF-8 but JSON parse failed; using string body (mime={mime_top!r})")
+            body = raw.decode("utf-8", errors="replace")
+        return ParsedWebhookBody(query=query, body=body, form=None, pending_binaries=[])
 
-    return ParsedWebhookBody(query=query, body=body, form=None, pending_binaries=[])
+    return ParsedWebhookBody(
+        query=query,
+        body=None,
+        form=None,
+        pending_binaries=[(bp, raw, mime_top, None)],
+        body_stashed_as_binary=True,
+    )

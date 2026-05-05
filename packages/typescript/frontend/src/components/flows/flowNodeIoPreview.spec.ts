@@ -79,6 +79,7 @@ describe('buildNodeInputPreview', () => {
     expect(prev.message).toBeNull();
     expect(prev.slots.map((s) => s.fromNodeId)).toEqual(['u', 't']);
     expect(prev.slots[0]?.itemsJson).toEqual([{ y: 2 }]);
+    expect(prev.slots[0]?.itemsBinaries).toEqual([{}]);
   });
 
   it('reports disconnected-input message when no slots', () => {
@@ -88,14 +89,16 @@ describe('buildNodeInputPreview', () => {
   it('uses self pin when node has no inbound edges', () => {
     const pin: FlowPinData = { solo: { main: [[{ json: { z: 9 }, binary: {} }]] } };
     const prev = buildNodeInputPreview('solo', [], {}, pin);
-    expect(prev.slots).toEqual([{ slot: 0, fromNodeId: 'solo', itemsJson: [{ z: 9 }] }]);
+    expect(prev.slots).toEqual([{ slot: 0, fromNodeId: 'solo', itemsJson: [{ z: 9 }], itemsBinaries: [{}] }]);
   });
 });
 
 describe('buildNodeOutputPreview', () => {
   it('returns pinned items without requiring run_data', () => {
     const pin: FlowPinData = { n: { main: [[{ json: { ok: true }, binary: {} }]] } };
-    expect(buildNodeOutputPreview('n', null, pin).itemsJson).toEqual([{ ok: true }]);
+    const outPrev = buildNodeOutputPreview('n', null, pin);
+    expect(outPrev.itemsJson).toEqual([{ ok: true }]);
+    expect(outPrev.itemsBinaries).toEqual([{}]);
   });
 });
 
