@@ -442,20 +442,20 @@ const IoBinaryPanel: React.FC<{
             ) : (
               <div className="mb-2 text-[11px] font-semibold text-gray-800">{r.propertyName}</div>
             )}
-            <dl className="grid grid-cols-[8.5rem_1fr] gap-x-2 gap-y-1 text-[11px]">
-              <dt className="text-gray-500">File Name</dt>
-              <dd className="min-w-0 truncate font-mono text-gray-900" title={displayName}>
+            <div className="grid grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1.5 text-[11px]">
+              <span className="whitespace-nowrap font-medium text-gray-500">File Name</span>
+              <span className="min-w-0 truncate font-mono text-gray-900" title={displayName}>
                 {displayName}
-              </dd>
-              <dt className="text-gray-500">File Extension</dt>
-              <dd className="font-mono text-gray-900">{ext}</dd>
-              <dt className="text-gray-500">Mime Type</dt>
-              <dd className="min-w-0 truncate font-mono text-gray-900" title={mime}>
+              </span>
+              <span className="whitespace-nowrap font-medium text-gray-500">File Extension</span>
+              <span className="min-w-0 truncate font-mono text-gray-900">{ext}</span>
+              <span className="whitespace-nowrap font-medium text-gray-500">Mime Type</span>
+              <span className="min-w-0 truncate font-mono text-gray-900" title={mime}>
                 {mime}
-              </dd>
-              <dt className="text-gray-500">File Size</dt>
-              <dd className="font-mono text-gray-900">{sizeLabel}</dd>
-            </dl>
+              </span>
+              <span className="whitespace-nowrap font-medium text-gray-500">File Size</span>
+              <span className="min-w-0 truncate font-mono text-gray-900">{sizeLabel}</span>
+            </div>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
