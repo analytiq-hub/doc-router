@@ -430,7 +430,7 @@ async def recover_all_queues(analytiq_client) -> None:
     For each recovered message, ``attempts`` is decremented by 1 (floored at 0)
     so an unfinished claim (e.g. killed worker) does not permanently burn a try.
     """
-    queues = ["ocr", "llm", "kb_index", "webhook"]
+    queues = ["ocr", "llm", "kb_index", "webhook", "flow_run"]
     for queue_name in queues:
         try:
             recovered = await ad.queue.recover_stale_messages(analytiq_client, queue_name)
