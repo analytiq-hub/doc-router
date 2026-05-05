@@ -1325,11 +1325,65 @@ async def _inbound_webhook_common(
         if not isinstance(rev_for_run, dict):
             raise HTTPException(status_code=500, detail="Missing flow revision for webhook execution")
 
+        claim = await db.flow_executions.update_one(
+            {"_id": ObjectId(exec_id), "status": "queued"},
+            {"$set": {"status": "running", "last_heartbeat_at": datetime.now(UTC)}},
+        )
+        if claim.matched_count == 0:
+            raise HTTPException(status_code=409, detail="Execution is not in queued state for synchronous run")
+
         # Bound synchronous webhook execution time; keep a conservative default.
+        # Mirror msg_handlers/flow_run.py: persist terminal status so worker_flow_cleanup can reap rows.
         try:
-            await asyncio.wait_for(ad.flows.run_flow(context=ctx, revision=rev_for_run), timeout=25.0)
+            result = await asyncio.wait_for(
+                ad.flows.run_flow(context=ctx, revision=rev_for_run),
+                timeout=25.0,
+            )
+        except asyncio.TimeoutError:
+            ts = datetime.now(UTC)
+            await db.flow_executions.update_one(
+                {"_id": ObjectId(exec_id)},
+                {
+                    "$set": {
+                        "status": "error",
+                        "finished_at": ts,
+                        "last_heartbeat_at": ts,
+                        "error": {
+                            "message": "Execution timed out",
+                            "node_id": None,
+                            "node_name": None,
+                            "stack": None,
+                        },
+                    }
+                },
+            )
+            raise HTTPException(status_code=500, detail="Webhook execution failed: Execution timed out") from None
         except Exception as e:
+            ts = datetime.now(UTC)
+            await db.flow_executions.update_one(
+                {"_id": ObjectId(exec_id)},
+                {
+                    "$set": {
+                        "status": "error",
+                        "finished_at": ts,
+                        "last_heartbeat_at": ts,
+                        "error": {
+                            "message": str(e),
+                            "node_id": None,
+                            "node_name": None,
+                            "stack": None,
+                        },
+                    }
+                },
+            )
             raise HTTPException(status_code=500, detail=f"Webhook execution failed: {e}") from e
+
+        terminal_status = result.get("status") or "success"
+        ts = datetime.now(UTC)
+        await db.flow_executions.update_one(
+            {"_id": ObjectId(exec_id)},
+            {"$set": {"status": terminal_status, "finished_at": ts, "last_heartbeat_at": ts}},
+        )
 
         # Prefer explicit Respond to Webhook node payload.
         resp_any = ctx.trigger_data.get("_webhook_response")
