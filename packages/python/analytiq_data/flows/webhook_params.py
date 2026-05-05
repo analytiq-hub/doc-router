@@ -7,8 +7,10 @@ raw body, synchronous response knobs) adapted to DocRouter routing by ``webhook_
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import logging
+import os
 import re
 from typing import Any
 
@@ -24,6 +26,19 @@ _BOT_UA_PAT = re.compile(
     r"discordbot|whatsapp|telegram|preview|gptbot|anthropic-ai|google-other",
     re.I,
 )
+
+
+def trust_forwarded_for_from_env() -> bool:
+    """
+    When true, ``X-Forwarded-For`` is considered alongside the TCP peer for IP allowlisting.
+
+    Set env ``FLOW_WEBHOOK_TRUST_X_FORWARDED_FOR`` to ``1`` / ``true`` only when the app sits
+    behind a **trusted** reverse proxy that sets or sanitizes this header; otherwise clients can
+    spoof allowed IPs.
+    """
+
+    v = os.environ.get("FLOW_WEBHOOK_TRUST_X_FORWARDED_FOR", "")
+    return v.strip().lower() in ("1", "true", "yes", "on")
 
 
 def extract_webhook_params_from_revision(revision: dict[str, Any] | None) -> dict[str, Any]:
@@ -77,49 +92,93 @@ def allowed_http_methods_snapshot(params: dict[str, Any]) -> frozenset[str] | No
     return frozenset({m})
 
 
-def request_ip_candidates(request: Request) -> tuple[list[str], str | None]:
+def ip_whitelist_candidates(request: Request) -> list[str]:
     """
-    Addresses to evaluate for IP whitelist checks (Forwarded-Chain + direct client).
+    Connection IPs to evaluate against the webhook allowlist.
 
-    Mirrors a minimal ``req.ips`` / ``req.ip`` style ordering.
+    By default only ``request.client.host`` (the immediate TCP peer) is used.
+
+    If ``FLOW_WEBHOOK_TRUST_X_FORWARDED_FOR`` is enabled (see :func:`trust_forwarded_for_from_env`),
+    ordered ``X-Forwarded-For`` hops are included first (client-left convention), then the TCP peer
+    if not already listed.
     """
 
-    hops: list[str] = []
+    direct: str | None = None
+    if request.client and request.client.host:
+        direct = request.client.host.strip()
+
+    if not trust_forwarded_for_from_env():
+        return [direct] if direct else []
+
+    out: list[str] = []
+    seen: set[str] = set()
     xff = request.headers.get("x-forwarded-for") or ""
     if xff.strip():
         for part in xff.split(","):
             p = part.strip()
-            if p:
-                hops.append(p)
-    direct: str | None = None
-    if request.client and request.client.host:
-        direct = request.client.host.strip()
-        if direct and direct not in hops:
-            hops.append(direct)
-    ip = hops[0] if hops else direct
-    return hops, ip
+            if p and p not in seen:
+                seen.add(p)
+                out.append(p)
+    if direct and direct not in seen:
+        out.append(direct)
+    return out
 
 
-def is_ip_whitelisted(whitelist_csv: str | None, hops: list[str], direct_ip: str | None) -> bool:
+def _parse_candidate_ip(raw: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+    try:
+        s = raw.strip()
+        if "%" in s:
+            s = s.split("%", 1)[0].strip()
+        return ipaddress.ip_address(s)
+    except ValueError:
+        return None
+
+
+def _rule_matches_ip(rule: str, addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    r = rule.strip()
+    if not r:
+        return False
+    if "/" in r:
+        try:
+            net = ipaddress.ip_network(r, strict=False)
+            return addr in net
+        except ValueError:
+            logger.warning("Webhook ip_whitelist ignores invalid CIDR rule %r", rule)
+            return False
+    try:
+        return addr == ipaddress.ip_address(r.strip())
+    except ValueError:
+        logger.warning("Webhook ip_whitelist ignores invalid IP rule %r", rule)
+        return False
+
+
+def is_ip_whitelisted(whitelist_csv: str | None, candidates: list[str]) -> bool:
     """
-    Substring-oriented whitelist check aligned with reference Webhook behaviour.
+    Return whether any ``candidates`` IP matches an allowlist rule.
 
-    Comma-separated ``whitelist_csv`` entries; empty means allow all.
+    Rules are comma-separated. Each rule is either a single IPv4/IPv6 address (exact match) or a
+    CIDR network (e.g. ``10.0.0.0/8``, ``2001:db8::/32``). Substring matching is not used.
+
+    Empty or whitespace-only ``whitelist_csv`` means allow all.
     """
 
     if whitelist_csv is None or not str(whitelist_csv).strip():
         return True
 
-    wl_parts = [p.strip() for p in str(whitelist_csv).split(",") if str(p).strip()]
-    ips = list(hops)
-    if direct_ip and direct_ip not in ips:
-        ips.append(direct_ip)
+    rules = [p.strip() for p in str(whitelist_csv).split(",") if p.strip()]
+    if not rules:
+        return True
 
-    for address in wl_parts:
-        if direct_ip and address in direct_ip:
-            return True
-        if any(address in hop for hop in ips if hop):
-            return True
+    if not candidates:
+        return False
+
+    for cand_s in candidates:
+        addr = _parse_candidate_ip(cand_s)
+        if addr is None:
+            continue
+        for rule in rules:
+            if _rule_matches_ip(rule, addr):
+                return True
     return False
 
 

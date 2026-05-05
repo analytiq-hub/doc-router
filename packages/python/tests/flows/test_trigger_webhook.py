@@ -412,34 +412,47 @@ async def test_parse_webhook_raw_body_stashes_bytes() -> None:
     uuid.UUID(f)
 
 
-def test_webhook_params_allowed_methods_snapshot() -> None:
+def test_webhook_params_allowed_methods_snapshot(monkeypatch: pytest.MonkeyPatch) -> None:
     wp = ad.flows.webhook_params
+
+    monkeypatch.delenv("FLOW_WEBHOOK_TRUST_X_FORWARDED_FOR", raising=False)
 
     assert wp.allowed_http_methods_snapshot({}) is None
     assert wp.allowed_http_methods_snapshot({"http_method": "POST"}) == frozenset({"POST"})
     assert wp.allowed_http_methods_snapshot({"multiple_methods": True, "allowed_methods": "GET, PATCH"}) == frozenset(
         {"GET", "PATCH"}
     )
-    hops, dip = wp.request_ip_candidates(
-        Request(
-            scope={
-                "type": "http",
-                "headers": [(b"x-forwarded-for", b" 10.0.0.1 , 172.31.9.99 ")],
-                "client": ("192.168.0.2", 0),
-                "server": ("test", 80),
-                "method": "GET",
-                "path": "/",
-                "query_string": b"",
-                "http_version": "1.1",
-                "scheme": "http",
-                "extensions": {},
-            }
-        )
-    )
-    assert hops[0] == "10.0.0.1"
-    assert wp.is_ip_whitelisted(None, hops, dip) is True
-    assert wp.is_ip_whitelisted("10.0.", hops, dip) is True
-    assert wp.is_ip_whitelisted("8.8.8.", hops, dip) is False
+    scope_base = {
+        "type": "http",
+        "headers": [(b"x-forwarded-for", b" 10.0.0.1 , 172.31.9.99 ")],
+        "client": ("192.168.0.2", 0),
+        "server": ("test", 80),
+        "method": "GET",
+        "path": "/",
+        "query_string": b"",
+        "http_version": "1.1",
+        "scheme": "http",
+        "extensions": {},
+    }
+    req = Request(scope=dict(scope_base))
+
+    # Default: only TCP peer is allowlist-evaluated; spoofed XFF must not grant access.
+    assert wp.ip_whitelist_candidates(req) == ["192.168.0.2"]
+    assert wp.is_ip_whitelisted(None, wp.ip_whitelist_candidates(req)) is True
+    assert wp.is_ip_whitelisted("192.168.0.2", wp.ip_whitelist_candidates(req)) is True
+    assert wp.is_ip_whitelisted("192.168.0.0/24", wp.ip_whitelist_candidates(req)) is True
+    assert wp.is_ip_whitelisted("10.0.0.1", wp.ip_whitelist_candidates(req)) is False
+    assert wp.is_ip_whitelisted("1", wp.ip_whitelist_candidates(req)) is False
+
+    monkeypatch.setenv("FLOW_WEBHOOK_TRUST_X_FORWARDED_FOR", "true")
+    req_trust = Request(scope=dict(scope_base))
+    cand = wp.ip_whitelist_candidates(req_trust)
+    assert cand[0] == "10.0.0.1"
+    assert cand[1] == "172.31.9.99"
+    assert cand[-1] == "192.168.0.2"
+    assert wp.is_ip_whitelisted("10.0.0.1", cand) is True
+    assert wp.is_ip_whitelisted("10.0.0.0/24", cand) is True
+    assert wp.is_ip_whitelisted("8.8.8.8", cand) is False
 
 
 def test_webhook_sync_response_shapes() -> None:

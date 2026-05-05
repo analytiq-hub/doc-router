@@ -1247,8 +1247,8 @@ async def _inbound_webhook_common(
     if allowed is not None and request.method.upper() not in allowed:
         raise HTTPException(status_code=405, detail="Method not allowed")
 
-    hops, direct_ip = ad.flows.webhook_params.request_ip_candidates(request)
-    if not ad.flows.webhook_params.is_ip_whitelisted(params.get("ip_whitelist"), hops, direct_ip):
+    candidates = ad.flows.webhook_params.ip_whitelist_candidates(request)
+    if not ad.flows.webhook_params.is_ip_whitelisted(params.get("ip_whitelist"), candidates):
         raise HTTPException(status_code=403, detail="IP is not whitelisted to access the webhook")
 
     if params.get("ignore_bots") and ad.flows.webhook_params.user_agent_looks_like_bot(

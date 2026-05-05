@@ -214,11 +214,13 @@ class FlowsWebhookTriggerNode:
                 "type": "string",
                 "default": "",
                 "description": (
-                    'Comma-separated substrings matched against forwarded / client IPs (similar to substring '
-                    "checks in comparable tools)."
+                    "Comma-separated allow rules: each entry is a single IPv4/IPv6 address (exact match) or "
+                    "a CIDR network (e.g. 10.0.0.0/8). Only the TCP client IP is checked unless the deployment "
+                    "sets env FLOW_WEBHOOK_TRUST_X_FORWARDED_FOR for trusted reverse-proxy chains "
+                    "(then X-Forwarded-For is used)."
                 ),
                 "x-ui-widget": "textarea",
-                "x-ui-placeholder": "127.0.0.1, 10.0.0.",
+                "x-ui-placeholder": "203.0.113.10, 10.0.0.0/8, ::1",
                 "x-ui-group": "Advanced",
             },
             "raw_body": {
