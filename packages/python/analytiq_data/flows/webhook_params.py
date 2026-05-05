@@ -154,7 +154,8 @@ def synchronous_http_response(exec_id: str, params: dict[str, Any]) -> tuple[int
     """
     Decide status code, outgoing headers (without Content-Length), and optional body bytes.
 
-    Non-``on_received`` modes still enqueue runs but use the default JSON acknowledgement for now.
+    Full acknowledgement options apply when ``response_mode`` is ``on_received``. Other modes still use
+    this helper for fallback / short JSON envelopes (e.g. missing Respond payload).
     """
 
     hdr_out = merge_response_headers(params)

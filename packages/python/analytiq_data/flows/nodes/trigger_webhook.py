@@ -73,9 +73,9 @@ class FlowsWebhookTriggerNode:
     here as ``FlowItem.binary[property_name]`` with pass-by-reference ``BinaryRef`` objects.
 
     Tunable inbound behaviour aligns with common Webhook-trigger options (methods, whitelist, bots,
-    raw body, synchronous response tweaks). Deferred execution responses (reply after the flow finishes)
-    are not implemented yet—the ``respond_to_webhook`` / ``last_node`` modes enqueue runs but keep the
-    same immediate acknowledgement as ``on_received``.
+    raw body, response timing). ``on_received`` acknowledges immediately and queues the run;
+    ``last_node`` and ``respond_to_webhook`` run the flow synchronously inside the HTTP request
+    (bounded timeout) and return the derived HTTP response.
     """
 
     key = "flows.trigger.webhook"
@@ -140,14 +140,16 @@ class FlowsWebhookTriggerNode:
                 "enum": ["on_received", "last_node", "respond_to_webhook"],
                 "default": "on_received",
                 "description": (
-                    "When DocRouter acknowledges the inbound HTTP request. Deferred responses after the "
-                    "flow completes require future engine support—the non-default modes enqueue runs "
-                    "identically today."
+                    "Respond immediately: return an HTTP acknowledgement right away and queue the workflow. "
+                    "When last node finishes: await a synchronous run (server time limit applies) and return "
+                    "JSON from the last executed node's first output item (or a minimal execution envelope). "
+                    "Using Respond to Webhook: same synchronous run; the HTTP reply is produced by the "
+                    "Respond to Webhook node, or the default acknowledgement if that node does not run."
                 ),
                 "x-ui-enum-names": [
-                    "Immediately",
-                    "When last node finishes (planned)",
-                    "Using respond node (planned)",
+                    "Respond immediately",
+                    "When last node finishes",
+                    "Using Respond to Webhook",
                 ],
                 "x-ui-group": "Response",
             },

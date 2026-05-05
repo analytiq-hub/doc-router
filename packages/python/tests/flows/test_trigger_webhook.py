@@ -457,6 +457,32 @@ def test_webhook_sync_response_shapes() -> None:
     assert st2 == 200
     assert body2 is None
 
+    # Fallback / synthetic ack path used outside full ``on_received`` UI (including respond / last-node fallbacks).
+    for mode in ("last_node", "respond_to_webhook"):
+        sm, _, bod = wp.synchronous_http_response("ex-sync", {"response_mode": mode})
+        assert sm == 200
+        assert bod is not None and b"ex-sync" in bod and b"execution_id" in bod
+
+
+def test_webhook_trigger_response_mode_schema_labels_match_enum() -> None:
+    n = ad.flows.FlowsWebhookTriggerNode()
+    prop = n.parameter_schema["properties"]["response_mode"]
+    assert prop["enum"] == ["on_received", "last_node", "respond_to_webhook"]
+    names = prop["x-ui-enum-names"]
+    assert names == [
+        "Respond immediately",
+        "When last node finishes",
+        "Using Respond to Webhook",
+    ]
+    assert len(names) == len(prop["enum"])
+    assert not any("(planned)" in str(label) for label in names)
+
+
+def test_webhook_trigger_validate_accepts_each_response_mode() -> None:
+    n = ad.flows.FlowsWebhookTriggerNode()
+    for mode in ("on_received", "last_node", "respond_to_webhook"):
+        assert n.validate_parameters({"response_mode": mode}) == [], repr(mode)
+
 
 def test_respond_to_webhook_validate_accepts_missing_body_mode() -> None:
     """``execute`` defaults missing ``body_mode`` to json; validation must match."""
