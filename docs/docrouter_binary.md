@@ -358,15 +358,17 @@ export interface FlowItemData {
 | Webhook trigger — binary upload | Files stored to `flow_blobs` at trigger time; emitted as `FlowItem.binary` |
 | HTTP Request node — binary response | `BinaryRef` under `binary["data"]` for binary `Content-Type` |
 | Binary pass-by-reference convention | Engine skips re-upload for already-stored refs; nodes copy `item.binary` |
+| Execution blob HTTP API | §10 — `GET .../blob?storage_id=flow_blobs:…` |
+| Frontend binary UX | §11 — `IoViewer` / **`IoBinaryPanel`** + `flowExecutionBlob.ts` |
 
-### Not yet implemented
+### Not yet implemented (or intentionally narrow)
 
 | Component | Notes |
 |---|---|
 | `docrouter.create_document` node | Promote flow binary to permanent DocRouter document (§4.2) |
-| `GET /executions/{id}/binary-data` endpoint | Serve flow binary from GridFS (§10) |
-| Frontend binary display in flow output panel | Render binary chips, preview, download (§11) |
-| SDK `FlowBinaryRef` type | TypeScript type for binary refs in flow item data (§11.3) |
+| Coordinate-based blob API | Resolve blob from `{ node_id, slot, item_index, property }` without client-supplied `storage_id` |
+| Execution API for `files:` binaries | Document file endpoint by `document_id`, not this `/blob` route |
+| SDK `FlowBinaryRef` / item types | §11.3 |
 
 ---
 
@@ -376,10 +378,10 @@ export interface FlowItemData {
 
 Implement the promotion node: `flow_blobs` → `files` + `docs` entry. Enables end-to-end: webhook receives PDF → create document → OCR → LLM.
 
-**Step 2 — Binary serve endpoint**
+**Step 2 — Broader binary API (optional)**
 
-Add `GET /v0/orgs/{orgId}/executions/{executionId}/binary-data`. Unlocks the frontend.
+Coordinate-based download, or authenticated `files:` streaming from execution context if product needs it.
 
-**Step 3 — Frontend binary display**
+**Step 3 — SDK and polish**
 
-Extend the output panel, add `getFlowBinaryUrl()`, add SDK types.
+Add `FlowBinaryRef` to the SDK; optional in-panel preview for `files:` refs similar to `flow_blobs:`.
