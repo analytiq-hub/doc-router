@@ -342,7 +342,16 @@ const FlowCredentials: React.FC<{
               const chip = canTest ? testChip[row.credential_id] : undefined;
               return (
                 <tr key={row.credential_id}>
-                  <td className={`${td} font-medium`}>{row.name}</td>
+                  <td className={td}>
+                    <button
+                      type="button"
+                      onClick={() => openEdit(row)}
+                      title="Edit credential"
+                      className="m-0 max-w-full cursor-pointer truncate border-0 bg-transparent p-0 text-left font-medium text-blue-700 hover:underline"
+                    >
+                      {row.name}
+                    </button>
+                  </td>
                   <td className={td}>{kindLabel}</td>
                   <td className={td}>{formatLocalDate(row.created_at)}</td>
                   <td className={`${td} text-right`}>
