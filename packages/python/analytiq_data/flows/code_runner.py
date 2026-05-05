@@ -149,6 +149,8 @@ async def run_python_code(
         stdout, stderr = await asyncio.wait_for(proc.communicate(inp), timeout=timeout_seconds)
     except asyncio.TimeoutError:
         proc.kill()
+        # Reap the child; without await wait(), SIGKILL'd processes become zombies on POSIX.
+        await proc.wait()
         raise CodeExecutionError("Code execution timed out") from None
 
     try:
