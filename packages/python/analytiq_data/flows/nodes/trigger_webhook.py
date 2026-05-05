@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Webhook trigger node (`flows.trigger.webhook`) — emits an n8n-shaped flat JSON item per inbound HTTP request."""
+"""Webhook trigger node (`flows.trigger.webhook`) — emits one flat JSON item per inbound HTTP request."""
 
 from typing import Any
 

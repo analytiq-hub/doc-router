@@ -1,4 +1,4 @@
-"""Tests for n8n → JSON Schema UI hints (`x-ui-*`) in `flows/port/schema.py`."""
+"""Tests for ported node UI hints mapped to JSON Schema (`x-ui-*`) in `flows/port/schema.py`."""
 
 from __future__ import annotations
 

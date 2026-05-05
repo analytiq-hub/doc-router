@@ -687,7 +687,7 @@ async def _execute_loop(
                             f"Node {node_label} returned {len(out_lists)} output slots, expected {outputs_count}"
                         )
                 else:
-                    # n8n-style per-item parameter resolution: evaluate params against each input item.
+                    # Per-item parameter resolution: evaluate params against each input item.
                     combined: list[list["ad.flows.FlowItem"]] = [[] for _ in range(outputs_count)]
                     for slot_idx, slot in enumerate(wi.inputs):
                         for item_idx, it in enumerate(slot):

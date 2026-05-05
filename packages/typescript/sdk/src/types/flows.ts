@@ -149,7 +149,7 @@ export interface SaveRevisionParams {
   pin_data?: FlowPinData | null;
 }
 
-/** Graph sent with `POST .../run` to execute the editor state without saving (matches n8n-style test runs). */
+/** Graph sent with `POST .../run` to execute the editor state without saving (test run from editor). */
 export type RevisionSnapshotPayload = Pick<SaveRevisionParams, 'nodes' | 'connections' | 'settings' | 'pin_data'>;
 
 export interface RunFlowParams {

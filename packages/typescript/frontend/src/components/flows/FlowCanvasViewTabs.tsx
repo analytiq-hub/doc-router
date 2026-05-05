@@ -6,7 +6,7 @@ export type FlowCanvasView = 'editor' | 'executions';
 
 /**
  * Centres the segmented control on the bottom edge of a `position: relative` header
- * (same pattern as n8n’s TabBar.vue: half the pill hangs below into the workspace).
+ * so half the pill hangs below into the workspace (tab straddle pattern).
  */
 export function FlowWorkspaceTabStraddle({ children }: { children: React.ReactNode }) {
   return (
@@ -33,7 +33,7 @@ export function FlowModalSideNavStraddle({ side, children }: { side: 'left' | 'r
   );
 }
 
-/** n8n-style pill: foreground-base track (~26px segments), rounded-md, active slice raised white. */
+/** Segmented pill: foreground-base track (~26px segments), rounded-md, active slice raised white. */
 const FlowCanvasViewTabs: React.FC<{
   value: FlowCanvasView;
   onChange: (next: FlowCanvasView) => void;

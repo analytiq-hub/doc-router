@@ -34,7 +34,7 @@ def _reject_fstring_prefix(expr: str) -> None:
     if _FSTRING_PREFIX_RE.match(expr.lstrip()):
         raise ExpressionError(
             "f-strings (f\"…\", rf'…', etc.) are not supported in flow expressions. "
-            "Use plain =_json['field'], =_json[\"field\"], or + to build strings — not n8n-style {{ }} or f\"…\"."
+            "Use plain =_json['field'], =_json[\"field\"], or + to build strings — not `{{ }}` templates or f\"…\"."
         )
 
 
@@ -369,7 +369,7 @@ def eval_expression(
         if "f-string" in str(e).lower():
             raise ExpressionError(
                 "f-string syntax is not supported in flow expressions. "
-                "Use =_json['key'] or string concatenation (+), not f\"…{…}\" or n8n-style templates."
+                "Use =_json['key'] or string concatenation (+), not f\"…{…}\" or `{{ }}` templates."
             ) from e
         raise ExpressionError(f"Invalid expression: {e}") from e
     except Exception as e:

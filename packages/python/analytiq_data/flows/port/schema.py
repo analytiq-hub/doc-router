@@ -4,7 +4,7 @@ from typing import Any
 
 
 def _apply_inode_ui_extensions(p: dict[str, Any], sch: dict[str, Any]) -> dict[str, Any]:
-    """Map n8n `INodeProperty` UI hints onto JSON Schema vendor keys consumed by the flows UI."""
+    """Map `INodeProperty`-style UI hints onto JSON Schema vendor keys consumed by the flows UI."""
     out = dict(sch)
     ph = p.get("placeholder")
     if isinstance(ph, str) and ph.strip():

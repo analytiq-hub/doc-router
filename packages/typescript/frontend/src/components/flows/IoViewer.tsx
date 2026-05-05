@@ -133,7 +133,7 @@ type TableData = {
   omittedTailItemCount?: number;
 };
 
-/** Aligned with n8n editor `RunDataTable.vue` `convertToTable` (one row per item, columns grow in first-seen key order). */
+/** One row per item; columns grow in first-seen key order (`convertToTable`-style widening). */
 const TABLE_MAX_KEYS_PER_ROW = 40;
 /** Upper bound on items passed into table conversion — pagination displays within this window. */
 const TABLE_MATERIALIZATION_CAP = 25_000;
@@ -146,11 +146,11 @@ function coerceExecutionItems(raw: unknown): unknown[] {
 }
 
 /**
- * n8n-style: walk items in order; columns are appended when new keys appear; missing keys are `undefined`
+ * Walk items in order; columns are appended when new keys appear; missing keys are `undefined`
  * and earlier rows are padded with trailing `undefined`s for columns added later.
- * Skips non-plain-object items (like n8n skipping entries without `json`).
+ * Skips non-plain-object items.
  */
-function convertToTableLikeN8n(items: unknown[], maxItems: number): TableData | null {
+function convertItemsToGrowingColumnTable(items: unknown[], maxItems: number): TableData | null {
   const omittedTailItemCount =
     items.length > maxItems ? items.filter(isPlainObject).length - items.slice(0, maxItems).filter(isPlainObject).length : 0;
 
@@ -255,7 +255,7 @@ function shortValuePreview(v: unknown): string {
 
 export type IoDataMode = 'schema' | 'table' | 'json' | 'binary';
 
-/** Shared Schema / Table / JSON / Binary toggle (n8n-style; Binary appears only when `showBinary`). */
+/** Shared Schema / Table / JSON / Binary toggle (Binary appears only when `showBinary`). */
 export function IoDataModeTabs({
   mode,
   onChange,
@@ -301,6 +301,36 @@ function fileExtensionFromName(name: string | undefined): string {
   const i = name.lastIndexOf('.');
   if (i <= 0 || i === name.length - 1) return '—';
   return name.slice(i + 1).toLowerCase();
+}
+
+/** When ``file_name`` is absent (e.g. Postman raw CSV), infer a conventional extension from MIME. */
+function fileExtensionHintFromMime(mime: string | undefined): string | null {
+  if (!mime || typeof mime !== 'string') return null;
+  const base = mime.split(';')[0].trim().toLowerCase();
+  const map: Record<string, string> = {
+    'text/csv': 'csv',
+    'application/csv': 'csv',
+    'text/tab-separated-values': 'tsv',
+    'text/tsv': 'tsv',
+    'application/pdf': 'pdf',
+    'application/json': 'json',
+    'application/xml': 'xml',
+    'text/xml': 'xml',
+    'application/zip': 'zip',
+    'application/gzip': 'gz',
+    'application/x-gzip': 'gz',
+    'application/octet-stream': 'bin',
+  };
+  if (map[base]) return map[base];
+  if (base.startsWith('text/')) return base.slice('text/'.length).replace(/[^a-z0-9+.@-]/gi, '') || null;
+  return null;
+}
+
+function displayFileExtension(fileName: string | undefined, mimeType: string | undefined): string {
+  const fromName = fileExtensionFromName(fileName);
+  if (fromName !== '—') return fromName;
+  const fromMime = fileExtensionHintFromMime(mimeType);
+  return fromMime ?? '—';
 }
 
 type BinaryRefLike = {
@@ -396,7 +426,7 @@ const IoBinaryPanel: React.FC<{
       ) : null}
       {rows.map((r) => {
         const cardKey = `${r.itemIndex}:${r.propertyName}:${r.ref.storage_id}`;
-        const ext = fileExtensionFromName(r.ref.file_name);
+        const ext = displayFileExtension(r.ref.file_name, r.ref.mime_type);
         const mime = r.ref.mime_type && r.ref.mime_type.trim() ? r.ref.mime_type : '—';
         const sizeLabel = r.ref.file_size != null ? formatFileSizeBytes(r.ref.file_size) : '—';
         const displayName = r.ref.file_name?.trim() || r.propertyName;
@@ -522,7 +552,7 @@ const SchemaAccordion: React.FC<{
   );
 };
 
-/** n8n-style schema: item count lives in header; body shows fields of the first item only — no `_json` root row. */
+/** Schema mode: item count in header; body shows fields of the first item only — no `_json` root row. */
 function SchemaFirstItemFields({
   schemaRoot,
   startDrag,
@@ -680,10 +710,10 @@ export const IoViewer: React.FC<{
 
   const table = useMemo(() => {
     if (valueKind === 'executionItems') {
-      return convertToTableLikeN8n(executionItems, TABLE_MATERIALIZATION_CAP);
+      return convertItemsToGrowingColumnTable(executionItems, TABLE_MATERIALIZATION_CAP);
     }
     if (Array.isArray(value)) {
-      return convertToTableLikeN8n(value, TABLE_MATERIALIZATION_CAP);
+      return convertItemsToGrowingColumnTable(value, TABLE_MATERIALIZATION_CAP);
     }
     return null;
   }, [value, valueKind, executionItems]);

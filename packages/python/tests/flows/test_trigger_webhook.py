@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import uuid
+
 import pytest
 from starlette.applications import Starlette
 from starlette.requests import Request
@@ -10,6 +12,29 @@ from starlette.routing import Route
 from starlette.testclient import TestClient
 
 import analytiq_data as ad
+
+
+def test_filename_from_content_disposition_quoted() -> None:
+    assert ad.flows.webhook_parse.filename_from_content_disposition('attachment; filename="report.csv"') == "report.csv"
+
+
+def test_filename_from_content_disposition_rfc5987() -> None:
+    assert (
+        ad.flows.webhook_parse.filename_from_content_disposition("attachment; filename*=UTF-8''rep%20ort.csv")
+        == "rep ort.csv"
+    )
+
+
+def test_filename_from_content_disposition_strips_path() -> None:
+    assert (
+        ad.flows.webhook_parse.filename_from_content_disposition('inline; filename="../../../tmp/x.csv"')
+        == "x.csv"
+    )
+
+
+def test_filename_from_content_disposition_bare_filename_prefix() -> None:
+    """Bare ``filename="…"`` without ``attachment`` / ``inline`` is accepted after normalization."""
+    assert ad.flows.webhook_parse.filename_from_content_disposition('filename="bare.csv"') == "bare.csv"
 
 
 @pytest.mark.asyncio
@@ -118,8 +143,35 @@ async def test_parse_webhook_text_csv_stashes_binary() -> None:
     assert len(data["pending"]) == 1
     _, text, mime, fname = data["pending"][0]
     assert mime == "text/csv"
-    assert fname is None
+    uuid.UUID(fname)
+    assert "." not in fname
     assert text == csv_bytes.decode("utf-8")
+
+
+@pytest.mark.asyncio
+async def test_parse_webhook_text_csv_uses_content_disposition_filename() -> None:
+    async def endpoint(request: Request) -> JSONResponse:
+        p = await ad.flows.webhook_parse.parse_webhook_request(request, binary_property_name="data")
+        return JSONResponse(
+            {
+                "pending": [(k, len(b), m, f) for k, b, m, f in p.pending_binaries],
+            }
+        )
+
+    app = Starlette(routes=[Route("/t", endpoint, methods=["POST"])])
+    client = TestClient(app)
+    csv_bytes = b"a,b\n1,2\n"
+    res = client.post(
+        "/t",
+        content=csv_bytes,
+        headers={
+            "Content-Type": "text/csv",
+            "Content-Disposition": 'attachment; filename="categories.csv"',
+        },
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["pending"] == [["data", len(csv_bytes), "text/csv", "categories.csv"]]
 
 
 def test_parse_webhook_json_body() -> None:
@@ -239,7 +291,7 @@ async def test_parse_webhook_octet_stream_sets_stashed_flag() -> None:
         return JSONResponse(
             {
                 "body": p.body,
-                "pending": [(k, len(b), m) for k, b, m, _fn in p.pending_binaries],
+                "pending": [(k, len(b), m, f) for k, b, m, f in p.pending_binaries],
                 "stashed": p.body_stashed_as_binary,
             }
         )
@@ -251,7 +303,9 @@ async def test_parse_webhook_octet_stream_sets_stashed_flag() -> None:
     data = res.json()
     assert data["body"] is None
     assert data["stashed"] is True
-    assert data["pending"] == [["data", 3, "application/octet-stream"]]
+    k, ln, m, f = data["pending"][0]
+    assert [k, ln, m] == ["data", 3, "application/octet-stream"]
+    uuid.UUID(f)
 
 
 @pytest.mark.asyncio
@@ -353,7 +407,9 @@ async def test_parse_webhook_raw_body_stashes_bytes() -> None:
     assert res.status_code == 200
     data = res.json()
     assert data["body"] is None
-    assert data["pending"] == [["payload", len(raw), "application/json", None]]
+    k, ln, m, f = data["pending"][0]
+    assert [k, ln, m] == ["payload", len(raw), "application/json"]
+    uuid.UUID(f)
 
 
 def test_webhook_params_allowed_methods_snapshot() -> None:

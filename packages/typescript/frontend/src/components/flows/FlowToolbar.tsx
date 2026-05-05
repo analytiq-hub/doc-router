@@ -48,7 +48,7 @@ const FlowToolbar: React.FC<{
   name: string;
   onNameChange: (name: string) => void;
   active: boolean;
-  /** `flow.active_flow_revid` when active — used for tooltip (short tail), like n8n version hint. */
+  /** `flow.active_flow_revid` when active — used for tooltip (short rev id tail). */
   activeFlowRevid?: string | null;
   isDirty: boolean;
   isSaving: boolean;

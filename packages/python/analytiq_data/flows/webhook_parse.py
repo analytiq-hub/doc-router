@@ -9,13 +9,21 @@ from __future__ import annotations
 
 import json
 import logging
+import re
+import uuid
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import unquote
 
 from starlette.datastructures import UploadFile
 from starlette.requests import Request
 
 logger = logging.getLogger(__name__)
+
+# RFC 6266 / 5987 — filename and filename* on Content-Disposition (single-part POST bodies).
+_RE_CONTENT_DISP_FILENAME_STAR = re.compile(r"filename\*\s*=\s*(?:([^']+)'')?([^;\s]+)", re.IGNORECASE)
+_RE_CONTENT_DISP_FILENAME_DQ = re.compile(r'filename\s*=\s*"((?:\\.|[^"\\])*)"', re.IGNORECASE)
+_RE_CONTENT_DISP_FILENAME_PLAIN = re.compile(r"filename\s*=\s*([^;\s]+)", re.IGNORECASE)
 
 _INBOUND_BINARY_CONTENT_TYPE_MARKERS = (
     "application/pdf",
@@ -49,7 +57,7 @@ def inbound_content_type_allow_unicode_json_body(content_type_header: str) -> bo
     """
     Request bodies we decode to ``str`` or ``dict`` and place on ``ParsedWebhookBody.body``.
 
-    n8n's Webhook node routes **most** payloads through JSON/form parsing unless **binary data** mode is enabled,
+    Many webhook setups route **most** payloads through JSON/form parsing unless **binary data** mode is enabled,
     in which case the entire stream becomes a binary file. DocRouter splits the difference automatically:
     structured JSON / plain / HTML / XML MIME types stay in ``body``; file-like types (CSV, spreadsheets as
     ``text/*`` except plain/html/XML, opaque ``application/*``, etc.) behave like binary mode—the raw bytes go
@@ -74,6 +82,69 @@ def inbound_content_type_allow_unicode_json_body(content_type_header: str) -> bo
         return True
 
     return False
+
+
+def filename_from_content_disposition(content_disposition: str | None) -> str | None:
+    """
+    Best-effort ``filename`` / ``filename*`` from ``Content-Disposition``.
+
+    Bare ``filename="…"`` without a disposition type (invalid per RFC but common from clients)
+    is normalized by prefixing ``attachment; `` before parsing.
+    Returns a basename only (no path segments).
+    """
+
+    if not content_disposition or not isinstance(content_disposition, str):
+        return None
+    v = content_disposition.strip()
+    if not v:
+        return None
+    lv = v.lower()
+    if not lv.startswith("attachment") and not lv.startswith("inline"):
+        v = f"attachment; {v}"
+
+    m = _RE_CONTENT_DISP_FILENAME_STAR.search(v)
+    if m:
+        raw_fn = (m.group(2) or "").strip().strip('"')
+        if raw_fn:
+            try:
+                name = unquote(raw_fn)
+            except Exception:
+                name = raw_fn
+            return _basename_only(name)
+
+    m = _RE_CONTENT_DISP_FILENAME_DQ.search(v)
+    if m:
+        inner = m.group(1).replace("\\\"", '"').replace("\\\\", "\\")
+        return _basename_only(unquote(inner)) if inner else None
+
+    m = _RE_CONTENT_DISP_FILENAME_PLAIN.search(v)
+    if m:
+        raw_fn = m.group(1).strip().strip('"')
+        if raw_fn:
+            return _basename_only(unquote(raw_fn))
+
+    return None
+
+
+def _basename_only(name: str) -> str:
+    s = (name or "").strip()
+    if not s or s in (".", ".."):
+        return ""
+    # Strip path-like prefixes from hostile clients.
+    s = s.replace("\\", "/").split("/")[-1].strip()
+    return s or ""
+
+
+def webhook_stashed_body_file_name(request: Request) -> str:
+    """
+    Non-multipart body stored as binary: ``Content-Disposition`` filename when present,
+    otherwise a new random UUID string (no extension).
+    """
+
+    fn = filename_from_content_disposition(request.headers.get("content-disposition"))
+    if fn:
+        return fn
+    return str(uuid.uuid4())
 
 
 def _raw_body_sniffs_opaque_binary(raw: bytes) -> bool:
@@ -174,13 +245,14 @@ async def parse_webhook_request(
         return ParsedWebhookBody(query=query, body=None, form=None, pending_binaries=[])
 
     mime_top = ct.split(";")[0].strip() or "application/octet-stream"
+    body_fname = webhook_stashed_body_file_name(request)
 
     if raw_body:
         return ParsedWebhookBody(
             query=query,
             body=None,
             form=None,
-            pending_binaries=[(bp, raw, mime_top, None)],
+            pending_binaries=[(bp, raw, mime_top, body_fname)],
             body_stashed_as_binary=True,
         )
 
@@ -189,7 +261,7 @@ async def parse_webhook_request(
             query=query,
             body=None,
             form=None,
-            pending_binaries=[(bp, raw, mime_top, None)],
+            pending_binaries=[(bp, raw, mime_top, body_fname)],
             body_stashed_as_binary=True,
         )
 
@@ -198,7 +270,7 @@ async def parse_webhook_request(
             query=query,
             body=None,
             form=None,
-            pending_binaries=[(bp, raw, mime_top, None)],
+            pending_binaries=[(bp, raw, mime_top, body_fname)],
             body_stashed_as_binary=True,
         )
 
@@ -214,6 +286,6 @@ async def parse_webhook_request(
         query=query,
         body=None,
         form=None,
-        pending_binaries=[(bp, raw, mime_top, None)],
+        pending_binaries=[(bp, raw, mime_top, body_fname)],
         body_stashed_as_binary=True,
     )

@@ -314,7 +314,7 @@ class ActivateFlowRequest(BaseModel):
 
 
 class FlowRevisionSnapshotRequest(BaseModel):
-    """Immutable graph copied from the editor (like n8n's `workflowData` on `/run`)."""
+    """Immutable graph copied from the editor for an unsaved execute request (`/run`)."""
     nodes: list[dict[str, Any]]
     connections: dict[str, Any]
     settings: dict[str, Any] = Field(default_factory=dict)

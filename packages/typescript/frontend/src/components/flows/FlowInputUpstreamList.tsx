@@ -21,7 +21,7 @@ function slotKey(s: UpstreamInputSlot): string {
 }
 
 /**
- * n8n-style input schema: one expandable row per upstream node (name + item count),
+ * Input schema view: one expandable row per upstream node (name + item count),
  * shared Schema / Table / JSON mode for all sources; body is accordion JSON inside each row.
  */
 export const FlowInputUpstreamList: React.FC<{
