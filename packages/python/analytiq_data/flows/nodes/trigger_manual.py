@@ -8,11 +8,11 @@ import analytiq_data as ad
 
 
 class FlowsManualTriggerNode:
-    """Seed a manual execution with the engine-provided `trigger_data` payload."""
+    """Seed a manual execution with a single empty JSON item (same idea as n8n Manual Trigger)."""
 
     key = "flows.trigger.manual"
     label = "Manual trigger"
-    description = "Emits a single item with trigger metadata. Use a Code node to build test data."
+    description = "Emits one item with empty JSON `{}`. Use a Code node or pin_data for test payloads; `trigger_data` is only in Code context."
     category = "Generic"
     is_trigger = True
     is_merge = False
@@ -25,7 +25,7 @@ class FlowsManualTriggerNode:
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "title": "Manual trigger",
-        "description": "No editable parameters. Downstream Code nodes usually shape test data.",
+        "description": "No editable parameters. Downstream nodes or pin_data supply JSON fields.",
         "properties": {},
         "additionalProperties": True,
     }
@@ -39,10 +39,10 @@ class FlowsManualTriggerNode:
         node: dict[str, Any],
         inputs: list[list["ad.flows.FlowItem"]],
     ) -> list[list["ad.flows.FlowItem"]]:
-        """Emit one item containing `trigger_data` under `json.trigger`."""
+        """Emit one item whose JSON is `{}` (trigger metadata lives on the execution / Code `context`)."""
 
         item = ad.flows.FlowItem(
-            json={"trigger": context.trigger_data},
+            json={},
             binary={},
             meta={"source_node_id": node["id"], "item_index": 0},
             paired_item=None,

@@ -205,9 +205,10 @@ def _register_nodes() -> None:
 async def test_expression_resolves_json() -> None:
     nodes = [
         _n("t1", "Start", "flows.trigger.manual", 0),
-        _n("e1", "Echo", "tests.echo_param", 200, {"value": "=_json['trigger']['x']"}),
+        _n("e1", "Echo", "tests.echo_param", 200, {"value": "=_json['x']"}),
     ]
     conns = {"t1": {"main": [[ad.flows.NodeConnection(dest_node_id="e1", connection_type="main", index=0)]]}}
+    pin_data = {"t1": [{"json": {"x": 5}, "binary": {}, "meta": {}, "paired_item": None}]}
     ctx = ad.flows.ExecutionContext(
         organization_id="org",
         execution_id="exec",
@@ -220,7 +221,10 @@ async def test_expression_resolves_json() -> None:
         stop_requested=False,
         logger=None,
     )
-    res = await ad.flows.run_flow(context=ctx, revision={"nodes": nodes, "connections": conns, "settings": {}, "pin_data": None})
+    res = await ad.flows.run_flow(
+        context=ctx,
+        revision={"nodes": nodes, "connections": conns, "settings": {}, "pin_data": pin_data},
+    )
     assert res["status"] == "success"
     out = ctx.run_data["e1"]["data"]["main"][0][0]
     assert out.json["value"] == 5
@@ -299,7 +303,13 @@ async def test_per_item_expression_can_access_current_input_item_via_input_item(
 async def test_expression_resolves_node_from_prior_run_data() -> None:
     nodes = [
         _n("t1", "Start", "flows.trigger.manual", 0),
-        _n("c1", "Code", "flows.code", 200, {"python_code": "def run(items, context):\n    return [{'x': items[0]['trigger']['x']}]\n", "timeout_seconds": 2}),
+        _n(
+            "c1",
+            "Code",
+            "flows.code",
+            200,
+            {"python_code": "def run(items, context):\n    return [{'x': context['trigger']['x']}]\n", "timeout_seconds": 2},
+        ),
         _n("e1", "Echo", "tests.echo_param", 400, {"value": "=_node['Code'].json['x']"}),
     ]
     conns = {

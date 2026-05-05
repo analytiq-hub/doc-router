@@ -255,7 +255,7 @@ Registered in `register_builtin.py` (five node types; **only one trigger: `flows
 
 | Key | `is_trigger` | `is_merge` | Inputs | Outputs | Description |
 |-----|:-----------:|:----------:|:------:|:-------:|-------------|
-| `flows.trigger.manual` | ✓ | ✗ | 0 | 1 | Emits the run seed item (used with manual and revision runs) |
+| `flows.trigger.manual` | ✓ | ✗ | 0 | 1 | Emits one item with empty JSON `{}` (n8n-style); execution still carries `trigger` on `flow_executions` and in Code `context` |
 | `flows.http_request` | ✗ | ✗ | 1 | 1 | Outbound HTTP (method, URL, body modes, optional header/query auth credentials) |
 | `flows.branch` | ✗ | ✗ | 1 | 2 | Routes items to `true`/`false` slot |
 | `flows.merge` | ✗ | ✓ | 2+ | 1 | Waits for all inputs, concatenates |

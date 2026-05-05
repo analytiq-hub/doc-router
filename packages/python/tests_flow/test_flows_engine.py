@@ -274,7 +274,7 @@ async def test_run_flow_executes_code_node() -> None:
             "type": "flows.code",
             "position": [200, 0],
             "parameters": {
-                "python_code": "def run(items, context):\n    out=[]\n    for it in items:\n        it=dict(it)\n        it['x']=it.get('trigger',{}).get('x',0)+1\n        out.append(it)\n    return out\n",
+                "python_code": "def run(items, context):\n    out=[]\n    td = context.get('trigger') or {}\n    for it in items:\n        it=dict(it)\n        it['x']=td.get('x',0)+1\n        out.append(it)\n    return out\n",
                 "timeout_seconds": 2,
             },
             "webhook_id": None,
@@ -590,45 +590,52 @@ async def test_run_flow_merge_both_inputs_concat_in_slot_order() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_flow_branch_true_and_false_outputs_by_trigger_field() -> None:
+async def test_run_flow_branch_true_and_false_outputs_by_json_field() -> None:
     """
     Branch must route items explicitly to `main[0]` (true) vs `main[1]` (false),
-    not only by implicit wiring. Manual trigger nests `trigger_data` under `json.trigger`.
+    not only by implicit wiring. Manual trigger emits `{}`; pin_data supplies `k` for the branch.
     """
 
-    async def _run(equals: dict[str, Any]) -> dict[str, Any]:
+    async def _run(equals_val: Any) -> dict[str, Any]:
         nodes = [
             _n("t1", "Start", "flows.trigger.manual", 0),
-            _n("b1", "Branch", "flows.branch", 200, {"field": "trigger", "equals": equals}),
+            _n("b1", "Branch", "flows.branch", 200, {"field": "k", "equals": equals_val}),
         ]
         connections = {
             "t1": {
                 "main": [[ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0)]],
             }
         }
+        pin_data = {"t1": [{"json": {"k": 1}, "binary": {}, "meta": {}, "paired_item": None}]}
         ctx = ad.flows.ExecutionContext(
             organization_id="org",
             execution_id="exec",
             flow_id="flow",
             flow_revid="rev",
             mode="manual",
-            trigger_data={"k": 1},
+            trigger_data={},
             run_data={},
             analytiq_client=None,
             stop_requested=False,
             logger=None,
         )
         res = await ad.flows.run_flow(
-            context=ctx, revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": None}
+            context=ctx,
+            revision={
+                "nodes": nodes,
+                "connections": connections,
+                "settings": {},
+                "pin_data": pin_data,
+            },
         )
         assert res["status"] == "success"
         return ctx.run_data
 
-    data_true = await _run({"k": 1})
+    data_true = await _run(1)
     b_true = data_true["b1"]["data"]["main"]
     assert [len(b_true[0]), len(b_true[1])] == [1, 0]
 
-    data_false = await _run({"k": 0})
+    data_false = await _run(0)
     b_false = data_false["b1"]["data"]["main"]
     assert [len(b_false[0]), len(b_false[1])] == [0, 1]
 
@@ -935,8 +942,8 @@ async def test_flows_code_context_includes_nodes_materialized_run_data() -> None
 
 
 @pytest.mark.asyncio
-async def test_manual_trigger_emits_single_item_with_trigger_key() -> None:
-    """`flows.trigger.manual` emits one row; trigger metadata is nested under `json.trigger`."""
+async def test_manual_trigger_emits_single_empty_json_item() -> None:
+    """`flows.trigger.manual` emits one row with empty JSON (n8n Manual Trigger behavior)."""
 
     n = ad.flows.FlowsManualTriggerNode()
     ctx = ad.flows.ExecutionContext(
@@ -953,7 +960,7 @@ async def test_manual_trigger_emits_single_item_with_trigger_key() -> None:
     )
     out = await n.execute(ctx, {"id": "t1", "parameters": {}}, [[]])
     assert len(out) == 1 and len(out[0]) == 1
-    assert out[0][0].json == {"trigger": {"type": "manual", "document_id": "d1"}}
+    assert out[0][0].json == {}
     assert out[0][0].meta["item_index"] == 0
 
 
@@ -979,7 +986,7 @@ async def test_manual_trigger_legacy_stored_payload_is_ignored() -> None:
         {"id": "t1", "parameters": {"payload": [{"ignored": True}]}},
         [[]],
     )
-    assert out[0][0].json == {"trigger": {"type": "manual"}}
+    assert out[0][0].json == {}
 
 
 def test_node_name_prefers_canvas_name() -> None:
