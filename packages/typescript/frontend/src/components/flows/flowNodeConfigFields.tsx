@@ -134,7 +134,10 @@ export const FlowNodeParameterFields: React.FC<{
 
   const orderedKeys = useMemo(() => getOrderedKeys(rootSchema), [rootSchema]);
 
-  if (nodeType?.is_trigger) {
+  const triggerHasParameterSchema =
+    Boolean(nodeType?.is_trigger && Object.keys(schemaProps).length > 0);
+
+  if (nodeType?.is_trigger && !triggerHasParameterSchema) {
     return (
       <div className="rounded-md border border-gray-200 bg-gray-50/80 px-3 py-3 text-sm text-gray-700">
         <p>This trigger has no editable parameters.</p>
@@ -147,7 +150,9 @@ export const FlowNodeParameterFields: React.FC<{
     );
   }
 
-  const renderParamField = (key: string, subschema: { type?: string; enum?: unknown[] } & Record<string, unknown>) => {
+  const renderParamField = (key: string, subschema: { type?: string; enum?: unknown[]; title?: string } & Record<string, unknown>) => {
+    const titleRaw = subschema?.title;
+    const propLabel = typeof titleRaw === 'string' && titleRaw.trim().length > 0 ? titleRaw.trim() : key;
     const t = subschema?.type;
     const uiHint = typeof subschema['x-ui-widget'] === 'string' ? (subschema['x-ui-widget'] as string) : '';
     const params = mergedParams;
@@ -164,7 +169,7 @@ export const FlowNodeParameterFields: React.FC<{
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
-            <span className={flowLabelClass}>{key}</span>
+            <span className={flowLabelClass}>{propLabel}</span>
             <input readOnly className={flowInputClass} value={safeJsonStringify(v, '[]')} />
           </div>
         );
@@ -172,7 +177,7 @@ export const FlowNodeParameterFields: React.FC<{
       return (
         <div key={key} className="mb-3">
             <FlowNameValueListField
-            label={key}
+            label={propLabel}
             value={v}
             readOnly={readOnly}
             configuringNodeId={node.id}
@@ -188,14 +193,14 @@ export const FlowNodeParameterFields: React.FC<{
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
-            <span className={flowLabelClass}>{key}</span>
+            <span className={flowLabelClass}>{propLabel}</span>
             <input readOnly className={flowInputClass} value={Boolean(v) ? 'true' : 'false'} />
           </div>
         );
       }
       return (
         <div key={key} className="mb-3 flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
-          <span className="text-sm text-gray-800">{key}</span>
+          <span className="text-sm text-gray-800">{propLabel}</span>
           <Switch
             checked={Boolean(v)}
             onChange={(checked) => applyPatch({ [key]: checked })}
@@ -213,7 +218,7 @@ export const FlowNodeParameterFields: React.FC<{
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
-            <span className={flowLabelClass}>{key}</span>
+            <span className={flowLabelClass}>{propLabel}</span>
             <input readOnly className={flowInputClass} value={v == null || v === '' ? '' : String(v)} />
           </div>
         );
@@ -221,7 +226,7 @@ export const FlowNodeParameterFields: React.FC<{
       return (
         <div key={key} className="mb-3">
           <label className={flowLabelClass} htmlFor={`param-${key}`}>
-            {key}
+            {propLabel}
           </label>
           <input
             id={`param-${key}`}
@@ -240,7 +245,7 @@ export const FlowNodeParameterFields: React.FC<{
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
-            <span className={flowLabelClass}>{key}</span>
+            <span className={flowLabelClass}>{propLabel}</span>
             <input readOnly className={flowInputClass} value={v == null ? '' : String(v)} />
           </div>
         );
@@ -248,7 +253,7 @@ export const FlowNodeParameterFields: React.FC<{
       return (
         <div key={key} className="mb-3">
           <label className={flowLabelClass} htmlFor={`param-enum-${key}`}>
-            {key}
+            {propLabel}
           </label>
           <select
             id={`param-enum-${key}`}
@@ -275,7 +280,7 @@ export const FlowNodeParameterFields: React.FC<{
         return (
           <div key={key} className="mb-3 w-full min-w-0">
             <label className={flowLabelClass} htmlFor={`param-json-${key}`}>
-              {key}
+              {propLabel}
             </label>
             <div className={flowMonacoParamShellClass}>
               <Editor
@@ -308,7 +313,7 @@ export const FlowNodeParameterFields: React.FC<{
       return (
         <div key={key} className="mb-3 w-full min-w-0">
           <label className={flowLabelClass} htmlFor={`param-json-${key}`} title={title}>
-            {key}
+            {propLabel}
           </label>
           <div className={flowMonacoParamShellClass}>
             <Editor
@@ -385,7 +390,7 @@ export const FlowNodeParameterFields: React.FC<{
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
-            <span className={flowLabelClass}>{key}</span>
+            <span className={flowLabelClass}>{propLabel}</span>
             <textarea
               readOnly
               className={flowInputClass + ' min-h-[120px] cursor-default font-mono text-[11px]'}
@@ -398,7 +403,7 @@ export const FlowNodeParameterFields: React.FC<{
       return (
         <div key={key} className="mb-3">
           <label className={flowLabelClass} htmlFor={`param-textarea-${key}`}>
-            {key}
+            {propLabel}
           </label>
           <textarea
             id={`param-textarea-${key}`}
@@ -424,7 +429,7 @@ export const FlowNodeParameterFields: React.FC<{
             : safeJsonStringify(v, '');
       return (
         <div key={key} className="min-h-0 flex-1">
-          <div className="mb-1 text-xs font-semibold text-gray-600">{key}</div>
+          <div className="mb-1 text-xs font-semibold text-gray-600">{propLabel}</div>
           <Editor
             height="400px"
             language={lang}
@@ -546,7 +551,7 @@ export const FlowNodeParameterFields: React.FC<{
     return (
       <div key={key} className="mb-3">
         <label className={flowLabelClass} htmlFor={`param-str-${key}`}>
-          {key}
+          {propLabel}
         </label>
         <input
           id={`param-str-${key}`}

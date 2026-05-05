@@ -8,7 +8,9 @@ from datetime import datetime, UTC
 from typing import Any, Optional, List, Literal
 
 from bson import ObjectId
+from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
+from starlette.responses import Response
 from pydantic import BaseModel, Field, ConfigDict
 
 import analytiq_data as ad
@@ -48,6 +50,13 @@ def _sanitize_inbound_webhook_headers(request: Request) -> dict[str, str]:
         else:
             out[k] = v
     return out
+
+
+def _safe_webhook_blob_segment(part: str) -> str:
+    """Single path segment for GridFS keys (no slashes)."""
+
+    p = "".join(c if (c.isalnum() or c in "._-") else "_" for c in part)
+    return (p[:120] if p else "file")
 
 
 def _raise_if_run_data_entries_oversized(run_data: dict[str, Any]) -> None:
@@ -832,18 +841,55 @@ async def stop_execution(organization_id: str, flow_id: str, exec_id: str, curre
     return {"ok": True}
 
 
-@flows_router.post("/v0/webhooks/{webhook_id}")
+@flows_router.api_route("/v0/webhooks/{webhook_id}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"])
 async def inbound_webhook(webhook_id: str, request: Request):
-    # Minimal v1: route via `flow_webhook_routes` lookup and enqueue.
+    # Route via `flow_webhook_routes` lookup, persist trigger metadata (never raw upload bytes — GridFS offload).
     db = await _get_db()
     route = await db.flow_webhook_routes.find_one({"_id": webhook_id})
     if not route:
         raise HTTPException(status_code=404, detail="Unknown webhook")
-    body = None
+
+    revision_doc: dict | None = None
+    fr_any = route.get("flow_revid")
     try:
-        body = await request.json()
-    except Exception:
-        body = {"raw": (await request.body()).decode("utf-8", errors="replace")}
+        if isinstance(fr_any, str) and fr_any.strip():
+            revision_doc = await db.flow_revisions.find_one({"_id": ObjectId(fr_any.strip()), "flow_id": route["flow_id"]})
+    except InvalidId:
+        revision_doc = None
+    params = ad.flows.webhook_params.extract_webhook_params_from_revision(revision_doc)
+
+    allowed = ad.flows.webhook_params.allowed_http_methods_snapshot(params)
+    if allowed is not None and request.method.upper() not in allowed:
+        raise HTTPException(status_code=405, detail="Method not allowed")
+
+    hops, direct_ip = ad.flows.webhook_params.request_ip_candidates(request)
+    if not ad.flows.webhook_params.is_ip_whitelisted(params.get("ip_whitelist"), hops, direct_ip):
+        raise HTTPException(status_code=403, detail="IP is not whitelisted to access the webhook")
+
+    if params.get("ignore_bots") and ad.flows.webhook_params.user_agent_looks_like_bot(
+        request.headers.get("user-agent")
+    ):
+        raise HTTPException(status_code=403, detail="Bots are not allowed for this webhook")
+
+    raw_body = bool(params.get("raw_body"))
+    bpf = params.get("binary_property_name")
+    binary_pn = bpf.strip() if isinstance(bpf, str) else "data"
+    parsed = await ad.flows.webhook_parse.parse_webhook_request(
+        request,
+        raw_body=raw_body,
+        binary_property_name=binary_pn,
+    )
+
+    trigger: dict[str, Any] = {
+        "type": "webhook",
+        "webhook_id": webhook_id,
+        "method": request.method,
+        "headers": _sanitize_inbound_webhook_headers(request),
+        "query": parsed.query or {},
+        "body": parsed.body,
+        "form": parsed.form,
+        "binary_properties": [],
+    }
     exec_doc = {
         "flow_id": route["flow_id"],
         "flow_revid": route["flow_revid"],
@@ -860,22 +906,57 @@ async def inbound_webhook(webhook_id: str, request: Request):
         "parent_execution_id": None,
         "run_data": {},
         "error": None,
-        "trigger": {
-            "type": "webhook",
-            "webhook_id": webhook_id,
-            "method": request.method,
-            "headers": _sanitize_inbound_webhook_headers(request),
-            "body": body,
-        },
+        "trigger": trigger,
     }
     res = await db.flow_executions.insert_one(exec_doc)
     exec_id = str(res.inserted_id)
-    await ad.queue.send_msg(ad.common.get_analytiq_client(), "flow_run", msg={
-        "flow_id": route["flow_id"],
-        "flow_revid": route["flow_revid"],
-        "execution_id": exec_id,
-        "organization_id": route["organization_id"],
-        "trigger": exec_doc["trigger"],
-    })
-    return {"execution_id": exec_id}
+
+    binary_props: list[dict[str, Any]] = []
+    aq_client = ad.common.get_analytiq_client()
+
+    if parsed.pending_binaries:
+        for i, (field, blob_bytes, mime, fname) in enumerate(parsed.pending_binaries):
+            seg_f = _safe_webhook_blob_segment(field)
+            seg_n = _safe_webhook_blob_segment(fname or field or "file")
+            gfs_key = f"{exec_id}/webhook/incoming/{i}_{seg_f}/{seg_n}"
+            await ad.mongodb.blob.save_blob_async(
+                aq_client,
+                bucket="flow_blobs",
+                key=gfs_key,
+                blob=blob_bytes,
+                metadata={
+                    "mime_type": mime,
+                    "webhook_field": field,
+                    "file_name": fname or "",
+                },
+            )
+            binary_props.append(
+                {
+                    "name": field,
+                    "mime_type": mime,
+                    "file_name": fname,
+                    "storage_id": f"flow_blobs:{gfs_key}",
+                }
+            )
+        trigger = {**trigger, "binary_properties": binary_props}
+        await db.flow_executions.update_one(
+            {"_id": ObjectId(exec_id)},
+            {"$set": {"trigger": trigger}},
+        )
+
+    await ad.queue.send_msg(
+        aq_client,
+        "flow_run",
+        msg={
+            "flow_id": route["flow_id"],
+            "flow_revid": route["flow_revid"],
+            "execution_id": exec_id,
+            "organization_id": route["organization_id"],
+            "trigger": trigger,
+        },
+    )
+    sync_status, hdr_map, payload = ad.flows.webhook_params.synchronous_http_response(exec_id, params)
+    if payload is None:
+        return Response(status_code=sync_status, headers=dict(hdr_map))
+    return Response(content=payload, status_code=sync_status, headers=dict(hdr_map))
 
