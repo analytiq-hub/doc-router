@@ -153,16 +153,14 @@ async def delete_blobs_by_prefix_async(analytiq_client, bucket: str, prefix: str
     db = mongo[analytiq_client.env]
     files_col = db[f"{bucket}.files"]
 
-    file_docs = await files_col.find(
+    cursor = files_col.find(
         {"filename": {"$regex": f"^{re.escape(prefix)}"}},
         {"_id": 1, "filename": 1},
-    ).to_list(length=None)
-    if not file_docs:
-        return 0
+    )
 
     fs_bucket = AsyncIOMotorGridFSBucket(db, bucket_name=bucket)
     deleted = 0
-    for doc in file_docs:
+    async for doc in cursor:
         try:
             await fs_bucket.delete(doc["_id"])
             deleted += 1

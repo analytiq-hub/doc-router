@@ -386,20 +386,14 @@ async def worker_flow_cleanup(worker_id: str) -> None:
             cutoff = now - timedelta(days=retention_days)
             db = analytiq_client.mongodb_async[ENV]
 
-            expired = await db.flow_executions.find(
-                {
-                    "finished_at": {"$lt": cutoff},
-                    "status": {"$in": ["success", "error", "cancelled"]},
-                },
-                {"_id": 1},
-            ).to_list(length=None)
-
-            if expired:
-                logger.info(
-                    f"Flow cleanup: found {len(expired)} expired execution(s) (cutoff={cutoff.date()})"
-                )
-
-            for execution in expired:
+            expired_filter = {
+                "finished_at": {"$lt": cutoff},
+                "status": {"$in": ["success", "error", "cancelled"]},
+            }
+            cursor = db.flow_executions.find(expired_filter, {"_id": 1})
+            processed = 0
+            async for execution in cursor:
+                processed += 1
                 execution_id = str(execution["_id"])
                 blobs_deleted = await ad.mongodb.blob.delete_blobs_by_prefix_async(
                     analytiq_client, bucket="flow_blobs", prefix=f"{execution_id}/"
@@ -407,6 +401,11 @@ async def worker_flow_cleanup(worker_id: str) -> None:
                 await db.flow_executions.delete_one({"_id": execution["_id"]})
                 logger.info(
                     f"Cleaned up execution {execution_id}: {blobs_deleted} blob(s) deleted"
+                )
+
+            if processed:
+                logger.info(
+                    f"Flow cleanup: processed {processed} expired execution(s) (cutoff={cutoff.date()})"
                 )
 
             await asyncio.sleep(CHECK_INTERVAL_SECS)
