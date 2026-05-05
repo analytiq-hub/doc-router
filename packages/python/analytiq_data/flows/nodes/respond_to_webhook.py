@@ -93,7 +93,9 @@ class FlowsRespondToWebhookNode:
                 if not (100 <= c <= 599):
                     errs.append("status_code must be between 100 and 599")
         bm = params.get("body_mode")
-        if bm not in ("json", "text", "none"):
+        if bm in (None, ""):
+            pass
+        elif bm not in ("json", "text", "none"):
             errs.append("body_mode must be json, text, or none")
         return errs
 

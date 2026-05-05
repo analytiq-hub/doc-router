@@ -458,6 +458,15 @@ def test_webhook_sync_response_shapes() -> None:
     assert body2 is None
 
 
+def test_respond_to_webhook_validate_accepts_missing_body_mode() -> None:
+    """``execute`` defaults missing ``body_mode`` to json; validation must match."""
+    n = ad.flows.FlowsRespondToWebhookNode()
+    assert n.validate_parameters({}) == []
+    assert n.validate_parameters({"status_code": 200}) == []
+    assert n.validate_parameters({"body_mode": None}) == []
+    assert n.validate_parameters({"body_mode": ""}) == []
+
+
 @pytest.mark.asyncio
 async def test_respond_to_webhook_node_sets_context_response() -> None:
     n = ad.flows.FlowsRespondToWebhookNode()
