@@ -119,7 +119,17 @@ One document per saved credential instance:
 }
 ```
 
-`encrypted_payload` is `ad.crypto.encrypt_token(json.dumps(fields_dict))`. Decryption returns the full dict; secret fields are stripped before any API response.
+### Encryption
+
+`encrypted_payload` is `ad.crypto.encrypt_token(json.dumps(fields_dict))` — AES-256-CFB, key derived from `NEXTAUTH_SECRET` (SHA-256 padded to 32 bytes).
+
+**Known limitation:** the IV is fixed — derived deterministically from the key via SHA-256 (`encryption.py`). This means identical plaintext always produces identical ciphertext. For credentials this is partially mitigated by the JSON field ordering varying across writes, but it is still weaker than random-IV encryption. A random-IV variant of `encrypt_token` should be added before storing high-value secrets (OAuth client secrets, etc.).
+
+Decryption returns the full field dict; `x-secret` fields are stripped before any API response.
+
+### Credential field values and expressions
+
+Credential field values are **plain strings** — they are not run through the expression engine (`resolve_parameters`). Storing an expression like `=$env['MY_TOKEN']` in a credential field would store the literal string, not the resolved value. This is intentional: credentials are static secrets managed by admins, not dynamic values computed at flow run time.
 
 **Index:** add a compound index `{ organization_id: 1, kind_key: 1 }` for efficient filtering.
 
@@ -353,7 +363,111 @@ Already partially present in `docrouter-org.ts` — verify these all exist:
 
 ---
 
-## 10. OAuth2 credential flow (not yet implemented)
+## 10. Porting n8n credentials to DocRouter
+
+### 10.1 Export from n8n
+
+n8n's CLI can export all credentials in decrypted form:
+
+```bash
+n8n export:credentials --all --decrypted --output=tools/n8n_credentials_decrypted.json
+```
+
+Each item in the output JSON array has this shape:
+
+```json
+{
+  "id": "5",
+  "name": "My Slack bot",
+  "type": "slackApi",
+  "data": { "accessToken": "xoxb-…" },
+  "createdAt": "2024-01-18T12:00:00.000Z",
+  "updatedAt": "2024-01-18T12:00:00.000Z"
+}
+```
+
+`type` is the n8n credential type name. `data` is the fully decrypted field dict.
+
+> **Security:** the decrypted export file contains all secret values in plain text. Delete it immediately after the import is complete.
+
+### 10.2 Import script
+
+A conversion script lives at (or should be created at) `tools/port_credentials.py`. It follows the same pattern as `tools/port_nodes.py`.
+
+**Algorithm:**
+
+1. Load the decrypted n8n export JSON.
+2. For each credential entry:
+   a. Map n8n `type` → DocRouter `kind_key`. For most built-in kinds the name is identical (e.g. `slackApi` → `slackApi`). Maintain a small override dict for diverging names.
+   b. Skip the entry if the `kind_key` is not registered in DocRouter's kind registry (i.e. the kind file does not exist under `schemas/credential-kinds/`).
+   c. POST to `POST /v0/orgs/{orgId}/credentials` with `{ kind_key, name, fields: data }`.
+3. Print a summary: imported / skipped / failed.
+
+**Minimal implementation sketch:**
+
+```python
+#!/usr/bin/env python3
+"""Import n8n decrypted credentials into DocRouter.
+
+Usage:
+    python tools/port_credentials.py \
+        --input tools/n8n_credentials_decrypted.json \
+        --org <organization_id> \
+        --api-url http://localhost:8000 \
+        --token <bearer_token>
+"""
+import argparse, json, sys
+import httpx
+
+KIND_REMAP: dict[str, str] = {
+    # n8n type name → DocRouter kind key (add overrides as needed)
+}
+
+def main() -> None:
+    p = argparse.ArgumentParser()
+    p.add_argument("--input",   required=True)
+    p.add_argument("--org",     required=True)
+    p.add_argument("--api-url", default="http://localhost:8000")
+    p.add_argument("--token",   required=True)
+    args = p.parse_args()
+
+    with open(args.input) as f:
+        items = json.load(f)
+
+    headers = {"Authorization": f"Bearer {args.token}"}
+    base = args.api_url.rstrip("/")
+    url = f"{base}/v0/orgs/{args.org}/credentials"
+
+    imported = skipped = failed = 0
+    for item in items:
+        kind_key = KIND_REMAP.get(item["type"], item["type"])
+        payload = {"kind_key": kind_key, "name": item["name"], "fields": item.get("data") or {}}
+        r = httpx.post(url, json=payload, headers=headers)
+        if r.status_code == 400 and "Unknown credential kind" in r.text:
+            print(f"  skip  {item['name']!r} (kind {kind_key!r} not registered)")
+            skipped += 1
+        elif r.is_success:
+            print(f"  ok    {item['name']!r} → {kind_key}")
+            imported += 1
+        else:
+            print(f"  FAIL  {item['name']!r}: {r.status_code} {r.text[:120]}")
+            failed += 1
+
+    print(f"\nDone: {imported} imported, {skipped} skipped, {failed} failed.")
+    if failed:
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+```
+
+### 10.3 Kind coverage
+
+Before running the import, check which n8n credential types appear in the export and ensure the corresponding kind files exist under `schemas/credential-kinds/`. Any kind without a matching file will be skipped. Add the missing kind files first (§2), then re-run.
+
+---
+
+## 11. OAuth2 credential flow (not yet implemented)
 
 OAuth2 kinds (`auth_mode: "oauth2_authorization_code"`) require a browser redirect to the provider's consent screen and a server-side callback to exchange the code for tokens.
 
@@ -371,7 +485,7 @@ Until this is built:
 
 ---
 
-## 11. What is implemented vs. what remains
+## 12. What is implemented vs. what remains
 
 ### Implemented (on `flows20` branch)
 
@@ -400,11 +514,11 @@ Until this is built:
 | `extends` chain resolution in registry | Registry does not merge base + extension kinds |
 | SSRF guard in `/test` endpoint | `assert_http_url_allowed()` not called before the test httpx request |
 | MongoDB index on `credentials` | Compound `{ organization_id: 1, kind_key: 1 }` not yet created |
-| OAuth2 flow | Initiate / callback / refresh (see §10) |
+| OAuth2 flow | Initiate / callback / refresh (see §11) |
 
 ---
 
-## 12. Build order for remaining work
+## 13. Build order for remaining work
 
 **Step 1 — Kind files**
 
@@ -432,4 +546,4 @@ If multi-level kind inheritance is needed (e.g. `googleOAuth2Api` extending `oAu
 
 **Step 6 — OAuth2 (separate milestone)**
 
-See §10 above.
+See §11 above.
