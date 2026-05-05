@@ -2,11 +2,18 @@ from __future__ import annotations
 
 """DocRouter node implementation for manual document-triggered flows."""
 
+import mimetypes
 from typing import Any
 
 import analytiq_data as ad
 
 from .. import services as flow_services
+
+
+def _mime_for_storage_key(key: str) -> str:
+    """Best-effort MIME type from GridFS filename (e.g. ``64f3a1b2.pdf``)."""
+    kind, _ = mimetypes.guess_type(key)
+    return kind or "application/octet-stream"
 
 
 class DocRouterManualTriggerNode:
@@ -45,11 +52,34 @@ class DocRouterManualTriggerNode:
         if not isinstance(doc_id, str) or not doc_id.strip():
             raise ValueError("document_id required in trigger_data for docrouter.trigger.manual")
         doc = await flow_services.get_document(context.analytiq_client, context.organization_id, doc_id)
+
+        user_fn = doc.get("user_file_name")
+        user_display = user_fn if isinstance(user_fn, str) else None
+
+        binary: dict[str, ad.flows.BinaryRef] = {}
+        pdf_key = doc.get("pdf_file_name")
+        if isinstance(pdf_key, str) and pdf_key.strip():
+            binary["pdf"] = ad.flows.BinaryRef(
+                mime_type="application/pdf",
+                file_name=user_display or "document.pdf",
+                storage_id=f"files:{pdf_key}",
+            )
+
+        orig_key = doc.get("mongo_file_name")
+        if isinstance(orig_key, str) and orig_key.strip():
+            # Avoid duplicate refs when PDF and stored original share the same GridFS key.
+            if orig_key != pdf_key:
+                binary["original"] = ad.flows.BinaryRef(
+                    mime_type=_mime_for_storage_key(orig_key),
+                    file_name=user_display,
+                    storage_id=f"files:{orig_key}",
+                )
+
         return [
             [
                 ad.flows.FlowItem(
                     json={"document": doc, "document_id": doc_id},
-                    binary={},
+                    binary=binary,
                     meta={"source_node_id": node["id"], "item_index": 0},
                     paired_item=None,
                 )
