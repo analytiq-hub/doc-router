@@ -523,7 +523,7 @@ async def _offload_binary_refs(
                     if ref.data is None or ref.storage_id:
                         continue
                     key = f"{execution_id}/{node_id}/{item_idx}/{prop}"
-                    await ad.blob.save_blob_async(
+                    await ad.mongodb.blob.save_blob_async(
                         analytiq_client,
                         bucket="flow_blobs",
                         key=key,

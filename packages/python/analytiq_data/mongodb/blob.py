@@ -3,6 +3,7 @@ from datetime import datetime, UTC
 import os
 import time
 import asyncio
+import re
 from motor.motor_asyncio import AsyncIOMotorGridFSBucket
 import logging
 
@@ -140,3 +141,33 @@ async def delete_blob_async(analytiq_client, bucket:str, key:str):
                 raise
             logger.warning(f"Retry {attempt + 1}/{max_retries} for deleting {bucket}/{key}: {e}")
             await asyncio.sleep(retry_delay)
+
+
+async def delete_blobs_by_prefix_async(analytiq_client, bucket: str, prefix: str) -> int:
+    """
+    Delete all GridFS entries in `bucket` whose filename starts with `prefix`.
+
+    Returns the number of files deleted.
+    """
+    mongo = analytiq_client.mongodb_async
+    db = mongo[analytiq_client.env]
+    files_col = db[f"{bucket}.files"]
+
+    file_docs = await files_col.find(
+        {"filename": {"$regex": f"^{re.escape(prefix)}"}},
+        {"_id": 1, "filename": 1},
+    ).to_list(length=None)
+    if not file_docs:
+        return 0
+
+    fs_bucket = AsyncIOMotorGridFSBucket(db, bucket_name=bucket)
+    deleted = 0
+    for doc in file_docs:
+        try:
+            await fs_bucket.delete(doc["_id"])
+            deleted += 1
+        except Exception as e:
+            logger.warning(f"Failed deleting blob {bucket}/{doc.get('filename')}: {e}")
+
+    logger.debug(f"Deleted {deleted} blob(s) with prefix {bucket}/{prefix}")
+    return deleted

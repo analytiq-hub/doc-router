@@ -811,6 +811,81 @@ async def test_run_flow_pin_data_coerces_binary_ref_dicts() -> None:
 
 
 @pytest.mark.asyncio
+async def test_persist_run_data_offloads_binaryref_data_and_persists_storage_id(monkeypatch) -> None:
+    """
+    When persisting run_data with a Mongo-backed client, inline BinaryRef.data must be:
+    - uploaded once to GridFS flow_blobs
+    - cleared from memory
+    - persisted as storage_id only (no bytes in MongoDB payload)
+    """
+
+    saved: dict[str, Any] = {}
+
+    async def _fake_save_blob_async(_client, *, bucket: str, key: str, blob: bytes, metadata: dict[str, Any], **_kw):
+        saved["bucket"] = bucket
+        saved["key"] = key
+        saved["blob"] = blob
+        saved["metadata"] = metadata
+
+    class _FakeFlowExecutions:
+        async def update_one(self, _filter, update):
+            saved["update"] = update
+
+    class _FakeDb:
+        flow_executions = _FakeFlowExecutions()
+
+    def _fake_get_async_db(_client=None):
+        return _FakeDb()
+
+    monkeypatch.setattr(ad.mongodb.blob, "save_blob_async", _fake_save_blob_async)
+    monkeypatch.setattr(ad.common, "get_async_db", _fake_get_async_db)
+
+    ref = ad.flows.BinaryRef(mime_type="text/plain", file_name="x.txt", data=b"abc")
+    item = ad.flows.FlowItem(json={"k": 1}, binary={"f": ref}, meta={}, paired_item=None)
+    run_data = {
+        "n1": {
+            "status": "success",
+            "start_time": "2020-01-01T00:00:00Z",
+            "execution_time_ms": 1,
+            "data": {"main": [[item]]},
+            "error": None,
+        }
+    }
+
+    exec_id = "64f3a1b2c3d4e5f6a7b8c9d0"
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id=exec_id,
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data=run_data,
+        analytiq_client=object(),
+        stop_requested=False,
+        logger=None,
+    )
+
+    await ad.flows.persist_run_data(ctx, run_data)
+
+    # Offload happened.
+    assert saved["bucket"] == "flow_blobs"
+    assert saved["key"] == f"{exec_id}/n1/0/f"
+    assert saved["blob"] == b"abc"
+    assert saved["metadata"]["mime_type"] == "text/plain"
+    assert saved["metadata"]["file_name"] == "x.txt"
+
+    # In-memory ref mutated: data cleared, storage_id set.
+    assert ref.data is None
+    assert ref.storage_id == f"flow_blobs:{exec_id}/n1/0/f"
+
+    # Persisted payload contains only storage_id metadata (no inline bytes).
+    stored_item = saved["update"]["$set"]["run_data"]["n1"]["data"]["main"][0][0]
+    assert stored_item["binary"]["f"]["storage_id"] == f"flow_blobs:{exec_id}/n1/0/f"
+    assert "data" not in stored_item["binary"]["f"]
+
+
+@pytest.mark.asyncio
 async def test_flows_code_context_includes_nodes_materialized_run_data() -> None:
     """`flows.code` gets context['nodes'][node_id]['main'] with JSON-only prior outputs."""
 

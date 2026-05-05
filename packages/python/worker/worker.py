@@ -4,6 +4,7 @@ import sys
 from dotenv import load_dotenv
 import asyncio
 from datetime import datetime, UTC
+from datetime import timedelta
 import logging
 # Add the parent directory to the sys path
 sys.path.append("..")
@@ -363,6 +364,60 @@ async def worker_flow_run(worker_id: str) -> None:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
 
+
+async def worker_flow_cleanup(worker_id: str) -> None:
+    """Periodic cleanup of expired flow executions and their flow_blobs."""
+    ENV = os.getenv("ENV", "dev")
+    analytiq_client = ad.common.get_analytiq_client(env=ENV, name=worker_id)
+    retention_days = int(os.getenv("FLOW_EXECUTION_RETENTION_DAYS", "30"))
+    logger.info(f"Starting flow cleanup worker {worker_id} (retention={retention_days}d)")
+
+    last_heartbeat = datetime.now(UTC)
+    CHECK_INTERVAL_SECS = 3600  # Run once per hour
+
+    while True:
+        try:
+            now = datetime.now(UTC)
+
+            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
+                logger.info(f"Flow cleanup worker {worker_id} heartbeat")
+                last_heartbeat = now
+
+            cutoff = now - timedelta(days=retention_days)
+            db = analytiq_client.mongodb_async[ENV]
+
+            expired = await db.flow_executions.find(
+                {
+                    "finished_at": {"$lt": cutoff},
+                    "status": {"$in": ["success", "error", "cancelled"]},
+                },
+                {"_id": 1},
+            ).to_list(length=None)
+
+            if expired:
+                logger.info(
+                    f"Flow cleanup: found {len(expired)} expired execution(s) (cutoff={cutoff.date()})"
+                )
+
+            for execution in expired:
+                execution_id = str(execution["_id"])
+                blobs_deleted = await ad.mongodb.blob.delete_blobs_by_prefix_async(
+                    analytiq_client, bucket="flow_blobs", prefix=f"{execution_id}/"
+                )
+                await db.flow_executions.delete_one({"_id": execution["_id"]})
+                logger.info(
+                    f"Cleaned up execution {execution_id}: {blobs_deleted} blob(s) deleted"
+                )
+
+            await asyncio.sleep(CHECK_INTERVAL_SECS)
+
+        except asyncio.CancelledError:
+            logger.warning(f"Flow cleanup worker {worker_id} cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"Flow cleanup worker {worker_id} error: {e}")
+            await asyncio.sleep(300)  # Back off 5 min on errors
+
 async def recover_all_queues(analytiq_client) -> None:
     """
     Recover stale messages across all queues at worker startup.
@@ -397,6 +452,7 @@ def start_workers(n_workers: int) -> list[asyncio.Task]:
         tasks.append(asyncio.create_task(worker_webhook(f"webhook_{i}"),    name=f"webhook_{i}"))
         tasks.append(asyncio.create_task(worker_flow_run(f"flow_run_{i}"),  name=f"flow_run_{i}"))
     tasks.append(asyncio.create_task(worker_kb_reconcile("kb_reconcile_0"), name="kb_reconcile_0"))
+    tasks.append(asyncio.create_task(worker_flow_cleanup("flow_cleanup_0"), name="flow_cleanup_0"))
     logger.info(f"Started {len(tasks)} worker tasks (n_workers={n_workers})")
     return tasks
 
