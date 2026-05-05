@@ -363,107 +363,169 @@ Already partially present in `docrouter-org.ts` — verify these all exist:
 
 ---
 
-## 10. Porting n8n credentials to DocRouter
+## 10. Porting n8n credential kinds to DocRouter
 
-### 10.1 Export from n8n
+This section is about converting n8n credential *type definitions* from the n8n source tree (`../n8n/packages/nodes-base/credentials/`) into DocRouter kind JSON files (`schemas/credential-kinds/`). This is analogous to `tools/dump_nodes.js` + `tools/port_nodes.py` for node types.
 
-n8n's CLI can export all credentials in decrypted form:
+### 10.1 n8n credential type structure
 
-```bash
-n8n export:credentials --all --decrypted --output=tools/n8n_credentials_decrypted.json
+Each credential type is a TypeScript class in `../n8n/packages/nodes-base/credentials/<Name>.credentials.ts`:
+
+```typescript
+export class SlackApi implements ICredentialType {
+    name = 'slackApi';                     // → kind key
+    displayName = 'Slack API';             // → display_name
+    properties: INodeProperties[] = [
+        {
+            name: 'accessToken',
+            displayName: 'Access Token',
+            type: 'string',
+            typeOptions: { password: true }, // → x-secret: true
+            required: true,
+            default: '',
+        },
+    ];
+    authenticate: IAuthenticateGeneric = {
+        type: 'generic',
+        properties: {
+            headers: {
+                Authorization: '=Bearer {{$credentials.accessToken}}',
+                // → inject.headers: { "Authorization": "Bearer {{ credentials.accessToken }}" }
+            },
+        },
+    };
+    test: ICredentialTestRequest = {
+        request: { baseURL: 'https://slack.com', url: '/api/auth.test' },
+        // → test_request: { method: "GET", url: "https://slack.com/api/auth.test" }
+    };
+}
 ```
 
-Each item in the output JSON array has this shape:
+OAuth2 types use `extends = ['oAuth2Api']` and declare `auth_url`, `token_url` etc. as hidden properties.
+
+### 10.2 Conversion pipeline
+
+Follows the same two-step pattern as node porting:
+
+**Step A — `tools/dump_credentials.js`** (to create): Node.js script that `require()`s each `*.credentials.ts` file (compiled) from `../n8n/packages/nodes-base/credentials/`, instantiates the class, and emits one JSONL line per type with the raw shape:
 
 ```json
-{
-  "id": "5",
-  "name": "My Slack bot",
-  "type": "slackApi",
-  "data": { "accessToken": "xoxb-…" },
-  "createdAt": "2024-01-18T12:00:00.000Z",
-  "updatedAt": "2024-01-18T12:00:00.000Z"
-}
+{"name":"slackApi","displayName":"Slack API","extends":null,"properties":[...],"authenticate":{...},"test":{...}}
 ```
 
-`type` is the n8n credential type name. `data` is the fully decrypted field dict.
+**Step B — `tools/port_credentials.py`** (to create): Python script that reads the JSONL and writes one `schemas/credential-kinds/<key>.json` per type.
 
-> **Security:** the decrypted export file contains all secret values in plain text. Delete it immediately after the import is complete.
+**Mapping rules** from n8n → DocRouter kind JSON:
 
-### 10.2 Import script
+| n8n field | DocRouter field | Notes |
+|---|---|---|
+| `name` | `key` | Identical |
+| `displayName` | `display_name` | |
+| `extends[0]` | `extends` | Not yet resolved in registry |
+| `properties[].name` | `secret_schema.properties` key | |
+| `properties[].displayName` | `title` | |
+| `properties[].description` | `description` | |
+| `properties[].typeOptions.password` | `x-secret: true` | |
+| `properties[].required` | `secret_schema.required[]` | |
+| `authenticate.properties.headers` | `inject.headers` | Convert `={{$credentials.x}}` → `{{ credentials.x }}` |
+| `authenticate.properties.qs` | `inject.query_params` | Same template conversion |
+| `test.request.baseURL` + `test.request.url` | `test_request.url` | Concatenate |
+| `test.request.method` | `test_request.method` | Default `GET` |
+| OAuth2 `grantType` hidden prop | `auth_mode` | `authorizationCode` → `oauth2_authorization_code` |
 
-A conversion script lives at (or should be created at) `tools/port_credentials.py`. It follows the same pattern as `tools/port_nodes.py`.
+Skip `type: 'hidden'` and `type: 'notice'` properties — they are UI-only, not user-filled fields.
 
-**Algorithm:**
+### 10.3 Template syntax conversion
 
-1. Load the decrypted n8n export JSON.
-2. For each credential entry:
-   a. Map n8n `type` → DocRouter `kind_key`. For most built-in kinds the name is identical (e.g. `slackApi` → `slackApi`). Maintain a small override dict for diverging names.
-   b. Skip the entry if the `kind_key` is not registered in DocRouter's kind registry (i.e. the kind file does not exist under `schemas/credential-kinds/`).
-   c. POST to `POST /v0/orgs/{orgId}/credentials` with `{ kind_key, name, fields: data }`.
-3. Print a summary: imported / skipped / failed.
-
-**Minimal implementation sketch:**
+n8n uses `={{$credentials.fieldName}}` (n8n expression syntax) in `authenticate` blocks. DocRouter uses Jinja2: `{{ credentials.fieldName }}`. The conversion is a simple string substitution:
 
 ```python
-#!/usr/bin/env python3
-"""Import n8n decrypted credentials into DocRouter.
+import re
 
-Usage:
-    python tools/port_credentials.py \
-        --input tools/n8n_credentials_decrypted.json \
-        --org <organization_id> \
-        --api-url http://localhost:8000 \
-        --token <bearer_token>
-"""
-import argparse, json, sys
-import httpx
-
-KIND_REMAP: dict[str, str] = {
-    # n8n type name → DocRouter kind key (add overrides as needed)
-}
-
-def main() -> None:
-    p = argparse.ArgumentParser()
-    p.add_argument("--input",   required=True)
-    p.add_argument("--org",     required=True)
-    p.add_argument("--api-url", default="http://localhost:8000")
-    p.add_argument("--token",   required=True)
-    args = p.parse_args()
-
-    with open(args.input) as f:
-        items = json.load(f)
-
-    headers = {"Authorization": f"Bearer {args.token}"}
-    base = args.api_url.rstrip("/")
-    url = f"{base}/v0/orgs/{args.org}/credentials"
-
-    imported = skipped = failed = 0
-    for item in items:
-        kind_key = KIND_REMAP.get(item["type"], item["type"])
-        payload = {"kind_key": kind_key, "name": item["name"], "fields": item.get("data") or {}}
-        r = httpx.post(url, json=payload, headers=headers)
-        if r.status_code == 400 and "Unknown credential kind" in r.text:
-            print(f"  skip  {item['name']!r} (kind {kind_key!r} not registered)")
-            skipped += 1
-        elif r.is_success:
-            print(f"  ok    {item['name']!r} → {kind_key}")
-            imported += 1
-        else:
-            print(f"  FAIL  {item['name']!r}: {r.status_code} {r.text[:120]}")
-            failed += 1
-
-    print(f"\nDone: {imported} imported, {skipped} skipped, {failed} failed.")
-    if failed:
-        sys.exit(1)
-
-if __name__ == "__main__":
-    main()
+def convert_template(n8n_tmpl: str) -> str:
+    # "=Bearer {{$credentials.accessToken}}" → "Bearer {{ credentials.accessToken }}"
+    s = n8n_tmpl.lstrip("=")
+    return re.sub(r"\{\{\s*\$credentials\.(\w+)\s*\}\}", r"{{ credentials.\1 }}", s)
 ```
 
-### 10.3 Kind coverage
+### 10.4 Auth mode mapping
 
-Before running the import, check which n8n credential types appear in the export and ensure the corresponding kind files exist under `schemas/credential-kinds/`. Any kind without a matching file will be skipped. Add the missing kind files first (§2), then re-run.
+| n8n `authenticate.type` / `grantType` | DocRouter `auth_mode` |
+|---|---|
+| `generic` (no OAuth) | `api_key` or `basic_auth` |
+| `authorizationCode` | `oauth2_authorization_code` |
+| `clientCredentials` | `oauth2_client_credentials` |
+
+Infer `basic_auth` when the inject block sets an `Authorization: Basic …` header.
+
+---
+
+## 10a. Gaps: what DocRouter needs to port all n8n credential kinds
+
+A survey of all ~370 credential type files in `../n8n/packages/nodes-base/credentials/` reveals the following gaps between what n8n supports and what DocRouter's kind format currently handles.
+
+### Gap 1 — `inject.body` (affects ~5 kinds)
+
+n8n's `authenticate.properties` supports a `body` injection target alongside `headers` and `qs`. A small number of credentials (e.g. Beeminder) POST their auth token in the request body. DocRouter's kind format only has `inject.headers` and `inject.query_params`.
+
+**Fix:** add `inject.body` to the kind format and teach the HTTP Request node executor to merge it into the request body.
+
+### Gap 2 — `extends` inheritance not resolved (affects ~100 kinds)
+
+Over 100 credentials use `extends = ['oAuth2Api']`, `googleOAuth2Api`, `microsoftOAuth2Api`, etc. DocRouter's kind registry declares an `extends` field but the `_resolve()` merge logic is not implemented — get_credential_kind returns the child dict without inheriting the base's `secret_schema`, `inject`, or `oauth2` config.
+
+**Fix:** implement `_resolve(key, seen)` in `credential_kind_registry.py` (the algorithm is already documented in §3).
+
+### Gap 3 — Dynamic test URL (affects ~50 kinds)
+
+Many credentials construct the test URL from a credential field: `baseURL: "={{$credentials.domain}}"`. DocRouter's `test_request.url` is a static string. The `/test` endpoint would silently call a literal `={{$credentials.domain}}/api/test` URL.
+
+**Fix:** apply the same Jinja2 template render to `test_request.url` and `test_request.baseURL` before making the test request (same render already done for inject headers/query_params).
+
+### Gap 4 — `preAuthentication` / expirable session tokens (affects ~7 kinds)
+
+Auth0, CrowdStrike, Cisco Umbrella, Metabase, Wekan, and a few others use a `preAuthentication()` lifecycle method: before the first request, if a `hidden` + `expirable: true` field (e.g. `sessionToken`) is empty or expired, they call a token endpoint to fetch it and store it back. DocRouter has no concept of this.
+
+**Fix:** add a `pre_auth` block to the kind format, similar to OAuth2's token refresh, specifying how to fetch a short-lived session token and which field to store it in. Alternatively, treat these as a subset of the OAuth2 `client_credentials` flow.
+
+### Gap 5 — Custom `authenticate()` method (affects ~24 kinds)
+
+AWS (SigV4), some Cisco endpoints, Datadog, and others implement a custom TypeScript `authenticate()` method that can't be expressed as simple header/query/body templates — they compute HMAC signatures, perform multi-step token fetches, etc.
+
+**Fix:** these cannot be ported as declarative JSON kinds. Each needs a dedicated Python node class (like the HTTP Request node) with custom auth logic. Skip them in the automated port; implement on demand as custom integrations.
+
+### Gap 6 — OAuth1 (affects ~10 kinds)
+
+Twitter, Etsy, Magento1, and others use `oAuth1Api` as the base. DocRouter's `auth_mode` enum does not include `oauth1`. OAuth1 requires request signing (HMAC-SHA1) which is more complex than OAuth2.
+
+**Fix:** add `auth_mode: "oauth1"` to the kind format and implement the signing flow. Defer until specifically needed.
+
+### Gap 7 — `options` field type in `secret_schema` (affects ~20 kinds)
+
+Some credentials expose a dropdown field (e.g. "region", "environment"). n8n uses `type: "options"` with a `values` array. JSON Schema supports this as `enum`. The conversion should map n8n `options` properties to a JSON Schema `enum` field (non-secret, so not `x-secret`).
+
+**Fix:** handle in `port_credentials.py` by mapping `type: "options"` + `options` array → `{ "type": "string", "enum": [...], "title": "..." }`.
+
+### Gap 8 — `hidden` runtime fields in `secret_schema` (affects ~15 kinds)
+
+Fields with `type: "hidden"` are not user-filled — they are populated at runtime (OAuth tokens, session IDs). In DocRouter's kind format these belong in `runtime_fields`, not `secret_schema`. The conversion must filter them out of `secret_schema` and list them in `runtime_fields` instead.
+
+**Fix:** handle in `port_credentials.py`: if `property.type === "hidden"`, emit it in `runtime_fields` rather than `secret_schema.properties`.
+
+### Summary
+
+| Gap | Scope | Effort | Action |
+|---|---|---|---|
+| `inject.body` | ~5 kinds | Low | Add to kind format + HTTP executor |
+| `extends` resolution | ~100 kinds | Medium | Implement `_resolve()` in registry |
+| Dynamic test URL | ~50 kinds | Low | Jinja2-render test URL at test time |
+| `preAuthentication` / expirable tokens | ~7 kinds | High | New `pre_auth` block in kind format |
+| Custom `authenticate()` | ~24 kinds | Very high | Skip; implement as bespoke Python nodes |
+| OAuth1 | ~10 kinds | High | Defer |
+| `options` → `enum` | ~20 kinds | Low | Handle in conversion script |
+| `hidden` → `runtime_fields` | ~15 kinds | Low | Handle in conversion script |
+
+The first three gaps (body injection, `extends` resolution, dynamic test URL) together unlock the large majority of API-key and OAuth2 authorization-code kinds. Custom auth and OAuth1 are the long tail and can be deferred.
 
 ---
 
@@ -500,6 +562,9 @@ Until this is built:
 | HTTP Request node credential slots | Done — `httpHeaderAuth` and `httpQueryAuth` slots |
 | Engine binding validation | Done — validates slot names in `validate_revision()` |
 | Frontend: node config credential slot picker | Done — `flowNodeCredentialSlots.tsx` |
+| Frontend flows page redesign | Done — split button + Flows / Credentials / Executions tabs in `page.tsx` |
+| Frontend credentials management tab | Done — `FlowCredentials.tsx` |
+| Frontend org-wide executions tab | Done — `FlowExecutionsAll.tsx` |
 | SDK TypeScript types for credentials | Done — `FlowCredentialSlot`, `FlowCredentialHeader`, etc. |
 | Tests | Done — `test_flow_credentials.py` |
 
@@ -507,10 +572,7 @@ Until this is built:
 
 | Component | Notes |
 |---|---|
-| Frontend flows page redesign | Split button + "Credentials" and "Executions" tabs not yet added to `page.tsx` |
-| Frontend credentials management tab | `FlowCredentials.tsx` not yet created |
-| Frontend org-wide executions tab | `FlowExecutionsAll.tsx` and `GET /v0/orgs/{orgId}/executions` endpoint not yet created |
-| Additional kind files | `slackApi`, `openAiApi`, `googleOAuth2Api`, etc. |
+| Additional kind files | `slackApi`, `googleOAuth2Api`, etc. — generate via `tools/port_credentials.py` (see §10) |
 | `extends` chain resolution in registry | Registry does not merge base + extension kinds |
 | SSRF guard in `/test` endpoint | `assert_http_url_allowed()` not called before the test httpx request |
 | MongoDB index on `credentials` | Compound `{ organization_id: 1, kind_key: 1 }` not yet created |
@@ -532,13 +594,9 @@ In `test_credential()` in `flows_credentials.py`, call `assert_http_url_allowed(
 
 Add a migration or startup check to ensure `{ organization_id: 1, kind_key: 1 }` index exists on `credentials`.
 
-**Step 4 — Frontend flows page redesign + Credentials tab**
+**Step 4 — Additional kind files**
 
-See §9.2 above. Replace the "Create Flow" tab with a split button, add the "Credentials" and "Executions" tabs to `page.tsx`, and implement `FlowCredentials.tsx`.
-
-**Step 4b — Org-wide executions tab**
-
-See §9.3 above. Add `GET /v0/orgs/{orgId}/executions` endpoint in `flows.py`, add SDK method, and implement `FlowExecutionsAll.tsx` reusing the per-flow executions view with an added Flow name column.
+Create `tools/dump_credentials.js` and `tools/port_credentials.py` following the node-porting pipeline (see §10). Run against `../n8n/packages/nodes-base/credentials/` to generate kind JSON files for the integrations needed.
 
 **Step 5 — `extends` registry support**
 
