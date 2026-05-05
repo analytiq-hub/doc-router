@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import urllib.parse
 from typing import Any
 
@@ -36,6 +37,46 @@ def _json_keypair_value(value: Any) -> Any:
     if value is None or isinstance(value, (dict, list, bool, int, float)):
         return value
     return str(value)
+
+
+# Substrings matched against ``Content-Type`` (lowercased) — see ``docs/docrouter_binary.md`` §9.
+_BINARY_RESPONSE_CONTENT_TYPE_MARKERS = (
+    "application/pdf",
+    "image/",
+    "audio/",
+    "video/",
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/gzip",
+    "application/x-gzip",
+    "application/octet-stream",
+)
+
+
+def _response_content_type_is_binary(content_type_header: str) -> bool:
+    h = (content_type_header or "").lower()
+    return any(marker in h for marker in _BINARY_RESPONSE_CONTENT_TYPE_MARKERS)
+
+
+def _extract_filename_from_content_disposition(headers: httpx.Headers) -> str | None:
+    """Best-effort ``filename`` / ``filename*`` from ``Content-Disposition``."""
+
+    cd = headers.get("content-disposition") or ""
+    if not cd:
+        return None
+    m = re.search(r"filename\*=(?:UTF-8''|utf-8'')([^;]+)", cd, re.IGNORECASE)
+    if m:
+        raw = m.group(1).strip().strip('"').strip()
+        decoded = urllib.parse.unquote(raw)
+        return decoded or None
+    m = re.search(r'filename\s*=\s*"((?:\\.|[^"\\])*)"', cd, re.IGNORECASE)
+    if m:
+        return m.group(1).replace('\\"', '"').strip() or None
+    m = re.search(r"filename\s*=\s*([^;\s]+)", cd, re.IGNORECASE)
+    if m:
+        raw = m.group(1).strip().strip('"')
+        return urllib.parse.unquote(raw) or None
+    return None
 
 
 class FlowsHttpRequestNode:
@@ -361,8 +402,37 @@ class FlowsHttpRequestNode:
             )
             raise RuntimeError(msg)
 
+        ct_header = resp.headers.get("content-type") or ""
+
+        out_meta = dict(item.meta) if isinstance(item.meta, dict) else {}
+        out_meta["source_node_id"] = node["id"]
+
+        if _response_content_type_is_binary(ct_header):
+            mime = (ct_header.split(";")[0].strip() or "application/octet-stream")
+            fname = _extract_filename_from_content_disposition(resp.headers)
+            out_binary = dict(item.binary)
+            out_binary["data"] = ad.flows.BinaryRef(
+                mime_type=mime,
+                file_name=fname,
+                data=resp.content,
+            )
+            out_json_bin: dict[str, Any] = {
+                "status_code": resp.status_code,
+                "headers": dict(resp.headers),
+            }
+            return [
+                [
+                    ad.flows.FlowItem(
+                        json=out_json_bin,
+                        binary=out_binary,
+                        meta=out_meta,
+                        paired_item=item.paired_item,
+                    )
+                ]
+            ]
+
         resp_body: Any
-        ct = resp.headers.get("content-type", "")
+        ct = ct_header
         if "application/json" in ct:
             try:
                 resp_body = resp.json()
@@ -375,9 +445,6 @@ class FlowsHttpRequestNode:
         if full_response:
             out_json["status_code"] = resp.status_code
             out_json["headers"] = dict(resp.headers)
-
-        out_meta = dict(item.meta) if isinstance(item.meta, dict) else {}
-        out_meta["source_node_id"] = node["id"]
 
         return [
             [

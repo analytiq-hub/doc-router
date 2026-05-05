@@ -102,6 +102,90 @@ async def test_execute_forwards_incoming_binary_and_meta(http_node: FlowsHttpReq
 
 
 @pytest.mark.asyncio
+async def test_execute_binary_pdf_response_attachs_binaryref_under_data(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    pdf_bytes = b"%PDF-1.7 hello"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=pdf_bytes,
+            headers={
+                "content-type": 'application/pdf; charset=latin1',
+                'Content-Disposition': 'attachment; filename="download-me.pdf"',
+            },
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        item = ad.flows.FlowItem(json={"u": "https://example.com/file"}, binary={}, meta={}, paired_item=None)
+        out = await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "n1",
+                "parameters": {"method": "GET", "url": "https://example.com/file", "body_mode": "none"},
+            },
+            [[item]],
+        )
+
+    row = out[0][0]
+    assert row.json["status_code"] == 200
+    hdrs = row.json["headers"]
+    assert hdrs.get("content-type") == "application/pdf; charset=latin1"
+    assert hdrs.get("content-disposition") == 'attachment; filename="download-me.pdf"'
+    assert "body" not in row.json
+    ref = row.binary["data"]
+    assert ref.mime_type == "application/pdf"
+    assert ref.file_name == "download-me.pdf"
+    assert ref.data == pdf_bytes
+
+
+@pytest.mark.asyncio
+async def test_execute_binary_response_merges_upstream_binary(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    """New ``binary[\"data\"]`` from the HTTP response coexists with forwarded refs."""
+
+    png = b"\x89PNG\r\n"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=png,
+            headers={"content-type": "image/png"},
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        pref = ad.flows.BinaryRef(mime_type="application/pdf", storage_id="files:upstream.pdf")
+        item = ad.flows.FlowItem(json={"u": "https://example.com/i"}, binary={"pdf": pref}, meta={}, paired_item=None)
+        out = await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "n1",
+                "parameters": {"method": "GET", "url": "https://example.com/i", "body_mode": "none"},
+            },
+            [[item]],
+        )
+
+    row = out[0][0]
+    assert row.binary["pdf"] is pref
+    assert row.binary["data"].mime_type == "image/png"
+    assert row.binary["data"].data == png
+
+
+@pytest.mark.asyncio
 async def test_execute_rejects_ssrf_loopback_before_http(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
     """SSRF guard blocks 127.0.0.1 before httpx runs (no network)."""
 
