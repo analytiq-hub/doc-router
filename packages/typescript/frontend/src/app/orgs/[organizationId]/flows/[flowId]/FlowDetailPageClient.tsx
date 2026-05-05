@@ -34,6 +34,36 @@ async function sleepMs(ms: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+/** Newest list row for this test leaf, started at/after the current listen session (epoch ms). */
+function pickLatestWebhookTestExecutionId(
+  items: FlowExecution[],
+  flowId: string,
+  leaf: string,
+  minStartedMs: number,
+): string | null {
+  const wantLeaf = leaf.trim();
+  if (!wantLeaf) return null;
+  for (const item of items) {
+    if (item.flow_id !== flowId) continue;
+    if (item.mode !== 'webhook_test') continue;
+    const trig = item.trigger;
+    if (!trig || typeof trig !== 'object') continue;
+    const wl = (trig as { webhook_leaf?: unknown }).webhook_leaf;
+    if (typeof wl !== 'string' || wl.trim() !== wantLeaf) continue;
+    const startedRaw = item.started_at;
+    const started =
+      typeof startedRaw === 'string'
+        ? Date.parse(startedRaw)
+        : typeof startedRaw === 'number'
+          ? startedRaw
+          : NaN;
+    if (!Number.isFinite(started) || started < minStartedMs) continue;
+    const eid = item.execution_id?.trim();
+    if (eid) return eid;
+  }
+  return null;
+}
+
 function downloadBlobJson(filename: string, data: unknown) {
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
@@ -77,6 +107,10 @@ export default function FlowDetailPageClient({
   /** When set, `/webhook-test/{leaf}` is wired to this editor session (until Stop or TTL on server). */
   const [webhookTestListeningLeaf, setWebhookTestListeningLeaf] = useState<string | null>(null);
   const [webhookTestListenBusy, setWebhookTestListenBusy] = useState(false);
+  /** Ignore webhook_test rows started before this listen (ms since epoch). */
+  const webhookTestListenEpochMsRef = useRef(0);
+  /** Last execution id we surfaced from webhook-test polling (for logs focus). */
+  const webhookTestPollChosenIdRef = useRef<string | null>(null);
   const logsPanelGroupRef = useRef<ImperativePanelGroupHandle | null>(null);
   /** Latest graph + revision for async pin persist (queues so rapid toggles don’t 409). */
   const persistCtxRef = useRef({
@@ -104,6 +138,44 @@ export default function FlowDetailPageClient({
     setWebhookTestListeningLeaf(null);
     setWebhookTestListenBusy(false);
   }, [flowId, organizationId]);
+
+  // While test-listening, inbound webhooks enqueue `flow_run`; poll executions so the node modal I/O updates.
+  useEffect(() => {
+    const leaf = webhookTestListeningLeaf?.trim();
+    if (!leaf) return;
+
+    let cancelled = false;
+    const POLL_MS = 900;
+
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const res = await api.getHttpClient().get<{ items: FlowExecution[]; total: number }>(
+          `/v0/orgs/${organizationId}/executions`,
+          { params: { flow_id: flowId, mode: 'webhook_test', limit: 30 } },
+        );
+        if (cancelled) return;
+        const chosen = pickLatestWebhookTestExecutionId(res.items ?? [], flowId, leaf, webhookTestListenEpochMsRef.current);
+        if (!chosen) return;
+        const ex = await api.getExecution(flowId, chosen);
+        if (cancelled) return;
+        if (chosen !== webhookTestPollChosenIdRef.current) {
+          webhookTestPollChosenIdRef.current = chosen;
+          setLogsFocusExecutionId(chosen);
+        }
+        setExecutionForIo(ex);
+      } catch {
+        // transient network / 404 during race
+      }
+    };
+
+    void tick();
+    const intervalId = window.setInterval(() => void tick(), POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [api, flowId, organizationId, webhookTestListeningLeaf]);
 
   const handleViewChange = useCallback(
     (next: FlowCanvasView) => {
@@ -429,6 +501,8 @@ export default function FlowDetailPageClient({
           webhook_leaf: s,
           revision_snapshot,
         });
+        webhookTestListenEpochMsRef.current = Date.now() - 2000;
+        webhookTestPollChosenIdRef.current = null;
         setWebhookTestListeningLeaf(s);
       } catch (err: unknown) {
         setMessage(err instanceof Error ? err.message : 'Failed to listen for test event');
