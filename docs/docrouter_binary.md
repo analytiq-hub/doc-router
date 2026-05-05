@@ -1,6 +1,6 @@
-# DocRouter Binary Blob Support — Implementation Plan
+# DocRouter Binary Blob Support
 
-This document plans how to extend the DocRouter flow engine to fully support binary data: flowing document binaries through items, storing flow-produced binaries in GridFS, serving them via a REST endpoint, and displaying them in the flow UI.
+This document describes binary data support in the DocRouter flow engine: how document and flow-produced binaries flow through items, are stored in GridFS, served via REST, and displayed in the flow UI.
 
 Reference: [`docs/n8n_binary.md`](./n8n_binary.md) for how n8n implements the equivalent.
 
@@ -10,17 +10,23 @@ Reference: [`docs/n8n_binary.md`](./n8n_binary.md) for how n8n implements the eq
 
 | Component | State |
 |---|---|
-| `BinaryRef` dataclass (`items.py`) | Defined — `mime_type`, `file_name`, `data` (bytes), `storage_id` (str) |
-| `FlowItem.binary` | Defined — `dict[str, BinaryRef]` |
-| `BinaryRef` serialization in run_data | Persists inline `data` bytes to MongoDB — **wrong for large blobs** |
-| GridFS storage (`mongodb/blob.py`) | Fully implemented — `save_blob_async`, `get_blob_async`, `delete_blob_async` |
-| Document streaming endpoint | `GET /v0/orgs/{orgId}/documents/{docId}/file` — streams raw binary from GridFS |
-| Document binary in flow items | **Not wired** — trigger emits only metadata JSON, not a binary ref |
-| `storage_id` field | Defined but never populated or read |
-| Binary endpoint for flow run data | **Does not exist** |
+| `BinaryRef` dataclass (`items.py`) | Done — `mime_type`, `file_name`, `data` (bytes), `storage_id` (str), `file_size` (int) |
+| `FlowItem.binary` | Done — `dict[str, BinaryRef]` |
+| `get_binary_stream()` helper | Done — in `items.py` |
+| `coerce_binary_ref()` deserializer | Done — in `items.py` |
+| `_offload_binary_refs()` in engine | Done — offloads inline bytes to `flow_blobs` before persist |
+| `BinaryRef` BSON serialization/deserialization | Done — asserts `storage_id` set; no inline bytes persisted |
+| GridFS `blob.py` utilities | Done — `save_blob_async`, `get_blob_async`, `delete_blob_async`, `delete_blobs_by_prefix_async` |
+| `worker_flow_cleanup` | Done — hourly worker deletes expired `flow_blobs` + `flow_executions` rows |
+| Document streaming endpoint | Done — `GET /v0/orgs/{orgId}/documents/{docId}/file` |
+| Manual trigger — `FlowItem.binary` wiring | Done — emits `"pdf"` and `"original"` refs pointing at `files` bucket |
+| Webhook trigger — binary upload | Done — stores uploaded files to `flow_blobs` at trigger time; surfaced as `FlowItem.binary` |
+| HTTP Request node — binary response | Done — binary `Content-Type` → `BinaryRef` under `binary["data"]` |
+| Binary pass-by-reference convention | Done — nodes copy `item.binary` dict; engine skips re-upload for already-stored refs |
+| `docrouter.create_document` node | **Not implemented** |
+| `GET /executions/{id}/binary-data` endpoint | **Not implemented** |
 | Frontend binary display in flows | **Not implemented** |
-
-The foundation is solid. The main gaps are: wiring documents into `FlowItem.binary`, using `storage_id` instead of inline bytes for persistence, the serve endpoint, and frontend display.
+| SDK `FlowBinaryRef` type | **Not implemented** |
 
 ---
 
@@ -35,7 +41,7 @@ DocRouter uses two GridFS buckets with distinct lifecycles:
 
 **Why not a single bucket?**
 
-- **Retention safety.** Flow execution cleanup must delete `flow_blobs` entries by `execution_id` prefix. If flow binaries lived in `files` alongside permanent documents, a bug in the cleanup query could delete a customer's invoice. Separate buckets make the boundary unambiguous.
+- **Retention safety.** Flow execution cleanup deletes `flow_blobs` entries by `execution_id` prefix. If flow binaries lived in `files` alongside permanent documents, a bug in the cleanup query could delete a customer's invoice. Separate buckets make the boundary unambiguous.
 - **Feature isolation.** Flows can be enabled or licensed independently of the core DocRouter document system. Disabling flows means `flow_blobs` is never written to and can be dropped entirely without touching `files`.
 - **Backup and restore.** `files` can be backed up independently on a different schedule than transient execution artifacts.
 
@@ -64,41 +70,32 @@ Never store raw bytes in `BinaryRef.data` in persisted run_data. `data` is trans
 
 ## 4. DocRouter document integration
 
-Documents are the central entity in DocRouter. When a flow is triggered with a document, the document's binary content must flow into `FlowItem.binary` as named properties.
+### 4.1 Manual trigger node — emit binary ref — Done
 
-### 4.1 Trigger node — emit binary ref
+**File:** `packages/python/analytiq_data/docrouter_flows/nodes/manual_trigger_node.py`
 
-The manual trigger node (`docrouter.trigger.manual`) currently emits only document metadata in `FlowItem.json`. Extend it to also populate `FlowItem.binary`:
+The manual trigger node emits `FlowItem.binary` with `"pdf"` and `"original"` refs pointing directly at `files` bucket entries. No bytes are copied — only string refs are created.
 
 ```python
-# In manual_trigger_node.py execute()
-doc = await db.docs.find_one({"document_id": document_id, ...})
-
-pdf_key  = doc.get("pdf_file_name")    # e.g. "64f3a1b2.pdf"
-orig_key = doc.get("mongo_file_name")  # e.g. "64f3a1b2.docx"
-
 binary: dict[str, BinaryRef] = {}
-if pdf_key:
+if pdf_key := doc.get("pdf_file_name"):
     binary["pdf"] = BinaryRef(
         mime_type="application/pdf",
         file_name=doc.get("user_file_name", "document.pdf"),
         storage_id=f"files:{pdf_key}",
     )
-if orig_key:
+if orig_key := doc.get("mongo_file_name"):
     binary["original"] = BinaryRef(
         mime_type=detect_mime(orig_key),
         file_name=doc.get("user_file_name"),
         storage_id=f"files:{orig_key}",
     )
-
-item = FlowItem(json={"document_id": document_id, "document": doc_metadata}, binary=binary)
+item = FlowItem(json={...}, binary=binary)
 ```
 
-Every node downstream of a document trigger has access to the document binary by name (`"pdf"` or `"original"`) without any additional API calls. No bytes are copied — the refs point directly at the existing `files` bucket entries.
+### 4.2 `docrouter.create_document` node — Not implemented
 
-### 4.2 `docrouter.create_document` node
-
-A new node that promotes a flow-produced binary into a permanent DocRouter document:
+A node that promotes a flow-produced binary into a permanent DocRouter document:
 
 1. Accepts a `BinaryRef` from `FlowItem.binary[property]`.
 2. Reads bytes from `flow_blobs` via `get_binary_stream()`.
@@ -106,27 +103,28 @@ A new node that promotes a flow-produced binary into a permanent DocRouter docum
 4. Inserts a `docs` collection entry with the new key and metadata.
 5. Emits `FlowItem.json = { "document_id": new_id, ... }` so downstream nodes (OCR, LLM, tagging) can process the new document through the standard DocRouter pipeline.
 
-This makes the promotion from transient flow binary to permanent document explicit and visible in the flow graph.
+### 4.3 Webhook trigger — binary upload — Done
 
-### 4.3 Webhook trigger — accept binary uploads
+**File:** `packages/python/analytiq_data/flows/nodes/trigger_webhook.py`
 
-When a webhook receives a multipart upload or a raw binary body:
+Uploaded files (multipart or raw binary body) are stored to GridFS `flow_blobs` at trigger time — before the flow execution starts. The stored refs are passed into `FlowItem.binary` directly as `BinaryRef(storage_id=...)` objects; there are no inline bytes to offload later.
 
 ```python
-binary["data"] = BinaryRef(
-    mime_type=content_type,
-    file_name=filename,
-    data=body_bytes,  # transient — offloaded to flow_blobs before persist
-)
+# trigger_webhook.py (simplified)
+bprops = td_any.get("binary_properties")   # written by the webhook ingestion API
+for bp in bprops:
+    sid = bp.get("storage_id")             # e.g. "flow_blobs:exec1/webhook/0/data"
+    binary_out[name] = ad.flows.BinaryRef(
+        mime_type=bp.get("mime_type"),
+        file_name=bp.get("file_name"),
+        storage_id=sid,
+        file_size=bp.get("file_size"),
+    )
 ```
-
-The bytes are held in `data` during the execution step and offloaded to `flow_blobs` before run_data is committed (see §6).
 
 ---
 
 ## 5. `BinaryRef` field semantics
-
-No new fields are needed. The semantics of the existing fields become well-defined:
 
 | Field | Meaning |
 |---|---|
@@ -134,62 +132,27 @@ No new fields are needed. The semantics of the existing fields become well-defin
 | `file_name` | Optional; used for `Content-Disposition` on download |
 | `data` | Transient in-memory bytes only. Never persisted to MongoDB. Cleared after GridFS offload. |
 | `storage_id` | `"<bucket>:<key>"` string. Set after offload or when referencing an existing document. |
+| `file_size` | Byte count when known (set after offload or by webhook ingestion); used by UI/API. |
 
 A `BinaryRef` is valid if either `data` or `storage_id` is set. After execution completes, all refs must have `storage_id` set.
 
 ---
 
-## 6. Engine changes — offload before persist
+## 6. Engine — offload before persist — Done
 
 **File:** `packages/python/analytiq_data/flows/engine.py`
 
-Add `_offload_binary_refs(run_data, execution_id, analytiq_client)` called just before `run_data` is written to MongoDB:
+`_offload_binary_refs(run_data, execution_id, analytiq_client)` is called just before `run_data` is written to MongoDB. It walks all nodes' output items and uploads any inline `BinaryRef.data` to `flow_blobs`, sets `storage_id`, and clears `data`.
 
-```python
-async def _offload_binary_refs(
-    run_data: dict[str, Any],
-    execution_id: str,
-    analytiq_client: Any,
-) -> None:
-    """Walk run_data; upload any inline BinaryRef.data to flow_blobs, set storage_id, clear data."""
-    for node_id, entry in run_data.items():
-        for slot in (entry.get("data") or {}).get("main") or []:
-            if not isinstance(slot, list):
-                continue
-            for item_idx, item in enumerate(slot):
-                if not isinstance(item, FlowItem):
-                    continue
-                for prop, ref in item.binary.items():
-                    if ref.data and not ref.storage_id:
-                        key = f"{execution_id}/{node_id}/{item_idx}/{prop}"
-                        await ad.blob.save_blob_async(
-                            analytiq_client,
-                            bucket="flow_blobs",
-                            key=key,
-                            blob=ref.data,
-                            metadata={"mime_type": ref.mime_type, "file_name": ref.file_name or ""},
-                        )
-                        ref.storage_id = f"flow_blobs:{key}"
-                        ref.data = None
-```
+The serializer (`_bson_serialize_value`) asserts that `storage_id` is set for every `BinaryRef` — no inline bytes reach MongoDB.
 
-### Serialization
-
-Update `_bson_serialize_value` to assert no inline bytes survive to persistence:
-
-```python
-if isinstance(obj, ad.flows.BinaryRef):
-    assert obj.data is None, f"BinaryRef.data not offloaded for {obj.file_name}"
-    return {"mime_type": obj.mime_type, "file_name": obj.file_name, "storage_id": obj.storage_id}
-```
-
-Deserialization (`_bson_deserialize_value`) reconstructs `BinaryRef` with only `storage_id` set.
+Deserialization reconstructs `BinaryRef` from the stored dict (only `storage_id` is set; `data` is always `None` after loading from MongoDB).
 
 ---
 
-## 7. Flow execution cleanup
+## 7. Flow execution cleanup — Done
 
-Flow executions have a configurable retention period. When an execution expires, its `flow_blobs` entries must be deleted alongside the `flow_executions` document. No retention system exists today — it must be built from scratch.
+**File:** `packages/python/worker/worker.py`, `packages/python/analytiq_data/mongodb/blob.py`
 
 ### 7.1 Configuration
 
@@ -197,108 +160,40 @@ Flow executions have a configurable retention period. When an execution expires,
 FLOW_EXECUTION_RETENTION_DAYS=30   # env var; default 30
 ```
 
-Read at worker startup via `int(os.getenv("FLOW_EXECUTION_RETENTION_DAYS", "30"))`. No per-org override in the first version; a single global value is sufficient.
+### 7.2 `delete_blobs_by_prefix_async` — Done
 
-### 7.2 `delete_blobs_by_prefix_async` — new utility in `mongodb/blob.py`
+In `mongodb/blob.py`. Queries `flow_blobs.files` by filename prefix regex and deletes each matching GridFS entry.
 
-```python
-async def delete_blobs_by_prefix_async(analytiq_client, bucket: str, prefix: str) -> int:
-    """Delete all GridFS entries in `bucket` whose filename starts with `prefix`.
-    Returns the number of files deleted."""
-    db = analytiq_client.mongodb_async[analytiq_client.env]
-    files_col = db[f"{bucket}.files"]
-    file_docs = await files_col.find(
-        {"filename": {"$regex": f"^{re.escape(prefix)}"}},
-        {"_id": 1, "filename": 1},
-    ).to_list(length=None)
-    if not file_docs:
-        return 0
-    fs_bucket = AsyncIOMotorGridFSBucket(db, bucket_name=bucket)
-    for doc in file_docs:
-        await fs_bucket.delete(doc["_id"])
-    logger.debug(f"Deleted {len(file_docs)} blob(s) with prefix {bucket}/{prefix}")
-    return len(file_docs)
-```
+### 7.3 `worker_flow_cleanup` — Done
 
-Add `import re` at the top of `blob.py`.
-
-### 7.3 `worker_flow_cleanup` coroutine in `worker.py`
-
-Follows the same pattern as `worker_kb_reconcile`: a single long-running coroutine registered once in `start_workers()`.
+Single coroutine registered in `start_workers()` alongside `worker_kb_reconcile`. Runs once per hour. Finds `flow_executions` with terminal status and `finished_at` older than the retention window, deletes their `flow_blobs` entries by `{execution_id}/` prefix, then deletes the `flow_executions` document.
 
 ```python
-async def worker_flow_cleanup(worker_id: str) -> None:
-    """Periodic cleanup of expired flow executions and their flow_blobs."""
-    ENV = os.getenv("ENV", "dev")
-    analytiq_client = ad.common.get_analytiq_client(env=ENV, name=worker_id)
-    retention_days = int(os.getenv("FLOW_EXECUTION_RETENTION_DAYS", "30"))
-    logger.info(f"Starting flow cleanup worker {worker_id} (retention={retention_days}d)")
+expired = await db.flow_executions.find({
+    "finished_at": {"$lt": cutoff},
+    "status": {"$in": ["success", "error", "cancelled"]},
+}).to_list(length=None)
 
-    last_heartbeat = datetime.now(UTC)
-    CHECK_INTERVAL_SECS = 3600  # Run once per hour
-
-    while True:
-        try:
-            now = datetime.now(UTC)
-
-            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
-                logger.info(f"Flow cleanup worker {worker_id} heartbeat")
-                last_heartbeat = now
-
-            cutoff = now - timedelta(days=retention_days)
-            db = analytiq_client.mongodb_async[ENV]
-
-            expired = await db.flow_executions.find(
-                {
-                    "finished_at": {"$lt": cutoff},
-                    "status": {"$in": ["success", "error", "cancelled"]},
-                }
-            ).to_list(length=None)
-
-            logger.info(f"Flow cleanup: found {len(expired)} expired execution(s) (cutoff={cutoff.date()})")
-
-            for execution in expired:
-                execution_id = str(execution["_id"])
-                blobs_deleted = await ad.blob.delete_blobs_by_prefix_async(
-                    analytiq_client, bucket="flow_blobs", prefix=f"{execution_id}/"
-                )
-                await db.flow_executions.delete_one({"_id": execution["_id"]})
-                logger.info(f"Cleaned up execution {execution_id}: {blobs_deleted} blob(s) deleted")
-
-            await asyncio.sleep(CHECK_INTERVAL_SECS)
-
-        except asyncio.CancelledError:
-            logger.warning(f"Flow cleanup worker {worker_id} cancelled")
-            raise
-        except Exception as e:
-            logger.error(f"Flow cleanup worker {worker_id} error: {e}")
-            await asyncio.sleep(300)  # Back off 5 min on errors
+for execution in expired:
+    execution_id = str(execution["_id"])
+    blobs_deleted = await ad.mongodb.blob.delete_blobs_by_prefix_async(
+        analytiq_client, bucket="flow_blobs", prefix=f"{execution_id}/"
+    )
+    await db.flow_executions.delete_one({"_id": execution["_id"]})
 ```
 
-Add `from datetime import timedelta` to the imports in `worker.py` (alongside the existing `datetime, UTC` import).
-
-### 7.4 Registration in `start_workers()`
-
-```python
-tasks.append(asyncio.create_task(worker_kb_reconcile("kb_reconcile_0"), name="kb_reconcile_0"))
-tasks.append(asyncio.create_task(worker_flow_cleanup("flow_cleanup_0"), name="flow_cleanup_0"))
-```
-
-A single instance is sufficient — there is no concurrency risk because the cleanup loop sleeps for an hour between passes and only touches `flow_executions` rows with terminal status.
-
-### 7.5 What is never cleaned up
+### 7.4 What is never cleaned up
 
 - **`files` bucket** — never touched. Document permanence is unconditional.
 - **Running executions** — `status` filter excludes `"running"` and `"pending"` rows.
-- **`flow_executions` documents for active flows** — only rows with a `finished_at` timestamp older than the retention window are eligible.
 
 ---
 
-## 8. Binary pass-by-reference and node authoring convention
+## 8. Binary pass-by-reference and node authoring convention — Done
 
 ### 8.1 No copies between nodes
 
-`BinaryRef.storage_id` is a string pointer. When a node receives a `FlowItem` with binary refs and does not modify the binary content, it must include the same `BinaryRef` objects unchanged in its output `FlowItem`. The engine's `_offload_binary_refs` (§6) only writes to GridFS when `ref.data` is set and `ref.storage_id` is not — so passing through an already-stored ref produces zero GridFS writes and no duplication.
+`BinaryRef.storage_id` is a string pointer. When a node receives a `FlowItem` with binary refs and does not modify the binary content, it must include the same `BinaryRef` objects unchanged in its output `FlowItem`. The engine's `_offload_binary_refs` only writes to GridFS when `ref.data` is set and `ref.storage_id` is not — so passing through an already-stored ref produces zero GridFS writes and no duplication.
 
 Multiple nodes' `run_data` entries can all reference the same `storage_id` string. The underlying file exists exactly once.
 
@@ -308,9 +203,9 @@ Multiple nodes' `run_data` entries can all reference the same `storage_id` strin
 trigger → extract-text → classify → tag-document → notify-webhook
 ```
 
-- `trigger` emits `BinaryRef(storage_id="files:abc.pdf")` — points at existing GridFS entry, no upload.
+- `trigger` emits `BinaryRef(storage_id="files:abc.pdf")` — no upload.
 - Each subsequent node passes the same `BinaryRef` through — no uploads.
-- `run_data` for all five nodes contains references to `"files:abc.pdf"`. Total GridFS writes for the binary: **zero**.
+- Total GridFS writes for the binary: **zero**.
 
 **Example — HTTP Request node downloads a new binary:**
 
@@ -329,54 +224,45 @@ trigger → http-request → ocr
 1. **To read binary content:** use `get_binary_stream()` (§8.3). Never access `ref.data` directly.
 2. **To pass binary through unchanged:** copy the incoming `BinaryRef` reference into the output `FlowItem.binary` under the same (or a chosen) property name. Do not set `ref.data`.
 3. **To produce new binary content:** create a new `BinaryRef` with `data=<bytes>` and no `storage_id`. The engine offloads it before persist.
-4. **Do not drop binary refs silently.** If a node ignores binary input (e.g. a classifier that only reads JSON), it should still forward the incoming `binary` dict so downstream nodes retain access. Dropping refs means they are lost from `run_data` at that point forward.
+4. **Do not drop binary refs silently.** If a node ignores binary input (e.g. a classifier that only reads JSON), it should still forward the incoming `binary` dict so downstream nodes retain access.
 
-### 8.3 `get_binary_stream()` helper
+### 8.3 `get_binary_stream()` — Done
 
-Add as a utility (e.g. in `items.py` or alongside `credentials.py`):
+**File:** `packages/python/analytiq_data/flows/items.py`
 
 ```python
 async def get_binary_stream(ref: BinaryRef, analytiq_client) -> bytes:
     """Return bytes for a BinaryRef — from memory or GridFS."""
     if ref.data is not None:
         return ref.data
-    if ref.storage_id:
-        bucket, key = ref.storage_id.split(":", 1)
-        result = await ad.blob.get_blob_async(analytiq_client, bucket=bucket, key=key)
-        return result["blob"]
-    raise ValueError("BinaryRef has neither data nor storage_id")
+    sid = ref.storage_id
+    if not sid:
+        raise ValueError("BinaryRef has neither data nor storage_id")
+    parts = sid.split(":", 1)
+    if len(parts) != 2:
+        raise ValueError(f"Invalid BinaryRef.storage_id: {sid!r}")
+    bucket, key = parts
+    result = await ad.blob.get_blob_async(analytiq_client, bucket=bucket, key=key)
+    if not result:
+        raise ValueError(f"Binary blob not found for storage_id={sid!r}")
+    return result["blob"]
 ```
 
-Works transparently across both buckets — the caller does not need to know where the binary lives.
+Works transparently across both buckets.
 
 ---
 
-## 9. HTTP Request node — binary response
+## 9. HTTP Request node — binary response — Done
 
 **File:** `packages/python/analytiq_data/flows/nodes/http_request.py`
 
-When `Content-Type` indicates binary content, attach a `BinaryRef` to the output item:
+When `Content-Type` indicates binary content, the response bytes are attached as `BinaryRef(data=resp.content)` under `binary["data"]`. The output `item.json` always contains `status_code` and `headers` for binary responses (the `full_response` flag is not checked in this path). Incoming `item.binary` refs are merged into the output — no upstream refs are dropped.
 
-```python
-BINARY_CONTENT_TYPES = ("application/pdf", "image/", "audio/", "video/",
-                         "application/zip", "application/gzip", "application/octet-stream")
-
-if any(ct in response.headers.get("content-type", "") for ct in BINARY_CONTENT_TYPES):
-    content_type = response.headers.get("content-type", "application/octet-stream").split(";")[0]
-    file_name = _extract_filename(response.headers)
-    out_item = FlowItem(
-        json={"status_code": response.status_code, "headers": dict(response.headers)},
-        binary={"data": BinaryRef(mime_type=content_type, file_name=file_name, data=response.content)},
-        meta=item.meta,
-        paired_item=item.paired_item,
-    )
-```
-
-The inline bytes are offloaded to `flow_blobs` by the engine before run_data is persisted (§6). This node produces a new binary; see §8.1 for how passthrough nodes handle the same ref without re-writing.
+The inline bytes are offloaded to `flow_blobs` by the engine before run_data is persisted.
 
 ---
 
-## 10. REST endpoint — serve flow binary data
+## 10. REST endpoint — serve flow binary data — Not implemented
 
 Add to `packages/python/app/routes/flows.py`:
 
@@ -391,11 +277,11 @@ Implementation:
 3. Parse `storage_id` → `bucket:key`, fetch from GridFS via `get_blob_async`.
 4. Return `StreamingResponse` with correct `Content-Type` and `Content-Disposition`.
 
-For document refs (`storage_id = "files:…"`), this streams the same bytes as `GET /documents/{docId}/file` but addressed by flow output position — useful when viewing what a node received or produced.
+For document refs (`storage_id = "files:…"`), this streams the same bytes as `GET /documents/{docId}/file` but addressed by flow output position.
 
 ---
 
-## 11. Frontend
+## 11. Frontend — Not implemented
 
 ### 11.1 Flow output panel — binary display
 
@@ -433,7 +319,7 @@ function getFlowBinaryUrl(
 }
 ```
 
-### 11.3 SDK types
+### 11.3 SDK types — Not implemented
 
 Add to `packages/typescript/sdk/src/types/flows.ts`:
 
@@ -442,6 +328,7 @@ export interface FlowBinaryRef {
   mime_type: string;
   file_name?: string | null;
   storage_id?: string | null;
+  file_size?: number | null;
 }
 
 export interface FlowItemData {
@@ -456,67 +343,43 @@ export interface FlowItemData {
 
 ### Implemented
 
-| Component | Status |
+| Component | Notes |
 |---|---|
-| `BinaryRef` dataclass | Done |
-| `FlowItem.binary` field | Done |
-| GridFS `blob.py` utilities | Done |
-| Document streaming endpoint | Done |
-| `BinaryRef` BSON serialization | Done (but persists inline bytes — needs fix per §6) |
+| `BinaryRef` dataclass | `mime_type`, `file_name`, `data`, `storage_id`, `file_size` |
+| `FlowItem.binary` field | `dict[str, BinaryRef]` |
+| `get_binary_stream()` | In `items.py`; transparent across both buckets |
+| `coerce_binary_ref()` | Deserializer in `items.py` |
+| `_offload_binary_refs()` in engine | Flushes inline bytes to `flow_blobs` before persist |
+| BSON serialization assert | Rejects any `BinaryRef` without `storage_id` at persist time |
+| `delete_blobs_by_prefix_async` | In `mongodb/blob.py` |
+| `worker_flow_cleanup` | Hourly; deletes expired `flow_blobs` + `flow_executions` |
+| GridFS `blob.py` utilities | `save_blob_async`, `get_blob_async`, `delete_blob_async` |
+| Manual trigger — binary wiring | `"pdf"` and `"original"` refs into `FlowItem.binary` |
+| Webhook trigger — binary upload | Files stored to `flow_blobs` at trigger time; emitted as `FlowItem.binary` |
+| HTTP Request node — binary response | `BinaryRef` under `binary["data"]` for binary `Content-Type` |
+| Binary pass-by-reference convention | Engine skips re-upload for already-stored refs; nodes copy `item.binary` |
 
 ### Not yet implemented
 
 | Component | Notes |
 |---|---|
-| Trigger node populates `FlowItem.binary` | Wire document GridFS keys into binary refs (§4.1) |
 | `docrouter.create_document` node | Promote flow binary to permanent DocRouter document (§4.2) |
-| Engine `_offload_binary_refs()` | Flush inline bytes to `flow_blobs` before persist (§6) |
-| Serialization assert — no inline bytes | Prevent large BSON documents (§6) |
-| `delete_blobs_by_prefix_async` in `blob.py` | Needed for execution cleanup (§7) |
-| Flow execution cleanup / retention | Delete `flow_blobs` entries on execution expiry (§7) |
-| Pass-by-reference convention + `get_binary_stream()` | Node authoring rules and transparent read from either bucket (§8) |
-| HTTP Request node binary response | Produce `BinaryRef` for binary content-types (§9) |
-| Webhook trigger binary upload | Attach uploaded file as `BinaryRef` (§4.3) |
 | `GET /executions/{id}/binary-data` endpoint | Serve flow binary from GridFS (§10) |
 | Frontend binary display in flow output panel | Render binary chips, preview, download (§11) |
 | SDK `FlowBinaryRef` type | TypeScript type for binary refs in flow item data (§11.3) |
 
 ---
 
-## 13. Build order
+## 13. Build order — remaining steps
 
-**Step 1 — Offload + serialization**
-
-Implement `_offload_binary_refs()`, add the serialization assert, call offload before every run_data persist. No visible change to users; prevents runaway BSON sizes.
-
-**Step 2 — `delete_blobs_by_prefix_async` + execution cleanup**
-
-Add prefix-delete to `blob.py`. Wire into the worker's execution expiry path. Keeps `flow_blobs` from growing unboundedly.
-
-**Step 3 — Document trigger wiring**
-
-Populate `FlowItem.binary` with `"pdf"` and `"original"` refs in the manual trigger node. Downstream nodes gain access to document bytes immediately.
-
-**Step 4 — Pass-by-reference convention + `get_binary_stream()` helper**
-
-Document the node authoring rules (§8.1–8.2) and add `get_binary_stream()` (§8.3). Required by Steps 5–7. Ensures node authors know to forward binary refs they do not modify.
-
-**Step 5 — HTTP Request node binary response**
-
-Detect binary `Content-Type`, attach `BinaryRef`. Offload handles persistence.
-
-**Step 6 — Webhook binary upload**
-
-Parse multipart/raw binary body, attach `BinaryRef`. Same offload path.
-
-**Step 7 — `docrouter.create_document` node**
+**Step 1 — `docrouter.create_document` node**
 
 Implement the promotion node: `flow_blobs` → `files` + `docs` entry. Enables end-to-end: webhook receives PDF → create document → OCR → LLM.
 
-**Step 8 — Binary serve endpoint**
+**Step 2 — Binary serve endpoint**
 
 Add `GET /v0/orgs/{orgId}/executions/{executionId}/binary-data`. Unlocks the frontend.
 
-**Step 9 — Frontend binary display**
+**Step 3 — Frontend binary display**
 
 Extend the output panel, add `getFlowBinaryUrl()`, add SDK types.
