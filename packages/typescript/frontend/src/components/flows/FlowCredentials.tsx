@@ -338,7 +338,8 @@ const FlowCredentials: React.FC<{
             )}
             {items.map((row) => {
               const kindLabel = kindByKey[row.kind_key]?.display_name || row.kind_key;
-              const chip = testChip[row.credential_id];
+              const canTest = kindByKey[row.kind_key]?.has_test_request === true;
+              const chip = canTest ? testChip[row.credential_id] : undefined;
               return (
                 <tr key={row.credential_id}>
                   <td className={`${td} font-medium`}>{row.name}</td>
@@ -359,16 +360,18 @@ const FlowCredentials: React.FC<{
                         </span>
                       )}
                       <div className="inline-flex shrink-0 items-center justify-end gap-0.5">
-                        <button
-                          type="button"
-                          title="Test connection"
-                          aria-label="Test connection"
-                          disabled={testLoadingId === row.credential_id}
-                          onClick={() => void runTest(row)}
-                          className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <BeakerIcon className="h-5 w-5" aria-hidden />
-                        </button>
+                        {canTest ? (
+                          <button
+                            type="button"
+                            title="Test connection"
+                            aria-label="Test connection"
+                            disabled={testLoadingId === row.credential_id}
+                            onClick={() => void runTest(row)}
+                            className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          >
+                            <BeakerIcon className="h-5 w-5" aria-hidden />
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           title="Edit"
@@ -387,18 +390,20 @@ const FlowCredentials: React.FC<{
                             <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
                           </MenuButton>
                           <MenuItems anchor="bottom end" portal className={flowWorkspaceMenuPanelClass}>
-                            <MenuItem>
-                              {({ focus }) => (
-                                <button
-                                  type="button"
-                                  disabled={testLoadingId === row.credential_id}
-                                  className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''} disabled:cursor-not-allowed disabled:opacity-50`}
-                                  onClick={() => void runTest(row)}
-                                >
-                                  <BeakerIcon className="h-4 w-4 shrink-0" aria-hidden /> Test
-                                </button>
-                              )}
-                            </MenuItem>
+                            {canTest ? (
+                              <MenuItem>
+                                {({ focus }) => (
+                                  <button
+                                    type="button"
+                                    disabled={testLoadingId === row.credential_id}
+                                    className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''} disabled:cursor-not-allowed disabled:opacity-50`}
+                                    onClick={() => void runTest(row)}
+                                  >
+                                    <BeakerIcon className="h-4 w-4 shrink-0" aria-hidden /> Test
+                                  </button>
+                                )}
+                              </MenuItem>
+                            ) : null}
                             <MenuItem>
                               {({ focus }) => (
                                 <button

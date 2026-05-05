@@ -28,6 +28,8 @@ class CredentialKindSummary(BaseModel):
     display_name: str
     auth_mode: str
     fields: list[dict[str, Any]]
+    #: True when the kind JSON defines a non-empty ``test_request`` (see credential test endpoint).
+    has_test_request: bool = False
 
 
 class CreateCredentialRequest(BaseModel):
@@ -145,6 +147,7 @@ async def list_credential_kinds(
                 display_name=str(kind.get("display_name") or kind["key"]),
                 auth_mode=str(kind.get("auth_mode") or "custom"),
                 fields=fields,
+                has_test_request=bool(kind.get("test_request")),
             )
         )
     return result

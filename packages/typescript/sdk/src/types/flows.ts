@@ -190,6 +190,8 @@ export interface FlowCredentialKindSummary {
   display_name: string;
   auth_mode: string;
   fields: Array<Record<string, unknown>>;
+  /** True when the kind defines `test_request` (connection test in UI). */
+  has_test_request?: boolean;
 }
 
 /** Saved org credential metadata (no secrets) from `GET .../credentials`. */
