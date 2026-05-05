@@ -27,12 +27,37 @@ _INBOUND_BINARY_CONTENT_TYPE_MARKERS = (
     "application/gzip",
     "application/x-gzip",
     "application/octet-stream",
+    # OpenDocument, OOXML, EPUB, many proprietary package types (often ZIP-wrapped).
+    "application/vnd.",
+    "+zip",
 )
 
 
 def inbound_content_type_looks_binary(content_type_header: str) -> bool:
     h = (content_type_header or "").lower()
+    # `application/vnd.*+json`, `...+xml`, etc. carry structured text, not package binaries.
+    if any(s in h for s in ("+json", "+xml", "+yaml")):
+        return False
     return any(marker in h for marker in _INBOUND_BINARY_CONTENT_TYPE_MARKERS)
+
+
+def _raw_body_sniffs_opaque_binary(raw: bytes) -> bool:
+    """
+    When ``Content-Type`` is ambiguous, avoid UTF-8 decoding opaque bytes into ``json.body``.
+
+    Heuristics: NUL in the first 64KiB, common archive magics.
+    """
+
+    if not raw:
+        return False
+    head = raw[:65536]
+    if b"\x00" in head:
+        return True
+    if raw.startswith(b"PK\x03\x04") or raw.startswith(b"PK\x05\x06"):
+        return True
+    if raw.startswith(b"\x1f\x8b"):
+        return True
+    return False
 
 
 @dataclass
@@ -132,6 +157,16 @@ async def parse_webhook_request(
         return ParsedWebhookBody(query=query, body=body, form=None, pending_binaries=[])
 
     if inbound_content_type_looks_binary(ct):
+        mime = ct.split(";")[0].strip() or "application/octet-stream"
+        return ParsedWebhookBody(
+            query=query,
+            body=None,
+            form=None,
+            pending_binaries=[(bp, raw, mime, None)],
+            body_stashed_as_binary=True,
+        )
+
+    if _raw_body_sniffs_opaque_binary(raw):
         mime = ct.split(";")[0].strip() or "application/octet-stream"
         return ParsedWebhookBody(
             query=query,

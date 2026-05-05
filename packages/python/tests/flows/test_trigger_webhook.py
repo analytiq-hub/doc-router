@@ -226,6 +226,86 @@ async def test_parse_webhook_octet_stream_sets_stashed_flag() -> None:
 
 
 @pytest.mark.asyncio
+async def test_parse_webhook_opendocument_content_type_stashes_binary() -> None:
+    async def endpoint(request: Request) -> JSONResponse:
+        p = await ad.flows.webhook_parse.parse_webhook_request(request, binary_property_name="data")
+        return JSONResponse(
+            {
+                "body": p.body,
+                "stashed": p.body_stashed_as_binary,
+                "pending_fields": [k for k, _b, _m, _f in p.pending_binaries],
+                "pending_len": [len(_b) for _k, _b, _m, _f in p.pending_binaries],
+            }
+        )
+
+    app = Starlette(routes=[Route("/t", endpoint, methods=["POST"])])
+    client = TestClient(app)
+    raw = b"PK\x03\x04" + b"\x00" * 80
+    res = client.post(
+        "/t",
+        content=raw,
+        headers={"Content-Type": "application/vnd.oasis.opendocument.spreadsheet"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["body"] is None
+    assert data["stashed"] is True
+    assert data["pending_fields"] == ["data"]
+    assert data["pending_len"] == [len(raw)]
+
+
+@pytest.mark.asyncio
+async def test_parse_webhook_vnd_plus_json_is_not_forced_binary() -> None:
+    async def endpoint(request: Request) -> JSONResponse:
+        p = await ad.flows.webhook_parse.parse_webhook_request(request)
+        return JSONResponse(
+            {
+                "body": p.body,
+                "stashed": p.body_stashed_as_binary,
+                "pending_len": len(p.pending_binaries),
+            }
+        )
+
+    app = Starlette(routes=[Route("/t", endpoint, methods=["POST"])])
+    client = TestClient(app)
+    res = client.post(
+        "/t",
+        content=b'{"catalog":true}',
+        headers={"Content-Type": "application/vnd.docrouter+json"},
+    )
+    assert res.status_code == 200
+    data = res.json()
+    assert data["body"] == {"catalog": True}
+    assert data["stashed"] is False
+    assert data["pending_len"] == 0
+
+
+@pytest.mark.asyncio
+async def test_parse_webhook_zip_magic_sniff_without_known_mime() -> None:
+    """ODS/OOXML are ZIP-shaped; sniff catches wrong or missing MIME."""
+
+    async def endpoint(request: Request) -> JSONResponse:
+        p = await ad.flows.webhook_parse.parse_webhook_request(request)
+        return JSONResponse(
+            {
+                "body": p.body,
+                "stashed": p.body_stashed_as_binary,
+                "mime": [m for _k, _b, m, _f in p.pending_binaries],
+            }
+        )
+
+    app = Starlette(routes=[Route("/t", endpoint, methods=["POST"])])
+    client = TestClient(app)
+    raw = b"PK\x03\x04" + bytes(range(120))
+    res = client.post("/t", content=raw, headers={"Content-Type": "application/binary"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["body"] is None
+    assert data["stashed"] is True
+    assert data["mime"] == ["application/binary"]
+
+
+@pytest.mark.asyncio
 async def test_parse_webhook_raw_body_stashes_bytes() -> None:
     async def endpoint(request: Request) -> JSONResponse:
         p = await ad.flows.webhook_parse.parse_webhook_request(request, raw_body=True, binary_property_name="payload")
