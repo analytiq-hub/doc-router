@@ -1,17 +1,68 @@
 from __future__ import annotations
 
-"""Webhook trigger node (`flows.trigger.webhook`) — mirrors n8n-style inbound HTTP trigger shape."""
+"""Webhook trigger node (`flows.trigger.webhook`) — emits an n8n-shaped flat JSON item per inbound HTTP request."""
 
 from typing import Any
 
 import analytiq_data as ad
 
 
+def _webhook_trigger_item_json(trigger_data: dict[str, Any]) -> dict[str, Any]:
+    """
+    Public item shape for downstream nodes:
+
+    ``headers``, ``params``, ``query``, ``body``, ``webhookUrl``, ``executionMode`` (``test`` or ``production``).
+    Raw trigger metadata remains on ``ExecutionContext.trigger_data`` (execution docs / logs).
+    """
+
+    raw_headers = trigger_data.get("headers")
+    headers: dict[str, str] = {}
+    if isinstance(raw_headers, dict):
+        for hk, hv in raw_headers.items():
+            if not isinstance(hk, str):
+                continue
+            headers[hk.lower()] = "" if hv is None else str(hv)
+
+    qraw = trigger_data.get("query")
+    query: dict[str, Any] = dict(qraw) if isinstance(qraw, dict) else {}
+
+    body_any = trigger_data.get("body")
+    form_any = trigger_data.get("form")
+    body_out: Any
+    if body_any is None:
+        if isinstance(form_any, dict) and form_any:
+            body_out = dict(form_any)
+        else:
+            body_out = {}
+    elif isinstance(body_any, dict):
+        body_out = dict(body_any)
+    else:
+        body_out = body_any
+
+    wurl = trigger_data.get("webhook_url")
+    webhook_url = str(wurl).strip() if isinstance(wurl, str) else ""
+
+    wm = trigger_data.get("webhook_mode")
+    execution_mode = "test" if wm == "test" else "production"
+
+    # Reserved for future path/route params (routing is leaf-based today).
+    params_out: dict[str, Any] = {}
+
+    return {
+        "headers": headers,
+        "params": params_out,
+        "query": query,
+        "body": body_out,
+        "webhookUrl": webhook_url,
+        "executionMode": execution_mode,
+    }
+
+
 class FlowsWebhookTriggerNode:
     """
     Emits one item from an inbound webhook HTTP request stored in ``ExecutionContext.trigger_data``.
 
-    ``trigger_data`` is produced by ``/v0/webhooks/{webhook_id}`` (see ``app.routes.flows``).
+    ``trigger_data`` is produced by inbound webhook routes (see ``app.routes.flows`` ``_inbound_webhook_common``).
     File uploads are stored under ``binary_properties[].storage_id`` (GridFS ``flow_blobs``) and surfaced
     here as ``FlowItem.binary[property_name]`` with pass-by-reference ``BinaryRef`` objects.
 
@@ -229,6 +280,10 @@ class FlowsWebhookTriggerNode:
         if not isinstance(td_any, dict):
             raise ValueError("flows.trigger.webhook requires trigger_data to be an object")
 
+        params = node.get("parameters") if isinstance(node.get("parameters"), dict) else {}
+        _bp = params.get("binary_property_name")
+        binary_fallback = _bp.strip() if isinstance(_bp, str) and _bp.strip() else "data"
+
         bprops = td_any.get("binary_properties")
         if not isinstance(bprops, list):
             bprops = []
@@ -239,7 +294,7 @@ class FlowsWebhookTriggerNode:
                 continue
             name = bp.get("name")
             if not isinstance(name, str) or not name.strip():
-                name = binary_pref.strip() if isinstance(binary_pref, str) and binary_pref.strip() else "data"
+                name = binary_fallback
             sid = bp.get("storage_id")
             if not isinstance(sid, str) or not sid.strip():
                 continue
@@ -256,7 +311,7 @@ class FlowsWebhookTriggerNode:
             )
 
         item = ad.flows.FlowItem(
-            json={"trigger": td_any},
+            json=_webhook_trigger_item_json(td_any),
             binary=binary_out,
             meta={"source_node_id": node["id"], "item_index": 0},
             paired_item=None,

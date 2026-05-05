@@ -48,12 +48,49 @@ async def test_webhook_trigger_maps_binary_properties_to_flowitem() -> None:
         stop_requested=False,
         logger=None,
     )
-    out = await n.execute(ctx, {"id": "t1"}, [[]])
+    out = await n.execute(ctx, {"id": "t1", "parameters": {}}, [[]])
     item = out[0][0]
-    assert item.json["trigger"]["type"] == "webhook"
+    assert item.json["body"] == {"x": 1}
+    assert item.json["executionMode"] == "production"
+    assert "headers" in item.json
     assert item.binary["data"].storage_id == "flow_blobs:64f3/a.pdf"
     assert item.binary["data"].mime_type == "application/pdf"
     assert item.binary["attachment"].mime_type == "image/png"
+
+
+@pytest.mark.asyncio
+async def test_webhook_trigger_flat_json_test_mode_form_body_and_url() -> None:
+    n = ad.flows.FlowsWebhookTriggerNode()
+    ctx = ad.flows.ExecutionContext(
+        organization_id="o",
+        execution_id="64f3a1b2c3d4e5f6a7b8c9d1",
+        flow_id="f",
+        flow_revid="r",
+        mode="webhook",
+        trigger_data={
+            "type": "webhook",
+            "webhook_mode": "test",
+            "webhook_url": "https://tools.example/webhook-test/e95569a5-245a-4426-a87c-a447b38f8d3b",
+            "headers": {"Content-Type": "text/csv", "Host": "tools.example"},
+            "query": {},
+            "body": None,
+            "form": {"row": "1"},
+            "binary_properties": [],
+        },
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    out = await n.execute(ctx, {"id": "t1", "parameters": {}}, [[]])
+    j = out[0][0].json
+    assert j["executionMode"] == "test"
+    assert j["webhookUrl"] == "https://tools.example/webhook-test/e95569a5-245a-4426-a87c-a447b38f8d3b"
+    assert j["headers"]["content-type"] == "text/csv"
+    assert j["headers"]["host"] == "tools.example"
+    assert j["body"] == {"row": "1"}
+    assert j["params"] == {}
+    assert j["query"] == {}
 
 
 def test_parse_webhook_json_body() -> None:

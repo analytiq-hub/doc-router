@@ -55,6 +55,39 @@ def _sanitize_inbound_webhook_headers(request: Request) -> dict[str, str]:
     return out
 
 
+def _inbound_webhook_canonical_public_url(request: Request) -> str:
+    """
+    Client-facing webhook URL as seen beyond reverse proxies.
+
+    Prefer ``X-Forwarded-Proto`` / ``X-Forwarded-Host`` when present so stored URLs match
+    what Postman/callers hit (``https`` + public host).
+    """
+
+    xf_proto = request.headers.get("x-forwarded-proto")
+    proto = ""
+    if isinstance(xf_proto, str) and xf_proto.strip():
+        proto = xf_proto.strip().split(",")[0].strip().lower()
+    if not proto:
+        proto = (request.url.scheme or "https").lower()
+
+    xf_host = request.headers.get("x-forwarded-host")
+    host = ""
+    if isinstance(xf_host, str) and xf_host.strip():
+        host = xf_host.strip().split(",")[0].strip()
+    if not host:
+        hh = request.headers.get("host")
+        if isinstance(hh, str) and hh.strip():
+            host = hh.strip()
+    if not host:
+        host = request.url.netloc or "localhost"
+
+    path = request.url.path or ""
+    query = request.url.query
+    if query:
+        return f"{proto}://{host}{path}?{query}"
+    return f"{proto}://{host}{path}"
+
+
 def _safe_webhook_blob_segment(part: str) -> str:
     """Single path segment for GridFS keys (no slashes)."""
 
@@ -1144,6 +1177,8 @@ async def _inbound_webhook_common(
         "body": parsed.body,
         "form": parsed.form,
         "binary_properties": [],
+        # Used only when building webhook trigger ``FlowItem.json`` (`webhookUrl` field).
+        "webhook_url": _inbound_webhook_canonical_public_url(request),
     }
     exec_doc = {
         "flow_id": flow_id,
