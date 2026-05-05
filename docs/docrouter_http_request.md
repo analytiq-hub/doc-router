@@ -1,12 +1,12 @@
-# DocRouter HTTP Request Node — Implementation Plan
+# DocRouter HTTP Request Node — Implementation
 
-Rename and reimplement `flows.webhook` as a general-purpose outbound HTTP Request node, aligned with n8n's naming convention and significantly expanded in capability.
+Outbound HTTP Request node (`flows.http_request`), replacing the old `flows.webhook` node.
 
-Related: [`docrouter_credentials.md`](./docrouter_credentials.md) (credential kinds `httpHeaderAuth` and `httpQueryAuth` used here), [`docrouter_nodes.md`](./docrouter_nodes.md).
+Related: [`docrouter_credentials.md`](./docrouter_credentials.md) (credential kinds `httpHeaderAuth` and `httpQueryAuth` used here), [`docrouter_nodes.md`](./docrouter_nodes.md), [`docrouter_binary.md`](./docrouter_binary.md) (binary response handling).
 
 ---
 
-## 1. Rename summary
+## 1. Rename — Done
 
 | | Old | New |
 |---|---|---|
@@ -16,524 +16,186 @@ Related: [`docrouter_credentials.md`](./docrouter_credentials.md) (credential ki
 | Label | `Webhook (generic)` | `HTTP Request` |
 | Category | `Generic` | `Generic` |
 
-The old `webhook.py` is deleted. No backward compatibility shim — the node key changes and any existing saved flows using `flows.webhook` must be updated.
+`webhook.py` is deleted. No backward compatibility shim.
 
 ---
 
-## 2. Scope
+## 2. Scope — V1 implemented
 
-### V1 (this plan)
-
-- Methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE`
-- URL: static string or `=expression` evaluated per item
-- Authentication: `none`, `httpHeaderAuth`, `httpQueryAuth` — via the credential slot mechanism from `docrouter_credentials.md`
-- Query parameters: key-value list; values support `=expression`
-- Headers: key-value list; values support `=expression`
-- Body content types: `json` (raw JSON string), `json_keypair` (key-value list assembled into a JSON object), `form_urlencoded`, `raw`
-- Body values support `=expression`
-- Response as FlowItem: `body` (parsed JSON or raw text), `status_code`, `headers` (optional, behind `full_response` flag)
-- `never_error`: when true, non-2xx responses produce a normal output item instead of raising
-- `follow_redirects`: boolean, default true
-- `timeout_seconds`: number, default 30
+| Feature | Status |
+|---|---|
+| Methods: `GET`, `POST`, `PUT`, `PATCH`, `DELETE` | Done |
+| Static URL or `=expression` evaluated per item | Done (engine pre-resolves) |
+| `httpHeaderAuth` and `httpQueryAuth` credential slots | Done |
+| Query parameters (key-value list, values support `=expression`) | Done |
+| Headers (key-value list, values support `=expression`) | Done |
+| Body modes: `none`, `json`, `json_keypair`, `form_urlencoded`, `raw` | Done |
+| `full_response` flag (status_code + headers in output) | Done |
+| `never_error` flag | Done |
+| `follow_redirects`, `timeout_seconds` | Done |
+| Binary response detection and `BinaryRef` output | Done |
+| SSRF guard (blocks loopback, RFC-1918, redirect chains) | Done — not in original plan |
+| Structured error logging per execution/node/org | Done — not in original plan |
+| Parameter schema UI hints (`x-ui-group`, `x-ui-widget`, `x-ui-show-when`) | Done — not in original plan |
+| Incoming binary pass-through (§8 of binary plan) | Done |
 
 ### Deferred to later
 
-- Basic auth, Digest auth, OAuth1, OAuth2 (requires token refresh loop from credentials plan §10)
-- Multipart / binary body
-- Pagination
-- Batching / rate limiting
-- Proxy
-- SSL client certificates
-- Response format: binary file output
+- Basic auth, Digest auth, OAuth1, OAuth2
+- Multipart / binary body (binary response is done; binary request body is not)
+- Pagination, batching / rate limiting
+- Proxy, SSL client certificates
 
 ---
 
-## 3. Credential slots
+## 3. Credential kinds — Done
 
-Two credential kinds are used. Both are defined in `schemas/credential-kinds/` per `docrouter_credentials.md §9`.
+Both files exist in `schemas/credential-kinds/`:
 
-**`httpHeaderAuth`** — adds a single header to every request:
+**`httpHeaderAuth.json`** — adds a single header to every request.
 
-```json
-{
-  "key": "httpHeaderAuth",
-  "display_name": "Header Auth",
-  "auth_mode": "api_key",
-  "secret_schema": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": ["name", "value"],
-    "properties": {
-      "name":  { "type": "string", "title": "Header Name",  "description": "e.g. Authorization" },
-      "value": { "type": "string", "title": "Header Value", "x-secret": true, "description": "e.g. Bearer sk-…" }
-    }
-  },
-  "inject": {
-    "headers": {
-      "{{ credentials.name }}": "{{ credentials.value }}"
-    }
-  }
-}
-```
+**`httpQueryAuth.json`** — adds a single query parameter to every request.
 
-**`httpQueryAuth`** — adds a single query parameter to every request:
-
-```json
-{
-  "key": "httpQueryAuth",
-  "display_name": "Query Auth",
-  "auth_mode": "api_key",
-  "secret_schema": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": ["name", "value"],
-    "properties": {
-      "name":  { "type": "string", "title": "Parameter Name",  "description": "e.g. api_key" },
-      "value": { "type": "string", "title": "Parameter Value", "x-secret": true }
-    }
-  },
-  "inject": {
-    "query_params": {
-      "{{ credentials.name }}": "{{ credentials.value }}"
-    }
-  }
-}
-```
-
-The node declares both as optional slots so a user picks whichever auth style their API requires:
+The node fetches each slot independently via `ad.flows.fetch_credential_fields(org_id, cred_id)` — one call per bound slot, not a flat-merged context dict. This avoids `name`/`value` field collisions when both slots are bound simultaneously.
 
 ```python
-credential_slots = [
-    {"slot": "httpHeaderAuth", "label": "Header Auth",  "required": False,
-     "docrouter_binding": "organization_credential_kind:httpHeaderAuth"},
-    {"slot": "httpQueryAuth",  "label": "Query Auth",   "required": False,
-     "docrouter_binding": "organization_credential_kind:httpQueryAuth"},
-]
+if bindings.get("httpHeaderAuth"):
+    hf = await ad.flows.fetch_credential_fields(org_id, str(bindings["httpHeaderAuth"]))
+    hn, hv = hf.get("name"), hf.get("value")
+    if hn and hv is not None:
+        headers[str(hn)] = str(hv)
+if bindings.get("httpQueryAuth"):
+    qf = await ad.flows.fetch_credential_fields(org_id, str(bindings["httpQueryAuth"]))
+    qn, qv = qf.get("name"), qf.get("value")
+    if qn and qv is not None:
+        query[str(qn)] = str(qv)
 ```
-
-At execution time, if a slot is bound, the resolved `credentials.name` / `credentials.value` pair is merged into the outgoing request headers or query string respectively.
 
 ---
 
 ## 4. Parameter schema
 
-```python
-parameter_schema: dict[str, Any] = {
-    "type": "object",
-    "additionalProperties": False,
-    "required": ["method", "url"],
-    "properties": {
-        # ── Core ──────────────────────────────────────────────────────────
-        "method": {
-            "type": "string",
-            "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
-            "default": "GET",
-        },
-        "url": {
-            "type": "string",
-            "description": "Static URL or =expression. Evaluated per item.",
-        },
-        # ── Query parameters ──────────────────────────────────────────────
-        "query_params": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["name", "value"],
-                "properties": {
-                    "name":  {"type": "string"},
-                    "value": {"type": "string"},  # supports =expression
-                },
-                "additionalProperties": False,
-            },
-            "default": [],
-        },
-        # ── Headers ───────────────────────────────────────────────────────
-        "headers": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["name", "value"],
-                "properties": {
-                    "name":  {"type": "string"},
-                    "value": {"type": "string"},  # supports =expression
-                },
-                "additionalProperties": False,
-            },
-            "default": [],
-        },
-        # ── Body ──────────────────────────────────────────────────────────
-        "body_mode": {
-            "type": "string",
-            "enum": ["none", "json", "json_keypair", "form_urlencoded", "raw"],
-            "default": "none",
-        },
-        # Used when body_mode == "json": raw JSON string (supports =expression)
-        "body_json": {
-            "type": "string",
-            "default": "",
-        },
-        # Used when body_mode == "json_keypair" or "form_urlencoded"
-        "body_params": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "required": ["name", "value"],
-                "properties": {
-                    "name":  {"type": "string"},
-                    "value": {"type": "string"},  # supports =expression
-                },
-                "additionalProperties": False,
-            },
-            "default": [],
-        },
-        # Used when body_mode == "raw"
-        "body_raw": {
-            "type": "string",
-            "default": "",
-        },
-        "body_content_type": {
-            "type": "string",
-            "default": "text/plain",
-            "description": "Content-Type header for raw body mode.",
-        },
-        # ── Response options ──────────────────────────────────────────────
-        "full_response": {
-            "type": "boolean",
-            "default": False,
-            "description": "Include status_code and headers in the output item.",
-        },
-        "never_error": {
-            "type": "boolean",
-            "default": False,
-            "description": "Treat non-2xx responses as normal output instead of errors.",
-        },
-        "follow_redirects": {
-            "type": "boolean",
-            "default": True,
-        },
-        "timeout_seconds": {
-            "type": "number",
-            "default": 30,
-        },
-    },
-}
-```
+The schema includes UI extension fields (`x-ui-group`, `x-ui-widget`, `x-ui-show-when`, `x-ui-placeholder`, `x-ui-regex`) that drive the schema-driven parameter form in the frontend.
+
+Notable differences from the plan:
+- `value` fields in `query_params`, `headers`, `body_params` items use `{}` (no type constraint) to allow expression-resolved non-string values from upstream items.
+- `url` has `minLength: 1` enforced at the JSON Schema level in addition to `validate_parameters`.
+- `x-ui-show-when` controls conditional display of `body_json`, `body_params`, `body_raw`, `body_content_type` based on `body_mode`.
 
 ---
 
-## 5. `execute()` implementation
+## 5. `execute()` implementation notes
 
 **File:** `packages/python/analytiq_data/flows/nodes/http_request.py`
 
-The node runs once per item (`batch_execute_inputs = False`). Per-item, it:
+### Parameter resolution
 
-1. Resolves all `=expression` parameter values against the current item using `ad.flows.resolve_parameters`.
-2. Merges credential injections (header auth → headers dict, query auth → query params dict).
-3. Builds the request with `httpx`.
-4. Emits a `FlowItem` whose `json` field contains the response.
+The engine pre-resolves all `=expression` values against the current item before calling `execute()`. The node receives already-resolved literals in `node["parameters"]` — it does **not** call `ad.flows.resolve_parameters` internally.
 
+### Binary response (see `docrouter_binary.md` §9)
+
+When `Content-Type` matches a binary marker, the response is attached as `BinaryRef(data=resp.content)` under `binary["data"]`. The output `item.json` contains `status_code` and `headers` (always, for binary responses — no `full_response` flag check). Inline bytes are offloaded to `flow_blobs` by the engine before `run_data` is persisted.
+
+Markers checked (lowercased):
 ```python
-from __future__ import annotations
-
-import json
-import urllib.parse
-from typing import Any
-
-import httpx
-
-import analytiq_data as ad
-
-
-class FlowsHttpRequestNode:
-
-    key = "flows.http_request"
-    label = "HTTP Request"
-    description = "Make an HTTP request to any URL."
-    category = "Generic"
-    is_trigger = False
-    is_merge = False
-    min_inputs = 1
-    max_inputs = 1
-    outputs = 1
-    output_labels = ["output"]
-    icon_key = "http_request"
-    batch_execute_inputs = False
-
-    credential_slots = [
-        {"slot": "httpHeaderAuth", "label": "Header Auth",  "required": False,
-         "docrouter_binding": "organization_credential_kind:httpHeaderAuth"},
-        {"slot": "httpQueryAuth",  "label": "Query Auth",   "required": False,
-         "docrouter_binding": "organization_credential_kind:httpQueryAuth"},
-    ]
-
-    parameter_schema: dict[str, Any] = { ... }   # see §4
-
-    def validate_parameters(self, params: dict[str, Any]) -> list[str]:
-        errs: list[str] = []
-        method = params.get("method")
-        if method not in ("GET", "POST", "PUT", "PATCH", "DELETE"):
-            errs.append(f"method must be one of GET POST PUT PATCH DELETE, got {method!r}")
-        url = params.get("url")
-        if not isinstance(url, str) or not url.strip():
-            errs.append("url must be a non-empty string")
-        ts = params.get("timeout_seconds")
-        if ts is not None and (not isinstance(ts, (int, float)) or ts <= 0):
-            errs.append("timeout_seconds must be a positive number")
-        return errs
-
-    async def execute(
-        self,
-        context: "ad.flows.ExecutionContext",
-        node: dict[str, Any],
-        inputs: list[list["ad.flows.FlowItem"]],
-    ) -> list[list["ad.flows.FlowItem"]]:
-
-        params_raw = node.get("parameters") or {}
-        item = inputs[0][0]   # batch_execute_inputs=False: exactly one item
-
-        # 1. Resolve expressions against the current item
-        params = ad.flows.resolve_parameters(
-            params_raw,
-            item=item,
-            run_data=context.run_data,
-        )
-
-        method   = params["method"]
-        url      = params["url"].strip()
-        timeout  = float(params.get("timeout_seconds") or 30)
-        follow_redirects = bool(params.get("follow_redirects", True))
-        never_error      = bool(params.get("never_error", False))
-        full_response    = bool(params.get("full_response", False))
-
-        # 2. Build headers and query params from parameter lists
-        headers: dict[str, str] = {}
-        for h in (params.get("headers") or []):
-            headers[h["name"]] = h["value"]
-
-        query: dict[str, str] = {}
-        for q in (params.get("query_params") or []):
-            query[q["name"]] = q["value"]
-
-        # 3. Merge credential injections from context.credentials
-        #    (set by the engine before execute() — see docrouter_credentials.md §7.2)
-        creds = getattr(context, "credentials", {}) or {}
-        if "httpHeaderAuth" in (node.get("credentials") or {}):
-            h_name  = creds.get("name")
-            h_value = creds.get("value")
-            if h_name and h_value:
-                headers[h_name] = h_value
-        if "httpQueryAuth" in (node.get("credentials") or {}):
-            q_name  = creds.get("name")
-            q_value = creds.get("value")
-            if q_name and q_value:
-                query[q_name] = q_value
-
-        # 4. Build body
-        body_mode = params.get("body_mode") or "none"
-        content: bytes | None = None
-        content_type: str | None = None
-
-        if body_mode == "json":
-            raw = params.get("body_json") or ""
-            obj = json.loads(raw) if raw.strip() else {}
-            content = json.dumps(obj).encode()
-            content_type = "application/json"
-            headers.setdefault("Content-Type", content_type)
-
-        elif body_mode == "json_keypair":
-            obj = {p["name"]: p["value"] for p in (params.get("body_params") or [])}
-            content = json.dumps(obj).encode()
-            content_type = "application/json"
-            headers.setdefault("Content-Type", content_type)
-
-        elif body_mode == "form_urlencoded":
-            pairs = {p["name"]: p["value"] for p in (params.get("body_params") or [])}
-            content = urllib.parse.urlencode(pairs).encode()
-            content_type = "application/x-www-form-urlencoded"
-            headers.setdefault("Content-Type", content_type)
-
-        elif body_mode == "raw":
-            content = (params.get("body_raw") or "").encode()
-            content_type = params.get("body_content_type") or "text/plain"
-            headers.setdefault("Content-Type", content_type)
-
-        # 5. Make the request
-        async with httpx.AsyncClient(
-            timeout=timeout,
-            follow_redirects=follow_redirects,
-        ) as client:
-            resp = await client.request(
-                method=method,
-                url=url,
-                params=query or None,
-                headers=headers or None,
-                content=content,
-            )
-
-        if not never_error and resp.status_code >= 400:
-            raise RuntimeError(
-                f"HTTP {resp.status_code} from {method} {url}: {resp.text[:200]}"
-            )
-
-        # 6. Parse response body
-        resp_body: Any
-        ct = resp.headers.get("content-type", "")
-        if "application/json" in ct:
-            try:
-                resp_body = resp.json()
-            except Exception:
-                resp_body = resp.text
-        else:
-            resp_body = resp.text
-
-        out_json: dict[str, Any] = {"body": resp_body}
-        if full_response:
-            out_json["status_code"] = resp.status_code
-            out_json["headers"] = dict(resp.headers)
-
-        return [[
-            ad.flows.FlowItem(
-                json=out_json,
-                binary={},
-                meta={"source_node_id": node["id"], "item_index": 0},
-                paired_item=None,
-            )
-        ]]
+("application/pdf", "image/", "audio/", "video/",
+ "application/zip", "application/x-zip-compressed",
+ "application/gzip", "application/x-gzip", "application/octet-stream")
 ```
 
-### Credential injection detail (§3 expansion)
+### Binary pass-through (see `docrouter_binary.md` §8)
 
-The engine sets `context.credentials` to the merged decrypted fields of all bound slots before calling `execute()`. Both `httpHeaderAuth` and `httpQueryAuth` store their fields as `name` and `value`. Since a node can bind at most one of each kind, there is no field-name collision. If both slots are bound (unusual but valid), the fields are merged; `name`/`value` from `httpQueryAuth` would overwrite `httpHeaderAuth`'s `name`/`value` in the flat dict.
+Both code paths (text and binary response) copy the incoming `item.binary` dict into the output `FlowItem`. Incoming binary refs from upstream nodes are not dropped — the output item merges them with any newly produced `BinaryRef`.
 
-To avoid this collision when both slots are bound simultaneously, resolve each slot independently rather than merging into a single flat dict. The engine's `resolve_node_credentials` (per `docrouter_credentials.md §7.1`) resolves all slots into one flat dict — this is fine for most nodes, but the HTTP Request node should resolve each slot separately:
+### SSRF guard
 
-```python
-# Alternative: resolve per-slot to avoid name/value collision
-header_cred_id = (node.get("credentials") or {}).get("httpHeaderAuth")
-query_cred_id  = (node.get("credentials") or {}).get("httpQueryAuth")
-# fetch and decrypt each independently, then use directly
-```
+`assert_http_url_allowed()` from `analytiq_data.flows.url_ssrf_guard` is called:
+1. Statically, after URL validation, before the httpx client is created.
+2. Via `event_hooks={"request": [_ssrf_guard_each_request]}` — on every outbound request including each redirect hop.
 
-This is a minor implementation detail; the simple flat-merge approach works if only one auth slot is bound (the typical case).
+This blocks loopback (`127.x`, `::1`), RFC-1918 ranges, and redirect chains that resolve to internal addresses.
+
+### Error handling
+
+- Empty or schemeless URL after parameter resolution → `RuntimeError` with an `_inbound_row_hint` explaining which upstream row was in use.
+- `httpx.UnsupportedProtocol` → normalized `RuntimeError`.
+- `httpx.RequestError` (connect errors, timeouts) → re-raised as-is after structured logging.
+- HTTP 4xx/5xx with `never_error=False` → `RuntimeError` with status and first 200 chars of body.
+
+All errors log `node_name`, `node_id`, `execution_id`, `flow_id`, `organization_id` via `context.logger` (falls back to module logger if not attached).
 
 ---
 
-## 6. Output FlowItem shape
+## 6. Output FlowItem shapes
 
-**`full_response: false` (default):**
-
+**Text/JSON response (`full_response: false`):**
 ```json
-{
-  "body": { "ok": true, "ts": "1234567890.123456" }
-}
+{ "body": { "ok": true } }
 ```
 
-When the response body is not JSON, `body` is a plain string.
-
-**`full_response: true`:**
-
+**Text/JSON response (`full_response: true`):**
 ```json
-{
-  "body": { "ok": true },
-  "status_code": 200,
-  "headers": {
-    "content-type": "application/json",
-    "x-rate-limit-remaining": "98"
-  }
-}
+{ "body": { "ok": true }, "status_code": 200, "headers": { "content-type": "application/json" } }
 ```
 
-Downstream nodes reference these via `=expression` syntax: `=_json["body"]["ok"]`, `=_json["status_code"]`.
+**Binary response (regardless of `full_response`):**
+```json
+// item.json:
+{ "status_code": 200, "headers": { "content-type": "application/pdf" } }
+// item.binary:
+{ "data": BinaryRef(mime_type="application/pdf", file_name="invoice.pdf", data=<bytes>) }
+```
+
+Upstream binary refs are merged into `item.binary` alongside the new `"data"` key.
 
 ---
 
 ## 7. Expression support
 
-All string parameter values starting with `=` are evaluated per item via `ad.flows.resolve_parameters` before the request is built. Examples:
-
-```json
-{
-  "method": "POST",
-  "url": "='https://api.example.com/users/' + str(_json['user_id'])",
-  "headers": [
-    {"name": "X-Request-Id", "value": "=_json['request_id']"}
-  ],
-  "body_mode": "json_keypair",
-  "body_params": [
-    {"name": "email", "value": "=_json['email']"},
-    {"name": "name",  "value": "=_json['full_name']"}
-  ]
-}
-```
-
-The `url`, `query_params[*].value`, `headers[*].value`, `body_params[*].value`, `body_json`, and `body_raw` fields all support `=expression`. The `name` side of a key-value pair does not (names are static).
+All `=expression` parameter values are resolved by the engine before `execute()` is called. The node receives plain string/object values. The `url`, `query_params[*].value`, `headers[*].value`, `body_params[*].value`, `body_json`, and `body_raw` fields all support expressions. The `name` side of key-value pairs is always static.
 
 ---
 
-## 8. Replacing `flows.webhook`
+## 8. `flows.webhook` removal — Done
 
-Delete `flows/nodes/webhook.py` and replace with `flows/nodes/http_request.py`. Any saved flows that used `flows.webhook` nodes must be edited in the flow editor to use `flows.http_request` instead — the parameter structure has changed enough that silent migration is not worthwhile.
-
----
-
-## 9. Registration
-
-Update `packages/python/analytiq_data/flows/nodes/__init__.py`:
-
-```python
-from .http_request import FlowsHttpRequestNode
-# Remove: from .webhook import FlowsWebhookNode
-
-_BUILTIN_NODES = [
-    ...,
-    FlowsHttpRequestNode,
-]
-```
-
-Update `packages/python/analytiq_data/flows/nodes/register.py` (or wherever `register_builtin()` is called) accordingly.
+`flows/nodes/webhook.py` is deleted. `FlowsHttpRequestNode` is registered in `nodes/__init__.py`. Any saved flows using `flows.webhook` must be updated in the flow editor.
 
 ---
 
-## 10. Tests
+## 9. Tests — Done
 
-**File:** `packages/python/tests/test_flow_http_request_node.py`
+**File:** `packages/python/tests/flows/test_flow_http_request_node.py`
 
-Key cases to cover:
+Tests use `httpx.MockTransport` (not `respx` as originally planned). Cases covered:
 
-| Test | What to assert |
+| Test | What it asserts |
 |---|---|
 | GET with static URL | Response body in `item.json["body"]` |
-| POST with `json_keypair` body | Correct JSON body sent; `Content-Type: application/json` |
-| POST with `body_json` expression `=_json["payload"]` | Expression resolved from input item |
-| `httpHeaderAuth` credential injected | Header present in outgoing request |
-| `httpQueryAuth` credential injected | Query param present in outgoing request |
-| Non-2xx with `never_error: false` | `RuntimeError` raised |
-| Non-2xx with `never_error: true` | Item emitted with `status_code: 404` (when `full_response: true`) |
+| POST `json_keypair` body | Correct JSON body; `Content-Type: application/json` |
+| POST `body_json` (literal resolved by engine) | Correct JSON body sent |
+| `httpHeaderAuth` credential slot | Header present in outgoing request |
+| `httpQueryAuth` credential slot | Query param present in outgoing request |
+| Non-2xx, `never_error: false` | `RuntimeError` raised |
+| Non-2xx, `never_error: true`, `full_response: true` | Item emitted with `status_code: 404` |
 | `full_response: true` | `status_code` and `headers` in output |
-| URL expression | `=_json["endpoint"]` resolved before request |
-| `validate_parameters` | Missing `url` → error; invalid method → error |
-Use `respx` (httpx mock library) to intercept HTTP calls in tests without network access.
+| `validate_parameters` | Invalid method → error; empty `body_json` → error; empty `body_raw` → error |
+| Empty URL after parameters | `RuntimeError` with "empty" |
+| Schemeless URL | `RuntimeError` with "http:// or https://" |
+| SSRF loopback blocked | `RuntimeError` with "blocked" (no network call) |
+| Redirect to loopback blocked | `RuntimeError` with "blocked" |
+| Connect error | `httpx.ConnectError` propagates |
+| Timeout error | `httpx.TimeoutException` propagates |
+| Binary PDF response | `BinaryRef` under `binary["data"]`; `status_code` and headers in `item.json` |
+| Binary response merges upstream binary | Upstream `binary["pdf"]` preserved alongside new `binary["data"]` |
+| Incoming binary/meta pass-through | Upstream `item.binary` and `item.meta` forwarded in text response path |
 
 ---
 
-## 11. Starter kind files to add
+## 10. What remains
 
-Two new files in `schemas/credential-kinds/` (in addition to those listed in `docrouter_credentials.md §9`):
-
-```
-schemas/credential-kinds/
-├── httpHeaderAuth.json    (see §3 above)
-└── httpQueryAuth.json     (see §3 above)
-```
-
----
-
-## 12. Build order
-
-1. Write `schemas/credential-kinds/httpHeaderAuth.json` and `httpQueryAuth.json`.
-2. Delete `packages/python/analytiq_data/flows/nodes/webhook.py`.
-3. Write `packages/python/analytiq_data/flows/nodes/http_request.py`.
-4. Register `FlowsHttpRequestNode` in `nodes/__init__.py`.
-5. Write `test_flow_http_request_node.py` with `respx` mocks; run `pytest`.
-6. Wire credential injection: confirm `context.credentials` is set by the engine before `execute()` (depends on `docrouter_credentials.md` Phase 3).
-7. Update the frontend node palette icon and label (no schema changes needed; the frontend reads `label` from `GET /v0/orgs/{orgId}/flows/node-types`).
+| Item | Notes |
+|---|---|
+| Frontend palette icon | `icon_key = "http_request"` set; frontend must map the key to an SVG |
+| Multipart / binary request body | Sending a `BinaryRef` as the request body (depends on `docrouter_binary.md` §8) |
+| Additional auth kinds | Basic auth, OAuth1/2 (depends on credentials plan) |
+| Pagination | Not started |
