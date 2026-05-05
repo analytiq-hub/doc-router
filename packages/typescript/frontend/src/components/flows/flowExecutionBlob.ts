@@ -10,10 +10,12 @@ export type FlowExecutionBlobContext = {
 export async function fetchFlowExecutionBlob(
   ctx: FlowExecutionBlobContext,
   storageId: string,
+  opts?: { action?: 'view' | 'download' },
 ): Promise<{ blob: Blob; downloadName: string | null }> {
+  const action = opts?.action ?? 'download';
   const res = await apiClient.get<ArrayBuffer>(
     `/v0/orgs/${encodeURIComponent(ctx.organizationId)}/flows/${encodeURIComponent(ctx.flowId)}/executions/${encodeURIComponent(ctx.executionId)}/blob`,
-    { params: { storage_id: storageId }, responseType: 'arraybuffer' },
+    { params: { storage_id: storageId, action }, responseType: 'arraybuffer' },
   );
   const cd = res.headers['content-disposition'];
   let downloadName: string | null = null;

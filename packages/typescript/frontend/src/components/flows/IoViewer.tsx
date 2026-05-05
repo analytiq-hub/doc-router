@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { FlowExecutionBlobContext } from './flowExecutionBlob';
@@ -368,6 +368,105 @@ function binaryAttachmentRows(itemsBinaries: Array<Record<string, unknown>>): Ar
   return rows;
 }
 
+/** Same categories as the reference workflow editor: only these open the in-panel viewer. */
+type BinaryViewKind = 'image' | 'video' | 'audio' | 'pdf' | 'json' | 'html' | 'text';
+
+function inferBinaryViewKind(mime: string | undefined, fileName: string | undefined): BinaryViewKind | null {
+  const m = (mime || '').split(';')[0].trim().toLowerCase();
+  const ext = fileExtensionFromName(fileName);
+  const extHint = fileExtensionHintFromMime(mime);
+  const e = ext !== '—' ? ext : extHint;
+
+  if (m.startsWith('image/')) return 'image';
+  if (m.startsWith('video/')) return 'video';
+  if (m.startsWith('audio/')) return 'audio';
+  if (m === 'application/pdf' || e === 'pdf') return 'pdf';
+  if (m === 'application/json' || m.endsWith('+json') || e === 'json') return 'json';
+  if (m === 'text/html' || e === 'html' || e === 'htm') return 'html';
+  if (m.startsWith('text/')) return 'text';
+  if (m === 'application/xml' || m === 'text/xml' || e === 'xml') return 'text';
+  return null;
+}
+
+type IoBinaryPreview =
+  | { variant: 'image'; blobUrl: string; title: string }
+  | { variant: 'video'; blobUrl: string; mime: string; title: string }
+  | { variant: 'audio'; blobUrl: string; mime: string; title: string }
+  | { variant: 'embed'; blobUrl: string; mime: string; title: string }
+  | { variant: 'json'; body: string; title: string }
+  | { variant: 'html'; body: string; title: string }
+  | { variant: 'text'; body: string; title: string };
+
+function IoBinaryPreviewOverlay({
+  preview,
+  onClose,
+}: {
+  preview: IoBinaryPreview;
+  onClose: () => void;
+}) {
+  return (
+    <div className="absolute inset-0 z-20 flex min-h-[220px] flex-col overflow-hidden rounded-md border border-[#eceff2] bg-white shadow-md">
+      <div className="flex shrink-0 items-center gap-2 border-b border-[#eceff2] bg-[#fafbfc] px-2 py-1.5">
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex items-center gap-1 rounded border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-800 shadow-sm hover:bg-gray-50"
+        >
+          <ChevronLeftIcon className="h-3.5 w-3.5" strokeWidth={2} />
+          Back
+        </button>
+        <span className="min-w-0 truncate text-[11px] font-semibold text-gray-900" title={preview.title}>
+          {preview.title}
+        </span>
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto p-2">
+        {preview.variant === 'image' ? (
+          <div className="flex justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={preview.blobUrl} alt="" className="max-h-[min(70vh,520px)] max-w-full object-contain" />
+          </div>
+        ) : null}
+        {preview.variant === 'video' ? (
+          <video controls className="max-h-[min(70vh,520px)] w-full max-w-full" preload="metadata">
+            <source src={preview.blobUrl} type={preview.mime} />
+          </video>
+        ) : null}
+        {preview.variant === 'audio' ? (
+          <audio controls className="w-full" preload="metadata">
+            <source src={preview.blobUrl} type={preview.mime} />
+          </audio>
+        ) : null}
+        {preview.variant === 'embed' ? (
+          <embed
+            src={preview.blobUrl}
+            type={preview.mime}
+            title={preview.title}
+            className="h-[min(70vh,520px)] w-full border-0"
+          />
+        ) : null}
+        {preview.variant === 'json' ? (
+          <pre className="whitespace-pre-wrap break-words rounded border border-gray-100 bg-gray-50 p-2 font-mono text-[11px] leading-relaxed text-gray-900">
+            {preview.body}
+          </pre>
+        ) : null}
+        {preview.variant === 'text' ? (
+          <pre className="whitespace-pre-wrap break-words rounded border border-gray-100 bg-gray-50 p-2 font-mono text-[11px] leading-relaxed text-gray-900">
+            {preview.body}
+          </pre>
+        ) : null}
+        {preview.variant === 'html' ? (
+          <iframe
+            title={preview.title}
+            sandbox=""
+            srcDoc={preview.body}
+            className="h-[min(70vh,520px)] w-full rounded border border-gray-200 bg-white"
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 const IoBinaryPanel: React.FC<{
   itemsBinaries: Array<Record<string, unknown>>;
   itemCount: number;
@@ -375,11 +474,89 @@ const IoBinaryPanel: React.FC<{
 }> = ({ itemsBinaries, itemCount, flowBlobDownloadContext }) => {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [preview, setPreview] = useState<IoBinaryPreview | null>(null);
+  const previewBlobUrlRef = useRef<string | null>(null);
 
   const rows = useMemo(() => binaryAttachmentRows(itemsBinaries), [itemsBinaries]);
 
-  const openBlob = useCallback(
-    async (key: string, storageId: string, download: boolean, fallbackName: string | undefined) => {
+  const closePreview = useCallback(() => {
+    if (previewBlobUrlRef.current) {
+      URL.revokeObjectURL(previewBlobUrlRef.current);
+      previewBlobUrlRef.current = null;
+    }
+    setPreview(null);
+  }, []);
+
+  useEffect(
+    () => () => {
+      if (previewBlobUrlRef.current) {
+        URL.revokeObjectURL(previewBlobUrlRef.current);
+        previewBlobUrlRef.current = null;
+      }
+    },
+    [],
+  );
+
+  const openPreview = useCallback(
+    async (cardKey: string, ref: BinaryRefLike, title: string) => {
+      const viewKind = inferBinaryViewKind(ref.mime_type, ref.file_name);
+      if (!viewKind || !flowBlobDownloadContext) return;
+
+      setError(null);
+      setBusyKey(cardKey);
+      try {
+        if (previewBlobUrlRef.current) {
+          URL.revokeObjectURL(previewBlobUrlRef.current);
+          previewBlobUrlRef.current = null;
+        }
+
+        const { blob } = await fetchFlowExecutionBlob(flowBlobDownloadContext, ref.storage_id!, { action: 'view' });
+        const effectiveMime =
+          blob.type && blob.type.trim() ? blob.type.split(';')[0].trim() : ref.mime_type || 'application/octet-stream';
+
+        if (viewKind === 'json') {
+          const raw = await blob.text();
+          let body: string;
+          try {
+            body = JSON.stringify(JSON.parse(raw), null, 2);
+          } catch {
+            body = raw;
+          }
+          setPreview({ variant: 'json', body, title });
+          return;
+        }
+        if (viewKind === 'html') {
+          setPreview({ variant: 'html', body: await blob.text(), title });
+          return;
+        }
+        if (viewKind === 'text') {
+          setPreview({ variant: 'text', body: await blob.text(), title });
+          return;
+        }
+
+        const blobUrl = URL.createObjectURL(blob);
+        previewBlobUrlRef.current = blobUrl;
+
+        if (viewKind === 'image') {
+          setPreview({ variant: 'image', blobUrl, title });
+        } else if (viewKind === 'video') {
+          setPreview({ variant: 'video', blobUrl, mime: effectiveMime, title });
+        } else if (viewKind === 'audio') {
+          setPreview({ variant: 'audio', blobUrl, mime: effectiveMime, title });
+        } else {
+          setPreview({ variant: 'embed', blobUrl, mime: effectiveMime, title });
+        }
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to load binary');
+      } finally {
+        setBusyKey(null);
+      }
+    },
+    [flowBlobDownloadContext],
+  );
+
+  const downloadBlob = useCallback(
+    async (key: string, storageId: string, fallbackName: string | undefined) => {
       if (!flowBlobDownloadContext) {
         setError('Run the workflow and select an execution to download binaries.');
         return;
@@ -387,20 +564,17 @@ const IoBinaryPanel: React.FC<{
       setError(null);
       setBusyKey(key);
       try {
-        const { blob, downloadName } = await fetchFlowExecutionBlob(flowBlobDownloadContext, storageId);
+        const { blob, downloadName } = await fetchFlowExecutionBlob(flowBlobDownloadContext, storageId, {
+          action: 'download',
+        });
         const url = URL.createObjectURL(blob);
-        if (download) {
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = (downloadName && downloadName.trim()) || fallbackName || 'attachment';
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
-        } else {
-          window.open(url, '_blank', 'noopener,noreferrer');
-          window.setTimeout(() => URL.revokeObjectURL(url), 120_000);
-        }
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (downloadName && downloadName.trim()) || fallbackName || 'attachment';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
       } catch (e: unknown) {
         setError(e instanceof Error ? e.message : 'Failed to load binary');
       } finally {
@@ -417,66 +591,73 @@ const IoBinaryPanel: React.FC<{
   const showItemLabels = itemCount > 1;
 
   return (
-    <div className="max-h-[360px] space-y-3 overflow-auto">
-      {error ? <div className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-900">{error}</div> : null}
-      {!flowBlobDownloadContext ? (
-        <div className="text-[11px] text-gray-500">
-          View and Download need a saved execution context (run the flow from the editor or open an execution).
-        </div>
-      ) : null}
-      {rows.map((r) => {
-        const cardKey = `${r.itemIndex}:${r.propertyName}:${r.ref.storage_id}`;
-        const ext = displayFileExtension(r.ref.file_name, r.ref.mime_type);
-        const mime = r.ref.mime_type && r.ref.mime_type.trim() ? r.ref.mime_type : '—';
-        const sizeLabel = r.ref.file_size != null ? formatFileSizeBytes(r.ref.file_size) : '—';
-        const displayName = r.ref.file_name?.trim() || r.propertyName;
-        const canFetch = Boolean(flowBlobDownloadContext && r.ref.storage_id.startsWith('flow_blobs:'));
-        const busy = busyKey === cardKey;
-        return (
-          <div key={cardKey} className="rounded-md border border-[#eceff2] bg-white p-3 shadow-sm">
-            {showItemLabels ? (
-              <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
-                Item {r.itemIndex + 1}
-                <span className="font-mono normal-case text-gray-600"> · {r.propertyName}</span>
-              </div>
-            ) : (
-              <div className="mb-2 text-[11px] font-semibold text-gray-800">{r.propertyName}</div>
-            )}
-            <div className="grid grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1.5 text-[11px]">
-              <span className="whitespace-nowrap font-medium text-gray-500">File Name</span>
-              <span className="min-w-0 truncate font-mono text-gray-900" title={displayName}>
-                {displayName}
-              </span>
-              <span className="whitespace-nowrap font-medium text-gray-500">File Extension</span>
-              <span className="min-w-0 truncate font-mono text-gray-900">{ext}</span>
-              <span className="whitespace-nowrap font-medium text-gray-500">Mime Type</span>
-              <span className="min-w-0 truncate font-mono text-gray-900" title={mime}>
-                {mime}
-              </span>
-              <span className="whitespace-nowrap font-medium text-gray-500">File Size</span>
-              <span className="min-w-0 truncate font-mono text-gray-900">{sizeLabel}</span>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button
-                type="button"
-                disabled={!canFetch || busy}
-                onClick={() => void openBlob(cardKey, r.ref.storage_id!, false, r.ref.file_name)}
-                className="rounded-md bg-rose-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {busy ? '…' : 'View'}
-              </button>
-              <button
-                type="button"
-                disabled={!canFetch || busy}
-                onClick={() => void openBlob(cardKey, r.ref.storage_id!, true, r.ref.file_name)}
-                className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {busy ? '…' : 'Download'}
-              </button>
-            </div>
+    <div className="relative min-h-[120px]">
+      {preview ? <IoBinaryPreviewOverlay preview={preview} onClose={closePreview} /> : null}
+      <div className="max-h-[360px] space-y-3 overflow-auto">
+        {error ? <div className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-900">{error}</div> : null}
+        {!flowBlobDownloadContext ? (
+          <div className="text-[11px] text-gray-500">
+            View and Download need a saved execution context (run the flow from the editor or open an execution).
           </div>
-        );
-      })}
+        ) : null}
+        {rows.map((r) => {
+          const cardKey = `${r.itemIndex}:${r.propertyName}:${r.ref.storage_id}`;
+          const ext = displayFileExtension(r.ref.file_name, r.ref.mime_type);
+          const mime = r.ref.mime_type && r.ref.mime_type.trim() ? r.ref.mime_type : '—';
+          const sizeLabel = r.ref.file_size != null ? formatFileSizeBytes(r.ref.file_size) : '—';
+          const displayName = r.ref.file_name?.trim() || r.propertyName;
+          const canFetch = Boolean(flowBlobDownloadContext && r.ref.storage_id.startsWith('flow_blobs:'));
+          const busy = busyKey === cardKey;
+          const viewKind = inferBinaryViewKind(r.ref.mime_type, r.ref.file_name);
+          const canView = Boolean(canFetch && viewKind);
+          return (
+            <div key={cardKey} className="rounded-md border border-[#eceff2] bg-white p-3 shadow-sm">
+              {showItemLabels ? (
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-gray-400">
+                  Item {r.itemIndex + 1}
+                  <span className="font-mono normal-case text-gray-600"> · {r.propertyName}</span>
+                </div>
+              ) : (
+                <div className="mb-2 text-[11px] font-semibold text-gray-800">{r.propertyName}</div>
+              )}
+              <div className="grid grid-cols-[max-content_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1.5 text-[11px]">
+                <span className="whitespace-nowrap font-medium text-gray-500">File Name</span>
+                <span className="min-w-0 truncate font-mono text-gray-900" title={displayName}>
+                  {displayName}
+                </span>
+                <span className="whitespace-nowrap font-medium text-gray-500">File Extension</span>
+                <span className="min-w-0 truncate font-mono text-gray-900">{ext}</span>
+                <span className="whitespace-nowrap font-medium text-gray-500">Mime Type</span>
+                <span className="min-w-0 truncate font-mono text-gray-900" title={mime}>
+                  {mime}
+                </span>
+                <span className="whitespace-nowrap font-medium text-gray-500">File Size</span>
+                <span className="min-w-0 truncate font-mono text-gray-900">{sizeLabel}</span>
+              </div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {canView ? (
+                  <button
+                    type="button"
+                    disabled={!canFetch || busy}
+                    onClick={() => void openPreview(cardKey, r.ref, displayName)}
+                    className="rounded-md bg-rose-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {busy ? '…' : 'View'}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  disabled={!canFetch || busy}
+                  onClick={() => void downloadBlob(cardKey, r.ref.storage_id!, r.ref.file_name)}
+                  className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-gray-800 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {busy ? '…' : 'Download'}
+                </button>
+              </div>
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 };

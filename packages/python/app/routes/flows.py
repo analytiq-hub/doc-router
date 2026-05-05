@@ -1131,6 +1131,10 @@ async def get_execution_blob(
     flow_id: str,
     exec_id: str,
     storage_id: str = Query(..., min_length=1, description='BinaryRef.storage_id (bucket:key), e.g. flow_blobs:execId/node/item/prop'),
+    action: Literal["view", "download"] = Query(
+        "download",
+        description='`view`: inline Content-Disposition for browser preview; `download`: attachment.',
+    ),
     current_user: User = Depends(get_org_user),
 ):
     """Return bytes for an item binary stored under this execution (`flow_blobs` GridFS keys are scoped per execution)."""
@@ -1170,7 +1174,8 @@ async def get_execution_blob(
     headers: dict[str, str] = {}
     if fname.strip():
         safe = "".join(ch if ch.isascii() and ch not in {'\\', '"'} else "_" for ch in fname.strip())[:240]
-        headers["Content-Disposition"] = f'attachment; filename="{safe}"'
+        disp = "inline" if action == "view" else "attachment"
+        headers["Content-Disposition"] = f'{disp}; filename="{safe}"'
     return Response(content=blob, media_type=mime, headers=headers)
 
 
