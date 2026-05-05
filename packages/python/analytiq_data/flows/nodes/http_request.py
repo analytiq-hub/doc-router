@@ -376,13 +376,16 @@ class FlowsHttpRequestNode:
             out_json["status_code"] = resp.status_code
             out_json["headers"] = dict(resp.headers)
 
+        out_meta = dict(item.meta) if isinstance(item.meta, dict) else {}
+        out_meta["source_node_id"] = node["id"]
+
         return [
             [
                 ad.flows.FlowItem(
                     json=out_json,
-                    binary={},
-                    meta={"source_node_id": node["id"], "item_index": 0},
-                    paired_item=None,
+                    binary=dict(item.binary),
+                    meta=out_meta,
+                    paired_item=item.paired_item,
                 )
             ]
         ]

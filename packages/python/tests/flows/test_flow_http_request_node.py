@@ -64,6 +64,44 @@ def minimal_ctx() -> ad.flows.ExecutionContext:
 
 
 @pytest.mark.asyncio
+async def test_execute_forwards_incoming_binary_and_meta(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
+    """Downstream HTTP output must not drop upstream ``FlowItem.binary`` (pass-by-reference)."""
+
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(200, json={"ok": True}, request=request)
+    )
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        pref = ad.flows.BinaryRef(mime_type="application/pdf", storage_id="files:x.pdf")
+        item = ad.flows.FlowItem(
+            json={"u": "https://example.com/api"},
+            binary={"pdf": pref},
+            meta={"item_index": 3, "trace": "a"},
+            paired_item=1,
+        )
+        out = await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "http1",
+                "parameters": {
+                    "method": "GET",
+                    "url": "https://example.com/api",
+                    "body_mode": "none",
+                },
+            },
+            [[item]],
+        )
+    row = out[0][0]
+    assert row.binary["pdf"] is pref
+    assert row.meta.get("trace") == "a"
+    assert row.meta.get("item_index") == 3
+    assert row.meta.get("source_node_id") == "http1"
+    assert row.paired_item == 1
+
+
+@pytest.mark.asyncio
 async def test_execute_rejects_ssrf_loopback_before_http(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
     """SSRF guard blocks 127.0.0.1 before httpx runs (no network)."""
 

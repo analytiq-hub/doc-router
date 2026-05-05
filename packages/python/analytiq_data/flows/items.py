@@ -31,6 +31,36 @@ class FlowItem:
     paired_item: int | list[int] | None = None
 
 
+async def get_binary_stream(ref: BinaryRef, analytiq_client: Any) -> bytes:
+    """
+    Return the bytes for a ``BinaryRef``: from in-memory ``data`` or GridFS via ``storage_id``.
+
+    ``storage_id`` must be ``\"<bucket>:<key>\"`` (e.g. ``files:abc.pdf`` or ``flow_blobs:exec/n/0/p``).
+    Callers should prefer this over reading ``ref.data`` directly so both buckets work uniformly.
+    """
+    if ref.data is not None:
+        return ref.data if isinstance(ref.data, (bytes, bytearray)) else bytes(ref.data)
+
+    sid = ref.storage_id
+    if not sid:
+        raise ValueError("BinaryRef has neither data nor storage_id")
+
+    parts = sid.split(":", 1)
+    if len(parts) != 2 or not parts[0] or not parts[1]:
+        raise ValueError(f"Invalid BinaryRef.storage_id: {sid!r}")
+
+    bucket, key = parts[0], parts[1]
+    import analytiq_data as ad
+
+    result = await ad.mongodb.blob.get_blob_async(analytiq_client, bucket=bucket, key=key)
+    if not result:
+        raise ValueError(f"Binary blob not found for storage_id={sid!r}")
+    blob = result.get("blob")
+    if blob is None:
+        raise ValueError(f"Binary blob payload missing for storage_id={sid!r}")
+    return blob
+
+
 def coerce_binary_ref(raw: Any) -> BinaryRef:
     """
     Coerce a persisted / JSON-ish representation of a binary ref into `BinaryRef`.
