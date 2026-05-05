@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Dialog,
   DialogBackdrop,
@@ -50,6 +50,7 @@ import {
   flowWorkspaceMenuTriggerIconBtnClass,
 } from './flowWorkspaceMenu';
 import { triggerReachabilityFromGraph } from './flowTriggerReachability';
+import { copyToClipboard } from '@/utils/clipboard';
 
 const IoBlock: React.FC<{
   title: string;
@@ -64,6 +65,107 @@ const IoBlock: React.FC<{
     <div className="min-h-0 flex-1 overflow-auto p-3 text-xs text-[#1a1d21]">{children}</div>
   </div>
 );
+
+const WEBHOOK_NODE_KEY = 'flows.trigger.webhook';
+
+const WebhookUrlHeader: React.FC<{
+  node: FlowNode;
+  readOnly: boolean;
+  onChange: (patch: Partial<FlowNode>) => void;
+  onListenWebhookTest?: (leaf: string) => void | Promise<void>;
+}> = ({ node, readOnly, onChange, onListenWebhookTest }) => {
+  const [mode, setMode] = useState<'test' | 'production'>('test');
+  const leaf = (node.parameters?.webhook_leaf as string | undefined) ?? '';
+
+  const ensureLeaf = useCallback(() => {
+    if (readOnly) return;
+    const cur = (node.parameters?.webhook_leaf as string | undefined) ?? '';
+    if (cur && cur.trim()) return;
+    const next = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now());
+    onChange({ parameters: { ...(node.parameters ?? {}), webhook_leaf: next } });
+  }, [node.parameters, onChange, readOnly]);
+
+  useEffect(() => {
+    ensureLeaf();
+  }, [ensureLeaf]);
+
+  const href = useMemo(() => {
+    const base = typeof window !== 'undefined' ? window.location.origin : '';
+    const s = (leaf || '').trim();
+    if (!base || !s) return '';
+    return mode === 'test' ? `${base}/webhook-test/${s}` : `${base}/webhook/${s}`;
+  }, [leaf, mode]);
+
+  return (
+    <div className="rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Webhook URLs</div>
+        <div className="flex items-center gap-2">
+          <div className="inline-flex overflow-hidden rounded-md border border-gray-200 bg-white">
+            <button
+              type="button"
+              className={[
+                'px-2.5 py-1 text-[11px] font-semibold',
+                mode === 'test' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-50',
+              ].join(' ')}
+              onClick={() => setMode('test')}
+            >
+              Test URL
+            </button>
+            <button
+              type="button"
+              className={[
+                'px-2.5 py-1 text-[11px] font-semibold',
+                mode === 'production' ? 'bg-blue-600 text-white' : 'text-gray-700 hover:bg-gray-50',
+              ].join(' ')}
+              onClick={() => setMode('production')}
+            >
+              Production URL
+            </button>
+          </div>
+          {onListenWebhookTest && !readOnly ? (
+            <button
+              type="button"
+              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+              onClick={() => void onListenWebhookTest((leaf || '').trim())}
+              disabled={!leaf.trim()}
+              title="Store the current editor snapshot for the test URL"
+            >
+              Listen for test event
+            </button>
+          ) : null}
+        </div>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          {href ? (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+              className="block truncate font-mono text-[12px] font-semibold text-blue-700 hover:underline"
+              title={href}
+            >
+              {href}
+            </a>
+          ) : (
+            <div className="font-mono text-[12px] text-gray-500">Set a valid UUID leaf to enable URLs.</div>
+          )}
+        </div>
+        {href ? (
+          <button
+            type="button"
+            className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+            onClick={() => void copyToClipboard(href)}
+            title="Copy URL"
+          >
+            Copy
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+};
 
 const VariablesAndContext: React.FC = () => (
   <Disclosure as="div" defaultOpen={false} className="mb-3 rounded border border-[#eceff2] bg-white">
@@ -167,6 +269,8 @@ const FlowNodeConfigModal: React.FC<{
   executeStepBusy?: boolean;
   /** When set, credential slot pickers load saved org credentials. */
   flowOrgApi?: DocRouterOrgApi | null;
+  /** Store the current editor snapshot for `/webhook-test/{leaf}`. */
+  onListenWebhookTest?: (leaf: string) => void | Promise<void>;
 }> = ({
   open,
   onClose,
@@ -185,6 +289,7 @@ const FlowNodeConfigModal: React.FC<{
   onExecuteStep,
   executeStepBusy = false,
   flowOrgApi = null,
+  onListenWebhookTest,
 }) => {
   const [tab, setTab] = useState(0);
   const [nameHover, setNameHover] = useState(false);
@@ -579,6 +684,14 @@ const FlowNodeConfigModal: React.FC<{
                     <TabPanels className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable]">
                       <TabPanel>
                         <div className="min-w-0 space-y-4">
+                          {node && nodeType?.key === WEBHOOK_NODE_KEY ? (
+                            <WebhookUrlHeader
+                              node={node}
+                              readOnly={readOnly}
+                              onChange={onChange}
+                              onListenWebhookTest={onListenWebhookTest}
+                            />
+                          ) : null}
                           {node && (
                             <FlowNodeParameterFields
                               readOnly={readOnly}

@@ -176,6 +176,13 @@ function uuid(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now());
 }
 
+function initialParametersForNodeType(typeKey: string): Record<string, unknown> {
+  if (typeKey === 'flows.trigger.webhook') {
+    return { webhook_leaf: uuid() };
+  }
+  return {};
+}
+
 function parseHandleIndex(handle: string | null | undefined, prefix: string): number | null {
   if (!handle) return null;
   if (!handle.startsWith(prefix)) return null;
@@ -211,6 +218,7 @@ const FlowEditor: React.FC<{
   onNodesChange: (next: Node<FlowRfNodeData>[]) => void;
   onEdgesChange: (next: Edge[]) => void;
   onExecute?: () => void;
+  onListenWebhookTest?: (leaf: string) => void | Promise<void>;
   /** Latest execution to drive Input / Output columns in the node modal (e.g. from logs panel). */
   executionForIo?: FlowExecution | null;
   /** Revision pin data keyed by node id. */
@@ -230,6 +238,7 @@ const FlowEditor: React.FC<{
   onNodesChange,
   onEdgesChange,
   onExecute,
+  onListenWebhookTest,
   executionForIo,
   pinData,
   onPinDataChange,
@@ -492,7 +501,7 @@ const FlowEditor: React.FC<{
         name: uniqueName,
         type: typeKey,
         position: [pos.x, pos.y],
-        parameters: {},
+        parameters: initialParametersForNodeType(typeKey),
         disabled: false,
         on_error: 'stop',
         notes: null,
@@ -568,7 +577,7 @@ const FlowEditor: React.FC<{
         name: uniqueName,
         type: typeKey,
         position: [p.x, p.y],
-        parameters: {},
+        parameters: initialParametersForNodeType(typeKey),
         disabled: false,
         on_error: 'stop',
         notes: null,
@@ -623,7 +632,7 @@ const FlowEditor: React.FC<{
         name: uniqueName,
         type: typeKey,
         position: [p.x, p.y],
-        parameters: {},
+        parameters: initialParametersForNodeType(typeKey),
         disabled: false,
         on_error: 'stop',
         notes: null,
@@ -849,6 +858,7 @@ const FlowEditor: React.FC<{
         }}
         onExecuteStep={onExecuteStep ? onExecuteStepClick : undefined}
         executeStepBusy={executeStepBusy}
+        onListenWebhookTest={onListenWebhookTest}
         flowOrgApi={flowOrgApi}
       />
 

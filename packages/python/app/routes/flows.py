@@ -11,6 +11,8 @@ from bson import ObjectId
 from bson.errors import InvalidId
 from fastapi import APIRouter, Depends, HTTPException, Query, Body, Request
 from starlette.responses import Response
+from uuid import uuid4
+from datetime import timedelta
 from pydantic import BaseModel, Field, ConfigDict
 
 import analytiq_data as ad
@@ -57,6 +59,84 @@ def _safe_webhook_blob_segment(part: str) -> str:
 
     p = "".join(c if (c.isalnum() or c in "._-") else "_" for c in part)
     return (p[:120] if p else "file")
+
+
+def _extract_webhook_leaf_from_nodes(nodes: list[dict[str, Any]]) -> str | None:
+    """Return webhook trigger leaf if present on the revision nodes."""
+    for n in nodes:
+        if not isinstance(n, dict):
+            continue
+        if n.get("type") != "flows.trigger.webhook":
+            continue
+        params = n.get("parameters") or {}
+        if not isinstance(params, dict):
+            return None
+        leaf = params.get("webhook_leaf")
+        if not isinstance(leaf, str):
+            return None
+        s = leaf.strip()
+        return s or None
+    return None
+
+
+async def _upsert_flow_webhook_route_leaf(
+    db: Any,
+    *,
+    leaf: str,
+    flow_id: str,
+    organization_id: str,
+) -> None:
+    """
+    Ensure `flow_webhook_routes[_id=leaf]` is owned by this flow.
+
+    The leaf must be system-wide unique, so if another flow already owns it,
+    raise 409.
+    """
+    existing = await db.flow_webhook_routes.find_one({"_id": leaf})
+    if existing:
+        prod = existing.get("production") if isinstance(existing.get("production"), dict) else {}
+        test = existing.get("test") if isinstance(existing.get("test"), dict) else {}
+        owner_flow = prod.get("flow_id") or test.get("flow_id")
+        if owner_flow and owner_flow != flow_id:
+            raise HTTPException(status_code=409, detail="Webhook URL leaf is already in use")
+    await db.flow_webhook_routes.update_one(
+        {"_id": leaf},
+        {
+            "$setOnInsert": {"created_at": _now()},
+            "$set": {
+                "leaf": leaf,
+                "production.flow_id": flow_id,
+                "production.organization_id": organization_id,
+                "updated_at": _now(),
+            },
+        },
+        upsert=True,
+    )
+
+
+async def _clear_other_webhook_route_leaves_for_flow(db: Any, *, flow_id: str, keep_leaf: str) -> None:
+    """If a flow changes its webhook leaf, clear old mappings for this flow."""
+    cursor = db.flow_webhook_routes.find(
+        {
+            "_id": {"$ne": keep_leaf},
+            "$or": [{"production.flow_id": flow_id}, {"test.flow_id": flow_id}],
+        }
+    )
+    async for doc in cursor:
+        old_leaf = doc.get("_id")
+        if not old_leaf:
+            continue
+        # Unset only the parts owned by this flow.
+        unset: dict[str, str] = {}
+        if isinstance(doc.get("production"), dict) and doc.get("production", {}).get("flow_id") == flow_id:
+            unset["production"] = ""
+        if isinstance(doc.get("test"), dict) and doc.get("test", {}).get("flow_id") == flow_id:
+            unset["test"] = ""
+        if unset:
+            await db.flow_webhook_routes.update_one(
+                {"_id": old_leaf},
+                {"$unset": unset, "$set": {"updated_at": _now()}},
+            )
 
 
 def _raise_if_run_data_entries_oversized(run_data: dict[str, Any]) -> None:
@@ -131,6 +211,17 @@ class SaveFlowRequest(BaseModel):
 class SaveFlowResponse(BaseModel):
     flow: FlowHeader
     revision: FlowRevision | None = None
+
+
+class ListenWebhookTestRequest(BaseModel):
+    webhook_leaf: str | None = None
+    revision_snapshot: FlowRevisionSnapshotRequest
+
+
+class ListenWebhookTestResponse(BaseModel):
+    webhook_leaf: str
+    test_path: str
+    production_path: str
 
 
 class ActivateFlowRequest(BaseModel):
@@ -539,6 +630,24 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
     except ad.flows.FlowValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    # Ensure webhook trigger leaf is persisted and system-wide unique (if this graph uses webhook trigger).
+    leaf = _extract_webhook_leaf_from_nodes(nodes)
+    if leaf is None:
+        # If the trigger exists but leaf is missing, generate one so the editor always gets URLs.
+        if any(isinstance(n, dict) and n.get("type") == "flows.trigger.webhook" for n in nodes):
+            leaf = str(uuid4())
+            for n in nodes:
+                if isinstance(n, dict) and n.get("type") == "flows.trigger.webhook":
+                    p = n.get("parameters")
+                    if not isinstance(p, dict):
+                        n["parameters"] = {"webhook_leaf": leaf}
+                    else:
+                        p.setdefault("webhook_leaf", leaf)
+                    break
+    if leaf:
+        await _upsert_flow_webhook_route_leaf(db, leaf=leaf, flow_id=flow_id, organization_id=organization_id)
+        await _clear_other_webhook_route_leaves_for_flow(db, flow_id=flow_id, keep_leaf=leaf)
+
     ghash = ad.flows.canonical_graph_hash(nodes, req.connections, settings)
 
     def _stable_pin_json(p: Any) -> str:
@@ -641,6 +750,52 @@ async def deactivate_flow(organization_id: str, flow_id: str, current_user: User
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Flow not found")
     return await get_flow(organization_id, flow_id, current_user)
+
+
+@flows_router.post(
+    "/v0/orgs/{organization_id}/flows/{flow_id}/webhook-test/listen",
+    response_model=ListenWebhookTestResponse,
+)
+async def listen_webhook_test(
+    organization_id: str,
+    flow_id: str,
+    req: ListenWebhookTestRequest,
+    current_user: User = Depends(get_org_user),
+):
+    """
+    Store a short-lived draft snapshot for `/webhook-test/{leaf}`.
+
+    This is what the editor uses for "Listen for test event": it should execute the current
+    unsaved graph (`revision_snapshot`) rather than the activated production revision.
+    """
+    db = await _get_db()
+    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
+    if not h:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    leaf = (req.webhook_leaf or "").strip() or _extract_webhook_leaf_from_nodes(req.revision_snapshot.nodes) or str(uuid4())
+    await _upsert_flow_webhook_route_leaf(db, leaf=leaf, flow_id=flow_id, organization_id=organization_id)
+    await _clear_other_webhook_route_leaves_for_flow(db, flow_id=flow_id, keep_leaf=leaf)
+
+    # Persist snapshot for test calls.
+    await db.flow_webhook_routes.update_one(
+        {"_id": leaf},
+        {
+            "$set": {
+                "test.flow_id": flow_id,
+                "test.organization_id": organization_id,
+                "test.revision_snapshot": req.revision_snapshot.model_dump(),
+                "test.expires_at": _now() + timedelta(hours=2),
+                "updated_at": _now(),
+            }
+        },
+        upsert=True,
+    )
+    return ListenWebhookTestResponse(
+        webhook_leaf=leaf,
+        test_path=f"/webhook-test/{leaf}",
+        production_path=f"/webhook/{leaf}",
+    )
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/run")
@@ -841,22 +996,56 @@ async def stop_execution(organization_id: str, flow_id: str, exec_id: str, curre
     return {"ok": True}
 
 
-@flows_router.api_route("/v0/webhooks/{webhook_id}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"])
-async def inbound_webhook(webhook_id: str, request: Request):
-    # Route via `flow_webhook_routes` lookup, persist trigger metadata (never raw upload bytes — GridFS offload).
-    db = await _get_db()
-    route = await db.flow_webhook_routes.find_one({"_id": webhook_id})
+async def _inbound_webhook_common(
+    *,
+    db: Any,
+    leaf: str,
+    request: Request,
+    mode: Literal["production", "test"],
+) -> Response:
+    """
+    Shared inbound implementation for:
+    - `/webhook/{leaf}` (production, activated revision)
+    - `/webhook-test/{leaf}` (test, editor snapshot)
+    """
+    route = await db.flow_webhook_routes.find_one({"_id": leaf})
     if not route:
         raise HTTPException(status_code=404, detail="Unknown webhook")
 
+    route_mode = route.get(mode) if isinstance(route.get(mode), dict) else None
+    if not route_mode:
+        raise HTTPException(status_code=404, detail="Unknown webhook")
+
+    flow_id = route_mode.get("flow_id")
+    org_id = route_mode.get("organization_id")
+    if not flow_id or not org_id:
+        raise HTTPException(status_code=404, detail="Unknown webhook")
+
     revision_doc: dict | None = None
-    fr_any = route.get("flow_revid")
-    try:
-        if isinstance(fr_any, str) and fr_any.strip():
-            revision_doc = await db.flow_revisions.find_one({"_id": ObjectId(fr_any.strip()), "flow_id": route["flow_id"]})
-    except InvalidId:
-        revision_doc = None
-    params = ad.flows.webhook_params.extract_webhook_params_from_revision(revision_doc)
+    revision_snapshot: dict | None = None
+    flow_revid_for_exec: str = ""
+
+    if mode == "production":
+        # Production: always run the activated saved revision.
+        flow_doc = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": org_id})
+        if not flow_doc:
+            raise HTTPException(status_code=404, detail="Flow not found")
+        if not flow_doc.get("active") or not flow_doc.get("active_flow_revid"):
+            raise HTTPException(status_code=409, detail="Flow is not active")
+        flow_revid_for_exec = str(flow_doc["active_flow_revid"])
+        try:
+            revision_doc = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid_for_exec), "flow_id": flow_id})
+        except InvalidId:
+            revision_doc = None
+    else:
+        # Test: run latest editor snapshot registered by /webhook-test/listen.
+        expires_at = route_mode.get("expires_at")
+        if isinstance(expires_at, datetime) and expires_at.replace(tzinfo=UTC) < _now():
+            raise HTTPException(status_code=404, detail="Test webhook listener expired")
+        snap_any = route_mode.get("revision_snapshot")
+        revision_snapshot = dict(snap_any) if isinstance(snap_any, dict) else None
+
+    params = ad.flows.webhook_params.extract_webhook_params_from_revision(revision_snapshot or revision_doc)
 
     allowed = ad.flows.webhook_params.allowed_http_methods_snapshot(params)
     if allowed is not None and request.method.upper() not in allowed:
@@ -882,7 +1071,8 @@ async def inbound_webhook(webhook_id: str, request: Request):
 
     trigger: dict[str, Any] = {
         "type": "webhook",
-        "webhook_id": webhook_id,
+        "webhook_leaf": leaf,
+        "webhook_mode": mode,
         "method": request.method,
         "headers": _sanitize_inbound_webhook_headers(request),
         "query": parsed.query or {},
@@ -891,10 +1081,10 @@ async def inbound_webhook(webhook_id: str, request: Request):
         "binary_properties": [],
     }
     exec_doc = {
-        "flow_id": route["flow_id"],
-        "flow_revid": route["flow_revid"],
-        "organization_id": route["organization_id"],
-        "mode": "webhook",
+        "flow_id": flow_id,
+        "flow_revid": flow_revid_for_exec,
+        "organization_id": org_id,
+        "mode": "webhook" if mode == "production" else "webhook_test",
         "status": "queued",
         "started_at": _now(),
         "finished_at": None,
@@ -908,6 +1098,8 @@ async def inbound_webhook(webhook_id: str, request: Request):
         "error": None,
         "trigger": trigger,
     }
+    if revision_snapshot is not None:
+        exec_doc["revision_snapshot"] = revision_snapshot
     res = await db.flow_executions.insert_one(exec_doc)
     exec_id = str(res.inserted_id)
 
@@ -948,10 +1140,10 @@ async def inbound_webhook(webhook_id: str, request: Request):
         aq_client,
         "flow_run",
         msg={
-            "flow_id": route["flow_id"],
-            "flow_revid": route["flow_revid"],
+            "flow_id": flow_id,
+            "flow_revid": flow_revid_for_exec,
             "execution_id": exec_id,
-            "organization_id": route["organization_id"],
+            "organization_id": org_id,
             "trigger": trigger,
         },
     )
@@ -959,4 +1151,23 @@ async def inbound_webhook(webhook_id: str, request: Request):
     if payload is None:
         return Response(status_code=sync_status, headers=dict(hdr_map))
     return Response(content=payload, status_code=sync_status, headers=dict(hdr_map))
+
+
+@flows_router.api_route("/webhook/{leaf}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"])
+async def inbound_webhook_production(leaf: str, request: Request):
+    db = await _get_db()
+    return await _inbound_webhook_common(db=db, leaf=leaf, request=request, mode="production")
+
+
+@flows_router.api_route("/webhook-test/{leaf}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"])
+async def inbound_webhook_test(leaf: str, request: Request):
+    db = await _get_db()
+    return await _inbound_webhook_common(db=db, leaf=leaf, request=request, mode="test")
+
+
+# Backward-compatible route (deprecated): `/v0/webhooks/{id}` used older webhook ids.
+@flows_router.api_route("/v0/webhooks/{webhook_id}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"])
+async def inbound_webhook(webhook_id: str, request: Request):
+    db = await _get_db()
+    return await _inbound_webhook_common(db=db, leaf=webhook_id, request=request, mode="production")
 

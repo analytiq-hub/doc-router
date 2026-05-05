@@ -13,6 +13,7 @@ import { snapRfNodesPositions } from '@/components/flows/canvasGrid';
 import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNodeData } from '@/components/flows/flowRf';
 import { GRAPH_BLOCKED_MESSAGE, triggerReachabilityFromGraph } from '@/components/flows/flowTriggerReachability';
 import { useFlowApi } from '@/components/flows/useFlowApi';
+import { apiClient } from '@/utils/api';
 import type { Edge, Node } from 'reactflow';
 import FlowExecutionsView from '@/components/flows/FlowExecutionsView';
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelGroupHandle } from 'react-resizable-panels';
@@ -408,6 +409,25 @@ export default function FlowDetailPageClient({
     }
   }, [api, buildRevisionSnapshotForRun, flowId, latestFlowRevid]);
 
+  const onListenWebhookTest = useCallback(
+    async (leaf: string) => {
+      const revision_snapshot = buildRevisionSnapshotForRun();
+      if (!revision_snapshot) return;
+      const s = leaf.trim();
+      if (!s) return;
+      try {
+        setMessage('');
+        await apiClient.post(`/v0/orgs/${organizationId}/flows/${flowId}/webhook-test/listen`, {
+          webhook_leaf: s,
+          revision_snapshot,
+        });
+      } catch (err: unknown) {
+        setMessage(err instanceof Error ? err.message : 'Failed to listen for test event');
+      }
+    },
+    [buildRevisionSnapshotForRun, flowId, organizationId],
+  );
+
   const onExecuteFlowStep = useCallback(
     async ({ targetNodeId, seedRunData }: { targetNodeId: string; seedRunData: Record<string, unknown> }) => {
       const revision_snapshot = buildRevisionSnapshotForRun();
@@ -585,6 +605,7 @@ export default function FlowDetailPageClient({
                         onNodesChange={onNodesChange}
                         onEdgesChange={onEdgesChange}
                         onExecute={onRun}
+                        onListenWebhookTest={onListenWebhookTest}
                         onExecuteStep={onExecuteFlowStep}
                         executionForIo={executionForIo}
                         pinData={revision?.pin_data ?? null}

@@ -42,22 +42,18 @@ class FlowsWebhookTriggerNode:
         ),
         "additionalProperties": True,
         "properties": {
-            "path": {
+            "webhook_leaf": {
                 "title": "Path",
                 "type": "string",
-                "description": (
-                    "Label for this endpoint (routing still uses webhook id until path-based inbound "
-                    "routing exists)."
-                ),
-                "x-ui-placeholder": "webhook",
                 "default": "",
-            },
-            "multiple_methods": {
-                "title": "Allow multiple HTTP methods",
-                "type": "boolean",
-                "default": False,
-                "description": "When enabled, comma-separate verbs in Allowed methods.",
-                "x-ui-group": "HTTP",
+                "description": (
+                    "Public URL leaf for both production and test endpoints. "
+                    "Should be a UUID; must be unique across the entire system."
+                ),
+                "x-ui-placeholder": "e.g. 550e8400-e29b-41d4-a716-446655440000",
+                "x-ui-regex": r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+                "x-ui-regex-message": "Must be a UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)",
+                "x-ui-group": "Webhook URLs",
             },
             "http_method": {
                 "title": "HTTP method",

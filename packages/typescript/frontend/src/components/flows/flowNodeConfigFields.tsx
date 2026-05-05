@@ -44,6 +44,9 @@ export const FlowNodeSettingsFields: React.FC<{
   onChange: (patch: Partial<FlowNode>) => void;
   readOnly?: boolean;
 }> = ({ node, onChange, readOnly = false }) => {
+  const isWebhookTrigger = node.type === 'flows.trigger.webhook';
+  const multipleMethods = Boolean((node.parameters as Record<string, unknown> | undefined)?.multiple_methods);
+
   if (readOnly) {
     return (
       <div className="space-y-3">
@@ -59,6 +62,12 @@ export const FlowNodeSettingsFields: React.FC<{
           <span className={flowLabelClass}>On error</span>
           <input readOnly className={flowInputClass} value={node.on_error ?? 'stop'} />
         </div>
+        {isWebhookTrigger ? (
+          <div>
+            <span className={flowLabelClass}>Allow multiple HTTP methods</span>
+            <input readOnly className={flowInputClass} value={multipleMethods ? 'yes' : 'no'} />
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -99,6 +108,22 @@ export const FlowNodeSettingsFields: React.FC<{
           <option value="continue">continue</option>
         </select>
       </div>
+      {isWebhookTrigger ? (
+        <div className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
+          <span className="text-sm text-gray-800">Allow multiple HTTP methods</span>
+          <Switch
+            checked={multipleMethods}
+            onChange={(checked) =>
+              onChange({
+                parameters: { ...(node.parameters ?? {}), multiple_methods: checked },
+              })
+            }
+            className={flowSwitchTrackClass}
+          >
+            <span className={flowSwitchThumbClass} aria-hidden />
+          </Switch>
+        </div>
+      ) : null}
     </div>
   );
 };
