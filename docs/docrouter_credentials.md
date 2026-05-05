@@ -590,9 +590,7 @@ Add additional kind JSON files under `schemas/credential-kinds/` as integrations
 
 In `test_credential()` in `flows_credentials.py`, call `assert_http_url_allowed(url)` (from `analytiq_data.flows.url_ssrf_guard`) before the `httpx.AsyncClient.request()` call.
 
-**Step 3 — MongoDB index**
-
-Completed: added a startup check to ensure `{ organization_id: 1, kind_key: 1 }` index exists on `credentials` (`app/main.py` calls `ad.flows.ensure_credentials_indexes()`).
+**Step 3 — MongoDB index** - DONE
 
 **Step 4 — Additional kind files**
 
