@@ -72,8 +72,9 @@ const WebhookUrlHeader: React.FC<{
   node: FlowNode;
   readOnly: boolean;
   onChange: (patch: Partial<FlowNode>) => void;
+  organizationId?: string | null;
   onListenWebhookTest?: (leaf: string) => void | Promise<void>;
-}> = ({ node, readOnly, onChange, onListenWebhookTest }) => {
+}> = ({ node, readOnly, onChange, organizationId = null, onListenWebhookTest }) => {
   const [mode, setMode] = useState<'test' | 'production'>('test');
   const leaf = (node.parameters?.webhook_leaf as string | undefined) ?? '';
 
@@ -90,11 +91,21 @@ const WebhookUrlHeader: React.FC<{
   }, [ensureLeaf]);
 
   const href = useMemo(() => {
-    const base = typeof window !== 'undefined' ? window.location.origin : '';
+    const fastApiPrefixRaw = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi';
+    const fastApiBaseRaw = fastApiPrefixRaw.trim();
+    const isAbsolute = /^https?:\/\//i.test(fastApiBaseRaw);
+    const origin = typeof window !== 'undefined' ? window.location.origin : '';
+    const fastApiBase = isAbsolute
+      ? fastApiBaseRaw.replace(/\/$/, '')
+      : `${origin}${fastApiBaseRaw.startsWith('/') ? '' : '/'}${fastApiBaseRaw}`.replace(/\/$/, '');
     const s = (leaf || '').trim();
-    if (!base || !s) return '';
-    return mode === 'test' ? `${base}/webhook-test/${s}` : `${base}/webhook/${s}`;
-  }, [leaf, mode]);
+    if (!fastApiBase || !s) return '';
+    const org = (organizationId || '').trim();
+    if (!org) return '';
+    return mode === 'test'
+      ? `${fastApiBase}/v0/orgs/${org}/flows/webhook-test/${s}`
+      : `${fastApiBase}/v0/orgs/${org}/flows/webhook/${s}`;
+  }, [leaf, mode, organizationId]);
 
   return (
     <div className="rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
@@ -689,6 +700,7 @@ const FlowNodeConfigModal: React.FC<{
                               node={node}
                               readOnly={readOnly}
                               onChange={onChange}
+                              organizationId={flowOrgApi?.organizationId ?? null}
                               onListenWebhookTest={onListenWebhookTest}
                             />
                           ) : null}

@@ -172,3 +172,36 @@ def test_webhook_sync_response_shapes() -> None:
     )
     assert st2 == 200
     assert body2 is None
+
+
+@pytest.mark.asyncio
+async def test_respond_to_webhook_node_sets_context_response() -> None:
+    n = ad.flows.FlowsRespondToWebhookNode()
+    ctx = ad.flows.ExecutionContext(
+        organization_id="o",
+        execution_id="64f3a1b2c3d4e5f6a7b8c9d1",
+        flow_id="f",
+        flow_revid="r",
+        mode="webhook",
+        trigger_data={"type": "webhook"},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    node = {
+        "id": "n1",
+        "type": "flows.respond_to_webhook",
+        "parameters": {
+            "status_code": 201,
+            "headers": [{"name": "X-Test", "value": "1"}],
+            "body_mode": "text",
+            "body_text": "hello",
+        },
+    }
+    out = await n.execute(ctx, node, [[ad.flows.FlowItem(json={"a": 1}, binary={}, meta={}, paired_item=None)]])
+    assert out and out[0]  # pass-through
+    resp = ctx.trigger_data.get("_webhook_response")
+    assert isinstance(resp, dict)
+    assert resp["status_code"] == 201
+    assert resp["headers"]["X-Test"] == "1"

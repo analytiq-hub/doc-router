@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import asyncio
 from datetime import datetime, UTC
 from typing import Any, Optional, List, Literal
 
@@ -1046,6 +1047,7 @@ async def _inbound_webhook_common(
         revision_snapshot = dict(snap_any) if isinstance(snap_any, dict) else None
 
     params = ad.flows.webhook_params.extract_webhook_params_from_revision(revision_snapshot or revision_doc)
+    response_mode = (params.get("response_mode") or "on_received").strip() if isinstance(params.get("response_mode"), str) else "on_received"
 
     allowed = ad.flows.webhook_params.allowed_http_methods_snapshot(params)
     if allowed is not None and request.method.upper() not in allowed:
@@ -1103,6 +1105,71 @@ async def _inbound_webhook_common(
     res = await db.flow_executions.insert_one(exec_doc)
     exec_id = str(res.inserted_id)
 
+    # Synchronous response modes: execute in-process and return response payload.
+    if response_mode in ("respond_to_webhook", "last_node"):
+        aq_client = ad.common.get_analytiq_client()
+        ctx = ad.flows.ExecutionContext(
+            organization_id=org_id,
+            execution_id=exec_id,
+            flow_id=flow_id,
+            flow_revid=flow_revid_for_exec,
+            mode="webhook",
+            trigger_data=trigger,
+            run_data={},
+            analytiq_client=aq_client,
+            stop_requested=False,
+            logger=None,
+        )
+
+        rev_for_run = revision_snapshot or revision_doc
+        if not isinstance(rev_for_run, dict):
+            raise HTTPException(status_code=500, detail="Missing flow revision for webhook execution")
+
+        # Bound synchronous webhook execution time; keep a conservative default.
+        try:
+            await asyncio.wait_for(ad.flows.run_flow(context=ctx, revision=rev_for_run), timeout=25.0)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Webhook execution failed: {e}") from e
+
+        # Prefer explicit Respond to Webhook node payload.
+        resp_any = ctx.trigger_data.get("_webhook_response")
+        if response_mode == "respond_to_webhook" and isinstance(resp_any, dict):
+            sc = resp_any.get("status_code")
+            try:
+                status = int(sc) if sc is not None else 200
+            except (TypeError, ValueError):
+                status = 200
+            hdrs = resp_any.get("headers")
+            headers = dict(hdrs) if isinstance(hdrs, dict) else {}
+            if resp_any.get("body_is_none"):
+                return Response(status_code=status, headers=headers)
+            body_txt = resp_any.get("body_bytes_utf8")
+            body_bytes = (body_txt if isinstance(body_txt, str) else "").encode("utf-8")
+            return Response(content=body_bytes, status_code=status, headers=headers)
+
+        if response_mode == "respond_to_webhook":
+            # No responder node found; fall back to default ack.
+            sync_status, hdr_map, payload = ad.flows.webhook_params.synchronous_http_response(exec_id, params)
+            if payload is None:
+                return Response(status_code=sync_status, headers=dict(hdr_map))
+            return Response(content=payload, status_code=sync_status, headers=dict(hdr_map))
+
+        # last_node: return first JSON of last executed node (best-effort).
+        keys = [k for k in ctx.run_data.keys() if isinstance(k, str) and not k.startswith("_")]
+        last_node_id = keys[-1] if keys else None
+        out_json: Any = {"execution_id": exec_id}
+        if isinstance(last_node_id, str):
+            ent = ctx.run_data.get(last_node_id) or {}
+            try:
+                main = ent.get("data", {}).get("main")  # type: ignore[union-attr]
+                if isinstance(main, list) and main and isinstance(main[0], list) and main[0]:
+                    it = main[0][0]
+                    out_json = it.json if hasattr(it, "json") else out_json
+            except Exception:
+                pass
+        body = json.dumps(out_json, default=str).encode("utf-8")
+        return Response(content=body, status_code=200, headers={"Content-Type": "application/json"})
+
     binary_props: list[dict[str, Any]] = []
     aq_client = ad.common.get_analytiq_client()
 
@@ -1158,9 +1225,26 @@ async def inbound_webhook_production(leaf: str, request: Request):
     db = await _get_db()
     return await _inbound_webhook_common(db=db, leaf=leaf, request=request, mode="production")
 
+@flows_router.api_route(
+    "/v0/orgs/{organization_id}/flows/webhook/{leaf}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"],
+)
+async def inbound_webhook_production_scoped(organization_id: str, leaf: str, request: Request):
+    db = await _get_db()
+    # The leaf is system-wide unique; org id here is for URL shape parity and logging.
+    return await _inbound_webhook_common(db=db, leaf=leaf, request=request, mode="production")
+
 
 @flows_router.api_route("/webhook-test/{leaf}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"])
 async def inbound_webhook_test(leaf: str, request: Request):
+    db = await _get_db()
+    return await _inbound_webhook_common(db=db, leaf=leaf, request=request, mode="test")
+
+@flows_router.api_route(
+    "/v0/orgs/{organization_id}/flows/webhook-test/{leaf}",
+    methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"],
+)
+async def inbound_webhook_test_scoped(organization_id: str, leaf: str, request: Request):
     db = await _get_db()
     return await _inbound_webhook_common(db=db, leaf=leaf, request=request, mode="test")
 
