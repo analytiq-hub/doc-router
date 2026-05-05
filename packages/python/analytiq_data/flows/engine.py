@@ -795,6 +795,92 @@ async def _execute_loop(
     return {"status": "success"}
 
 
+def _webhook_node_finish_epoch_ms(entry: Any) -> float:
+    """Approximate wall-clock end time (epoch ms) for ordering webhook ``last_node`` picks."""
+
+    if not isinstance(entry, dict):
+        return -1.0
+    ms = float(entry.get("execution_time_ms") or 0)
+    st = entry.get("start_time")
+    if isinstance(st, str):
+        try:
+            base_ms = datetime.fromisoformat(st.replace("Z", "+00:00")).timestamp() * 1000.0
+            return base_ms + ms
+        except Exception:
+            pass
+    return ms
+
+
+def pick_webhook_last_node_id(run_data: dict[str, Any], revision: dict[str, Any]) -> str | None:
+    """
+    Choose which node's primary-output JSON drives synchronous webhook ``last_node`` HTTP replies.
+
+    Prefer **sink** nodes in the forward subgraph from the trigger (nodes with no outgoing ``main``
+    edge to another reachable node). When several sinks ran (parallel branches), pick the sink that
+    **finished last** using ``start_time`` + ``execution_time_ms`` — not ``run_data`` insertion order.
+
+    Falls back to the latest-finished node among all reachable executed nodes, then any executed node id.
+    """
+
+    nodes: list[dict[str, Any]] = revision.get("nodes") or []
+    try:
+        connections = ad.flows.coerce_json_connections_to_dataclasses(revision.get("connections"))
+    except Exception:
+        connections = {}
+
+    trigger_id: str | None = None
+    for n in nodes:
+        if not isinstance(n, dict):
+            continue
+        nid, typ = n.get("id"), n.get("type")
+        if not isinstance(nid, str) or not nid or not isinstance(typ, str):
+            continue
+        try:
+            if ad.flows.get(typ).is_trigger:
+                trigger_id = nid
+                break
+        except Exception:
+            continue
+
+    def _fallback_latest(keys: list[str]) -> str | None:
+        if not keys:
+            return None
+        return max(keys, key=lambda i: _webhook_node_finish_epoch_ms(run_data.get(i)))
+
+    if not trigger_id:
+        fb = [k for k in run_data.keys() if isinstance(k, str) and not k.startswith("_")]
+        return _fallback_latest(fb)
+
+    reachable = _forward_reachable_from(trigger_id, connections)
+
+    sinks: list[str] = []
+    for nid in reachable:
+        typed = (connections or {}).get(nid) or {}
+        outgoing_to_reachable = False
+        for slot in typed.get("main") or []:
+            if not slot:
+                continue
+            for conn in slot:
+                if conn.dest_node_id in reachable:
+                    outgoing_to_reachable = True
+                    break
+            if outgoing_to_reachable:
+                break
+        if not outgoing_to_reachable:
+            sinks.append(nid)
+
+    sink_ran = [s for s in sinks if s in run_data]
+    if sink_ran:
+        return max(sink_ran, key=lambda i: _webhook_node_finish_epoch_ms(run_data.get(i)))
+
+    reachable_ran = [n for n in reachable if n in run_data]
+    if reachable_ran:
+        return max(reachable_ran, key=lambda i: _webhook_node_finish_epoch_ms(run_data.get(i)))
+
+    fb = [k for k in run_data.keys() if isinstance(k, str) and not k.startswith("_")]
+    return _fallback_latest(fb)
+
+
 async def run_flow(
     *,
     context: "ad.flows.ExecutionContext",

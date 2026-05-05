@@ -1408,9 +1408,8 @@ async def _inbound_webhook_common(
                 return Response(status_code=sync_status, headers=dict(hdr_map))
             return Response(content=payload, status_code=sync_status, headers=dict(hdr_map))
 
-        # last_node: return first JSON of last executed node (best-effort).
-        keys = [k for k in ctx.run_data.keys() if isinstance(k, str) and not k.startswith("_")]
-        last_node_id = keys[-1] if keys else None
+        # last_node: primary JSON from graph sink node(s); parallel branches tie-break by finish time.
+        last_node_id = ad.flows.pick_webhook_last_node_id(ctx.run_data, rev_for_run)
         out_json: Any = {"execution_id": exec_id}
         if isinstance(last_node_id, str):
             ent = ctx.run_data.get(last_node_id) or {}

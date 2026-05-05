@@ -537,3 +537,73 @@ async def test_respond_to_webhook_node_sets_context_response() -> None:
     assert isinstance(resp, dict)
     assert resp["status_code"] == 201
     assert resp["headers"]["X-Test"] == "1"
+
+
+def test_pick_webhook_last_node_parallel_branches_by_latest_finish_not_insertion_order() -> None:
+    """Sink nodes only; among sinks choose latest finish time (not ``run_data`` key order)."""
+
+    revision = {
+        "nodes": [
+            {"id": "t", "type": "flows.trigger.webhook", "name": "T"},
+            {"id": "a", "type": "flows.code", "name": "A"},
+            {"id": "b", "type": "flows.code", "name": "B"},
+        ],
+        "connections": {
+            "t": {"main": [[{"dest_node_id": "a", "index": 0}, {"dest_node_id": "b", "index": 0}]]},
+            "a": {"main": [[]]},
+            "b": {"main": [[]]},
+        },
+    }
+    run_data = {
+        "t": {
+            "status": "success",
+            "start_time": "2020-01-01T00:00:00+00:00",
+            "execution_time_ms": 1,
+            "data": {"main": [[]]},
+        },
+        "a": {
+            "status": "success",
+            "start_time": "2020-01-01T00:00:05+00:00",
+            "execution_time_ms": 100,
+            "data": {"main": [[{"json": {"pick": "a"}}]]},
+        },
+        "b": {
+            "status": "success",
+            "start_time": "2020-01-01T00:00:01+00:00",
+            "execution_time_ms": 1000,
+            "data": {"main": [[{"json": {"pick": "b"}}]]},
+        },
+    }
+    # Insertion order would pick "b" last; finish-time picks "a" (ends later).
+    assert ad.flows.pick_webhook_last_node_id(run_data, revision) == "a"
+
+
+def test_pick_webhook_last_node_merge_single_sink() -> None:
+    """Diamond graph: only the merge is a sink — not branch leaves."""
+
+    revision = {
+        "nodes": [
+            {"id": "t", "type": "flows.trigger.webhook", "name": "T"},
+            {"id": "a", "type": "flows.code", "name": "A"},
+            {"id": "b", "type": "flows.code", "name": "B"},
+            {"id": "m", "type": "flows.merge", "name": "M"},
+        ],
+        "connections": {
+            "t": {"main": [[{"dest_node_id": "a", "index": 0}, {"dest_node_id": "b", "index": 0}]]},
+            "a": {"main": [[{"dest_node_id": "m", "index": 0}]]},
+            "b": {"main": [[{"dest_node_id": "m", "index": 1}]]},
+            "m": {"main": [[]]},
+        },
+    }
+    run_data = {
+        "t": {"status": "success", "start_time": "2020-01-01T00:00:00+00:00", "execution_time_ms": 1, "data": {"main": [[]]}},
+        "a": {"status": "success", "start_time": "2020-01-01T00:00:01+00:00", "execution_time_ms": 5, "data": {"main": [[]]}},
+        "b": {"status": "success", "start_time": "2020-01-01T00:00:02+00:00", "execution_time_ms": 5, "data": {"main": [[]]}},
+        "m": {
+            "status": "success",
+            "start_time": "2020-01-01T00:00:10+00:00",
+            "execution_time_ms": 2,
+            "data": {"main": [[{"json": {"pick": "merge"}}]]},
+        },
+    }
+    assert ad.flows.pick_webhook_last_node_id(run_data, revision) == "m"
