@@ -102,6 +102,9 @@ async def lifespan(app):
     # Initialize KB embedding cache index
     await ad.kb.embedding_cache.ensure_embedding_cache_index(analytiq_client)
 
+    # Ensure credentials indexes (non-migration startup check)
+    await ad.flows.ensure_credentials_indexes(analytiq_client)
+
     # Start background workers in the same event loop (replaces the worker subprocess)
     n_workers = int(os.getenv("N_WORKERS", "1"))
     worker_tasks = start_workers(n_workers)

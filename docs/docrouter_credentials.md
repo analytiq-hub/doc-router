@@ -567,6 +567,7 @@ Until this is built:
 | Frontend org-wide executions tab | Done — `FlowExecutionsAll.tsx` |
 | SDK TypeScript types for credentials | Done — `FlowCredentialSlot`, `FlowCredentialHeader`, etc. |
 | Tests | Done — `test_flow_credentials.py` |
+| MongoDB index on `credentials` | Done — startup check ensures `{ organization_id: 1, kind_key: 1 }` |
 
 ### Not yet implemented
 
@@ -575,7 +576,6 @@ Until this is built:
 | Additional kind files | `slackApi`, `googleOAuth2Api`, etc. — generate via `tools/port_credentials.py` (see §10) |
 | `extends` chain resolution in registry | Registry does not merge base + extension kinds |
 | SSRF guard in `/test` endpoint | `assert_http_url_allowed()` not called before the test httpx request |
-| MongoDB index on `credentials` | Compound `{ organization_id: 1, kind_key: 1 }` not yet created |
 | OAuth2 flow | Initiate / callback / refresh (see §11) |
 
 ---
@@ -592,7 +592,7 @@ In `test_credential()` in `flows_credentials.py`, call `assert_http_url_allowed(
 
 **Step 3 — MongoDB index**
 
-Add a migration or startup check to ensure `{ organization_id: 1, kind_key: 1 }` index exists on `credentials`.
+Completed: added a startup check to ensure `{ organization_id: 1, kind_key: 1 }` index exists on `credentials` (`app/main.py` calls `ad.flows.ensure_credentials_indexes()`).
 
 **Step 4 — Additional kind files**
 
