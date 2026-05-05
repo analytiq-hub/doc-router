@@ -267,10 +267,19 @@ def _bson_serialize_value(obj: Any) -> Any:
             "paired_item": obj.paired_item,
         }
     if isinstance(obj, ad.flows.BinaryRef):
+        # Never persist inline bytes into MongoDB run_data (can exceed BSON limits).
+        # Offload should have moved `data` to GridFS and set `storage_id` before serialization.
+        if obj.data is not None and not obj.storage_id:
+            raise RuntimeError(
+                f"BinaryRef.data must be offloaded before persistence (file={obj.file_name!r})"
+            )
+        if not obj.storage_id:
+            raise RuntimeError(
+                f"BinaryRef.storage_id must be set before persistence (file={obj.file_name!r})"
+            )
         return {
             "mime_type": obj.mime_type,
             "file_name": obj.file_name,
-            "data": obj.data,
             "storage_id": obj.storage_id,
         }
     if isinstance(obj, list):
@@ -477,6 +486,54 @@ def _coerce_main_to_output_slots(main: list[Any], outputs_count: int) -> list[li
     return out
 
 
+async def _offload_binary_refs(
+    run_data: dict[str, Any],
+    execution_id: str,
+    analytiq_client: Any,
+) -> None:
+    """
+    Walk in-memory `run_data` and upload any inline `BinaryRef.data` to GridFS `flow_blobs`.
+
+    Mutates `BinaryRef` objects in-place:
+    - If `ref.data` is set and `ref.storage_id` is empty, saves bytes to GridFS, sets `storage_id`, clears `data`.
+    - If both `data` and `storage_id` are set, clears `data` (treat as already stored).
+    """
+
+    for node_id, entry in (run_data or {}).items():
+        if not isinstance(entry, dict):
+            continue
+        data = entry.get("data")
+        if not isinstance(data, dict):
+            continue
+        main = data.get("main")
+        if not isinstance(main, list):
+            continue
+        for slot in main:
+            if not isinstance(slot, list):
+                continue
+            for item_idx, item in enumerate(slot):
+                if not isinstance(item, ad.flows.FlowItem):
+                    continue
+                for prop, ref in (item.binary or {}).items():
+                    if not isinstance(ref, ad.flows.BinaryRef):
+                        continue
+                    if ref.data is not None and ref.storage_id:
+                        ref.data = None
+                        continue
+                    if ref.data is None or ref.storage_id:
+                        continue
+                    key = f"{execution_id}/{node_id}/{item_idx}/{prop}"
+                    await ad.blob.save_blob_async(
+                        analytiq_client,
+                        bucket="flow_blobs",
+                        key=key,
+                        blob=ref.data,
+                        metadata={"mime_type": ref.mime_type, "file_name": ref.file_name or ""},
+                    )
+                    ref.storage_id = f"flow_blobs:{key}"
+                    ref.data = None
+
+
 async def persist_run_data(context: "ad.flows.ExecutionContext", run_data: dict[str, Any]) -> None:
     """Persist full `run_data` for a flow execution (used for incremental progress)."""
 
@@ -485,6 +542,7 @@ async def persist_run_data(context: "ad.flows.ExecutionContext", run_data: dict[
         return
 
     db = ad.common.get_async_db(context.analytiq_client)
+    await _offload_binary_refs(run_data, context.execution_id, context.analytiq_client)
     stored = _bson_serialize_run_data(run_data)
     await db.flow_executions.update_one(
         {"_id": ObjectId(context.execution_id)},
