@@ -218,7 +218,10 @@ const FlowEditor: React.FC<{
   onNodesChange: (next: Node<FlowRfNodeData>[]) => void;
   onEdgesChange: (next: Edge[]) => void;
   onExecute?: () => void;
-  onListenWebhookTest?: (leaf: string) => void | Promise<void>;
+  onStartWebhookTestListen?: (leaf: string) => void | Promise<void>;
+  onStopWebhookTestListen?: (leaf: string) => void | Promise<void>;
+  webhookTestListeningLeaf?: string | null;
+  webhookTestListenBusy?: boolean;
   /** Latest execution to drive Input / Output columns in the node modal (e.g. from logs panel). */
   executionForIo?: FlowExecution | null;
   /** Revision pin data keyed by node id. */
@@ -238,7 +241,10 @@ const FlowEditor: React.FC<{
   onNodesChange,
   onEdgesChange,
   onExecute,
-  onListenWebhookTest,
+  onStartWebhookTestListen,
+  onStopWebhookTestListen,
+  webhookTestListeningLeaf = null,
+  webhookTestListenBusy = false,
   executionForIo,
   pinData,
   onPinDataChange,
@@ -858,7 +864,11 @@ const FlowEditor: React.FC<{
         }}
         onExecuteStep={onExecuteStep ? onExecuteStepClick : undefined}
         executeStepBusy={executeStepBusy}
-        onListenWebhookTest={onListenWebhookTest}
+        onStartWebhookTestListen={onStartWebhookTestListen}
+        onStopWebhookTestListen={onStopWebhookTestListen}
+        webhookTestListening={Boolean((webhookTestListeningLeaf ?? '').trim())}
+        webhookTestListeningLeaf={webhookTestListeningLeaf}
+        webhookTestListenBusy={webhookTestListenBusy}
         flowOrgApi={flowOrgApi}
       />
 

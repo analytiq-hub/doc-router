@@ -13,7 +13,6 @@ import { snapRfNodesPositions } from '@/components/flows/canvasGrid';
 import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNodeData } from '@/components/flows/flowRf';
 import { GRAPH_BLOCKED_MESSAGE, triggerReachabilityFromGraph } from '@/components/flows/flowTriggerReachability';
 import { useFlowApi } from '@/components/flows/useFlowApi';
-import { apiClient } from '@/utils/api';
 import type { Edge, Node } from 'reactflow';
 import FlowExecutionsView from '@/components/flows/FlowExecutionsView';
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelGroupHandle } from 'react-resizable-panels';
@@ -75,6 +74,9 @@ export default function FlowDetailPageClient({
   const [message, setMessage] = useState<string>('');
   const [logsFocusExecutionId, setLogsFocusExecutionId] = useState<string | null>(null);
   const [editorOpenConfigNodeId, setEditorOpenConfigNodeId] = useState<string | null>(null);
+  /** When set, `/webhook-test/{leaf}` is wired to this editor session (until Stop or TTL on server). */
+  const [webhookTestListeningLeaf, setWebhookTestListeningLeaf] = useState<string | null>(null);
+  const [webhookTestListenBusy, setWebhookTestListenBusy] = useState(false);
   const logsPanelGroupRef = useRef<ImperativePanelGroupHandle | null>(null);
   /** Latest graph + revision for async pin persist (queues so rapid toggles don’t 409). */
   const persistCtxRef = useRef({
@@ -97,6 +99,11 @@ export default function FlowDetailPageClient({
     if (!Number.isFinite(n)) return 50;
     return Math.min(LOGS_MAX_EXPANDED_PCT, Math.max(LOGS_MIN_EXPANDED_PCT, n));
   });
+
+  useEffect(() => {
+    setWebhookTestListeningLeaf(null);
+    setWebhookTestListenBusy(false);
+  }, [flowId, organizationId]);
 
   const handleViewChange = useCallback(
     (next: FlowCanvasView) => {
@@ -409,7 +416,7 @@ export default function FlowDetailPageClient({
     }
   }, [api, buildRevisionSnapshotForRun, flowId, latestFlowRevid]);
 
-  const onListenWebhookTest = useCallback(
+  const onStartWebhookTestListen = useCallback(
     async (leaf: string) => {
       const revision_snapshot = buildRevisionSnapshotForRun();
       if (!revision_snapshot) return;
@@ -417,15 +424,38 @@ export default function FlowDetailPageClient({
       if (!s) return;
       try {
         setMessage('');
-        await apiClient.post(`/v0/orgs/${organizationId}/flows/${flowId}/webhook-test/listen`, {
+        setWebhookTestListenBusy(true);
+        await api.getHttpClient().post(`/v0/orgs/${organizationId}/flows/${flowId}/webhook-test/listen`, {
           webhook_leaf: s,
           revision_snapshot,
         });
+        setWebhookTestListeningLeaf(s);
       } catch (err: unknown) {
         setMessage(err instanceof Error ? err.message : 'Failed to listen for test event');
+      } finally {
+        setWebhookTestListenBusy(false);
       }
     },
-    [buildRevisionSnapshotForRun, flowId, organizationId],
+    [api, buildRevisionSnapshotForRun, flowId, organizationId],
+  );
+
+  const onStopWebhookTestListen = useCallback(
+    async (leaf: string) => {
+      try {
+        setMessage('');
+        setWebhookTestListenBusy(true);
+        const s = leaf.trim();
+        await api.getHttpClient().post(`/v0/orgs/${organizationId}/flows/${flowId}/webhook-test/stop`, {
+          ...(s ? { webhook_leaf: s } : {}),
+        });
+        setWebhookTestListeningLeaf(null);
+      } catch (err: unknown) {
+        setMessage(err instanceof Error ? err.message : 'Failed to stop webhook test listener');
+      } finally {
+        setWebhookTestListenBusy(false);
+      }
+    },
+    [api, flowId, organizationId],
   );
 
   const onExecuteFlowStep = useCallback(
@@ -605,7 +635,10 @@ export default function FlowDetailPageClient({
                         onNodesChange={onNodesChange}
                         onEdgesChange={onEdgesChange}
                         onExecute={onRun}
-                        onListenWebhookTest={onListenWebhookTest}
+                        onStartWebhookTestListen={onStartWebhookTestListen}
+                        onStopWebhookTestListen={onStopWebhookTestListen}
+                        webhookTestListeningLeaf={webhookTestListeningLeaf}
+                        webhookTestListenBusy={webhookTestListenBusy}
                         onExecuteStep={onExecuteFlowStep}
                         executionForIo={executionForIo}
                         pinData={revision?.pin_data ?? null}

@@ -73,8 +73,22 @@ const WebhookUrlHeader: React.FC<{
   readOnly: boolean;
   onChange: (patch: Partial<FlowNode>) => void;
   organizationId?: string | null;
-  onListenWebhookTest?: (leaf: string) => void | Promise<void>;
-}> = ({ node, readOnly, onChange, organizationId = null, onListenWebhookTest }) => {
+  testListenActive?: boolean;
+  testListenBusy?: boolean;
+  testListeningLeaf?: string | null;
+  onStartWebhookTestListen?: (leaf: string) => void | Promise<void>;
+  onStopWebhookTestListen?: (leaf: string) => void | Promise<void>;
+}> = ({
+  node,
+  readOnly,
+  onChange,
+  organizationId = null,
+  testListenActive = false,
+  testListenBusy = false,
+  testListeningLeaf = null,
+  onStartWebhookTestListen,
+  onStopWebhookTestListen,
+}) => {
   const [mode, setMode] = useState<'test' | 'production'>('test');
   const leaf = (node.parameters?.webhook_leaf as string | undefined) ?? '';
 
@@ -89,6 +103,14 @@ const WebhookUrlHeader: React.FC<{
   useEffect(() => {
     ensureLeaf();
   }, [ensureLeaf]);
+
+  const leafForListen = useCallback((): string => {
+    const raw = (node.parameters?.webhook_leaf as string | undefined) ?? '';
+    if (raw.trim()) return raw.trim();
+    const generated = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : String(Date.now());
+    onChange({ parameters: { ...(node.parameters ?? {}), webhook_leaf: generated } });
+    return generated.trim();
+  }, [node.parameters, onChange]);
 
   const href = useMemo(() => {
     const fastApiPrefixRaw = process.env.NEXT_PUBLIC_FASTAPI_FRONTEND_URL || '/fastapi';
@@ -106,6 +128,11 @@ const WebhookUrlHeader: React.FC<{
       ? `${fastApiBase}/v0/orgs/${org}/flows/webhook-test/${s}`
       : `${fastApiBase}/v0/orgs/${org}/flows/webhook/${s}`;
   }, [leaf, mode, organizationId]);
+
+  const trimmedLeaf = (leaf || '').trim();
+  const listeningHere =
+    Boolean(testListenActive && testListeningLeaf && trimmedLeaf && testListeningLeaf.trim() === trimmedLeaf);
+  const testUrlLive = listeningHere;
 
   return (
     <div className="rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
@@ -134,15 +161,33 @@ const WebhookUrlHeader: React.FC<{
               Production URL
             </button>
           </div>
-          {onListenWebhookTest && !readOnly ? (
+          {onStartWebhookTestListen && !readOnly ? (
             <button
               type="button"
-              className="inline-flex items-center gap-1.5 rounded-md border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
-              onClick={() => void onListenWebhookTest((leaf || '').trim())}
-              disabled={!leaf.trim()}
-              title="Store the current editor snapshot for the test URL"
+              disabled={testListenBusy}
+              aria-pressed={listeningHere}
+              className={[
+                'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60',
+                listeningHere
+                  ? 'border-green-700 bg-green-600 text-white'
+                  : 'border-red-200 bg-[#ff6d5a] text-white hover:opacity-95',
+              ].join(' ')}
+              onClick={() => {
+                if (listeningHere) {
+                  void onStopWebhookTestListen?.(trimmedLeaf || leafForListen());
+                  return;
+                }
+                void onStartWebhookTestListen?.(leafForListen());
+              }}
+              title={listeningHere ? 'Stop forwarding test webhook hits to this editor snapshot' : 'Store this editor snapshot for the test webhook URL'}
             >
-              Listen for test event
+              {testListenBusy ? (
+                <span
+                  className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-white border-t-transparent"
+                  aria-hidden
+                />
+              ) : null}
+              {listeningHere ? 'Stop listening' : 'Listen for test event'}
             </button>
           ) : null}
         </div>
@@ -150,15 +195,31 @@ const WebhookUrlHeader: React.FC<{
       <div className="mt-2 flex items-center justify-between gap-2">
         <div className="min-w-0">
           {href ? (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-              className="block truncate font-mono text-[12px] font-semibold text-blue-700 hover:underline"
-              title={href}
-            >
-              {href}
-            </a>
+            <>
+              <a
+                href={mode === 'test' && !testUrlLive ? undefined : href}
+                target="_blank"
+                rel="noreferrer"
+                aria-disabled={mode === 'test' && !testUrlLive}
+                onClick={(e) => {
+                  if (mode === 'test' && !testUrlLive) {
+                    e.preventDefault();
+                  }
+                }}
+                className={[
+                  'block truncate font-mono text-[12px] font-semibold',
+                  mode === 'test' && !testUrlLive ? 'cursor-not-allowed text-gray-500' : 'text-blue-700 hover:underline',
+                ].join(' ')}
+                title={href}
+              >
+                {href}
+              </a>
+              {mode === 'test' && !testUrlLive ? (
+                <div className="mt-1 text-[10px] text-gray-500">
+                  Listening is off — click <span className="font-semibold">Listen for test event</span> to enable the test URL.
+                </div>
+              ) : null}
+            </>
           ) : (
             <div className="font-mono text-[12px] text-gray-500">Set a valid UUID leaf to enable URLs.</div>
           )}
@@ -166,7 +227,11 @@ const WebhookUrlHeader: React.FC<{
         {href ? (
           <button
             type="button"
-            className="shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50"
+            className={[
+              'shrink-0 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold hover:bg-gray-50',
+              mode === 'test' && !testUrlLive ? 'cursor-not-allowed opacity-60' : 'text-gray-700',
+            ].join(' ')}
+            disabled={mode === 'test' && !testUrlLive}
             onClick={() => void copyToClipboard(href)}
             title="Copy URL"
           >
@@ -280,8 +345,13 @@ const FlowNodeConfigModal: React.FC<{
   executeStepBusy?: boolean;
   /** When set, credential slot pickers load saved org credentials. */
   flowOrgApi?: DocRouterOrgApi | null;
-  /** Store the current editor snapshot for `/webhook-test/{leaf}`. */
-  onListenWebhookTest?: (leaf: string) => void | Promise<void>;
+  /** Begin listening on `/webhook-test/{leaf}` for this editor snapshot. */
+  onStartWebhookTestListen?: (leaf: string) => void | Promise<void>;
+  /** Tear down `/webhook-test/{leaf}` listener snapshot. */
+  onStopWebhookTestListen?: (leaf: string) => void | Promise<void>;
+  webhookTestListening?: boolean;
+  webhookTestListeningLeaf?: string | null;
+  webhookTestListenBusy?: boolean;
 }> = ({
   open,
   onClose,
@@ -300,7 +370,11 @@ const FlowNodeConfigModal: React.FC<{
   onExecuteStep,
   executeStepBusy = false,
   flowOrgApi = null,
-  onListenWebhookTest,
+  onStartWebhookTestListen,
+  onStopWebhookTestListen,
+  webhookTestListening = false,
+  webhookTestListeningLeaf = null,
+  webhookTestListenBusy = false,
 }) => {
   const [tab, setTab] = useState(0);
   const [nameHover, setNameHover] = useState(false);
@@ -701,7 +775,11 @@ const FlowNodeConfigModal: React.FC<{
                               readOnly={readOnly}
                               onChange={onChange}
                               organizationId={flowOrgApi?.organizationId ?? null}
-                              onListenWebhookTest={onListenWebhookTest}
+                              testListenActive={webhookTestListening}
+                              testListenBusy={webhookTestListenBusy}
+                              testListeningLeaf={webhookTestListeningLeaf}
+                              onStartWebhookTestListen={onStartWebhookTestListen}
+                              onStopWebhookTestListen={onStopWebhookTestListen}
                             />
                           ) : null}
                           {node && (

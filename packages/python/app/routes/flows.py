@@ -225,6 +225,13 @@ class ListenWebhookTestResponse(BaseModel):
     production_path: str
 
 
+class StopWebhookTestRequest(BaseModel):
+    """Optional hints for tearing down `/webhook-test/{leaf}` without requiring a snapshot."""
+
+    webhook_leaf: str | None = None
+    revision_snapshot: FlowRevisionSnapshotRequest | None = None
+
+
 class ActivateFlowRequest(BaseModel):
     flow_revid: str | None = None
 
@@ -797,6 +804,62 @@ async def listen_webhook_test(
         test_path=f"/webhook-test/{leaf}",
         production_path=f"/webhook/{leaf}",
     )
+
+
+@flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/webhook-test/stop")
+async def stop_listen_webhook_test(
+    organization_id: str,
+    flow_id: str,
+    req: StopWebhookTestRequest | None = Body(default=None),
+    current_user: User = Depends(get_org_user),
+):
+    """
+    Tear down editor test-mode listening so `/webhook-test/{leaf}` yields 404 again.
+
+    Optionally pass `webhook_leaf` explicitly; otherwise the server tries to infer from the webhook node
+    snapshot in ``req.revision_snapshot``.
+    """
+
+    db = await _get_db()
+    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
+    if not h:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    leaf_any = ""
+    if req:
+        leaf_any = (req.webhook_leaf or "").strip() or ""
+        snap = req.revision_snapshot
+        if not leaf_any and snap and snap.nodes:
+            leaf_any = (_extract_webhook_leaf_from_nodes(snap.nodes) or "").strip()
+
+    leaf = leaf_any
+    doc = await db.flow_webhook_routes.find_one({"_id": leaf}) if leaf else None
+
+    # Best-effort: if caller didn't pass snapshot/leaf (or doc missing), locate any routes owned by this flow in test mode.
+    if not doc:
+        cand = await db.flow_webhook_routes.find_one({"test.flow_id": flow_id, "test.organization_id": organization_id})
+        doc = cand
+        leaf = str(doc["_id"]) if cand and cand.get("_id") else leaf
+
+    if not doc:
+        # Nothing to remove.
+        return {"ok": True}
+
+    test_any = doc.get("test") if isinstance(doc.get("test"), dict) else None
+    if not test_any:
+        return {"ok": True}
+    if test_any.get("flow_id") != flow_id or test_any.get("organization_id") != organization_id:
+        raise HTTPException(status_code=403, detail="Cannot stop webhook test listener for another flow")
+
+    lid = doc.get("_id")
+    await db.flow_webhook_routes.update_one(
+        {"_id": lid},
+        {"$unset": {"test": ""}, "$set": {"updated_at": _now()}},
+    )
+    leftover = await db.flow_webhook_routes.find_one({"_id": lid})
+    if leftover and not isinstance(leftover.get("production"), dict) and not isinstance(leftover.get("test"), dict):
+        await db.flow_webhook_routes.delete_one({"_id": lid})
+    return {"ok": True}
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/run")
