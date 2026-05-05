@@ -169,7 +169,7 @@ The `/test` endpoint:
 - Renders `kind.inject.headers` and `kind.inject.query_params` via Jinja2.
 - Makes the `test_request` HTTP call.
 - Returns `ok: true` with a message if the kind has no `test_request` defined.
-- SSRF protection is not yet applied here — add `assert_http_url_allowed(url)` before the httpx call.
+- **`validate_http_url_allowed_async(url)`** runs before the test `httpx` request (same SSRF rules as the HTTP Request flow node).
 
 ---
 
@@ -575,7 +575,7 @@ Until this is built:
 |---|---|
 | Additional kind files | `slackApi`, `googleOAuth2Api`, etc. — generate via `tools/port_credentials.py` (see §10) |
 | `extends` chain resolution in registry | Registry does not merge base + extension kinds |
-| SSRF guard in `/test` endpoint | `assert_http_url_allowed()` not called before the test httpx request |
+| SSRF guard in `/test` endpoint | Done — `validate_http_url_allowed_async()` before `httpx.AsyncClient.request()` |
 | OAuth2 flow | Initiate / callback / refresh (see §11) |
 
 ---
@@ -586,9 +586,7 @@ Until this is built:
 
 Add additional kind JSON files under `schemas/credential-kinds/` as integrations are prioritized. They are picked up automatically without any code changes.
 
-**Step 2 — SSRF guard in test endpoint**
-
-In `test_credential()` in `flows_credentials.py`, call `assert_http_url_allowed(url)` (from `analytiq_data.flows.url_ssrf_guard`) before the `httpx.AsyncClient.request()` call.
+**Step 2 — SSRF guard in test endpoint** — DONE (`validate_http_url_allowed_async` in `flows_credentials.py`).
 
 **Step 3 — MongoDB index** - DONE
 

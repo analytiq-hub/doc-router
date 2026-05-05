@@ -15,7 +15,7 @@ Reference: [`docs/n8n_binary.md`](./n8n_binary.md) for how n8n implements the eq
 | `get_binary_stream()` helper | Done — in `items.py` |
 | `coerce_binary_ref()` deserializer | Done — in `items.py` |
 | `_offload_binary_refs()` in engine | Done — offloads inline bytes to `flow_blobs` before persist |
-| `BinaryRef` BSON serialization/deserialization | Done — asserts `storage_id` set; no inline bytes persisted |
+| `BinaryRef` BSON serialization/deserialization | Done — rejects unset `storage_id`; no inline bytes persisted |
 | GridFS `blob.py` utilities | Done — `save_blob_async`, `get_blob_async`, `delete_blob_async`, `delete_blobs_by_prefix_async` |
 | `worker_flow_cleanup` | Done — hourly worker deletes expired `flow_blobs` + `flow_executions` rows |
 | Document streaming endpoint | Done — `GET /v0/orgs/{orgId}/documents/{docId}/file` |
@@ -144,7 +144,7 @@ A `BinaryRef` is valid if either `data` or `storage_id` is set. After execution 
 
 `_offload_binary_refs(run_data, execution_id, analytiq_client)` is called just before `run_data` is written to MongoDB. It walks all nodes' output items and uploads any inline `BinaryRef.data` to `flow_blobs`, sets `storage_id`, and clears `data`.
 
-The serializer (`_bson_serialize_value`) asserts that `storage_id` is set for every `BinaryRef` — no inline bytes reach MongoDB.
+The serializer (`_bson_serialize_value`) raises ``RuntimeError`` if `storage_id` is missing or inline `data` was not offloaded — no inline bytes reach MongoDB.
 
 Deserialization reconstructs `BinaryRef` from the stored dict (only `storage_id` is set; `data` is always `None` after loading from MongoDB).
 
@@ -350,7 +350,7 @@ export interface FlowItemData {
 | `get_binary_stream()` | In `items.py`; transparent across both buckets |
 | `coerce_binary_ref()` | Deserializer in `items.py` |
 | `_offload_binary_refs()` in engine | Flushes inline bytes to `flow_blobs` before persist |
-| BSON serialization assert | Rejects any `BinaryRef` without `storage_id` at persist time |
+| BSON serialization guard | Rejects any `BinaryRef` without `storage_id` at persist time (`RuntimeError`) |
 | `delete_blobs_by_prefix_async` | In `mongodb/blob.py` |
 | `worker_flow_cleanup` | Hourly; deletes expired `flow_blobs` + `flow_executions` |
 | GridFS `blob.py` utilities | `save_blob_async`, `get_blob_async`, `delete_blob_async` |

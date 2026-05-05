@@ -11,7 +11,7 @@ from typing import Any
 import httpx
 
 import analytiq_data as ad
-from analytiq_data.flows.url_ssrf_guard import assert_http_url_allowed
+from analytiq_data.flows.url_ssrf_guard import validate_http_url_allowed_async
 
 logger = logging.getLogger(__name__)
 
@@ -356,7 +356,7 @@ class FlowsHttpRequestNode:
         async def _ssrf_guard_each_request(request: httpx.Request) -> None:
             """Run SSRF blocklist on every outbound URL, including each redirect hop."""
 
-            assert_http_url_allowed(str(request.url), purpose="HTTP Request")
+            await validate_http_url_allowed_async(str(request.url), purpose="HTTP Request")
 
         try:
             async with httpx.AsyncClient(

@@ -109,9 +109,7 @@ Both code paths (text and binary response) copy the incoming `item.binary` dict 
 
 ### SSRF guard
 
-`assert_http_url_allowed()` from `analytiq_data.flows.url_ssrf_guard` is called:
-1. Statically, after URL validation, before the httpx client is created.
-2. Via `event_hooks={"request": [_ssrf_guard_each_request]}` — on every outbound request including each redirect hop.
+`validate_http_url_allowed_async()` from `analytiq_data.flows.url_ssrf_guard` runs inside `event_hooks={"request": [_ssrf_guard_each_request]}` — on **every** outbound request (including the first and each redirect hop). DNS resolution for hostnames uses a thread pool so the asyncio event loop is not blocked.
 
 This blocks loopback (`127.x`, `::1`), RFC-1918 ranges, and redirect chains that resolve to internal addresses.
 

@@ -394,7 +394,7 @@ async def test_credential(
         return TestCredentialResponse(ok=False, error="test_request.url missing")
 
     try:
-        ad.flows.assert_http_url_allowed(url, purpose="Credential test request")
+        await ad.flows.validate_http_url_allowed_async(url, purpose="Credential test request")
     except RuntimeError as e:
         return TestCredentialResponse(ok=False, error=str(e))
 
