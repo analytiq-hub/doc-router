@@ -49,6 +49,9 @@ class ParsedWebhookBody:
     Uploaded to ``flow_blobs`` under keys like ``{execution_id}/webhook/incoming/...`` by the route handler.
     """
 
+    body_stashed_as_binary: bool = False
+    """True when the raw HTTP body bytes are only in ``pending_binaries`` (not in ``body`` / JSON)."""
+
 
 async def parse_webhook_request(
     request: Request,
@@ -117,6 +120,7 @@ async def parse_webhook_request(
             body=None,
             form=None,
             pending_binaries=[(bp, raw, mime, None)],
+            body_stashed_as_binary=True,
         )
 
     if "application/json" in ct_l:
@@ -133,7 +137,8 @@ async def parse_webhook_request(
             query=query,
             body=None,
             form=None,
-            pending_binaries=[("data", raw, mime, None)],
+            pending_binaries=[(bp, raw, mime, None)],
+            body_stashed_as_binary=True,
         )
 
     try:

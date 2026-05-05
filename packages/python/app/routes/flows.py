@@ -95,6 +95,49 @@ def _safe_webhook_blob_segment(part: str) -> str:
     return (p[:120] if p else "file")
 
 
+async def _webhook_finalize_pending_uploads(
+    db: Any,
+    aq_client: Any,
+    exec_id: str,
+    trigger: dict[str, Any],
+    pending: list[tuple[str, bytes, str, str | None]],
+) -> dict[str, Any]:
+    """Upload ``pending`` blobs to ``flow_blobs`` and merge ``binary_properties`` into ``trigger``."""
+
+    if not pending:
+        return trigger
+    binary_props: list[dict[str, Any]] = []
+    for i, (field, blob_bytes, mime, fname) in enumerate(pending):
+        seg_f = _safe_webhook_blob_segment(field)
+        seg_n = _safe_webhook_blob_segment(fname or field or "file")
+        gfs_key = f"{exec_id}/webhook/incoming/{i}_{seg_f}/{seg_n}"
+        await ad.mongodb.blob.save_blob_async(
+            aq_client,
+            bucket="flow_blobs",
+            key=gfs_key,
+            blob=blob_bytes,
+            metadata={
+                "mime_type": mime,
+                "webhook_field": field,
+                "file_name": fname or "",
+            },
+        )
+        binary_props.append(
+            {
+                "name": field,
+                "mime_type": mime,
+                "file_name": fname,
+                "storage_id": f"flow_blobs:{gfs_key}",
+            }
+        )
+    merged = {**trigger, "binary_properties": binary_props}
+    await db.flow_executions.update_one(
+        {"_id": ObjectId(exec_id)},
+        {"$set": {"trigger": merged}},
+    )
+    return merged
+
+
 def _extract_webhook_leaf_from_nodes(nodes: list[dict[str, Any]]) -> str | None:
     """Return webhook trigger leaf if present on the revision nodes."""
     for n in nodes:
@@ -1179,6 +1222,8 @@ async def _inbound_webhook_common(
         "binary_properties": [],
         # Used only when building webhook trigger ``FlowItem.json`` (`webhookUrl` field).
         "webhook_url": _inbound_webhook_canonical_public_url(request),
+        # Raw body bytes live in binary output only (`FlowItem.binary`), not ``json.body``.
+        "body_stashed_as_binary": bool(getattr(parsed, "body_stashed_as_binary", False)),
     }
     exec_doc = {
         "flow_id": flow_id,
@@ -1203,9 +1248,11 @@ async def _inbound_webhook_common(
     res = await db.flow_executions.insert_one(exec_doc)
     exec_id = str(res.inserted_id)
 
+    aq_client = ad.common.get_analytiq_client()
+    trigger = await _webhook_finalize_pending_uploads(db, aq_client, exec_id, trigger, parsed.pending_binaries)
+
     # Synchronous response modes: execute in-process and return response payload.
     if response_mode in ("respond_to_webhook", "last_node"):
-        aq_client = ad.common.get_analytiq_client()
         ctx = ad.flows.ExecutionContext(
             organization_id=org_id,
             execution_id=exec_id,
@@ -1267,39 +1314,6 @@ async def _inbound_webhook_common(
                 pass
         body = json.dumps(out_json, default=str).encode("utf-8")
         return Response(content=body, status_code=200, headers={"Content-Type": "application/json"})
-
-    binary_props: list[dict[str, Any]] = []
-    aq_client = ad.common.get_analytiq_client()
-
-    if parsed.pending_binaries:
-        for i, (field, blob_bytes, mime, fname) in enumerate(parsed.pending_binaries):
-            seg_f = _safe_webhook_blob_segment(field)
-            seg_n = _safe_webhook_blob_segment(fname or field or "file")
-            gfs_key = f"{exec_id}/webhook/incoming/{i}_{seg_f}/{seg_n}"
-            await ad.mongodb.blob.save_blob_async(
-                aq_client,
-                bucket="flow_blobs",
-                key=gfs_key,
-                blob=blob_bytes,
-                metadata={
-                    "mime_type": mime,
-                    "webhook_field": field,
-                    "file_name": fname or "",
-                },
-            )
-            binary_props.append(
-                {
-                    "name": field,
-                    "mime_type": mime,
-                    "file_name": fname,
-                    "storage_id": f"flow_blobs:{gfs_key}",
-                }
-            )
-        trigger = {**trigger, "binary_properties": binary_props}
-        await db.flow_executions.update_one(
-            {"_id": ObjectId(exec_id)},
-            {"$set": {"trigger": trigger}},
-        )
 
     await ad.queue.send_msg(
         aq_client,

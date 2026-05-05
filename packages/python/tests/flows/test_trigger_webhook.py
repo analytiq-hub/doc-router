@@ -144,6 +144,88 @@ def test_parse_webhook_multipart_via_testclient() -> None:
 
 
 @pytest.mark.asyncio
+async def test_webhook_trigger_body_stashed_keeps_json_body_empty() -> None:
+    """When ``body_stashed_as_binary``, do not duplicate payload under ``json.body``."""
+    n = ad.flows.FlowsWebhookTriggerNode()
+    ctx = ad.flows.ExecutionContext(
+        organization_id="o",
+        execution_id="64f3a1b2c3d4e5f6a7b8c9d1",
+        flow_id="f",
+        flow_revid="r",
+        mode="webhook",
+        trigger_data={
+            "type": "webhook",
+            "webhook_mode": "test",
+            "webhook_url": "https://host/webhook-test/u",
+            "headers": {"content-type": "application/pdf"},
+            "query": {},
+            "body": None,
+            "form": None,
+            "body_stashed_as_binary": True,
+            "binary_properties": [
+                {
+                    "name": "data",
+                    "mime_type": "application/pdf",
+                    "file_name": "x.pdf",
+                    "storage_id": "flow_blobs:fake/key",
+                },
+            ],
+        },
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    out = await n.execute(ctx, {"id": "t1", "parameters": {"binary_property_name": "data"}}, [[]])
+    assert out[0][0].json["body"] == {}
+    assert out[0][0].binary["data"].storage_id == "flow_blobs:fake/key"
+
+
+@pytest.mark.asyncio
+async def test_parse_webhook_raw_body_sets_stashed_flag() -> None:
+    async def endpoint(request: Request) -> JSONResponse:
+        p = await ad.flows.webhook_parse.parse_webhook_request(request, raw_body=True, binary_property_name="payload")
+        return JSONResponse(
+            {
+                "body": p.body,
+                "pending_len": len(p.pending_binaries),
+                "stashed": p.body_stashed_as_binary,
+            }
+        )
+
+    app = Starlette(routes=[Route("/t", endpoint, methods=["POST"])])
+    client = TestClient(app)
+    res = client.post("/t", content=b"\x00\x01\xff", headers={"Content-Type": "application/octet-stream"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["body"] is None
+    assert data["pending_len"] == 1
+    assert data["stashed"] is True
+
+
+@pytest.mark.asyncio
+async def test_parse_webhook_octet_stream_sets_stashed_flag() -> None:
+    async def endpoint(request: Request) -> JSONResponse:
+        p = await ad.flows.webhook_parse.parse_webhook_request(request)
+        return JSONResponse(
+            {
+                "body": p.body,
+                "pending": [(k, len(b), m) for k, b, m, _fn in p.pending_binaries],
+                "stashed": p.body_stashed_as_binary,
+            }
+        )
+
+    app = Starlette(routes=[Route("/t", endpoint, methods=["POST"])])
+    client = TestClient(app)
+    res = client.post("/t", content=b"abc", headers={"Content-Type": "application/octet-stream"})
+    assert res.status_code == 200
+    data = res.json()
+    assert data["body"] is None
+    assert data["stashed"] is True
+    assert data["pending"] == [["data", 3, "application/octet-stream"]]
+
+
+@pytest.mark.asyncio
 async def test_parse_webhook_raw_body_stashes_bytes() -> None:
     async def endpoint(request: Request) -> JSONResponse:
         p = await ad.flows.webhook_parse.parse_webhook_request(request, raw_body=True, binary_property_name="payload")

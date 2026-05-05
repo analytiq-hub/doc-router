@@ -139,44 +139,6 @@ export default function FlowDetailPageClient({
     setWebhookTestListenBusy(false);
   }, [flowId, organizationId]);
 
-  // While test-listening, inbound webhooks enqueue `flow_run`; poll executions so the node modal I/O updates.
-  useEffect(() => {
-    const leaf = webhookTestListeningLeaf?.trim();
-    if (!leaf) return;
-
-    let cancelled = false;
-    const POLL_MS = 900;
-
-    const tick = async () => {
-      if (cancelled) return;
-      try {
-        const res = await api.getHttpClient().get<{ items: FlowExecution[]; total: number }>(
-          `/v0/orgs/${organizationId}/executions`,
-          { params: { flow_id: flowId, mode: 'webhook_test', limit: 30 } },
-        );
-        if (cancelled) return;
-        const chosen = pickLatestWebhookTestExecutionId(res.items ?? [], flowId, leaf, webhookTestListenEpochMsRef.current);
-        if (!chosen) return;
-        const ex = await api.getExecution(flowId, chosen);
-        if (cancelled) return;
-        if (chosen !== webhookTestPollChosenIdRef.current) {
-          webhookTestPollChosenIdRef.current = chosen;
-          setLogsFocusExecutionId(chosen);
-        }
-        setExecutionForIo(ex);
-      } catch {
-        // transient network / 404 during race
-      }
-    };
-
-    void tick();
-    const intervalId = window.setInterval(() => void tick(), POLL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [api, flowId, organizationId, webhookTestListeningLeaf]);
-
   const handleViewChange = useCallback(
     (next: FlowCanvasView) => {
       router.push(`/orgs/${organizationId}/flows/${flowId}?tab=${next}`);
@@ -513,15 +475,22 @@ export default function FlowDetailPageClient({
     [api, buildRevisionSnapshotForRun, flowId, organizationId],
   );
 
+  const webhookTestStopInternal = useCallback(
+    async (leaf: string) => {
+      const s = leaf.trim();
+      await api.getHttpClient().post(`/v0/orgs/${organizationId}/flows/${flowId}/webhook-test/stop`, {
+        ...(s ? { webhook_leaf: s } : {}),
+      });
+    },
+    [api, flowId, organizationId],
+  );
+
   const onStopWebhookTestListen = useCallback(
     async (leaf: string) => {
       try {
         setMessage('');
         setWebhookTestListenBusy(true);
-        const s = leaf.trim();
-        await api.getHttpClient().post(`/v0/orgs/${organizationId}/flows/${flowId}/webhook-test/stop`, {
-          ...(s ? { webhook_leaf: s } : {}),
-        });
+        await webhookTestStopInternal(leaf);
         setWebhookTestListeningLeaf(null);
       } catch (err: unknown) {
         setMessage(err instanceof Error ? err.message : 'Failed to stop webhook test listener');
@@ -529,8 +498,57 @@ export default function FlowDetailPageClient({
         setWebhookTestListenBusy(false);
       }
     },
-    [api, flowId, organizationId],
+    [webhookTestStopInternal],
   );
+
+  // Poll while listening; tear down the listener server-side after the first matching webhook run is seen.
+  useEffect(() => {
+    const leaf = webhookTestListeningLeaf?.trim();
+    if (!leaf) return;
+
+    let cancelled = false;
+    const POLL_MS = 900;
+
+    const tick = async () => {
+      if (cancelled) return;
+      try {
+        const res = await api.getHttpClient().get<{ items: FlowExecution[]; total: number }>(
+          `/v0/orgs/${organizationId}/executions`,
+          { params: { flow_id: flowId, mode: 'webhook_test', limit: 30 } },
+        );
+        if (cancelled) return;
+        const chosen = pickLatestWebhookTestExecutionId(res.items ?? [], flowId, leaf, webhookTestListenEpochMsRef.current);
+        if (!chosen) return;
+        const ex = await api.getExecution(flowId, chosen);
+        if (cancelled) return;
+        const isNewRun = chosen !== webhookTestPollChosenIdRef.current;
+        if (isNewRun) {
+          webhookTestPollChosenIdRef.current = chosen;
+          setLogsFocusExecutionId(chosen);
+        }
+        setExecutionForIo(ex);
+        if (isNewRun) {
+          try {
+            await webhookTestStopInternal(leaf);
+            if (!cancelled) setWebhookTestListeningLeaf(null);
+          } catch (err: unknown) {
+            if (!cancelled) {
+              setMessage(err instanceof Error ? err.message : 'Webhook received but failed to stop test listener');
+            }
+          }
+        }
+      } catch {
+        // transient network / 404 during race
+      }
+    };
+
+    void tick();
+    const intervalId = window.setInterval(() => void tick(), POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [api, flowId, organizationId, webhookTestListeningLeaf, webhookTestStopInternal]);
 
   const onExecuteFlowStep = useCallback(
     async ({ targetNodeId, seedRunData }: { targetNodeId: string; seedRunData: Record<string, unknown> }) => {

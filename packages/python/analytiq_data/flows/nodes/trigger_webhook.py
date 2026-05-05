@@ -12,6 +12,8 @@ def _webhook_trigger_item_json(trigger_data: dict[str, Any]) -> dict[str, Any]:
     Public item shape for downstream nodes:
 
     ``headers``, ``params``, ``query``, ``body``, ``webhookUrl``, ``executionMode`` (``test`` or ``production``).
+    When ``body_stashed_as_binary`` is set on the inbound trigger (raw body / binary content-type),
+    ``body`` is always ``{}`` — bytes are only on ``FlowItem.binary``.
     Raw trigger metadata remains on ``ExecutionContext.trigger_data`` (execution docs / logs).
     """
 
@@ -28,8 +30,12 @@ def _webhook_trigger_item_json(trigger_data: dict[str, Any]) -> dict[str, Any]:
 
     body_any = trigger_data.get("body")
     form_any = trigger_data.get("form")
+    stashed_binary = bool(trigger_data.get("body_stashed_as_binary"))
+
     body_out: Any
-    if body_any is None:
+    if stashed_binary:
+        body_out = {}
+    elif body_any is None:
         if isinstance(form_any, dict) and form_any:
             body_out = dict(form_any)
         else:
