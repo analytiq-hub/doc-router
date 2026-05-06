@@ -329,18 +329,25 @@ function nodeItemsFromRunData(runData: Record<string, unknown> | null | undefine
   return items;
 }
 
+/** One pin lane row (`main[0]`) shape from upstream / run output snapshots. Must preserve refs. */
+function pinLaneRowFromPinItem(item: FlowPinItem): { json: unknown; binary?: Record<string, FlowBinaryRef> } {
+  const bin =
+    item.binary && typeof item.binary === 'object' && !Array.isArray(item.binary)
+      ? (item.binary as Record<string, FlowBinaryRef>)
+      : undefined;
+  if (bin != null && Object.keys(bin).length > 0) {
+    return { json: item.json, binary: bin };
+  }
+  return { json: item.json };
+}
+
+/**
+ * Persist pin_data from modal output items (`FlowPinItem[]`), including binary refs already on items.
+ *
+ * Caller: first-time Pin from Execute output only (`onTogglePin`); edit flow uses `pinNodeOutputFromJsonAndBinary`.
+ */
 function pinNodeOutputFromItems(items: FlowPinItem[]): FlowPinNodeOutput {
-  return {
-    main: [
-      [
-        ...items.map((i) =>
-          i.binary && typeof i.binary === 'object' && Object.keys(i.binary).length
-            ? { json: i.json, binary: i.binary }
-            : { json: i.json },
-        ),
-      ],
-    ],
-  };
+  return { main: [[...items.map((i) => pinLaneRowFromPinItem(i))]] };
 }
 
 function isLikelyCancelledUpload(err: unknown): boolean {

@@ -75,14 +75,53 @@ def test_flow_pins_keys_from_pin_data_collects_all_main_lanes() -> None:
 
 def test_safe_content_disposition_filename_strips_controls() -> None:
     assert "\n" not in flows_routes._safe_content_disposition_filename('x\ny"z\\')
+    assert "\r" not in flows_routes._safe_content_disposition_filename("a\rb\r\nc")
     assert flows_routes._safe_content_disposition_filename("") == "file"
 
 
 def test_pin_blob_mime_allows_inline() -> None:
     assert flows_routes._pin_blob_mime_allows_inline("image/png")
+    assert flows_routes._pin_blob_mime_allows_inline("image/png; charset=binary")
     assert not flows_routes._pin_blob_mime_allows_inline("image/svg+xml")
     assert flows_routes._pin_blob_mime_allows_inline("application/pdf")
     assert not flows_routes._pin_blob_mime_allows_inline("text/html")
+
+
+def test_mime_essence_strips_params() -> None:
+    assert flows_routes._mime_essence("text/html; charset=latin1") == "text/html"
+    assert flows_routes._mime_essence(" Application/PDF ; x=y") == "application/pdf"
+
+
+def test_blob_response_media_type_downgrades_risky_for_attachment() -> None:
+    octet = "application/octet-stream"
+    assert flows_routes._blob_response_media_type("text/html", content_disposition_is_inline=False) == octet
+    assert (
+        flows_routes._blob_response_media_type(
+            "application/javascript", content_disposition_is_inline=False
+        )
+        == octet
+    )
+    assert (
+        flows_routes._blob_response_media_type(
+            "application/vnd.ms-excel", content_disposition_is_inline=False
+        )
+        == octet
+    )
+    assert (
+        flows_routes._blob_response_media_type(
+            "application/pdf", content_disposition_is_inline=False
+        )
+        == "application/pdf"
+    )
+
+
+def test_blob_response_media_type_inline_only_safe() -> None:
+    assert flows_routes._blob_response_media_type(
+        "text/html", content_disposition_is_inline=True
+    ) == "application/octet-stream"
+    assert flows_routes._blob_response_media_type(
+        "image/png", content_disposition_is_inline=True
+    ) == "image/png"
 
 
 def test_upload_pin_binary_invalid_flow_revid_400(flow_with_revision, mock_auth, test_db):
@@ -200,3 +239,5 @@ def test_pin_binary_view_disposition_for_html_is_attachment(flow_with_revision, 
     assert r_get.status_code == 200, r_get.text
     cd = r_get.headers.get("content-disposition", "")
     assert "attachment" in cd.lower()
+    ctype = r_get.headers.get("content-type", "")
+    assert "application/octet-stream" in ctype.lower()

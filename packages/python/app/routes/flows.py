@@ -25,7 +25,7 @@ from app.models import User
 logger = logging.getLogger(__name__)
 flows_router = APIRouter(tags=["flows"])
 
-# Pinned binary uploads: cap body size to limit memory (bytes are read fully into memory today).
+# Pinned binary uploads: refuse bodies over this size; only ``MAX + 1`` bytes are read from the stream.
 MAX_PIN_UPLOAD_BYTES = 50 * 1024 * 1024
 
 # Preview: cap serialized JSON per run_data node entry to limit memory/CPU from pathological payloads.
@@ -103,7 +103,8 @@ def _flow_pins_keys_from_pin_data(pin_data: Any, *, prefix: str) -> set[str]:
     Collect `flow_pins` GridFS keys referenced by a pin_data payload, filtered by key prefix.
 
     Traverses every list under ``main`` (all output lanes), not only lane 0, so GC matches
-    references stored in secondary lanes.
+    references stored in secondary lanes. (Runtime pin application for executions still reads
+    lane 0 only — see ``coerce_pin_data_node_output``.)
 
     pin_data is expected to be `{ node_id: { main: [[ ... ], [ ... ]] } }` but this function is
     intentionally permissive and will ignore unknown shapes.
@@ -143,7 +144,12 @@ def _flow_pins_keys_from_pin_data(pin_data: Any, *, prefix: str) -> set[str]:
 
 
 def _safe_content_disposition_filename(fname: str) -> str:
-    """Strip header-injection/control chars; keeps ASCII printable except ``\\`` and ``"``."""
+    """
+    Safe ``filename="…"`` value for RFC 7230 field lines: ASCII printable only.
+
+    Excludes backslash and double-quote (header metacharacters) and control characters (U+0000–U+001F)
+    via ``str.isprintable()``, preventing header injection (e.g. folded lines / extra headers).
+    """
 
     s = "".join(
         ch if ch.isascii() and ch.isprintable() and ch not in {'\\', '"'} else "_" for ch in fname.strip()
@@ -151,21 +157,51 @@ def _safe_content_disposition_filename(fname: str) -> str:
     return s or "file"
 
 
+def _mime_essence(mime_raw: str) -> str:
+    """Normalize to lowercase ``type/subtype`` before ``;parameters`` (CR/LF stripped)."""
+
+    if not isinstance(mime_raw, str):
+        return "application/octet-stream"
+    pre = mime_raw.strip()
+    base = pre.split(";", maxsplit=1)[0].strip().lower().replace("\r", "").replace("\n", "")
+    return base or "application/octet-stream"
+
+
 def _pin_blob_mime_allows_inline(mime_raw: str) -> bool:
     """
-    Restrict ``Content-Disposition: inline`` to non-executable preview types.
+    Only ``image/*`` (excluding SVG/XML vector HTML) or ``application/pdf`` may preview inline.
 
-    User-supplied ``mime_type`` is stored with the blob; ``text/html`` inline would be stored XSS.
+    User-supplied ``mime_type`` is stored with blobs; echoed on download—never treat ``text/html`` etc.
+    as inline (stored XSS via ``Content-Disposition: inline`` + browser rendering).
     """
 
-    m = mime_raw.strip().lower()
-    if not m:
+    essence = _mime_essence(mime_raw)
+    if not essence:
         return False
-    if m.startswith("image/") and not m.startswith("image/svg+xml"):
-        return True
-    if m == "application/pdf":
-        return True
-    return False
+    if essence.startswith("image/"):
+        return not essence.startswith("image/svg+xml")
+    return essence == "application/pdf"
+
+
+def _blob_response_media_type(stored_mime: str, *, content_disposition_is_inline: bool) -> str:
+    """
+    Echo a conservative ``Content-Type`` for arbitrary stored metadata.
+
+    - Inline: only safe preview essences keep their type (images except SVG, PDF); else octet-stream.
+    - Attachment: never echo ``text/*`` as such; downgrade ``application/*`` except PDF to octet-stream
+      so uploads cannot force ``application/javascript``, ``application/xhtml+xml``, etc.
+    """
+
+    essence = _mime_essence(stored_mime)
+    if content_disposition_is_inline and _pin_blob_mime_allows_inline(stored_mime):
+        return essence
+    if content_disposition_is_inline:
+        return "application/octet-stream"
+    if essence.startswith("text/"):
+        return "application/octet-stream"
+    if essence.startswith("application/"):
+        return essence if essence == "application/pdf" else "application/octet-stream"
+    return essence
 
 
 def _object_id_or_400(value: str, *, field: str) -> ObjectId:
@@ -816,7 +852,7 @@ async def upload_pinned_binary(
     seg_name = _safe_webhook_blob_segment(fname)
     key = f"pin/{flow_revid}/{seg_node}/{int(slot)}/{int(item_index)}/{seg_prop}/{seg_name}"
 
-    blob = await file.read()
+    blob = await file.read(MAX_PIN_UPLOAD_BYTES + 1)
     if len(blob) > MAX_PIN_UPLOAD_BYTES:
         raise HTTPException(
             status_code=413,
@@ -908,7 +944,8 @@ async def get_revision_pin_blob(
         headers["Content-Disposition"] = f'{disp}; filename="{safe}"'
     elif not want_inline:
         headers["Content-Disposition"] = disp
-    return Response(content=blob, media_type=mime, headers=headers)
+    media_type = _blob_response_media_type(mime, content_disposition_is_inline=want_inline)
+    return Response(content=blob, media_type=media_type, headers=headers)
 
 
 @flows_router.put("/v0/orgs/{organization_id}/flows/{flow_id}", response_model=SaveFlowResponse)
@@ -956,8 +993,10 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
     # Pin binary cleanup: delete `flow_pins` blobs referenced by the previous revision pin_data
     # that are no longer referenced by the new pin_data (scoped to the previous revision id prefix).
     #
-    # Only keys under ``pin/{latest_revision_id}/`` are considered; pins that still reference blobs
-    # uploaded under an older revision path are not covered (known limitation / possible leak).
+    # Only keys under ``pin/{latest_revision_id}/`` are considered, where ``latest_id`` is the
+    # revision row being superseded. Blobs uploaded under a revision that never becomes that
+    # ``latest`` row at save time are never prefix-matched here (orphan / leak; acceptable short-term).
+    # Pins referencing blobs under an older revision path than ``latest_id`` are also skipped.
     if latest is not None:
         latest_id = str(latest.get("_id") or "")
         if latest_id:
@@ -1423,7 +1462,8 @@ async def get_execution_blob(
         headers["Content-Disposition"] = f'{disp}; filename="{safe}"'
     elif not want_inline:
         headers["Content-Disposition"] = disp
-    return Response(content=blob, media_type=mime, headers=headers)
+    media_type = _blob_response_media_type(mime, content_disposition_is_inline=want_inline)
+    return Response(content=blob, media_type=media_type, headers=headers)
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/executions/{exec_id}/stop")
