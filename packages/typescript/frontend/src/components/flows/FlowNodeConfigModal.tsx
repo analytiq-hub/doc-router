@@ -481,10 +481,31 @@ const FlowNodeConfigModal: React.FC<{
         : {
             itemsJson: [] as unknown[],
             itemsBinaries: [] as Record<string, unknown>[],
+            logs: [] as string[],
             message: null as string | null,
           },
     [nodeId, runData, typedPinData],
   );
+
+  // Mirror n8n behavior: surface code-node stdout (print/log) lines to browser console during manual preview.
+  const lastConsoleLogsKeyRef = React.useRef<string>('');
+  useEffect(() => {
+    if (!nodeId) return;
+    const logs = outputExecPreview.logs ?? [];
+    if (!logs.length) return;
+    const key = `${nodeId}:${logs.join('')}`;
+    if (key === lastConsoleLogsKeyRef.current) return;
+    lastConsoleLogsKeyRef.current = key;
+    try {
+      const name = node?.name || nodeId;
+      for (const line of logs) {
+        // Logs include trailing newline; keep output readable.
+        console.log(`[Flow Code: "${name}"]`, String(line).replace(/\n$/, ''));
+      }
+    } catch {
+      // ignore console errors in restricted environments
+    }
+  }, [nodeId, node?.name, outputExecPreview.logs]);
 
   const outputHasBinary = useMemo(() => {
     for (const b of outputExecPreview.itemsBinaries ?? []) {

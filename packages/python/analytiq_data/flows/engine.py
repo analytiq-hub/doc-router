@@ -748,6 +748,7 @@ async def _execute_loop(
             "execution_time_ms": int((time.time() - start) * 1000),
             "data": {"main": out_lists},
             "error": error_env,
+            "logs": (context.node_logs.pop(node["id"], None) if hasattr(context, "node_logs") else None),
         }
         await persist_run_data(context, context.run_data)
 

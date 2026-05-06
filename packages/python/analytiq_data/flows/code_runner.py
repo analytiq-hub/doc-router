@@ -28,8 +28,22 @@ import json
 import sys
 import traceback
 
+_LOGS = []
+
 def _safe_builtins():
     # Intentionally small. No __import__ => no imports.
+    def _log_line(*args, **kwargs):
+        sep = kwargs.get("sep", " ")
+        end = kwargs.get("end", "\n")
+        try:
+            s = sep.join(str(a) for a in args) + str(end)
+        except Exception:
+            s = "<unprintable>\n"
+        # Cap each log line to avoid pathological memory/JSON size.
+        if len(s) > 10_000:
+            s = s[:10_000] + "…\n"
+        _LOGS.append(s)
+
     allowed = {
         "abs": abs,
         "all": all,
@@ -50,6 +64,9 @@ def _safe_builtins():
         "sum": sum,
         "tuple": tuple,
         "zip": zip,
+        # Support print-style debugging without writing to stdout (stdout is reserved for JSON protocol).
+        "print": _log_line,
+        "log": _log_line,
     }
     return allowed
 
@@ -101,7 +118,7 @@ for i, v in enumerate(out):
     if not isinstance(v, dict):
         _fail(f"run() output items must be dicts; got {type(v).__name__} at index {i}")
 
-sys.stdout.write(json.dumps({"ok": True, "items": out}))
+sys.stdout.write(json.dumps({"ok": True, "items": out, "logs": _LOGS}))
 sys.stdout.flush()
 """
 
@@ -120,7 +137,7 @@ async def run_python_code(
     items: list[dict[str, Any]],
     context: dict[str, Any],
     timeout_seconds: float = 2.0,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], list[str]]:
     """
     Execute `code` in an isolated Python subprocess.
 
@@ -168,5 +185,12 @@ async def run_python_code(
     out_items = resp.get("items")
     if not isinstance(out_items, list):
         raise CodeExecutionError("Runner returned invalid items")
-    return out_items
+    logs = resp.get("logs")
+    if logs is None:
+        logs_out: list[str] = []
+    elif isinstance(logs, list) and all(isinstance(x, str) for x in logs):
+        logs_out = logs
+    else:
+        raise CodeExecutionError("Runner returned invalid logs")
+    return out_items, logs_out
 

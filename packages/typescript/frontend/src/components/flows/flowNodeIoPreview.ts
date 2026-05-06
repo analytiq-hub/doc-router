@@ -315,26 +315,29 @@ export function buildNodeOutputPreview(
   nodeId: string,
   runData: RunData,
   pinData?: FlowPinData | null,
-): { itemsJson: unknown[]; itemsBinaries: Record<string, unknown>[]; message: string | null } {
+): { itemsJson: unknown[]; itemsBinaries: Record<string, unknown>[]; logs: string[]; message: string | null } {
   const pinned = pinData?.[nodeId];
   if (hasPinMainLane(pinned)) {
     const snaps = laneMain0SnapshotsFromPin(pinned);
     return {
       itemsJson: snaps.map((s) => s.json),
       itemsBinaries: snaps.map((s) => s.binary),
+      logs: [],
       message: null,
     };
   }
   if (!runData) {
-    return { itemsJson: [], itemsBinaries: [], message: 'Run the workflow to see output data for this node.' };
+    return { itemsJson: [], itemsBinaries: [], logs: [], message: 'Run the workflow to see output data for this node.' };
   }
   const rec = runData[nodeId] as NodeRun | undefined;
   if (rec == null) {
-    return { itemsJson: [], itemsBinaries: [], message: null };
+    return { itemsJson: [], itemsBinaries: [], logs: [], message: null };
   }
   const snaps = laneMain0Snapshots(rec);
   const itemsJson = snaps.map((s) => s.json);
   const itemsBinaries = snaps.map((s) => s.binary);
+  const rawLogs = (rec as unknown as { logs?: unknown }).logs;
+  const logs = Array.isArray(rawLogs) ? rawLogs.filter((x) => typeof x === 'string') as string[] : [];
   const msg = rec.status && rec.status !== 'success' ? `Status: ${rec.status}` : null;
-  return { itemsJson, itemsBinaries, message: msg };
+  return { itemsJson, itemsBinaries, logs, message: msg };
 }

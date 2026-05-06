@@ -106,12 +106,21 @@ class FlowsCodeNode:
             "execution_time": src_exec_ms,
         }
 
-        out_json_items = await ad.flows.run_python_code(
+        out_json_items, logs = await ad.flows.run_python_code(
             code=code,
             items=payload_items,
             context=ctx,
             timeout_seconds=timeout_seconds,
         )
+
+        # Expose `print()`/`log()` lines to the engine for UI surfacing.
+        if logs:
+            nid = str(node.get("id") or "")
+            if nid:
+                try:
+                    context.node_logs[nid] = [str(x) for x in logs]
+                except Exception:
+                    pass
 
         out: list["ad.flows.FlowItem"] = []
         for idx, j in enumerate(out_json_items):
