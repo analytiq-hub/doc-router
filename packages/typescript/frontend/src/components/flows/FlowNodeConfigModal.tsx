@@ -486,6 +486,13 @@ const FlowNodeConfigModal: React.FC<{
     [nodeId, runData, typedPinData],
   );
 
+  const outputHasBinary = useMemo(() => {
+    for (const b of outputExecPreview.itemsBinaries ?? []) {
+      if (b && typeof b === 'object' && Object.keys(b).length > 0) return true;
+    }
+    return false;
+  }, [outputExecPreview.itemsBinaries]);
+
   const outputRunError = useMemo(() => {
     if (!nodeId || !runData) return undefined;
     const rec = runData[nodeId];
@@ -513,6 +520,8 @@ const FlowNodeConfigModal: React.FC<{
   const [pinEditError, setPinEditError] = useState<string>('');
 
   const hasPin = Boolean(pinnedForNode);
+  const pinUiDisabled = Boolean(readOnly || !onPinDataChange || (!hasPin && outputHasBinary));
+  const pinUiDisabledReason = !hasPin && outputHasBinary ? 'Pin/Edit is disabled because this node output contains binary data.' : null;
 
   const onTogglePin = () => {
     if (readOnly) return;
@@ -530,6 +539,7 @@ const FlowNodeConfigModal: React.FC<{
   };
 
   const onOpenEditPin = () => {
+    if (pinUiDisabled) return;
     setPinEditError('');
     const lane0 = pinnedForNode?.main?.[0] ?? null;
     const seedItems = (Array.isArray(lane0) ? lane0 : outputItems ?? []).map((i) => i?.json ?? null);
@@ -851,13 +861,16 @@ const FlowNodeConfigModal: React.FC<{
                       <button
                         type="button"
                         onClick={onTogglePin}
-                        disabled={readOnly || !onPinDataChange}
+                        disabled={pinUiDisabled}
                         className={[
                           'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold',
                           hasPin ? 'border-violet-200 bg-violet-50 text-violet-800' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50',
-                          (readOnly || !onPinDataChange) ? 'cursor-not-allowed opacity-50' : '',
+                          pinUiDisabled ? 'cursor-not-allowed opacity-50' : '',
                         ].join(' ')}
-                        title={hasPin ? 'Discard pinned output' : 'Pin current output for preview and execute step'}
+                        title={
+                          pinUiDisabledReason ??
+                          (hasPin ? 'Discard pinned output' : 'Pin current output for preview and execute step')
+                        }
                         aria-pressed={hasPin}
                       >
                         {hasPin ? (
@@ -870,9 +883,12 @@ const FlowNodeConfigModal: React.FC<{
                       <button
                         type="button"
                         onClick={onOpenEditPin}
-                        disabled={readOnly || !onPinDataChange}
+                        disabled={pinUiDisabled}
                         className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        title={hasPin ? 'Edit pinned output JSON' : 'Edit output JSON (saves as pin when you Save)'}
+                        title={
+                          pinUiDisabledReason ??
+                          (hasPin ? 'Edit pinned output JSON' : 'Edit output JSON (saves as pin when you Save)')
+                        }
                       >
                         <PencilSquareIcon className="h-4 w-4" aria-hidden />
                         Edit
