@@ -42,6 +42,9 @@ def test_http_request_parameter_schema_display_extensions(http_node: FlowsHttpRe
         "body_params",
         "body_raw",
         "body_content_type",
+        "binary_property_name",
+        "multipart_file_field_name",
+        "multipart_fields",
         "full_response",
         "never_error",
         "follow_redirects",
@@ -99,6 +102,114 @@ async def test_execute_forwards_incoming_binary_and_meta(http_node: FlowsHttpReq
     assert row.meta.get("item_index") == 3
     assert row.meta.get("source_node_id") == "http1"
     assert row.paired_item == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_uploads_binary_as_raw_body(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    """Binary body mode uploads item.binary[prop] as request body bytes."""
+
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["content_type"] = request.headers.get("content-type")
+        seen["body"] = request.read()
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        minimal_ctx.analytiq_client = object()
+        blob = b"\x00\x01hello"
+        item = ad.flows.FlowItem(
+            json={},
+            binary={"data": ad.flows.BinaryRef(mime_type="application/octet-stream", file_name="a.bin", data=blob)},
+            meta={},
+            paired_item=None,
+        )
+        await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "http1",
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://example.com/upload",
+                    "body_mode": "binary",
+                    "binary_property_name": "data",
+                },
+            },
+            [[item]],
+        )
+
+    assert seen["content_type"] == "application/octet-stream"
+    assert seen["body"] == blob
+
+
+@pytest.mark.asyncio
+async def test_execute_uploads_binary_as_multipart_form(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    """multipart_form mode uploads item.binary[prop] as a multipart file field."""
+
+    seen: dict[str, object] = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        ct = request.headers.get("content-type") or ""
+        seen["content_type"] = ct
+        body = request.read()
+        seen["body"] = body
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        minimal_ctx.analytiq_client = object()
+        blob = b"PDFBYTES"
+        item = ad.flows.FlowItem(
+            json={},
+            binary={
+                "pdf": ad.flows.BinaryRef(
+                    mime_type="application/pdf",
+                    file_name="invoice.pdf",
+                    data=blob,
+                )
+            },
+            meta={},
+            paired_item=None,
+        )
+        await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "http1",
+                "parameters": {
+                    "method": "POST",
+                    "url": "https://example.com/upload",
+                    "body_mode": "multipart_form",
+                    "binary_property_name": "pdf",
+                    "multipart_file_field_name": "file",
+                    "multipart_fields": [{"name": "a", "value": "b"}],
+                },
+            },
+            [[item]],
+        )
+
+    assert isinstance(seen["content_type"], str)
+    assert "multipart/form-data" in str(seen["content_type"])
+    body = seen["body"]
+    assert isinstance(body, (bytes, bytearray))
+    # Minimal invariants: form field name, filename, and payload are present.
+    assert b'name="a"' in body
+    assert b"\r\nb\r\n" in body
+    assert b'name="file"' in body
+    assert b'filename="invoice.pdf"' in body
+    assert blob in body
 
 
 @pytest.mark.asyncio

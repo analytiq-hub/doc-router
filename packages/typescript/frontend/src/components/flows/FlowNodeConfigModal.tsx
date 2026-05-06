@@ -324,6 +324,11 @@ function pinNodeOutputFromItems(items: FlowPinItem[]): FlowPinNodeOutput {
   return { main: [[...items.map((i) => ({ json: i.json }))]] };
 }
 
+function pinNodeOutputFromJsonArray(rawItems: unknown[]): FlowPinNodeOutput {
+  const items: FlowPinItem[] = rawItems.map((json) => ({ json }));
+  return pinNodeOutputFromItems(items);
+}
+
 const FlowNodeConfigModal: React.FC<{
   open: boolean;
   onClose: () => void;
@@ -526,7 +531,9 @@ const FlowNodeConfigModal: React.FC<{
 
   const onOpenEditPin = () => {
     setPinEditError('');
-    setPinEditText(JSON.stringify(pinnedForNode ?? pinNodeOutputFromItems(outputItems ?? []), null, 2));
+    const lane0 = pinnedForNode?.main?.[0] ?? null;
+    const seedItems = (Array.isArray(lane0) ? lane0 : outputItems ?? []).map((i) => i?.json ?? null);
+    setPinEditText(JSON.stringify(seedItems, null, 2));
     setPinEditOpen(true);
   };
 
@@ -538,12 +545,12 @@ const FlowNodeConfigModal: React.FC<{
       setPinEditError(parsed.error);
       return;
     }
-    if (!parsed.value || typeof parsed.value !== 'object') {
-      setPinEditError('Pinned output must be a JSON object with shape { "main": [[{ "json": ... }]] }.');
+    if (!Array.isArray(parsed.value)) {
+      setPinEditError('Pinned output must be a JSON array of items (e.g. [{...}, {...}] or []).');
       return;
     }
     const base = (typedPinData ?? {}) as FlowPinData;
-    const next: FlowPinData = { ...base, [nodeId]: parsed.value as FlowPinNodeOutput };
+    const next: FlowPinData = { ...base, [nodeId]: pinNodeOutputFromJsonArray(parsed.value) };
     onPinDataChange(next);
     setPinEditOpen(false);
   };
@@ -985,7 +992,7 @@ const FlowNodeConfigModal: React.FC<{
                 />
               </div>
               <div className="mt-2 text-xs text-gray-500">
-                Shape: <span className="font-mono">{`{ "<node_id>": { "main": [[{ "json": ... }]] } }`}</span>
+                Shape: <span className="font-mono">{`[ { ... }, { ... } ]`}</span>
               </div>
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-4 py-3">

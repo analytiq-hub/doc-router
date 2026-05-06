@@ -163,7 +163,15 @@ class FlowsHttpRequestNode:
             },
             "body_mode": {
                 "type": "string",
-                "enum": ["none", "json", "json_keypair", "form_urlencoded", "raw"],
+                "enum": [
+                    "none",
+                    "json",
+                    "json_keypair",
+                    "form_urlencoded",
+                    "raw",
+                    "binary",
+                    "multipart_form",
+                ],
                 "default": "none",
                 "x-ui-group": "Body",
             },
@@ -205,6 +213,36 @@ class FlowsHttpRequestNode:
                 "description": "Content-Type header for raw body mode.",
                 "x-ui-group": "Body",
                 "x-ui-show-when": {"field": "body_mode", "equals": "raw"},
+            },
+            "binary_property_name": {
+                "type": "string",
+                "default": "data",
+                "description": "Name of the incoming `item.binary` property to upload.",
+                "x-ui-group": "Body",
+                "x-ui-show-when": {"field": "body_mode", "in": ["binary", "multipart_form"]},
+            },
+            "multipart_file_field_name": {
+                "type": "string",
+                "default": "file",
+                "description": "Multipart form field name to use for the uploaded binary.",
+                "x-ui-group": "Body",
+                "x-ui-show-when": {"field": "body_mode", "equals": "multipart_form"},
+            },
+            "multipart_fields": {
+                "type": "array",
+                "x-ui-widget": "name_value_list",
+                "x-ui-group": "Body",
+                "x-ui-show-when": {"field": "body_mode", "equals": "multipart_form"},
+                "items": {
+                    "type": "object",
+                    "required": ["name", "value"],
+                    "properties": {
+                        "name": {"type": "string"},
+                        "value": {},
+                    },
+                    "additionalProperties": False,
+                },
+                "default": [],
             },
             "full_response": {
                 "type": "boolean",
@@ -248,6 +286,12 @@ class FlowsHttpRequestNode:
                 errs.append("body_raw must not be empty when body mode is raw")
             if not str(params.get("body_content_type") or "").strip():
                 errs.append("body_content_type must not be empty when body mode is raw")
+        if body_mode in ("binary", "multipart_form"):
+            if not str(params.get("binary_property_name") or "").strip():
+                errs.append("binary_property_name must not be empty when body mode uploads binary")
+        if body_mode == "multipart_form":
+            if not str(params.get("multipart_file_field_name") or "").strip():
+                errs.append("multipart_file_field_name must not be empty when body mode is multipart_form")
         return errs
 
     async def execute(
@@ -323,6 +367,8 @@ class FlowsHttpRequestNode:
         body_mode = params.get("body_mode") or "none"
         content: bytes | None = None
         content_type: str | None = None
+        data: dict[str, str] | None = None
+        files: dict[str, tuple[str, bytes, str]] | None = None
 
         if body_mode == "json":
             raw = params.get("body_json")
@@ -352,6 +398,28 @@ class FlowsHttpRequestNode:
             content = str(params.get("body_raw") or "").encode()
             content_type = str(params.get("body_content_type") or "text/plain")
             headers.setdefault("Content-Type", content_type)
+        elif body_mode in ("binary", "multipart_form"):
+            if context.analytiq_client is None:
+                raise RuntimeError("HTTP Request binary upload requires analytiq_client on the execution context")
+            prop = str(params.get("binary_property_name") or "data").strip() or "data"
+            ref = item.binary.get(prop)
+            if ref is None:
+                raise RuntimeError(f"HTTP Request expected item.binary[{prop!r}] for binary upload, but it was missing")
+            blob = await ad.flows.get_binary_stream(ref, context.analytiq_client)
+            mime = (ref.mime_type or "application/octet-stream") if hasattr(ref, "mime_type") else "application/octet-stream"
+            filename = (ref.file_name or "upload") if hasattr(ref, "file_name") else "upload"
+
+            if body_mode == "binary":
+                content = blob
+                headers.setdefault("Content-Type", mime)
+            else:
+                # multipart_form
+                data = {}
+                for p in params.get("multipart_fields") or []:
+                    if isinstance(p, dict) and p.get("name") is not None:
+                        data[str(p["name"])] = str(p.get("value", ""))
+                field_name = str(params.get("multipart_file_field_name") or "file").strip() or "file"
+                files = {field_name: (filename, blob, mime)}
 
         async def _ssrf_guard_each_request(request: httpx.Request) -> None:
             """Run SSRF blocklist on every outbound URL, including each redirect hop."""
@@ -370,6 +438,8 @@ class FlowsHttpRequestNode:
                     params=query or None,
                     headers=headers or None,
                     content=content,
+                    data=data,
+                    files=files,
                 )
         except httpx.UnsupportedProtocol as e:
             # Should be rare after preflight validation; normalize message for callers.
