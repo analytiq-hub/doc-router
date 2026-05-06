@@ -598,6 +598,11 @@ const FlowNodeConfigModal: React.FC<{
   const [pinEditBinary, setPinEditBinary] = useState<UiPinnedBinary>([]);
   const [pinEditBinaryAddProp, setPinEditBinaryAddProp] = useState<Record<number, string>>({});
   const [pinEditError, setPinEditError] = useState<string>('');
+  /** Per-item keyed upload progress (`onUploadProgress`); cleared when idle or modal closes. */
+  const [pinBinaryUploadProgress, setPinBinaryUploadProgress] = useState<{
+    itemIndex: number;
+    percent: number;
+  } | null>(null);
   const modalMountedRef = useRef(true);
   const pinBinaryUploadAbortRef = useRef<AbortController | null>(null);
 
@@ -614,6 +619,7 @@ const FlowNodeConfigModal: React.FC<{
     if (!pinEditOpen) {
       pinBinaryUploadAbortRef.current?.abort();
       pinBinaryUploadAbortRef.current = null;
+      setPinBinaryUploadProgress(null);
     }
   }, [pinEditOpen]);
 
@@ -631,6 +637,8 @@ const FlowNodeConfigModal: React.FC<{
         input.value = '';
         return;
       }
+      setPinEditError('');
+      setPinBinaryUploadProgress({ itemIndex, percent: 0 });
       const prop = (pinEditBinaryAddProp[itemIndex] ?? 'data').trim() || 'data';
       const fd = new FormData();
       fd.set('node_id', node?.id ?? '');
@@ -642,13 +650,19 @@ const FlowNodeConfigModal: React.FC<{
       const ac = new AbortController();
       pinBinaryUploadAbortRef.current = ac;
       try {
-        const ref = await flowOrgApi
-          .getHttpClient()
-          .postFormData<FlowBinaryRef>(
-            `/v0/orgs/${flowOrgApi.organizationId}/flows/${flowId}/revisions/${flowRevidForPins}/pins/binary`,
-            fd,
-            { signal: ac.signal },
-          );
+        const ref = await flowOrgApi.getHttpClient().postFormData<FlowBinaryRef>(
+          `/v0/orgs/${flowOrgApi.organizationId}/flows/${flowId}/revisions/${flowRevidForPins}/pins/binary`,
+          fd,
+          {
+            signal: ac.signal,
+            onUploadProgress: (pe) => {
+              if (!modalMountedRef.current) return;
+              const total = pe.total && pe.total > 0 ? pe.total : Math.max(file.size, 1);
+              const pct = Math.min(100, Math.round((100 * pe.loaded) / Math.max(total, 1)));
+              setPinBinaryUploadProgress({ itemIndex, percent: pct });
+            },
+          },
+        );
         if (!modalMountedRef.current) return;
         setPinEditBinary((cur) => {
           const next = [...cur];
@@ -664,6 +678,7 @@ const FlowNodeConfigModal: React.FC<{
         setPinEditError(err instanceof Error ? err.message : 'Upload failed');
       } finally {
         if (pinBinaryUploadAbortRef.current === ac) pinBinaryUploadAbortRef.current = null;
+        setPinBinaryUploadProgress((p) => (p?.itemIndex === itemIndex ? null : p));
         input.value = '';
       }
     },
@@ -1200,12 +1215,17 @@ const FlowNodeConfigModal: React.FC<{
                             <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Pinned binaries</div>
                             <button
                               type="button"
-                              className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                              disabled={pinBinaryUploadProgress !== null}
+                              className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                               onClick={() => setPinEditBinary((cur) => [...cur, {}])}
                             >
                               Add item
                             </button>
                           </div>
+                          <p className="text-[11px] text-gray-500">
+                            Maximum file size {Math.round(PIN_BINARY_MAX_BYTES / (1024 * 1024))} MB per file; oversized
+                            files are rejected before upload completes.
+                          </p>
 
                           {pinEditBinary.length === 0 ? (
                             <div className="text-sm text-gray-600">No pinned binary items yet.</div>
@@ -1303,6 +1323,7 @@ const FlowNodeConfigModal: React.FC<{
                                   <input
                                     className="w-44 rounded-md border border-gray-200 px-2 py-1 text-xs"
                                     placeholder="property name (e.g. pdf)"
+                                    disabled={pinBinaryUploadProgress !== null}
                                     value={pinEditBinaryAddProp[itemIndex] ?? 'data'}
                                     onChange={(e) =>
                                       setPinEditBinaryAddProp((cur) => ({ ...cur, [itemIndex]: e.target.value }))
@@ -1310,10 +1331,28 @@ const FlowNodeConfigModal: React.FC<{
                                   />
                                   <input
                                     type="file"
-                                    className="text-xs"
+                                    disabled={pinBinaryUploadProgress !== null}
+                                    className="text-xs disabled:opacity-50"
                                     onChange={(e) => void onPinBinaryFileInputChange(itemIndex, e)}
                                   />
                                 </div>
+                                {pinBinaryUploadProgress?.itemIndex === itemIndex ? (
+                                  <div className="mt-2 max-w-xs">
+                                    <div className="mb-1 text-[11px] text-gray-600">
+                                      Uploading… {pinBinaryUploadProgress.percent}%
+                                    </div>
+                                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-200">
+                                      <div
+                                        className="h-full rounded-full bg-violet-600 transition-[width] duration-150"
+                                        style={{ width: `${pinBinaryUploadProgress.percent}%` }}
+                                        aria-valuenow={pinBinaryUploadProgress.percent}
+                                        aria-valuemin={0}
+                                        aria-valuemax={100}
+                                        role="progressbar"
+                                      />
+                                    </div>
+                                  </div>
+                                ) : null}
                               </div>
                             </div>
                           ))}

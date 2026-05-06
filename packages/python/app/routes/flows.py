@@ -100,7 +100,10 @@ def _safe_webhook_blob_segment(part: str) -> str:
 
 def _flow_pins_keys_from_pin_data(pin_data: Any, *, prefix: str) -> set[str]:
     """
-    Collect `flow_pins` GridFS keys referenced by a pin_data payload, filtered by key prefix.
+    Collect `flow_pins` GridFS keys referenced by a pin_data payload, filtered by ``key.startswith(prefix)``.
+
+    For save-step cleanup use ``prefix="pin/"`` so keys keep working when the baked-in upload revision id
+    (``pin/{upload_revid}/…``) no longer equals the superseded revision id.
 
     Traverses every list under ``main`` (all output lanes), not only lane 0, so GC matches
     references stored in secondary lanes. (Runtime pin application for executions still reads
@@ -990,28 +993,25 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
         await _upsert_flow_webhook_route_leaf(db, leaf=leaf, flow_id=flow_id, organization_id=organization_id)
         await _clear_other_webhook_route_leaves_for_flow(db, flow_id=flow_id, keep_leaf=leaf)
 
-    # Pin binary cleanup: delete `flow_pins` blobs referenced by the previous revision pin_data
-    # that are no longer referenced by the new pin_data (scoped to the previous revision id prefix).
+    # Pin binary cleanup: delete `flow_pins` blobs that were referenced by the superseded revision's
+    # pin_data but are not referenced by the incoming pin_data.
     #
-    # Only keys under ``pin/{latest_revision_id}/`` are considered, where ``latest_id`` is the
-    # revision row being superseded. Blobs uploaded under a revision that never becomes that
-    # ``latest`` row at save time are never prefix-matched here (orphan / leak; acceptable short-term).
-    # Pins referencing blobs under an older revision path than ``latest_id`` are also skipped.
-    if latest is not None:
-        latest_id = str(latest.get("_id") or "")
-        if latest_id:
-            prefix = f"pin/{latest_id}/"
-            prev_keys = _flow_pins_keys_from_pin_data(latest.get("pin_data"), prefix=prefix)
-            next_keys = _flow_pins_keys_from_pin_data(pin_data, prefix=prefix)
-            removed = sorted(prev_keys - next_keys)
-            if removed:
-                aq_client = ad.common.get_analytiq_client()
-                for key in removed:
-                    try:
-                        await ad.mongodb.blob.delete_blob_async(aq_client, bucket="flow_pins", key=key)
-                    except Exception:
-                        # Best-effort cleanup; never block flow saves.
-                        logger.warning(f"Failed deleting flow_pins blob {key!r} during pin cleanup", exc_info=True)
+    # Blob keys are ``pin/{flow_revid_at_upload}/…``; that segment is the revision head at upload time,
+    # not necessarily the revision row that last held the pin. Matching only ``pin/{latest_id}/`` would
+    # miss stale keys (e.g. pin uploaded under R1, pin_data carried on R2+). Use prefix ``pin/`` so any
+    # key present in the flow's stored prev pin_data set is eligible for removal when dropped.
+    if latest is not None and latest.get("_id"):
+        prev_keys = _flow_pins_keys_from_pin_data(latest.get("pin_data"), prefix="pin/")
+        next_keys = _flow_pins_keys_from_pin_data(pin_data, prefix="pin/")
+        removed = sorted(prev_keys - next_keys)
+        if removed:
+            aq_client = ad.common.get_analytiq_client()
+            for key in removed:
+                try:
+                    await ad.mongodb.blob.delete_blob_async(aq_client, bucket="flow_pins", key=key)
+                except Exception:
+                    # Best-effort cleanup; never block flow saves.
+                    logger.warning(f"Failed deleting flow_pins blob {key!r} during pin cleanup", exc_info=True)
 
     ghash = ad.flows.canonical_graph_hash(nodes, req.connections, settings)
 

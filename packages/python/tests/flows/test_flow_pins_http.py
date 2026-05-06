@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import BytesIO
+from unittest.mock import patch
 
 import pytest
 
@@ -69,7 +70,7 @@ def test_flow_pins_keys_from_pin_data_collects_all_main_lanes() -> None:
             ]
         }
     }
-    keys = flows_routes._flow_pins_keys_from_pin_data(pin_data, prefix=f"pin/{pid}/")
+    keys = flows_routes._flow_pins_keys_from_pin_data(pin_data, prefix="pin/")
     assert keys == {k0, k1}
 
 
@@ -241,3 +242,91 @@ def test_pin_binary_view_disposition_for_html_is_attachment(flow_with_revision, 
     assert "attachment" in cd.lower()
     ctype = r_get.headers.get("content-type", "")
     assert "application/octet-stream" in ctype.lower()
+
+
+def test_pin_cleanup_removes_blob_when_storage_key_uses_prior_upload_revision(mock_auth, test_db):
+    """
+    Upload-time rev id is baked into ``pin/{rev}/…``. After R1→R2 the ref may sit on R2's pin_data
+    while the key still says R1; widening cleanup to ``prefix=pin/`` must delete it when dropped.
+    """
+
+    deleted: list[tuple[str, str]] = []
+
+    async def capture_delete(analytiq_client, bucket: str, key: str):
+        deleted.append((bucket, key))
+        return None
+
+    r0 = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows",
+        json={"name": "pin gc cross-revision prefix"},
+        headers=get_auth_headers(),
+    )
+    assert r0.status_code == 200, r0.text
+    flow_id = r0.json()["flow"]["flow_id"]
+    r1 = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        json={
+            "base_flow_revid": "",
+            "name": "pin gc cross-revision prefix",
+            "nodes": [_std_manual_node()],
+            "connections": {},
+            "settings": {},
+            "pin_data": None,
+        },
+        headers=get_auth_headers(),
+    )
+    assert r1.status_code == 200, r1.text
+    rev_a = r1.json()["revision"]["flow_revid"]
+
+    blob_key = f"pin/{rev_a}/t1/0/0/data/file.bin"
+    storage = f"flow_pins:{blob_key}"
+    pin_payload = {
+        "t1": {
+            "main": [
+                [
+                    {
+                        "json": {},
+                        "binary": {
+                            "data": {
+                                "storage_id": storage,
+                                "mime_type": "application/octet-stream",
+                                "file_name": "file.bin",
+                                "file_size": 1,
+                            }
+                        },
+                    }
+                ]
+            ]
+        }
+    }
+    r2 = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        json={
+            "base_flow_revid": rev_a,
+            "name": "pin gc cross-revision prefix",
+            "nodes": [_std_manual_node()],
+            "connections": {},
+            "settings": {},
+            "pin_data": pin_payload,
+        },
+        headers=get_auth_headers(),
+    )
+    assert r2.status_code == 200, r2.text
+    rev_b = r2.json()["revision"]["flow_revid"]
+
+    with patch("app.routes.flows.ad.mongodb.blob.delete_blob_async", side_effect=capture_delete):
+        r3 = client.put(
+            f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+            json={
+                "base_flow_revid": rev_b,
+                "name": "pin gc cross-revision prefix",
+                "nodes": [_std_manual_node()],
+                "connections": {},
+                "settings": {},
+                "pin_data": None,
+            },
+            headers=get_auth_headers(),
+        )
+
+    assert r3.status_code == 200, r3.text
+    assert ("flow_pins", blob_key) in deleted, deleted
