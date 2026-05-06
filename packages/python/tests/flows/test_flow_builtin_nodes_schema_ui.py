@@ -12,6 +12,7 @@ def test_code_node_parameter_schema_ui_hints() -> None:
     props = FlowsCodeNode().parameter_schema["properties"]
     assert props["python_code"].get("x-ui-widget") == "code"
     assert props["python_code"].get("x-ui-group") == "Code"
+    assert props["python_code"].get("default") == "def run(items, context):\n  return items\n"
     assert props["timeout_seconds"].get("x-ui-group") == "Options"
     assert props["timeout_seconds"].get("maximum") == 30
 

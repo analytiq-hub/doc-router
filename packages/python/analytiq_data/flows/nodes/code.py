@@ -42,7 +42,7 @@ class FlowsCodeNode:
             "python_code": {
                 "type": "string",
                 "minLength": 1,
-                "default": "",
+                "default": "def run(items, context):\n  return items\n",
                 "description": "Must define def run(items: list[dict], context: dict) -> list[dict].",
                 "x-ui-widget": "code",
                 "x-ui-group": "Code",
