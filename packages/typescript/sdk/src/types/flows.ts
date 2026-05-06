@@ -72,7 +72,14 @@ export interface FlowNodeConnection {
 
 export type FlowConnections = Record<string, { main: Array<FlowNodeConnection[] | null> }>;
 
-export type FlowPinItem = { json: unknown };
+export interface FlowBinaryRef {
+  mime_type: string;
+  file_name?: string | null;
+  storage_id?: string | null;
+  file_size?: number | null;
+}
+
+export type FlowPinItem = { json: unknown; binary?: Record<string, FlowBinaryRef> };
 
 /** Pinned output for a single node, keyed like engine `data.main`. */
 export type FlowPinNodeOutput = {

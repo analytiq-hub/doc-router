@@ -722,6 +722,7 @@ export default function FlowDetailPageClient({
                     <div className="h-full min-h-0 min-w-0 overflow-hidden">
                       <FlowEditor
                         flowId={flowId}
+                        flowRevidForPins={(revision?.flow_revid ?? latestFlowRevid ?? '').trim() || null}
                         nodeTypes={nodeTypes}
                         nodes={rfNodes as Node<FlowRfNodeData>[]}
                         edges={rfEdges}

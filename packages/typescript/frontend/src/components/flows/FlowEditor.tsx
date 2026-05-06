@@ -225,6 +225,8 @@ const FlowEditor: React.FC<{
   webhookTestListenBusy?: boolean;
   /** Flow id for execution-scoped binary download URLs in the node modal. */
   flowId?: string | null;
+  /** Revision id used for pin-binary uploads (must be a saved revision id). */
+  flowRevidForPins?: string | null;
   /** Latest execution to drive Input / Output columns in the node modal (e.g. from logs panel). */
   executionForIo?: FlowExecution | null;
   /** Revision pin data keyed by node id. */
@@ -249,6 +251,7 @@ const FlowEditor: React.FC<{
   webhookTestListeningLeaf = null,
   webhookTestListenBusy = false,
   flowId = null,
+  flowRevidForPins = null,
   executionForIo,
   pinData,
   onPinDataChange,
@@ -883,6 +886,8 @@ const FlowEditor: React.FC<{
         webhookTestListenBusy={webhookTestListenBusy}
         flowOrgApi={flowOrgApi}
         flowBlobDownloadContext={flowBlobDownloadContext}
+        flowId={flowId}
+        flowRevidForPins={flowRevidForPins ?? executionForIo?.flow_revid ?? null}
       />
 
       {nodePaletteOpen && (

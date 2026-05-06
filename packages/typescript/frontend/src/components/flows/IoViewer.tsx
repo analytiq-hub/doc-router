@@ -601,12 +601,13 @@ const IoBinaryPanel: React.FC<{
           </div>
         ) : null}
         {rows.map((r) => {
-          const cardKey = `${r.itemIndex}:${r.propertyName}:${r.ref.storage_id}`;
+          const sid = typeof r.ref.storage_id === 'string' ? r.ref.storage_id : '';
+          const cardKey = `${r.itemIndex}:${r.propertyName}:${sid}`;
           const ext = displayFileExtension(r.ref.file_name, r.ref.mime_type);
           const mime = r.ref.mime_type && r.ref.mime_type.trim() ? r.ref.mime_type : '—';
           const sizeLabel = r.ref.file_size != null ? formatFileSizeBytes(r.ref.file_size) : '—';
           const displayName = r.ref.file_name?.trim() || r.propertyName;
-          const canFetch = Boolean(flowBlobDownloadContext && r.ref.storage_id.startsWith('flow_blobs:'));
+          const canFetch = Boolean(flowBlobDownloadContext && sid && sid.startsWith('flow_blobs:'));
           const busy = busyKey === cardKey;
           const viewKind = inferBinaryViewKind(r.ref.mime_type, r.ref.file_name);
           const canView = Boolean(canFetch && viewKind);

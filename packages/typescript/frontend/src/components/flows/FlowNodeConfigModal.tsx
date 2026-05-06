@@ -22,7 +22,7 @@ import { MapPinIcon as MapPinSolidIcon, PencilSquareIcon, XMarkIcon } from '@her
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor from '@monaco-editor/react';
 import type { Edge } from 'reactflow';
-import type { FlowNode, FlowNodeType, FlowPinData, FlowPinItem, FlowPinNodeOutput } from '@docrouter/sdk';
+import type { FlowBinaryRef, FlowNode, FlowNodeType, FlowPinData, FlowPinItem, FlowPinNodeOutput } from '@docrouter/sdk';
 import type { DocRouterOrgApi } from '@/utils/api';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
 import { FlowNodeCredentialSlots } from './flowNodeCredentialSlots';
@@ -315,7 +315,13 @@ function nodeItemsFromRunData(runData: Record<string, unknown> | null | undefine
   if (!Array.isArray(lane0)) return null;
   const items: FlowPinItem[] = [];
   for (const it of lane0) {
-    if (it && typeof it === 'object' && 'json' in it) items.push({ json: (it as { json?: unknown }).json ?? null });
+    if (it && typeof it === 'object' && 'json' in it) {
+      const bin = (it as { binary?: unknown }).binary;
+      items.push({
+        json: (it as { json?: unknown }).json ?? null,
+        ...(bin && typeof bin === 'object' && !Array.isArray(bin) ? { binary: bin as Record<string, FlowBinaryRef> } : {}),
+      });
+    }
   }
   return items;
 }
@@ -324,9 +330,28 @@ function pinNodeOutputFromItems(items: FlowPinItem[]): FlowPinNodeOutput {
   return { main: [[...items.map((i) => ({ json: i.json }))]] };
 }
 
-function pinNodeOutputFromJsonArray(rawItems: unknown[]): FlowPinNodeOutput {
-  const items: FlowPinItem[] = rawItems.map((json) => ({ json }));
-  return pinNodeOutputFromItems(items);
+type UiPinnedBinary = Array<Record<string, FlowBinaryRef[]>>;
+
+function pinNodeOutputFromJsonAndBinary(args: { jsonItems: unknown[]; binaryItems: UiPinnedBinary }): FlowPinNodeOutput {
+  const { jsonItems, binaryItems } = args;
+  const n = Math.max(jsonItems.length, binaryItems.length);
+  const out: Array<{ json: unknown; binary?: Record<string, FlowBinaryRef> }> = [];
+  for (let i = 0; i < n; i++) {
+    const rawJson = i < jsonItems.length ? jsonItems[i] : {};
+    const json = rawJson != null && typeof rawJson === 'object' && !Array.isArray(rawJson) ? rawJson : {};
+    const bin = i < binaryItems.length ? (binaryItems[i] ?? {}) : {};
+    const flat: Record<string, FlowBinaryRef> = {};
+    for (const [prop, refs] of Object.entries(bin)) {
+      const list = Array.isArray(refs) ? refs.filter(Boolean) : [];
+      for (let j = 0; j < list.length; j++) {
+        const ref = list[j]!;
+        const key = j === 0 ? prop : `${prop}_${j + 1}`;
+        flat[key] = ref;
+      }
+    }
+    out.push(Object.keys(flat).length ? { json, binary: flat } : { json });
+  }
+  return { main: [[...out.map((i) => ({ json: i.json, ...(i.binary ? { binary: i.binary } : {}) }))]] };
 }
 
 const FlowNodeConfigModal: React.FC<{
@@ -360,6 +385,10 @@ const FlowNodeConfigModal: React.FC<{
   webhookTestListenBusy?: boolean;
   /** When set, Binary tab View/Download can resolve `flow_blobs:` payloads for this execution. */
   flowBlobDownloadContext?: FlowExecutionBlobContext | null;
+  /** Flow id for revision pin-binary upload URLs. */
+  flowId?: string | null;
+  /** Saved revision id used for pin-binary uploads. */
+  flowRevidForPins?: string | null;
 }> = ({
   open,
   onClose,
@@ -384,6 +413,8 @@ const FlowNodeConfigModal: React.FC<{
   webhookTestListeningLeaf = null,
   webhookTestListenBusy = false,
   flowBlobDownloadContext = null,
+  flowId = null,
+  flowRevidForPins = null,
 }) => {
   const [tab, setTab] = useState(0);
   const [nameHover, setNameHover] = useState(false);
@@ -537,12 +568,14 @@ const FlowNodeConfigModal: React.FC<{
     Boolean(node && !isTrigger && !reachFromTriggersModal.reachable.has(node.id));
 
   const [pinEditOpen, setPinEditOpen] = useState(false);
-  const [pinEditText, setPinEditText] = useState('');
+  const [pinEditText, setPinEditText] = useState(''); // JSON tab text (array)
+  const [pinEditBinary, setPinEditBinary] = useState<UiPinnedBinary>([]);
+  const [pinEditBinaryAddProp, setPinEditBinaryAddProp] = useState<Record<number, string>>({});
   const [pinEditError, setPinEditError] = useState<string>('');
 
   const hasPin = Boolean(pinnedForNode);
-  const pinUiDisabled = Boolean(readOnly || !onPinDataChange || (!hasPin && outputHasBinary));
-  const pinUiDisabledReason = !hasPin && outputHasBinary ? 'Pin/Edit is disabled because this node output contains binary data.' : null;
+  const pinUiDisabled = Boolean(readOnly || !onPinDataChange);
+  const pinUiDisabledReason = null;
 
   const onTogglePin = () => {
     if (readOnly) return;
@@ -563,8 +596,20 @@ const FlowNodeConfigModal: React.FC<{
     if (pinUiDisabled) return;
     setPinEditError('');
     const lane0 = pinnedForNode?.main?.[0] ?? null;
-    const seedItems = (Array.isArray(lane0) ? lane0 : outputItems ?? []).map((i) => i?.json ?? null);
+    const seedLane = Array.isArray(lane0) ? lane0 : outputItems ?? [];
+    const seedItems = seedLane.map((i) => i?.json ?? null);
     setPinEditText(JSON.stringify(seedItems, null, 2));
+    const seedBin: UiPinnedBinary = seedLane.map((i) => {
+      const raw = (i as unknown as { binary?: unknown }).binary;
+      if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+      const out: Record<string, FlowBinaryRef[]> = {};
+      for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+        if (v && typeof v === 'object' && 'storage_id' in (v as object)) out[k] = [v as FlowBinaryRef];
+      }
+      return out;
+    });
+    setPinEditBinary(seedBin);
+    setPinEditBinaryAddProp({});
     setPinEditOpen(true);
   };
 
@@ -581,7 +626,10 @@ const FlowNodeConfigModal: React.FC<{
       return;
     }
     const base = (typedPinData ?? {}) as FlowPinData;
-    const next: FlowPinData = { ...base, [nodeId]: pinNodeOutputFromJsonArray(parsed.value) };
+    const next: FlowPinData = {
+      ...base,
+      [nodeId]: pinNodeOutputFromJsonAndBinary({ jsonItems: parsed.value, binaryItems: pinEditBinary }),
+    };
     onPinDataChange(next);
     setPinEditOpen(false);
   };
@@ -1010,27 +1058,204 @@ const FlowNodeConfigModal: React.FC<{
             </div>
             {pinEditError && <div className="border-b border-gray-100 px-4 py-2 text-sm text-red-600">{pinEditError}</div>}
             <div className="p-3">
-              <div className="rounded border border-gray-200">
-                <Editor
-                  height="520px"
-                  language="json"
-                  value={pinEditText}
-                  onChange={(val) => {
-                    setPinEditError('');
-                    setPinEditText(val ?? '');
-                  }}
-                  options={{
-                    minimap: { enabled: false },
-                    fontSize: 12,
-                    scrollBeyondLastLine: false,
-                    wordWrap: 'on',
-                    readOnly: readOnly || !onPinDataChange,
-                  }}
-                />
-              </div>
-              <div className="mt-2 text-xs text-gray-500">
-                Shape: <span className="font-mono">{`[ { ... }, { ... } ]`}</span>
-              </div>
+              <TabGroup>
+                <TabList className="flex items-center gap-1 border-b border-gray-200 bg-gray-50 px-2 py-1">
+                  <Tab className="rounded px-2 py-1 text-xs font-semibold text-gray-700 data-[selected]:bg-white data-[selected]:shadow-sm">
+                    Json
+                  </Tab>
+                  <Tab className="rounded px-2 py-1 text-xs font-semibold text-gray-700 data-[selected]:bg-white data-[selected]:shadow-sm">
+                    Binary
+                  </Tab>
+                </TabList>
+                <TabPanels>
+                  <TabPanel>
+                    <div className="rounded border border-gray-200">
+                      <Editor
+                        height="420px"
+                        language="json"
+                        value={pinEditText}
+                        onChange={(val) => {
+                          setPinEditError('');
+                          setPinEditText(val ?? '');
+                        }}
+                        options={{
+                          minimap: { enabled: false },
+                          fontSize: 12,
+                          scrollBeyondLastLine: false,
+                          wordWrap: 'on',
+                          readOnly: readOnly || !onPinDataChange,
+                        }}
+                      />
+                    </div>
+                    <div className="mt-2 text-xs text-gray-500">
+                      Shape: <span className="font-mono">{`[ { ... }, { ... } ]`}</span>
+                    </div>
+                  </TabPanel>
+                  <TabPanel>
+                    <div className="rounded border border-gray-200 p-3">
+                      {!flowOrgApi || !flowId || !flowRevidForPins ? (
+                        <div className="text-sm text-gray-600">
+                          Binary pin uploads need a saved revision context. Save the flow, then reopen this modal to upload pinned binaries.
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Pinned binaries</div>
+                            <button
+                              type="button"
+                              className="rounded-md border border-gray-200 bg-white px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                              onClick={() => setPinEditBinary((cur) => [...cur, {}])}
+                            >
+                              Add item
+                            </button>
+                          </div>
+
+                          {pinEditBinary.length === 0 ? (
+                            <div className="text-sm text-gray-600">No pinned binary items yet.</div>
+                          ) : null}
+
+                          {pinEditBinary.map((itemBin, itemIndex) => (
+                            <div key={`bin-${itemIndex}`} className="rounded-md border border-gray-200 bg-white p-2">
+                              <div className="mb-2 flex items-center justify-between">
+                                <div className="text-xs font-semibold text-gray-900">{`Item ${itemIndex}`}</div>
+                                <button
+                                  type="button"
+                                  className="text-xs font-semibold text-gray-500 hover:text-gray-700"
+                                  onClick={() =>
+                                    setPinEditBinary((cur) => cur.filter((_, i) => i !== itemIndex))
+                                  }
+                                >
+                                  Remove item
+                                </button>
+                              </div>
+
+                              <div className="space-y-2">
+                                {Object.keys(itemBin).length === 0 ? (
+                                  <div className="text-xs text-gray-500">No files.</div>
+                                ) : (
+                                  Object.entries(itemBin).map(([prop, refs]) => (
+                                    <div key={`${itemIndex}-${prop}`} className="rounded border border-gray-100 bg-gray-50 p-2">
+                                      <div className="flex items-center justify-between">
+                                        <div className="text-xs font-semibold text-gray-700">{prop}</div>
+                                        <button
+                                          type="button"
+                                          className="text-xs font-semibold text-gray-500 hover:text-gray-700"
+                                          onClick={() =>
+                                            setPinEditBinary((cur) => {
+                                              const next = [...cur];
+                                              const copy = { ...(next[itemIndex] ?? {}) };
+                                              delete copy[prop];
+                                              next[itemIndex] = copy;
+                                              return next;
+                                            })
+                                          }
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                      <div className="mt-1 space-y-1">
+                                        {(refs ?? []).map((r, idx) => (
+                                          <div key={`${prop}-${idx}`} className="flex items-center justify-between text-xs text-gray-700">
+                                            <div className="min-w-0 truncate font-mono">
+                                              {(r.file_name ?? 'file') + (r.mime_type ? ` (${r.mime_type})` : '')}
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <a
+                                                className="text-blue-700 hover:underline"
+                                                href={
+                                                  r.storage_id
+                                                    ? `/fastapi/v0/orgs/${flowOrgApi.organizationId}/flows/${flowId}/revisions/${flowRevidForPins}/pins/blob?storage_id=${encodeURIComponent(r.storage_id)}&action=view`
+                                                    : undefined
+                                                }
+                                                target="_blank"
+                                                rel="noreferrer"
+                                                aria-disabled={!r.storage_id}
+                                                onClick={(e) => {
+                                                  if (!r.storage_id) e.preventDefault();
+                                                }}
+                                              >
+                                                View
+                                              </a>
+                                              <button
+                                                type="button"
+                                                className="text-xs font-semibold text-gray-500 hover:text-gray-700"
+                                                onClick={() =>
+                                                  setPinEditBinary((cur) => {
+                                                    const next = [...cur];
+                                                    const copy = { ...(next[itemIndex] ?? {}) };
+                                                    const list = (copy[prop] ?? []).slice();
+                                                    list.splice(idx, 1);
+                                                    if (list.length) copy[prop] = list;
+                                                    else delete copy[prop];
+                                                    next[itemIndex] = copy;
+                                                    return next;
+                                                  })
+                                                }
+                                              >
+                                                Remove file
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))
+                                )}
+
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <input
+                                    className="w-44 rounded-md border border-gray-200 px-2 py-1 text-xs"
+                                    placeholder="property name (e.g. pdf)"
+                                    value={pinEditBinaryAddProp[itemIndex] ?? 'data'}
+                                    onChange={(e) =>
+                                      setPinEditBinaryAddProp((cur) => ({ ...cur, [itemIndex]: e.target.value }))
+                                    }
+                                  />
+                                  <input
+                                    type="file"
+                                    className="text-xs"
+                                    onChange={async (e) => {
+                                      const f = e.target.files?.[0];
+                                      e.target.value = '';
+                                      if (!f) return;
+                                      const prop = (pinEditBinaryAddProp[itemIndex] ?? 'data').trim() || 'data';
+                                      const fd = new FormData();
+                                      fd.set('node_id', node?.id ?? '');
+                                      fd.set('slot', '0');
+                                      fd.set('item_index', String(itemIndex));
+                                      fd.set('property', prop);
+                                      fd.set('file', f);
+                                      try {
+                                        const ref = await flowOrgApi
+                                          .getHttpClient()
+                                          .postFormData<FlowBinaryRef>(
+                                            `/v0/orgs/${flowOrgApi.organizationId}/flows/${flowId}/revisions/${flowRevidForPins}/pins/binary`,
+                                            fd,
+                                          );
+                                        setPinEditBinary((cur) => {
+                                          const next = [...cur];
+                                          const copy = { ...(next[itemIndex] ?? {}) };
+                                          const list = (copy[prop] ?? []).slice();
+                                          list.push(ref);
+                                          copy[prop] = list;
+                                          next[itemIndex] = copy;
+                                          return next;
+                                        });
+                                      } catch (err) {
+                                        setPinEditError(err instanceof Error ? err.message : 'Upload failed');
+                                      }
+                                    }}
+                                  />
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </TabPanel>
+                </TabPanels>
+              </TabGroup>
             </div>
             <div className="flex items-center justify-end gap-2 border-t border-gray-100 px-4 py-3">
               <button
