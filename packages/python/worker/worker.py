@@ -4,6 +4,7 @@ import sys
 from dotenv import load_dotenv
 import asyncio
 from datetime import datetime, UTC
+from datetime import timedelta
 import logging
 # Add the parent directory to the sys path
 sys.path.append("..")
@@ -13,6 +14,12 @@ import analytiq_data as ad
 ad.common.setup()
 
 logger = logging.getLogger(__name__)
+
+# Flow node registrations (process-local global registry).
+# This module is used both as a standalone worker entrypoint and as an import
+# from the FastAPI app. Registering is idempotent (overwrites by key).
+ad.flows.register_builtin_nodes()
+ad.flows.register_docrouter_nodes()
 
 HEARTBEAT_INTERVAL_SECS = 600  # seconds
 POLL_MIN_SLEEP = 0.2   # seconds — first idle sleep
@@ -320,6 +327,96 @@ async def worker_webhook(worker_id: str) -> None:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
 
+
+async def worker_flow_run(worker_id: str) -> None:
+    """
+    Worker for `flow_run` queue messages (runs flow executions).
+    """
+    ENV = os.getenv("ENV", "dev")
+    analytiq_client = ad.common.get_analytiq_client(env=ENV, name=worker_id)
+    logger.info(f"Starting worker {worker_id}")
+
+    last_heartbeat = datetime.now(UTC)
+
+    while True:
+        try:
+            now = datetime.now(UTC)
+            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
+                logger.info(f"Worker {worker_id} heartbeat")
+                last_heartbeat = now
+
+            msg = await ad.queue.recv_msg(analytiq_client, "flow_run")
+            if msg:
+                _queue_idle_sleep["flow_run"] = POLL_MIN_SLEEP
+                try:
+                    await ad.msg_handlers.process_flow_run_msg(analytiq_client, msg)
+                except asyncio.CancelledError:
+                    logger.warning(
+                        f"Worker {worker_id} cancelled mid-flight on flow_run msg {msg.get('_id')}; "
+                        f"message will be recovered via visibility timeout"
+                    )
+                    raise
+            else:
+                sleep = _queue_idle_sleep.get("flow_run", POLL_MIN_SLEEP)
+                await asyncio.sleep(sleep)
+                _queue_idle_sleep["flow_run"] = min(sleep * 2, POLL_MAX_SLEEP)
+        except Exception as e:
+            logger.error(f"Worker {worker_id} encountered error: {str(e)}")
+            await asyncio.sleep(1)
+
+
+async def worker_flow_cleanup(worker_id: str) -> None:
+    """Periodic cleanup of expired flow executions and their flow_blobs."""
+    ENV = os.getenv("ENV", "dev")
+    analytiq_client = ad.common.get_analytiq_client(env=ENV, name=worker_id)
+    retention_days = int(os.getenv("FLOW_EXECUTION_RETENTION_DAYS", "30"))
+    logger.info(f"Starting flow cleanup worker {worker_id} (retention={retention_days}d)")
+
+    last_heartbeat = datetime.now(UTC)
+    CHECK_INTERVAL_SECS = 3600  # Run once per hour
+
+    while True:
+        try:
+            now = datetime.now(UTC)
+
+            if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
+                logger.info(f"Flow cleanup worker {worker_id} heartbeat")
+                last_heartbeat = now
+
+            cutoff = now - timedelta(days=retention_days)
+            db = analytiq_client.mongodb_async[ENV]
+
+            expired_filter = {
+                "finished_at": {"$lt": cutoff},
+                "status": {"$in": ["success", "error", "cancelled"]},
+            }
+            cursor = db.flow_executions.find(expired_filter, {"_id": 1})
+            processed = 0
+            async for execution in cursor:
+                processed += 1
+                execution_id = str(execution["_id"])
+                blobs_deleted = await ad.mongodb.blob.delete_blobs_by_prefix_async(
+                    analytiq_client, bucket="flow_blobs", prefix=f"{execution_id}/"
+                )
+                await db.flow_executions.delete_one({"_id": execution["_id"]})
+                logger.info(
+                    f"Cleaned up execution {execution_id}: {blobs_deleted} blob(s) deleted"
+                )
+
+            if processed:
+                logger.info(
+                    f"Flow cleanup: processed {processed} expired execution(s) (cutoff={cutoff.date()})"
+                )
+
+            await asyncio.sleep(CHECK_INTERVAL_SECS)
+
+        except asyncio.CancelledError:
+            logger.warning(f"Flow cleanup worker {worker_id} cancelled")
+            raise
+        except Exception as e:
+            logger.error(f"Flow cleanup worker {worker_id} error: {e}")
+            await asyncio.sleep(300)  # Back off 5 min on errors
+
 async def recover_all_queues(analytiq_client) -> None:
     """
     Recover stale messages across all queues at worker startup.
@@ -332,7 +429,7 @@ async def recover_all_queues(analytiq_client) -> None:
     For each recovered message, ``attempts`` is decremented by 1 (floored at 0)
     so an unfinished claim (e.g. killed worker) does not permanently burn a try.
     """
-    queues = ["ocr", "llm", "kb_index", "webhook"]
+    queues = ["ocr", "llm", "kb_index", "webhook", "flow_run"]
     for queue_name in queues:
         try:
             recovered = await ad.queue.recover_stale_messages(analytiq_client, queue_name)
@@ -352,7 +449,9 @@ def start_workers(n_workers: int) -> list[asyncio.Task]:
         tasks.append(asyncio.create_task(worker_llm(f"llm_{i}"),            name=f"llm_{i}"))
         tasks.append(asyncio.create_task(worker_kb_index(f"kb_index_{i}"),  name=f"kb_index_{i}"))
         tasks.append(asyncio.create_task(worker_webhook(f"webhook_{i}"),    name=f"webhook_{i}"))
+        tasks.append(asyncio.create_task(worker_flow_run(f"flow_run_{i}"),  name=f"flow_run_{i}"))
     tasks.append(asyncio.create_task(worker_kb_reconcile("kb_reconcile_0"), name="kb_reconcile_0"))
+    tasks.append(asyncio.create_task(worker_flow_cleanup("flow_cleanup_0"), name="flow_cleanup_0"))
     logger.info(f"Started {len(tasks)} worker tasks (n_workers={n_workers})")
     return tasks
 

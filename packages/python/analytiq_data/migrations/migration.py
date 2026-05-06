@@ -3095,6 +3095,94 @@ class BackfillOcrTextMetadataType(Migration):
             return False
 
 
+class AddCredentialsOrgNameUniqueIndex(Migration):
+    def __init__(self):
+        super().__init__(
+            description="Unique index on credentials (organization_id, name) — one label per org"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            coll = db.credentials
+            async for doc in coll.find({"name": {"$type": "string"}}):
+                n = doc.get("name")
+                if isinstance(n, str) and n != n.strip():
+                    await coll.update_one({"_id": doc["_id"]}, {"$set": {"name": n.strip()}})
+            await coll.create_index(
+                [("organization_id", 1), ("name", 1)],
+                unique=True,
+                name="credentials_org_name_unique",
+            )
+            logger.info("Successfully created credentials_org_name_unique index")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create credentials_org_name_unique index: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            await db.credentials.drop_index("credentials_org_name_unique")
+            logger.info("Dropped credentials_org_name_unique index")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to drop credentials_org_name_unique index: {e}")
+            return False
+
+
+class AddFlowExecutionsFlowsCredentialsListIndexes(Migration):
+    """Compound indexes for org-scoped list queries (sort + pagination)."""
+
+    def __init__(self):
+        super().__init__(
+            description=(
+                "Indexes: flow_executions (org+started_at), (org+flow+started_at); "
+                "flows (org+updated_at); credentials (org+updated_at)"
+            )
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            await db.flow_executions.create_index(
+                [("organization_id", 1), ("started_at", -1)],
+                name="flow_executions_org_started_at",
+            )
+            await db.flow_executions.create_index(
+                [("organization_id", 1), ("flow_id", 1), ("started_at", -1)],
+                name="flow_executions_org_flow_started_at",
+            )
+            await db.flows.create_index(
+                [("organization_id", 1), ("updated_at", -1)],
+                name="flows_org_updated_at",
+            )
+            await db.credentials.create_index(
+                [("organization_id", 1), ("updated_at", -1)],
+                name="credentials_org_updated_at",
+            )
+            logger.info("Successfully created flows/credentials/execution list indexes")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to create flow list indexes: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            for coll, name in (
+                (db.flow_executions, "flow_executions_org_started_at"),
+                (db.flow_executions, "flow_executions_org_flow_started_at"),
+                (db.flows, "flows_org_updated_at"),
+                (db.credentials, "credentials_org_updated_at"),
+            ):
+                try:
+                    await coll.drop_index(name)
+                except Exception:
+                    pass
+            logger.info("Dropped flows/credentials/execution list indexes")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to drop flow list indexes: {e}")
+            return False
+
+
 MIGRATIONS = [
     OcrKeyMigration(),
     LlmResultFieldsMigration(),
@@ -3136,6 +3224,8 @@ MIGRATIONS = [
     MigrateAwsAndVertexToCloudConfig(),
     AddGridFSFilesBucketIndexes(),
     BackfillOcrTextMetadataType(),
+    AddCredentialsOrgNameUniqueIndex(),
+    AddFlowExecutionsFlowsCredentialsListIndexes(),
     # Add more migrations here
 ]
 

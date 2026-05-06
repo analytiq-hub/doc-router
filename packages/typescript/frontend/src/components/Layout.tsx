@@ -17,6 +17,7 @@ import {
   DataObject as SchemaIcon,
   Chat as PromptIcon,
   Assignment as FormsIcon,
+  AccountTree as FlowsIcon,
   MenuBook as KnowledgeBaseIcon,
   InfoOutlined as AboutIcon
 } from '@mui/icons-material';
@@ -91,6 +92,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         { text: 'Schemas', icon: SchemaIcon, tooltip: 'Schemas', href: `/orgs/${orgIdForLinks}/schemas` },
         { text: 'Prompts', icon: PromptIcon, tooltip: 'Prompts', href: `/orgs/${orgIdForLinks}/prompts` },
         { text: 'Forms', icon: FormsIcon, tooltip: 'Forms', href: `/orgs/${orgIdForLinks}/forms` },
+        { text: 'Flows', icon: FlowsIcon, tooltip: 'Flows', href: `/orgs/${orgIdForLinks}/flows` },
         { text: 'Knowledge Bases', icon: KnowledgeBaseIcon, tooltip: 'Knowledge Bases', href: `/orgs/${orgIdForLinks}/knowledge-bases` },
       ]
     : [
@@ -100,6 +102,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         { text: 'Schemas', icon: SchemaIcon, tooltip: 'Schemas', href: '#' },
         { text: 'Prompts', icon: PromptIcon, tooltip: 'Prompts', href: '#' },
         { text: 'Forms', icon: FormsIcon, tooltip: 'Forms', href: '#' },
+        { text: 'Flows', icon: FlowsIcon, tooltip: 'Flows', href: '#' },
         { text: 'Knowledge Bases', icon: KnowledgeBaseIcon, tooltip: 'Knowledge Bases', href: '#' },
       ];
 

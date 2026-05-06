@@ -8,3 +8,6 @@ export { HttpClient } from './http-client';
 
 // All types
 export * from './types';
+
+// Flow graph ↔ editor helpers
+export * from './flow-rf';

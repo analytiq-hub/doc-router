@@ -45,12 +45,16 @@ help:
 	@echo ""
 	@echo "Testing:"
 	@echo "  make tests                   - Run Python unit tests (fast, excludes kb_slow)"
+	@echo "  make tests-flow              - Run flow engine tests only"
+	@echo "  make flow-node-dump          - Dump upstream integration nodes to tools/flow_node_dump.jsonl (override UPSTREAM_NODES_ROOT, FLOW_DUMP_SUBDIRS)"
+	@echo "  make flow-node-port          - Emit DocRouter packages from tools/flow_node_dump.jsonl"
 	@echo "  make tests-kb                - Run slow KB integration tests (real search indexes)"
 	@echo "  make tests-scale             - Run Python scale tests"
 	@echo "  make tests-all               - Run all Python tests"
 	@echo "  make tests-ui                - Run UI tests"
 	@echo "  make tests-ui-debug          - Run UI tests in debug mode"
 	@echo "  make tests-ts                - Run TypeScript SDK and MCP tests"
+	@echo "  make vitest                  - Run frontend Vitest unit tests (flows schema helpers, etc.)"
 	@echo ""
 	@echo "Cleanup:"
 	@echo "  make clean                   - Remove Python virtual environment"
@@ -225,6 +229,27 @@ destroy-kind:
 tests: setup-python
 	. .venv/bin/activate && pytest -n auto -m "not kb_slow" packages/python/tests/
 
+tests-flow: setup-python
+	. .venv/bin/activate && pytest -q packages/python/tests_flow/
+
+# Repository root (directory containing this makefile). Paths below work with `make -f /abs/path/makefile`.
+_DOC_ROUTER_ROOT := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
+
+# Sibling upstream checkout with a built packages/nodes-base/dist (pnpm install && pnpm build).
+UPSTREAM_NODES_ROOT ?= $(abspath $(_DOC_ROUTER_ROOT)/../n8n)
+
+FLOW_DUMP_SUBDIRS ?= packages/nodes-base/dist/nodes
+
+flow-node-dump:
+	mkdir -p tools
+	tmp=$$(mktemp); \
+	trap 'rm -f "$$tmp"' EXIT; \
+	FLOW_DUMP_SUBDIRS="$(FLOW_DUMP_SUBDIRS)" node --disable-warning=DEP0040 tools/dump_nodes.js --upstream-root "$(UPSTREAM_NODES_ROOT)" > "$$tmp" && \
+	mv -f "$$tmp" tools/flow_node_dump.jsonl
+
+flow-node-port: setup-python
+	. .venv/bin/activate && python tools/port_nodes.py tools/flow_node_dump.jsonl --validate
+
 tests-kb: setup-python
 	. .venv/bin/activate && pytest -v -m "kb_slow" packages/python/tests/
 
@@ -245,6 +270,9 @@ tests-ui-debug: setup-ui
 tests-ts:
 	cd packages/typescript/sdk && npm install && npm run test:all
 	cd packages/typescript/mcp && npm install && npm run test
+
+vitest:
+	cd packages/typescript/frontend && npm install && npm test
 
 clean:
 	rm -rf .venv
@@ -283,4 +311,4 @@ dockerhub-push: dockerhub-push-frontend dockerhub-push-backend
 dockerhub-build-push: dockerhub-build dockerhub-push
 	@echo "✅ Build and push complete!"
 
-.PHONY: help deploy-dev tests tests-kb setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean
+.PHONY: help deploy-dev tests tests-kb setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts vitest deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean flow-node-dump flow-node-port

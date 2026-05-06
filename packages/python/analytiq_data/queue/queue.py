@@ -78,7 +78,12 @@ async def send_msg(
 
     result = await queue_collection.insert_one(msg_data)
     msg_id = str(result.inserted_id)
-    logger.info(f"Sent message: {msg_id} to {queue_name}")
+    exec_tail = ""
+    if isinstance(msg, dict):
+        eid = msg.get("execution_id")
+        if isinstance(eid, str) and eid.strip():
+            exec_tail = f" execution_id={eid.strip()}"
+    logger.info(f"Sent message: {msg_id} to {queue_name}{exec_tail}")
     return msg_id
 
 async def recv_msg(analytiq_client, queue_name: str) -> Optional[Dict[str, Any]]:
@@ -271,7 +276,7 @@ async def release_all_in_flight_queue_claims(db) -> int:
     so jobs stuck in ``processing`` due to a worker killed mid-job during a restart are
     recovered automatically.
     """
-    queue_collections = ["queues.ocr", "queues.llm", "queues.webhook", "queues.kb_index"]
+    queue_collections = ["queues.ocr", "queues.llm", "queues.webhook", "queues.kb_index", "queues.flow_run"]
     all_collections = await db.list_collection_names()
     for coll_name in all_collections:
         if coll_name.startswith("queues.kb_index_") and coll_name not in queue_collections:

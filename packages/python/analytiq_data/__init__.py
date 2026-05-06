@@ -9,6 +9,8 @@ from . import migrations
 from . import mongodb
 from . import msg_handlers
 from . import ocr
+from . import flows
+from . import docrouter_flows
 from . import queue
 from . import payments
 from . import webhooks

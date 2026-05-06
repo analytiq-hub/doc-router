@@ -189,6 +189,11 @@ export class HttpClient {
     return response.data;
   }
 
+  async patch<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig): Promise<T> {
+    const response: AxiosResponse<T> = await this.axios.patch(url, data, config);
+    return response.data;
+  }
+
   async delete<T = unknown>(url: string, config?: AxiosRequestConfig): Promise<T> {
     const response: AxiosResponse<T> = await this.axios.delete(url, config);
     return response.data;

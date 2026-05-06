@@ -171,15 +171,12 @@ api.interceptors.response.use(
 );
 
 export class DocRouterOrgApi extends DocRouterOrg {
-  private readonly _orgId: string;
-
  constructor(organizationId: string) {
     super({
       baseURL: NEXT_PUBLIC_FASTAPI_FRONTEND_URL,
       orgToken: '', // Empty token so tokenProvider will be used
       organizationId: organizationId,
     });
-    this._orgId = organizationId;
 
     // Set up token provider that gets called on every request
     this.getHttpClient().updateTokenProvider(async () => {

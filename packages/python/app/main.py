@@ -44,6 +44,8 @@ from app.routes.redirect import redirect_router
 from app.routes.webhooks import webhooks_router
 from app.routes.knowledge_bases import knowledge_bases_router
 from app.routes.agent import agent_router
+from app.routes.flows import flows_router
+from app.routes.flows_credentials import flow_credentials_router
 import analytiq_data as ad
 from worker.worker import start_workers
 
@@ -99,6 +101,9 @@ async def lifespan(app):
 
     # Initialize KB embedding cache index
     await ad.kb.embedding_cache.ensure_embedding_cache_index(analytiq_client)
+
+    # Ensure credentials indexes (non-migration startup check)
+    await ad.flows.ensure_credentials_indexes(analytiq_client)
 
     # Start background workers in the same event loop (replaces the worker subprocess)
     n_workers = int(os.getenv("N_WORKERS", "1"))
@@ -164,3 +169,10 @@ app.include_router(emails_router)
 app.include_router(webhooks_router)
 app.include_router(knowledge_bases_router)
 app.include_router(agent_router)
+app.include_router(flows_router)
+app.include_router(flow_credentials_router)
+
+# Flow node registrations (global registry).
+# Register once at import time; idempotent overwrites are fine.
+ad.flows.register_builtin_nodes()
+ad.flows.register_docrouter_nodes()

@@ -37,7 +37,9 @@ export function useDictation(
   const [error, setError] = useState<string | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const onTranscriptRef = useRef(onTranscript);
-  onTranscriptRef.current = onTranscript;
+  useEffect(() => {
+    onTranscriptRef.current = onTranscript;
+  }, [onTranscript]);
 
   const toggle = useCallback(() => {
     if (!supported) {

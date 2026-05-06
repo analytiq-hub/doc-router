@@ -1,6 +1,9 @@
 // Core SDK types
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
+// Flows
+export * from './flows';
+
 export interface DocRouterConfig {
   baseURL: string;
   token?: string;

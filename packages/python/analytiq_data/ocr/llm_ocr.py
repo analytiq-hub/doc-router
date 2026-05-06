@@ -97,14 +97,14 @@ def _parse_llm_ocr_response(raw: str) -> list[dict[str, Any]]:
     return _normalize_pages(data, raw)
 
 
-async def _assert_llm_ocr_provider_and_model(
+async def _validate_llm_ocr_provider_and_model(
     analytiq_client,
     provider_name: str,
     model: str,
-) -> tuple[str, str | None, str | None, str | None, str]:
+) -> tuple[str, str]:
     """
     Validate ``llm_providers`` (name, enabled, model list) and that ``model`` maps to the same
-    LiteLLM provider row. Returns (api_key, row_litellm).
+    LiteLLM provider row. Returns ``(api_key, row_litellm)``.
     """
     db = analytiq_client.mongodb_async[analytiq_client.env]
     doc = await db.llm_providers.find_one({"name": provider_name})
@@ -183,7 +183,7 @@ async def run_llm_ocr_pdf(
     if not pdf_bytes:
         raise ValueError("LLM OCR requires non-empty PDF bytes")
 
-    api_key, row_litellm = await _assert_llm_ocr_provider_and_model(
+    api_key, row_litellm = await _validate_llm_ocr_provider_and_model(
         analytiq_client, provider_name, model
     )
 

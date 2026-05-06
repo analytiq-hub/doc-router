@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://docrouter.example/schemas/runtimes/http_request_v1.json",
+  "title": "http_request_v1 declarative spec",
+  "description": "Stub for validating http.spec.json packages (see docs/docrouter_nodes.md). Extend with query_params, timeouts, error policy, etc.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["method", "url"],
+  "properties": {
+    "method": {
+      "type": "string",
+      "pattern": "^(GET|POST|PUT|PATCH|DELETE|HEAD|OPTIONS)$"
+    },
+    "url": {
+      "type": "string",
+      "minLength": 1
+    },
+    "headers": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "query_params": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["string", "number", "boolean", "null"]
+      }
+    },
+    "body": {},
+    "response_jmespath": {
+      "type": "string"
+    },
+    "response_set": {}
+  }
+}
