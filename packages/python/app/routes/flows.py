@@ -25,6 +25,9 @@ from app.models import User
 logger = logging.getLogger(__name__)
 flows_router = APIRouter(tags=["flows"])
 
+# Pinned binary uploads: cap body size to limit memory (bytes are read fully into memory today).
+MAX_PIN_UPLOAD_BYTES = 50 * 1024 * 1024
+
 # Preview: cap serialized JSON per run_data node entry to limit memory/CPU from pathological payloads.
 _MAX_PREVIEW_RUN_DATA_ENTRY_BYTES = 512_000
 
@@ -89,24 +92,21 @@ def _inbound_webhook_canonical_public_url(request: Request) -> str:
 
 
 def _safe_webhook_blob_segment(part: str) -> str:
-    """Single path segment for GridFS keys (no slashes)."""
+    """Single path segment for GridFS keys (no slashes, no `..` segments after rewrite)."""
 
     p = "".join(c if (c.isalnum() or c in "._-") else "_" for c in part)
     return (p[:120] if p else "file")
-
-
-def _safe_pin_blob_segment(part: str) -> str:
-    """Single path segment for pin GridFS keys (no slashes)."""
-
-    return _safe_webhook_blob_segment(part)
 
 
 def _flow_pins_keys_from_pin_data(pin_data: Any, *, prefix: str) -> set[str]:
     """
     Collect `flow_pins` GridFS keys referenced by a pin_data payload, filtered by key prefix.
 
-    pin_data is expected to be `{ node_id: { main: [[ { json, binary }... ]] } }` but this function
-    is intentionally permissive and will ignore unknown shapes.
+    Traverses every list under ``main`` (all output lanes), not only lane 0, so GC matches
+    references stored in secondary lanes.
+
+    pin_data is expected to be `{ node_id: { main: [[ ... ], [ ... ]] } }` but this function is
+    intentionally permissive and will ignore unknown shapes.
     """
 
     out: set[str] = set()
@@ -118,28 +118,61 @@ def _flow_pins_keys_from_pin_data(pin_data: Any, *, prefix: str) -> set[str]:
         main = node_entry.get("main")
         if not isinstance(main, list) or not main:
             continue
-        lane0 = main[0]
-        if not isinstance(lane0, list):
-            continue
-        for it in lane0:
-            if not isinstance(it, dict):
+        for lane in main:
+            if not isinstance(lane, list):
                 continue
-            binary = it.get("binary")
-            if not isinstance(binary, dict):
-                continue
-            for ref in binary.values():
-                if not isinstance(ref, dict):
+            for it in lane:
+                if not isinstance(it, dict):
                     continue
-                sid = ref.get("storage_id")
-                if not isinstance(sid, str) or not sid.strip():
+                binary = it.get("binary")
+                if not isinstance(binary, dict):
                     continue
-                parts = sid.strip().split(":", 1)
-                if len(parts) != 2 or parts[0] != "flow_pins":
-                    continue
-                key = parts[1]
-                if key.startswith(prefix):
-                    out.add(key)
+                for ref in binary.values():
+                    if not isinstance(ref, dict):
+                        continue
+                    sid = ref.get("storage_id")
+                    if not isinstance(sid, str) or not sid.strip():
+                        continue
+                    parts = sid.strip().split(":", 1)
+                    if len(parts) != 2 or parts[0] != "flow_pins":
+                        continue
+                    key = parts[1]
+                    if key.startswith(prefix):
+                        out.add(key)
     return out
+
+
+def _safe_content_disposition_filename(fname: str) -> str:
+    """Strip header-injection/control chars; keeps ASCII printable except ``\\`` and ``"``."""
+
+    s = "".join(
+        ch if ch.isascii() and ch.isprintable() and ch not in {'\\', '"'} else "_" for ch in fname.strip()
+    )[:240]
+    return s or "file"
+
+
+def _pin_blob_mime_allows_inline(mime_raw: str) -> bool:
+    """
+    Restrict ``Content-Disposition: inline`` to non-executable preview types.
+
+    User-supplied ``mime_type`` is stored with the blob; ``text/html`` inline would be stored XSS.
+    """
+
+    m = mime_raw.strip().lower()
+    if not m:
+        return False
+    if m.startswith("image/") and not m.startswith("image/svg+xml"):
+        return True
+    if m == "application/pdf":
+        return True
+    return False
+
+
+def _object_id_or_400(value: str, *, field: str) -> ObjectId:
+    try:
+        return ObjectId(value)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail=f"Invalid {field}") from None
 
 
 async def _webhook_finalize_pending_uploads(
@@ -744,7 +777,7 @@ async def upload_pinned_binary(
     flow_id: str,
     flow_revid: str,
     node_id: str = Form(..., min_length=1),
-    slot: int = Form(0),
+    slot: int = Form(0, ge=0),
     item_index: int = Form(..., ge=0),
     property: str = Form(..., min_length=1),
     file: UploadFile = File(...),
@@ -754,19 +787,23 @@ async def upload_pinned_binary(
     Upload one pinned binary attachment for a revision pin_data payload.
 
     Returns a `FlowBinaryRef`-shaped dict for embedding into `pin_data`.
+
+    Orphan caveat: blobs are keyed under this revision id. They are garbage-collected when a saved
+    pin_data stops referencing them (on a later revision save). Uploads made before pin_data is
+    saved, or uploads that are never referenced, are not cleaned up automatically (no TTL yet).
     """
 
     _ = current_user
     db = await _get_db()
-    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
+    flow_oid = _object_id_or_400(flow_id, field="flow_id")
+    rev_oid = _object_id_or_400(flow_revid, field="flow_revid")
+    h = await db.flows.find_one({"_id": flow_oid, "organization_id": organization_id})
     if not h:
         raise HTTPException(status_code=404, detail="Flow not found")
-    r = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
+    r = await db.flow_revisions.find_one({"_id": rev_oid, "flow_id": flow_id})
     if not r:
         raise HTTPException(status_code=404, detail="Revision not found")
 
-    if slot < 0:
-        raise HTTPException(status_code=400, detail="slot must be >= 0")
     if not node_id.strip():
         raise HTTPException(status_code=400, detail="node_id is required")
     prop = property.strip()
@@ -774,14 +811,17 @@ async def upload_pinned_binary(
         raise HTTPException(status_code=400, detail="property is required")
 
     fname = (file.filename or "").strip() or "file"
-    seg_node = _safe_pin_blob_segment(node_id.strip())
-    seg_prop = _safe_pin_blob_segment(prop)
-    seg_name = _safe_pin_blob_segment(fname)
+    seg_node = _safe_webhook_blob_segment(node_id.strip())
+    seg_prop = _safe_webhook_blob_segment(prop)
+    seg_name = _safe_webhook_blob_segment(fname)
     key = f"pin/{flow_revid}/{seg_node}/{int(slot)}/{int(item_index)}/{seg_prop}/{seg_name}"
 
     blob = await file.read()
-    if blob is None:
-        blob = b""
+    if len(blob) > MAX_PIN_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large (max {MAX_PIN_UPLOAD_BYTES} bytes)",
+        )
 
     mime = (file.content_type or "").strip() or "application/octet-stream"
     aq_client = ad.common.get_analytiq_client()
@@ -819,7 +859,10 @@ async def get_revision_pin_blob(
     storage_id: str = Query(..., min_length=1, description="FlowBinaryRef.storage_id, e.g. flow_pins:pin/<flowRevid>/..."),
     action: Literal["view", "download"] = Query(
         "download",
-        description="`view`: inline Content-Disposition for browser preview; `download`: attachment.",
+        description=(
+            "`view`: inline preview only for image/* (excluding SVG) and PDF; other types use attachment. "
+            "`download`: attachment."
+        ),
     ),
     current_user: User = Depends(get_org_user),
 ):
@@ -827,10 +870,12 @@ async def get_revision_pin_blob(
 
     _ = current_user
     db = await _get_db()
-    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
+    flow_oid = _object_id_or_400(flow_id, field="flow_id")
+    rev_oid = _object_id_or_400(flow_revid, field="flow_revid")
+    h = await db.flows.find_one({"_id": flow_oid, "organization_id": organization_id})
     if not h:
         raise HTTPException(status_code=404, detail="Flow not found")
-    r = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
+    r = await db.flow_revisions.find_one({"_id": rev_oid, "flow_id": flow_id})
     if not r:
         raise HTTPException(status_code=404, detail="Revision not found")
 
@@ -856,10 +901,13 @@ async def get_revision_pin_blob(
     mime = meta.get("mime_type") if isinstance(meta.get("mime_type"), str) else "application/octet-stream"
     fname = meta.get("file_name") if isinstance(meta.get("file_name"), str) else ""
     headers: dict[str, str] = {}
+    want_inline = action == "view" and _pin_blob_mime_allows_inline(mime)
+    disp = "inline" if want_inline else "attachment"
     if fname.strip():
-        safe = "".join(ch if ch.isascii() and ch not in {'\\', '"'} else "_" for ch in fname.strip())[:240]
-        disp = "inline" if action == "view" else "attachment"
+        safe = _safe_content_disposition_filename(fname)
         headers["Content-Disposition"] = f'{disp}; filename="{safe}"'
+    elif not want_inline:
+        headers["Content-Disposition"] = disp
     return Response(content=blob, media_type=mime, headers=headers)
 
 
@@ -907,6 +955,9 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
 
     # Pin binary cleanup: delete `flow_pins` blobs referenced by the previous revision pin_data
     # that are no longer referenced by the new pin_data (scoped to the previous revision id prefix).
+    #
+    # Only keys under ``pin/{latest_revision_id}/`` are considered; pins that still reference blobs
+    # uploaded under an older revision path are not covered (known limitation / possible leak).
     if latest is not None:
         latest_id = str(latest.get("_id") or "")
         if latest_id:
@@ -1323,7 +1374,10 @@ async def get_execution_blob(
     storage_id: str = Query(..., min_length=1, description='BinaryRef.storage_id (bucket:key), e.g. flow_blobs:execId/node/item/prop'),
     action: Literal["view", "download"] = Query(
         "download",
-        description='`view`: inline Content-Disposition for browser preview; `download`: attachment.',
+        description=(
+            "`view`: inline preview only for image/* (excluding SVG) and PDF; other types use attachment. "
+            "`download`: attachment."
+        ),
     ),
     current_user: User = Depends(get_org_user),
 ):
@@ -1362,10 +1416,13 @@ async def get_execution_blob(
     mime = meta.get("mime_type") if isinstance(meta.get("mime_type"), str) else "application/octet-stream"
     fname = meta.get("file_name") if isinstance(meta.get("file_name"), str) else ""
     headers: dict[str, str] = {}
+    want_inline = action == "view" and _pin_blob_mime_allows_inline(mime)
+    disp = "inline" if want_inline else "attachment"
     if fname.strip():
-        safe = "".join(ch if ch.isascii() and ch not in {'\\', '"'} else "_" for ch in fname.strip())[:240]
-        disp = "inline" if action == "view" else "attachment"
+        safe = _safe_content_disposition_filename(fname)
         headers["Content-Disposition"] = f'{disp}; filename="{safe}"'
+    elif not want_inline:
+        headers["Content-Disposition"] = disp
     return Response(content=blob, media_type=mime, headers=headers)
 
 

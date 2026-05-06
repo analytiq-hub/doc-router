@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Dialog,
   DialogBackdrop,
@@ -68,6 +68,9 @@ const IoBlock: React.FC<{
 );
 
 const WEBHOOK_NODE_KEY = 'flows.trigger.webhook';
+
+/** Must match `MAX_PIN_UPLOAD_BYTES` in `app/routes/flows.py` pin binary upload. */
+const PIN_BINARY_MAX_BYTES = 50 * 1024 * 1024;
 
 const WebhookUrlHeader: React.FC<{
   node: FlowNode;
@@ -327,7 +330,23 @@ function nodeItemsFromRunData(runData: Record<string, unknown> | null | undefine
 }
 
 function pinNodeOutputFromItems(items: FlowPinItem[]): FlowPinNodeOutput {
-  return { main: [[...items.map((i) => ({ json: i.json }))]] };
+  return {
+    main: [
+      [
+        ...items.map((i) =>
+          i.binary && typeof i.binary === 'object' && Object.keys(i.binary).length
+            ? { json: i.json, binary: i.binary }
+            : { json: i.json },
+        ),
+      ],
+    ],
+  };
+}
+
+function isLikelyCancelledUpload(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const o = err as { code?: unknown; name?: unknown };
+  return o.code === 'ERR_CANCELED' || o.name === 'CanceledError';
 }
 
 type UiPinnedBinary = Array<Record<string, FlowBinaryRef[]>>;
@@ -572,6 +591,77 @@ const FlowNodeConfigModal: React.FC<{
   const [pinEditBinary, setPinEditBinary] = useState<UiPinnedBinary>([]);
   const [pinEditBinaryAddProp, setPinEditBinaryAddProp] = useState<Record<number, string>>({});
   const [pinEditError, setPinEditError] = useState<string>('');
+  const modalMountedRef = useRef(true);
+  const pinBinaryUploadAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    modalMountedRef.current = true;
+    return () => {
+      modalMountedRef.current = false;
+      pinBinaryUploadAbortRef.current?.abort();
+      pinBinaryUploadAbortRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!pinEditOpen) {
+      pinBinaryUploadAbortRef.current?.abort();
+      pinBinaryUploadAbortRef.current = null;
+    }
+  }, [pinEditOpen]);
+
+  const onPinBinaryFileInputChange = useCallback(
+    async (itemIndex: number, e: React.ChangeEvent<HTMLInputElement>) => {
+      const input = e.currentTarget;
+      const file = input.files?.[0];
+      if (!file) return;
+      if (!flowOrgApi || !flowId || !flowRevidForPins) {
+        input.value = '';
+        return;
+      }
+      if (file.size > PIN_BINARY_MAX_BYTES) {
+        setPinEditError(`File too large (max ${Math.round(PIN_BINARY_MAX_BYTES / (1024 * 1024))} MB).`);
+        input.value = '';
+        return;
+      }
+      const prop = (pinEditBinaryAddProp[itemIndex] ?? 'data').trim() || 'data';
+      const fd = new FormData();
+      fd.set('node_id', node?.id ?? '');
+      fd.set('slot', '0');
+      fd.set('item_index', String(itemIndex));
+      fd.set('property', prop);
+      fd.set('file', file);
+      pinBinaryUploadAbortRef.current?.abort();
+      const ac = new AbortController();
+      pinBinaryUploadAbortRef.current = ac;
+      try {
+        const ref = await flowOrgApi
+          .getHttpClient()
+          .postFormData<FlowBinaryRef>(
+            `/v0/orgs/${flowOrgApi.organizationId}/flows/${flowId}/revisions/${flowRevidForPins}/pins/binary`,
+            fd,
+            { signal: ac.signal },
+          );
+        if (!modalMountedRef.current) return;
+        setPinEditBinary((cur) => {
+          const next = [...cur];
+          const copy = { ...(next[itemIndex] ?? {}) };
+          const list = (copy[prop] ?? []).slice();
+          list.push(ref);
+          copy[prop] = list;
+          next[itemIndex] = copy;
+          return next;
+        });
+      } catch (err) {
+        if (!modalMountedRef.current || isLikelyCancelledUpload(err)) return;
+        setPinEditError(err instanceof Error ? err.message : 'Upload failed');
+      } finally {
+        if (pinBinaryUploadAbortRef.current === ac) pinBinaryUploadAbortRef.current = null;
+        input.value = '';
+      }
+    },
+    [flowOrgApi, flowId, flowRevidForPins, node?.id, pinEditBinaryAddProp],
+  );
 
   const hasPin = Boolean(pinnedForNode);
   const pinUiDisabled = Boolean(readOnly || !onPinDataChange);
@@ -1214,37 +1304,7 @@ const FlowNodeConfigModal: React.FC<{
                                   <input
                                     type="file"
                                     className="text-xs"
-                                    onChange={async (e) => {
-                                      const f = e.target.files?.[0];
-                                      e.target.value = '';
-                                      if (!f) return;
-                                      const prop = (pinEditBinaryAddProp[itemIndex] ?? 'data').trim() || 'data';
-                                      const fd = new FormData();
-                                      fd.set('node_id', node?.id ?? '');
-                                      fd.set('slot', '0');
-                                      fd.set('item_index', String(itemIndex));
-                                      fd.set('property', prop);
-                                      fd.set('file', f);
-                                      try {
-                                        const ref = await flowOrgApi
-                                          .getHttpClient()
-                                          .postFormData<FlowBinaryRef>(
-                                            `/v0/orgs/${flowOrgApi.organizationId}/flows/${flowId}/revisions/${flowRevidForPins}/pins/binary`,
-                                            fd,
-                                          );
-                                        setPinEditBinary((cur) => {
-                                          const next = [...cur];
-                                          const copy = { ...(next[itemIndex] ?? {}) };
-                                          const list = (copy[prop] ?? []).slice();
-                                          list.push(ref);
-                                          copy[prop] = list;
-                                          next[itemIndex] = copy;
-                                          return next;
-                                        });
-                                      } catch (err) {
-                                        setPinEditError(err instanceof Error ? err.message : 'Upload failed');
-                                      }
-                                    }}
+                                    onChange={(e) => void onPinBinaryFileInputChange(itemIndex, e)}
                                   />
                                 </div>
                               </div>
