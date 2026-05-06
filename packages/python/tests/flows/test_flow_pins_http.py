@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 import pytest
 
+import analytiq_data as ad
+
 import app.routes.flows as flows_routes
 from tests.conftest_utils import TEST_ORG_ID, client, get_auth_headers
 
@@ -330,3 +332,29 @@ def test_pin_cleanup_removes_blob_when_storage_key_uses_prior_upload_revision(mo
 
     assert r3.status_code == 200, r3.text
     assert ("flow_pins", blob_key) in deleted, deleted
+
+
+@pytest.mark.asyncio
+async def test_delete_flow_removes_associated_flow_pins_blobs(flow_with_revision, mock_auth, test_db):
+    flow_id, rev_id = flow_with_revision
+    files = {"file": ("blob.bin", BytesIO(b"keep-flow-pins-gone"), "application/octet-stream")}
+    data = {"node_id": "n1", "slot": "0", "item_index": "0", "property": "data"}
+    r_up = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}/revisions/{rev_id}/pins/binary",
+        data=data,
+        files=files,
+        headers=_auth_multipart_headers(),
+    )
+    assert r_up.status_code == 200, r_up.text
+    key = r_up.json()["storage_id"].split(":", 1)[1]
+
+    aq_client = ad.common.get_analytiq_client()
+    assert await ad.mongodb.blob.get_blob_async(aq_client, "flow_pins", key) is not None
+
+    r_del = client.delete(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        headers=get_auth_headers(),
+    )
+    assert r_del.status_code == 200, r_del.text
+
+    assert await ad.mongodb.blob.get_blob_async(aq_client, "flow_pins", key) is None

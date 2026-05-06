@@ -751,13 +751,31 @@ async def patch_flow_name(organization_id: str, flow_id: str, req: PatchFlowRequ
 @flows_router.delete("/v0/orgs/{organization_id}/flows/{flow_id}")
 async def delete_flow(organization_id: str, flow_id: str, current_user: User = Depends(get_org_user)):
     """
-    Delete a flow header document.
+    Delete a flow header document and best-effort remove ``flow_pins`` blobs for this flow.
 
-    v1 behavior: only deletes from the `flows` collection. Revisions/executions are left
-    intact for now (can be cleaned up by a later admin task / cascading delete).
+    ``flow_revisions`` and ``flow_executions`` rows are unchanged (v1); pin JSON still lives there until
+    a separate revision cleanup exists.
     """
 
     db = await _get_db()
+    hdr = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
+    if not hdr:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    rev_docs = await db.flow_revisions.find({"flow_id": flow_id}, {"_id": 1}).to_list(None)
+    rev_ids = [str(d["_id"]) for d in rev_docs]
+    try:
+        n_del = await ad.mongodb.blob.delete_flow_pins_for_flow_async(
+            ad.common.get_analytiq_client(),
+            organization_id=organization_id,
+            flow_id=flow_id,
+            flow_revision_ids=rev_ids,
+        )
+        if n_del:
+            logger.info(f"Flow delete removed {n_del} flow_pins blob(s) for flow_id={flow_id}")
+    except Exception:
+        logger.warning(f"Flow delete: failed flow_pins sweep for flow_id={flow_id}", exc_info=True)
+
     res = await db.flows.delete_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Flow not found")

@@ -143,6 +143,68 @@ async def delete_blob_async(analytiq_client, bucket:str, key:str):
             await asyncio.sleep(retry_delay)
 
 
+async def delete_flow_pins_for_flow_async(
+    analytiq_client,
+    *,
+    organization_id: str,
+    flow_id: str,
+    flow_revision_ids: list[str],
+) -> int:
+    """
+    Delete all ``flow_pins`` GridFS files tied to one flow before the flow header is removed.
+
+    - Matches uploads that stored ``metadata.flow_id`` / ``metadata.organization_id`` (current upload path).
+    - Also deletes filenames ``pin/<revision_id>/…`` for each known ``flow_revision_ids`` row (covers
+      legacy blobs and any orphaned keys under those revision prefixes).
+
+    Deletes are best-effort per file; failures are logged and skipped.
+    Returns the count of successfully deleted file documents.
+    """
+
+    mongo = analytiq_client.mongodb_async
+    db = mongo[analytiq_client.env]
+    files_col = db["flow_pins.files"]
+    fs_bucket = AsyncIOMotorGridFSBucket(db, bucket_name="flow_pins")
+
+    seen: set = set()
+    ids_to_delete: list = []
+
+    async for doc in files_col.find(
+        {
+            "metadata.flow_id": flow_id,
+            "metadata.organization_id": organization_id,
+        },
+        {"_id": 1},
+    ):
+        oid = doc["_id"]
+        if oid not in seen:
+            seen.add(oid)
+            ids_to_delete.append(oid)
+
+    for rid in flow_revision_ids:
+        prefix = f"pin/{rid}/"
+        async for doc in files_col.find(
+            {"filename": {"$regex": f"^{re.escape(prefix)}"}},
+            {"_id": 1},
+        ):
+            oid = doc["_id"]
+            if oid not in seen:
+                seen.add(oid)
+                ids_to_delete.append(oid)
+
+    deleted = 0
+    for oid in ids_to_delete:
+        try:
+            await fs_bucket.delete(oid)
+            deleted += 1
+        except Exception as e:
+            logger.warning(f"Failed to delete flow_pins file {oid}: {e}")
+
+    if deleted:
+        logger.debug(f"Deleted {deleted} flow_pins blob(s) for flow_id={flow_id}")
+    return deleted
+
+
 async def delete_blobs_by_prefix_async(analytiq_client, bucket: str, prefix: str) -> int:
     """
     Delete all GridFS entries in `bucket` whose filename starts with `prefix`.
