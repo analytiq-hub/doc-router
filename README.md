@@ -11,7 +11,21 @@ The Document Router is designed to work standalone or with a human-in-the-loop, 
 
 It acts as a system of record for the `extraction schemas` and `prompts`, and it is portable over all major clouds and LLM providers.
 
-A [Document Agent](https://docrouter.ai/docs/document-agent/) is available to configure prompts and extractions, and to review processed results. 
+A [Document Agent](https://docrouter.ai/docs/document-agent/) is available to configure prompts and extractions, and to review processed results.
+
+# Quick start (Docker)
+
+Requires Docker on Linux, macOS, or Windows (WSL).
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/analytiq-hub/doc-router/main/tools/run-doc-router-docker.sh | bash -s -- up
+```
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/analytiq-hub/doc-router/main/tools/run-doc-router-docker.sh | bash -s -- down
+```
+
+The script prints URLs and sign-in credentials after `up`. More detail: [Docker setup](./docs/INSTALL.docker.md), [docrouter_docker](./docs/docrouter_docker.md), and [`tools/run-doc-router-docker.sh`](./tools/run-doc-router-docker.sh).
 
 # Tech stack
 * NextJS, NextAuth, MaterialUI, TailwindCSS
