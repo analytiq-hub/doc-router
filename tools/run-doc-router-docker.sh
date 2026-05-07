@@ -239,6 +239,31 @@ ghcr_hint() {
   echo "  echo YOUR_GITHUB_TOKEN | docker login ghcr.io -u YOUR_GITHUB_USERNAME --password-stdin" >&2
 }
 
+# Read KEY=value from .env (first non-comment match). No shell expansion.
+read_dotenv_value() {
+  local key="$1" file="$2" line val
+  [[ -f "$file" ]] || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ ^[[:space:]]*${key}= ]] || continue
+    val="${line#*=}"
+    val="${val%$'\r'}"
+    printf '%s\n' "$val"
+    return 0
+  done <"$file"
+  return 1
+}
+
+print_signin_hint() {
+  local ef="${STATE_DIR}/.env"
+  local admin_email admin_pw
+  admin_email="$(read_dotenv_value ADMIN_EMAIL "$ef" || true)"
+  admin_pw="$(read_dotenv_value ADMIN_PASSWORD "$ef" || true)"
+  admin_email="${admin_email:-admin}"
+  admin_pw="${admin_pw:-admin}"
+  echo "Credentials sign-in (http://localhost:3000/auth/signin): user ${admin_email} / password ${admin_pw}" >&2
+}
+
 do_up() {
   mkdir -p "$STATE_DIR"
   write_compose_yaml "${STATE_DIR}/docker-compose.yml"
@@ -262,6 +287,7 @@ do_up() {
 
   echo >&2
   echo "DocRouter is starting. Open http://localhost:3000 (API via http://localhost:3000/fastapi , backend :8000)." >&2
+  print_signin_hint
   echo "State directory: ${STATE_DIR}" >&2
 }
 
