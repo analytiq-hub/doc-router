@@ -211,6 +211,13 @@ export default function FlowDetailPageClient({
     return triggers.map((fn) => ({ id: fn.id, label: (fn.name || '').trim() || fn.type }));
   }, [rfNodes, nodeTypesByKey]);
 
+  const [lastRunTriggerId, setLastRunTriggerId] = useState<string | null>(null);
+  const lastRunTriggerLabel = useMemo(() => {
+    const id = (lastRunTriggerId || '').trim();
+    if (!id) return null;
+    return executeWorkflowTriggers.find((t) => t.id === id)?.label ?? null;
+  }, [executeWorkflowTriggers, lastRunTriggerId]);
+
   const graphSaveBlockedReason = graphStructurallyValid ? null : GRAPH_BLOCKED_MESSAGE;
 
   const isDirty = useMemo(() => {
@@ -459,6 +466,7 @@ export default function FlowDetailPageClient({
           ...(multi ? { start_trigger_node_id: st } : {}),
           revision_snapshot,
         });
+        if (multi && st) setLastRunTriggerId(st);
         if (out.execution_id) {
           setLogsFocusExecutionId(out.execution_id);
         }
@@ -749,6 +757,8 @@ export default function FlowDetailPageClient({
                         onEdgesChange={onEdgesChange}
                         onExecute={() => void onRun()}
                         executeWorkflowTriggers={executeWorkflowTriggers}
+                        executeWorkflowSelectedTriggerLabel={lastRunTriggerLabel}
+                        executeWorkflowPreferredTriggerId={lastRunTriggerId}
                         onExecuteFromWorkflowTrigger={(id) => void onRun(id)}
                         onStartWebhookTestListen={onStartWebhookTestListen}
                         onStopWebhookTestListen={onStopWebhookTestListen}

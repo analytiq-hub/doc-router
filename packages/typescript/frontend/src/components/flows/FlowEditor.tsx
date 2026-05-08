@@ -227,6 +227,10 @@ const FlowEditor: React.FC<{
   onExecute?: () => void;
   /** When multiple triggers exist, dropdown entries run from each trigger (`onExecute` is unused). */
   executeWorkflowTriggers?: FlowExecuteWorkflowTriggerOption[];
+  /** When set, shown in the footer run button as the last chosen trigger. */
+  executeWorkflowSelectedTriggerLabel?: string | null;
+  /** Last trigger used for footer “quick run”; fallback to first trigger when unset. */
+  executeWorkflowPreferredTriggerId?: string | null;
   onExecuteFromWorkflowTrigger?: (triggerId: string) => void;
   onStartWebhookTestListen?: (leaf: string) => void | Promise<void>;
   onStopWebhookTestListen?: (leaf: string) => void | Promise<void>;
@@ -259,6 +263,8 @@ const FlowEditor: React.FC<{
   onEdgesChange,
   onExecute,
   executeWorkflowTriggers = [],
+  executeWorkflowSelectedTriggerLabel = null,
+  executeWorkflowPreferredTriggerId = null,
   onExecuteFromWorkflowTrigger,
   onStartWebhookTestListen,
   onStopWebhookTestListen,
@@ -886,6 +892,20 @@ const FlowEditor: React.FC<{
     ],
   );
 
+  const footerExecuteSubLabel = useMemo(() => {
+    const chosen = (executeWorkflowSelectedTriggerLabel || '').trim();
+    if (chosen) return `from ${chosen}`;
+    const first = executeWorkflowTriggers[0];
+    const fallback = ((first?.label || first?.id) ?? '').trim();
+    return fallback ? `from ${fallback}` : 'from trigger';
+  }, [executeWorkflowSelectedTriggerLabel, executeWorkflowTriggers]);
+
+  const preferredFooterTriggerId = useMemo(() => {
+    const cand = (executeWorkflowPreferredTriggerId || '').trim();
+    if (cand && executeWorkflowTriggers.some((t) => t.id === cand)) return cand;
+    return executeWorkflowTriggers[0]?.id ?? '';
+  }, [executeWorkflowPreferredTriggerId, executeWorkflowTriggers]);
+
   return (
     <div className="docrouter-flow-canvas flex h-full min-h-[20rem] w-full min-w-0 flex-col overflow-hidden rounded-lg border border-[#e2e4e8] bg-[#f7f7f9]">
       <div
@@ -924,36 +944,67 @@ const FlowEditor: React.FC<{
                 addFooterPadding={Boolean(onExecute || executeWorkflowTriggers.length > 1)}
                 runButton={
                   executeWorkflowTriggers.length > 1 && onExecuteFromWorkflowTrigger ? (
-                    <Menu as="div" className="relative inline-block shrink-0 text-left">
-                      <MenuButton
+                    <div className="inline-flex shrink-0 overflow-hidden rounded-md shadow-md ring-1 ring-black/10">
+                      <button
                         type="button"
-                        className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95 active:scale-[0.99]"
+                        aria-label={`Execute workflow (${footerExecuteSubLabel})`}
+                        disabled={!preferredFooterTriggerId}
+                        onClick={() => {
+                          if (!preferredFooterTriggerId) return;
+                          void onExecuteFromWorkflowTrigger(preferredFooterTriggerId);
+                        }}
+                        className="inline-flex shrink-0 items-center gap-3 rounded-none px-5 py-2.5 text-left text-sm font-semibold text-white transition hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
                         style={{ backgroundColor: EXECUTE_BUTTON_BG }}
+                        onMouseEnter={(e) => {
+                          if ((e.currentTarget as HTMLButtonElement).disabled) return;
+                          (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG_HOVER;
+                        }}
+                        onMouseLeave={(e) => {
+                          (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG;
+                        }}
                       >
-                        <BeakerIcon className="h-4 w-4" aria-hidden />
-                        Execute workflow
-                        <ChevronDownIcon className="h-4 w-4" aria-hidden />
-                      </MenuButton>
-                      <MenuItems
-                        anchor="top"
-                        modal={false}
-                        className={`${flowWorkspaceMenuPanelClass} mt-2 min-w-[12rem]`}
-                      >
-                        {executeWorkflowTriggers.map((t) => (
-                          <MenuItem key={t.id}>
-                            {({ focus }) => (
-                              <button
-                                type="button"
-                                className={`${flowWorkspaceDropdownItemSimpleClass} flex w-full items-center gap-2 ${focus ? 'bg-gray-100' : ''}`}
-                                onClick={() => onExecuteFromWorkflowTrigger(t.id)}
-                              >
-                                <span className="whitespace-normal text-left">{`From ${t.label.trim() ? t.label : t.id}`}</span>
-                              </button>
-                            )}
-                          </MenuItem>
-                        ))}
-                      </MenuItems>
-                    </Menu>
+                        <BeakerIcon className="h-4 w-4 shrink-0" aria-hidden />
+                        <span className="flex flex-col items-start leading-tight">
+                          <span className="whitespace-nowrap">Execute workflow</span>
+                          <span className="text-[11px] font-semibold opacity-95">{footerExecuteSubLabel}</span>
+                        </span>
+                      </button>
+                      <Menu as="div" className="relative shrink-0 self-stretch text-left">
+                        <MenuButton
+                          type="button"
+                          aria-label="Choose which trigger starts the workflow"
+                          className="inline-flex h-full min-h-full min-w-[2.75rem] items-center justify-center border-l border-white/30 px-3 text-white transition hover:opacity-95 active:scale-[0.99]"
+                          style={{ backgroundColor: EXECUTE_BUTTON_BG }}
+                          onMouseEnter={(e) => {
+                            (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG_HOVER;
+                          }}
+                          onMouseLeave={(e) => {
+                            (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG;
+                          }}
+                        >
+                          <ChevronDownIcon className="h-4 w-4" aria-hidden />
+                        </MenuButton>
+                        <MenuItems
+                          anchor="top end"
+                          modal={false}
+                          className={`${flowWorkspaceMenuPanelClass} mt-2 min-w-[12rem]`}
+                        >
+                          {executeWorkflowTriggers.map((t) => (
+                            <MenuItem key={t.id}>
+                              {({ focus }) => (
+                                <button
+                                  type="button"
+                                  className={`${flowWorkspaceDropdownItemSimpleClass} flex w-full items-center gap-2 ${focus ? 'bg-gray-100' : ''}`}
+                                  onClick={() => onExecuteFromWorkflowTrigger(t.id)}
+                                >
+                                  <span className="whitespace-normal text-left">{`From ${t.label.trim() ? t.label : t.id}`}</span>
+                                </button>
+                              )}
+                            </MenuItem>
+                          ))}
+                        </MenuItems>
+                      </Menu>
+                    </div>
                   ) : onExecute ? (
                     <button
                       type="button"
