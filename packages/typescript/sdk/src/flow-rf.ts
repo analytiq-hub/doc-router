@@ -1,3 +1,4 @@
+import { finalizePersistedFlowNodeParameters } from './flow-parameter-merge';
 import type { FlowConnections, FlowNode, FlowNodeConnection, FlowNodeType, FlowRevision, SaveRevisionParams } from './types/flows';
 
 /** React Flow data payload (rendered in the app; `nodeType` is optional in saved graphs). */
@@ -109,10 +110,16 @@ export function rfToRevision(
 ): Omit<SaveRevisionParams, 'base_flow_revid'> & { base_flow_revid: string } {
   const nodes: FlowNode[] = rfNodes.map((n) => {
     const original = n.data?.flowNode;
+    const schema = n.data?.nodeType?.parameter_schema;
+    const parameters = finalizePersistedFlowNodeParameters(
+      schema,
+      (original?.parameters ?? {}) as Record<string, unknown>,
+    );
     return {
       ...(original as FlowNode),
       id: n.id,
       position: [Math.round(n.position.x), Math.round(n.position.y)],
+      parameters,
     };
   });
   const connections = rfToConnections(rfEdges);

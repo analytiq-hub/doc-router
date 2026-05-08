@@ -33,6 +33,30 @@ const mergeNodeType: FlowNodeType = {
   parameter_schema: {},
 };
 
+const codeLikeNodeType: FlowNodeType = {
+  key: 'tests.code_like',
+  label: 'Code',
+  description: 'c',
+  category: 'Test',
+  is_trigger: false,
+  min_inputs: 1,
+  max_inputs: 1,
+  outputs: 1,
+  output_labels: ['out'],
+  parameter_schema: {
+    type: 'object',
+    properties: {
+      python_code: {
+        type: 'string',
+        default: 'def run(items, context):\n  return items\n',
+      },
+      timeout_seconds: { type: 'number', default: 2 },
+    },
+    required: ['python_code'],
+    additionalProperties: false,
+  } as FlowNodeType['parameter_schema'],
+};
+
 function _node(id: string, x: number, y: number, type: string, name: string): FlowRevision['nodes'][0] {
   return {
     id,
@@ -160,5 +184,16 @@ describe('flow-rf', () => {
     expect(fp1).toBe(fp2);
     const fp3 = revisionContentFingerprint('Other', nodes, edges, rev);
     expect(fp3).not.toBe(fp1);
+  });
+
+  it('rfToRevision fills schema defaults when parameters were never edited', () => {
+    const py = _node('C', 10, 20, 'tests.code_like', 'C');
+    const rev = baseRev([py], {});
+    const byKey = { 'tests.code_like': codeLikeNodeType };
+    const { nodes, edges } = revisionToRF(rev, byKey);
+    const out = rfToRevision(nodes, edges, rev, 'With code');
+    const codeNode = out.nodes.find((n) => n.id === 'C');
+    expect(codeNode?.parameters.python_code).toBe('def run(items, context):\n  return items\n');
+    expect(codeNode?.parameters.timeout_seconds).toBe(2);
   });
 });
