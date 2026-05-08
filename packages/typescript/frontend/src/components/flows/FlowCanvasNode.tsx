@@ -13,7 +13,7 @@ import {
   StopCircleIcon,
   TrashIcon,
 } from '@heroicons/react/24/solid';
-import { NoSymbolIcon } from '@heroicons/react/24/outline';
+import { BeakerIcon, NoSymbolIcon } from '@heroicons/react/24/outline';
 import { inputHandleCount } from './flowRf';
 import type { FlowRfNodeDataWithRun, NodeRunStatusBadge } from './flowNodeRunStatus';
 import { getNodeRunStatusFromRunData } from './flowNodeRunStatus';
@@ -30,6 +30,20 @@ import {
 
 const handleClass =
   '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-emerald-500 hover:!bg-emerald-50';
+
+const TRIGGER_EXECUTE_BUTTON_BG = '#ff6d5a';
+const TRIGGER_EXECUTE_BUTTON_BG_HOVER = '#e85d4d';
+
+/** Trigger node body height (`h-[96px]` below); hover run button is exactly ⅓. */
+const FLOW_TRIGGER_NODE_BODY_PX = 96;
+const TRIGGER_EXECUTE_BTN_H_PX = FLOW_TRIGGER_NODE_BODY_PX / 3;
+
+/** Test id slug for hover “Execute workflow” (mirrors typical workflow-editor naming). */
+function flowExecuteWorkflowTestSlug(displayLabel: string, fallbackId: string): string {
+  const t = displayLabel.trim();
+  if (!t) return fallbackId.slice(0, 64);
+  return t.slice(0, 120).replace(/[^\w\s-]/g, '');
+}
 
 /** Mid-edge insert already provides “+” on the connection; hide the inline stub until the node is hovered. */
 const appendStubHiddenUntilNodeHoverClass =
@@ -370,6 +384,45 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
       >
         {toolbar}
         <div className="relative mx-auto w-[96px]">
+          {actions?.onHoverExecuteWorkflowFromTrigger ? (
+            <>
+              {/* Corridor from node edge to/off the floated control — avoids losing `group-hover` over empty canvas */}
+              <div
+                aria-hidden
+                className="pointer-events-none absolute right-full top-1/2 z-[6095] h-[112px] w-[calc(2.25rem+9.25rem)] -translate-y-1/2 group-hover:pointer-events-auto [@media(hover:none)]:pointer-events-auto"
+                onMouseEnter={showToolbarForPointer}
+                onMouseLeave={hideToolbarForPointerSoon}
+              />
+              <button
+                type="button"
+                aria-live="polite"
+                aria-label={`Execute workflow from ${displayLabel}`}
+                data-test-id={`execute-workflow-button-${flowExecuteWorkflowTestSlug(displayLabel, id)}`}
+                className="pointer-events-none absolute right-[calc(100%+2.25rem)] top-1/2 z-[6100] flex shrink-0 -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-md px-2 py-0 text-left text-[10px] font-semibold leading-none text-white opacity-0 shadow-md transition-opacity duration-150 hover:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
+                style={{
+                  backgroundColor: TRIGGER_EXECUTE_BUTTON_BG,
+                  height: TRIGGER_EXECUTE_BTN_H_PX,
+                  minHeight: TRIGGER_EXECUTE_BTN_H_PX,
+                  maxHeight: TRIGGER_EXECUTE_BTN_H_PX,
+                }}
+                onMouseEnter={(e) => {
+                  showToolbarForPointer();
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = TRIGGER_EXECUTE_BUTTON_BG_HOVER;
+                }}
+                onMouseLeave={(e) => {
+                  hideToolbarForPointerSoon();
+                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = TRIGGER_EXECUTE_BUTTON_BG;
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void actions?.onHoverExecuteWorkflowFromTrigger?.(id);
+                }}
+              >
+                <BeakerIcon className="h-2.5 w-2.5 shrink-0 opacity-95" aria-hidden strokeWidth={2} />
+                <span>Execute workflow</span>
+              </button>
+            </>
+          ) : null}
           <div
             className={[
               nodeBodyBase,

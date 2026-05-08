@@ -808,6 +808,19 @@ const FlowEditor: React.FC<{
     await runExecuteStepForNode(configModalNodeId);
   }, [configModalNodeId, runExecuteStepForNode]);
 
+  const hoverExecuteWorkflowFromTrigger = useMemo(() => {
+    const multi = executeWorkflowTriggers.length > 1;
+    if (multi) {
+      if (!onExecuteFromWorkflowTrigger) return undefined;
+      return (triggerNodeId: string) => void onExecuteFromWorkflowTrigger(triggerNodeId);
+    }
+    if (!onExecute) return undefined;
+    return (triggerNodeId: string) => {
+      void triggerNodeId;
+      void onExecute();
+    };
+  }, [executeWorkflowTriggers.length, onExecute, onExecuteFromWorkflowTrigger]);
+
   const canvasActions = useMemo(
     () => ({
       onExecuteNodeStep: onExecuteStep ? runExecuteStepForNode : undefined,
@@ -858,8 +871,19 @@ const FlowEditor: React.FC<{
         pendingOutputAppendRef.current = payload;
         setNodePaletteOpen(true);
       },
+      onHoverExecuteWorkflowFromTrigger: hoverExecuteWorkflowFromTrigger,
     }),
-    [edges, executeStepBusy, nodeTypesByKey, nodes, onEdgesChange, onExecuteStep, onNodesChange, runExecuteStepForNode],
+    [
+      edges,
+      executeStepBusy,
+      hoverExecuteWorkflowFromTrigger,
+      nodeTypesByKey,
+      nodes,
+      onEdgesChange,
+      onExecuteStep,
+      onNodesChange,
+      runExecuteStepForNode,
+    ],
   );
 
   return (

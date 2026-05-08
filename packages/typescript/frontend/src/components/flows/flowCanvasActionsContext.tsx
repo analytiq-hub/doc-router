@@ -33,6 +33,11 @@ export type FlowCanvasActions = {
   onBeginInsertOnEdge?: (payload: EdgeInsertPayload) => void;
   /** Start add-node flow from a dangling output (opens palette; new node links to this handle). */
   onBeginAppendFromOutput?: (payload: OutputAppendPayload) => void;
+  /**
+   * Full workflow run from this trigger node (canvas hover control, parity with footer “Execute workflow”).
+   * Parent supplies when the graph supports run; receives the RF node id of the hovered trigger.
+   */
+  onHoverExecuteWorkflowFromTrigger?: (triggerNodeId: string) => void | Promise<void>;
 };
 
 const FlowCanvasActionsContext = createContext<FlowCanvasActions | null>(null);
