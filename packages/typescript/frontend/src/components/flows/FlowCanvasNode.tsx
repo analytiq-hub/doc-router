@@ -58,7 +58,7 @@ function OutputHandlesWithContinuation({
             />
             {canAppend ? (
               <div
-                className="docrouter-flow-node-append pointer-events-none absolute left-full z-[6000] flex translate-y-[-50%] items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100"
+                className="docrouter-flow-node-append absolute left-full z-[6000] flex translate-y-[-50%] items-center gap-1"
                 style={{ top: `${topPct}%` }}
               >
                 <span className="pointer-events-none inline-block h-px w-4 shrink-0 bg-[#c5cad3]" aria-hidden />
