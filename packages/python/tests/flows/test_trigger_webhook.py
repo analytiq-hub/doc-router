@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
 
 import pytest
@@ -607,3 +608,27 @@ def test_pick_webhook_last_node_merge_single_sink() -> None:
         },
     }
     assert ad.flows.pick_webhook_last_node_id(run_data, revision) == "m"
+
+
+def test_pick_webhook_last_node_bad_start_trigger_warns(caplog: pytest.LogCaptureFixture) -> None:
+    """Unresolvable ``start_trigger_node_id`` must log before falling back (multi-trigger ambiguity)."""
+
+    revision = {
+        "nodes": [
+            {"id": "t1", "type": "flows.trigger.manual", "name": "T1"},
+            {"id": "t2", "type": "flows.trigger.manual", "name": "T2"},
+            {"id": "a", "type": "flows.code", "name": "A"},
+        ],
+        "connections": {
+            "t1": {"main": [[{"dest_node_id": "a", "index": 0}]]},
+            "t2": {"main": [[]]},
+            "a": {"main": [[]]},
+        },
+    }
+    run_data = {
+        "a": {"status": "success", "start_time": "2020-01-01T00:00:00+00:00", "execution_time_ms": 1, "data": {"main": [[]]}},
+    }
+    with caplog.at_level(logging.WARNING):
+        ad.flows.pick_webhook_last_node_id(run_data, revision, start_trigger_node_id="no-such-trigger")
+    assert any("no-such-trigger" in r.message for r in caplog.records)
+    assert any("pick_webhook_last_node_id" in r.message for r in caplog.records)

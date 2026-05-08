@@ -69,8 +69,13 @@ export function clearHiddenFieldsToDefaults(
 ): Record<string, unknown> {
   const props = getSchemaProperties(parameterSchema);
   const out = { ...params };
-  for (const k of Object.keys(props)) {
-    if (!isPropertyVisible(k, parameterSchema, out)) {
+  const keys = Object.keys(props);
+  const visible: Record<string, boolean> = {};
+  for (const k of keys) {
+    visible[k] = isPropertyVisible(k, parameterSchema, params);
+  }
+  for (const k of keys) {
+    if (!visible[k]) {
       out[k] = defaultFromSubschema(props[k]);
     }
   }

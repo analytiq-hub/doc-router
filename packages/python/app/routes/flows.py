@@ -441,20 +441,28 @@ class FlowRevisionSnapshotRequest(BaseModel):
 
 
 class RunFlowRequest(BaseModel):
-    flow_revid: str | None = None
-    document_id: str | None = None
-    """Which trigger seeds a full manual run when the graph has multiple triggers (execute-step resolves this when omitted if unambiguous)."""
-
-    start_trigger_node_id: str | None = None
-    """When set, run only the upstream subgraph through this node (execute step)."""
-
-    target_node_id: str | None = None
-    """Client-supplied prior outputs keyed by node id (validated); merged into execution before run."""
-    run_data: dict[str, Any] | None = None
-    """Node ids whose seed entries are ignored so those nodes re-execute."""
-    dirty_node_ids: list[str] | None = None
-    """Editor graph to execute immediately (unsaved or dirty). Overrides DB revision when present."""
-    revision_snapshot: FlowRevisionSnapshotRequest | None = None
+    flow_revid: str | None = Field(None, description="Revision lineage id for the execution; optional when revision_snapshot is supplied.")
+    document_id: str | None = Field(None, description="Optional document id recorded on the manual trigger payload for this run.")
+    start_trigger_node_id: str | None = Field(
+        None,
+        description="When the revision has multiple triggers, which one starts a full run (required in that case). For execute-step runs the engine infers the trigger when omitted if unambiguous.",
+    )
+    target_node_id: str | None = Field(
+        None,
+        description="Execute-step: run through this node only (upstream closure). Prior outputs may be supplied via run_data.",
+    )
+    run_data: dict[str, Any] | None = Field(
+        None,
+        description="Per-node output seed keyed by node id (validated). Used with target_node_id for execute-step.",
+    )
+    dirty_node_ids: list[str] | None = Field(
+        None,
+        description="Node ids whose seed entries are ignored so those nodes re-execute.",
+    )
+    revision_snapshot: FlowRevisionSnapshotRequest | None = Field(
+        None,
+        description="Immutable editor graph for an immediate run; overrides the stored revision when set.",
+    )
 
 
 async def _resolve_flow_revid_lineage(flow_id: str, flow_revid: str | None, db: Any) -> str:

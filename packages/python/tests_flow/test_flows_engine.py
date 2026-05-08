@@ -362,6 +362,30 @@ async def test_run_flow_full_run_requires_start_trigger_when_multiple() -> None:
         await ad.flows.run_flow(context=ctx, revision=rev)
 
 
+def test_prune_run_data_outside_closure_respects_forward_reachable_multi_trigger_seed() -> None:
+    """Full multi-trigger runs scope ``allowed_pins`` to forward reach — prune must use the same set."""
+
+    nodes = [
+        _manual_trig("t1", "One"),
+        _manual_trig("t2", "Two"),
+        _pass_next("a1", "A"),
+        _pass_next("b1", "B"),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="a1", connection_type="main", index=0)]]},
+        "t2": {"main": [[ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0)]]},
+    }
+    conns_dc = ad.flows.coerce_json_connections_to_dataclasses(connections)
+    scope = frozenset(ad.flows.trigger_forward_reachable_nodes("t2", conns_dc))
+    run_data = {
+        "t1": {"status": "success", "data": {"main": [[]]}, "execution_time_ms": 0},
+        "a1": {"status": "success", "data": {"main": [[]]}, "execution_time_ms": 0},
+        "t2": {"status": "success", "data": {"main": [[]]}, "execution_time_ms": 0},
+    }
+    ad.flows.prune_run_data_outside_closure(run_data, scope)
+    assert set(run_data.keys()) == {"t2"}
+
+
 def test_trigger_forward_reachable_pins_do_not_seed_other_manual_branch_run_data() -> None:
     """Pins on manual trigger ``t1`` must not preload ``run_data`` when scoping for a ``t2`` full run."""
 

@@ -11,3 +11,4 @@ export * from './types';
 
 // Flow graph ↔ editor helpers
 export * from './flow-rf';
+export * from './flow-parameter-merge';

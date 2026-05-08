@@ -11,6 +11,7 @@ import asyncio
 import collections
 import hashlib
 import json
+import logging
 import time
 from dataclasses import dataclass
 from datetime import datetime, UTC
@@ -20,6 +21,9 @@ from bson import ObjectId
 from jsonschema import Draft7Validator
 
 import analytiq_data as ad
+
+
+logger = logging.getLogger(__name__)
 
 
 class FlowValidationError(ValueError):
@@ -409,8 +413,9 @@ def prune_run_data_outside_closure(
     """
     Remove per-node ``run_data`` entries that are outside ``allowed_node_ids``.
 
-    Execute step merges editor panel seed spanning all nodes; unrelated parallel branches must not
-    stay in ``run_data`` for this execution (they would otherwise show success without running).
+    Used when ``run_data`` is narrowed to a subgraph: execute-step (upstream closure), or a full run
+    rooted at one trigger (forward-reachable node ids). Drops panel seed from unrelated parallel
+    branches so they are not shown as having succeeded in this execution.
     """
 
     stale = [
@@ -945,8 +950,10 @@ def pick_webhook_last_node_id(
         connections = {}
 
     trigger_id: str | None = None
+    requested_explicit: str | None = None
     if isinstance(start_trigger_node_id, str) and start_trigger_node_id.strip():
-        trig = start_trigger_node_id.strip()
+        requested_explicit = start_trigger_node_id.strip()
+        trig = requested_explicit
         raw_n = None
         for n in nodes:
             if isinstance(n, dict) and str(n.get("id") or "") == trig:
@@ -959,7 +966,13 @@ def pick_webhook_last_node_id(
                     if ad.flows.get(typ_raw).is_trigger:
                         trigger_id = trig
                 except Exception:
-                    trigger_id = None
+                    pass
+
+    if requested_explicit and trigger_id is None:
+        logger.warning(
+            "pick_webhook_last_node_id: start_trigger_node_id %r did not resolve (missing node, non-trigger type, or registry lookup error); falling back to first trigger or global latest-finished heuristic — ambiguous on multi-trigger flows",
+            requested_explicit,
+        )
 
     if not trigger_id:
         for n in nodes:
