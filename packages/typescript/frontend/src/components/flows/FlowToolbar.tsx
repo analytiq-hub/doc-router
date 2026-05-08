@@ -55,6 +55,8 @@ const FlowToolbar: React.FC<{
   activationPending?: boolean;
   /** When set, Save is blocked (tooltip + banner) until the graph is valid. */
   graphSaveBlockedReason?: string | null;
+  /** When set, Activate is blocked (e.g. empty canvas). */
+  activateBlockedReason?: string | null;
   onSave: () => void;
   onActivate: () => void;
   onDeactivate: () => void;
@@ -68,6 +70,7 @@ const FlowToolbar: React.FC<{
   isSaving,
   activationPending = false,
   graphSaveBlockedReason = null,
+  activateBlockedReason = null,
   onSave,
   onActivate,
   onDeactivate,
@@ -77,7 +80,8 @@ const FlowToolbar: React.FC<{
   const [nameFocus, setNameFocus] = useState(false);
   const showNameField = nameHover || nameFocus;
   const measure = useInlineNameWidthPx(name, 'Flow name');
-  const activateDisabled = isDirty || activationPending || Boolean(graphSaveBlockedReason);
+  const activateDisabled =
+    isDirty || activationPending || Boolean(graphSaveBlockedReason) || Boolean(activateBlockedReason);
   const deactivateDisabled = activationPending;
   const saveDisabled = !isDirty || isSaving || Boolean(graphSaveBlockedReason);
 
@@ -136,7 +140,10 @@ const FlowToolbar: React.FC<{
             className={flowToolbarBtnClass}
             onClick={onActivate}
             disabled={activateDisabled}
-            title={graphSaveBlockedReason ? graphSaveBlockedReason : isDirty ? 'Save before activating' : undefined}
+            title={
+              activateBlockedReason ??
+              (graphSaveBlockedReason ? graphSaveBlockedReason : isDirty ? 'Save before activating' : undefined)
+            }
           >
             {activationPending ? 'Activating…' : 'Activate'}
           </button>

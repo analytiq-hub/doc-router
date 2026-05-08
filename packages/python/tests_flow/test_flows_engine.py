@@ -304,6 +304,18 @@ def test_validate_revision_rejects_graph_with_no_trigger() -> None:
         ad.flows.validate_revision(nodes, {}, {}, None)
 
 
+def test_validate_revision_accepts_empty_graph() -> None:
+    """Editor may save a brand-new workflow before the user adds any trigger."""
+    ad.flows.validate_revision([], {}, {}, None)
+
+
+def test_validate_revision_rejects_empty_graph_with_connections_or_pins() -> None:
+    with pytest.raises(ad.flows.FlowValidationError, match="no nodes"):
+        ad.flows.validate_revision([], {"x": {"main": [[]]}}, {}, None)
+    with pytest.raises(ad.flows.FlowValidationError, match="no nodes"):
+        ad.flows.validate_revision([], {}, {}, {"n1": {"main": []}})
+
+
 def test_validate_revision_accepts_two_disjoint_trigger_subgraphs() -> None:
     nodes = [
         _manual_trig("t1", "One"),

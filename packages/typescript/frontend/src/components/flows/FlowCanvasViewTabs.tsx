@@ -37,7 +37,9 @@ export function FlowModalSideNavStraddle({ side, children }: { side: 'left' | 'r
 const FlowCanvasViewTabs: React.FC<{
   value: FlowCanvasView;
   onChange: (next: FlowCanvasView) => void;
-}> = ({ value, onChange }) => {
+  /** When true, Executions is non-interactive (e.g. flow not persisted yet). */
+  disableExecutionsTab?: boolean;
+}> = ({ value, onChange, disableExecutionsTab = false }) => {
   const segment = (active: boolean) =>
     [
       'flex h-[26px] min-w-[5rem] select-none items-center justify-center rounded-md px-3 text-[13px] font-semibold leading-none tracking-tight transition-colors',
@@ -59,8 +61,17 @@ const FlowCanvasViewTabs: React.FC<{
         type="button"
         role="tab"
         aria-selected={value === 'executions'}
-        onClick={() => onChange('executions')}
-        className={segment(value === 'executions')}
+        disabled={disableExecutionsTab}
+        title={
+          disableExecutionsTab ? 'Save the flow once to open executions and runs from the server.' : undefined
+        }
+        onClick={() => {
+          if (!disableExecutionsTab) onChange('executions');
+        }}
+        className={[
+          segment(value === 'executions'),
+          disableExecutionsTab ? 'cursor-not-allowed opacity-50' : '',
+        ].join(' ')}
       >
         Executions
       </button>

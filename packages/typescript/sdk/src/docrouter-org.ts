@@ -962,15 +962,24 @@ export class DocRouterOrg {
     );
   }
 
-  async createFlow(params: CreateFlowParams): Promise<{ flow: FlowHeader }> {
-    return this.http.post<{ flow: FlowHeader }>(`/v0/orgs/${this.organizationId}/flows`, params);
+  async createFlow(params: CreateFlowParams): Promise<{ flow: FlowHeader; revision?: FlowRevision | null }> {
+    return this.http.post<{ flow: FlowHeader; revision?: FlowRevision | null }>(
+      `/v0/orgs/${this.organizationId}/flows`,
+      params,
+    );
   }
 
-  async listFlows(params?: { limit?: number; offset?: number }): Promise<ListFlowsResponse> {
+  async listFlows(params?: {
+    limit?: number;
+    offset?: number;
+    /** When true, include flows that have never had a saved revision (for name reservation, etc.). */
+    includeUnsaved?: boolean;
+  }): Promise<ListFlowsResponse> {
     return this.http.get<ListFlowsResponse>(`/v0/orgs/${this.organizationId}/flows`, {
       params: {
         limit: params?.limit ?? 20,
         offset: params?.offset ?? 0,
+        ...(params?.includeUnsaved ? { include_unsaved: true } : {}),
       },
     });
   }

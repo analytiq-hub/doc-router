@@ -85,13 +85,26 @@ def validate_revision(
     """
     Validate a flow revision against v1 rules.
 
+    Empty graphs (no nodes) are allowed so the editor can save a new workflow before any
+    trigger is added.     When there is at least one node, enforce trigger/reachability/DAG rules.
+
     Enforces uniqueness (ids/names), existence of referenced nodes, port index
-    bounds, DAG constraint, at least one trigger, reachability from some trigger,
-    and JSON-schema
-    parameter validation via the registered node types.
+    bounds, DAG constraint, at least one trigger when non-empty, reachability from some trigger,
+    and node-type structural checks.
+
+    For an empty ``nodes`` list, ``settings`` are not inspected: v1 uses revision ``settings``
+    only as graph-level metadata; if it later gains semantics tied to concrete nodes,
+    tighten this path (reject unknown keys / require `{}` until first node exists).
     """
 
     settings = settings or {}
+    if not nodes:
+        if connections:
+            raise FlowValidationError("Cannot save connections when the flow has no nodes")
+        if pin_data:
+            raise FlowValidationError("Cannot save pin_data when the flow has no nodes")
+        return
+
     node_ids = [n.get("id") for n in nodes]
     if len(node_ids) != len(set(node_ids)):
         raise FlowValidationError("nodes[].id must be unique")

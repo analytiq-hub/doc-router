@@ -147,6 +147,11 @@ export interface ListExecutionsResponse {
 
 export interface CreateFlowParams {
   name: string;
+  /** When provided with the graph, persists the first revision in the same request as header creation. */
+  nodes?: FlowNode[];
+  connections?: FlowConnections;
+  settings?: Record<string, unknown>;
+  pin_data?: FlowPinData | null;
 }
 
 export interface SaveRevisionParams {

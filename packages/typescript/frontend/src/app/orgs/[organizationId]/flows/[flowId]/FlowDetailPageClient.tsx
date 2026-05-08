@@ -3,7 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import type { FlowExecution, FlowNodeType, FlowPinData, FlowRevision, FlowRfEdge, FlowRfNode } from '@docrouter/sdk';
+import type {
+  FlowExecution,
+  FlowNodeType,
+  FlowPinData,
+  FlowRevision,
+  FlowRfEdge,
+  FlowRfNode,
+  ListNodeTypesResponse,
+} from '@docrouter/sdk';
 import FlowToolbar from '@/components/flows/FlowToolbar';
 import FlowEditor from '@/components/flows/FlowEditor';
 import FlowCanvasViewTabs, { FlowWorkspaceTabStraddle, type FlowCanvasView } from '@/components/flows/FlowCanvasViewTabs';
@@ -12,7 +20,13 @@ import FlowLogsPanel from '@/components/flows/FlowLogsPanel';
 import { snapRfNodesPositions } from '@/components/flows/canvasGrid';
 import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNodeData } from '@/components/flows/flowRf';
 import { GRAPH_BLOCKED_MESSAGE, triggerReachabilityFromGraph } from '@/components/flows/flowTriggerReachability';
+import {
+  loadFlowNamesTakenLower,
+  NEW_FLOW_URL_SEGMENT,
+  nextSequentialDisplayName,
+} from '@/components/flows/flowDefaultNames';
 import { useFlowApi } from '@/components/flows/useFlowApi';
+import { getApiErrorMsg } from '@/utils/api';
 import type { Edge, Node } from 'reactflow';
 import FlowExecutionsView from '@/components/flows/FlowExecutionsView';
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelGroupHandle } from 'react-resizable-panels';
@@ -21,6 +35,21 @@ const LOGS_COLLAPSED_PCT = 8;
 const LOGS_MIN_EXPANDED_PCT = LOGS_COLLAPSED_PCT;
 const LOGS_MAX_EXPANDED_PCT = 90;
 const LOGS_STORAGE_KEY = 'docrouter.flow.logsPanel.expandedPct';
+
+/** New canvas: no nodes until the user adds a trigger from the palette. */
+function emptyEditorRevision(flowIdMeta: string): FlowRevision {
+  return {
+    flow_revid: '',
+    flow_id: flowIdMeta,
+    flow_version: 0,
+    graph_hash: '',
+    nodes: [],
+    connections: {},
+    settings: {},
+    pin_data: null,
+    engine_version: 1,
+  };
+}
 
 function tabFromQuery(value: string | null): FlowCanvasView {
   return value === 'executions' ? 'executions' : 'editor';
@@ -87,6 +116,9 @@ export default function FlowDetailPageClient({
   const router = useRouter();
   const searchParams = useSearchParams();
   const view = tabFromQuery(searchParams.get('tab'));
+  const proposedNameQuery = searchParams.get('proposedName');
+  const isDraftRoute = flowId === NEW_FLOW_URL_SEGMENT;
+  const editorFlowId = isDraftRoute ? '' : flowId;
   const [flowName, setFlowName] = useState<string>('Flow');
   const [flowActive, setFlowActive] = useState<boolean>(false);
   const [activeFlowRevid, setActiveFlowRevid] = useState<string | null>(null);
@@ -139,11 +171,20 @@ export default function FlowDetailPageClient({
     setWebhookTestListenBusy(false);
   }, [flowId, organizationId]);
 
+  useEffect(() => {
+    if (!isDraftRoute || view !== 'executions') return;
+    router.replace(`/orgs/${organizationId}/flows/${NEW_FLOW_URL_SEGMENT}`);
+  }, [isDraftRoute, organizationId, router, view]);
+
   const handleViewChange = useCallback(
     (next: FlowCanvasView) => {
+      if (next === 'executions' && isDraftRoute) {
+        setMessage('Save the flow once to open executions.');
+        return;
+      }
       router.push(`/orgs/${organizationId}/flows/${flowId}?tab=${next}`);
     },
-    [flowId, organizationId, router],
+    [flowId, isDraftRoute, organizationId, router],
   );
 
   const onLogsEditNode = useCallback(
@@ -222,15 +263,54 @@ export default function FlowDetailPageClient({
 
   const isDirty = useMemo(() => {
     if (graphFingerprint == null || savedContentFingerprint == null) return false;
+    // Draft (/flows/new): no server revision yet — compare fingerprints only so a pristine canvas is not dirty.
+    if (isDraftRoute) {
+      return graphFingerprint !== savedContentFingerprint;
+    }
     if (!latestFlowRevid) return true;
     return graphFingerprint !== savedContentFingerprint;
-  }, [graphFingerprint, latestFlowRevid, savedContentFingerprint]);
+  }, [graphFingerprint, isDraftRoute, latestFlowRevid, savedContentFingerprint]);
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
         setMessage('');
+        if (isDraftRoute) {
+          const fromQuery = (proposedNameQuery ?? '').trim();
+          let nts: ListNodeTypesResponse;
+          let initialName: string;
+          // Quick-create always passes proposedName — skip paging `GET /flows` here (heavy; avoids masking
+          // canvas load failures as "Network Error" when listing is slow or fails).
+          if (fromQuery) {
+            nts = await api.listFlowNodeTypes();
+            if (!mounted) return;
+            initialName = fromQuery;
+          } else {
+            const [ntsRes, takenLower] = await Promise.all([
+              api.listFlowNodeTypes(),
+              loadFlowNamesTakenLower(api).catch(() => new Set<string>()),
+            ]);
+            if (!mounted) return;
+            nts = ntsRes;
+            initialName = nextSequentialDisplayName(takenLower, 'My workflow');
+          }
+          setFlowName(initialName);
+          setFlowActive(false);
+          setActiveFlowRevid(null);
+          setLatestFlowRevid('');
+          setNodeTypes(nts.items);
+
+          const blank = emptyEditorRevision('');
+          setRevision(blank);
+          const { nodes, edges } = revisionToRF(blank, Object.fromEntries(nts.items.map((x) => [x.key, x])));
+          const snapped = snapRfNodesPositions(nodes as Node<FlowRfNodeData>[]);
+          setRfNodes(snapped as Node[]);
+          setRfEdges(edges as Edge[]);
+          setSavedContentFingerprint(revisionContentFingerprint(initialName, snapped, edges, blank));
+          return;
+        }
+
         const [flowItem, nts] = await Promise.all([api.getFlow(flowId), api.listFlowNodeTypes()]);
         if (!mounted) return;
         setFlowName(flowItem.flow.name);
@@ -259,31 +339,7 @@ export default function FlowDetailPageClient({
           return;
         }
 
-        const triggerType = nts.items.find((x) => x.is_trigger)?.key ?? 'flows.trigger.manual';
-        const triggerLabel = nts.items.find((x) => x.key === triggerType)?.label ?? 'Manual Trigger';
-        const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : 't1';
-        const blank: FlowRevision = {
-          flow_revid: '',
-          flow_id: flowId,
-          flow_version: 0,
-          graph_hash: '',
-          nodes: [
-            {
-              id,
-              name: triggerLabel,
-              type: triggerType,
-              position: [120, 120],
-              parameters: {},
-              disabled: false,
-              on_error: 'stop',
-              notes: null,
-            },
-          ],
-          connections: {},
-          settings: {},
-          pin_data: null,
-          engine_version: 1,
-        };
+        const blank = emptyEditorRevision(flowId);
         setRevision(blank);
         const { nodes, edges } = revisionToRF(blank, Object.fromEntries(nts.items.map((x) => [x.key, x])));
         const snapped = snapRfNodesPositions(nodes as Node<FlowRfNodeData>[]);
@@ -293,14 +349,14 @@ export default function FlowDetailPageClient({
           revisionContentFingerprint(flowItem.flow.name, snapped, edges, blank),
         );
       } catch (err: unknown) {
-        setMessage(err instanceof Error ? err.message : 'Failed to load flow');
+        setMessage(getApiErrorMsg(err) || 'Failed to load flow');
       }
     };
     void load();
     return () => {
       mounted = false;
     };
-  }, [api, flowId]);
+  }, [api, flowId, isDraftRoute, proposedNameQuery]);
 
   const onNodesChange = useCallback((next: Node[]) => {
     setRfNodes(next);
@@ -320,6 +376,21 @@ export default function FlowDetailPageClient({
       setIsSaving(true);
       setMessage('');
       const body = rfToRevision(rfNodes as FlowRfNode[], rfEdges as FlowRfEdge[], revision, flowName);
+      if (isDraftRoute) {
+        const res = await api.createFlow({
+          name: body.name,
+          nodes: body.nodes,
+          connections: body.connections,
+          settings: body.settings,
+          pin_data: body.pin_data,
+        });
+        if (!res.revision) {
+          setMessage('Save failed: no revision was created');
+          return;
+        }
+        router.replace(`/orgs/${organizationId}/flows/${res.flow.flow_id}`);
+        return;
+      }
       const res = await api.saveRevision(flowId, {
         base_flow_revid: latestFlowRevid || '',
         name: body.name,
@@ -350,11 +421,24 @@ export default function FlowDetailPageClient({
     } finally {
       setIsSaving(false);
     }
-  }, [api, flowId, flowName, graphStructurallyValid, latestFlowRevid, rfEdges, rfNodes, revision]);
+  }, [
+    api,
+    flowId,
+    flowName,
+    graphStructurallyValid,
+    isDraftRoute,
+    latestFlowRevid,
+    organizationId,
+    rfEdges,
+    rfNodes,
+    revision,
+    router,
+  ]);
 
   /** Persist pin/unpin immediately so server matches the editor (no separate Save), like common workflow tooling. */
   const persistPinDataToServer = useCallback(
     async (mergedRevision: FlowRevision, pinData: FlowPinData | null) => {
+      if (isDraftRoute) return;
       const ctx = persistCtxRef.current;
       if (
         ctx.rfNodes.length > 0 &&
@@ -402,7 +486,7 @@ export default function FlowDetailPageClient({
         setIsSaving(false);
       }
     },
-    [api, flowId],
+    [api, flowId, isDraftRoute],
   );
 
   const onPinDataChange = useCallback(
@@ -427,6 +511,8 @@ export default function FlowDetailPageClient({
         });
       }
 
+      if (isDraftRoute) return;
+
       pinPersistChain.current = pinPersistChain.current.then(async () => {
         try {
           await persistPinDataToServer(mergedForSave, next);
@@ -436,7 +522,7 @@ export default function FlowDetailPageClient({
         }
       });
     },
-    [persistPinDataToServer, revision],
+    [isDraftRoute, persistPinDataToServer, revision],
   );
 
   const buildRevisionSnapshotForRun = useCallback(() => {
@@ -715,13 +801,18 @@ export default function FlowDetailPageClient({
                   isSaving={isSaving}
                   activationPending={activationPending}
                   graphSaveBlockedReason={graphSaveBlockedReason}
+                  activateBlockedReason={rfNodes.length === 0 ? 'Add nodes to the workflow before activating.' : null}
                   onSave={onSave}
                   onActivate={onActivate}
                   onDeactivate={onDeactivate}
                   onDownloadFlowJson={() => void onDownloadFlowJson()}
                 />
                 <FlowWorkspaceTabStraddle>
-                  <FlowCanvasViewTabs value={view} onChange={handleViewChange} />
+                  <FlowCanvasViewTabs
+                    value={view}
+                    onChange={handleViewChange}
+                    disableExecutionsTab={isDraftRoute}
+                  />
                 </FlowWorkspaceTabStraddle>
               </div>
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -748,23 +839,25 @@ export default function FlowDetailPageClient({
                   <Panel defaultSize={100 - LOGS_COLLAPSED_PCT} minSize={25} className="min-h-0">
                     <div className="h-full min-h-0 min-w-0 overflow-hidden">
                       <FlowEditor
-                        flowId={flowId}
+                        flowId={editorFlowId}
                         flowRevidForPins={(revision?.flow_revid ?? latestFlowRevid ?? '').trim() || null}
                         nodeTypes={nodeTypes}
                         nodes={rfNodes as Node<FlowRfNodeData>[]}
                         edges={rfEdges}
                         onNodesChange={onNodesChange}
                         onEdgesChange={onEdgesChange}
-                        onExecute={() => void onRun()}
+                        onExecute={isDraftRoute ? undefined : () => void onRun()}
                         executeWorkflowTriggers={executeWorkflowTriggers}
                         executeWorkflowSelectedTriggerLabel={lastRunTriggerLabel}
                         executeWorkflowPreferredTriggerId={lastRunTriggerId}
-                        onExecuteFromWorkflowTrigger={(id) => void onRun(id)}
-                        onStartWebhookTestListen={onStartWebhookTestListen}
-                        onStopWebhookTestListen={onStopWebhookTestListen}
+                        onExecuteFromWorkflowTrigger={
+                          isDraftRoute ? undefined : (id) => void onRun(id)
+                        }
+                        onStartWebhookTestListen={isDraftRoute ? undefined : onStartWebhookTestListen}
+                        onStopWebhookTestListen={isDraftRoute ? undefined : onStopWebhookTestListen}
                         webhookTestListeningLeaf={webhookTestListeningLeaf}
                         webhookTestListenBusy={webhookTestListenBusy}
-                        onExecuteStep={onExecuteFlowStep}
+                        onExecuteStep={isDraftRoute ? undefined : onExecuteFlowStep}
                         executionForIo={executionForIo}
                         pinData={revision?.pin_data ?? null}
                         onPinDataChange={onPinDataChange}
@@ -783,7 +876,7 @@ export default function FlowDetailPageClient({
                     <div className="h-full min-h-0">
                       <FlowLogsPanel
                         orgApi={api}
-                        flowId={flowId}
+                        flowId={editorFlowId}
                         focusExecutionId={logsFocusExecutionId}
                         onClearFocus={() => setLogsFocusExecutionId(null)}
                         onExecutionChange={setExecutionForIo}
@@ -812,7 +905,11 @@ export default function FlowDetailPageClient({
                   </span>
                 </div>
                 <FlowWorkspaceTabStraddle>
-                  <FlowCanvasViewTabs value={view} onChange={handleViewChange} />
+                  <FlowCanvasViewTabs
+                    value={view}
+                    onChange={handleViewChange}
+                    disableExecutionsTab={isDraftRoute}
+                  />
                 </FlowWorkspaceTabStraddle>
               </div>
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

@@ -380,11 +380,18 @@ class FlowRevision(BaseModel):
 
 
 class CreateFlowRequest(BaseModel):
+    """Create a flow header. When ``nodes`` is set, also persist the first revision in the same request."""
+
     name: str
+    nodes: list[dict[str, Any]] | None = None
+    connections: dict[str, Any] | None = None
+    settings: dict[str, Any] | None = None
+    pin_data: dict[str, Any] | None = None
 
 
 class CreateFlowResponse(BaseModel):
     flow: FlowHeader
+    revision: FlowRevision | None = None
 
 
 class ListFlowsResponse(BaseModel):
@@ -657,10 +664,48 @@ async def create_flow(organization_id: str, req: CreateFlowRequest, current_user
         }
     )
     flow_id = str(res.inserted_id)
-    header = await db.flows.find_one({"_id": ObjectId(flow_id)})
-    _raw = {k: header[k] for k in header if k != "_id"}
-    hdr = {k: (v.replace(tzinfo=UTC) if isinstance(v, datetime) else v) for k, v in _raw.items()}
-    return {"flow": FlowHeader(flow_id=flow_id, **hdr)}
+    if req.nodes is None:
+        header = await db.flows.find_one({"_id": ObjectId(flow_id)})
+        _raw = {k: header[k] for k in header if k != "_id"}
+        hdr = {k: (v.replace(tzinfo=UTC) if isinstance(v, datetime) else v) for k, v in _raw.items()}
+        return {"flow": FlowHeader(flow_id=flow_id, **hdr), "revision": None}
+
+    connections = req.connections if req.connections is not None else {}
+    settings_payload = req.settings if req.settings is not None else {}
+    # First revision: latest is None, so save_revision's base check is skipped; empty string is valid.
+    save_req = SaveFlowRequest(
+        base_flow_revid="",
+        name=req.name,
+        nodes=req.nodes,
+        connections=connections,
+        settings=settings_payload,
+        pin_data=req.pin_data,
+    )
+    try:
+        saved = await save_revision(organization_id, flow_id, save_req, current_user)
+        return {"flow": saved["flow"], "revision": saved["revision"]}
+    except Exception:
+        await db.flow_revisions.delete_many({"flow_id": flow_id})
+        await db.flows.delete_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
+        raise
+
+
+_LOOKUP_LATEST_REVISION = {
+    "$lookup": {
+        "from": "flow_revisions",
+        "let": {"fid": {"$toString": "$_id"}},
+        "pipeline": [
+            {"$match": {"$expr": {"$eq": ["$flow_id", "$$fid"]}}},
+            {"$sort": {"flow_version": -1}},
+            {"$limit": 1},
+            {"$project": {"_id": 1, "flow_version": 1, "graph_hash": 1}},
+        ],
+        "as": "_latest",
+    }
+}
+
+
+_MATCH_HAS_SAVED_REVISION = {"$match": {"$expr": {"$gt": [{"$size": "$_latest"}, 0]}}}
 
 
 @flows_router.get("/v0/orgs/{organization_id}/flows", response_model=ListFlowsResponse)
@@ -668,29 +713,23 @@ async def list_flows(
     organization_id: str,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    include_unsaved: bool = Query(
+        False,
+        description="If true, include flow headers that have no saved revision (draft-only).",
+    ),
     current_user: User = Depends(get_org_user),
 ):
     db = await _get_db()
-    total = await db.flows.count_documents({"organization_id": organization_id})
-    pipeline = [
+    base_stages: list[dict[str, Any]] = [
         {"$match": {"organization_id": organization_id}},
         {"$sort": {"updated_at": -1}},
-        {"$skip": offset},
-        {"$limit": limit},
-        {
-            "$lookup": {
-                "from": "flow_revisions",
-                "let": {"fid": {"$toString": "$_id"}},
-                "pipeline": [
-                    {"$match": {"$expr": {"$eq": ["$flow_id", "$$fid"]}}},
-                    {"$sort": {"flow_version": -1}},
-                    {"$limit": 1},
-                    {"$project": {"_id": 1, "flow_version": 1, "graph_hash": 1}},
-                ],
-                "as": "_latest",
-            }
-        },
+        _LOOKUP_LATEST_REVISION,
     ]
+    if not include_unsaved:
+        base_stages.append(_MATCH_HAS_SAVED_REVISION)
+    count_rows = await db.flows.aggregate(base_stages + [{"$count": "total"}]).to_list(1)
+    total = int(count_rows[0]["total"]) if count_rows else 0
+    pipeline = base_stages + [{"$skip": offset}, {"$limit": limit}]
     rows = await db.flows.aggregate(pipeline).to_list(limit)
     items: list[dict[str, Any]] = []
     for h in rows:

@@ -8,7 +8,11 @@ import FlowList from '@/components/flows/FlowList';
 import FlowCreate from '@/components/flows/FlowCreate';
 import FlowCredentials from '@/components/flows/FlowCredentials';
 import FlowExecutionsAll from '@/components/flows/FlowExecutionsAll';
-import { loadFlowNamesTakenLower, nextSequentialDisplayName } from '@/components/flows/flowDefaultNames';
+import {
+  loadFlowNamesTakenLower,
+  NEW_FLOW_URL_SEGMENT,
+  nextSequentialDisplayName,
+} from '@/components/flows/flowDefaultNames';
 import { useFlowApi } from '@/components/flows/useFlowApi';
 import {
   flowWorkspaceDropdownItemClass,
@@ -89,8 +93,9 @@ export default function FlowsPageClient({
       setCreateFlowBusy(true);
       const taken = await loadFlowNamesTakenLower(api);
       const name = nextSequentialDisplayName(taken, 'My workflow');
-      const res = await api.createFlow({ name });
-      router.push(`/orgs/${organizationId}/flows/${res.flow.flow_id}`);
+      const q = new URLSearchParams();
+      q.set('proposedName', name);
+      router.push(`/orgs/${organizationId}/flows/${NEW_FLOW_URL_SEGMENT}?${q.toString()}`);
     } catch (err) {
       setCreateFlowError(getApiErrorMsg(err) || 'Failed to create flow');
     } finally {
