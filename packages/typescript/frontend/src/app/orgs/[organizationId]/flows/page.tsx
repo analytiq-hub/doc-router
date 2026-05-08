@@ -2,7 +2,7 @@ import FlowsPageClient, { type FlowsTab } from './FlowsPageClient';
 
 type PageProps = {
   params: Promise<{ organizationId: string }>;
-  searchParams: Promise<{ tab?: string; newFlow?: string; newCredential?: string }>;
+  searchParams: Promise<{ tab?: string; newFlow?: string; newCredential?: string; bootstrapCredential?: string }>;
 };
 
 export default async function FlowsPage(props: PageProps) {
@@ -12,14 +12,15 @@ export default async function FlowsPage(props: PageProps) {
   const tab: FlowsTab =
     rawTab === 'credentials' || rawTab === 'executions' ? rawTab : 'flows';
   const newFlow = sp.newFlow === '1';
-  const newCredential = sp.newCredential === '1';
+  const autoCreateCredential =
+    sp.newCredential === '1' || sp.bootstrapCredential === '1';
 
   return (
     <FlowsPageClient
       organizationId={organizationId}
       tab={tab}
       newFlow={newFlow}
-      newCredential={newCredential}
+      autoCreateCredential={autoCreateCredential}
     />
   );
 }

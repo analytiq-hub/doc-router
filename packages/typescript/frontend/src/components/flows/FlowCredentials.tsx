@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Menu, MenuButton, MenuItem, MenuItems, MenuSeparator } from '@headlessui/react';
 import {
   BeakerIcon,
@@ -22,6 +22,7 @@ import {
   flowWorkspaceMenuTriggerIconBtnClass,
 } from './flowWorkspaceMenu';
 import { flowInputClass, flowLabelClass, flowSelectClass } from './flowUiClasses';
+import { loadCredentialNamesTakenLower, nextSequentialDisplayName } from './flowDefaultNames';
 
 type FieldRow = {
   name: string;
@@ -98,9 +99,10 @@ function FlowModal({
 
 const FlowCredentials: React.FC<{
   organizationId: string;
-  autoOpenCreate?: boolean;
-  onAutoOpenCreateHandled?: () => void;
-}> = ({ organizationId, autoOpenCreate, onAutoOpenCreateHandled }) => {
+  /** Create a named credential and open the edit dialog (from “Create credential” shortcut). */
+  autoBootstrapCredential?: boolean;
+  onAutoBootstrapCredentialHandled?: () => void;
+}> = ({ organizationId, autoBootstrapCredential, onAutoBootstrapCredentialHandled }) => {
   const api = useFlowApi(organizationId);
   const [kinds, setKinds] = useState<FlowCredentialKindSummary[]>([]);
   const [items, setItems] = useState<FlowCredentialHeader[]>([]);
@@ -123,6 +125,8 @@ const FlowCredentials: React.FC<{
 
   const [testChip, setTestChip] = useState<Record<string, { ok: boolean; detail: string }>>({});
   const [testLoadingId, setTestLoadingId] = useState<string | null>(null);
+
+  const bootstrapConsumedRef = useRef(false);
 
   const kindByKey = useMemo(() => Object.fromEntries(kinds.map((k) => [k.key, k])), [kinds]);
 
@@ -151,11 +155,76 @@ const FlowCredentials: React.FC<{
     void load();
   }, [load]);
 
+  const openEdit = useCallback((row: FlowCredentialHeader) => {
+    setEditRow(row);
+    setEditName(row.name);
+    const k = kindByKey[row.kind_key];
+    const next: Record<string, string> = {};
+    if (k) {
+      for (const f of fieldRows(k)) {
+        if (!f.name) continue;
+        if (f.is_secret) next[f.name] = '';
+        else {
+          const pub = row.public_fields[f.name];
+          next[f.name] = pub === undefined || pub === null ? '' : String(pub);
+        }
+      }
+    }
+    setEditFields(next);
+    setShowSecret({});
+  }, [kindByKey]);
+
   useEffect(() => {
-    if (!autoOpenCreate) return;
-    setCreateOpen(true);
-    onAutoOpenCreateHandled?.();
-  }, [autoOpenCreate, onAutoOpenCreateHandled]);
+    if (!autoBootstrapCredential) {
+      bootstrapConsumedRef.current = false;
+      return;
+    }
+    if (bootstrapConsumedRef.current) return;
+    if (loading || kinds.length === 0) return;
+
+    bootstrapConsumedRef.current = true;
+    let cancelled = false;
+
+    const run = async () => {
+      try {
+        setMessage('');
+        const taken = await loadCredentialNamesTakenLower(api);
+        const name = nextSequentialDisplayName(taken, 'My credential');
+        const kindKey = kinds[0].key;
+        const kind = kindByKey[kindKey];
+        if (!kind || cancelled) return;
+        const fields: Record<string, unknown> = {};
+        for (const f of fieldRows(kind)) {
+          if (!f.name) continue;
+          fields[f.name] = '';
+        }
+        const created = await api.createFlowCredential({ kind_key: kindKey, name, fields });
+        if (cancelled) return;
+        await load();
+        if (cancelled) return;
+        openEdit(created);
+      } catch (err) {
+        bootstrapConsumedRef.current = false;
+        if (!cancelled) setMessage(getApiErrorMsg(err) || 'Failed to create credential');
+      } finally {
+        if (!cancelled) onAutoBootstrapCredentialHandled?.();
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    api,
+    autoBootstrapCredential,
+    kindByKey,
+    kinds,
+    load,
+    loading,
+    openEdit,
+    onAutoBootstrapCredentialHandled,
+  ]);
 
   const createKind = createKindKey ? kindByKey[createKindKey] : null;
   const createFieldDefs = useMemo(() => fieldRows(createKind), [createKind]);
@@ -201,25 +270,6 @@ const FlowCredentials: React.FC<{
     } catch (err) {
       setMessage(getApiErrorMsg(err) || 'Failed to create credential');
     }
-  };
-
-  const openEdit = (row: FlowCredentialHeader) => {
-    setEditRow(row);
-    setEditName(row.name);
-    const k = kindByKey[row.kind_key];
-    const next: Record<string, string> = {};
-    if (k) {
-      for (const f of fieldRows(k)) {
-        if (!f.name) continue;
-        if (f.is_secret) next[f.name] = '';
-        else {
-          const pub = row.public_fields[f.name];
-          next[f.name] = pub === undefined || pub === null ? '' : String(pub);
-        }
-      }
-    }
-    setEditFields(next);
-    setShowSecret({});
   };
 
   const submitEdit = async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronDownIcon } from '@heroicons/react/20/solid';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
@@ -8,10 +8,13 @@ import FlowList from '@/components/flows/FlowList';
 import FlowCreate from '@/components/flows/FlowCreate';
 import FlowCredentials from '@/components/flows/FlowCredentials';
 import FlowExecutionsAll from '@/components/flows/FlowExecutionsAll';
+import { loadFlowNamesTakenLower, nextSequentialDisplayName } from '@/components/flows/flowDefaultNames';
+import { useFlowApi } from '@/components/flows/useFlowApi';
 import {
   flowWorkspaceDropdownItemClass,
   flowWorkspaceMenuPanelClass,
 } from '@/components/flows/flowWorkspaceMenu';
+import { getApiErrorMsg } from '@/utils/api';
 
 export type FlowsTab = 'flows' | 'credentials' | 'executions';
 
@@ -19,14 +22,18 @@ export default function FlowsPageClient({
   organizationId,
   tab,
   newFlow,
-  newCredential,
+  autoCreateCredential,
 }: {
   organizationId: string;
   tab: FlowsTab;
   newFlow: boolean;
-  newCredential: boolean;
+  /** Create a credential with a default name and open the editor (shortcut from create menu or legacy `newCredential`). */
+  autoCreateCredential: boolean;
 }) {
   const router = useRouter();
+  const api = useFlowApi(organizationId);
+  const [createFlowBusy, setCreateFlowBusy] = useState(false);
+  const [createFlowError, setCreateFlowError] = useState('');
 
   const pushWithSearch = useCallback(
     (mutate: (q: URLSearchParams) => void) => {
@@ -52,6 +59,7 @@ export default function FlowsPageClient({
       q.set('tab', newValue);
       q.delete('newFlow');
       q.delete('newCredential');
+      q.delete('bootstrapCredential');
     });
   };
 
@@ -66,16 +74,32 @@ export default function FlowsPageClient({
     [replaceWithSearch],
   );
 
-  const onCredentialAutoOpenHandled = useCallback(() => {
-    stripQueryKeys(['newCredential']);
+  const onCredentialBootstrapHandled = useCallback(() => {
+    stripQueryKeys(['newCredential', 'bootstrapCredential']);
   }, [stripQueryKeys]);
 
   const dismissNewFlow = useCallback(() => {
     stripQueryKeys(['newFlow']);
   }, [stripQueryKeys]);
 
+  const handleCreateFlowNavigate = useCallback(async () => {
+    if (createFlowBusy) return;
+    setCreateFlowError('');
+    try {
+      setCreateFlowBusy(true);
+      const taken = await loadFlowNamesTakenLower(api);
+      const name = nextSequentialDisplayName(taken, 'My workflow');
+      const res = await api.createFlow({ name });
+      router.push(`/orgs/${organizationId}/flows/${res.flow.flow_id}`);
+    } catch (err) {
+      setCreateFlowError(getApiErrorMsg(err) || 'Failed to create flow');
+    } finally {
+      setCreateFlowBusy(false);
+    }
+  }, [api, createFlowBusy, organizationId, router]);
+
   const createFlowPrimaryClass =
-    'inline-flex items-center justify-center rounded-l-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60';
+    'inline-flex items-center justify-center rounded-l-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60 disabled:cursor-not-allowed disabled:opacity-60';
 
   const createFlowChevronClass =
     'inline-flex items-center justify-center rounded-r-md border-l border-blue-500 bg-blue-600 px-2 py-2 text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500/60';
@@ -119,23 +143,21 @@ export default function FlowsPageClient({
           </button>
         </div>
 
-        <div className="flex shrink-0 items-center gap-2 pb-2 sm:pb-4">
+        <div className="flex shrink-0 flex-col items-end gap-1 pb-2 sm:flex-row sm:items-center sm:pb-4">
+          {createFlowError ? <div className="text-sm text-red-600">{createFlowError}</div> : null}
           <div className="inline-flex rounded-md shadow-sm">
             <button
               type="button"
               className={createFlowPrimaryClass}
-              onClick={() =>
-                pushWithSearch((q) => {
-                  q.set('tab', 'flows');
-                  q.set('newFlow', '1');
-                })
-              }
+              disabled={createFlowBusy}
+              onClick={() => void handleCreateFlowNavigate()}
             >
-              Create flow
+              {createFlowBusy ? 'Creating…' : 'Create flow'}
             </button>
             <Menu as="div" className="relative -ml-px block">
               <MenuButton
                 type="button"
+                disabled={createFlowBusy}
                 className={createFlowChevronClass}
                 aria-label="More create options"
               >
@@ -150,7 +172,8 @@ export default function FlowsPageClient({
                       onClick={() =>
                         pushWithSearch((q) => {
                           q.set('tab', 'credentials');
-                          q.set('newCredential', '1');
+                          q.delete('newCredential');
+                          q.set('bootstrapCredential', '1');
                         })
                       }
                     >
@@ -190,8 +213,8 @@ export default function FlowsPageClient({
           {tab === 'credentials' && (
             <FlowCredentials
               organizationId={organizationId}
-              autoOpenCreate={newCredential}
-              onAutoOpenCreateHandled={onCredentialAutoOpenHandled}
+              autoBootstrapCredential={autoCreateCredential}
+              onAutoBootstrapCredentialHandled={onCredentialBootstrapHandled}
             />
           )}
         </div>
