@@ -402,6 +402,26 @@ def invalidate_run_data_downstream_of_pins(
                 q.append(d)
 
 
+def prune_run_data_outside_closure(
+    run_data: dict[str, Any],
+    allowed_node_ids: AbstractSet[str],
+) -> None:
+    """
+    Remove per-node ``run_data`` entries that are outside ``allowed_node_ids``.
+
+    Execute step merges editor panel seed spanning all nodes; unrelated parallel branches must not
+    stay in ``run_data`` for this execution (they would otherwise show success without running).
+    """
+
+    stale = [
+        k
+        for k in list(run_data.keys())
+        if isinstance(k, str) and not k.startswith("_") and k not in allowed_node_ids
+    ]
+    for k in stale:
+        del run_data[k]
+
+
 def _upstream_nodes_reaching_target(
     target_id: str,
     connections: "ad.flows.Connections",

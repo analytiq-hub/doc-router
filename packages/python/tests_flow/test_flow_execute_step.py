@@ -75,6 +75,19 @@ def _code(nid: str, code: str) -> dict[str, Any]:
     }
 
 
+def test_prune_run_data_outside_closure_drops_parallel_manual_branches() -> None:
+    """Execute-step seed from the panel must not leave sibling trigger branches in ``run_data``."""
+
+    run_data: dict[str, Any] = {
+        "t1": {"status": "success", "data": {"main": [[]]}},
+        "c1": {"status": "success", "data": {"main": [[]]}},
+        "t2": {"status": "success", "data": {"main": [[]]}},
+        "c2": {"status": "success", "data": {"main": [[]]}},
+    }
+    ad.flows.prune_run_data_outside_closure(run_data, frozenset({"t2", "c2"}))
+    assert set(run_data.keys()) == {"t2", "c2"}
+
+
 def _merge(nid: str) -> dict[str, Any]:
     return {
         "id": nid,

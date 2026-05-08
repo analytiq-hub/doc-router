@@ -137,6 +137,9 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
             run_data, revision_conns, pin_touched, limit_nodes=allowed_pins
         )
 
+    if tgt_any and allowed_pins is not None:
+        ad.flows.prune_run_data_outside_closure(run_data, allowed_pins)
+
     lineage_revid = str(exec_doc.get("flow_revid") or flow_revid_payload or "")
 
     context = ad.flows.ExecutionContext(
