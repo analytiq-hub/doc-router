@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
-import { Handle, NodeToolbar, Position, type NodeProps } from 'reactflow';
+import { Handle, NodeToolbar, Position, useStore, type NodeProps } from 'reactflow';
 import {
   CheckCircleIcon,
   EllipsisHorizontalIcon,
@@ -31,6 +31,63 @@ import {
 const handleClass =
   '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-emerald-500 hover:!bg-emerald-50';
 
+/** Mid-edge insert already provides “+” on the connection; hide the inline stub until the node is hovered. */
+const appendStubHiddenUntilNodeHoverClass =
+  'opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:pointer-events-none [@media(hover:hover)]:group-hover:pointer-events-auto [@media(hover:hover)]:group-hover:opacity-100 motion-safe:transition-opacity motion-safe:duration-150';
+
+function OutputHandleWithContinuation({
+  nodeId,
+  handleId,
+  topPct,
+  actions,
+}: {
+  nodeId: string;
+  handleId: string;
+  topPct: number;
+  actions: FlowCanvasActions | null;
+}) {
+  const canAppend = Boolean(actions?.onBeginAppendFromOutput);
+  const hasOutgoingEdge = useStore(
+    useCallback(
+      (s) => s.edges.some((e) => e.source === nodeId && String(e.sourceHandle ?? 'out-0') === handleId),
+      [nodeId, handleId],
+    ),
+  );
+
+  return (
+    <>
+      <Handle
+        id={handleId}
+        type="source"
+        position={Position.Right}
+        className={handleClass}
+        style={{ top: `${topPct}%` }}
+      />
+      {canAppend ? (
+        <div
+          className={[
+            'docrouter-flow-node-append absolute left-full z-[6000] flex translate-y-[-50%] items-center gap-1',
+            hasOutgoingEdge ? appendStubHiddenUntilNodeHoverClass : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          style={{ top: `${topPct}%` }}
+        >
+          <span className="pointer-events-none inline-block h-px w-4 shrink-0 bg-[#c5cad3]" aria-hidden />
+          <FlowCanvasAppendPlusButton
+            title="Add next node"
+            ariaLabel="Add next node"
+            onClick={(e) => {
+              e.stopPropagation();
+              actions?.onBeginAppendFromOutput?.({ source: nodeId, sourceHandle: handleId });
+            }}
+          />
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function OutputHandlesWithContinuation({
   outputs,
   actions,
@@ -41,38 +98,19 @@ function OutputHandlesWithContinuation({
   nodeId: string;
 }) {
   const nOut = Math.max(outputs, 0);
-  const canAppend = Boolean(actions?.onBeginAppendFromOutput);
   return (
     <>
       {Array.from({ length: nOut }).map((_, i) => {
         const topPct = (100 * (i + 1)) / (nOut + 1);
         const handleId = `out-${i}`;
         return (
-          <React.Fragment key={handleId}>
-            <Handle
-              id={handleId}
-              type="source"
-              position={Position.Right}
-              className={handleClass}
-              style={{ top: `${topPct}%` }}
-            />
-            {canAppend ? (
-              <div
-                className="docrouter-flow-node-append absolute left-full z-[6000] flex translate-y-[-50%] items-center gap-1"
-                style={{ top: `${topPct}%` }}
-              >
-                <span className="pointer-events-none inline-block h-px w-4 shrink-0 bg-[#c5cad3]" aria-hidden />
-                <FlowCanvasAppendPlusButton
-                  title="Add next node"
-                  ariaLabel="Add next node"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    actions?.onBeginAppendFromOutput?.({ source: nodeId, sourceHandle: handleId });
-                  }}
-                />
-              </div>
-            ) : null}
-          </React.Fragment>
+          <OutputHandleWithContinuation
+            key={handleId}
+            nodeId={nodeId}
+            handleId={handleId}
+            topPct={topPct}
+            actions={actions}
+          />
         );
       })}
     </>
