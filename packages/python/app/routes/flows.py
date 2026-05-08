@@ -443,6 +443,9 @@ class FlowRevisionSnapshotRequest(BaseModel):
 class RunFlowRequest(BaseModel):
     flow_revid: str | None = None
     document_id: str | None = None
+    """Which trigger seeds a full manual run when the graph has multiple triggers (execute-step resolves this when omitted if unambiguous)."""
+
+    start_trigger_node_id: str | None = None
     """When set, run only the upstream subgraph through this node (execute step)."""
 
     target_node_id: str | None = None
@@ -485,6 +488,7 @@ class FlowExecution(BaseModel):
     run_data: dict[str, Any] = {}
     error: dict[str, Any] | None = None
     trigger: dict[str, Any]
+    start_trigger_node_id: str | None = None
     target_node_id: str | None = None
     initial_run_data: dict[str, Any] | None = None
     #: Present on list responses when joined from ``flows`` (org-wide execution views).
@@ -1320,6 +1324,7 @@ async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, curr
         "run_data": {},
         "error": None,
         "trigger": {"type": "manual", "document_id": req.document_id},
+        "start_trigger_node_id": (req.start_trigger_node_id or "").strip() or None,
         "target_node_id": req.target_node_id,
         "initial_run_data": seed_filtered or None,
         "dirty_node_ids": dirty_clean or None,
@@ -1545,7 +1550,12 @@ async def _inbound_webhook_common(
         snap_any = route_mode.get("revision_snapshot")
         revision_snapshot = dict(snap_any) if isinstance(snap_any, dict) else None
 
-    params = ad.flows.webhook_params.extract_webhook_params_from_revision(revision_snapshot or revision_doc)
+    params = ad.flows.webhook_params.extract_webhook_params_from_revision(
+        revision_snapshot or revision_doc, webhook_leaf=leaf
+    )
+    webhook_trigger_node_id = ad.flows.webhook_params.resolve_webhook_trigger_node_id(
+        revision_snapshot or revision_doc, leaf
+    )
     response_mode = (params.get("response_mode") or "on_received").strip() if isinstance(params.get("response_mode"), str) else "on_received"
 
     allowed = ad.flows.webhook_params.allowed_http_methods_snapshot(params)
@@ -1602,6 +1612,7 @@ async def _inbound_webhook_common(
         "run_data": {},
         "error": None,
         "trigger": trigger,
+        "start_trigger_node_id": webhook_trigger_node_id,
     }
     if revision_snapshot is not None:
         exec_doc["revision_snapshot"] = revision_snapshot
@@ -1641,7 +1652,11 @@ async def _inbound_webhook_common(
         # Mirror msg_handlers/flow_run.py: persist terminal status so worker_flow_cleanup can reap rows.
         try:
             result = await asyncio.wait_for(
-                ad.flows.run_flow(context=ctx, revision=rev_for_run),
+                ad.flows.run_flow(
+                    context=ctx,
+                    revision=rev_for_run,
+                    start_trigger_node_id=webhook_trigger_node_id,
+                ),
                 timeout=25.0,
             )
         except asyncio.TimeoutError:
@@ -1714,7 +1729,9 @@ async def _inbound_webhook_common(
             return Response(content=payload, status_code=sync_status, headers=dict(hdr_map))
 
         # last_node: primary JSON from graph sink node(s); parallel branches tie-break by finish time.
-        last_node_id = ad.flows.pick_webhook_last_node_id(ctx.run_data, rev_for_run)
+        last_node_id = ad.flows.pick_webhook_last_node_id(
+            ctx.run_data, rev_for_run, start_trigger_node_id=webhook_trigger_node_id
+        )
         out_json: Any = {"execution_id": exec_id}
         if isinstance(last_node_id, str):
             ent = ctx.run_data.get(last_node_id) or {}

@@ -132,6 +132,8 @@ export interface FlowExecution {
   trigger: Record<string, unknown>;
   /** Populated on org-wide execution list responses when the flow header exists. */
   flow_name?: string | null;
+  /** Trigger node that seeded the run (multi-trigger graphs and webhooks). */
+  start_trigger_node_id?: string | null;
   /** Set for execute-step / partial manual runs. */
   target_node_id?: string | null;
   /** Client-supplied seed snapshot at queue time (optional). */
@@ -162,6 +164,8 @@ export type RevisionSnapshotPayload = Pick<SaveRevisionParams, 'nodes' | 'connec
 export interface RunFlowParams {
   flow_revid?: string;
   document_id?: string;
+  /** When the graph has several triggers, selects which one seeds a full manual run. */
+  start_trigger_node_id?: string;
   /** Run only upstream subgraph through this node id (execute step). */
   target_node_id?: string;
   /** Prior `run_data` entries to reuse (validated); requires `target_node_id`. */

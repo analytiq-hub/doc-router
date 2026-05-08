@@ -41,22 +41,65 @@ def trust_forwarded_for_from_env() -> bool:
     return v.strip().lower() in ("1", "true", "yes", "on")
 
 
-def extract_webhook_params_from_revision(revision: dict[str, Any] | None) -> dict[str, Any]:
-    """Return merged ``parameters`` for the first webhook trigger node in ``revision``, or ``{}``."""
+def extract_webhook_params_from_revision(
+    revision: dict[str, Any] | None, *, webhook_leaf: str | None = None
+) -> dict[str, Any]:
+    """
+    Return ``parameters`` for a ``flows.trigger.webhook`` node in ``revision``.
+
+    When ``webhook_leaf`` is set, return parameters for that leaf only; if none match, ``{}``.
+    Otherwise return the **first** webhook node (backward compatible).
+    """
 
     if not revision or not isinstance(revision, dict):
         return {}
     nodes_any = revision.get("nodes") or []
     if not isinstance(nodes_any, list):
         return {}
+    want = webhook_leaf.strip() if isinstance(webhook_leaf, str) else ""
+
+    def _iter_webhook_param_dicts():
+        for n_any in nodes_any:
+            if not isinstance(n_any, dict):
+                continue
+            if n_any.get("type") != _WEBHOOK_TYPE:
+                continue
+            p_any = n_any.get("parameters")
+            yield dict(p_any) if isinstance(p_any, dict) else {}
+
+    if want:
+        for merged in _iter_webhook_param_dicts():
+            got = str(merged.get("webhook_leaf") or "").strip()
+            if got == want:
+                return merged
+        return {}
+
+    for merged in _iter_webhook_param_dicts():
+        return merged
+    return {}
+
+
+def resolve_webhook_trigger_node_id(revision: dict[str, Any] | None, webhook_leaf: str) -> str | None:
+    """Return the canvas node ``id`` of the webhook trigger that owns ``webhook_leaf``."""
+
+    lf = webhook_leaf.strip()
+    if not lf or not revision or not isinstance(revision, dict):
+        return None
+    nodes_any = revision.get("nodes") or []
+    if not isinstance(nodes_any, list):
+        return None
     for n_any in nodes_any:
         if not isinstance(n_any, dict):
             continue
         if n_any.get("type") != _WEBHOOK_TYPE:
             continue
         p_any = n_any.get("parameters")
-        return dict(p_any) if isinstance(p_any, dict) else {}
-    return {}
+        merged = dict(p_any) if isinstance(p_any, dict) else {}
+        if str(merged.get("webhook_leaf") or "").strip() != lf:
+            continue
+        nid = n_any.get("id")
+        return str(nid) if nid is not None and str(nid).strip() else None
+    return None
 
 
 def allowed_http_methods_snapshot(params: dict[str, Any]) -> frozenset[str] | None:

@@ -21,10 +21,12 @@ import ReactFlow, {
   type EdgeChange,
   type NodeChange,
 } from 'reactflow';
+import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import {
   ArrowUturnLeftIcon,
   ArrowsPointingOutIcon,
   BeakerIcon,
+  ChevronDownIcon,
   MagnifyingGlassIcon,
   MagnifyingGlassMinusIcon,
   MagnifyingGlassPlusIcon,
@@ -58,6 +60,9 @@ import { edgesWithRunDataItemCounts } from './flowNodeIoPreview';
 import { inputHandleCount } from './flowRf';
 import type { FlowRfNodeData } from './flowRf';
 import { triggerReachabilityFromGraph } from './flowTriggerReachability';
+import { flowWorkspaceDropdownItemSimpleClass, flowWorkspaceMenuPanelClass } from './flowWorkspaceMenu';
+
+export type FlowExecuteWorkflowTriggerOption = { id: string; label: string };
 
 const EXECUTE_BUTTON_BG = '#ff6d5a';
 const EXECUTE_BUTTON_BG_HOVER = '#e85d4d';
@@ -220,6 +225,9 @@ const FlowEditor: React.FC<{
   onNodesChange: (next: Node<FlowRfNodeData>[]) => void;
   onEdgesChange: (next: Edge[]) => void;
   onExecute?: () => void;
+  /** When multiple triggers exist, dropdown entries run from each trigger (`onExecute` is unused). */
+  executeWorkflowTriggers?: FlowExecuteWorkflowTriggerOption[];
+  onExecuteFromWorkflowTrigger?: (triggerId: string) => void;
   onStartWebhookTestListen?: (leaf: string) => void | Promise<void>;
   onStopWebhookTestListen?: (leaf: string) => void | Promise<void>;
   webhookTestListeningLeaf?: string | null;
@@ -250,6 +258,8 @@ const FlowEditor: React.FC<{
   onNodesChange,
   onEdgesChange,
   onExecute,
+  executeWorkflowTriggers = [],
+  onExecuteFromWorkflowTrigger,
   onStartWebhookTestListen,
   onStopWebhookTestListen,
   webhookTestListeningLeaf = null,
@@ -887,9 +897,40 @@ const FlowEditor: React.FC<{
               <Background color="#b8c0cc" gap={FLOW_CANVAS_GRID_PX} size={1.2} variant={BackgroundVariant.Dots} />
               <Controls className="!shadow-md" position="bottom-left" showZoom={false} showFitView={false} showInteractive={false} />
               <CanvasZoomControls
-                addFooterPadding={Boolean(onExecute)}
+                addFooterPadding={Boolean(onExecute || executeWorkflowTriggers.length > 1)}
                 runButton={
-                  onExecute ? (
+                  executeWorkflowTriggers.length > 1 && onExecuteFromWorkflowTrigger ? (
+                    <Menu as="div" className="relative inline-block shrink-0 text-left">
+                      <MenuButton
+                        type="button"
+                        className="inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95 active:scale-[0.99]"
+                        style={{ backgroundColor: EXECUTE_BUTTON_BG }}
+                      >
+                        <BeakerIcon className="h-4 w-4" aria-hidden />
+                        Execute workflow
+                        <ChevronDownIcon className="h-4 w-4" aria-hidden />
+                      </MenuButton>
+                      <MenuItems
+                        anchor="top"
+                        modal={false}
+                        className={`${flowWorkspaceMenuPanelClass} mt-2 min-w-[12rem]`}
+                      >
+                        {executeWorkflowTriggers.map((t) => (
+                          <MenuItem key={t.id}>
+                            {({ focus }) => (
+                              <button
+                                type="button"
+                                className={`${flowWorkspaceDropdownItemSimpleClass} flex w-full items-center gap-2 ${focus ? 'bg-gray-100' : ''}`}
+                                onClick={() => onExecuteFromWorkflowTrigger(t.id)}
+                              >
+                                <span className="whitespace-normal text-left">{`From ${t.label.trim() ? t.label : t.id}`}</span>
+                              </button>
+                            )}
+                          </MenuItem>
+                        ))}
+                      </MenuItems>
+                    </Menu>
+                  ) : onExecute ? (
                     <button
                       type="button"
                       onClick={onExecute}

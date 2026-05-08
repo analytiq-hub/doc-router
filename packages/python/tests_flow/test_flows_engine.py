@@ -262,6 +262,165 @@ def test_validate_revision_rejects_cycle() -> None:
         ad.flows.validate_revision(nodes, connections, settings={}, pin_data=None)
 
 
+def _manual_trig(nid: str, name: str) -> dict[str, Any]:
+    return {
+        "id": nid,
+        "name": name,
+        "type": "flows.trigger.manual",
+        "position": [0, 0],
+        "parameters": {},
+        "webhook_id": None,
+        "disabled": False,
+        "on_error": "stop",
+        "retry_on_fail": False,
+        "max_tries": 1,
+        "wait_between_tries_ms": 1000,
+        "notes": None,
+    }
+
+
+def _pass_next(nid: str, name: str) -> dict[str, Any]:
+    return {
+        "id": nid,
+        "name": name,
+        "type": "tests.passthrough",
+        "position": [200, 0],
+        "parameters": {},
+        "webhook_id": None,
+        "disabled": False,
+        "on_error": "stop",
+        "retry_on_fail": False,
+        "max_tries": 1,
+        "wait_between_tries_ms": 1000,
+        "notes": None,
+    }
+
+
+def test_validate_revision_rejects_graph_with_no_trigger() -> None:
+    nodes = [
+        _pass_next("n1", "A"),
+    ]
+    with pytest.raises(ad.flows.FlowValidationError, match="at least one trigger"):
+        ad.flows.validate_revision(nodes, {}, {}, None)
+
+
+def test_validate_revision_accepts_two_disjoint_trigger_subgraphs() -> None:
+    nodes = [
+        _manual_trig("t1", "One"),
+        _manual_trig("t2", "Two"),
+        _pass_next("a1", "A"),
+        _pass_next("b1", "B"),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="a1", connection_type="main", index=0)]]},
+        "t2": {"main": [[ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0)]]},
+    }
+    ad.flows.validate_revision(nodes, connections, {}, None)
+
+
+def test_validate_revision_rejects_orphan_unreachable_from_triggers() -> None:
+    nodes = [
+        _manual_trig("t1", "One"),
+        _manual_trig("t2", "Two"),
+        _pass_next("a1", "A"),
+        _pass_next("orph", "Lonely"),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="a1", connection_type="main", index=0)]]},
+        "t2": {"main": [[]]},
+    }
+    with pytest.raises(ad.flows.FlowValidationError, match="not reachable from any trigger"):
+        ad.flows.validate_revision(nodes, connections, {}, None)
+
+
+@pytest.mark.asyncio
+async def test_run_flow_full_run_requires_start_trigger_when_multiple() -> None:
+    nodes = [
+        _manual_trig("t1", "One"),
+        _manual_trig("t2", "Two"),
+        _pass_next("a1", "A"),
+        _pass_next("b1", "B"),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="a1", connection_type="main", index=0)]]},
+        "t2": {"main": [[ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0)]]},
+    }
+    rev = {"nodes": nodes, "connections": connections, "settings": {}, "pin_data": None}
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    with pytest.raises(ad.flows.FlowValidationError, match="multiple triggers"):
+        await ad.flows.run_flow(context=ctx, revision=rev)
+
+
+def test_trigger_forward_reachable_pins_do_not_seed_other_manual_branch_run_data() -> None:
+    """Pins on manual trigger ``t1`` must not preload ``run_data`` when scoping for a ``t2`` full run."""
+
+    nodes = [
+        _manual_trig("t1", "One"),
+        _manual_trig("t2", "Two"),
+        _pass_next("a1", "A"),
+        _pass_next("b1", "B"),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="a1", connection_type="main", index=0)]]},
+        "t2": {"main": [[ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0)]]},
+    }
+    conns_dc = ad.flows.coerce_json_connections_to_dataclasses(connections)
+    pin_data = {"t1": [{"json": {"pinned": True}, "binary": {}, "meta": {}, "paired_item": None}]}
+    revision = {"nodes": nodes, "connections": connections, "settings": {}, "pin_data": pin_data}
+
+    rd: dict = {}
+    scope = frozenset(ad.flows.trigger_forward_reachable_nodes("t2", conns_dc))
+    ad.flows.apply_revision_pins_to_run_data(rd, revision, allowed_node_ids=scope)
+
+    assert "t1" not in rd
+    assert "a1" not in rd
+    assert rd == {}
+
+
+@pytest.mark.asyncio
+async def test_run_flow_two_triggers_with_explicit_start_executes_that_branch_only() -> None:
+    """Starting from ``t2`` must not traverse ``t1``'s downstream node."""
+
+    nodes = [
+        _manual_trig("t1", "One"),
+        _manual_trig("t2", "Two"),
+        _pass_next("a1", "A"),
+        _pass_next("b1", "B"),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="a1", connection_type="main", index=0)]]},
+        "t2": {"main": [[ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0)]]},
+    }
+    rev = {"nodes": nodes, "connections": connections, "settings": {}, "pin_data": None}
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(context=ctx, revision=rev, start_trigger_node_id="t2")
+    assert res["status"] == "success"
+    assert "b1" in ctx.run_data
+    assert "a1" not in ctx.run_data
+
+
 @pytest.mark.asyncio
 async def test_run_flow_executes_code_node() -> None:
     """`flows.code` runs in an isolated subprocess and transforms items."""

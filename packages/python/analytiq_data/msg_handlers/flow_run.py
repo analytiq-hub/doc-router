@@ -99,15 +99,34 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
         logger.warning("flow_run: failed to parse revision connections (%r); pin downstream invalidation may be incomplete", e)
         revision_conns = {}
 
+    nodes_list = revision.get("nodes") or []
+    nodes_list = nodes_list if isinstance(nodes_list, list) else []
+    st_raw = exec_doc.get("start_trigger_node_id")
+    start_kw = str(st_raw).strip() if isinstance(st_raw, str) and str(st_raw).strip() else None
+
     allowed_pins: frozenset[str] | None = None
     tgt_any = exec_doc.get("target_node_id")
     if tgt_any:
         try:
-            nodes = revision.get("nodes") or []
-            trig = next(str(n["id"]) for n in nodes if ad.flows.get(n["type"]).is_trigger)
-            allowed_pins = frozenset(ad.flows.upstream_closure_for_target(trig, str(tgt_any), revision_conns))
+            trig = ad.flows.resolve_execution_start_trigger(
+                nodes=nodes_list,
+                connections=revision_conns,
+                start_trigger_node_id=start_kw,
+                target_node_id=str(tgt_any).strip() if tgt_any else None,
+            )
+            allowed_pins = frozenset(
+                ad.flows.upstream_closure_for_target(trig, str(tgt_any), revision_conns)
+            )
         except Exception as e:
             logger.warning("flow_run: pin overlay subgraph failed (%r); applying all revision pins", e)
+            allowed_pins = None
+    elif start_kw:
+        # Full run from an explicit trigger (multi-trigger manual, webhook): do not merge pin_data for
+        # other triggers' branches — that would show them as succeeded without executing downstream.
+        try:
+            allowed_pins = ad.flows.trigger_forward_reachable_nodes(start_kw, revision_conns)
+        except Exception as e:
+            logger.warning("flow_run: pin forward scope failed (%r); applying all revision pins", e)
             allowed_pins = None
 
     pin_touched = ad.flows.apply_revision_pins_to_run_data(
@@ -152,6 +171,7 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
                 revision=revision,
                 target_node_id=target_node_id,
                 dirty_node_ids=dirty if dirty else None,
+                start_trigger_node_id=start_kw,
             )
         finally:
             heartbeat_task.cancel()

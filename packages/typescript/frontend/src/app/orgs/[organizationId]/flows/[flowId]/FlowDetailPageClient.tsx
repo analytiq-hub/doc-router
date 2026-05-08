@@ -199,6 +199,18 @@ export default function FlowDetailPageClient({
     return triggerReachabilityFromGraph(flowNodes, rfEdges, nodeTypesByKey).allReachable;
   }, [nodeTypesByKey, rfEdges, rfNodes]);
 
+  const executeWorkflowTriggers = useMemo(() => {
+    const flowNodes = (rfNodes as Node<FlowRfNodeData>[]).map((x) => x.data.flowNode);
+    const triggers = flowNodes.filter((fn) => nodeTypesByKey[fn.type]?.is_trigger);
+    triggers.sort((a, b) => {
+      const an = (a.name || '').toLowerCase();
+      const bn = (b.name || '').toLowerCase();
+      if (an !== bn) return an.localeCompare(bn);
+      return (a.id || '').localeCompare(b.id || '', 'en');
+    });
+    return triggers.map((fn) => ({ id: fn.id, label: (fn.name || '').trim() || fn.type }));
+  }, [rfNodes, nodeTypesByKey]);
+
   const graphSaveBlockedReason = graphStructurallyValid ? null : GRAPH_BLOCKED_MESSAGE;
 
   const isDirty = useMemo(() => {
@@ -431,24 +443,31 @@ export default function FlowDetailPageClient({
     };
   }, [revision, rfNodes, rfEdges, flowName]);
 
-  const onRun = useCallback(async () => {
-    const revision_snapshot = buildRevisionSnapshotForRun();
-    if (!revision_snapshot) return;
-    try {
-      setMessage('');
-      const rid = latestFlowRevid?.trim();
-      const out = await api.runFlow(flowId, {
-        flow_revid: rid || undefined,
-        document_id: undefined,
-        revision_snapshot,
-      });
-      if (out.execution_id) {
-        setLogsFocusExecutionId(out.execution_id);
+  const onRun = useCallback(
+    async (startTriggerNodeId?: string) => {
+      const revision_snapshot = buildRevisionSnapshotForRun();
+      if (!revision_snapshot) return;
+      try {
+        setMessage('');
+        const rid = latestFlowRevid?.trim();
+        const multi = executeWorkflowTriggers.length > 1;
+        const st = typeof startTriggerNodeId === 'string' ? startTriggerNodeId.trim() : '';
+        if (multi && !st) return;
+        const out = await api.runFlow(flowId, {
+          flow_revid: rid || undefined,
+          document_id: undefined,
+          ...(multi ? { start_trigger_node_id: st } : {}),
+          revision_snapshot,
+        });
+        if (out.execution_id) {
+          setLogsFocusExecutionId(out.execution_id);
+        }
+      } catch (err: unknown) {
+        setMessage(err instanceof Error ? err.message : 'Failed to run');
       }
-    } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : 'Failed to run');
-    }
-  }, [api, buildRevisionSnapshotForRun, flowId, latestFlowRevid]);
+    },
+    [api, buildRevisionSnapshotForRun, executeWorkflowTriggers, flowId, latestFlowRevid],
+  );
 
   const onStartWebhookTestListen = useCallback(
     async (leaf: string) => {
@@ -728,7 +747,9 @@ export default function FlowDetailPageClient({
                         edges={rfEdges}
                         onNodesChange={onNodesChange}
                         onEdgesChange={onEdgesChange}
-                        onExecute={onRun}
+                        onExecute={() => void onRun()}
+                        executeWorkflowTriggers={executeWorkflowTriggers}
+                        onExecuteFromWorkflowTrigger={(id) => void onRun(id)}
                         onStartWebhookTestListen={onStartWebhookTestListen}
                         onStopWebhookTestListen={onStopWebhookTestListen}
                         webhookTestListeningLeaf={webhookTestListeningLeaf}

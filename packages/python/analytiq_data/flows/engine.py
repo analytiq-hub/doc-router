@@ -82,7 +82,8 @@ def validate_revision(
     Validate a flow revision against v1 rules.
 
     Enforces uniqueness (ids/names), existence of referenced nodes, port index
-    bounds, DAG constraint, exactly one trigger, reachability, and JSON-schema
+    bounds, DAG constraint, at least one trigger, reachability from some trigger,
+    and JSON-schema
     parameter validation via the registered node types.
     """
 
@@ -97,8 +98,7 @@ def validate_revision(
 
     nodes_by_id = {n["id"]: n for n in nodes}
 
-    # Exactly one trigger node.
-    trigger_nodes = []
+    trigger_nodes: list[dict[str, Any]] = []
     for n in nodes:
         try:
             nt = ad.flows.get(n["type"])
@@ -106,13 +106,15 @@ def validate_revision(
             raise FlowValidationError(f"Unknown node type: {n['type']}") from None
         if nt.is_trigger:
             trigger_nodes.append(n)
-    if len(trigger_nodes) != 1:
-        raise FlowValidationError(f"Flow must contain exactly one trigger node (found {len(trigger_nodes)})")
 
-    # Reachability from trigger.
-    trigger_id = trigger_nodes[0]["id"]
-    reachable = {trigger_id}
-    frontier = [trigger_id]
+    if len(trigger_nodes) < 1:
+        raise FlowValidationError("Flow must contain at least one trigger node")
+
+    # Reachability: every node must lie on a path from at least one trigger (union of subgraphs).
+    reachable: set[str] = set()
+    frontier = [t["id"] for t in trigger_nodes]
+    for tid in frontier:
+        reachable.add(tid)
     while frontier:
         cur = frontier.pop()
         typed = (connections or {}).get(cur) or {}
@@ -125,10 +127,8 @@ def validate_revision(
                     reachable.add(conn.dest_node_id)
                     frontier.append(conn.dest_node_id)
     for n in nodes:
-        if n["id"] == trigger_id:
-            continue
         if n["id"] not in reachable:
-            raise FlowValidationError(f"Node {ad.flows.node_name(n)} is not reachable from trigger")
+            raise FlowValidationError(f"Node {ad.flows.node_name(n)} is not reachable from any trigger")
 
     # Connection validation.
     for src, typed in (connections or {}).items():
@@ -307,7 +307,8 @@ def apply_revision_pins_to_run_data(
 
     Execute-step merges prior ``initial_run_data`` into ``run_data``; without this, seeded merge
     (or branch) snapshots can contradict ``revision.pin_data``. Pinned lane-0 output wins for nodes
-    in scope (execute-step subgraph when ``allowed_node_ids`` is set; entire revision otherwise).
+    in scope (execute-step subgraph when ``allowed_node_ids`` is set; for full runs with a chosen
+    ``start_trigger_node_id``, forward reachability from that trigger; entire revision otherwise).
 
     Returns ids of nodes whose snapshots were overwritten from ``pin_data``.
     """
@@ -443,6 +444,17 @@ def _forward_reachable_from(trigger_id: str, connections: "ad.flows.Connections"
     return seen
 
 
+def trigger_forward_reachable_nodes(trigger_id: str, connections: "ad.flows.Connections") -> frozenset[str]:
+    """
+    Node ids reachable forward from ``trigger_id`` along ``main`` edges, including ``trigger_id``.
+
+    Used to scope ``pin_data`` injection so a run rooted at one trigger does not fabricate
+    ``run_data`` for pinned nodes on another trigger's branch.
+    """
+
+    return frozenset(_forward_reachable_from(trigger_id, connections))
+
+
 def upstream_closure_for_target(
     trigger_id: str,
     target_id: str,
@@ -456,6 +468,84 @@ def upstream_closure_for_target(
 
     return _upstream_nodes_reaching_target(target_id, connections) & _forward_reachable_from(
         trigger_id, connections
+    )
+
+
+def resolve_execution_start_trigger(
+    *,
+    nodes: list[dict[str, Any]],
+    connections: "ad.flows.Connections",
+    start_trigger_node_id: str | None,
+    target_node_id: str | None,
+) -> str:
+    """
+    Choose which trigger node id seeds ``run_flow`` / execute-step overlays.
+
+    * Single trigger: always that node's id (``start_trigger_node_id`` ignored unless wrong).
+    * Multiple triggers + ``start_trigger_node_id``: must name a trigger on the revision.
+    * Multiple triggers + execute step only: unambiguous ancestor trigger chosen automatically when
+      exactly one trigger can reach ``target_node_id``; otherwise ``start_trigger_node_id`` is required.
+    * Multiple triggers + full run: ``start_trigger_node_id`` is required.
+    """
+
+    nodes_by_id = {str(n["id"]): n for n in nodes if n.get("id") is not None}
+    triggers: list[dict[str, Any]] = []
+    for n in nodes:
+        nid, typ = n.get("id"), n.get("type")
+        if not isinstance(nid, str) or not nid or not isinstance(typ, str):
+            continue
+        try:
+            if ad.flows.get(typ).is_trigger:
+                triggers.append(n)
+        except Exception:
+            continue
+
+    if not triggers:
+        raise FlowValidationError("Flow has no trigger nodes")
+
+    if len(triggers) == 1:
+        only = triggers[0]["id"]
+        if isinstance(only, str) and isinstance(start_trigger_node_id, str) and start_trigger_node_id.strip():
+            st = start_trigger_node_id.strip()
+            if st != only:
+                raise FlowValidationError(f"start_trigger_node_id must be the only trigger ({only}), not {st!r}")
+        return only
+
+    if isinstance(start_trigger_node_id, str) and start_trigger_node_id.strip():
+        st = start_trigger_node_id.strip()
+        raw = nodes_by_id.get(st)
+        if raw is None:
+            raise FlowValidationError(f"start_trigger_node_id not found: {st!r}")
+        typ_raw = raw.get("type")
+        if not isinstance(typ_raw, str):
+            raise FlowValidationError(f"start_trigger_node_id {st!r} has no type")
+        try:
+            if not ad.flows.get(typ_raw).is_trigger:
+                raise FlowValidationError(f"start_trigger_node_id {st!r} is not a trigger node")
+        except KeyError:
+            raise FlowValidationError(f"Unknown node type for start_trigger_node_id={st!r}") from None
+        return st
+
+    if isinstance(target_node_id, str) and target_node_id.strip():
+        tgt = target_node_id.strip()
+        reaching: list[str] = []
+        for t in triggers:
+            tid = str(t["id"])
+            clo = upstream_closure_for_target(tid, tgt, connections)
+            if tgt in clo:
+                reaching.append(tid)
+        if len(reaching) == 1:
+            return reaching[0]
+        if not reaching:
+            raise FlowValidationError(
+                f"target node id {tgt!r} is not reachable from any trigger on this revision"
+            )
+        raise FlowValidationError(
+            "Multiple triggers can reach this target; pass start_trigger_node_id to choose one"
+        )
+
+    raise FlowValidationError(
+        "Flow has multiple triggers; pass start_trigger_node_id to choose which one starts a full run"
     )
 
 
@@ -812,7 +902,12 @@ def _webhook_node_finish_epoch_ms(entry: Any) -> float:
     return ms
 
 
-def pick_webhook_last_node_id(run_data: dict[str, Any], revision: dict[str, Any]) -> str | None:
+def pick_webhook_last_node_id(
+    run_data: dict[str, Any],
+    revision: dict[str, Any],
+    *,
+    start_trigger_node_id: str | None = None,
+) -> str | None:
     """
     Choose which node's primary-output JSON drives synchronous webhook ``last_node`` HTTP replies.
 
@@ -830,18 +925,35 @@ def pick_webhook_last_node_id(run_data: dict[str, Any], revision: dict[str, Any]
         connections = {}
 
     trigger_id: str | None = None
-    for n in nodes:
-        if not isinstance(n, dict):
-            continue
-        nid, typ = n.get("id"), n.get("type")
-        if not isinstance(nid, str) or not nid or not isinstance(typ, str):
-            continue
-        try:
-            if ad.flows.get(typ).is_trigger:
-                trigger_id = nid
+    if isinstance(start_trigger_node_id, str) and start_trigger_node_id.strip():
+        trig = start_trigger_node_id.strip()
+        raw_n = None
+        for n in nodes:
+            if isinstance(n, dict) and str(n.get("id") or "") == trig:
+                raw_n = n
                 break
-        except Exception:
-            continue
+        if raw_n is not None:
+            typ_raw = raw_n.get("type")
+            if isinstance(typ_raw, str):
+                try:
+                    if ad.flows.get(typ_raw).is_trigger:
+                        trigger_id = trig
+                except Exception:
+                    trigger_id = None
+
+    if not trigger_id:
+        for n in nodes:
+            if not isinstance(n, dict):
+                continue
+            nid, typ = n.get("id"), n.get("type")
+            if not isinstance(nid, str) or not nid or not isinstance(typ, str):
+                continue
+            try:
+                if ad.flows.get(typ).is_trigger:
+                    trigger_id = nid
+                    break
+            except Exception:
+                continue
 
     def _fallback_latest(keys: list[str]) -> str | None:
         if not keys:
@@ -888,6 +1000,7 @@ async def run_flow(
     revision: dict[str, Any],
     target_node_id: str | None = None,
     dirty_node_ids: frozenset[str] | None = None,
+    start_trigger_node_id: str | None = None,
 ) -> dict[str, Any]:
     """
     Run a single flow execution for a specific immutable revision snapshot.
@@ -907,20 +1020,25 @@ async def run_flow(
     context.revision_nodes = nodes
 
     nodes_by_id = {n["id"]: n for n in nodes}
-    trigger = next(n for n in nodes if ad.flows.get(n["type"]).is_trigger)
+    chosen_trigger_id = resolve_execution_start_trigger(
+        nodes=nodes,
+        connections=connections,
+        start_trigger_node_id=start_trigger_node_id,
+        target_node_id=target_node_id,
+    )
     dirty = dirty_node_ids or frozenset()
 
     merge_waiting: dict[str, list[list["ad.flows.FlowItem"] | None]] = {}
-    work: collections.deque[_WorkItem] = collections.deque([_WorkItem(node_id=trigger["id"], inputs=[])])
+    work: collections.deque[_WorkItem] = collections.deque([_WorkItem(node_id=chosen_trigger_id, inputs=[])])
 
     if target_node_id:
         if target_node_id not in nodes_by_id:
             raise FlowValidationError(f"target_node_id not found in revision: {target_node_id}")
-        closure = upstream_closure_for_target(trigger["id"], target_node_id, connections)
+        closure = upstream_closure_for_target(chosen_trigger_id, target_node_id, connections)
         if target_node_id not in closure:
             raise FlowValidationError(
-                f"target node {ad.flows.node_name(nodes_by_id[target_node_id])} is not reachable from the trigger "
-                "on this revision"
+                f"target node {ad.flows.node_name(nodes_by_id[target_node_id])} is not reachable from the "
+                "selected trigger on this revision"
             )
         coro = _execute_loop(
             context,
