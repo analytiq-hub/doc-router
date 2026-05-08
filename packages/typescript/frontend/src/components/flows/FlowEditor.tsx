@@ -51,6 +51,7 @@ import {
   FlowCanvasActionsProvider,
   FlowExecutionVisualProvider,
   type EdgeInsertPayload,
+  type OutputAppendPayload,
 } from './flowCanvasActionsContext';
 import { FLOW_CANVAS_GRID_PX, snapToFlowGrid } from './canvasGrid';
 import { edgesWithRunDataItemCounts } from './flowNodeIoPreview';
@@ -272,6 +273,7 @@ const FlowEditor: React.FC<{
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const screenToFlowPointRef = useRef<((p: { x: number; y: number }) => { x: number; y: number }) | null>(null);
   const pendingEdgeInsertRef = useRef<EdgeInsertPayload | null>(null);
+  const pendingOutputAppendRef = useRef<OutputAppendPayload | null>(null);
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
   const renameAnchorRef = useRef<Map<string, string>>(new Map());
@@ -333,11 +335,13 @@ const FlowEditor: React.FC<{
 
   const closePalette = useCallback(() => {
     pendingEdgeInsertRef.current = null;
+    pendingOutputAppendRef.current = null;
     setNodePaletteOpen(false);
   }, []);
 
   const openPalette = useCallback(() => {
     pendingEdgeInsertRef.current = null;
+    pendingOutputAppendRef.current = null;
     setNodePaletteOpen(true);
   }, []);
 
@@ -569,17 +573,92 @@ const FlowEditor: React.FC<{
     [edges, nodeTypesByKey, nodes, onEdgesChange, onNodesChange],
   );
 
+  const appendNodeAfterOutput = useCallback(
+    (pending: OutputAppendPayload, typeKey: string): boolean => {
+      const nt = nodeTypesByKey[typeKey];
+      if (!nt) return false;
+      if (inputHandleCount(nt) < 1 || (nt.outputs ?? 0) < 1) return false;
+
+      const srcNode = nodes.find((n) => n.id === pending.source);
+      if (!srcNode?.data.flowNode) return false;
+
+      const sh = pending.sourceHandle ?? 'out-0';
+      const outIdx = parseHandleIndex(sh, 'out-');
+      if (outIdx == null || outIdx < 0) return false;
+      const srcType = srcNode.data.nodeType ?? nodeTypesByKey[srcNode.data.flowNode.type];
+      if (srcType && outIdx >= (srcType.outputs ?? 0)) return false;
+
+      const dx = FLOW_CANVAS_GRID_PX * 8;
+      const pos = snapToFlowGrid({ x: srcNode.position.x + dx, y: srcNode.position.y });
+      const newId = uuid();
+      const baseName = nt.label ? `${nt.label}` : typeKey;
+      const uniqueName = makeUniqueNodeName(
+        baseName,
+        nodes.map((n) => n.data.flowNode.name),
+      );
+      const flowNode: FlowNode = {
+        id: newId,
+        name: uniqueName,
+        type: typeKey,
+        position: [pos.x, pos.y],
+        parameters: initialParametersForNodeType(typeKey),
+        disabled: false,
+        on_error: 'stop',
+        notes: null,
+      };
+      const newNode: Node<FlowRfNodeData> = {
+        id: newId,
+        type: 'flow-node',
+        position: pos,
+        selected: true,
+        data: { flowNode, nodeType: nt },
+      };
+
+      const edgeBase = {
+        type: FLOW_RF_LABELED_EDGE_TYPE,
+        style: { stroke: '#a8b0bd', strokeWidth: 1.5 } as const,
+        markerEnd: FLOW_EDGE_MARKER,
+      };
+      const e1: Edge = {
+        id: uuid(),
+        source: pending.source,
+        target: newId,
+        sourceHandle: sh,
+        targetHandle: 'in-0',
+        ...edgeBase,
+      };
+
+      onNodesChange([...nodes.map((n) => ({ ...n, selected: false })), newNode]);
+      onEdgesChange([...edges, e1]);
+      setConfigModalNodeId(newId);
+      return true;
+    },
+    [edges, nodeTypesByKey, nodes, onEdgesChange, onNodesChange],
+  );
+
   const addNodeFromTypeAtViewCenter = useCallback(
     (typeKey: string) => {
-      const pending = pendingEdgeInsertRef.current;
-      if (pending) {
+      const pendingEdge = pendingEdgeInsertRef.current;
+      if (pendingEdge) {
         pendingEdgeInsertRef.current = null;
-        const ok = insertNodeOnSplitEdge(pending, typeKey);
+        const ok = insertNodeOnSplitEdge(pendingEdge, typeKey);
         if (ok) {
           closePalette();
           return;
         }
-        pendingEdgeInsertRef.current = pending;
+        pendingEdgeInsertRef.current = pendingEdge;
+        return;
+      }
+
+      const pendingAppend = pendingOutputAppendRef.current;
+      if (pendingAppend) {
+        pendingOutputAppendRef.current = null;
+        const ok = appendNodeAfterOutput(pendingAppend, typeKey);
+        if (ok) {
+          closePalette();
+          return;
+        }
+        pendingOutputAppendRef.current = pendingAppend;
         return;
       }
 
@@ -617,7 +696,7 @@ const FlowEditor: React.FC<{
       setConfigModalNodeId(id);
       closePalette();
     },
-    [closePalette, insertNodeOnSplitEdge, nodeTypesByKey, nodes, onNodesChange],
+    [appendNodeAfterOutput, closePalette, insertNodeOnSplitEdge, nodeTypesByKey, nodes, onNodesChange],
   );
 
   /** Palette is over a full-screen backdrop while open; drops must be handled there, not only on the pane below. */
@@ -629,15 +708,27 @@ const FlowEditor: React.FC<{
         event.dataTransfer.getData('text/plain');
       if (!typeKey) return;
 
-      const pending = pendingEdgeInsertRef.current;
-      if (pending) {
+      const pendingEdge = pendingEdgeInsertRef.current;
+      if (pendingEdge) {
         pendingEdgeInsertRef.current = null;
-        const ok = insertNodeOnSplitEdge(pending, typeKey);
+        const ok = insertNodeOnSplitEdge(pendingEdge, typeKey);
         if (ok) {
           closePalette();
           return;
         }
-        pendingEdgeInsertRef.current = pending;
+        pendingEdgeInsertRef.current = pendingEdge;
+        return;
+      }
+
+      const pendingAppend = pendingOutputAppendRef.current;
+      if (pendingAppend) {
+        pendingOutputAppendRef.current = null;
+        const ok = appendNodeAfterOutput(pendingAppend, typeKey);
+        if (ok) {
+          closePalette();
+          return;
+        }
+        pendingOutputAppendRef.current = pendingAppend;
         return;
       }
 
@@ -672,7 +763,7 @@ const FlowEditor: React.FC<{
       setConfigModalNodeId(id);
       closePalette();
     },
-    [closePalette, insertNodeOnSplitEdge, nodeTypesByKey, nodes, onNodesChange],
+    [appendNodeAfterOutput, closePalette, insertNodeOnSplitEdge, nodeTypesByKey, nodes, onNodesChange],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -748,7 +839,13 @@ const FlowEditor: React.FC<{
         onEdgesChange(edges.filter((e) => e.id !== edgeId));
       },
       onBeginInsertOnEdge: (payload: EdgeInsertPayload) => {
+        pendingOutputAppendRef.current = null;
         pendingEdgeInsertRef.current = payload;
+        setNodePaletteOpen(true);
+      },
+      onBeginAppendFromOutput: (payload: OutputAppendPayload) => {
+        pendingEdgeInsertRef.current = null;
+        pendingOutputAppendRef.current = payload;
         setNodePaletteOpen(true);
       },
     }),

@@ -14,6 +14,12 @@ export type EdgeInsertPayload = {
   flowPosition: { x: number; y: number };
 };
 
+/** Payload when appending the next node from a source output handle (no edge split). */
+export type OutputAppendPayload = {
+  source: string;
+  sourceHandle: string;
+};
+
 /** Actions for the editable flow canvas (node toolbar, edge controls). Executions read-only view omits this provider. */
 export type FlowCanvasActions = {
   /** Partial run through this node (same as modal “Execute step”). Omitted when execute-step is unavailable. */
@@ -25,6 +31,8 @@ export type FlowCanvasActions = {
   onDeleteEdge: (edgeId: string) => void;
   /** Start add-node flow to split this edge (opens palette; chosen type is wired inline). */
   onBeginInsertOnEdge?: (payload: EdgeInsertPayload) => void;
+  /** Start add-node flow from a dangling output (opens palette; new node links to this handle). */
+  onBeginAppendFromOutput?: (payload: OutputAppendPayload) => void;
 };
 
 const FlowCanvasActionsContext = createContext<FlowCanvasActions | null>(null);

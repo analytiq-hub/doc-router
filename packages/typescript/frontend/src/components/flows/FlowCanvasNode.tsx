@@ -17,7 +17,9 @@ import { NoSymbolIcon } from '@heroicons/react/24/outline';
 import { inputHandleCount } from './flowRf';
 import type { FlowRfNodeDataWithRun, NodeRunStatusBadge } from './flowNodeRunStatus';
 import { getNodeRunStatusFromRunData } from './flowNodeRunStatus';
+import type { FlowCanvasActions } from './flowCanvasActionsContext';
 import { useFlowCanvasActions, useFlowExecutionVisual } from './flowCanvasActionsContext';
+import { FlowCanvasAppendPlusButton } from './FlowCanvasAppendPlusButton';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
 import {
   flowWorkspaceDropdownItemMutedClass,
@@ -28,6 +30,54 @@ import {
 
 const handleClass =
   '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-emerald-500 hover:!bg-emerald-50';
+
+function OutputHandlesWithContinuation({
+  outputs,
+  actions,
+  nodeId,
+}: {
+  outputs: number;
+  actions: FlowCanvasActions | null;
+  nodeId: string;
+}) {
+  const nOut = Math.max(outputs, 0);
+  const canAppend = Boolean(actions?.onBeginAppendFromOutput);
+  return (
+    <>
+      {Array.from({ length: nOut }).map((_, i) => {
+        const topPct = (100 * (i + 1)) / (nOut + 1);
+        const handleId = `out-${i}`;
+        return (
+          <React.Fragment key={handleId}>
+            <Handle
+              id={handleId}
+              type="source"
+              position={Position.Right}
+              className={handleClass}
+              style={{ top: `${topPct}%` }}
+            />
+            {canAppend ? (
+              <div
+                className="docrouter-flow-node-append pointer-events-none absolute left-full z-[6000] flex translate-y-[-50%] items-center gap-1 opacity-0 transition-opacity duration-150 group-hover:pointer-events-auto group-hover:opacity-100"
+                style={{ top: `${topPct}%` }}
+              >
+                <span className="pointer-events-none inline-block h-px w-4 shrink-0 bg-[#c5cad3]" aria-hidden />
+                <FlowCanvasAppendPlusButton
+                  title="Add next node"
+                  ariaLabel="Add next node"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    actions?.onBeginAppendFromOutput?.({ source: nodeId, sourceHandle: handleId });
+                  }}
+                />
+              </div>
+            ) : null}
+          </React.Fragment>
+        );
+      })}
+    </>
+  );
+}
 
 function ExecutionStatusBadge({ status }: { status: NonNullable<NodeRunStatusBadge> }) {
   if (status === 'success') {
@@ -304,16 +354,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
             <div className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 p-1 text-[#ff6d5a]">
               <BoltIcon className="h-5 w-5" aria-hidden />
             </div>
-            {Array.from({ length: Math.max(outputs, 0) }).map((_, i) => (
-              <Handle
-                key={`out-${i}`}
-                id={`out-${i}`}
-                type="source"
-                position={Position.Right}
-                className={handleClass}
-                style={{ top: `${(100 * (i + 1)) / (outputs + 1)}%` }}
-              />
-            ))}
+            <OutputHandlesWithContinuation outputs={outputs} actions={actions} nodeId={id} />
             {runSt && <ExecutionStatusBadge status={runSt} />}
           </div>
           {labelBlock}
@@ -356,16 +397,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
             fallback="process"
             className="h-9 w-9 text-[#94a3b8]"
           />
-          {Array.from({ length: Math.max(outputs, 0) }).map((_, i) => (
-            <Handle
-              key={`out-${i}`}
-              id={`out-${i}`}
-              type="source"
-              position={Position.Right}
-              className={handleClass}
-              style={{ top: `${(100 * (i + 1)) / (outputs + 1)}%` }}
-            />
-          ))}
+          <OutputHandlesWithContinuation outputs={outputs} actions={actions} nodeId={id} />
           {runSt && <ExecutionStatusBadge status={runSt} />}
         </div>
         {labelBlock}

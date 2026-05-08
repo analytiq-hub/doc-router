@@ -12,8 +12,9 @@ import {
   type Edge,
   type EdgeProps,
 } from 'reactflow';
-import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { TrashIcon } from '@heroicons/react/24/outline';
 import { useFlowCanvasActions } from './flowCanvasActionsContext';
+import { FlowCanvasAppendPlusButton } from './FlowCanvasAppendPlusButton';
 
 const DEFAULT_MARKER_END = getMarkerEnd(MarkerType.ArrowClosed);
 
@@ -143,11 +144,10 @@ export default function FlowCanvasEdge(props: EdgeProps) {
               onMouseEnter={showEdgeControlsSoon}
               onMouseLeave={hideEdgeControlsSoon}
             >
-              <button
-                type="button"
+              <FlowCanvasAppendPlusButton
                 title="Add node on this connection"
+                ariaLabel="Add node on this connection"
                 disabled={!canInsert}
-                aria-label="Add node on this connection"
                 onClick={(e) => {
                   e.stopPropagation();
                   actions?.onBeginInsertOnEdge?.({
@@ -159,10 +159,7 @@ export default function FlowCanvasEdge(props: EdgeProps) {
                     flowPosition: { x: labelX, y: labelY },
                   });
                 }}
-                className="flex h-7 w-7 items-center justify-center rounded border border-[#c5cad3] bg-[#f4f5f6] text-gray-700 shadow-sm hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                <PlusIcon className="h-3.5 w-3.5" strokeWidth={2} />
-              </button>
+              />
               <button
                 type="button"
                 title="Delete connection"
