@@ -21,6 +21,8 @@ import analytiq_data as ad
 from app.auth import get_org_user
 from app.models import User
 
+from analytiq_data.flows.palette_groups import resolve_palette_group
+
 
 logger = logging.getLogger(__name__)
 flows_router = APIRouter(tags=["flows"])
@@ -591,6 +593,7 @@ async def list_node_types(organization_id: str, current_user: User = Depends(get
                 "label": nt.label,
                 "description": nt.description,
                 "category": nt.category,
+                "palette_group": resolve_palette_group(nt),
                 "is_trigger": nt.is_trigger,
                 "min_inputs": nt.min_inputs,
                 "max_inputs": nt.max_inputs,

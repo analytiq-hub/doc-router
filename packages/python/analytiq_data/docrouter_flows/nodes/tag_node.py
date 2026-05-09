@@ -16,6 +16,7 @@ class DocRouterSetTagsNode:
     label = "Set tags"
     description = "Applies configured tags."
     category = "DocRouter"
+    palette_group = "docrouter"
     is_trigger = False
     is_merge = False
     min_inputs = 1

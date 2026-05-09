@@ -26,6 +26,7 @@ class FlowsCodeNode:
     label = "Code (Python)"
     description = "Runs a small Python snippet to transform items."
     category = "Generic"
+    palette_group = "core"
     is_trigger = False
     is_merge = False
     min_inputs = 1

@@ -16,6 +16,7 @@ class DocRouterOcrNode:
     label = "Run OCR"
     description = "Runs OCR on the input document(s)."
     category = "DocRouter"
+    palette_group = "docrouter"
     is_trigger = False
     is_merge = False
     min_inputs = 1

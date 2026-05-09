@@ -14,6 +14,7 @@ class FlowsManualTriggerNode:
     label = "Manual trigger"
     description = "Emits one item with empty JSON `{}`. Use a Code node or pin_data for test payloads; `trigger_data` is only in Code context."
     category = "Generic"
+    palette_group = "trigger"
     is_trigger = True
     is_merge = False
     min_inputs = 0

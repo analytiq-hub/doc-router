@@ -16,6 +16,7 @@ class DocRouterLlmExtractNode:
     label = "LLM extract"
     description = "Runs linked prompt-based extraction."
     category = "DocRouter"
+    palette_group = "docrouter"
     is_trigger = False
     is_merge = False
     min_inputs = 1

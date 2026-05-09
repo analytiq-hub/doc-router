@@ -18,6 +18,7 @@ class FlowsRespondToWebhookNode:
     label = "Respond to Webhook"
     description = "Define the HTTP response for a synchronous webhook execution."
     category = "Generic"
+    palette_group = "core"
     is_trigger = False
     is_merge = False
     min_inputs = 1

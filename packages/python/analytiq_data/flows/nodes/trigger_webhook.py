@@ -82,6 +82,7 @@ class FlowsWebhookTriggerNode:
     label = "Webhook"
     description = "Starts the flow when the webhook URL receives an HTTP request (JSON, form, or binary body)."
     category = "Generic"
+    palette_group = "trigger"
     is_trigger = True
     is_merge = False
     min_inputs = 0

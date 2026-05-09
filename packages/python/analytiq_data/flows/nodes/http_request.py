@@ -86,6 +86,7 @@ class FlowsHttpRequestNode:
     label = "HTTP Request"
     description = "Make an HTTP request to any URL."
     category = "Generic"
+    palette_group = "core"
     is_trigger = False
     is_merge = False
     min_inputs = 1

@@ -216,6 +216,7 @@ class {class_name}:
     label = {label!r}
     description = {description!r}
     category = {category!r}
+    palette_group = "app"
     is_trigger = {repr(is_trigger)}
     is_merge = False
     min_inputs = {int(min_inputs)}

@@ -14,6 +14,7 @@ class FlowsMergeNode:
     label = "Merge"
     description = "Waits for all inputs, then concatenates them."
     category = "Generic"
+    palette_group = "flow"
     is_trigger = False
     is_merge = True
     min_inputs = 2

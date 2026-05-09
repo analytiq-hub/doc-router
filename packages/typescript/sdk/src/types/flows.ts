@@ -13,6 +13,8 @@ export interface FlowNodeType {
   label: string;
   description: string;
   category: string;
+  /** Palette section in Flow editor: `docrouter` | `app` | `flow` | `core` | `trigger`. */
+  palette_group?: string;
   /** Backend preset mapped to bundled Heroicons (`null`/omit → generic process/trigger glyph). */
   icon_key?: string | null;
   is_trigger: boolean;

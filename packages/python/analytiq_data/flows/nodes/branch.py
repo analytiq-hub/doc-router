@@ -29,6 +29,7 @@ class FlowsBranchNode:
     label = "Branch"
     description = "Routes items to true/false outputs based on a condition."
     category = "Generic"
+    palette_group = "flow"
     is_trigger = False
     is_merge = False
     min_inputs = 1

@@ -23,6 +23,7 @@ class DocRouterManualTriggerNode:
     label = "Manual trigger (document)"
     description = "Emits the target document as one item."
     category = "DocRouter"
+    palette_group = "trigger"
     is_trigger = True
     is_merge = False
     min_inputs = 0

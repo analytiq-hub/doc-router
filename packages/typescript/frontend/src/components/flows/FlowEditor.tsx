@@ -27,6 +27,7 @@ import {
   ArrowsPointingOutIcon,
   BeakerIcon,
   ChevronDownIcon,
+  ChevronLeftIcon,
   MagnifyingGlassIcon,
   MagnifyingGlassMinusIcon,
   MagnifyingGlassPlusIcon,
@@ -47,6 +48,12 @@ import type { DocRouterOrgApi } from '@/utils/api';
 import type { FlowExecutionBlobContext } from './flowExecutionBlob';
 import FlowNodePalette from './FlowNodePalette';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
+import {
+  paletteSectionDescription,
+  paletteSectionForNodeType,
+  paletteSectionLabel,
+  type FlowPaletteSectionId,
+} from './flowPaletteGroups';
 import { FLOW_RF_LABELED_EDGE_TYPE } from './flowRfCanvasTypes';
 import { useStableFlowRfCanvasRegistration } from './useStableFlowRfCanvasRegistration';
 import {
@@ -282,10 +289,27 @@ const FlowEditor: React.FC<{
 }) => {
   const { rfCanvasNodeTypes, rfCanvasEdgeTypes } = useStableFlowRfCanvasRegistration();
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
+  const [paletteDrilledSection, setPaletteDrilledSection] = useState<FlowPaletteSectionId | null>(null);
+  const [paletteSearching, setPaletteSearching] = useState(false);
   const [configModalNodeId, setConfigModalNodeId] = useState<string | null>(null);
   const [executeStepBusy, setExecuteStepBusy] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
+
+  const paletteDrillHeading = useMemo(() => {
+    if (paletteDrilledSection === null || paletteSearching) return null;
+    const inSection = nodeTypes.filter(
+      (nt) => paletteSectionForNodeType(nt) === paletteDrilledSection,
+    );
+    if (inSection.length === 0) return null;
+    const label = paletteSectionLabel(paletteDrilledSection);
+    return `${label} (${inSection.length})`;
+  }, [paletteDrilledSection, paletteSearching, nodeTypes]);
+
+  const onPaletteSearchActiveChange = useCallback((active: boolean) => {
+    setPaletteSearching(active);
+    if (active) setPaletteDrilledSection(null);
+  }, []);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const screenToFlowPointRef = useRef<((p: { x: number; y: number }) => { x: number; y: number }) | null>(null);
   const pendingEdgeInsertRef = useRef<EdgeInsertPayload | null>(null);
@@ -352,6 +376,8 @@ const FlowEditor: React.FC<{
   const closePalette = useCallback(() => {
     pendingEdgeInsertRef.current = null;
     pendingOutputAppendRef.current = null;
+    setPaletteDrilledSection(null);
+    setPaletteSearching(false);
     setNodePaletteOpen(false);
   }, []);
 
@@ -1115,32 +1141,75 @@ const FlowEditor: React.FC<{
             onDrop={handlePaletteNodeDrop}
             aria-hidden
           />
-          <div
-            className="fixed right-0 top-0 z-[160] flex h-full w-[min(100vw,300px)] min-w-0 flex-col border-l border-[#e2e4e8] bg-white shadow-xl"
+          <aside
+            className="fixed right-0 top-0 z-[160] flex h-full w-[min(100vw,385px)] min-w-0 flex-col border-l border-[#dfe3e9] bg-[#fafbfc] shadow-xl"
             role="dialog"
             aria-modal
-            aria-label="Add node"
+            aria-labelledby="flow-node-palette-title"
           >
-            <div className="flex items-center justify-between border-b border-[#eceff2] px-3 py-2">
-              <span className="text-sm font-semibold text-gray-900">Add node</span>
-              <button
-                type="button"
-                onClick={closePalette}
-                aria-label="Close"
-                className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100"
-              >
-                <XMarkIcon className="h-5 w-5" />
-              </button>
-            </div>
+            <header className="shrink-0 border-b border-[#dfe3e9] bg-[#f3f6f9] px-4 py-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-1 items-start gap-2">
+                  {paletteDrillHeading !== null ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setPaletteDrilledSection(null)}
+                        aria-label="Back to categories"
+                        className="-ml-1 -mt-0.5 shrink-0 rounded-md p-1.5 text-[#5d656e] transition hover:bg-white/70"
+                      >
+                        <ChevronLeftIcon className="h-5 w-5" />
+                      </button>
+                      <div className="min-w-0">
+                        <h2
+                          id="flow-node-palette-title"
+                          className="text-base font-bold leading-snug tracking-tight text-[#22262b]"
+                        >
+                          {paletteDrillHeading}
+                        </h2>
+                        {paletteDrilledSection !== null && (
+                          <p className="mt-1 text-sm font-normal leading-snug text-[#5d656e]">
+                            {paletteSectionDescription(paletteDrilledSection)}
+                          </p>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="min-w-0">
+                      <h2
+                        id="flow-node-palette-title"
+                        className="text-base font-bold leading-snug tracking-tight text-[#22262b]"
+                      >
+                        Add a step
+                      </h2>
+                      <p className="mt-1 text-sm font-normal leading-snug text-[#5d656e]">
+                        Choose a trigger or action, drag it onto the canvas, or double-click to place it.
+                      </p>
+                    </div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={closePalette}
+                  aria-label="Close"
+                  className="-mr-1 -mt-0.5 shrink-0 rounded-md p-1.5 text-[#5d656e] transition hover:bg-white/70"
+                >
+                  <XMarkIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </header>
             <div className="min-h-0 flex-1">
               <FlowNodePalette
                 nodeTypes={nodeTypes}
                 embedInDrawer
+                drilledSection={paletteDrilledSection}
+                onDrilledSectionChange={setPaletteDrilledSection}
+                onSearchActiveChange={onPaletteSearchActiveChange}
                 searchInputRef={searchInputRef}
                 onNodeTypeDoubleClick={addNodeFromTypeAtViewCenter}
               />
             </div>
-          </div>
+          </aside>
         </>
       )}
     </div>
