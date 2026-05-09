@@ -961,16 +961,10 @@ async def run_llm(
         logger.info(f"{document_id}/{prompt_revid}: LLM model {llm_model} not supported, falling back to default llm_model")
         llm_model = "gpt-4o-mini"
         llm_provider = "openai"
+    
+    logger.info(f"{document_id}/{prompt_revid}: LLM model: {llm_model}, provider: {llm_provider}")
         
-    api_key = await ad.llm.get_llm_key(analytiq_client, llm_provider)
-    if api_key:
-        logger.info(
-            f"{document_id}/{prompt_revid}: LLM model: {llm_model}, provider: {llm_provider}, api_key: {api_key[:16]}********"
-        )
-    else:
-        logger.info(
-            f"{document_id}/{prompt_revid}: LLM model: {llm_model}, provider: {llm_provider}, api_key: (none — using provider-specific auth)"
-        )
+    api_key = await ad.llm.get_llm_key(analytiq_client, llm_provider)        
 
     # Check if prompt has KB ID for RAG (do this early to modify system prompt if needed)
     kb_id = await ad.common.get_prompt_kb_id(analytiq_client, prompt_revid)
