@@ -51,6 +51,8 @@ disallow_incomplete_defs = true
 [tool.pytest.ini_options]
 filterwarnings = [
     "ignore:enable_cleanup_closed ignored because:DeprecationWarning",
+    # PyMuPDF (SWIG) registers builtin proxy types without __module__ — noisy on Python 3.13+
+    "ignore:builtin type .* has no __module__ attribute:DeprecationWarning",
 ]
 markers = [
     "mongot: tests that require MongoDB vector search ($vectorSearch) / mongot",
