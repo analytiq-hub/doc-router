@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from typing import Any
 from unittest.mock import patch
 
 import httpx
@@ -36,7 +37,9 @@ def test_http_request_parameter_schema_display_extensions(http_node: FlowsHttpRe
         "method",
         "url",
         "query_params",
+        "query_json",
         "headers",
+        "headers_json",
         "body_mode",
         "body_json",
         "body_params",
@@ -48,6 +51,7 @@ def test_http_request_parameter_schema_display_extensions(http_node: FlowsHttpRe
         "full_response",
         "never_error",
         "follow_redirects",
+        "max_redirects",
         "timeout_seconds",
     ]
 
@@ -102,6 +106,111 @@ async def test_execute_forwards_incoming_binary_and_meta(http_node: FlowsHttpReq
     assert row.meta.get("item_index") == 3
     assert row.meta.get("source_node_id") == "http1"
     assert row.paired_item == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_head_method(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    seen_method: str | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal seen_method
+        seen_method = request.method
+        return httpx.Response(200, request=request)
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+        await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "h1",
+                "parameters": {"method": "HEAD", "url": "https://example.com/x", "body_mode": "none"},
+            },
+            [[item]],
+        )
+    assert seen_method == "HEAD"
+
+
+@pytest.mark.asyncio
+async def test_query_json_overwrites_query_params(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    seen_qs: str | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal seen_qs
+        seen_qs = str(request.url)
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+        await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "h1",
+                "parameters": {
+                    "method": "GET",
+                    "url": "https://example.com/api",
+                    "body_mode": "none",
+                    "query_params": [{"name": "a", "value": "1"}, {"name": "b", "value": "2"}],
+                    "query_json": '{"a": "9", "c": "3"}',
+                },
+            },
+            [[item]],
+        )
+    assert seen_qs is not None
+    assert "a=9" in seen_qs
+    assert "c=3" in seen_qs
+    assert "b=2" in seen_qs
+
+
+@pytest.mark.asyncio
+async def test_max_redirects_passed_to_httpx_client(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    captured: dict[str, Any] = {}
+
+    def capture_client(**kw: Any) -> httpx.AsyncClient:
+        captured.clear()
+        captured.update(kw)
+        return _RealAsyncClient(
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json={}, request=r)),
+            **kw,
+        )
+
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=capture_client,
+    ):
+        item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+        await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "h1",
+                "parameters": {
+                    "method": "GET",
+                    "url": "https://example.com/",
+                    "body_mode": "none",
+                    "follow_redirects": True,
+                    "max_redirects": 7,
+                },
+            },
+            [[item]],
+        )
+    assert captured.get("follow_redirects") is True
+    assert captured.get("max_redirects") == 7
 
 
 @pytest.mark.asyncio
@@ -665,6 +774,12 @@ def test_validate_parameters_errors(http_node: FlowsHttpRequestNode):
     assert not http_node.validate_parameters({"method": "GET", "url": "https://x"})
     errs = http_node.validate_parameters({"method": "FOO", "url": "http://x"})
     assert errs and "method" in errs[0].lower()
+    errs_mr = http_node.validate_parameters({"method": "GET", "url": "https://x", "max_redirects": 0})
+    assert any("max_redirects" in e for e in errs_mr)
+    errs_qj = http_node.validate_parameters(
+        {"method": "GET", "url": "https://x", "query_json": "["}
+    )
+    assert any("query_json" in e for e in errs_qj)
 
 
 def test_http_request_url_json_schema_minlength(http_node: FlowsHttpRequestNode):

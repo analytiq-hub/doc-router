@@ -38,6 +38,39 @@ def _json_keypair_value(value: Any) -> Any:
     return str(value)
 
 
+_ALLOWED_HTTP_METHODS = frozenset(
+    {"GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"}
+)
+
+
+def _parse_json_object_param(raw: Any, *, field_label: str) -> dict[str, Any]:
+    """Resolve optional JSON object parameter (string from UI or dict from expressions)."""
+
+    if raw is None or raw == "":
+        return {}
+    if isinstance(raw, dict):
+        return dict(raw)
+    if isinstance(raw, str):
+        s = raw.strip()
+        if not s:
+            return {}
+        try:
+            parsed = json.loads(s)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"{field_label} must be valid JSON object text: {e}") from e
+        if not isinstance(parsed, dict):
+            raise ValueError(f"{field_label} must be a JSON object, got {type(parsed).__name__}")
+        return parsed
+    raise ValueError(f"{field_label} must be a JSON object or string, got {type(raw).__name__}")
+
+
+def _merge_flat_json_into_str_dict(parsed: dict[str, Any], dest: dict[str, str]) -> None:
+    """Merge JSON object keys into a string-only header/query map (n8n-style JSON overlay)."""
+
+    for k, v in parsed.items():
+        dest[str(k)] = "" if v is None else str(v)
+
+
 # Substrings matched against ``Content-Type`` (lowercased) — see ``docs/docrouter_binary.md`` §9.
 _BINARY_RESPONSE_CONTENT_TYPE_MARKERS = (
     "application/pdf",
@@ -123,7 +156,7 @@ class FlowsHttpRequestNode:
         "properties": {
             "method": {
                 "type": "string",
-                "enum": ["GET", "POST", "PUT", "PATCH", "DELETE"],
+                "enum": ["GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE"],
                 "default": "GET",
                 "x-ui-group": "Request",
             },
@@ -152,6 +185,13 @@ class FlowsHttpRequestNode:
                 },
                 "default": [],
             },
+            "query_json": {
+                "type": "string",
+                "default": "",
+                "description": "Optional JSON object merged after query_params (same keys overwrite). Use for dynamic query objects or =expression.",
+                "x-ui-widget": "json",
+                "x-ui-group": "Request",
+            },
             "headers": {
                 "type": "array",
                 "x-ui-widget": "name_value_list",
@@ -166,6 +206,13 @@ class FlowsHttpRequestNode:
                     "additionalProperties": False,
                 },
                 "default": [],
+            },
+            "headers_json": {
+                "type": "string",
+                "default": "",
+                "description": "Optional JSON object merged after headers (same keys overwrite). Credential headers apply after this.",
+                "x-ui-widget": "json",
+                "x-ui-group": "Request",
             },
             "body_mode": {
                 "type": "string",
@@ -267,6 +314,13 @@ class FlowsHttpRequestNode:
                 "default": True,
                 "x-ui-group": "Options",
             },
+            "max_redirects": {
+                "type": "integer",
+                "default": 20,
+                "minimum": 1,
+                "description": "Maximum redirect hops when follow_redirects is enabled (matches httpx default).",
+                "x-ui-group": "Options",
+            },
             "timeout_seconds": {
                 "type": "number",
                 "default": 30,
@@ -278,12 +332,27 @@ class FlowsHttpRequestNode:
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
         errs: list[str] = []
-        method = params.get("method") or "GET"
-        if method not in ("GET", "POST", "PUT", "PATCH", "DELETE"):
-            errs.append(f"method must be one of GET POST PUT PATCH DELETE, got {method!r}")
+        method = str(params.get("method") or "GET").upper()
+        if method not in _ALLOWED_HTTP_METHODS:
+            errs.append(
+                f"method must be one of {' '.join(sorted(_ALLOWED_HTTP_METHODS))}, got {method!r}"
+            )
         ts = params.get("timeout_seconds")
         if ts is not None and (not isinstance(ts, (int, float)) or ts <= 0):
             errs.append("timeout_seconds must be a positive number")
+        mr = params.get("max_redirects")
+        if mr is not None and (
+            not isinstance(mr, int) or isinstance(mr, bool) or mr < 1
+        ):
+            errs.append("max_redirects must be an integer >= 1")
+        for jname in ("query_json", "headers_json"):
+            raw = params.get(jname)
+            if raw is None or raw == "":
+                continue
+            try:
+                _parse_json_object_param(raw, field_label=jname)
+            except ValueError as e:
+                errs.append(str(e))
         body_mode = params.get("body_mode", "none")
         if body_mode == "json" and not str(params.get("body_json") or "").strip():
             errs.append("body_json must not be empty when body mode is json")
@@ -352,6 +421,18 @@ class FlowsHttpRequestNode:
         for q in params.get("query_params") or []:
             if isinstance(q, dict) and q.get("name"):
                 query[str(q["name"])] = str(q.get("value", ""))
+
+        try:
+            qj = _parse_json_object_param(params.get("query_json"), field_label="query_json")
+        except ValueError as e:
+            raise RuntimeError(str(e)) from None
+        _merge_flat_json_into_str_dict(qj, query)
+
+        try:
+            hj = _parse_json_object_param(params.get("headers_json"), field_label="headers_json")
+        except ValueError as e:
+            raise RuntimeError(str(e)) from None
+        _merge_flat_json_into_str_dict(hj, headers)
 
         bindings = node.get("credentials") or {}
         org_id = context.organization_id
@@ -457,12 +538,22 @@ class FlowsHttpRequestNode:
                 str(request.url), purpose="HTTP Request"
             )
 
+        max_redirs = int(params.get("max_redirects") or 20)
+        if max_redirs < 1:
+            max_redirs = 20
+
+        client_kw: dict[str, Any] = {
+            "timeout": timeout,
+            "event_hooks": {"request": [_ssrf_guard_each_request]},
+        }
+        if follow_redirects:
+            client_kw["follow_redirects"] = True
+            client_kw["max_redirects"] = max_redirs
+        else:
+            client_kw["follow_redirects"] = False
+
         try:
-            async with httpx.AsyncClient(
-                timeout=timeout,
-                follow_redirects=follow_redirects,
-                event_hooks={"request": [_ssrf_guard_each_request]},
-            ) as client:
+            async with httpx.AsyncClient(**client_kw) as client:
                 resp = await client.request(
                     method=method,
                     url=url,
