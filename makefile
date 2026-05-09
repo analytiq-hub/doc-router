@@ -48,6 +48,8 @@ help:
 	@echo "  make tests-flow              - Run flow engine tests only"
 	@echo "  make flow-node-dump          - Dump upstream integration nodes to tools/flow_node_dump.jsonl (override UPSTREAM_NODES_ROOT, FLOW_DUMP_SUBDIRS)"
 	@echo "  make flow-node-port          - Emit DocRouter packages from tools/flow_node_dump.jsonl"
+	@echo "  make credential-dump         - Dump n8n credential classes to tools/credential_dump.jsonl (needs built ../n8n/packages/nodes-base)"
+	@echo "  make credential-port         - Generate schemas/credential-kinds/*.json from tools/credential_dump.jsonl (optional CREDENTIAL_PORT_ARGS)"
 	@echo "  make tests-kb                - Run slow KB integration tests (real search indexes)"
 	@echo "  make tests-scale             - Run Python scale tests"
 	@echo "  make tests-all               - Run all Python tests"
@@ -250,6 +252,21 @@ flow-node-dump:
 flow-node-port: setup-python
 	. .venv/bin/activate && python tools/port_nodes.py tools/flow_node_dump.jsonl --validate
 
+credential-dump:
+	mkdir -p tools
+	tmp=$$(mktemp); \
+	trap 'rm -f "$$tmp"' EXIT; \
+	node --disable-warning=DEP0040 tools/dump_credentials.js \
+		--n8n-nodes-base "$(UPSTREAM_NODES_ROOT)/packages/nodes-base" > "$$tmp" && \
+	mv -f "$$tmp" tools/credential_dump.jsonl
+
+# Extra CLI args for port_credentials.py (e.g. CREDENTIAL_PORT_ARGS=--limit 50 --dry-run).
+CREDENTIAL_PORT_ARGS ?=
+
+credential-port: setup-python
+	. .venv/bin/activate && PYTHONPATH=packages/python python tools/port_credentials.py tools/credential_dump.jsonl \
+		--out schemas/credential-kinds $(CREDENTIAL_PORT_ARGS)
+
 tests-kb: setup-python
 	. .venv/bin/activate && pytest -v -m "kb_slow" packages/python/tests/
 
@@ -311,4 +328,4 @@ dockerhub-push: dockerhub-push-frontend dockerhub-push-backend
 dockerhub-build-push: dockerhub-build dockerhub-push
 	@echo "✅ Build and push complete!"
 
-.PHONY: help deploy-dev tests tests-kb setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts vitest deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean flow-node-dump flow-node-port
+.PHONY: help deploy-dev tests tests-kb setup setup-dev setup-python setup-typescript setup-kind setup-ui tests-ts vitest deploy deploy-compose deploy-compose-embedded deploy-kind down logs down-compose down-compose-clean down-kind destroy-kind dockerhub-build dockerhub-build-frontend dockerhub-build-backend dockerhub-push dockerhub-push-frontend dockerhub-push-backend dockerhub-build-push clean flow-node-dump flow-node-port credential-dump credential-port
