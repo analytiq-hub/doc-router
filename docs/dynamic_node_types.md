@@ -405,17 +405,16 @@ analytiq_data/flows/
 app/routes/flows.py       5 new CRUD routes for /node-types/custom
                           extend list_node_types to include org types
 
-tests_flow/
-  test_dynamic_node_types.py  unit tests (no MongoDB)
-tests/
-  test_flows_e2e.py           integration test additions
+tests/flows/
+  (planned) test_dynamic_node_types.py  unit tests (no MongoDB)
+  test_flows_e2e.py           integration test additions (when exercised)
 ```
 
 ---
 
 ## 8. Testing strategy
 
-### Unit tests (`tests_flow/test_dynamic_node_types.py`)
+### Unit tests (`tests/flows/test_dynamic_node_types.py`, when added)
 
 All tests run without MongoDB. `load_org_node_types` is not called; instead,
 `local_types` is constructed directly in each test and passed to `validate_revision`

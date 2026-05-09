@@ -59,7 +59,7 @@ packages/python/
     msg_handlers/flow_run.py  ← Queue worker entry point
   app/routes/flows.py         ← FastAPI HTTP routes
   worker/worker.py            ← Background worker (consumes flow_run queue)
-  tests_flow/                 ← Engine unit tests (no MongoDB)
+  tests/flows/                ← Flow engine + HTTP integrations (fixtures from `tests/conftest.py`)
   tests/test_flows_e2e.py     ← Integration tests (MongoDB + HTTP)
 ```
 
@@ -432,13 +432,11 @@ app/routes/flows_credentials.py   credential kinds list + org credential CRUD (`
 
 worker/worker.py        worker_flow_run — consumes flow_run queue messages
 
-tests_flow/
-  conftest.py           sys.path setup
+tests/flows/
   test_flows_engine.py  Validation + run_flow (code, branch, merge, pin_data)
   test_expressions.py   _json/_node resolution, on_error, unsafe-call rejection
-
-tests/
-  test_flows_e2e.py     HTTP + MongoDB integration test (TestClient + real Mongo)
+  test_flows_e2e.py     HTTP + MongoDB integration (TestClient + real Mongo)
+  …                     other flow HTTP/schema/credentials tests (`tests/conftest.py` fixtures)
 ```
 
 ---
@@ -513,7 +511,7 @@ Unknown node types raise `FlowValidationError` (not `KeyError`).
 
 ```bash
 # Engine unit tests — no MongoDB, no HTTP
-pytest packages/python/tests_flow/
+pytest packages/python/tests/flows/
 
 # Integration tests — requires running MongoDB (MONGO_URI in .env)
 pytest packages/python/tests/ -k flows

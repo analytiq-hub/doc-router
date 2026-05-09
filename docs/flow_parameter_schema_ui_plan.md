@@ -149,7 +149,7 @@ Port-converted nodes (from n8n via `port/schema.py`): `_apply_inode_ui_extension
 | Python | `x-ui-*` keys present on HTTP node schema; `list(props.keys())` order | Done (`test_flow_http_request_node.py`) |
 | Python | Port converter maps `placeholder`, `code` type, `displayOptions.show` to `x-ui-*` | Done (`test_flow_port_schema_display.py`) |
 | Python | E2E flow run with expressions in pair-list values | Done (`test_flows_e2e.py`) |
-| Python | Expression / `_node` / preview (`revision_nodes`) | Done (`tests_flow/test_expressions.py`) |
+| Python | Expression / `_node` / preview (`revision_nodes`) | Done (`tests/flows/test_expressions.py`) |
 | TS | `_node` string rewrite helpers | Done (`flowExpressionNodeRefs.spec.ts`) |
 
 ---

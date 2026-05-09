@@ -230,7 +230,7 @@ tests: setup-python
 	. .venv/bin/activate && pytest -n auto -m "not kb_slow" packages/python/tests/
 
 tests-flow: setup-python
-	. .venv/bin/activate && pytest -q packages/python/tests_flow/
+	. .venv/bin/activate && pytest -q packages/python/tests/flows/
 
 # Repository root (directory containing this makefile). Paths below work with `make -f /abs/path/makefile`.
 _DOC_ROUTER_ROOT := $(abspath $(dir $(firstword $(MAKEFILE_LIST))))
