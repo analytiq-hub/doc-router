@@ -58,6 +58,8 @@ def test_http_request_parameter_schema_display_extensions(http_node: FlowsHttpRe
     assert list(props.keys()) == [
         "method",
         "url",
+        "authentication",
+        "generic_auth_slot",
         "query_params",
         "query_json",
         "headers",

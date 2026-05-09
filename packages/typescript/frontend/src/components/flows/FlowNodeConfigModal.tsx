@@ -1010,6 +1010,7 @@ const FlowNodeConfigModal: React.FC<{
                               onChange={onChange}
                               expressionPreview={expressionPreview}
                               soleInboundParentNodeId={soleInboundParentNodeId}
+                              flowOrgApi={flowOrgApi}
                             />
                           )}
                           {node && (

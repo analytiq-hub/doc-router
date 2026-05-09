@@ -195,6 +195,23 @@ class FlowsHttpRequestNode:
                 "x-ui-regex": "^https?://\\S+$",
                 "x-ui-regex-message": "Must be a valid HTTP/S URL",
             },
+            "authentication": {
+                "type": "string",
+                "enum": ["none", "generic", "predefined"],
+                "default": "none",
+                "title": "Authentication",
+                "description": "Credential attachment mode (editor UX). Execution uses node credential bindings only.",
+                "x-ui-group": "Request",
+            },
+            "generic_auth_slot": {
+                "type": "string",
+                "enum": [s["slot"] for s in credential_slots],
+                "default": "httpBearerAuth",
+                "title": "Generic auth type",
+                "description": "Which credential slot to bind when using generic credential authentication.",
+                "x-ui-group": "Request",
+                "x-ui-show-when": {"field": "authentication", "equals": "generic"},
+            },
             "query_params": {
                 "type": "array",
                 "x-ui-widget": "name_value_list",
@@ -414,6 +431,16 @@ class FlowsHttpRequestNode:
         px = str(params.get("proxy") or "").strip()
         if px and not _proxy_parameter_syntax_ok(px):
             errs.append("proxy must be a valid http(s) URL with a hostname")
+        auth_mode = str(params.get("authentication") or "none").lower()
+        if auth_mode not in ("none", "generic", "predefined"):
+            errs.append(
+                "authentication must be one of none generic predefined"
+            )
+        allowed_slots = {s["slot"] for s in FlowsHttpRequestNode.credential_slots}
+        if str(params.get("authentication") or "none").lower() == "generic":
+            gas = params.get("generic_auth_slot")
+            if gas is not None and str(gas) not in allowed_slots:
+                errs.append("generic_auth_slot must match a credential slot on this node")
         return errs
 
     async def execute(

@@ -91,6 +91,10 @@ export const FlowNodeCredentialSlots: React.FC<{
     return m;
   }, [items]);
 
+  if (nodeType?.key === 'flows.http_request') {
+    return null;
+  }
+
   if (!slots?.length) return null;
 
   const setSlot = (slot: FlowCredentialSlot, credentialId: string) => {

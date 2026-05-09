@@ -2,6 +2,7 @@ import React, { useCallback, useMemo, useState } from 'react';
 import { Switch } from '@headlessui/react';
 import Editor from '@monaco-editor/react';
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
+import type { DocRouterOrgApi } from '@/utils/api';
 import {
   flowInputClass,
   flowLabelClass,
@@ -20,6 +21,7 @@ import {
   isPropertyVisible,
   mergeParameterDefaults,
 } from './flowSchemaParameterUtils';
+import { FlowHttpRequestAuthSection, FLOWS_HTTP_REQUEST_KEY } from './FlowHttpRequestAuthSection';
 function isExpressionValue(value: unknown): boolean {
   return typeof value === 'string' && value.startsWith('=');
 }
@@ -137,7 +139,17 @@ export const FlowNodeParameterFields: React.FC<{
   expressionPreview?: ExpressionPreviewContext | null;
   /** Single inbound edge source id — upstream drops from that node use `_json` instead of `_node[…].json`. */
   soleInboundParentNodeId?: string | null;
-}> = ({ node, nodeType, onChange, readOnly = false, expressionPreview = null, soleInboundParentNodeId = null }) => {
+  /** Org API for HTTP Request authentication UI (credential pickers). */
+  flowOrgApi?: DocRouterOrgApi | null;
+}> = ({
+  node,
+  nodeType,
+  onChange,
+  readOnly = false,
+  expressionPreview = null,
+  soleInboundParentNodeId = null,
+  flowOrgApi = null,
+}) => {
   const [fieldRegexErrors, setFieldRegexErrors] = useState<Record<string, string>>({});
   const rootSchema = nodeType?.parameter_schema;
   const schemaProps = useMemo(() => getSchemaProperties(rootSchema), [rootSchema]);
@@ -158,6 +170,11 @@ export const FlowNodeParameterFields: React.FC<{
   );
 
   const orderedKeys = useMemo(() => getOrderedKeys(rootSchema), [rootSchema]);
+  const isHttpRequest = nodeType?.key === FLOWS_HTTP_REQUEST_KEY;
+  const skipKeysForHttpRequest = useMemo(
+    () => (isHttpRequest ? new Set(['authentication', 'generic_auth_slot']) : null),
+    [isHttpRequest],
+  );
 
   const triggerHasParameterSchema =
     Boolean(nodeType?.is_trigger && Object.keys(schemaProps).length > 0);
@@ -617,6 +634,7 @@ export const FlowNodeParameterFields: React.FC<{
   let lastGroupLabel: string | null | undefined;
 
   for (const key of orderedKeys) {
+    if (skipKeysForHttpRequest?.has(key)) continue;
     if (!isPropertyVisible(key, rootSchema, mergedParams)) continue;
     const sub = schemaProps[key];
     const groupRaw = sub['x-ui-group'];
@@ -639,6 +657,22 @@ export const FlowNodeParameterFields: React.FC<{
     }
 
     blocks.push(renderParamField(key, sub as { type?: string; enum?: unknown[] } & Record<string, unknown>));
+
+    if (isHttpRequest && key === 'url') {
+      blocks.push(
+        <FlowHttpRequestAuthSection
+          key="flows-http-request-authentication"
+          node={node}
+          nodeType={nodeType}
+          rootSchema={rootSchema}
+          mergedParams={mergedParams}
+          rawParams={(node.parameters || {}) as Record<string, unknown>}
+          onChange={onChange}
+          flowOrgApi={flowOrgApi}
+          readOnly={readOnly}
+        />,
+      );
+    }
   }
 
   return (
