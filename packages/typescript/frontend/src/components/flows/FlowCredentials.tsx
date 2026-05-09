@@ -14,6 +14,7 @@ import {
 } from '@heroicons/react/24/outline';
 import type { FlowCredentialHeader, FlowCredentialKindSummary } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
+import { toast } from 'react-toastify';
 import { formatLocalDate } from '@/utils/date';
 import { useFlowApi } from './useFlowApi';
 import {
@@ -134,6 +135,7 @@ const FlowCredentials: React.FC<{
 
   const [testChip, setTestChip] = useState<Record<string, { ok: boolean; detail: string }>>({});
   const [testLoadingId, setTestLoadingId] = useState<string | null>(null);
+  const [oauthConnectLoading, setOauthConnectLoading] = useState(false);
 
   const kindByKey = useMemo(() => Object.fromEntries(kinds.map((k) => [k.key, k])), [kinds]);
 
@@ -191,6 +193,22 @@ const FlowCredentials: React.FC<{
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const sp = new URLSearchParams(window.location.search);
+    const st = sp.get('flow_oauth');
+    if (!st) return;
+    if (st === 'success') {
+      toast.success('Credential connected successfully');
+    } else if (st === 'error') {
+      toast.error(sp.get('flow_oauth_detail') || 'OAuth connection failed');
+    }
+    sp.delete('flow_oauth');
+    sp.delete('flow_oauth_detail');
+    const qs = sp.toString();
+    window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
+  }, []);
 
   const openEdit = useCallback((row: FlowCredentialHeader) => {
     setEditRow(row);
@@ -324,6 +342,19 @@ const FlowCredentials: React.FC<{
       await load();
     } catch (err) {
       setMessage(getApiErrorMsg(err) || 'Failed to delete credential');
+    }
+  };
+
+  const startOAuthConnect = async () => {
+    if (!editRow) return;
+    try {
+      setOauthConnectLoading(true);
+      setMessage('');
+      const { authorization_url } = await api.initiateFlowOAuthConnect(editRow.credential_id);
+      window.location.href = authorization_url;
+    } catch (err) {
+      setMessage(getApiErrorMsg(err) || 'Could not start OAuth');
+      setOauthConnectLoading(false);
     }
   };
 
@@ -804,6 +835,23 @@ const FlowCredentials: React.FC<{
               ) : null}
             </div>
           ))}
+          {editKind?.supports_oauth_browser_flow &&
+          String(editRow?.public_fields?.grantType ?? 'authorizationCode') === 'authorizationCode' ? (
+            <div className="rounded-md border border-blue-100 bg-blue-50/90 px-3 py-3 text-sm text-blue-950">
+              <button
+                type="button"
+                className={btnPrimary}
+                disabled={oauthConnectLoading}
+                onClick={() => void startOAuthConnect()}
+              >
+                {oauthConnectLoading ? 'Redirecting…' : 'Connect with provider'}
+              </button>
+              <p className="mt-2 text-xs leading-relaxed text-blue-900">
+                Save Client ID, Secret, and URLs first. This opens the provider login page to obtain access and refresh
+                tokens.
+              </p>
+            </div>
+          ) : null}
         </div>
       </FlowModal>
 

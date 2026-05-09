@@ -111,7 +111,12 @@ async def fetch_credential_kind_and_fields(
             kind = ad.flows.get_credential_kind(str(kind_key))
         except KeyError:
             return {}, fields
-        return kind, fields
+        from analytiq_data.flows.credential_runtime import apply_runtime_credential_updates
+
+        updated = await apply_runtime_credential_updates(
+            organization_id, credential_id, kind, fields
+        )
+        return kind, updated
     except Exception as e:
         logger.warning("fetch_credential_kind_and_fields failed for %s: %s", credential_id, e)
         return {}, fields

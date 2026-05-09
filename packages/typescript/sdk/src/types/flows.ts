@@ -210,6 +210,10 @@ export interface FlowCredentialKindSummary {
   fields: Array<Record<string, unknown>>;
   /** True when the kind defines `test_request` (connection test in UI). */
   has_test_request?: boolean;
+  /** OAuth2 authorization-code browser redirect (Connect in UI). */
+  supports_oauth_browser_flow?: boolean;
+  /** Kind defines `pre_auth` (session bootstrap before inject). */
+  has_pre_auth?: boolean;
 }
 
 /** Saved org credential metadata (no secrets) from `GET .../credentials`. */

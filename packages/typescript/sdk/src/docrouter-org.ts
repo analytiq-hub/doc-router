@@ -962,6 +962,14 @@ export class DocRouterOrg {
     );
   }
 
+  /** OAuth2 authorization-code: returns provider URL to redirect the browser to. */
+  async initiateFlowOAuthConnect(credentialId: string): Promise<{ authorization_url: string }> {
+    return this.http.post<{ authorization_url: string }>(
+      `/v0/orgs/${this.organizationId}/credentials/${credentialId}/oauth/initiate`,
+      {},
+    );
+  }
+
   async createFlow(params: CreateFlowParams): Promise<{ flow: FlowHeader; revision?: FlowRevision | null }> {
     return this.http.post<{ flow: FlowHeader; revision?: FlowRevision | null }>(
       `/v0/orgs/${this.organizationId}/flows`,

@@ -10,6 +10,7 @@ from typing import Any
 import httpx
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import RedirectResponse
 from pymongo.errors import DuplicateKeyError
 from jsonschema import Draft7Validator
 from pydantic import BaseModel
@@ -30,6 +31,10 @@ class CredentialKindSummary(BaseModel):
     fields: list[dict[str, Any]]
     #: True when the kind JSON defines a non-empty ``test_request`` (see credential test endpoint).
     has_test_request: bool = False
+    #: OAuth2 authorization-code redirect supported (Connect in UI).
+    supports_oauth_browser_flow: bool = False
+    #: Kind defines ``pre_auth`` (session / token bootstrap before inject).
+    has_pre_auth: bool = False
 
 
 class CreateCredentialRequest(BaseModel):
@@ -67,6 +72,23 @@ class TestCredentialResponse(BaseModel):
 
 
 _DUPLICATE_NAME_DETAIL = "A credential with this name already exists for this organization."
+
+
+def _kind_supports_oauth_browser_flow(kind: dict[str, Any]) -> bool:
+    if "oauth2" not in str(kind.get("auth_mode") or "").lower():
+        return False
+    props = (kind.get("secret_schema") or {}).get("properties") or {}
+    if not isinstance(props, dict):
+        return False
+    gt = props.get("grantType") or {}
+    enum = gt.get("enum") if isinstance(gt, dict) else None
+    if not isinstance(enum, list) or "authorizationCode" not in enum:
+        return False
+    return "authUrl" in props
+
+
+class OAuthInitiateResponse(BaseModel):
+    authorization_url: str
 
 
 def _normalize_credential_name(name: str) -> str:
@@ -148,6 +170,8 @@ async def list_credential_kinds(
                 auth_mode=str(kind.get("auth_mode") or "custom"),
                 fields=fields,
                 has_test_request=bool(kind.get("test_request")),
+                supports_oauth_browser_flow=_kind_supports_oauth_browser_flow(kind),
+                has_pre_auth=isinstance(kind.get("pre_auth"), dict),
             )
         )
     return result
@@ -377,6 +401,15 @@ async def test_credential(
     except Exception as e:
         return TestCredentialResponse(ok=False, error=f"Decrypt failed: {e}")
 
+    try:
+        from analytiq_data.flows.credential_runtime import apply_runtime_credential_updates
+
+        fields = await apply_runtime_credential_updates(
+            organization_id, credential_id, kind, fields
+        )
+    except Exception as e:
+        logger.warning("credential runtime refresh before test failed: %s", e)
+
     rend = ad.flows.render_credential_inject(kind, fields)
     headers = rend["headers"]
     qs = rend["query_params"]
@@ -410,3 +443,129 @@ async def test_credential(
         return TestCredentialResponse(ok=ok, status_code=resp.status_code, error=None if ok else resp.text[:500])
     except Exception as e:
         return TestCredentialResponse(ok=False, error=str(e))
+
+
+@flow_credentials_router.post(
+    "/v0/orgs/{organization_id}/credentials/{credential_id}/oauth/initiate",
+    response_model=OAuthInitiateResponse,
+)
+async def oauth_initiate_flow_credential(
+    organization_id: str,
+    credential_id: str,
+    current_user: User = Depends(get_org_user),
+) -> OAuthInitiateResponse:
+    from analytiq_data.flows.credential_runtime import (
+        build_oauth_authorization_url,
+        encode_flow_oauth_state,
+    )
+
+    db = ad.common.get_async_db()
+    try:
+        oid = ObjectId(credential_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid credential id") from None
+    doc = await db.credentials.find_one({"_id": oid, "organization_id": organization_id})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Credential not found")
+    try:
+        kind = ad.flows.get_credential_kind(doc["kind_key"])
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Unknown credential kind") from None
+
+    if not _kind_supports_oauth_browser_flow(kind):
+        raise HTTPException(
+            status_code=400,
+            detail="This credential kind does not support OAuth browser login",
+        )
+
+    raw = doc.get("encrypted_payload")
+    try:
+        fields = json.loads(ad.crypto.decrypt_token(raw)) if raw else {}
+        if not isinstance(fields, dict):
+            fields = {}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Decrypt failed: {e}") from None
+
+    gt = str(fields.get("grantType") or "authorizationCode")
+    if gt != "authorizationCode":
+        raise HTTPException(
+            status_code=400,
+            detail="Connect is only available when Grant Type is authorization code",
+        )
+
+    if not str(fields.get("authUrl") or "").strip():
+        raise HTTPException(status_code=400, detail="Authorization URL is missing")
+
+    try:
+        state = encode_flow_oauth_state(
+            organization_id, credential_id, current_user.user_id
+        )
+        url = build_oauth_authorization_url(fields, state)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+
+    return OAuthInitiateResponse(authorization_url=url)
+
+
+@flow_credentials_router.get("/v0/callback/flow-oauth")
+async def flow_oauth_callback(
+    code: str | None = Query(None),
+    state: str | None = Query(None),
+    error: str | None = Query(None),
+    error_description: str | None = Query(None),
+) -> RedirectResponse:
+    from analytiq_data.flows.credential_runtime import (
+        decode_flow_oauth_state,
+        exchange_authorization_code,
+        oauth_callback_redirect_error,
+        oauth_callback_redirect_error_generic,
+        oauth_callback_redirect_success,
+    )
+
+    if error or error_description:
+        msg = (error_description or error or "oauth_error").strip()
+        return RedirectResponse(oauth_callback_redirect_error_generic(msg))
+
+    if not code or not state:
+        return RedirectResponse(oauth_callback_redirect_error_generic("missing_code_or_state"))
+
+    try:
+        payload = decode_flow_oauth_state(state)
+    except Exception:
+        return RedirectResponse(oauth_callback_redirect_error_generic("invalid_oauth_state"))
+
+    org_id = str(payload.get("org") or "")
+    cred_id = str(payload.get("cid") or "")
+    if not org_id or not cred_id:
+        return RedirectResponse(oauth_callback_redirect_error_generic("invalid_oauth_state_payload"))
+
+    db = ad.common.get_async_db()
+    try:
+        oid = ObjectId(cred_id)
+    except Exception:
+        return RedirectResponse(oauth_callback_redirect_error(org_id, "invalid credential"))
+
+    doc = await db.credentials.find_one({"_id": oid, "organization_id": org_id})
+    if not doc:
+        return RedirectResponse(oauth_callback_redirect_error(org_id, "credential_not_found"))
+
+    try:
+        kind = ad.flows.get_credential_kind(doc["kind_key"])
+    except KeyError:
+        return RedirectResponse(oauth_callback_redirect_error(org_id, "unknown_kind"))
+
+    raw = doc.get("encrypted_payload")
+    try:
+        fields = json.loads(ad.crypto.decrypt_token(raw)) if raw else {}
+        if not isinstance(fields, dict):
+            fields = {}
+    except Exception as e:
+        return RedirectResponse(oauth_callback_redirect_error(org_id, f"decrypt: {e}"))
+
+    try:
+        await exchange_authorization_code(org_id, cred_id, fields, code)
+    except Exception as e:
+        logger.warning("oauth token exchange failed: %s", e)
+        return RedirectResponse(oauth_callback_redirect_error(org_id, str(e)))
+
+    return RedirectResponse(oauth_callback_redirect_success(org_id))

@@ -103,6 +103,15 @@ def _merge_two_kind_documents(base: dict[str, Any], overlay: dict[str, Any]) -> 
     elif "runtime_fields" in out:
         del out["runtime_fields"]
 
+    bpa = base.get("pre_auth") if isinstance(base.get("pre_auth"), dict) else None
+    opa = overlay.get("pre_auth") if isinstance(overlay.get("pre_auth"), dict) else None
+    if opa:
+        out["pre_auth"] = dict(opa)
+    elif bpa:
+        out["pre_auth"] = dict(bpa)
+    elif "pre_auth" in out:
+        del out["pre_auth"]
+
     return out
 
 
