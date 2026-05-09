@@ -15,8 +15,8 @@ DocRouter intentionally keeps **strong SSRF controls** and **organization-scoped
 | Phase | Goals | Status |
 |-------|--------|--------|
 | **1** | HTTP methods **HEAD**, **OPTIONS**; optional **query_json** / **headers_json** (JSON objects merged after key/value lists); **max_redirects** when following redirects; tests | **Done** |
-| **2** | Authentication UX aligned with n8n: explicit mode (none / generic slots / “service” credential picker); extend credential slots (Digest, Custom JSON, OAuth wiring) per credentials roadmap | Planned |
-| **3** | Options: **proxy**, **allow insecure TLS** (if product-approved), **response format** controls closer to n8n (forced json/text/file vs autodetect), **batching** | Planned |
+| **2** | Authentication UX aligned with n8n: explicit mode (none / generic slots / “service” credential picker); extend credential slots (**Digest**, **JSON body** via ``httpJsonBodyAuth``, OAuth wiring) per credentials roadmap | **Partial** — slots include Bearer / Basic / Digest / Header / Query / **JSON Body**; OAuth refresh/pre-auth lives in `credential_runtime`; “service” picker / predefined integrations **not** done |
+| **3** | Options: **proxy**, **allow insecure TLS** (**verify_tls**), **response_format** (auto / json / text / binary), **batching** | **Partial** — proxy, TLS verify, response format **implemented**; batching **planned** |
 | **4** | **Pagination** (expressions + bounded loops), **SSL client certificate** credential + httpx agent options | Planned |
 | **5** | **Node versioning** (`type_version` / schema evolution without breaking saved flows), optional **curl import** in the parameter UI | Planned |
 
@@ -60,22 +60,24 @@ Invalid JSON or non-object → validation error on save; at runtime a bad value 
 | URL | Absolute `http(s)` or `=expression` per inbound item |
 | Query | Key/value list + optional **`query_json`** overlay |
 | Headers | Key/value list + optional **`headers_json`** overlay |
-| Credential slots | **httpBearerAuth**, **httpHeaderAuth**, **httpQueryAuth** + inject templates from kind JSON |
-| Body modes | `none`, `json`, `json_keypair`, `form_urlencoded`, `raw`, `binary`, `multipart_form` |
-| Options | `full_response`, `never_error`, `follow_redirects`, **`max_redirects`**, `timeout_seconds` |
+| Credential slots | **httpBearerAuth**, **httpBasicAuth**, **httpDigestAuth**, **httpHeaderAuth**, **httpQueryAuth**, **httpJsonBodyAuth** + inject templates from kind JSON (`inject.headers` / `query_params` / **`body`**) |
+| Body modes | `none`, `json`, `json_keypair`, `form_urlencoded`, `raw`, `binary`, `multipart_form` — with **`body_mode: none`**, credential **`inject.body`** alone still sends **application/json** (JSON Body auth) |
+| Options | `full_response`, `never_error`, `follow_redirects`, **`max_redirects`**, **`proxy`** (SSRF-checked), **`verify_tls`**, **`response_format`**, `timeout_seconds` |
 | Binary responses | Content-Type heuristics → `BinaryRef` on output (see `docrouter_binary.md`) |
 | SSRF | `validate_http_url_allowed_async` on every request including redirect hops |
 | Parameter UI hints | `x-ui-group`, `x-ui-widget`, `x-ui-show-when` on schema |
 
 ### Still deferred (later phases)
 
-Predefined integration credentials on the node (n8n “Predefined credential type”), pagination, proxy, batch/rate limits, curl import, SSL client certs.
+Predefined integration credentials on the node (n8n “Predefined credential type”), **batching** / rate limits, **pagination**, **curl import**, **SSL client certs**, **node versioning** (`type_version`).
 
 ---
 
 ## 5. Credential slots
 
 Kinds live under `schemas/credential-kinds/`. The node resolves each bound slot via `fetch_credential_kind_and_fields`, applies **inject** templates where present, then legacy header/query field pairs.
+
+- **`inject.body`** (e.g. **`httpJsonBodyAuth`**) merges string templates into the request JSON object for **`body_mode`** `json` / `json_keypair` / `form_urlencoded`. If **`body_mode`** is **`none`** and the only payload comes from **`inject.body`**, the node sends **`Content-Type: application/json`** with that object as the body (typical token-in-JSON-body APIs).
 
 See §3 of the historical doc in git history for detailed inject examples if needed.
 

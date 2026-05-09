@@ -385,6 +385,58 @@ async def test_execute_basic_auth_sends_authorization_header(
 
 
 @pytest.mark.asyncio
+async def test_http_json_body_auth_inject_sends_json_when_body_mode_none(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    """``httpJsonBodyAuth``-style ``inject.body`` with ``body_mode: none`` produces a JSON POST body."""
+
+    seen_body: bytes | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal seen_body
+        seen_body = request.read()
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
+    ):
+
+        async def fetch_fake(_org: str, _cid: str):
+            kind = {
+                "inject": {
+                    "body": {
+                        "access_token": "{{ credentials.access_token }}",
+                    }
+                }
+            }
+            return kind, {"access_token": "tok123"}
+
+        with patch(
+            "analytiq_data.flows.fetch_credential_kind_and_fields",
+            fetch_fake,
+        ):
+            item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+            await http_node.execute(
+                minimal_ctx,
+                {
+                    "id": "n1",
+                    "credentials": {"httpJsonBodyAuth": "507f1f77bcf86cd799439011"},
+                    "parameters": {
+                        "method": "POST",
+                        "url": _RECEIVER_HTTPS,
+                        "body_mode": "none",
+                    },
+                },
+                [[item]],
+            )
+    assert seen_body is not None
+    assert json.loads(seen_body.decode()) == {"access_token": "tok123"}
+
+
+@pytest.mark.asyncio
 async def test_basic_and_digest_credentials_conflict(
     http_node: FlowsHttpRequestNode,
     minimal_ctx: ad.flows.ExecutionContext,

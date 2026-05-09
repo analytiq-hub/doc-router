@@ -166,6 +166,12 @@ class FlowsHttpRequestNode:
             "required": False,
             "docrouter_binding": "organization_credential_kind:httpQueryAuth",
         },
+        {
+            "slot": "httpJsonBodyAuth",
+            "label": "JSON Body Auth",
+            "required": False,
+            "docrouter_binding": "organization_credential_kind:httpJsonBodyAuth",
+        },
     ]
 
     parameter_schema: dict[str, Any] = {
@@ -591,6 +597,14 @@ class FlowsHttpRequestNode:
                         data[str(p["name"])] = str(p.get("value", ""))
                 field_name = str(params.get("multipart_file_field_name") or "file").strip() or "file"
                 files = {field_name: (filename, blob, mime)}
+        elif body_mode == "none" and credential_body:
+            # Inject-only credentials (e.g. ``httpJsonBodyAuth`` with ``inject.body``): send as JSON.
+            obj = {
+                k: ad.flows.coerce_template_json_value(v)
+                for k, v in credential_body.items()
+            }
+            content = json.dumps(obj).encode()
+            headers.setdefault("Content-Type", "application/json")
 
         async def _ssrf_guard_each_request(request: httpx.Request) -> None:
             """Run SSRF blocklist on every outbound URL, including each redirect hop."""
