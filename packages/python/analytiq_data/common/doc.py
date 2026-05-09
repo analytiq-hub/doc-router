@@ -3,10 +3,11 @@ from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import re
 from typing import Any
 
 import analytiq_data as ad
-from analytiq_data.common.grid_filter import build_filter_match, build_sort_spec
+from analytiq_data.common.grid_filter import build_filter_match, build_sort_doc
 
 logger = logging.getLogger(__name__)
 
@@ -230,15 +231,42 @@ async def list_docs(
     if grid_match:
         query = {"$and": [query, grid_match]}
 
-    total_count = await collection.count_documents(query)
+    sort_doc: dict[str, Any] = {}
+    if name_search:
+        name_lower = name_search.lower()
+        escaped = re.escape(name_search)
+        sort_doc["match_rank"] = 1
+    sort_doc.update(build_sort_doc(sort_model, _LIST_DOCS_FIELD_MAP, default_tiebreaker="upload_date"))
 
-    sort_spec = build_sort_spec(
-        sort_model, _LIST_DOCS_FIELD_MAP,
-        default_sort=[("upload_date", -1)],
-        tiebreaker="upload_date",
-    )
-    cursor = collection.find(query).sort(sort_spec).skip(skip).limit(limit)
-    documents = await cursor.to_list(length=limit)
+    pipeline: list[dict[str, Any]] = [{"$match": query}]
+    if name_search:
+        pipeline.append({
+            "$addFields": {
+                "match_rank": {
+                    "$switch": {
+                        "branches": [
+                            {"case": {"$eq": [{"$toLower": "$user_file_name"}, name_lower]}, "then": 0},
+                            {"case": {"$regexMatch": {"input": "$user_file_name", "regex": f"^{escaped}", "options": "i"}}, "then": 1},
+                        ],
+                        "default": 2,
+                    }
+                }
+            }
+        })
+    pipeline.append({"$sort": sort_doc})
+    pipeline.append({
+        "$facet": {
+            "total": [{"$count": "count"}],
+            "docs": [{"$skip": skip}, {"$limit": limit}],
+        }
+    })
+
+    result = await collection.aggregate(pipeline).to_list(length=1)
+    result = result[0] if result else {"total": [], "docs": []}
+    total_count = result["total"][0]["count"] if result.get("total") else 0
+    documents = result.get("docs") or []
+    for doc in documents:
+        doc.pop("match_rank", None)
     return documents, total_count
 
 async def update_doc_state(analytiq_client, document_id: str, state: str):

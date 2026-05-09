@@ -152,3 +152,156 @@ async def test_documents_grid_sort_and_filters_focused(test_db, mock_auth):
     # uploaded_by: alice, bob, charlie
     assert got_order.index(doc1_id) < got_order.index(doc2_id) < got_order.index(doc3_id)
 
+
+@pytest.mark.asyncio
+async def test_name_search_match_rank_exact_prefix_substring(test_db, mock_auth):
+    """
+    Rank 0 (exact) beats rank 1 (prefix) beats rank 2 (substring),
+    even when the lower-ranked documents have a newer upload_date.
+
+    Search term "a.txt":
+      "a.txt"        → exact match (rank 0)
+      "a.txt_v2.txt" → starts with "a.txt" (rank 1); os.path.splitext gives .txt
+      "my_a.txt"     → contains "a.txt" at position 3 (rank 2)
+    """
+    docs_coll = test_db["docs"]
+
+    up_exact = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents",
+        json={"documents": [_minimal_pdf_data_url("a.txt")]},
+        headers=get_auth_headers(),
+    )
+    assert up_exact.status_code == 200
+    id_exact = up_exact.json()["documents"][0]["document_id"]
+
+    up_prefix = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents",
+        json={"documents": [_minimal_pdf_data_url("a.txt_v2.txt")]},
+        headers=get_auth_headers(),
+    )
+    assert up_prefix.status_code == 200
+    id_prefix = up_prefix.json()["documents"][0]["document_id"]
+
+    up_substr = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents",
+        json={"documents": [_minimal_pdf_data_url("my_a.txt")]},
+        headers=get_auth_headers(),
+    )
+    assert up_substr.status_code == 200
+    id_substr = up_substr.json()["documents"][0]["document_id"]
+
+    # Give lower-ranked docs newer dates to prove rank dominates date
+    await docs_coll.update_one({"_id": ObjectId(id_exact)}, {"$set": {"upload_date": datetime(2026, 1, 1, tzinfo=UTC)}})
+    await docs_coll.update_one({"_id": ObjectId(id_prefix)}, {"$set": {"upload_date": datetime(2026, 2, 1, tzinfo=UTC)}})
+    await docs_coll.update_one({"_id": ObjectId(id_substr)}, {"$set": {"upload_date": datetime(2026, 3, 1, tzinfo=UTC)}})
+
+    r = _list_docs({"name_search": "a.txt", "limit": 50})
+    ids = [d["id"] for d in r["documents"]]
+
+    assert id_exact in ids and id_prefix in ids and id_substr in ids
+    assert ids.index(id_exact) < ids.index(id_prefix), "exact must precede prefix"
+    assert ids.index(id_prefix) < ids.index(id_substr), "prefix must precede substring"
+
+
+@pytest.mark.asyncio
+async def test_name_search_exact_beats_substring_older_doc(test_db, mock_auth):
+    """
+    '1.txt' (exact, older) should rank above '11.txt' (substring, newer).
+    '11.txt' contains '1.txt' starting at position 1, so it is rank 2.
+    """
+    docs_coll = test_db["docs"]
+
+    up_exact = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents",
+        json={"documents": [_minimal_pdf_data_url("1.txt")]},
+        headers=get_auth_headers(),
+    )
+    assert up_exact.status_code == 200
+    id_exact = up_exact.json()["documents"][0]["document_id"]
+
+    up_substr = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents",
+        json={"documents": [_minimal_pdf_data_url("11.txt")]},
+        headers=get_auth_headers(),
+    )
+    assert up_substr.status_code == 200
+    id_substr = up_substr.json()["documents"][0]["document_id"]
+
+    # 11.txt is much newer
+    await docs_coll.update_one({"_id": ObjectId(id_exact)}, {"$set": {"upload_date": datetime(2026, 1, 1, tzinfo=UTC)}})
+    await docs_coll.update_one({"_id": ObjectId(id_substr)}, {"$set": {"upload_date": datetime(2026, 6, 1, tzinfo=UTC)}})
+
+    r = _list_docs({"name_search": "1.txt", "limit": 50})
+    ids = [d["id"] for d in r["documents"]]
+
+    assert id_exact in ids and id_substr in ids
+    assert ids.index(id_exact) < ids.index(id_substr), "exact match must rank above substring even when older"
+
+
+@pytest.mark.asyncio
+async def test_name_search_same_rank_date_tiebreaker(test_db, mock_auth):
+    """
+    Two docs both at rank 2 (substring) are ordered by upload_date DESC.
+    """
+    docs_coll = test_db["docs"]
+
+    up_old = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents",
+        json={"documents": [_minimal_pdf_data_url("my_invoice_jan.pdf")]},
+        headers=get_auth_headers(),
+    )
+    assert up_old.status_code == 200
+    id_old = up_old.json()["documents"][0]["document_id"]
+
+    up_new = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents",
+        json={"documents": [_minimal_pdf_data_url("my_invoice_jun.pdf")]},
+        headers=get_auth_headers(),
+    )
+    assert up_new.status_code == 200
+    id_new = up_new.json()["documents"][0]["document_id"]
+
+    await docs_coll.update_one({"_id": ObjectId(id_old)}, {"$set": {"upload_date": datetime(2026, 1, 1, tzinfo=UTC)}})
+    await docs_coll.update_one({"_id": ObjectId(id_new)}, {"$set": {"upload_date": datetime(2026, 6, 1, tzinfo=UTC)}})
+
+    r = _list_docs({"name_search": "invoice", "limit": 50})
+    ids = [d["id"] for d in r["documents"]]
+
+    assert id_old in ids and id_new in ids
+    assert ids.index(id_new) < ids.index(id_old), "within same rank, newer upload_date should come first"
+
+
+@pytest.mark.asyncio
+async def test_name_search_case_insensitive_exact(test_db, mock_auth):
+    """
+    Case-insensitive exact match: searching 'A.TXT' gives rank 0 for 'a.txt'
+    and rank 1 for 'a.txt_v2.txt' (prefix).  The older exact match must rank first.
+    """
+    docs_coll = test_db["docs"]
+
+    up_exact = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents",
+        json={"documents": [_minimal_pdf_data_url("a.txt")]},
+        headers=get_auth_headers(),
+    )
+    assert up_exact.status_code == 200
+    id_exact = up_exact.json()["documents"][0]["document_id"]
+
+    up_prefix = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/documents",
+        json={"documents": [_minimal_pdf_data_url("a.txt_v2.txt")]},
+        headers=get_auth_headers(),
+    )
+    assert up_prefix.status_code == 200
+    id_prefix = up_prefix.json()["documents"][0]["document_id"]
+
+    # Prefix doc is newer
+    await docs_coll.update_one({"_id": ObjectId(id_exact)}, {"$set": {"upload_date": datetime(2026, 1, 1, tzinfo=UTC)}})
+    await docs_coll.update_one({"_id": ObjectId(id_prefix)}, {"$set": {"upload_date": datetime(2026, 6, 1, tzinfo=UTC)}})
+
+    r = _list_docs({"name_search": "A.TXT", "limit": 50})
+    ids = [d["id"] for d in r["documents"]]
+
+    assert id_exact in ids and id_prefix in ids
+    assert ids.index(id_exact) < ids.index(id_prefix), "case-insensitive exact match should rank first"
+
