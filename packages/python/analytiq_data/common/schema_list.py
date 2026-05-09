@@ -4,6 +4,7 @@ Server-side list for schemas: latest revision per schema_id, optional MUI grid s
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from analytiq_data.common.grid_filter import build_filter_match, build_sort_doc
@@ -78,7 +79,27 @@ async def list_schemas_for_org(
     if grid_match:
         pipeline.append({"$match": grid_match})
 
-    pipeline.append({"$sort": build_sort_doc(sort_model, _FIELD_MAP)})
+    if name_search:
+        name_lower = name_search.lower()
+        escaped = re.escape(name_search)
+        pipeline.append({
+            "$addFields": {
+                "match_rank": {
+                    "$switch": {
+                        "branches": [
+                            {"case": {"$eq": [{"$toLower": "$name"}, name_lower]}, "then": 0},
+                            {"case": {"$regexMatch": {"input": "$name", "regex": f"^{escaped}", "options": "i"}}, "then": 1},
+                        ],
+                        "default": 2,
+                    }
+                }
+            }
+        })
+        sort_doc: dict[str, Any] = {"match_rank": 1}
+        sort_doc.update(build_sort_doc(sort_model, _FIELD_MAP))
+    else:
+        sort_doc = build_sort_doc(sort_model, _FIELD_MAP)
+    pipeline.append({"$sort": sort_doc})
     pipeline.append(
         {
             "$facet": {
@@ -95,6 +116,7 @@ async def list_schemas_for_org(
 
     for schema in schemas:
         schema["schema_revid"] = str(schema.pop("_id"))
+        schema.pop("match_rank", None)
         sid = schema.get("schema_id")
         if sid and schema.get("name") in (None, "Unknown"):
             schema["name"] = schema_id_to_name.get(str(sid), schema.get("name") or "Unknown")
