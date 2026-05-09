@@ -165,8 +165,7 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[4]
 
 
-@lru_cache(maxsize=1)
-def _loaded_kinds() -> dict[str, dict[str, Any]]:
+def _read_credential_kind_store_from_disk() -> dict[str, dict[str, Any]]:
     root = _repo_root() / "schemas" / "credential-kinds"
     out: dict[str, dict[str, Any]] = {}
     if not root.is_dir():
@@ -189,25 +188,45 @@ def _loaded_kinds() -> dict[str, dict[str, Any]]:
     return out
 
 
+@lru_cache(maxsize=1)
+def _credential_kinds_bundle() -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    """Load JSON once and resolve ``extends`` once per process (until cache clear).
+
+    Returns ``(raw_store, resolved_by_key)``. Only kinds that resolve cleanly appear in
+    ``resolved_by_key`` (same as ``list_credential_kinds`` skipping broken kinds).
+    """
+
+    store = _read_credential_kind_store_from_disk()
+    resolved: dict[str, dict[str, Any]] = {}
+    for k in sorted(store.keys()):
+        try:
+            resolved[k] = _resolve_kind_with_extends(k, store, ())
+        except (ValueError, KeyError) as e:
+            logger.warning("Skip credential kind %s: %s", k, e)
+    return store, resolved
+
+
+def _loaded_kinds() -> dict[str, dict[str, Any]]:
+    """Raw credential kind JSON keyed by kind ``key`` (cached via ``_credential_kinds_bundle``)."""
+
+    return _credential_kinds_bundle()[0]
+
+
 def list_credential_kinds() -> list[dict[str, Any]]:
     """Return all loaded credential kind documents (mutable copies, ``extends`` resolved)."""
 
-    store = _loaded_kinds()
-    out: list[dict[str, Any]] = []
-    for k in sorted(store.keys()):
-        try:
-            out.append(dict(_resolve_kind_with_extends(k, store, ())))
-        except (ValueError, KeyError) as e:
-            logger.warning("Skip credential kind %s: %s", k, e)
-    return out
+    _, resolved = _credential_kinds_bundle()
+    return [dict(resolved[k]) for k in sorted(resolved.keys())]
 
 
 def get_credential_kind(key: str) -> dict[str, Any]:
     """Return credential kind document or raise ``KeyError`` (``extends`` merged)."""
 
-    store = _loaded_kinds()
+    store, resolved = _credential_kinds_bundle()
     if key not in store:
         raise KeyError(key)
+    if key in resolved:
+        return dict(resolved[key])
     return dict(_resolve_kind_with_extends(key, store, ()))
 
 

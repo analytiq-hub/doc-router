@@ -158,7 +158,7 @@ def test_kind_registry_extends_merge_slack_oauth(tmp_path) -> None:
 
     orig_repo_root = reg._repo_root
     reg._repo_root = lambda: tmp_path  # type: ignore[method-assign, assignment]
-    reg._loaded_kinds.cache_clear()
+    reg._credential_kinds_bundle.cache_clear()
     try:
         merged = ad.flows.get_credential_kind("slackOAuth2Api")
         assert merged["display_name"] == "Slack OAuth2 API"
@@ -169,4 +169,4 @@ def test_kind_registry_extends_merge_slack_oauth(tmp_path) -> None:
         assert "extends" not in merged
     finally:
         reg._repo_root = orig_repo_root  # type: ignore[method-assign, assignment]
-        reg._loaded_kinds.cache_clear()
+        reg._credential_kinds_bundle.cache_clear()
