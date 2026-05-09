@@ -18,7 +18,55 @@ Runtime flow: before executing a node, the engine resolves its slot bindings →
 
 ---
 
-## 2. Credential kind file format
+## 2. n8n ↔ DocRouter mapping
+
+DocRouter’s credential model is **data-first** (JSON kind files + encrypted org instances). [n8n](https://github.com/n8n-io/n8n) implements each credential as a **TypeScript class** (`ICredentialType` in `n8n-workflow`) with optional hooks. The table below maps n8n behaviors to DocRouter artifacts.
+
+### 2.1 Hook and feature mapping
+
+| n8n mechanism | What it does | DocRouter equivalent | Notes |
+|---------------|----------------|------------------------|--------|
+| `properties` + `typeOptions.password` | User-editable fields; secrets masked in UI | `secret_schema` (JSON Schema) + `x-secret: true` on sensitive properties | Non-secret options fields map to JSON Schema `enum` / string (see §12 Gap 7). |
+| `authenticate` **object** with `type: "generic"` | Declarative `headers` / `qs` / `body` templates using `$credentials` | `inject.headers`, `inject.query_params`, (future) `inject.body` — **Jinja2** with `credentials.<field>` | `/credentials/{id}/test` already renders `inject` this way. HTTP Request node should converge on the same helper (today it reads `name`/`value` directly for header/query slots). |
+| `authenticate` **function** | Imperative: `(credentials, requestOptions) => requestOptions` | **Not** expressible in JSON | Options: (1) allowlisted **Python handler** registered by `kind_key`; (2) **node-specific** Python (e.g. custom integration node); (3) extend kind JSON only for **fixed patterns** we add (SigV4, etc.). |
+| `preAuthentication` | Login / token exchange; often fills a **hidden expirable** field before requests | **Not implemented** | Plan: declarative `pre_auth` in kind JSON **or** OAuth2/token pipeline (`auth_mode` + stored tokens) **or** Python handler. See §12 Gap 4. |
+| `test` (`ICredentialTestRequest`) | Probe URL + optional success rules | `test_request` | Extend with optional **`test_rules`** (expected status / body), §12 Gap 3 (Jinja2-rendered URL). |
+| OAuth2 auth code / refresh | Browser redirect + token storage | §13 OAuth2 milestone | Implemented in n8n **core** (CLI), not only in the credential file; DocRouter needs backend + UI similarly. |
+| `extends: ['oAuth2Api']`, etc. | Inherit base schema + behavior | `extends` in JSON (**merge not implemented**) | §12 Gap 2 — registry `_resolve()` required to port OAuth2-heavy kinds at scale. |
+| `genericAuth: true` | HTTP Request can select this credential as “generic auth” | Node `credential_slots` + `docrouter_binding: organization_credential_kind:<key>` | Same UX goal; DocRouter binds per slot on compatible nodes. |
+
+**Summary:** Anything n8n does with **generic** `authenticate` + **static or field-templated** test URLs maps to **JSON kinds + one injector**. Anything that needs **custom TypeScript `authenticate()` or `preAuthentication()`** maps to **Python building blocks** (handlers, OAuth flow, or bespoke nodes), not to copy-pasted JSON alone.
+
+### 2.2 Plan to port all n8n credential types
+
+The n8n open-source tree contains on the order of **~370** credential classes under `packages/nodes-base/credentials/*.credentials.ts` (exact count drifts with releases). Porting **all** of them into DocRouter is a **programmatic + phased** effort; many files are OAuth2 extensions of a small set of bases (`oAuth2Api`, `googleOAuth2Api`, …).
+
+**Principles**
+
+1. **Do not** aim for 370 hand-written JSON files — generate from n8n sources via `tools/dump_credentials.js` + `tools/port_credentials.py` (§11).
+2. **Triage** each generated kind: *declarative-only* vs *needs code* (§12 Gap 5–6).
+3. **Ship infrastructure before bulk import:** `extends` resolution, dynamic `test_request` URLs, optional `inject.body`, then run the port pipeline and commit kinds in batches by integration domain (HTTP/API, Google, Microsoft, …).
+
+**Phases**
+
+| Phase | Goal | Unblocks |
+|-------|------|----------|
+| **P0 — Prerequisites** | Implement §12 Gaps **1–3** (`inject.body` where needed, `_resolve()` for `extends`, Jinja2 on `test_request` URLs). Optional: `test_rules` for parity with n8n test validation. | Majority of **generic** API-key and OAuth2-shaped kinds; accurate `/test` |
+| **P1 — Automated declarative port** | Run dump + port scripts; review PRs per vendor batch. Skip or flag kinds that reference unsupported hooks. | Hundreds of **template-only** credentials |
+| **P2 — OAuth2 stack** | Implement §13 (initiate, callback, refresh) for `auth_mode` OAuth2 kinds; verify merged kinds from P0 `extends` | All `extends: ['oAuth2Api']`-style kinds that are **pure OAuth2 config** |
+| **P3 — Pre-auth / expirable tokens** | Design `pre_auth` (or reuse OAuth2 client-credentials) for §12 Gap 4 | Small set (~7) of session-token credentials |
+| **P4 — Long tail: custom `authenticate()`** | Per-integration Python handlers **or** dedicated flow nodes; **do not** fake in JSON | AWS SigV4, Datadog signing, etc. (~24 in §12 survey — validate counts against current n8n tree) |
+| **P5 — OAuth1** | Only if product requires those nodes (§12 Gap 6) | Twitter OAuth1-era APIs, etc. |
+
+**Exit criteria for “port complete”**
+
+- Every n8n credential kind is either: **(a)** represented by a DocRouter `schemas/credential-kinds/<key>.json` with passing `/test` where `test_request` is valid, **(b)** explicitly listed as **handler-backed** with a Python module path or node requirement, or **(c)** **out of scope** (deprecated vendor — document in a `schemas/credential-kinds/PORTING_STATUS.md` or similar inventory).
+
+**Inventory maintenance:** Re-run the dump script when upgrading the `../n8n` pin; diff JSON keys against DocRouter’s `schemas/credential-kinds/` to find new or removed upstream kinds.
+
+---
+
+## 3. Credential kind file format
 
 Kind definitions live in `schemas/credential-kinds/<key>.json`. They are loaded automatically at import time (no startup call required).
 
@@ -81,7 +129,7 @@ Kind definitions live in `schemas/credential-kinds/<key>.json`. They are loaded 
 
 ---
 
-## 3. Python kind registry
+## 4. Python kind registry
 
 **File:** `packages/python/analytiq_data/flows/credential_kind_registry.py`
 
@@ -101,7 +149,7 @@ Exposed through the `analytiq_data.flows` namespace. Accessible as `ad.flows.lis
 
 ---
 
-## 4. `credentials` MongoDB collection
+## 5. `credentials` MongoDB collection
 
 One document per saved credential instance:
 
@@ -135,13 +183,13 @@ Credential field values are **plain strings** — they are not run through the e
 
 ---
 
-## 5. Backend API
+## 6. Backend API
 
 **File:** `packages/python/app/routes/flows_credentials.py`
 
 Router registered in `packages/python/app/main.py` as `flow_credentials_router`.
 
-### 5.1 Pydantic models
+### 6.1 Pydantic models
 
 | Model | Purpose |
 |---|---|
@@ -152,7 +200,7 @@ Router registered in `packages/python/app/main.py` as `flow_credentials_router`.
 | `ListCredentialsResponse` | `{ items, total }` |
 | `TestCredentialResponse` | `{ ok, status_code?, error? }` |
 
-### 5.2 Routes
+### 6.2 Routes
 
 | Method | Path | Description |
 |---|---|---|
@@ -173,9 +221,9 @@ The `/test` endpoint:
 
 ---
 
-## 6. Flow node credential bindings
+## 7. Flow node credential bindings
 
-### 6.1 Node document structure
+### 7.1 Node document structure
 
 Nodes are stored in `flow_revisions.nodes` as plain dicts. Each node optionally carries a `credentials` map:
 
@@ -193,7 +241,7 @@ Nodes are stored in `flow_revisions.nodes` as plain dicts. Each node optionally 
 
 Key = slot name from the node type's `credential_slots`; value = `credentials._id` as a string.
 
-### 6.2 Node type declaration
+### 7.2 Node type declaration
 
 Node types declare their credential slots via a `credential_slots` class attribute:
 
@@ -217,21 +265,21 @@ credential_slots = [
 
 `GET /v0/orgs/{orgId}/flows/node-types` includes `credential_slots` in each node type's response so the frontend can render the binding UI.
 
-### 6.3 Validation at execution time
+### 7.3 Validation at execution time
 
 `engine.py` `validate_revision()` checks that `credentials` on each node is either absent or a `dict[str, str]`. It also validates that each slot name in the binding map is a known slot for that node type.
 
 ---
 
-## 7. Code nodes and credentials
+## 8. Code nodes and credentials
 
 Code nodes (`flows.code`) execute arbitrary user-supplied Python in a subprocess. Because decrypted credential values passed into that sandbox would be readable by whoever writes the flow — defeating the purpose of keeping secrets from non-admin users — **code nodes do not have credential slots and credentials are never injected into the subprocess context**.
 
 ---
 
-## 8. Runtime credential injection
+## 9. Runtime credential injection
 
-### 7.1 Resolver utility
+### 9.1 Resolver utility
 
 **File:** `packages/python/analytiq_data/flows/credentials.py`
 
@@ -242,7 +290,7 @@ async def fetch_credential_fields(organization_id: str, credential_id: str) -> d
 
 Called directly by nodes that need credentials. Returns the full decrypted field dict (including secret fields) — for use inside the execution engine only, never exposed externally.
 
-### 7.2 Execution context
+### 9.2 Execution context
 
 `ExecutionContext` carries a `credentials` field (plain dict) that the engine clears and repopulates before each node execution:
 
@@ -255,7 +303,7 @@ class ExecutionContext:
 
 The engine clears `context.credentials` at the start of each node call. Nodes that have credential slots call `fetch_credential_fields` directly from their `execute()` method and use the result immediately.
 
-### 7.3 Usage in `http_request` executor
+### 9.3 Usage in `http_request` executor
 
 The HTTP Request node (`packages/python/analytiq_data/flows/nodes/http_request.py`) reads its credential bindings at execution time:
 
@@ -275,9 +323,9 @@ if qf:
 
 ---
 
-## 9. Frontend
+## 10. Frontend
 
-### 9.1 Node config panel — credential slot binding (implemented)
+### 10.1 Node config panel — credential slot binding (implemented)
 
 **File:** `packages/typescript/frontend/src/components/flows/flowNodeCredentialSlots.tsx`
 
@@ -290,7 +338,7 @@ if qf:
 
 The binding is saved as part of the node's data in the next `PUT` save.
 
-### 9.2 Credentials management tab (not yet implemented)
+### 10.2 Credentials management tab (not yet implemented)
 
 **Route:** `/orgs/[organizationId]/flows?tab=credentials`
 
@@ -324,7 +372,7 @@ Concretely in `packages/typescript/frontend/src/app/orgs/[organizationId]/flows/
   2. Field form rendered from `kind.fields`: `is_secret: true` → password input with show/hide toggle; `description` → helper text. Name field always at top.
   3. Submit → `POST .../credentials` → dialog closes, list refreshes.
 
-### 9.3 Org-wide executions tab (not yet implemented)
+### 10.3 Org-wide executions tab (not yet implemented)
 
 **Route:** `/orgs/[organizationId]/flows?tab=executions`
 
@@ -363,11 +411,16 @@ Already partially present in `docrouter-org.ts` — verify these all exist:
 
 ---
 
-## 10. Porting n8n credential kinds to DocRouter
+## 11. Porting n8n credential kinds to DocRouter
 
-This section is about converting n8n credential *type definitions* from the n8n source tree (`../n8n/packages/nodes-base/credentials/`) into DocRouter kind JSON files (`schemas/credential-kinds/`). This is analogous to `tools/dump_nodes.js` + `tools/port_nodes.py` for node types.
+This section is about converting n8n credential *type definitions* from the n8n source tree (`../n8n/packages/nodes-base/credentials/`) into DocRouter kind JSON files (`schemas/credential-kinds/`). This is analogous to `tools/dump_nodes.js` + `tools/port_nodes.py` for node types. **Phased strategy, hook mapping, and “done” criteria for the full ~370-type inventory** are in §2.
 
-### 10.1 n8n credential type structure
+### 11.0 Relation to §2 and §12
+
+- §**2** — *why* n8n constructs map to DocRouter (hooks, JSON vs Python) and *how* to sequence porting all upstream kinds.
+- §**12** — infrastructure gaps to close before automated port yields correct kinds and tests.
+
+### 11.1 n8n credential type structure
 
 Each credential type is a TypeScript class in `../n8n/packages/nodes-base/credentials/<Name>.credentials.ts`:
 
@@ -403,7 +456,7 @@ export class SlackApi implements ICredentialType {
 
 OAuth2 types use `extends = ['oAuth2Api']` and declare `auth_url`, `token_url` etc. as hidden properties.
 
-### 10.2 Conversion pipeline
+### 11.2 Conversion pipeline
 
 Follows the same two-step pattern as node porting:
 
@@ -435,7 +488,7 @@ Follows the same two-step pattern as node porting:
 
 Skip `type: 'hidden'` and `type: 'notice'` properties — they are UI-only, not user-filled fields.
 
-### 10.3 Template syntax conversion
+### 11.3 Template syntax conversion
 
 n8n uses `={{$credentials.fieldName}}` (n8n expression syntax) in `authenticate` blocks. DocRouter uses Jinja2: `{{ credentials.fieldName }}`. The conversion is a simple string substitution:
 
@@ -448,7 +501,7 @@ def convert_template(n8n_tmpl: str) -> str:
     return re.sub(r"\{\{\s*\$credentials\.(\w+)\s*\}\}", r"{{ credentials.\1 }}", s)
 ```
 
-### 10.4 Auth mode mapping
+### 11.4 Auth mode mapping
 
 | n8n `authenticate.type` / `grantType` | DocRouter `auth_mode` |
 |---|---|
@@ -460,7 +513,7 @@ Infer `basic_auth` when the inject block sets an `Authorization: Basic …` head
 
 ---
 
-## 10a. Gaps: what DocRouter needs to port all n8n credential kinds
+## 12. Gaps: what DocRouter needs to port all n8n credential kinds
 
 A survey of all ~370 credential type files in `../n8n/packages/nodes-base/credentials/` reveals the following gaps between what n8n supports and what DocRouter's kind format currently handles.
 
@@ -474,7 +527,7 @@ n8n's `authenticate.properties` supports a `body` injection target alongside `he
 
 Over 100 credentials use `extends = ['oAuth2Api']`, `googleOAuth2Api`, `microsoftOAuth2Api`, etc. DocRouter's kind registry declares an `extends` field but the `_resolve()` merge logic is not implemented — get_credential_kind returns the child dict without inheriting the base's `secret_schema`, `inject`, or `oauth2` config.
 
-**Fix:** implement `_resolve(key, seen)` in `credential_kind_registry.py` (the algorithm is already documented in §3).
+**Fix:** implement `_resolve(key, seen)` in `credential_kind_registry.py` (the algorithm is already documented in §4).
 
 ### Gap 3 — Dynamic test URL (affects ~50 kinds)
 
@@ -529,7 +582,7 @@ The first three gaps (body injection, `extends` resolution, dynamic test URL) to
 
 ---
 
-## 11. OAuth2 credential flow (not yet implemented)
+## 13. OAuth2 credential flow (not yet implemented)
 
 OAuth2 kinds (`auth_mode: "oauth2_authorization_code"`) require a browser redirect to the provider's consent screen and a server-side callback to exchange the code for tokens.
 
@@ -547,7 +600,7 @@ Until this is built:
 
 ---
 
-## 12. What is implemented vs. what remains
+## 14. What is implemented vs. what remains
 
 ### Implemented (on `flows20` branch)
 
@@ -573,14 +626,14 @@ Until this is built:
 
 | Component | Notes |
 |---|---|
-| Additional kind files | `slackApi`, `googleOAuth2Api`, etc. — generate via `tools/port_credentials.py` (see §10) |
+| Additional kind files | `slackApi`, `googleOAuth2Api`, etc. — generate via `tools/port_credentials.py` (see §11) |
 | `extends` chain resolution in registry | Registry does not merge base + extension kinds |
 | SSRF guard in `/test` endpoint | Done — `validate_http_url_allowed_async()` before `httpx.AsyncClient.request()` |
-| OAuth2 flow | Initiate / callback / refresh (see §11) |
+| OAuth2 flow | Initiate / callback / refresh (see §13) |
 
 ---
 
-## 13. Build order for remaining work
+## 15. Build order for remaining work
 
 **Step 1 — Kind files**
 
@@ -592,7 +645,7 @@ Add additional kind JSON files under `schemas/credential-kinds/` as integrations
 
 **Step 4 — Additional kind files**
 
-Create `tools/dump_credentials.js` and `tools/port_credentials.py` following the node-porting pipeline (see §10). Run against `../n8n/packages/nodes-base/credentials/` to generate kind JSON files for the integrations needed.
+Create `tools/dump_credentials.js` and `tools/port_credentials.py` following the node-porting pipeline (see §11). Run against `../n8n/packages/nodes-base/credentials/` to generate kind JSON files for the integrations needed.
 
 **Step 5 — `extends` registry support**
 
@@ -600,4 +653,4 @@ If multi-level kind inheritance is needed (e.g. `googleOAuth2Api` extending `oAu
 
 **Step 6 — OAuth2 (separate milestone)**
 
-See §11 above.
+See §13 above.

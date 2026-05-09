@@ -1167,6 +1167,23 @@ async def activate_flow(organization_id: str, flow_id: str, req: ActivateFlowReq
     r = await db.flow_revisions.find_one({"_id": ObjectId(target), "flow_id": flow_id})
     if not r:
         raise HTTPException(status_code=404, detail="Revision not found")
+
+    nodes_raw = r.get("nodes") or []
+    nodes_list = nodes_raw if isinstance(nodes_raw, list) else []
+    try:
+        rev_conns = ad.flows.coerce_json_connections_to_dataclasses(r.get("connections"))
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid connections: {e}") from e
+    try:
+        ad.flows.validate_revision(
+            nodes_list,
+            rev_conns,
+            r.get("settings") or {},
+            r.get("pin_data"),
+        )
+    except ad.flows.FlowValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
     await db.flows.update_one(
         {"_id": ObjectId(flow_id)},
         {"$set": {"active": True, "active_flow_revid": target, "updated_at": _now(), "updated_by": current_user.user_id}},

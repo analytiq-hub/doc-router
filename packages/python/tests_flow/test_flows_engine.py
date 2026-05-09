@@ -304,9 +304,10 @@ def test_validate_revision_rejects_graph_with_no_trigger() -> None:
         ad.flows.validate_revision(nodes, {}, {}, None)
 
 
-def test_validate_revision_accepts_empty_graph() -> None:
-    """Editor may save a brand-new workflow before the user adds any trigger."""
-    ad.flows.validate_revision([], {}, {}, None)
+def test_validate_revision_rejects_empty_graph() -> None:
+    """A revision must contain at least one trigger; an empty canvas is invalid to persist."""
+    with pytest.raises(ad.flows.FlowValidationError, match="at least one trigger"):
+        ad.flows.validate_revision([], {}, {}, None)
 
 
 def test_validate_revision_rejects_empty_graph_with_connections_or_pins() -> None:

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import type {
   FlowExecution,
+  FlowNode,
   FlowNodeType,
   FlowPinData,
   FlowRevision,
@@ -19,7 +20,11 @@ import { FLOW_WORKSPACE_HEADER_HEIGHT_CLASS, FLOW_WORKSPACE_TITLE_READ_CLASS } f
 import FlowLogsPanel from '@/components/flows/FlowLogsPanel';
 import { snapRfNodesPositions } from '@/components/flows/canvasGrid';
 import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNodeData } from '@/components/flows/flowRf';
-import { GRAPH_BLOCKED_MESSAGE, triggerReachabilityFromGraph } from '@/components/flows/flowTriggerReachability';
+import {
+  GRAPH_BLOCKED_MESSAGE,
+  MISSING_TRIGGER_MESSAGE,
+  triggerReachabilityFromGraph,
+} from '@/components/flows/flowTriggerReachability';
 import {
   loadFlowNamesTakenLower,
   NEW_FLOW_URL_SEGMENT,
@@ -259,7 +264,16 @@ export default function FlowDetailPageClient({
     return executeWorkflowTriggers.find((t) => t.id === id)?.label ?? null;
   }, [executeWorkflowTriggers, lastRunTriggerId]);
 
-  const graphSaveBlockedReason = graphStructurallyValid ? null : GRAPH_BLOCKED_MESSAGE;
+  const graphSaveBlockedReason = useMemo(() => {
+    if (nodeTypes.length > 0 && executeWorkflowTriggers.length === 0) {
+      return MISSING_TRIGGER_MESSAGE;
+    }
+    return graphStructurallyValid ? null : GRAPH_BLOCKED_MESSAGE;
+  }, [
+    executeWorkflowTriggers.length,
+    graphStructurallyValid,
+    nodeTypes.length,
+  ]);
 
   const isDirty = useMemo(() => {
     if (graphFingerprint == null || savedContentFingerprint == null) return false;
@@ -368,6 +382,10 @@ export default function FlowDetailPageClient({
 
   const onSave = useCallback(async () => {
     if (!revision) return;
+    if (nodeTypes.length > 0 && executeWorkflowTriggers.length === 0) {
+      setMessage(MISSING_TRIGGER_MESSAGE);
+      return;
+    }
     if (rfNodes.length > 0 && !graphStructurallyValid) {
       setMessage(GRAPH_BLOCKED_MESSAGE);
       return;
@@ -423,11 +441,13 @@ export default function FlowDetailPageClient({
     }
   }, [
     api,
+    executeWorkflowTriggers.length,
     flowId,
     flowName,
     graphStructurallyValid,
     isDraftRoute,
     latestFlowRevid,
+    nodeTypes.length,
     organizationId,
     rfEdges,
     rfNodes,
@@ -440,6 +460,14 @@ export default function FlowDetailPageClient({
     async (mergedRevision: FlowRevision, pinData: FlowPinData | null) => {
       if (isDraftRoute) return;
       const ctx = persistCtxRef.current;
+      const typeCatalogLoaded = Object.keys(ctx.nodeTypesByKey).length > 0;
+      const triggersOnGraph = (
+        (ctx.rfNodes as Node<FlowRfNodeData>[]).map((x) => x.data.flowNode) as FlowNode[]
+      ).filter((fn) => ctx.nodeTypesByKey[fn.type]?.is_trigger);
+      if (typeCatalogLoaded && triggersOnGraph.length === 0) {
+        setMessage(MISSING_TRIGGER_MESSAGE);
+        throw new Error(MISSING_TRIGGER_MESSAGE);
+      }
       if (
         ctx.rfNodes.length > 0 &&
         !triggerReachabilityFromGraph(
@@ -801,7 +829,9 @@ export default function FlowDetailPageClient({
                   isSaving={isSaving}
                   activationPending={activationPending}
                   graphSaveBlockedReason={graphSaveBlockedReason}
-                  activateBlockedReason={rfNodes.length === 0 ? 'Add nodes to the workflow before activating.' : null}
+                  activateBlockedReason={
+                    nodeTypes.length > 0 && executeWorkflowTriggers.length === 0 ? MISSING_TRIGGER_MESSAGE : null
+                  }
                   onSave={onSave}
                   onActivate={onActivate}
                   onDeactivate={onDeactivate}
