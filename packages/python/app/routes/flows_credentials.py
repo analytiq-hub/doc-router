@@ -377,19 +377,14 @@ async def test_credential(
     except Exception as e:
         return TestCredentialResponse(ok=False, error=f"Decrypt failed: {e}")
 
-    inject = kind.get("inject") or {}
-    jinja_env = Environment(undefined=Undefined)
-    headers: dict[str, str] = {}
-    for hk, hv in (inject.get("headers") or {}).items():
-        if isinstance(hv, str):
-            headers[str(hk)] = jinja_env.from_string(hv).render(credentials=fields)
-    qs: dict[str, str] = {}
-    for qk, qv in (inject.get("query_params") or {}).items():
-        if isinstance(qv, str):
-            qs[str(qk)] = jinja_env.from_string(qv).render(credentials=fields)
+    rend = ad.flows.render_credential_inject(kind, fields)
+    headers = rend["headers"]
+    qs = rend["query_params"]
+    inject_body = rend["body"]
 
+    jinja_env = Environment(undefined=Undefined)
     method = str(test_req.get("method", "GET")).upper()
-    url = str(test_req.get("url") or "")
+    url = jinja_env.from_string(str(test_req.get("url") or "")).render(credentials=fields)
     if not url:
         return TestCredentialResponse(ok=False, error="test_request.url missing")
 
@@ -398,9 +393,19 @@ async def test_credential(
     except RuntimeError as e:
         return TestCredentialResponse(ok=False, error=str(e))
 
+    req_kw: dict[str, Any] = {}
+    if inject_body:
+        req_kw["json"] = ad.flows.inject_body_as_json(inject_body)
+
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.request(method, url, headers=headers or None, params=qs or None)
+            resp = await client.request(
+                method,
+                url,
+                headers=headers or None,
+                params=qs or None,
+                **req_kw,
+            )
         ok = 200 <= resp.status_code < 300
         return TestCredentialResponse(ok=ok, status_code=resp.status_code, error=None if ok else resp.text[:500])
     except Exception as e:

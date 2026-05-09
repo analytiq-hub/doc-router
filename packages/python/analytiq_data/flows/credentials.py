@@ -74,3 +74,44 @@ async def fetch_credential_fields(organization_id: str, credential_id: str) -> d
     except Exception as e:
         logger.warning("fetch_credential_fields failed for %s: %s", credential_id, e)
         return {}
+
+
+async def fetch_credential_kind_and_fields(
+    organization_id: str, credential_id: str
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Load one credential's kind definition (from ``kind_key``) and decrypted fields.
+
+    Returns ``({}, fields)`` when the document is missing. On unknown ``kind_key``,
+    returns ``({}, fields)`` with fields still populated when decryption succeeds.
+    """
+
+    fields = await fetch_credential_fields(organization_id, credential_id)
+    if not fields:
+        return {}, {}
+
+    try:
+        from bson import ObjectId
+
+        oid = ObjectId(credential_id)
+    except Exception:
+        return {}, fields
+
+    try:
+        db = ad.common.get_async_db()
+        doc = await db.credentials.find_one(
+            {"_id": oid, "organization_id": organization_id}
+        )
+        if not doc:
+            return {}, fields
+        kind_key = doc.get("kind_key")
+        if not kind_key:
+            return {}, fields
+        try:
+            kind = ad.flows.get_credential_kind(str(kind_key))
+        except KeyError:
+            return {}, fields
+        return kind, fields
+    except Exception as e:
+        logger.warning("fetch_credential_kind_and_fields failed for %s: %s", credential_id, e)
+        return {}, fields

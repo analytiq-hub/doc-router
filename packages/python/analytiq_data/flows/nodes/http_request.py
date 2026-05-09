@@ -11,7 +11,6 @@ from typing import Any
 import httpx
 
 import analytiq_data as ad
-from analytiq_data.flows.url_ssrf_guard import validate_http_url_allowed_async
 
 logger = logging.getLogger(__name__)
 
@@ -350,20 +349,34 @@ class FlowsHttpRequestNode:
 
         bindings = node.get("credentials") or {}
         org_id = context.organization_id
-        if bindings.get("httpHeaderAuth"):
-            hf = await ad.flows.fetch_credential_fields(
-                org_id, str(bindings["httpHeaderAuth"])
+        credential_body: dict[str, str] = {}
+        for slot_spec in FlowsHttpRequestNode.credential_slots:
+            slot = slot_spec.get("slot")
+            if not slot or not isinstance(slot, str):
+                continue
+            cred_id = bindings.get(slot)
+            if not cred_id:
+                continue
+            kind, cfields = await ad.flows.fetch_credential_kind_and_fields(
+                org_id, str(cred_id)
             )
-            hn, hv = hf.get("name"), hf.get("value")
-            if hn and hv is not None:
-                headers[str(hn)] = str(hv)
-        if bindings.get("httpQueryAuth"):
-            qf = await ad.flows.fetch_credential_fields(
-                org_id, str(bindings["httpQueryAuth"])
-            )
-            qn, qv = qf.get("name"), qf.get("value")
-            if qn and qv is not None:
-                query[str(qn)] = str(qv)
+            inj = kind.get("inject") if isinstance(kind.get("inject"), dict) else None
+            if inj and (
+                inj.get("headers") or inj.get("query_params") or inj.get("body")
+            ):
+                rinj = ad.flows.render_credential_inject(kind, cfields)
+                headers.update(rinj["headers"])
+                query.update(rinj["query_params"])
+                credential_body.update(rinj["body"])
+                continue
+            if slot == "httpHeaderAuth":
+                hn, hv = cfields.get("name"), cfields.get("value")
+                if hn and hv is not None:
+                    headers[str(hn)] = str(hv)
+            elif slot == "httpQueryAuth":
+                qn, qv = cfields.get("name"), cfields.get("value")
+                if qn and qv is not None:
+                    query[str(qn)] = str(qv)
 
         body_mode = params.get("body_mode") or "none"
         content: bytes | None = None
@@ -374,6 +387,11 @@ class FlowsHttpRequestNode:
         if body_mode == "json":
             raw = params.get("body_json")
             body_obj = _coerce_json_body(raw)
+            if credential_body:
+                if not isinstance(body_obj, dict):
+                    body_obj = {}
+                for bk, bv in credential_body.items():
+                    body_obj[bk] = ad.flows.coerce_template_json_value(bv)
             content = json.dumps(body_obj).encode()
             content_type = "application/json"
             headers.setdefault("Content-Type", content_type)
@@ -383,6 +401,8 @@ class FlowsHttpRequestNode:
                 for p in (params.get("body_params") or [])
                 if isinstance(p, dict) and p.get("name") is not None
             }
+            for bk, bv in credential_body.items():
+                obj[bk] = ad.flows.coerce_template_json_value(bv)
             content = json.dumps(obj).encode()
             content_type = "application/json"
             headers.setdefault("Content-Type", content_type)
@@ -392,6 +412,8 @@ class FlowsHttpRequestNode:
                 for p in (params.get("body_params") or [])
                 if isinstance(p, dict) and p.get("name") is not None
             }
+            for bk, bv in credential_body.items():
+                pairs[bk] = str(ad.flows.coerce_template_json_value(bv))
             content = urllib.parse.urlencode(pairs).encode()
             content_type = "application/x-www-form-urlencoded"
             headers.setdefault("Content-Type", content_type)
@@ -425,7 +447,9 @@ class FlowsHttpRequestNode:
         async def _ssrf_guard_each_request(request: httpx.Request) -> None:
             """Run SSRF blocklist on every outbound URL, including each redirect hop."""
 
-            await validate_http_url_allowed_async(str(request.url), purpose="HTTP Request")
+            await ad.flows.validate_http_url_allowed_async(
+                str(request.url), purpose="HTTP Request"
+            )
 
         try:
             async with httpx.AsyncClient(

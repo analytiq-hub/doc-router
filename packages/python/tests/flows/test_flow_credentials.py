@@ -153,6 +153,83 @@ async def test_header_auth_credential_injected_from_db(test_db):
 
 
 @pytest.mark.asyncio
+async def test_header_auth_uses_kind_inject_templates(test_db):
+    """With ``kind_key`` set, injector renders Jinja on header keys (matches kind JSON files)."""
+    cred_id = ObjectId()
+    await test_db.credentials.insert_one(
+        {
+            "_id": cred_id,
+            "organization_id": TEST_ORG,
+            "kind_key": "httpHeaderAuth",
+            "encrypted_payload": _encrypted({"name": "Authorization", "value": "Bearer kind-path"}),
+        }
+    )
+
+    requests_seen: list[httpx.Request] = []
+    transport = httpx.MockTransport(
+        lambda req: (requests_seen.append(req) or httpx.Response(200, json={}, request=req))
+    )
+
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        await FlowsHttpRequestNode().execute(
+            _ctx(),
+            _node(
+                {"method": "GET", "url": "https://example.com/", "body_mode": "none"},
+                credentials={"httpHeaderAuth": str(cred_id)},
+            ),
+            [[_item()]],
+        )
+
+    assert requests_seen[0].headers.get("Authorization") == "Bearer kind-path"
+
+
+@pytest.mark.asyncio
+async def test_json_body_credential_merged_into_post(test_db):
+    """Kinds with ``inject.body`` merge rendered fields into JSON request bodies."""
+
+    cred_id = ObjectId()
+    await test_db.credentials.insert_one(
+        {
+            "_id": cred_id,
+            "organization_id": TEST_ORG,
+            "kind_key": "httpJsonBodyAuth",
+            "encrypted_payload": _encrypted({"access_token": "body-injected"}),
+        }
+    )
+
+    requests_seen: list[httpx.Request] = []
+    transport = httpx.MockTransport(
+        lambda req: (requests_seen.append(req) or httpx.Response(200, json={}, request=req))
+    )
+
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+    ):
+        await FlowsHttpRequestNode().execute(
+            _ctx(),
+            _node(
+                {
+                    "method": "POST",
+                    "url": "https://example.com/",
+                    "body_mode": "json",
+                    "body_json": '{"hello": true}',
+                    "headers": [],
+                    "query_params": [],
+                },
+                credentials={"httpHeaderAuth": str(cred_id)},
+            ),
+            [[_item()]],
+        )
+
+    payload = json.loads(requests_seen[0].content.decode())
+    assert payload == {"hello": True, "access_token": "body-injected"}
+
+
+@pytest.mark.asyncio
 async def test_query_auth_credential_injected_from_db(test_db):
     """httpQueryAuth credential stored in DB is fetched, decrypted, and appended as a query param."""
     cred_id = ObjectId()

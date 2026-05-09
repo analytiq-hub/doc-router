@@ -468,14 +468,14 @@ async def test_http_header_auth_slot(
     minimal_ctx: ad.flows.ExecutionContext,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    async def fake_fetch(org_id: str, cred_id: str) -> dict:
+    async def fake_kind_fields(org_id: str, cred_id: str):
         assert org_id == "org1"
         assert cred_id == "deadbeefdeadbeefdeadbeef"
-        return {"name": "Authorization", "value": "Bearer secret"}
+        return {}, {"name": "Authorization", "value": "Bearer secret"}
 
     monkeypatch.setattr(
-        "analytiq_data.flows.fetch_credential_fields",
-        fake_fetch,
+        "analytiq_data.flows.fetch_credential_kind_and_fields",
+        fake_kind_fields,
     )
 
     requests_seen: list[httpx.Request] = []
@@ -515,12 +515,12 @@ async def test_http_query_auth_slot(
     minimal_ctx: ad.flows.ExecutionContext,
     monkeypatch: pytest.MonkeyPatch,
 ):
-    async def fake_fetch(org_id: str, cred_id: str) -> dict:
-        return {"name": "api_key", "value": "abc123"}
+    async def fake_kind_fields(org_id: str, cred_id: str):
+        return {}, {"name": "api_key", "value": "abc123"}
 
     monkeypatch.setattr(
-        "analytiq_data.flows.fetch_credential_fields",
-        fake_fetch,
+        "analytiq_data.flows.fetch_credential_kind_and_fields",
+        fake_kind_fields,
     )
 
     requests_seen: list[httpx.Request] = []

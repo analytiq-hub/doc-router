@@ -2,9 +2,31 @@
 
 from __future__ import annotations
 
+import httpx
 import pytest
 
+import analytiq_data as ad
+
 from tests.conftest_utils import client, get_token_headers
+
+
+class _RecordingHttpClient:
+    """Minimal async client that records outbound URLs."""
+
+    urls: list[str]
+
+    def __init__(self, urls: list[str], **_: object) -> None:
+        self._urls = urls
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *_):
+        pass
+
+    async def request(self, method: str, url: str, **_kw):  # type: ignore[no-untyped-def]
+        self._urls.append(url)
+        return httpx.Response(204, request=httpx.Request(method, url))
 
 
 @pytest.mark.asyncio
@@ -182,3 +204,66 @@ async def test_list_credentials_pagination(org_and_users, test_db):
     j2 = p2.json()
     assert j2["total"] == 3
     assert len(j2["items"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_credential_test_renders_templated_url(org_and_users, monkeypatch):
+    """``test_request.url`` supports Jinja2 with ``credentials.<field>`` (Gap 3)."""
+
+    import app.routes.flows_credentials as fc
+
+    _TEMPLATED_TEST_KIND = {
+        "key": "httpTemplatedUrlTest",
+        "display_name": "Templated test URL",
+        "auth_mode": "api_key",
+        "secret_schema": {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["host_path"],
+            "properties": {
+                "host_path": {"type": "string", "minLength": 1},
+            },
+        },
+        "inject": {},
+        "test_request": {
+            "method": "GET",
+            "url": "https://example.com/{{ credentials.host_path }}",
+        },
+    }
+    _real_get_kind = ad.flows.get_credential_kind
+
+    def get_kind_maybe_synthetic(kind_key: str):
+        if kind_key == "httpTemplatedUrlTest":
+            return dict(_TEMPLATED_TEST_KIND)
+        return _real_get_kind(kind_key)
+
+    monkeypatch.setattr(ad.flows, "get_credential_kind", get_kind_maybe_synthetic)
+
+    org_id = org_and_users["org_id"]
+    member = org_and_users["member"]
+    hdrs = get_token_headers(member["token"])
+
+    create = client.post(
+        f"/v0/orgs/{org_id}/credentials",
+        json={
+            "kind_key": "httpTemplatedUrlTest",
+            "name": "Template URL cred",
+            "fields": {"host_path": "v1/hello"},
+        },
+        headers=hdrs,
+    )
+    assert create.status_code == 200, create.text
+    cred_id = create.json()["credential_id"]
+
+    seen: list[str] = []
+
+    monkeypatch.setattr(fc.httpx, "AsyncClient", lambda **kw: _RecordingHttpClient(seen, **kw))
+
+    probe = client.post(
+        f"/v0/orgs/{org_id}/credentials/{cred_id}/test",
+        headers=hdrs,
+    )
+
+    assert probe.status_code == 200, probe.text
+    assert probe.json().get("ok") is True
+    assert seen == ["https://example.com/v1/hello"]

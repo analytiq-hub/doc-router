@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Menu, MenuButton, MenuItem, MenuItems, MenuSeparator } from '@headlessui/react';
 import {
   BeakerIcon,
@@ -99,7 +99,7 @@ function FlowModal({
 
 const FlowCredentials: React.FC<{
   organizationId: string;
-  /** Create a named credential and open the edit dialog (from “Create credential” shortcut). */
+  /** Open the “New credential” dialog (from Create flow ▾ → Create credential). */
   autoBootstrapCredential?: boolean;
   onAutoBootstrapCredentialHandled?: () => void;
 }> = ({ organizationId, autoBootstrapCredential, onAutoBootstrapCredentialHandled }) => {
@@ -125,8 +125,6 @@ const FlowCredentials: React.FC<{
 
   const [testChip, setTestChip] = useState<Record<string, { ok: boolean; detail: string }>>({});
   const [testLoadingId, setTestLoadingId] = useState<string | null>(null);
-
-  const bootstrapConsumedRef = useRef(false);
 
   const kindByKey = useMemo(() => Object.fromEntries(kinds.map((k) => [k.key, k])), [kinds]);
 
@@ -175,37 +173,20 @@ const FlowCredentials: React.FC<{
   }, [kindByKey]);
 
   useEffect(() => {
-    if (!autoBootstrapCredential) {
-      bootstrapConsumedRef.current = false;
-      return;
-    }
-    if (bootstrapConsumedRef.current) return;
+    if (!autoBootstrapCredential) return;
     if (loading || kinds.length === 0) return;
 
-    bootstrapConsumedRef.current = true;
     let cancelled = false;
 
     const run = async () => {
       try {
         setMessage('');
+        setCreateOpen(true);
         const taken = await loadCredentialNamesTakenLower(api);
-        const name = nextSequentialDisplayName(taken, 'My credential');
-        const kindKey = kinds[0].key;
-        const kind = kindByKey[kindKey];
-        if (!kind || cancelled) return;
-        const fields: Record<string, unknown> = {};
-        for (const f of fieldRows(kind)) {
-          if (!f.name) continue;
-          fields[f.name] = '';
-        }
-        const created = await api.createFlowCredential({ kind_key: kindKey, name, fields });
         if (cancelled) return;
-        await load();
-        if (cancelled) return;
-        openEdit(created);
+        setCreateName(nextSequentialDisplayName(taken, 'My credential'));
       } catch (err) {
-        bootstrapConsumedRef.current = false;
-        if (!cancelled) setMessage(getApiErrorMsg(err) || 'Failed to create credential');
+        if (!cancelled) setMessage(getApiErrorMsg(err) || 'Failed to prepare new credential');
       } finally {
         if (!cancelled) onAutoBootstrapCredentialHandled?.();
       }
@@ -215,16 +196,7 @@ const FlowCredentials: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [
-    api,
-    autoBootstrapCredential,
-    kindByKey,
-    kinds,
-    load,
-    loading,
-    openEdit,
-    onAutoBootstrapCredentialHandled,
-  ]);
+  }, [autoBootstrapCredential, loading, kinds.length, api, onAutoBootstrapCredentialHandled]);
 
   const createKind = createKindKey ? kindByKey[createKindKey] : null;
   const createFieldDefs = useMemo(() => fieldRows(createKind), [createKind]);

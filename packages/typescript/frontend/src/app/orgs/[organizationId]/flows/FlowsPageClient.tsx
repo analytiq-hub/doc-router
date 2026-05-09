@@ -31,7 +31,7 @@ export default function FlowsPageClient({
   organizationId: string;
   tab: FlowsTab;
   newFlow: boolean;
-  /** Create a credential with a default name and open the editor (shortcut from create menu or legacy `newCredential`). */
+  /** Open the new-credential dialog (Create flow ▾, or legacy `newCredential` / `bootstrapCredential` in URL). */
   autoCreateCredential: boolean;
 }) {
   const router = useRouter();
