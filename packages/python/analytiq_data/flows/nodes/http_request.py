@@ -202,6 +202,7 @@ class FlowsHttpRequestNode:
                 "title": "Authentication",
                 "description": "Credential attachment mode (editor UX). Execution uses node credential bindings only.",
                 "x-ui-group": "Request",
+                "x-ui-widget": "credential_authentication",
             },
             "generic_auth_slot": {
                 "type": "string",
@@ -209,8 +210,8 @@ class FlowsHttpRequestNode:
                 "default": "httpBearerAuth",
                 "title": "Generic auth type",
                 "description": "Which credential slot to bind when using generic credential authentication.",
-                "x-ui-group": "Request",
                 "x-ui-show-when": {"field": "authentication", "equals": "generic"},
+                "x-ui-companion-of": "authentication",
             },
             "query_params": {
                 "type": "array",

@@ -11,6 +11,7 @@ import type {
 } from '@docrouter/sdk';
 import { apiClient, type DocRouterOrgApi } from '@/utils/api';
 import { flowLabelClass, flowSelectClass } from './flowUiClasses';
+import { parameterSchemaUsesCredentialAuthenticationWidget } from './flowSchemaParameterUtils';
 
 function formatCredentialLoadError(e: unknown): string {
   if (isAxiosError(e)) {
@@ -91,7 +92,7 @@ export const FlowNodeCredentialSlots: React.FC<{
     return m;
   }, [items]);
 
-  if (nodeType?.key === 'flows.http_request') {
+  if (parameterSchemaUsesCredentialAuthenticationWidget(nodeType?.parameter_schema)) {
     return null;
   }
 

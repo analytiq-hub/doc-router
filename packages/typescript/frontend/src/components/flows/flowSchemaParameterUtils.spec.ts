@@ -2,11 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   applyParameterPatch,
   clearHiddenFieldsToDefaults,
+  companionUiPrimaryKey,
   defaultFromSubschema,
   evalShowWhen,
   getOrderedKeys,
   getVisiblePropertyKeys,
+  isCompanionUiProperty,
   mergeParameterDefaults,
+  parameterSchemaUsesCredentialAuthenticationWidget,
 } from './flowSchemaParameterUtils';
 
 const schema = {
@@ -76,5 +79,20 @@ describe('flowSchemaParameterUtils', () => {
     expect(defaultFromSubschema({ type: 'boolean' })).toBe(false);
     expect(defaultFromSubschema({ type: 'string' })).toBe('');
     expect(defaultFromSubschema({ type: 'array' })).toEqual([]);
+  });
+
+  it('isCompanionUiProperty and companionUiPrimaryKey read x-ui-companion-of', () => {
+    expect(isCompanionUiProperty(undefined)).toBe(false);
+    expect(isCompanionUiProperty({ 'x-ui-companion-of': 'authentication' })).toBe(true);
+    expect(companionUiPrimaryKey({ 'x-ui-companion-of': 'authentication' })).toBe('authentication');
+  });
+
+  it('parameterSchemaUsesCredentialAuthenticationWidget detects credential_authentication widget', () => {
+    expect(parameterSchemaUsesCredentialAuthenticationWidget(null)).toBe(false);
+    expect(
+      parameterSchemaUsesCredentialAuthenticationWidget({
+        properties: { authentication: { 'x-ui-widget': 'credential_authentication' } },
+      }),
+    ).toBe(true);
   });
 });

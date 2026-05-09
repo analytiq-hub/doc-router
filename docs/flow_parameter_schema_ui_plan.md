@@ -20,6 +20,7 @@ This document describes how **all** node parameter editors share a **single sche
 | Expression preview in UI | Done (debounced `POST …/preview-expression` + `FlowExpressionPreviewLine`; request includes **`nodes`** so `_node` matches execute — §8) |
 | Expression variables: `_json` / `_binary` / `_node` / … (see §8) | **Done** — name-keyed `_node['Display'].json` / `.output[slot].json` (backend); **`_items`** remains id-keyed (`materialize_node_data`); editor rewrites `_node[…]` on rename/delete (**§8.6**) |
 | `flows.http_request` on generic schema path | Done |
+| `x-ui-widget: credential_authentication` + companion rows (`x-ui-companion-of`) | Done — suppresses duplicate credential row rendering |
 
 ---
 
@@ -46,7 +47,7 @@ Non-goals for v1: replacing Monaco for code nodes; building a full visual expres
 
 ### 2.2 Frontend
 
-- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks properties in declaration order (`getOrderedKeys`), evaluates visibility **only** via `x-ui-show-when` (`isPropertyVisible` / `evalShowWhen`), merges defaults, clears hidden fields via schema defaults, and picks widgets based on `x-ui-widget` and inferred JSON Schema type.
+- **`FlowNodeParameterFields`** reads `nodeType.parameter_schema`, walks properties in declaration order (`getOrderedKeys`), skips **`x-ui-companion-of`** rows (rendered inside composite widgets), evaluates visibility **only** via `x-ui-show-when` (`isPropertyVisible` / `evalShowWhen`), merges defaults, clears hidden fields via schema defaults, and picks widgets based on `x-ui-widget` and inferred JSON Schema type.
 - **No frontend validation**: `flowParameterValidation.ts` has been removed. No AJV, no sentinel substitution, no inline errors, no Save-button blocking. Parameter errors surface after the user runs the flow or executes a step.
 - **`flowSchemaParameterUtils.ts`**: `evalShowWhen`, `isPropertyVisible`, `getOrderedKeys`, `getVisiblePropertyKeys`, `defaultFromSubschema`, `mergeParameterDefaults`, `clearHiddenFieldsToDefaults`, `applyParameterPatch`. The UI **does not** interpret root `allOf`/`if`/`then` for visibility — port-converted nodes rely on emitted `x-ui-show-when` where the mapper applies. Unit-tested in `flowSchemaParameterUtils.spec.ts`.
 - **`FlowNameValueListField.tsx`** — pair editor with add/remove rows and drag-drop into name and value cells.
@@ -67,6 +68,7 @@ Runtime evaluation — resolving expressions against actual upstream data — is
 | `x-ui-enum-names` display labels | Read in `renderParamField` enum branch |
 | Display order | `properties` declaration order (Python insertion order, JSON key order) |
 | Section labels | `x-ui-group` renders a non-collapsible section divider |
+| `credential_authentication` widget | Primary property: `x-ui-widget: "credential_authentication"`. Companion properties (e.g. generic auth type enum) set `x-ui-companion-of` to the primary property key so they are not rendered twice; the widget owns both values. Default `FlowNodeCredentialSlots` is suppressed when this widget is present (schema-driven). |
 
 ---
 

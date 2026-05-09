@@ -16,12 +16,14 @@ import { FLOW_VALUE_MIME, parseFlowValueDragPayload, payloadToExpression, type F
 import { FlowExpressionPreviewLine, type ExpressionPreviewContext } from './FlowExpressionPreviewLine';
 import {
   applyParameterPatch,
+  companionUiPrimaryKey,
   getOrderedKeys,
   getSchemaProperties,
+  isCompanionUiProperty,
   isPropertyVisible,
   mergeParameterDefaults,
 } from './flowSchemaParameterUtils';
-import { FlowHttpRequestAuthSection, FLOWS_HTTP_REQUEST_KEY } from './FlowHttpRequestAuthSection';
+import { FlowCredentialAuthenticationField } from './FlowCredentialAuthenticationField';
 function isExpressionValue(value: unknown): boolean {
   return typeof value === 'string' && value.startsWith('=');
 }
@@ -139,7 +141,7 @@ export const FlowNodeParameterFields: React.FC<{
   expressionPreview?: ExpressionPreviewContext | null;
   /** Single inbound edge source id — upstream drops from that node use `_json` instead of `_node[…].json`. */
   soleInboundParentNodeId?: string | null;
-  /** Org API for HTTP Request authentication UI (credential pickers). */
+  /** Org API for credential pickers (e.g. ``credential_authentication`` widget). */
   flowOrgApi?: DocRouterOrgApi | null;
 }> = ({
   node,
@@ -170,11 +172,6 @@ export const FlowNodeParameterFields: React.FC<{
   );
 
   const orderedKeys = useMemo(() => getOrderedKeys(rootSchema), [rootSchema]);
-  const isHttpRequest = nodeType?.key === FLOWS_HTTP_REQUEST_KEY;
-  const skipKeysForHttpRequest = useMemo(
-    () => (isHttpRequest ? new Set(['authentication', 'generic_auth_slot']) : null),
-    [isHttpRequest],
-  );
 
   const triggerHasParameterSchema =
     Boolean(nodeType?.is_trigger && Object.keys(schemaProps).length > 0);
@@ -197,6 +194,28 @@ export const FlowNodeParameterFields: React.FC<{
     const propLabel = typeof titleRaw === 'string' && titleRaw.trim().length > 0 ? titleRaw.trim() : key;
     const t = subschema?.type;
     const uiHint = typeof subschema['x-ui-widget'] === 'string' ? (subschema['x-ui-widget'] as string) : '';
+    if (uiHint === 'credential_authentication') {
+      const companionKeys = Object.keys(schemaProps).filter(
+        (k) => companionUiPrimaryKey(schemaProps[k] as Record<string, unknown>) === key,
+      );
+      return (
+        <div key={key} className="mb-3">
+          <FlowCredentialAuthenticationField
+            node={node}
+            nodeType={nodeType}
+            rootSchema={rootSchema}
+            mergedParams={mergedParams}
+            rawParams={(node.parameters || {}) as Record<string, unknown>}
+            parameterKey={key}
+            companionKeys={companionKeys}
+            title={propLabel}
+            onChange={onChange}
+            flowOrgApi={flowOrgApi}
+            readOnly={readOnly}
+          />
+        </div>
+      );
+    }
     const params = mergedParams;
     const v = params[key];
     const isCode =
@@ -634,7 +653,8 @@ export const FlowNodeParameterFields: React.FC<{
   let lastGroupLabel: string | null | undefined;
 
   for (const key of orderedKeys) {
-    if (skipKeysForHttpRequest?.has(key)) continue;
+    const subPre = schemaProps[key];
+    if (isCompanionUiProperty(subPre as Record<string, unknown>)) continue;
     if (!isPropertyVisible(key, rootSchema, mergedParams)) continue;
     const sub = schemaProps[key];
     const groupRaw = sub['x-ui-group'];
@@ -657,22 +677,6 @@ export const FlowNodeParameterFields: React.FC<{
     }
 
     blocks.push(renderParamField(key, sub as { type?: string; enum?: unknown[] } & Record<string, unknown>));
-
-    if (isHttpRequest && key === 'url') {
-      blocks.push(
-        <FlowHttpRequestAuthSection
-          key="flows-http-request-authentication"
-          node={node}
-          nodeType={nodeType}
-          rootSchema={rootSchema}
-          mergedParams={mergedParams}
-          rawParams={(node.parameters || {}) as Record<string, unknown>}
-          onChange={onChange}
-          flowOrgApi={flowOrgApi}
-          readOnly={readOnly}
-        />,
-      );
-    }
   }
 
   return (

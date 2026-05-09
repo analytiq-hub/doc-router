@@ -10,6 +10,31 @@ export type DocRouterShowWhen = {
   equals?: unknown;
 };
 
+/** Renders only inside the composite widget for the named primary property (see ``x-ui-widget: credential_authentication``). */
+export const UI_COMPANION_OF = 'x-ui-companion-of';
+
+export function isCompanionUiProperty(sub: Record<string, unknown> | undefined): boolean {
+  if (!sub) return false;
+  const v = sub[UI_COMPANION_OF];
+  return typeof v === 'string' && v.trim().length > 0;
+}
+
+/** Primary property key this companion row belongs to. */
+export function companionUiPrimaryKey(sub: Record<string, unknown> | undefined): string | null {
+  if (!sub) return null;
+  const v = sub[UI_COMPANION_OF];
+  return typeof v === 'string' && v.trim().length > 0 ? v.trim() : null;
+}
+
+/** Node exposes ``credential_authentication`` widget — suppress default per-slot credential panel below parameters. */
+export function parameterSchemaUsesCredentialAuthenticationWidget(parameterSchema: unknown): boolean {
+  const props = getSchemaProperties(parameterSchema);
+  for (const k of Object.keys(props)) {
+    if (props[k]?.['x-ui-widget'] === 'credential_authentication') return true;
+  }
+  return false;
+}
+
 export function getSchemaProperties(parameterSchema: unknown): Record<string, Record<string, unknown>> {
   const props = (parameterSchema as { properties?: unknown } | null | undefined)?.properties;
   if (!props || typeof props !== 'object') return {};
