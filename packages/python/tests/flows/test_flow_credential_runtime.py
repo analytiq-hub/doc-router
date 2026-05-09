@@ -37,9 +37,42 @@ def test_build_oauth_authorization_url():
         "grantType": "authorizationCode",
     }
     url = build_oauth_authorization_url(fields, "state-xyz")
-    assert "https://example.com/oauth/authorize?" in url or "https://example.com/oauth/authorize&" in url
+    assert url.startswith("https://example.com/oauth/authorize?")
     assert "state=state-xyz" in url.replace("+", " ")
     assert "client_id=cid" in url
+    assert url.count("response_type=") == 1
+
+
+def test_build_oauth_authorization_url_preserves_static_query_and_custom_json():
+    fields = {
+        "authUrl": "https://example.com/oauth/authorize?audience=api",
+        "clientId": "cid",
+        "authQueryParameters": '{"prompt":"login","resource":"x"}',
+        "grantType": "authorizationCode",
+    }
+    url = build_oauth_authorization_url(fields, "st")
+    assert "audience=api" in url
+    assert "prompt=login" in url
+    assert "resource=x" in url
+    assert url.count("client_id=") == 1
+
+
+def test_build_oauth_authorization_url_ignores_reserved_keys_in_auth_query_parameters():
+    evil = (
+        '{"redirect_uri":"https://evil.example/cb","state":"hijack","response_type":"token",'
+        '"client_id":"bad","audience":"keep"}'
+    )
+    fields = {
+        "authUrl": "https://example.com/oauth/authorize",
+        "clientId": "good-client",
+        "authQueryParameters": evil,
+    }
+    url = build_oauth_authorization_url(fields, "legit-state")
+    assert "client_id=good-client" in url
+    assert "state=legit-state" in url
+    assert "response_type=code" in url
+    assert "evil.example" not in url
+    assert "audience=keep" in url
 
 
 @pytest.mark.asyncio

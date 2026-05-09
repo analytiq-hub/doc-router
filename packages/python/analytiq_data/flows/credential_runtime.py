@@ -465,29 +465,45 @@ def oauth_callback_redirect_error_generic(message: str) -> str:
 def build_oauth_authorization_url(fields: dict[str, Any], state: str) -> str:
     """Query-string for ``response_type=code`` OAuth2 authorization redirect."""
 
-    from urllib.parse import urlencode
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
     auth_url = str(fields.get("authUrl") or "").strip()
     if not auth_url:
         raise RuntimeError("authUrl missing")
 
-    params: dict[str, str] = {
-        "response_type": "code",
-        "client_id": str(fields.get("clientId") or ""),
-        "redirect_uri": flow_oauth_redirect_uri(),
-        "state": state,
-    }
-    scope = str(fields.get("scope") or "").strip()
-    if scope:
-        params["scope"] = scope
+    parsed = urlparse(auth_url)
+    merged: dict[str, str] = {}
+    if parsed.query:
+        for qk, qv in parse_qsl(parsed.query, keep_blank_values=True):
+            merged[qk] = qv
+
+    # Never allow authQueryParameters JSON to override protocol-critical / CSRF parameters.
+    _locked_canonical = frozenset({"redirect_uri", "state", "response_type", "client_id"})
     aqp = fields.get("authQueryParameters")
     if isinstance(aqp, str) and aqp.strip().startswith("{"):
         try:
             extra = json.loads(aqp)
             if isinstance(extra, dict):
                 for k, v in extra.items():
-                    params[str(k)] = str(v)
-        except Exception:
-            pass
-    sep = "&" if "?" in auth_url else "?"
-    return auth_url + sep + urlencode(params)
+                    ks = str(k)
+                    if ks.lower() in _locked_canonical:
+                        logger.warning(
+                            "Ignoring authQueryParameters key %r (reserved for OAuth redirect safety)",
+                            ks,
+                        )
+                        continue
+                    merged[ks] = str(v)
+        except json.JSONDecodeError:
+            logger.warning("authQueryParameters is not valid JSON; ignoring")
+
+    merged["response_type"] = "code"
+    merged["client_id"] = str(fields.get("clientId") or "")
+    merged["redirect_uri"] = flow_oauth_redirect_uri()
+    merged["state"] = state
+
+    scope = str(fields.get("scope") or "").strip()
+    if scope:
+        merged["scope"] = scope
+
+    new_query = urlencode(merged)
+    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))

@@ -124,14 +124,20 @@ def _merge_two_kind_documents(base: dict[str, Any], overlay: dict[str, Any]) -> 
 def _resolve_kind_with_extends(
     key: str,
     store: dict[str, dict[str, Any]],
-    seen: frozenset[str],
+    path: tuple[str, ...],
 ) -> dict[str, Any]:
+    """Resolve ``extends`` chains. ``path`` is the ordered stack of kinds entered on this branch."""
+
     raw = store.get(key)
     if raw is None:
         raise KeyError(key)
-    if key in seen:
-        chain = " -> ".join((*sorted(seen), key))
+    if key in path:
+        start = path.index(key)
+        cycle_keys = path[start:] + (key,)
+        chain = " -> ".join(cycle_keys)
         raise ValueError(f"circular credential kind extends: {chain}")
+
+    branch = path + (key,)
 
     bases: list[str] = []
     ext = raw.get("extends")
@@ -142,7 +148,7 @@ def _resolve_kind_with_extends(
 
     merged: dict[str, Any] | None = None
     for b in bases:
-        parent = _resolve_kind_with_extends(b, store, seen | {key})
+        parent = _resolve_kind_with_extends(b, store, branch)
         merged = parent if merged is None else _merge_two_kind_documents(merged, parent)
 
     overlay = dict(raw)
@@ -190,7 +196,7 @@ def list_credential_kinds() -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for k in sorted(store.keys()):
         try:
-            out.append(dict(_resolve_kind_with_extends(k, store, frozenset())))
+            out.append(dict(_resolve_kind_with_extends(k, store, ())))
         except (ValueError, KeyError) as e:
             logger.warning("Skip credential kind %s: %s", k, e)
     return out
@@ -202,7 +208,7 @@ def get_credential_kind(key: str) -> dict[str, Any]:
     store = _loaded_kinds()
     if key not in store:
         raise KeyError(key)
-    return dict(_resolve_kind_with_extends(key, store, frozenset()))
+    return dict(_resolve_kind_with_extends(key, store, ()))
 
 
 def credential_secret_field_names(kind: dict[str, Any]) -> set[str]:
