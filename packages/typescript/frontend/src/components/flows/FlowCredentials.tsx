@@ -7,7 +7,9 @@ import {
   EllipsisVerticalIcon,
   EyeIcon,
   EyeSlashIcon,
+  MagnifyingGlassIcon,
   PencilSquareIcon,
+  PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
 import type { FlowCredentialHeader, FlowCredentialKindSummary } from '@docrouter/sdk';
@@ -21,7 +23,7 @@ import {
   flowWorkspaceMenuPanelClass,
   flowWorkspaceMenuTriggerIconBtnClass,
 } from './flowWorkspaceMenu';
-import { flowInputClass, flowLabelClass, flowSelectClass } from './flowUiClasses';
+import { flowInputClass, flowLabelClass } from './flowUiClasses';
 import { loadCredentialNamesTakenLower, nextSequentialDisplayName } from './flowDefaultNames';
 
 type FieldRow = {
@@ -58,6 +60,7 @@ function FlowModal({
   onClose,
   children,
   footer,
+  panelMaxWidthClassName = 'max-w-md',
 }: {
   open: boolean;
   title: string;
@@ -66,6 +69,8 @@ function FlowModal({
   onClose: () => void;
   children: React.ReactNode;
   footer: React.ReactNode;
+  /** Tailwind max-width for the dialog panel (picker lists benefit from `max-w-lg`). */
+  panelMaxWidthClassName?: string;
 }) {
   if (!open) return null;
   return (
@@ -77,7 +82,7 @@ function FlowModal({
         onClick={onClose}
       />
       <div
-        className="relative z-10 flex max-h-[min(85vh,36rem)] w-full max-w-md flex-col rounded-lg border border-gray-200 bg-white shadow-xl"
+        className={`relative z-10 flex max-h-[min(85vh,36rem)] w-full flex-col rounded-lg border border-gray-200 bg-white shadow-xl ${panelMaxWidthClassName}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby="flow-cred-modal-title"
@@ -112,6 +117,10 @@ const FlowCredentials: React.FC<{
   const [pagination, setPagination] = useState({ page: 0, pageSize: 20 });
 
   const [createOpen, setCreateOpen] = useState(false);
+  /** Step 1: search + pick kind; step 2: name + fields (n8n-style wizard). */
+  const [createWizardStep, setCreateWizardStep] = useState<'pick' | 'form'>('pick');
+  const [createKindQuery, setCreateKindQuery] = useState('');
+  const [createPickKindKey, setCreatePickKindKey] = useState('');
   const [editRow, setEditRow] = useState<FlowCredentialHeader | null>(null);
   const [deleteRow, setDeleteRow] = useState<FlowCredentialHeader | null>(null);
 
@@ -127,6 +136,36 @@ const FlowCredentials: React.FC<{
   const [testLoadingId, setTestLoadingId] = useState<string | null>(null);
 
   const kindByKey = useMemo(() => Object.fromEntries(kinds.map((k) => [k.key, k])), [kinds]);
+
+  const filteredCredentialKinds = useMemo(() => {
+    const q = createKindQuery.trim().toLowerCase();
+    if (!q) return kinds;
+    return kinds.filter((k) => {
+      const label = (k.display_name || k.key || '').toLowerCase();
+      const key = (k.key || '').toLowerCase();
+      return label.includes(q) || key.includes(q);
+    });
+  }, [kinds, createKindQuery]);
+
+  const resetCreateWizardState = useCallback(() => {
+    setCreateWizardStep('pick');
+    setCreateKindQuery('');
+    setCreatePickKindKey('');
+    setCreateKindKey('');
+    setCreateName('');
+    setCreateFields({});
+    setShowSecret({});
+  }, []);
+
+  const openCreateCredential = useCallback(() => {
+    resetCreateWizardState();
+    setCreateOpen(true);
+  }, [resetCreateWizardState]);
+
+  const closeCreateCredential = useCallback(() => {
+    setCreateOpen(false);
+    resetCreateWizardState();
+  }, [resetCreateWizardState]);
 
   const load = useCallback(async () => {
     try {
@@ -181,6 +220,7 @@ const FlowCredentials: React.FC<{
     const run = async () => {
       try {
         setMessage('');
+        resetCreateWizardState();
         setCreateOpen(true);
         const taken = await loadCredentialNamesTakenLower(api);
         if (cancelled) return;
@@ -196,7 +236,14 @@ const FlowCredentials: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [autoBootstrapCredential, loading, kinds.length, api, onAutoBootstrapCredentialHandled]);
+  }, [
+    autoBootstrapCredential,
+    loading,
+    kinds.length,
+    api,
+    onAutoBootstrapCredentialHandled,
+    resetCreateWizardState,
+  ]);
 
   const createKind = createKindKey ? kindByKey[createKindKey] : null;
   const createFieldDefs = useMemo(() => fieldRows(createKind), [createKind]);
@@ -211,12 +258,6 @@ const FlowCredentials: React.FC<{
       return next;
     });
   }, [createOpen, createKindKey, createKind]);
-
-  useEffect(() => {
-    if (createOpen && !createKindKey && kinds.length > 0) {
-      setCreateKindKey(kinds[0].key);
-    }
-  }, [createOpen, createKindKey, kinds]);
 
   const submitCreate = async () => {
     if (!createKindKey.trim() || !createName.trim()) {
@@ -237,7 +278,7 @@ const FlowCredentials: React.FC<{
         name: createName.trim(),
         fields,
       });
-      setCreateOpen(false);
+      closeCreateCredential();
       await load();
     } catch (err) {
       setMessage(getApiErrorMsg(err) || 'Failed to create credential');
@@ -319,6 +360,18 @@ const FlowCredentials: React.FC<{
   const editFieldDefs = useMemo(() => fieldRows(editKind), [editKind]);
   const pageCount = Math.max(1, Math.ceil(total / pagination.pageSize));
 
+  const continuePickToForm = () => {
+    if (!createPickKindKey.trim()) return;
+    setCreateKindKey(createPickKindKey);
+    setCreateWizardStep('form');
+  };
+
+  const backFormToPick = () => {
+    setCreatePickKindKey(createKindKey);
+    setCreateKindKey('');
+    setCreateWizardStep('pick');
+  };
+
   const renderSecretToggle = (key: string) => (
     <button
       type="button"
@@ -332,6 +385,15 @@ const FlowCredentials: React.FC<{
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-3">
+        <p className="m-0 text-sm text-gray-600">Store API keys and auth for HTTP Request and other nodes.</p>
+        <button type="button" className={btnPrimary} onClick={openCreateCredential}>
+          <span className="inline-flex items-center gap-1.5">
+            <PlusIcon className="h-4 w-4 shrink-0" aria-hidden />
+            Add credential
+          </span>
+        </button>
+      </div>
       {message && <div className="px-4 py-3 text-sm text-red-600">{message}</div>}
       <div className="overflow-x-auto" style={{ minHeight: 360 }}>
         <table className="w-full min-w-[720px] border-collapse">
@@ -513,73 +575,170 @@ const FlowCredentials: React.FC<{
 
       <FlowModal
         open={createOpen}
-        title="New credential"
-        onClose={() => setCreateOpen(false)}
+        title={createWizardStep === 'pick' ? 'New credential' : 'Connection details'}
+        titleAccessory={
+          createWizardStep === 'form' && createKind ? (
+            <span
+              className="inline-block max-w-[14rem] truncate rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-800"
+              title={createKind.display_name}
+            >
+              {createKind.display_name}
+            </span>
+          ) : undefined
+        }
+        panelMaxWidthClassName={createWizardStep === 'pick' ? 'max-w-lg' : 'max-w-md'}
+        onClose={closeCreateCredential}
         footer={
-          <>
-            <button type="button" className={btnSecondary} onClick={() => setCreateOpen(false)}>
-              Cancel
-            </button>
-            <button type="button" className={btnPrimary} onClick={() => void submitCreate()}>
-              Save
-            </button>
-          </>
+          createWizardStep === 'pick' ? (
+            <>
+              <button type="button" className={btnSecondary} onClick={closeCreateCredential}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={btnPrimary}
+                disabled={!createPickKindKey}
+                onClick={continuePickToForm}
+              >
+                Continue
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className={btnSecondary} onClick={backFormToPick}>
+                Back
+              </button>
+              <button type="button" className={btnSecondary} onClick={closeCreateCredential}>
+                Cancel
+              </button>
+              <button type="button" className={btnPrimary} onClick={() => void submitCreate()}>
+                Save
+              </button>
+            </>
+          )
         }
       >
-        <div className="flex flex-col gap-4">
-          <div>
-            <label className={flowLabelClass} htmlFor="cred-create-kind">
-              Kind
-            </label>
-            <select
-              id="cred-create-kind"
-              className={flowSelectClass}
-              value={createKindKey}
-              onChange={(e) => setCreateKindKey(e.target.value)}
-            >
-              {kinds.map((k) => (
-                <option key={k.key} value={k.key}>
-                  {k.display_name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className={flowLabelClass} htmlFor="cred-create-name">
-              Name
-            </label>
-            <input
-              id="cred-create-name"
-              className={flowInputClass}
-              value={createName}
-              onChange={(e) => setCreateName(e.target.value)}
-              autoComplete="off"
-            />
-          </div>
-          {createFieldDefs.map((f) => (
-            <div key={f.name}>
-              <label className={flowLabelClass} htmlFor={`cred-create-${f.name}`}>
-                {f.title || f.name}
+        {createWizardStep === 'pick' ? (
+          <div className="flex flex-col gap-4">
+            <p className="m-0 text-sm leading-relaxed text-gray-700">
+              Select an app or service to connect to.
+            </p>
+            <div>
+              <label className={flowLabelClass} htmlFor="cred-create-kind-search">
+                Search
               </label>
               <div className="relative">
-                <input
-                  id={`cred-create-${f.name}`}
-                  className={f.is_secret ? `${flowInputClass} pr-10` : flowInputClass}
-                  type={f.is_secret && !showSecret[f.name] ? 'password' : 'text'}
-                  value={createFields[f.name] ?? ''}
-                  onChange={(e) =>
-                    setCreateFields((prev) => ({ ...prev, [f.name]: e.target.value }))
-                  }
-                  autoComplete="off"
+                <MagnifyingGlassIcon
+                  className="pointer-events-none absolute left-2.5 top-1/2 h-5 w-5 -translate-y-1/2 text-gray-400"
+                  aria-hidden
                 />
-                {f.is_secret ? renderSecretToggle(f.name) : null}
+                <input
+                  id="cred-create-kind-search"
+                  type="search"
+                  role="combobox"
+                  aria-expanded={filteredCredentialKinds.length > 0}
+                  aria-controls="cred-create-kind-list"
+                  aria-autocomplete="list"
+                  placeholder="Search for app or service…"
+                  autoComplete="off"
+                  value={createKindQuery}
+                  onChange={(e) => setCreateKindQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      if (createPickKindKey) continuePickToForm();
+                    }
+                  }}
+                  className={`${flowInputClass} pl-10`}
+                />
               </div>
-              {f.description ? (
-                <p className="mt-1 text-xs text-gray-500">{f.description}</p>
-              ) : null}
             </div>
-          ))}
-        </div>
+            <div>
+              <div className="mb-1 text-xs font-medium text-gray-600">Credential type</div>
+              <div
+                id="cred-create-kind-list"
+                role="listbox"
+                aria-label="Credential types"
+                className="max-h-[min(240px,40vh)] overflow-y-auto rounded-md border border-gray-200 bg-gray-50/80"
+              >
+                {kinds.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-sm text-gray-500">
+                    No credential types are installed. Add JSON definitions under{' '}
+                    <code className="rounded bg-gray-100 px-1 py-0.5 text-xs">schemas/credential-kinds/</code>.
+                  </div>
+                ) : filteredCredentialKinds.length === 0 ? (
+                  <div className="px-3 py-6 text-center text-sm text-gray-500">
+                    No services match your search.
+                  </div>
+                ) : (
+                  filteredCredentialKinds.map((k) => {
+                    const selected = createPickKindKey === k.key;
+                    return (
+                      <button
+                        key={k.key}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        className={`flex w-full border-0 px-3 py-2.5 text-left text-sm transition ${
+                          selected
+                            ? 'bg-blue-50 font-medium text-blue-900 ring-1 ring-inset ring-blue-200'
+                            : 'bg-white text-gray-800 hover:bg-gray-100'
+                        }`}
+                        onClick={() => setCreatePickKindKey(k.key)}
+                        onDoubleClick={() => {
+                          setCreatePickKindKey(k.key);
+                          setCreateKindKey(k.key);
+                          setCreateWizardStep('form');
+                        }}
+                      >
+                        <span className="min-w-0 flex-1 truncate">{k.display_name}</span>
+                        <span className="ml-2 shrink-0 font-mono text-[11px] text-gray-400">{k.key}</span>
+                      </button>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div>
+              <label className={flowLabelClass} htmlFor="cred-create-name">
+                Name
+              </label>
+              <input
+                id="cred-create-name"
+                className={flowInputClass}
+                value={createName}
+                onChange={(e) => setCreateName(e.target.value)}
+                autoComplete="off"
+              />
+            </div>
+            {createFieldDefs.map((f) => (
+              <div key={f.name}>
+                <label className={flowLabelClass} htmlFor={`cred-create-${f.name}`}>
+                  {f.title || f.name}
+                </label>
+                <div className="relative">
+                  <input
+                    id={`cred-create-${f.name}`}
+                    className={f.is_secret ? `${flowInputClass} pr-10` : flowInputClass}
+                    type={f.is_secret && !showSecret[f.name] ? 'password' : 'text'}
+                    value={createFields[f.name] ?? ''}
+                    onChange={(e) =>
+                      setCreateFields((prev) => ({ ...prev, [f.name]: e.target.value }))
+                    }
+                    autoComplete="off"
+                  />
+                  {f.is_secret ? renderSecretToggle(f.name) : null}
+                </div>
+                {f.description ? (
+                  <p className="mt-1 text-xs text-gray-500">{f.description}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        )}
       </FlowModal>
 
       <FlowModal
