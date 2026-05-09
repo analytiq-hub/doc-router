@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.ouraring.com/v2/usercollection/personal_info"
-  }
+  },
+  "experimental": true
 }

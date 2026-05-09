@@ -25,5 +25,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://shuffler.io/api/v1/users/getusers"
-  }
+  },
+  "experimental": true
 }

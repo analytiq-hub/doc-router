@@ -28,5 +28,6 @@
       "x-API-Id": "{{ credentials.apiID }}",
       "x-API-Key": "{{ credentials.apiKey }}"
     }
-  }
+  },
+  "experimental": true
 }

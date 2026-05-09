@@ -33,5 +33,6 @@
   "test_request": {
     "method": "GET",
     "url": "=https://{{$credentials.apiDomain}}/v3/domains"
-  }
+  },
+  "experimental": true
 }

@@ -5,7 +5,9 @@
   "secret_schema": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["token"],
+    "required": [
+      "token"
+    ],
     "properties": {
       "token": {
         "type": "string",
@@ -19,5 +21,6 @@
     "headers": {
       "Authorization": "Bearer {{ credentials.token }}"
     }
-  }
+  },
+  "experimental": false
 }

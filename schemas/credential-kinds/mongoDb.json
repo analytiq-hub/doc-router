@@ -79,5 +79,6 @@
       }
     },
     "required": []
-  }
+  },
+  "experimental": true
 }

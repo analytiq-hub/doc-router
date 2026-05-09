@@ -5,7 +5,9 @@
   "secret_schema": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["access_token"],
+    "required": [
+      "access_token"
+    ],
     "properties": {
       "access_token": {
         "type": "string",
@@ -18,5 +20,6 @@
     "body": {
       "access_token": "{{ credentials.access_token }}"
     }
-  }
+  },
+  "experimental": true
 }

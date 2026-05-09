@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://rest.gohighlevel.com/v1/custom-values/"
-  }
+  },
+  "experimental": true
 }

@@ -56,5 +56,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.environment === \"cloudHosted\" ? \"https://\" + $credentials.subdomain + \".\" + $credentials.domain : $credentials.domain}}/api/method/frappe.auth.get_logged_user"
-  }
+  },
+  "experimental": true
 }

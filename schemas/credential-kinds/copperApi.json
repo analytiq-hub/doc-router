@@ -33,5 +33,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.copper.com/developer_api/v1/users/me"
-  }
+  },
+  "experimental": true
 }

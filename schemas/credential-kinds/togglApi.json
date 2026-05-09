@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.track.toggl.com/api/v9/me"
-  }
+  },
+  "experimental": true
 }

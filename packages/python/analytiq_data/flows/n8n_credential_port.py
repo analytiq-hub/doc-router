@@ -12,6 +12,15 @@ from typing import Any
 
 _UNCRED = re.compile(r"\{\{\s*\$credentials\.(\w+)\s*\}\}")
 
+# Non-experimental kinds match ``schemas/credential-kinds/*.json`` for Basic / Bearer / Header HTTP helpers.
+_NON_EXPERIMENTAL_KIND_KEYS = frozenset(
+    {
+        "httpBasicAuth",
+        "httpBearerAuth",
+        "httpHeaderAuth",
+    }
+)
+
 
 def convert_n8n_template(s: str) -> str:
     """Map ``={{$credentials.field}}`` / ``{{$credentials.field}}`` to Jinja ``credentials.field``."""
@@ -298,6 +307,8 @@ def port_record_to_kind(record: dict[str, Any]) -> tuple[dict[str, Any] | None, 
 
     if test_req:
         kind["test_request"] = test_req
+
+    kind["experimental"] = key not in _NON_EXPERIMENTAL_KIND_KEYS
 
     return kind, None
 

@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.brandfetch.io/v2/brands/brandfetch.com"
-  }
+  },
+  "experimental": true
 }

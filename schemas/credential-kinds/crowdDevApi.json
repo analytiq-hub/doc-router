@@ -39,5 +39,6 @@
   "test_request": {
     "method": "POST",
     "url": "={{$credentials.url.replace(/\\/$/, \"\") + \"/api/tenant/\" + $credentials.tenantId}}/member/query"
-  }
+  },
+  "experimental": true
 }

@@ -28,5 +28,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.host}}/rest/default/V1/modules"
-  }
+  },
+  "experimental": true
 }

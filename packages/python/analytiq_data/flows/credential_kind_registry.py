@@ -112,6 +112,12 @@ def _merge_two_kind_documents(base: dict[str, Any], overlay: dict[str, Any]) -> 
     elif "pre_auth" in out:
         del out["pre_auth"]
 
+    exp = bool(base.get("experimental")) or bool(overlay.get("experimental"))
+    if exp:
+        out["experimental"] = True
+    else:
+        out.pop("experimental", None)
+
     return out
 
 

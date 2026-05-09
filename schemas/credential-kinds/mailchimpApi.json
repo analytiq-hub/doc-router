@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "=https://{{$credentials.apiKey.split(\"-\").pop()}}.api.mailchimp.com/3.0/lists"
-  }
+  },
+  "experimental": true
 }

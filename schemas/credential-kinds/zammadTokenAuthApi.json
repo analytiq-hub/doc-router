@@ -28,5 +28,6 @@
       "accessToken",
       "baseUrl"
     ]
-  }
+  },
+  "experimental": true
 }

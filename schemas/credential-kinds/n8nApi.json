@@ -30,5 +30,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{ $credentials.baseUrl }}/workflows?limit=5"
-  }
+  },
+  "experimental": true
 }

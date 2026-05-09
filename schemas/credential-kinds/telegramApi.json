@@ -25,5 +25,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.baseUrl}}/bot{{$credentials.accessToken}}/getMe"
-  }
+  },
+  "experimental": true
 }

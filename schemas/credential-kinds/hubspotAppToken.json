@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.hubapi.com/account-info/v3/details"
-  }
+  },
+  "experimental": true
 }

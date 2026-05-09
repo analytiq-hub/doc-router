@@ -7,5 +7,6 @@
     "additionalProperties": false,
     "properties": {},
     "required": []
-  }
+  },
+  "experimental": true
 }

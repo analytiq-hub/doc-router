@@ -28,5 +28,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.server.replace(new RegExp(\"/$\"), \"\") + \"/api/v4\" }}/personal_access_tokens/self"
-  }
+  },
+  "experimental": true
 }

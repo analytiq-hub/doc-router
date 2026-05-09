@@ -23,5 +23,6 @@
   "test_request": {
     "method": "POST",
     "url": "https://api.monday.com/v2"
-  }
+  },
+  "experimental": true
 }

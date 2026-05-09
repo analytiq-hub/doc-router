@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.airtable.com/v0/meta/whoami"
-  }
+  },
+  "experimental": true
 }

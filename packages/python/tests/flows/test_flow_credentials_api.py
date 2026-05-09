@@ -267,3 +267,111 @@ async def test_credential_test_renders_templated_url(org_and_users, monkeypatch)
     assert probe.status_code == 200, probe.text
     assert probe.json().get("ok") is True
     assert seen == ["https://example.com/v1/hello"]
+
+
+@pytest.mark.asyncio
+async def test_list_credential_kinds_filters_experimental_without_org_flag(
+    org_and_users, test_db, monkeypatch
+):
+    from bson import ObjectId
+
+    org_id = org_and_users["org_id"]
+    member = org_and_users["member"]
+    headers = get_token_headers(member["token"])
+
+    real_list = ad.flows.list_credential_kinds
+
+    def patched_list():
+        kinds = real_list()
+        kinds.append(
+            {
+                "key": "expKindTestOnly",
+                "display_name": "Experimental Test",
+                "auth_mode": "custom",
+                "secret_schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {},
+                    "required": [],
+                },
+                "experimental": True,
+            }
+        )
+        return kinds
+
+    monkeypatch.setattr(ad.flows, "list_credential_kinds", patched_list)
+    r = client.get(f"/v0/orgs/{org_id}/credential-kinds", headers=headers)
+    assert r.status_code == 200
+    keys = [x["key"] for x in r.json()]
+    assert "expKindTestOnly" not in keys
+
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id)},
+        {"$set": {"experimental_features": True}},
+    )
+    r2 = client.get(f"/v0/orgs/{org_id}/credential-kinds", headers=headers)
+    keys2 = [x["key"] for x in r2.json()]
+    assert "expKindTestOnly" in keys2
+
+
+@pytest.mark.asyncio
+async def test_create_experimental_credential_blocked_without_org_flag(org_and_users, monkeypatch):
+    org_id = org_and_users["org_id"]
+    member = org_and_users["member"]
+    headers = get_token_headers(member["token"])
+
+    real_get = ad.flows.get_credential_kind
+
+    def get_kind_exp(key: str):
+        k = dict(real_get(key))
+        k["experimental"] = True
+        return k
+
+    monkeypatch.setattr(ad.flows, "get_credential_kind", get_kind_exp)
+
+    r = client.post(
+        f"/v0/orgs/{org_id}/credentials",
+        json={
+            "kind_key": "httpHeaderAuth",
+            "name": "Blocked Exp",
+            "fields": {"name": "Authorization", "value": "Bearer x"},
+        },
+        headers=headers,
+    )
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_create_experimental_credential_allowed_with_org_flag(
+    org_and_users, test_db, monkeypatch
+):
+    from bson import ObjectId
+
+    org_id = org_and_users["org_id"]
+    member = org_and_users["member"]
+    headers = get_token_headers(member["token"])
+
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id)},
+        {"$set": {"experimental_features": True}},
+    )
+
+    real_get = ad.flows.get_credential_kind
+
+    def get_kind_exp(key: str):
+        k = dict(real_get(key))
+        k["experimental"] = True
+        return k
+
+    monkeypatch.setattr(ad.flows, "get_credential_kind", get_kind_exp)
+
+    r = client.post(
+        f"/v0/orgs/{org_id}/credentials",
+        json={
+            "kind_key": "httpHeaderAuth",
+            "name": "Allowed Exp",
+            "fields": {"name": "Authorization", "value": "Bearer x"},
+        },
+        headers=headers,
+    )
+    assert r.status_code == 200, r.text

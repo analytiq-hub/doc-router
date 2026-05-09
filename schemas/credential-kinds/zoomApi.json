@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.zoom.us/v2/users/me"
-  }
+  },
+  "experimental": true
 }

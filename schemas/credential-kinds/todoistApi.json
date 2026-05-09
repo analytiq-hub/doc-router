@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.todoist.com/rest/v2/labels"
-  }
+  },
+  "experimental": true
 }

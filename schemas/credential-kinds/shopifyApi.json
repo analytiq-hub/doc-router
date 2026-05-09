@@ -40,5 +40,6 @@
   "test_request": {
     "method": "GET",
     "url": "=https://{{$credentials.shopSubdomain}}.myshopify.com/admin/api/2024-07/products.json"
-  }
+  },
+  "experimental": true
 }

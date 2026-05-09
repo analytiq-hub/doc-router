@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.sendgrid.com/v3/marketing/contacts"
-  }
+  },
+  "experimental": true
 }

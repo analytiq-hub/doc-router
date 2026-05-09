@@ -19,5 +19,6 @@
   ],
   "runtime_fields": [
     "scope"
-  ]
+  ],
+  "experimental": true
 }

@@ -35,5 +35,6 @@
   "test_request": {
     "method": "GET",
     "url": "=https://{{$credentials?.subdomain}}.service-now.com/api/now/table/sys_user_role"
-  }
+  },
+  "experimental": true
 }

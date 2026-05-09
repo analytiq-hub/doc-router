@@ -24,5 +24,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.intercom.io/me"
-  }
+  },
+  "experimental": true
 }

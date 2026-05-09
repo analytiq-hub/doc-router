@@ -96,12 +96,14 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const [type, setType] = useState<OrganizationType>('individual')
   const [members, setMembers] = useState<OrganizationMember[]>([])
   const [defaultPromptEnabled, setDefaultPromptEnabled] = useState<boolean>(true)
+  const [experimentalFeatures, setExperimentalFeatures] = useState<boolean>(false)
   const [allUsers, setAllUsers] = useState<User[]>([])
   const [memberSearch, setMemberSearch] = useState('');
   const [originalName, setOriginalName] = useState('')
   const [originalType, setOriginalType] = useState<OrganizationType>('individual')
   const [originalMembers, setOriginalMembers] = useState<OrganizationMember[]>([])
   const [originalDefaultPromptEnabled, setOriginalDefaultPromptEnabled] = useState<boolean>(true)
+  const [originalExperimentalFeatures, setOriginalExperimentalFeatures] = useState<boolean>(false)
   const [ocrConfig, setOcrConfig] = useState<OrgOcrConfig | null>(null)
   const [originalOcrConfig, setOriginalOcrConfig] = useState<OrgOcrConfig | null>(null)
   const { session } = useAppSession();
@@ -137,7 +139,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
           ? organization.default_prompt_enabled
           : true
       );
-
+      setExperimentalFeatures(organization.experimental_features === true);
       // Store original values
       setOriginalName(organization.name);
       setOriginalType(organization.type);
@@ -147,6 +149,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
           ? organization.default_prompt_enabled
           : true
       );
+      setOriginalExperimentalFeatures(organization.experimental_features === true);
 
       const oc = cloneOcrConfig(organization.ocr_config)
       setOcrConfig(oc)
@@ -261,6 +264,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
         type,
         members,
         default_prompt_enabled: defaultPromptEnabled,
+        experimental_features: experimentalFeatures,
         ...(ocrConfig ? { ocr_config: ocrConfig as unknown as Record<string, unknown> } : {}),
       });
       await refreshData();
@@ -270,6 +274,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       setOriginalType(type);
       setOriginalMembers(members);
       setOriginalDefaultPromptEnabled(defaultPromptEnabled);
+      setOriginalExperimentalFeatures(experimentalFeatures);
       if (ocrConfig) {
         setOriginalOcrConfig(cloneOcrConfig(ocrConfig))
       }
@@ -485,6 +490,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     if (type !== originalType) return true;
     if (members.length !== originalMembers.length) return true;
     if (defaultPromptEnabled !== originalDefaultPromptEnabled) return true;
+    if (experimentalFeatures !== originalExperimentalFeatures) return true;
     if (ocrConfig && originalOcrConfig && JSON.stringify(ocrConfig) !== JSON.stringify(originalOcrConfig)) {
       return true;
     }
@@ -636,6 +642,24 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                   </label>
                   <p className="text-sm text-gray-500">
                     When enabled, the default prompt will run automatically for documents in this organization.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-start space-x-2">
+                <input
+                  id="experimental-features-enabled"
+                  type="checkbox"
+                  checked={experimentalFeatures}
+                  onChange={(e) => setExperimentalFeatures(e.target.checked)}
+                  className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+                <div>
+                  <label htmlFor="experimental-features-enabled" className="block text-sm font-medium text-gray-700">
+                    Show experimental features
+                  </label>
+                  <p className="text-sm text-gray-500">
+                    Experimental features are still under development.
                   </p>
                 </div>
               </div>

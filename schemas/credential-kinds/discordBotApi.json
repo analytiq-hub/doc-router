@@ -25,5 +25,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://discord.com/api/v10/users/@me/guilds"
-  }
+  },
+  "experimental": true
 }

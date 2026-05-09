@@ -30,5 +30,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.trello.com/=/1/tokens/{{$credentials.apiToken}}/member"
-  }
+  },
+  "experimental": true
 }

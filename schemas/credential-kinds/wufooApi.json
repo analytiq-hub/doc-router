@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "=https://{{$credentials.subdomain}}.wufoo.com/api/v3/forms.json"
-  }
+  },
+  "experimental": true
 }

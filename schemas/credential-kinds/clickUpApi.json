@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.clickup.com/api/v2/team"
-  }
+  },
+  "experimental": true
 }

@@ -16,5 +16,6 @@
     "required": [
       "apiKey"
     ]
-  }
+  },
+  "experimental": true
 }

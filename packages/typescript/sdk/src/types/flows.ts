@@ -214,6 +214,8 @@ export interface FlowCredentialKindSummary {
   supports_oauth_browser_flow?: boolean;
   /** Kind defines `pre_auth` (session bootstrap before inject). */
   has_pre_auth?: boolean;
+  /** Requires organization `experimental_features` to list this kind. */
+  experimental?: boolean;
 }
 
 /** Saved org credential metadata (no secrets) from `GET .../credentials`. */

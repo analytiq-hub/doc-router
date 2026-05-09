@@ -26,5 +26,6 @@
     "grantType",
     "authQueryParameters",
     "authentication"
-  ]
+  ],
+  "experimental": true
 }

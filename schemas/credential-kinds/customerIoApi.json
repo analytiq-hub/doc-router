@@ -41,5 +41,6 @@
       "region",
       "trackingApiKey"
     ]
-  }
+  },
+  "experimental": true
 }

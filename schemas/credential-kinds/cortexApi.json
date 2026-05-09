@@ -29,5 +29,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.host}}/api/analyzer"
-  }
+  },
+  "experimental": true
 }

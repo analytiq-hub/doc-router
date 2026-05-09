@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.cloudflare.com/client/v4/user/tokens/verify"
-  }
+  },
+  "experimental": true
 }

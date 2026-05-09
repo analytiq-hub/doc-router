@@ -32,5 +32,6 @@
   "test_request": {
     "method": "POST",
     "url": "https://api.dropboxapi.com/2/users/get_current_account"
-  }
+  },
+  "experimental": true
 }

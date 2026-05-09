@@ -35,5 +35,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.baseUrl}}/services/alerts/fired_alerts"
-  }
+  },
+  "experimental": true
 }

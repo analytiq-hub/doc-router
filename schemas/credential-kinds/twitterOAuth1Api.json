@@ -16,5 +16,6 @@
     "authUrl",
     "accessTokenUrl",
     "signatureMethod"
-  ]
+  ],
+  "experimental": true
 }

@@ -46,6 +46,8 @@ class OrganizationCreate(BaseModel):
     name: str
     type: OrganizationType = "individual"
     default_prompt_enabled: bool = True
+    #: When True, org users see ported / experimental flow credential kinds and related UI.
+    experimental_features: bool = False
     ocr_config: Optional[dict[str, Any]] = None
 
 class OrganizationUpdate(BaseModel):
@@ -53,6 +55,7 @@ class OrganizationUpdate(BaseModel):
     type: OrganizationType = "individual"
     members: List[OrganizationMember] | None = None
     default_prompt_enabled: Optional[bool] = None
+    experimental_features: Optional[bool] = None
     ocr_config: Optional[dict[str, Any]] = None
 
 class OrganizationOcrCatalog(BaseModel):
@@ -70,6 +73,7 @@ class Organization(BaseModel):
     members: List[OrganizationMember]
     type: OrganizationType = "individual"
     default_prompt_enabled: bool = True
+    experimental_features: bool = False
     ocr_config: OrgOcrConfig
     ocr_catalog: OrganizationOcrCatalog
     created_at: datetime
@@ -158,6 +162,7 @@ async def list_organizations(
                 "id": str(organization["_id"]),
                 "type": organization.get("type", "individual"),
                 "default_prompt_enabled": organization.get("default_prompt_enabled", True),
+                "experimental_features": organization.get("experimental_features", False),
                 "ocr_config": merge_org_ocr_config(organization.get("ocr_config")),
                 "ocr_catalog": ocr_catalog,
             })
@@ -213,6 +218,7 @@ async def list_organizations(
             "id": str(org["_id"]),
             "type": org.get("type", "individual"),
             "default_prompt_enabled": org.get("default_prompt_enabled", True),
+            "experimental_features": org.get("experimental_features", False),
             "ocr_config": merge_org_ocr_config(org.get("ocr_config")),
             "ocr_catalog": ocr_catalog,
         }) for org in organizations
@@ -273,6 +279,7 @@ async def create_organization(
         }],
         "type": organization.type or "team",  # Default to team if not specified
         "default_prompt_enabled": organization.default_prompt_enabled,
+        "experimental_features": organization.experimental_features,
         "created_at": datetime.now(UTC),
         "updated_at": datetime.now(UTC)
     }
@@ -354,6 +361,9 @@ async def update_organization(
     if organization_update.default_prompt_enabled is not None:
         update_data["default_prompt_enabled"] = organization_update.default_prompt_enabled
 
+    if organization_update.experimental_features is not None:
+        update_data["experimental_features"] = organization_update.experimental_features
+
     if organization_update.ocr_config is not None:
         try:
             update_data["ocr_config"] = await apply_ocr_config_update(
@@ -387,6 +397,7 @@ async def update_organization(
         "members": updated_organization["members"],
         "type": updated_organization.get("type", "individual"),
         "default_prompt_enabled": updated_organization.get("default_prompt_enabled", True),
+        "experimental_features": updated_organization.get("experimental_features", False),
         "ocr_config": merge_org_ocr_config(updated_organization.get("ocr_config")),
         "ocr_catalog": await _organization_ocr_catalog(),
         "created_at": updated_organization["created_at"],

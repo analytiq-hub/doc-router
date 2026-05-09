@@ -40,5 +40,6 @@
   "test_request": {
     "method": "GET",
     "url": "=https://{{$credentials.domain}}/api/v2/clients"
-  }
+  },
+  "experimental": true
 }

@@ -34,5 +34,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials?.server}}/user"
-  }
+  },
+  "experimental": true
 }

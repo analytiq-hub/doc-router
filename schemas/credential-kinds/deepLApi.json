@@ -32,5 +32,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.apiPlan === \"pro\" ? \"https://api.deepl.com/v2\" : \"https://api-free.deepl.com/v2\" }}/usage"
-  }
+  },
+  "experimental": true
 }

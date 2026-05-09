@@ -32,5 +32,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.openai.com/v1/models"
-  }
+  },
+  "experimental": true
 }

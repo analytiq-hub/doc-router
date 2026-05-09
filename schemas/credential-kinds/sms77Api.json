@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://gateway.seven.io/api/hooks"
-  }
+  },
+  "experimental": true
 }

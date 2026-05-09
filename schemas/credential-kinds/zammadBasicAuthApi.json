@@ -34,5 +34,6 @@
       "password",
       "username"
     ]
-  }
+  },
+  "experimental": true
 }

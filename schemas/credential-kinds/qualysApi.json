@@ -33,5 +33,6 @@
     "headers": {
       "X-Requested-With": "{{ credentials.requestedWith }}"
     }
-  }
+  },
+  "experimental": true
 }

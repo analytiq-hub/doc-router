@@ -26,5 +26,6 @@
   "test_request": {
     "method": "POST",
     "url": "https://graph.facebook.com/v19.0/oauth/access_token"
-  }
+  },
+  "experimental": true
 }

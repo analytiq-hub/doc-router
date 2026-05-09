@@ -44,5 +44,6 @@
       }
     },
     "required": []
-  }
+  },
+  "experimental": true
 }

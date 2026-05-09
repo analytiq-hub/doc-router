@@ -47,5 +47,6 @@
   "test_request": {
     "method": "GET",
     "url": "=https://{{$credentials.baseUrl}}/api/v1/authSettings/exemptedUrls"
-  }
+  },
+  "experimental": true
 }

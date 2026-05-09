@@ -33,5 +33,6 @@
     "authQueryParameters",
     "authentication",
     "scope"
-  ]
+  ],
+  "experimental": true
 }

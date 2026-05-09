@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.webflow.com/sites"
-  }
+  },
+  "experimental": true
 }

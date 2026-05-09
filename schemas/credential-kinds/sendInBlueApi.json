@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.brevo.com/v3/account"
-  }
+  },
+  "experimental": true
 }

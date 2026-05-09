@@ -29,5 +29,6 @@
   "test_request": {
     "method": "GET",
     "url": "=https://{{$credentials.subdomain}}.zendesk.com/api/v2/ticket_fields.json"
-  }
+  },
+  "experimental": true
 }

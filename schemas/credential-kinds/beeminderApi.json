@@ -28,5 +28,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://www.beeminder.com/api/v1/=/users/{{$credentials.user}}.json"
-  }
+  },
+  "experimental": true
 }

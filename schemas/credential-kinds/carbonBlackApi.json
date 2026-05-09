@@ -26,5 +26,6 @@
     "headers": {
       "X-Auth-Token": "{{ credentials.accessToken }}"
     }
-  }
+  },
+  "experimental": true
 }

@@ -29,5 +29,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.host}}/rest/v1/"
-  }
+  },
+  "experimental": true
 }

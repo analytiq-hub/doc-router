@@ -56,5 +56,6 @@
       }
     },
     "required": []
-  }
+  },
+  "experimental": true
 }

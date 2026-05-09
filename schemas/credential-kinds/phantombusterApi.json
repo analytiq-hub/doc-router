@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.phantombuster.com/api/v2/agents/fetch-all"
-  }
+  },
+  "experimental": true
 }

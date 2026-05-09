@@ -31,5 +31,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://graph.facebook.com/v13.0/"
-  }
+  },
+  "experimental": true
 }

@@ -25,5 +25,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://www.filescan.io/api/system/do-healthcheck"
-  }
+  },
+  "experimental": true
 }

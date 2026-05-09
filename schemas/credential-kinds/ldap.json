@@ -62,5 +62,6 @@
     "required": [
       "hostname"
     ]
-  }
+  },
+  "experimental": true
 }

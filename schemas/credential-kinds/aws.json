@@ -105,5 +105,6 @@
   "test_request": {
     "method": "POST",
     "url": "=https://sts.{{$credentials.region}}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15"
-  }
+  },
+  "experimental": true
 }

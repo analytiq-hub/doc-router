@@ -35,6 +35,8 @@ class CredentialKindSummary(BaseModel):
     supports_oauth_browser_flow: bool = False
     #: Kind defines ``pre_auth`` (session / token bootstrap before inject).
     has_pre_auth: bool = False
+    #: Gated by organization ``experimental_features`` in list/create UI.
+    experimental: bool = False
 
 
 class CreateCredentialRequest(BaseModel):
@@ -72,6 +74,17 @@ class TestCredentialResponse(BaseModel):
 
 
 _DUPLICATE_NAME_DETAIL = "A credential with this name already exists for this organization."
+
+
+async def _org_experimental_features_enabled(db, organization_id: str) -> bool:
+    try:
+        oid = ObjectId(organization_id)
+    except Exception:
+        return False
+    doc = await db.organizations.find_one({"_id": oid}, {"experimental_features": 1})
+    if not doc:
+        return False
+    return bool(doc.get("experimental_features"))
 
 
 def _kind_supports_oauth_browser_flow(kind: dict[str, Any]) -> bool:
@@ -149,9 +162,13 @@ async def list_credential_kinds(
     organization_id: str,
     current_user: User = Depends(get_org_user),
 ) -> list[CredentialKindSummary]:
-    _ = organization_id, current_user
+    _ = current_user
+    db = ad.common.get_async_db()
+    show_exp = await _org_experimental_features_enabled(db, organization_id)
     result: list[CredentialKindSummary] = []
     for kind in ad.flows.list_credential_kinds():
+        if kind.get("experimental") and not show_exp:
+            continue
         schema_props = (kind.get("secret_schema") or {}).get("properties") or {}
         if not isinstance(schema_props, dict):
             schema_props = {}
@@ -172,6 +189,7 @@ async def list_credential_kinds(
                 has_test_request=bool(kind.get("test_request")),
                 supports_oauth_browser_flow=_kind_supports_oauth_browser_flow(kind),
                 has_pre_auth=isinstance(kind.get("pre_auth"), dict),
+                experimental=bool(kind.get("experimental")),
             )
         )
     return result
@@ -191,6 +209,13 @@ async def create_credential(
     except KeyError:
         raise HTTPException(status_code=400, detail=f"Unknown credential kind: {req.kind_key}") from None
 
+    db = ad.common.get_async_db()
+    if kind.get("experimental") and not await _org_experimental_features_enabled(db, organization_id):
+        raise HTTPException(
+            status_code=403,
+            detail="Experimental credential types are disabled for this organization. Enable 'Show experimental features' in organization settings.",
+        )
+
     schema = kind.get("secret_schema")
     if schema:
         try:
@@ -204,7 +229,6 @@ async def create_credential(
 
     encrypted = ad.crypto.encrypt_token(json.dumps(req.fields))
     now = datetime.now(UTC)
-    db = ad.common.get_async_db()
     if await _credential_name_taken(db, organization_id, norm_name):
         raise HTTPException(status_code=409, detail=_DUPLICATE_NAME_DETAIL)
     try:

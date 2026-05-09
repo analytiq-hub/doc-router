@@ -24,5 +24,6 @@
     "headers": {
       "xc-auth": "{{ credentials.apiToken }}"
     }
-  }
+  },
+  "experimental": true
 }

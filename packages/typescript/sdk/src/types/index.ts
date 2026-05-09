@@ -116,6 +116,8 @@ export interface Organization {
   type: OrganizationType;
   members: OrganizationMember[];
   default_prompt_enabled?: boolean;
+  /** When true, ported/experimental flow credential kinds are listed and can be created. */
+  experimental_features?: boolean;
   ocr_config: OrgOcrConfig;
   ocr_catalog: OrganizationOcrCatalog;
   created_at: string;
@@ -126,6 +128,7 @@ export interface CreateOrganizationRequest {
   name: string;
   type?: OrganizationType;
   default_prompt_enabled?: boolean;
+  experimental_features?: boolean;
   /** Partial OCR config merged with defaults (same shape as OrgOcrConfig, nested partials allowed). */
   ocr_config?: Record<string, unknown>;
 }
@@ -135,6 +138,7 @@ export interface UpdateOrganizationRequest {
   type?: OrganizationType;
   members?: OrganizationMember[];
   default_prompt_enabled?: boolean;
+  experimental_features?: boolean;
   ocr_config?: Record<string, unknown>;
 }
 

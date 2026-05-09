@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.url}}/ghost/api/v3/content/settings/"
-  }
+  },
+  "experimental": true
 }

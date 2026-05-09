@@ -23,5 +23,6 @@
   "test_request": {
     "method": "POST",
     "url": "https://plugins.twake.app/plugins/n8n/channel"
-  }
+  },
+  "experimental": true
 }

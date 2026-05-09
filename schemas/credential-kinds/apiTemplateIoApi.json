@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.apitemplate.io/v1/list-templates"
-  }
+  },
+  "experimental": true
 }

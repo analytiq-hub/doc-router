@@ -34,5 +34,6 @@
   "test_request": {
     "method": "GET",
     "url": "=https://api{{$credentials.region === \"eu\" ? \".eu\" : \"\"}}.mist.com/api/v1/self"
-  }
+  },
+  "experimental": true
 }

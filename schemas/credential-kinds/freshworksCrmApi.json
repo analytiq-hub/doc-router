@@ -29,5 +29,6 @@
   "test_request": {
     "method": "GET",
     "url": "=https://{{$credentials?.domain}}.myfreshworks.com/crm/sales/api/tasks"
-  }
+  },
+  "experimental": true
 }

@@ -40,5 +40,6 @@
       "customSubdomain",
       "selfHostedUrl"
     ]
-  }
+  },
+  "experimental": true
 }

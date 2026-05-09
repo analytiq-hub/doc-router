@@ -28,5 +28,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.url.replace(new RegExp(\"/$\"), \"\")}}/api/users/self"
-  }
+  },
+  "experimental": true
 }

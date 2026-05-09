@@ -28,5 +28,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.registryUrl}}/-/whoami"
-  }
+  },
+  "experimental": true
 }

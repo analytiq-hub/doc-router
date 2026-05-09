@@ -28,5 +28,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.URL}}/api/v2/assets/"
-  }
+  },
+  "experimental": true
 }

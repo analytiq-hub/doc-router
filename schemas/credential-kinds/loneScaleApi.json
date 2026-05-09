@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://public-api.lonescale.com/users"
-  }
+  },
+  "experimental": true
 }

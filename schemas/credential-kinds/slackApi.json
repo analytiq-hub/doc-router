@@ -25,5 +25,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://slack.com/api/users.profile.get"
-  }
+  },
+  "experimental": true
 }

@@ -22,5 +22,6 @@
       "hostname",
       "userToken"
     ]
-  }
+  },
+  "experimental": true
 }

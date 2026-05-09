@@ -74,6 +74,7 @@ def test_port_http_header_style_record() -> None:
     assert err is None
     assert kind is not None
     assert kind["key"] == "httpHeaderAuth"
+    assert kind.get("experimental") is False
     assert kind["inject"]["headers"]["{{ credentials.name }}"] == "{{ credentials.value }}"
 
 
@@ -94,6 +95,7 @@ def test_options_enum_gap7() -> None:
     kind, err = port_record_to_kind(record)
     assert err is None
     assert kind is not None
+    assert kind.get("experimental") is True
     props = kind["secret_schema"]["properties"]["mode"]
     assert props.get("enum") == ["a", "b"]
 
@@ -109,6 +111,7 @@ def test_hidden_runtime_fields_gap8() -> None:
     kind, err = port_record_to_kind(record)
     assert err is None
     assert kind is not None
+    assert kind.get("experimental") is True
     assert "secretField" in kind.get("runtime_fields", [])
     assert "secretField" not in kind["secret_schema"]["properties"]
 
@@ -124,6 +127,7 @@ def test_kind_registry_extends_merge_slack_oauth(tmp_path) -> None:
     parent = {
         "key": "oAuth2Api",
         "display_name": "OAuth2 API",
+        "experimental": True,
         "auth_mode": "oauth2_authorization_code",
         "secret_schema": {
             "type": "object",
@@ -138,6 +142,7 @@ def test_kind_registry_extends_merge_slack_oauth(tmp_path) -> None:
     child = {
         "key": "slackOAuth2Api",
         "display_name": "Slack OAuth2 API",
+        "experimental": True,
         "extends": ["oAuth2Api"],
         "auth_mode": "oauth2_authorization_code",
         "secret_schema": {
@@ -157,6 +162,7 @@ def test_kind_registry_extends_merge_slack_oauth(tmp_path) -> None:
     try:
         merged = ad.flows.get_credential_kind("slackOAuth2Api")
         assert merged["display_name"] == "Slack OAuth2 API"
+        assert merged.get("experimental") is True
         props = merged["secret_schema"]["properties"]
         assert "clientId" in props and "clientSecret" in props
         assert merged.get("runtime_fields") == ["grantType", "authUrl"]

@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.clockify.me/api/v1/workspaces"
-  }
+  },
+  "experimental": true
 }

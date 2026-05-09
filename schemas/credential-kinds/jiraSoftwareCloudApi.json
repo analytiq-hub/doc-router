@@ -28,5 +28,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials?.domain}}/rest/api/2/project"
-  }
+  },
+  "experimental": true
 }

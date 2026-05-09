@@ -38,5 +38,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.url}}/nitro/v1/config/nspartition?view=summary"
-  }
+  },
+  "experimental": true
 }

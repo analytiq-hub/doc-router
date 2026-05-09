@@ -33,5 +33,6 @@
       "url",
       "username"
     ]
-  }
+  },
+  "experimental": true
 }

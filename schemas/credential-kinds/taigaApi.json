@@ -33,5 +33,6 @@
       }
     },
     "required": []
-  }
+  },
+  "experimental": true
 }

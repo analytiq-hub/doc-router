@@ -33,5 +33,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.url}}/api/v1/validate"
-  }
+  },
+  "experimental": true
 }

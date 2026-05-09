@@ -23,5 +23,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.mailjet.com/v4/sms"
-  }
+  },
+  "experimental": true
 }

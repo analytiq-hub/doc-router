@@ -19,5 +19,6 @@
     "headers": {
       "Authorization": "{{ credentials.apiKey }}"
     }
-  }
+  },
+  "experimental": true
 }

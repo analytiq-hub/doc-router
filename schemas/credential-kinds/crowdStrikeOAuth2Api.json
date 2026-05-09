@@ -40,5 +40,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials?.url}}/user-management/queries/users/v1"
-  }
+  },
+  "experimental": true
 }

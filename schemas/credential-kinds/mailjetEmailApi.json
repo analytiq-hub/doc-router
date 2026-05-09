@@ -30,5 +30,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://api.mailjet.com/v3/REST/template"
-  }
+  },
+  "experimental": true
 }

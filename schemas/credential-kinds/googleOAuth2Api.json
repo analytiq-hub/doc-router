@@ -17,5 +17,6 @@
     "accessTokenUrl",
     "authQueryParameters",
     "authentication"
-  ]
+  ],
+  "experimental": true
 }

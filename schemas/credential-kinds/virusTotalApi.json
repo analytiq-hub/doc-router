@@ -25,5 +25,6 @@
   "test_request": {
     "method": "GET",
     "url": "https://www.virustotal.com/api/v3/popular_threat_categories"
-  }
+  },
+  "experimental": true
 }

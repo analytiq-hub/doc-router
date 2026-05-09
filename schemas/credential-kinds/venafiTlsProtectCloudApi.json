@@ -32,5 +32,6 @@
   "test_request": {
     "method": "GET",
     "url": "=https://api.venafi.{{$credentials.region ?? \"cloud\"}}/v1/preferences"
-  }
+  },
+  "experimental": true
 }

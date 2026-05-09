@@ -25,5 +25,6 @@
   "test_request": {
     "method": "POST",
     "url": "https://api.malcore.io/api/urlcheck"
-  }
+  },
+  "experimental": true
 }

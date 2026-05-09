@@ -5,7 +5,10 @@
   "secret_schema": {
     "type": "object",
     "additionalProperties": false,
-    "required": ["name", "value"],
+    "required": [
+      "name",
+      "value"
+    ],
     "properties": {
       "name": {
         "type": "string",
@@ -23,5 +26,6 @@
     "query_params": {
       "{{ credentials.name }}": "{{ credentials.value }}"
     }
-  }
+  },
+  "experimental": true
 }

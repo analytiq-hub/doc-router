@@ -32,5 +32,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.url}}/groups.json"
-  }
+  },
+  "experimental": true
 }

@@ -19,5 +19,6 @@
     "query_params": {
       "api_key": "{{ credentials.apiKey }}"
     }
-  }
+  },
+  "experimental": true
 }

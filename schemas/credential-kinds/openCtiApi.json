@@ -21,5 +21,6 @@
     "headers": {
       "Authorization": "Bearer {{ credentials.apiKey }}"
     }
-  }
+  },
+  "experimental": true
 }

@@ -32,5 +32,6 @@
   "test_request": {
     "method": "POST",
     "url": "={{$credentials.url}}/api_jsonrpc.php"
-  }
+  },
+  "experimental": true
 }

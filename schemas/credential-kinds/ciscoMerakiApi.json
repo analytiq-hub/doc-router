@@ -21,5 +21,6 @@
     "headers": {
       "X-Cisco-Meraki-API-Key": "{{ credentials.apiKey }}"
     }
-  }
+  },
+  "experimental": true
 }

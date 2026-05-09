@@ -39,5 +39,6 @@
       "host",
       "port"
     ]
-  }
+  },
+  "experimental": true
 }

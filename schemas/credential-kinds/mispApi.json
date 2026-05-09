@@ -34,5 +34,6 @@
   "test_request": {
     "method": "GET",
     "url": "={{$credentials.baseUrl.replace(new RegExp(\"/$\"), \"\")}}/tags"
-  }
+  },
+  "experimental": true
 }
