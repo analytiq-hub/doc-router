@@ -58,4 +58,5 @@ markers = [
     "mongot: tests that require MongoDB vector search ($vectorSearch) / mongot",
     "kb_slow: Slow KB tests — real search indexes, mongot integration, and test_llm_kb (make tests-kb)",
     "doc_retrieval_benchmark: upload/download timing benchmarks (pytest -s ... 2>/dev/null)",
+    "real_ssrf: HTTP Request tests that exercise real SSRF validation (no guard bypass)",
 ]

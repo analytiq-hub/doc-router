@@ -71,6 +71,13 @@ def _merge_flat_json_into_str_dict(parsed: dict[str, Any], dest: dict[str, str])
         dest[str(k)] = "" if v is None else str(v)
 
 
+def _proxy_parameter_syntax_ok(proxy: str) -> bool:
+    """Lightweight check for validate_parameters (full SSRF check runs in execute)."""
+
+    p = urllib.parse.urlparse(proxy.strip())
+    return p.scheme in ("http", "https") and bool(p.hostname)
+
+
 # Substrings matched against ``Content-Type`` (lowercased) — see ``docs/docrouter_binary.md`` §9.
 _BINARY_RESPONSE_CONTENT_TYPE_MARKERS = (
     "application/pdf",
@@ -134,6 +141,18 @@ class FlowsHttpRequestNode:
             "label": "Bearer Auth",
             "required": False,
             "docrouter_binding": "organization_credential_kind:httpBearerAuth",
+        },
+        {
+            "slot": "httpBasicAuth",
+            "label": "Basic Auth",
+            "required": False,
+            "docrouter_binding": "organization_credential_kind:httpBasicAuth",
+        },
+        {
+            "slot": "httpDigestAuth",
+            "label": "Digest Auth",
+            "required": False,
+            "docrouter_binding": "organization_credential_kind:httpDigestAuth",
         },
         {
             "slot": "httpHeaderAuth",
@@ -321,6 +340,25 @@ class FlowsHttpRequestNode:
                 "description": "Maximum redirect hops when follow_redirects is enabled (matches httpx default).",
                 "x-ui-group": "Options",
             },
+            "proxy": {
+                "type": "string",
+                "default": "",
+                "description": "Optional HTTP(S) proxy URL (e.g. http://proxy:8080). Validated against the same SSRF rules as the request URL.",
+                "x-ui-group": "Options",
+            },
+            "verify_tls": {
+                "type": "boolean",
+                "default": True,
+                "description": "Verify TLS certificates. Disable only for trusted debug endpoints.",
+                "x-ui-group": "Options",
+            },
+            "response_format": {
+                "type": "string",
+                "enum": ["auto", "json", "text", "binary"],
+                "default": "auto",
+                "description": "How to interpret the response body: auto (Content-Type heuristics), json, text, or always store raw bytes as BinaryRef.",
+                "x-ui-group": "Options",
+            },
             "timeout_seconds": {
                 "type": "number",
                 "default": 30,
@@ -367,6 +405,9 @@ class FlowsHttpRequestNode:
         if body_mode == "multipart_form":
             if not str(params.get("multipart_file_field_name") or "").strip():
                 errs.append("multipart_file_field_name must not be empty when body mode is multipart_form")
+        px = str(params.get("proxy") or "").strip()
+        if px and not _proxy_parameter_syntax_ok(px):
+            errs.append("proxy must be a valid http(s) URL with a hostname")
         return errs
 
     async def execute(
@@ -437,6 +478,8 @@ class FlowsHttpRequestNode:
         bindings = node.get("credentials") or {}
         org_id = context.organization_id
         credential_body: dict[str, str] = {}
+        auth_basic: tuple[str, str] | None = None
+        auth_digest: tuple[str, str] | None = None
         for slot_spec in FlowsHttpRequestNode.credential_slots:
             slot = slot_spec.get("slot")
             if not slot or not isinstance(slot, str):
@@ -464,6 +507,24 @@ class FlowsHttpRequestNode:
                 qn, qv = cfields.get("name"), cfields.get("value")
                 if qn and qv is not None:
                     query[str(qn)] = str(qv)
+            elif slot == "httpBasicAuth":
+                bu, bp = cfields.get("user"), cfields.get("password")
+                if bu is not None and bp is not None:
+                    auth_basic = (str(bu), str(bp))
+            elif slot == "httpDigestAuth":
+                du, dp = cfields.get("user"), cfields.get("password")
+                if du is not None and dp is not None:
+                    auth_digest = (str(du), str(dp))
+
+        if auth_basic is not None and auth_digest is not None:
+            raise RuntimeError(
+                "HTTP Request cannot bind both httpBasicAuth and httpDigestAuth credentials."
+            )
+        req_auth: httpx.Auth | None = None
+        if auth_basic is not None:
+            req_auth = httpx.BasicAuth(auth_basic[0], auth_basic[1])
+        elif auth_digest is not None:
+            req_auth = httpx.DigestAuth(auth_digest[0], auth_digest[1])
 
         body_mode = params.get("body_mode") or "none"
         content: bytes | None = None
@@ -545,12 +606,24 @@ class FlowsHttpRequestNode:
         client_kw: dict[str, Any] = {
             "timeout": timeout,
             "event_hooks": {"request": [_ssrf_guard_each_request]},
+            # Ignore HTTP(S)_PROXY from the environment so flow URLs and MockTransport tests are authoritative.
+            "trust_env": False,
         }
         if follow_redirects:
             client_kw["follow_redirects"] = True
             client_kw["max_redirects"] = max_redirs
         else:
             client_kw["follow_redirects"] = False
+
+        if params.get("verify_tls") is False:
+            client_kw["verify"] = False
+
+        proxy_raw = str(params.get("proxy") or "").strip()
+        if proxy_raw:
+            await ad.flows.validate_http_url_allowed_async(
+                proxy_raw, purpose="HTTP Request proxy"
+            )
+            client_kw["proxy"] = proxy_raw
 
         try:
             async with httpx.AsyncClient(**client_kw) as client:
@@ -562,6 +635,7 @@ class FlowsHttpRequestNode:
                     content=content,
                     data=data,
                     files=files,
+                    auth=req_auth,
                 )
         except httpx.UnsupportedProtocol as e:
             # Should be rare after preflight validation; normalize message for callers.
@@ -599,7 +673,13 @@ class FlowsHttpRequestNode:
         out_meta = dict(item.meta) if isinstance(item.meta, dict) else {}
         out_meta["source_node_id"] = node["id"]
 
-        if _response_content_type_is_binary(ct_header):
+        rf_raw = str(params.get("response_format") or "auto").lower()
+        response_format = rf_raw if rf_raw in ("auto", "json", "text", "binary") else "auto"
+
+        treat_as_binary = response_format == "binary" or (
+            response_format == "auto" and _response_content_type_is_binary(ct_header)
+        )
+        if treat_as_binary:
             mime = (ct_header.split(";")[0].strip() or "application/octet-stream")
             fname = _extract_filename_from_content_disposition(resp.headers)
             out_binary = dict(item.binary)
@@ -625,13 +705,22 @@ class FlowsHttpRequestNode:
 
         resp_body: Any
         ct = ct_header
-        if "application/json" in ct:
+        if response_format == "json":
             try:
                 resp_body = resp.json()
             except Exception:
                 resp_body = resp.text
-        else:
+        elif response_format == "text":
             resp_body = resp.text
+        else:
+            # auto
+            if "application/json" in ct:
+                try:
+                    resp_body = resp.json()
+                except Exception:
+                    resp_body = resp.text
+            else:
+                resp_body = resp.text
 
         out_json: dict[str, Any] = {"body": resp_body}
         if full_response:

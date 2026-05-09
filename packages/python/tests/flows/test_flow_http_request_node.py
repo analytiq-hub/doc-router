@@ -16,6 +16,28 @@ from analytiq_data.flows.nodes.http_request import FlowsHttpRequestNode
 # Capture real constructor before tests patch `http_request.httpx.AsyncClient`.
 _RealAsyncClient = httpx.AsyncClient
 
+# Synthetic URLs for MockTransport-only tests (no external receiver). Normal tests patch
+# ``validate_http_url_allowed_async`` via ``_noop_ssrf_for_mock_receiver`` so hostnames and
+# TEST-NET literals are not exercised against real SSRF resolution rules.
+_RECEIVER_HTTPS = "https://flows-http-request.test/receiver"
+_PROXY_NON_LOOPBACK = "http://proxy.flows-http-request.test:8888"
+# Literal IP for ``real_ssrf`` redirect/proxy tests (guard passes without DNS); MockTransport owns HTTP.
+_REDIRECT_ENTRY = "http://1.1.1.1/start"
+
+
+@pytest.fixture(autouse=True)
+def _noop_ssrf_for_mock_receiver(request: Any):
+    """Bypass SSRF validation when tests use ``httpx.MockTransport`` as the only receiver."""
+    if request.node.get_closest_marker("real_ssrf"):
+        yield
+        return
+
+    async def _allow(*_args: object, **_kwargs: object) -> None:
+        return None
+
+    with patch("analytiq_data.flows.validate_http_url_allowed_async", _allow):
+        yield
+
 
 @pytest.fixture
 def http_node() -> FlowsHttpRequestNode:
@@ -52,6 +74,9 @@ def test_http_request_parameter_schema_display_extensions(http_node: FlowsHttpRe
         "never_error",
         "follow_redirects",
         "max_redirects",
+        "proxy",
+        "verify_tls",
+        "response_format",
         "timeout_seconds",
     ]
 
@@ -79,7 +104,7 @@ async def test_execute_forwards_incoming_binary_and_meta(http_node: FlowsHttpReq
     )
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         pref = ad.flows.BinaryRef(mime_type="application/pdf", storage_id="files:x.pdf")
         item = ad.flows.FlowItem(
@@ -123,7 +148,7 @@ async def test_execute_head_method(
     transport = httpx.MockTransport(handler)
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
         await http_node.execute(
@@ -152,7 +177,7 @@ async def test_query_json_overwrites_query_params(
     transport = httpx.MockTransport(handler)
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
         await http_node.execute(
@@ -186,8 +211,8 @@ async def test_max_redirects_passed_to_httpx_client(
         captured.clear()
         captured.update(kw)
         return _RealAsyncClient(
-            transport=httpx.MockTransport(lambda r: httpx.Response(200, json={}, request=r)),
             **kw,
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json={}, request=r)),
         )
 
     with patch(
@@ -214,6 +239,219 @@ async def test_max_redirects_passed_to_httpx_client(
 
 
 @pytest.mark.asyncio
+async def test_verify_tls_false_passed_to_httpx_client(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    captured: dict[str, Any] = {}
+
+    def capture_client(**kw: Any) -> httpx.AsyncClient:
+        captured.clear()
+        captured.update(kw)
+        return _RealAsyncClient(
+            **kw,
+            transport=httpx.MockTransport(lambda r: httpx.Response(200, json={}, request=r)),
+        )
+
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=capture_client,
+    ):
+        item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+        await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "h1",
+                "parameters": {
+                    "method": "GET",
+                    "url": _RECEIVER_HTTPS,
+                    "body_mode": "none",
+                    "verify_tls": False,
+                },
+            },
+            [[item]],
+        )
+    assert captured.get("verify") is False
+
+
+@pytest.mark.asyncio
+async def test_proxy_url_passed_to_httpx_client(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    """Proxy must reach ``AsyncClient``; with a real client, httpx would open TCP to the proxy host."""
+
+    captured: dict[str, Any] = {}
+
+    class RecordingAsyncClient:
+        def __init__(self, **kw: Any) -> None:
+            captured.clear()
+            captured.update(kw)
+
+        async def __aenter__(self) -> RecordingAsyncClient:
+            return self
+
+        async def __aexit__(self, *_exc: object) -> None:
+            return None
+
+        async def request(self, *_a: object, **_k: object) -> httpx.Response:
+            return httpx.Response(200, json={}, request=httpx.Request("GET", _RECEIVER_HTTPS))
+
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        RecordingAsyncClient,
+    ):
+        item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+        await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "h1",
+                "parameters": {
+                    "method": "GET",
+                    "url": _RECEIVER_HTTPS,
+                    "body_mode": "none",
+                    "proxy": _PROXY_NON_LOOPBACK,
+                },
+            },
+            [[item]],
+        )
+    assert captured.get("proxy") == _PROXY_NON_LOOPBACK
+
+
+@pytest.mark.real_ssrf
+@pytest.mark.asyncio
+async def test_loopback_proxy_blocked_by_ssrf(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+    with pytest.raises(RuntimeError, match="blocked|not allowed"):
+        await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "h1",
+                "parameters": {
+                    "method": "GET",
+                    "url": "http://1.1.1.1/",
+                    "body_mode": "none",
+                    "proxy": "http://127.0.0.1:9999",
+                },
+            },
+            [[item]],
+        )
+
+
+@pytest.mark.asyncio
+async def test_execute_basic_auth_sends_authorization_header(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    auth_hdr: str | None = None
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal auth_hdr
+        auth_hdr = request.headers.get("authorization")
+        return httpx.Response(200, json={"ok": True}, request=request)
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
+    ):
+
+        async def fetch_fake(_org: str, _cid: str):
+            return {}, {"user": "alice", "password": "s3cr3t"}
+
+        with patch(
+            "analytiq_data.flows.fetch_credential_kind_and_fields",
+            fetch_fake,
+        ):
+            item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+            await http_node.execute(
+                minimal_ctx,
+                {
+                    "id": "n1",
+                    "credentials": {"httpBasicAuth": "507f1f77bcf86cd799439011"},
+                    "parameters": {
+                        "method": "GET",
+                        "url": _RECEIVER_HTTPS,
+                        "body_mode": "none",
+                    },
+                },
+                [[item]],
+            )
+    assert auth_hdr is not None
+    assert auth_hdr.startswith("Basic ")
+
+
+@pytest.mark.asyncio
+async def test_basic_and_digest_credentials_conflict(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    async def fetch_fake(_org: str, _cid: str):
+        return {}, {"user": "u", "password": "p"}
+
+    item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+    with patch(
+        "analytiq_data.flows.fetch_credential_kind_and_fields",
+        fetch_fake,
+    ):
+        with pytest.raises(RuntimeError, match="both httpBasicAuth"):
+            await http_node.execute(
+                minimal_ctx,
+                {
+                    "id": "n1",
+                    "credentials": {
+                        "httpBasicAuth": "507f1f77bcf86cd799439011",
+                        "httpDigestAuth": "507f1f77bcf86cd799439012",
+                    },
+                    "parameters": {
+                        "method": "GET",
+                        "url": _RECEIVER_HTTPS,
+                        "body_mode": "none",
+                    },
+                },
+                [[item]],
+            )
+
+
+@pytest.mark.asyncio
+async def test_response_format_text_returns_raw_body_string(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            headers={"content-type": "application/json"},
+            content=b"{broken",
+            request=request,
+        )
+
+    transport = httpx.MockTransport(handler)
+    with patch(
+        "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
+    ):
+        item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+        out = await http_node.execute(
+            minimal_ctx,
+            {
+                "id": "n1",
+                "parameters": {
+                    "method": "GET",
+                    "url": _RECEIVER_HTTPS,
+                    "body_mode": "none",
+                    "response_format": "text",
+                },
+            },
+            [[item]],
+        )
+    assert out[0][0].json["body"] == "{broken"
+
+
+@pytest.mark.asyncio
 async def test_execute_uploads_binary_as_raw_body(
     http_node: FlowsHttpRequestNode,
     minimal_ctx: ad.flows.ExecutionContext,
@@ -230,7 +468,7 @@ async def test_execute_uploads_binary_as_raw_body(
     transport = httpx.MockTransport(handler)
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         minimal_ctx.analytiq_client = object()
         blob = b"\x00\x01hello"
@@ -277,7 +515,7 @@ async def test_execute_uploads_binary_as_multipart_form(
     transport = httpx.MockTransport(handler)
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         minimal_ctx.analytiq_client = object()
         blob = b"PDFBYTES"
@@ -342,7 +580,7 @@ async def test_execute_binary_pdf_response_attachs_binaryref_under_data(
     transport = httpx.MockTransport(handler)
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={"u": "https://example.com/file"}, binary={}, meta={}, paired_item=None)
         out = await http_node.execute(
@@ -386,7 +624,7 @@ async def test_execute_binary_response_merges_upstream_binary(
     transport = httpx.MockTransport(handler)
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         pref = ad.flows.BinaryRef(mime_type="application/pdf", storage_id="files:upstream.pdf")
         item = ad.flows.FlowItem(json={"u": "https://example.com/i"}, binary={"pdf": pref}, meta={}, paired_item=None)
@@ -405,6 +643,7 @@ async def test_execute_binary_response_merges_upstream_binary(
     assert row.binary["data"].data == png
 
 
+@pytest.mark.real_ssrf
 @pytest.mark.asyncio
 async def test_execute_rejects_ssrf_loopback_before_http(http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext):
     """SSRF guard blocks 127.0.0.1 before httpx runs (no network)."""
@@ -427,6 +666,7 @@ async def test_execute_rejects_ssrf_loopback_before_http(http_node: FlowsHttpReq
         )
 
 
+@pytest.mark.real_ssrf
 @pytest.mark.asyncio
 async def test_follow_redirect_rejected_when_location_is_blocked(
     http_node: FlowsHttpRequestNode, minimal_ctx: ad.flows.ExecutionContext,
@@ -435,14 +675,14 @@ async def test_follow_redirect_rejected_when_location_is_blocked(
 
     def handler(request: httpx.Request) -> httpx.Response:
         u = str(request.url)
-        if u.startswith("http://8.8.8.8"):
+        if u.startswith("http://1.1.1.1/") and "/start" in u:
             return httpx.Response(302, headers={"location": "http://127.0.0.1/evil"}, request=request)
         return httpx.Response(200, json={"ok": True}, request=request)
 
     transport = httpx.MockTransport(handler)
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={"x": 1}, binary={}, meta={}, paired_item=None)
         with pytest.raises(RuntimeError, match="blocked"):
@@ -452,7 +692,7 @@ async def test_follow_redirect_rejected_when_location_is_blocked(
                     "id": "n1",
                     "parameters": {
                         "method": "GET",
-                        "url": "http://8.8.8.8/start",
+                        "url": _REDIRECT_ENTRY,
                         "headers": [],
                         "query_params": [],
                         "body_mode": "none",
@@ -470,7 +710,7 @@ async def test_get_static_url(http_node: FlowsHttpRequestNode, minimal_ctx: ad.f
     )
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={"x": 1}, binary={}, meta={}, paired_item=None)
         out = await http_node.execute(
@@ -503,7 +743,7 @@ async def test_post_json_keypair(http_node: FlowsHttpRequestNode, minimal_ctx: a
 
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={"a": 1}, binary={}, meta={}, paired_item=None)
         await http_node.execute(
@@ -543,7 +783,7 @@ async def test_body_json_from_expression(http_node: FlowsHttpRequestNode, minima
 
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(
             json={"payload": '{"hello": "world"}'},
@@ -596,7 +836,7 @@ async def test_http_header_auth_slot(
 
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
         await http_node.execute(
@@ -641,7 +881,7 @@ async def test_http_query_auth_slot(
 
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
         await http_node.execute(
@@ -674,7 +914,7 @@ async def test_non_2xx_raises_when_not_never_error(
 
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
         with pytest.raises(RuntimeError, match="HTTP 404"):
@@ -706,7 +946,7 @@ async def test_non_2xx_never_error_emits_item(
 
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
         out = await http_node.execute(
@@ -747,7 +987,7 @@ async def test_full_response_includes_headers(
 
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
         out = await http_node.execute(
@@ -780,6 +1020,10 @@ def test_validate_parameters_errors(http_node: FlowsHttpRequestNode):
         {"method": "GET", "url": "https://x", "query_json": "["}
     )
     assert any("query_json" in e for e in errs_qj)
+    errs_px = http_node.validate_parameters(
+        {"method": "GET", "url": "https://x", "proxy": "ftp://bad"}
+    )
+    assert any("proxy" in e.lower() for e in errs_px)
 
 
 def test_http_request_url_json_schema_minlength(http_node: FlowsHttpRequestNode):
@@ -826,7 +1070,7 @@ async def test_invalid_url_error_includes_upstream_row_hint(http_node: FlowsHttp
     )
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(
             json={"name": "not-a-url"},
@@ -857,7 +1101,7 @@ async def test_rejects_schemeless_url(http_node: FlowsHttpRequestNode, minimal_c
     )
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={"host": "example.com"}, binary={}, meta={}, paired_item=None)
         with pytest.raises(RuntimeError, match="http:// or https://"):
@@ -884,13 +1128,13 @@ async def test_connect_error_propagates(http_node: FlowsHttpRequestNode, minimal
     transport = httpx.MockTransport(handler)
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
         with pytest.raises(httpx.ConnectError):
             await http_node.execute(
                 minimal_ctx,
-                {"id": "n1", "parameters": {"method": "GET", "url": "http://8.8.8.8/"}},
+                {"id": "n1", "parameters": {"method": "GET", "url": _RECEIVER_HTTPS}},
                 [[item]],
             )
 
@@ -903,7 +1147,7 @@ async def test_timeout_error_propagates(http_node: FlowsHttpRequestNode, minimal
     transport = httpx.MockTransport(handler)
     with patch(
         "analytiq_data.flows.nodes.http_request.httpx.AsyncClient",
-        side_effect=lambda **kw: _RealAsyncClient(transport=transport, **kw),
+        side_effect=lambda **kw: _RealAsyncClient(**kw, transport=transport),
     ):
         item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
         with pytest.raises(httpx.TimeoutException):
@@ -913,7 +1157,7 @@ async def test_timeout_error_propagates(http_node: FlowsHttpRequestNode, minimal
                     "id": "n1",
                     "parameters": {
                         "method": "GET",
-                        "url": "http://8.8.8.8/",
+                        "url": _RECEIVER_HTTPS,
                         "timeout_seconds": 1,
                     },
                 },
