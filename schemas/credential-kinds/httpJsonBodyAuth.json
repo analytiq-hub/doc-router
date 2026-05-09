@@ -1,0 +1,22 @@
+{
+  "key": "httpJsonBodyAuth",
+  "display_name": "JSON Body Token",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["access_token"],
+    "properties": {
+      "access_token": {
+        "type": "string",
+        "title": "Access Token",
+        "x-secret": true
+      }
+    }
+  },
+  "inject": {
+    "body": {
+      "access_token": "{{ credentials.access_token }}"
+    }
+  }
+}
