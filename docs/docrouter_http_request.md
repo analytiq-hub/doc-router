@@ -1,120 +1,192 @@
 # DocRouter HTTP Request Node
 
-Outbound HTTP node (`flows.http_request`), replacing the legacy `flows.webhook` node.
+Outbound HTTP node (`flows.http_request`). Replaces the legacy `flows.webhook` node.
 
 **Related:** [`docrouter_credentials.md`](./docrouter_credentials.md), [`docrouter_nodes.md`](./docrouter_nodes.md), [`docrouter_binary.md`](./docrouter_binary.md).
 
 ---
 
-## 1. Roadmap (n8n-parity direction)
+## 1. What is implemented
 
-The upstream **n8n** HTTP Request node (`../n8n/packages/nodes-base/nodes/HttpRequest/`) is the behavioral reference: versioned node type, explicit **authentication** axis (none / predefined credential type / generic credential type), rich **Options** (redirect policy, proxy, batching, response format), **pagination**, SSL client certs, curl import, etc.
-
-DocRouter intentionally keeps **strong SSRF controls** and **organization-scoped credentials**; parity is about **UX and capability**, not copying unsafe defaults.
-
-| Phase | Goals | Status |
-|-------|--------|--------|
-| **1** | HTTP methods **HEAD**, **OPTIONS**; optional **query_json** / **headers_json** (JSON objects merged after key/value lists); **max_redirects** when following redirects; tests | **Done** |
-| **2** | Authentication UX aligned with n8n: explicit mode (none / generic slots / “service” credential picker); extend credential slots (**Digest**, **JSON body** via ``httpJsonBodyAuth``, OAuth wiring) per credentials roadmap | **Partial** — slots include Bearer / Basic / Digest / Header / Query / **JSON Body**; OAuth refresh/pre-auth lives in `credential_runtime`; “service” picker / predefined integrations **not** done |
-| **3** | Options: **proxy**, **allow insecure TLS** (**verify_tls**), **response_format** (auto / json / text / binary), **batching** | **Partial** — proxy, TLS verify, response format **implemented**; batching **planned** |
-| **4** | **Pagination** (expressions + bounded loops), **SSL client certificate** credential + httpx agent options | Planned |
-| **5** | **Node versioning** (`type_version` / schema evolution without breaking saved flows), optional **curl import** in the parameter UI | Planned |
-
----
-
-## 2. Phase 1 implementation notes
-
-### Methods
-
-`parameter_schema.properties.method.enum` includes **GET**, **HEAD**, **OPTIONS**, **POST**, **PUT**, **PATCH**, **DELETE**.
-
-### Query / headers JSON overlay
-
-- **`query_json`**: optional JSON **object** (string from the UI or dict after expression evaluation). Parsed after **`query_params`** key/value rows; **same keys overwrite** list values (n8n-style “JSON specification” overlay).
-- **`headers_json`**: same for **`headers`**, applied **before** credential injection so credential-provided header/query values still apply on top for auth.
-
-Invalid JSON or non-object → validation error on save; at runtime a bad value raises `RuntimeError` with the parse message.
-
-### Redirects
-
-- **`follow_redirects`** (boolean, default `true`).
-- **`max_redirects`** (integer ≥ 1, default **20**) passed to **httpx** when `follow_redirects` is enabled (matches httpx’s default cap).
-
----
-
-## 3. Rename (historical)
-
-| | Old | New |
-|---|---|---|
-| Node key | `flows.webhook` | `flows.http_request` |
-| Class | `FlowsWebhookNode` | `FlowsHttpRequestNode` |
-| File | `flows/nodes/webhook.py` | `flows/nodes/http_request.py` |
-
----
-
-## 4. Implemented features (summary)
-
-| Feature | Notes |
+| Feature | Detail |
 |---------|--------|
-| Methods | GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE |
-| URL | Absolute `http(s)` or `=expression` per inbound item |
-| Query | Key/value list + optional **`query_json`** overlay |
-| Headers | Key/value list + optional **`headers_json`** overlay |
-| Credential slots | **httpBearerAuth**, **httpBasicAuth**, **httpDigestAuth**, **httpHeaderAuth**, **httpQueryAuth**, **httpJsonBodyAuth** + inject templates from kind JSON (`inject.headers` / `query_params` / **`body`**) |
-| Body modes | `none`, `json`, `json_keypair`, `form_urlencoded`, `raw`, `binary`, `multipart_form` — with **`body_mode: none`**, credential **`inject.body`** alone still sends **application/json** (JSON Body auth) |
-| Options | `full_response`, `never_error`, `follow_redirects`, **`max_redirects`**, **`proxy`** (SSRF-checked), **`verify_tls`**, **`response_format`**, `timeout_seconds` |
-| Binary responses | Content-Type heuristics → `BinaryRef` on output (see `docrouter_binary.md`) |
-| SSRF | `validate_http_url_allowed_async` on every request including redirect hops |
-| Parameter UI hints | `x-ui-group`, `x-ui-widget`, `x-ui-show-when` on schema |
-
-### Still deferred (later phases)
-
-Predefined integration credentials on the node (n8n “Predefined credential type”), **batching** / rate limits, **pagination**, **curl import**, **SSL client certs**, **node versioning** (`type_version`).
-
----
-
-## 5. Credential slots
-
-Kinds live under `schemas/credential-kinds/`. The node resolves each bound slot via `fetch_credential_kind_and_fields`, applies **inject** templates where present, then legacy header/query field pairs.
-
-- **`inject.body`** (e.g. **`httpJsonBodyAuth`**) merges string templates into the request JSON object for **`body_mode`** `json` / `json_keypair` / `form_urlencoded`. If **`body_mode`** is **`none`** and the only payload comes from **`inject.body`**, the node sends **`Content-Type: application/json`** with that object as the body (typical token-in-JSON-body APIs).
-
-See §3 of the historical doc in git history for detailed inject examples if needed.
+| **Methods** | GET, HEAD, OPTIONS, POST, PUT, PATCH, DELETE |
+| **URL** | Absolute `http(s)://…` or `=expression` per inbound item |
+| **Query params** | Key/value list (`query_params`) + optional `query_json` overlay |
+| **Headers** | Key/value list (`headers`) + optional `headers_json` overlay |
+| **Body modes** | `none`, `json`, `json_keypair`, `form_urlencoded`, `raw`, `binary`, `multipart_form` |
+| **Credential slots** | `httpBearerAuth`, `httpBasicAuth`, `httpDigestAuth`, `httpHeaderAuth`, `httpQueryAuth`, `httpJsonBodyAuth` |
+| **Credential injection** | `inject.headers`, `inject.query_params`, `inject.body` via Jinja2 templates from kind JSON |
+| **Body + credential body** | `inject.body` merges into `json` / `json_keypair` / `form_urlencoded` bodies; `body_mode: none` with credential body sends JSON |
+| **Authentication widget** | `credential_authentication` schema widget in node config panel (none / generic / predefined UI) |
+| **Redirects** | `follow_redirects` (default true) + `max_redirects` (default 20) |
+| **Proxy** | `proxy` URL, SSRF-checked before connecting |
+| **TLS** | `verify_tls` (default true) |
+| **Response format** | `response_format`: auto (Content-Type heuristics), json, text, binary |
+| **Full response** | `full_response` adds `status_code` and `headers` to output |
+| **Never error** | `never_error` emits non-2xx as items instead of raising |
+| **Timeout** | `timeout_seconds` (default 30) |
+| **SSRF** | `validate_http_url_allowed_async` on every hop including redirects |
+| **Environment proxy** | `trust_env=False` — ignores `HTTP_PROXY`/`HTTPS_PROXY` env vars |
+| **Binary responses** | Content-Type heuristics + `response_format: binary` → `BinaryRef` on output |
 
 ---
 
-## 6. Parameter schema
+## 2. Authentication
 
-Extension fields (`x-ui-*`) drive the schema-driven flow editor forms.
+Authentication is set per-node via the `authentication` parameter (schema widget `x-ui-widget: credential_authentication`).
+
+| Mode | Behaviour |
+|------|-----------|
+| `none` | No credential bound |
+| `generic` | User picks a credential slot type (Bearer, Basic, etc.) then a saved credential of that kind |
+| `predefined` | User picks any compatible saved credential; the correct slot is auto-selected by kind |
+
+The companion parameter `generic_auth_slot` records which slot is active in `generic` mode. Both are hidden from the default field renderer (marked `x-ui-companion-of: authentication`) — the `FlowCredentialAuthenticationField` component renders the full UI block.
+
+### Credential slots and how they inject
+
+Each bound slot is processed in order during `execute`. If the kind has an `inject` section, Jinja2 templates are rendered and results merged into `headers`, `query`, or `credential_body`. Otherwise the legacy field pair falls back:
+
+| Slot | Kind | Injection |
+|------|------|-----------|
+| `httpBearerAuth` | `inject.headers` | `Authorization: Bearer <token>` |
+| `httpBasicAuth` | fallback | `httpx.BasicAuth(user, password)` |
+| `httpDigestAuth` | fallback | `httpx.DigestAuth(user, password)` |
+| `httpHeaderAuth` | `inject.headers` | Arbitrary header name/value |
+| `httpQueryAuth` | `inject.query_params` | Arbitrary query name/value |
+| `httpJsonBodyAuth` | `inject.body` | Merges `access_token` into request body |
+
+`httpBasicAuth` and `httpDigestAuth` cannot be bound simultaneously — `execute` raises immediately.
+
+### `inject.body` + body mode rules
+
+| `body_mode` | Credential body present | Behaviour |
+|-------------|------------------------|-----------|
+| `json` | yes | Merges into parsed body; **raises `RuntimeError`** if body root is not a JSON object |
+| `json_keypair` | yes | Merges into key/value object |
+| `form_urlencoded` | yes | Merges into form pairs |
+| `none` | yes | Sends credential body as `application/json` |
+| `raw`, `binary`, `multipart_form` | yes | `credential_body` silently ignored (not applicable) |
 
 ---
 
-## 7. `execute()` behavior
+## 3. Parameter reference
 
-- Parameters are **pre-resolved** by the engine (`=expressions` expanded); the node does not call `resolve_parameters` itself.
-- **HEAD** / **OPTIONS** use the same body machinery as other methods; callers should leave `body_mode` `none` when inappropriate.
-- Errors are logged with `node_name`, `node_id`, `execution_id`, `flow_id`, `organization_id` when `context.logger` is set.
+### Request group
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `method` | enum | `GET` | GET HEAD OPTIONS POST PUT PATCH DELETE |
+| `url` | string | — | `minLength: 1`; must be `http(s)` |
+| `authentication` | enum | `none` | `none` / `generic` / `predefined`; drives credential widget |
+| `generic_auth_slot` | enum | `httpBearerAuth` | Visible only when `authentication == generic` |
+| `query_params` | array of `{name, value}` | `[]` | Applied first |
+| `query_json` | string (JSON object) | `""` | Merged after `query_params`; same keys overwrite |
+| `headers` | array of `{name, value}` | `[]` | Applied first; credential headers apply last |
+| `headers_json` | string (JSON object) | `""` | Merged after `headers`, before credential injection |
+
+### Body group
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `body_mode` | enum | `none` | none / json / json_keypair / form_urlencoded / raw / binary / multipart_form |
+| `body_json` | string | `""` | Required when `body_mode == json` |
+| `body_params` | array of `{name, value}` | `[]` | Used by json_keypair and form_urlencoded |
+| `body_raw` | string | `""` | Used by raw |
+| `body_content_type` | string | `text/plain` | Content-Type for raw mode |
+| `binary_property_name` | string | `data` | `item.binary` key for binary / multipart |
+| `multipart_fields` | array of `{name, value}` | `[]` | Extra form fields for multipart |
+| `multipart_file_field_name` | string | `file` | Part name for the binary file in multipart |
+
+### Options group
+
+| Parameter | Type | Default | Notes |
+|-----------|------|---------|-------|
+| `follow_redirects` | boolean | `true` | |
+| `max_redirects` | integer ≥ 1 | `20` | Only effective when `follow_redirects` is true |
+| `proxy` | string | `""` | `http(s)://host:port`; SSRF-checked |
+| `verify_tls` | boolean | `true` | Set false only for trusted debug endpoints |
+| `response_format` | enum | `auto` | auto / json / text / binary |
+| `full_response` | boolean | `false` | Adds `status_code` and `headers` to `item.json` |
+| `never_error` | boolean | `false` | Emits non-2xx as items instead of raising |
+| `timeout_seconds` | number > 0 | `30` | |
 
 ---
 
-## 8. Output shapes
+## 4. Output shapes
 
-Unchanged from prior documentation:
+Default output (`full_response: false`):
+```json
+{ "body": <parsed or raw response> }
+```
 
-- Default JSON output: `{ "body": … }`.
-- `full_response: true` adds `status_code` and `headers`.
-- Binary responses attach bytes under `item.binary["data"]` and put metadata in `item.json`.
+With `full_response: true`:
+```json
+{ "body": …, "status_code": 200, "headers": { "Content-Type": "…" } }
+```
+
+Binary response (`response_format: binary` or detected from Content-Type):
+- `item.binary["data"]` → `BinaryRef` with `mime_type` and `file_name`
+- `item.json` → `{ "url": …, "mime_type": …, "file_name": … }`
 
 ---
 
-## 9. Tests
+## 5. SSRF protection
 
-**File:** `packages/python/tests/flows/test_flow_http_request_node.py`
+`validate_http_url_allowed_async` blocks private/link-local ranges. It runs:
+1. Before the initial request (URL parameter)
+2. On every redirect hop (via httpx `event_hooks`)
+3. On the `proxy` URL before connecting
 
-Includes Phase 1 coverage: **HEAD** request method, **query_json** overlay, **max_redirects** forwarded to httpx, validation for **`max_redirects`** and invalid **`query_json`**.
+`trust_env=False` prevents the process environment's `HTTP_PROXY`/`HTTPS_PROXY` from leaking into flow execution.
 
 ---
 
-## 10. Declarative runtime stub
+## 6. Tests
 
-`schemas/runtimes/http_request_v1.schema.json` allows `HEAD` and `OPTIONS` in the method pattern for ported packages.
+`packages/python/tests/flows/test_flow_http_request_node.py`
+
+Notable coverage added in this phase:
+- HEAD method
+- query_json overlay
+- headers_json overlay
+- max_redirects forwarded to httpx
+- verify_tls=false forwarded
+- proxy URL forwarded and SSRF-blocked
+- Basic auth (Authorization header produced)
+- httpJsonBodyAuth with body_mode=none → JSON body sent
+- httpJsonBodyAuth + non-dict body_json → RuntimeError raised
+- httpBasicAuth + httpDigestAuth simultaneously → RuntimeError raised
+- response_format=text returns raw string for broken JSON
+- validate_parameters: max_redirects, query_json, proxy, authentication, generic_auth_slot
+
+---
+
+## 7. What is not yet implemented
+
+These are the known gaps in priority order.
+
+### 7.1 Predefined credential integration (n8n "service" picker)
+
+n8n allows a node to declare it natively supports a specific third-party service (e.g. Slack, GitHub). The user picks one credential from only that service's kind. DocRouter has credential_slots + the generic/predefined authentication widget, but the "predefined" path currently just picks any compatible org credential. True service integrations require the node to declare a `service_credential_kind` and the UI to surface it distinctly.
+
+### 7.2 Batching / rate-limiting
+
+n8n's HTTP Request node supports batching (send N items per second, N items per batch). DocRouter's engine processes items one at a time per node call. Batching would require changes to the engine loop, not just the node.
+
+### 7.3 Pagination
+
+n8n supports cursor-based, offset-based, and link-header pagination loops inside the HTTP Request node. Requires an internal loop with bounded iteration, new parameters (`pagination_mode`, `max_pages`, etc.), and carry-over state across iterations.
+
+### 7.4 SSL client certificates
+
+Add an `httpSslAuth` credential slot. The kind would store PEM-encoded `cert` and `key`; the node would load them into `httpx.AsyncClient(cert=...)`.
+
+### 7.5 Node versioning (`type_version`)
+
+Schema changes (new parameters, renamed options) currently have no migration path. Adding `type_version` to the node type and a migration table would let old saved flows keep working after parameter-schema changes.
+
+### 7.6 Curl import
+
+A UI affordance to paste a `curl` command and auto-populate method, URL, headers, and body. Frontend-only feature; no backend changes needed.
