@@ -1,0 +1,114 @@
+{
+  "key": "mySql",
+  "display_name": "MySQL",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": "localhost"
+      },
+      "database": {
+        "title": "Database",
+        "type": "string",
+        "default": "mysql"
+      },
+      "user": {
+        "title": "User",
+        "type": "string",
+        "default": "mysql"
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "port": {
+        "title": "Port",
+        "type": "number",
+        "default": 3306
+      },
+      "connectTimeout": {
+        "title": "Connect Timeout",
+        "type": "number",
+        "description": "The milliseconds before a timeout occurs during the initial connection to the MySQL server",
+        "default": 10000
+      },
+      "ssl": {
+        "title": "SSL",
+        "type": "boolean",
+        "default": false
+      },
+      "caCertificate": {
+        "title": "CA Certificate",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "clientPrivateKey": {
+        "title": "Client Private Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "clientCertificate": {
+        "title": "Client Certificate",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "sshTunnel": {
+        "title": "SSH Tunnel",
+        "type": "boolean",
+        "default": false
+      },
+      "sshAuthenticateWith": {
+        "title": "SSH Authenticate with",
+        "type": "string",
+        "enum": [
+          "password",
+          "privateKey"
+        ],
+        "default": "password"
+      },
+      "sshHost": {
+        "title": "SSH Host",
+        "type": "string",
+        "default": "localhost"
+      },
+      "sshPort": {
+        "title": "SSH Port",
+        "type": "number",
+        "default": 22
+      },
+      "sshUser": {
+        "title": "SSH User",
+        "type": "string",
+        "default": "root"
+      },
+      "sshPassword": {
+        "title": "SSH Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "privateKey": {
+        "title": "Private Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "passphrase": {
+        "title": "Passphrase",
+        "type": "string",
+        "description": "Passphrase used to create the key, if no passphrase was used leave empty",
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

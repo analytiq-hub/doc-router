@@ -1,0 +1,24 @@
+{
+  "key": "freshdeskApi",
+  "display_name": "Freshdesk API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "domain": {
+        "title": "Domain",
+        "type": "string",
+        "description": "If the URL you get displayed on Freshdesk is \"https://company.freshdesk.com\" enter \"company\"",
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "key": "philipsHueOAuth2Api",
+  "display_name": "PhilipHue OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "appId": {
+        "title": "APP ID",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "extends": [
+    "oAuth2Api"
+  ],
+  "runtime_fields": [
+    "grantType",
+    "authUrl",
+    "accessTokenUrl",
+    "authQueryParameters",
+    "scope",
+    "authentication"
+  ]
+}

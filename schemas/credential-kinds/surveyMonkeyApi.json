@@ -1,0 +1,30 @@
+{
+  "key": "surveyMonkeyApi",
+  "display_name": "SurveyMonkey API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "description": "The access token must have the following scopes:\n\t\t\t<ul>\n\t\t\t\t<li>Create/modify webhooks</li>\n\t\t\t\t<li>View webhooks</li>\n\t\t\t\t<li>View surveys</li>\n\t\t\t\t<li>View collectors</li>\n\t\t\t\t<li>View responses</li>\n\t\t\t\t<li>View response details</li>\n\t\t\t</ul>",
+        "x-secret": true,
+        "default": ""
+      },
+      "clientId": {
+        "title": "Client ID",
+        "type": "string",
+        "default": ""
+      },
+      "clientSecret": {
+        "title": "Client Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

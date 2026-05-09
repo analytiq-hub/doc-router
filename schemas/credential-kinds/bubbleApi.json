@@ -1,0 +1,46 @@
+{
+  "key": "bubbleApi",
+  "display_name": "Bubble API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiToken": {
+        "title": "API Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "appName": {
+        "title": "App Name",
+        "type": "string",
+        "default": ""
+      },
+      "environment": {
+        "title": "Environment",
+        "type": "string",
+        "enum": [
+          "development",
+          "live"
+        ],
+        "default": "live"
+      },
+      "hosting": {
+        "title": "Hosting",
+        "type": "string",
+        "enum": [
+          "bubbleHosted",
+          "selfHosted"
+        ],
+        "default": "bubbleHosted"
+      },
+      "domain": {
+        "title": "Domain",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

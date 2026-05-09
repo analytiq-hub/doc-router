@@ -1,0 +1,38 @@
+{
+  "key": "githubApi",
+  "display_name": "GitHub API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "server": {
+        "title": "Github Server",
+        "type": "string",
+        "description": "The server to connect to. Only has to be set if Github Enterprise is used.",
+        "default": "https://api.github.com"
+      },
+      "user": {
+        "title": "User",
+        "type": "string",
+        "default": ""
+      },
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "token {{$credentials?.accessToken}}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials?.server}}/user"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "key": "amqp",
+  "display_name": "AMQP",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "hostname": {
+        "title": "Hostname",
+        "type": "string",
+        "default": ""
+      },
+      "port": {
+        "title": "Port",
+        "type": "number",
+        "default": 5672
+      },
+      "username": {
+        "title": "User",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "transportType": {
+        "title": "Transport Type",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "key": "homeAssistantApi",
+  "display_name": "Home Assistant API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": ""
+      },
+      "port": {
+        "title": "Port",
+        "type": "number",
+        "default": 8123
+      },
+      "ssl": {
+        "title": "SSL",
+        "type": "boolean",
+        "default": false
+      },
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

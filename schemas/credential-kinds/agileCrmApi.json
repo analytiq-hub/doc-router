@@ -1,0 +1,29 @@
+{
+  "key": "agileCrmApi",
+  "display_name": "AgileCRM API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "email": {
+        "title": "Email",
+        "type": "string",
+        "default": ""
+      },
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "subdomain": {
+        "title": "Subdomain",
+        "type": "string",
+        "description": "If the domain is https://example.agilecrm.com \"example\" would have to be entered",
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

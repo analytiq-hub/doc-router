@@ -1,0 +1,19 @@
+{
+  "key": "driftApi",
+  "display_name": "Drift API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accessToken": {
+        "title": "Personal Access Token",
+        "type": "string",
+        "description": "Visit your account details page, and grab the Access Token. See <a href=\"https://devdocs.drift.com/docs/quick-start\">Drift auth</a>.",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

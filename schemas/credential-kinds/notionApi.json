@@ -1,0 +1,22 @@
+{
+  "key": "notionApi",
+  "display_name": "Notion API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "Internal Integration Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://api.notion.com/v1/users/me"
+  }
+}

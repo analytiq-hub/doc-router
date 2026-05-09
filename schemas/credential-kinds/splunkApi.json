@@ -1,0 +1,39 @@
+{
+  "key": "splunkApi",
+  "display_name": "Splunk API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "authToken": {
+        "title": "Auth Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "baseUrl": {
+        "title": "Base URL",
+        "type": "string",
+        "description": "Protocol, domain and port",
+        "default": ""
+      },
+      "allowUnauthorizedCerts": {
+        "title": "Allow Self-Signed Certificates",
+        "type": "boolean",
+        "description": "Whether to connect even if SSL certificate validation is not possible",
+        "default": false
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{$credentials?.authToken}}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.baseUrl}}/services/alerts/fired_alerts"
+  }
+}

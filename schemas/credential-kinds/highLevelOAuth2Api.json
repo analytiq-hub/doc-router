@@ -1,0 +1,38 @@
+{
+  "key": "highLevelOAuth2Api",
+  "display_name": "HighLevel OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "authUrl": {
+        "title": "Authorization URL",
+        "type": "string",
+        "enum": [
+          "https://marketplace.leadconnectorhq.com/oauth/chooselocation",
+          "https://marketplace.gohighlevel.com/oauth/chooselocation"
+        ],
+        "default": "https://marketplace.leadconnectorhq.com/oauth/chooselocation"
+      },
+      "scope": {
+        "title": "Scope",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": [
+      "authUrl",
+      "scope"
+    ]
+  },
+  "extends": [
+    "oAuth2Api"
+  ],
+  "runtime_fields": [
+    "grantType",
+    "accessTokenUrl",
+    "authQueryParameters",
+    "authentication"
+  ]
+}

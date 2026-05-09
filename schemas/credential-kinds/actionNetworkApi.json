@@ -1,0 +1,22 @@
+{
+  "key": "actionNetworkApi",
+  "display_name": "Action Network API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://actionnetwork.org/api/v2/events?per_page=1"
+  }
+}

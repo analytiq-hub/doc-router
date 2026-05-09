@@ -1,0 +1,33 @@
+{
+  "key": "freshworksCrmApi",
+  "display_name": "Freshworks CRM API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "domain": {
+        "title": "Domain",
+        "type": "string",
+        "description": "Domain in the Freshworks CRM org URL. For example, in <code>https://n8n-org.myfreshworks.com</code>, the domain is <code>n8n-org</code>.",
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Token token={{$credentials?.apiKey}}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "=https://{{$credentials?.domain}}.myfreshworks.com/crm/sales/api/tasks"
+  }
+}

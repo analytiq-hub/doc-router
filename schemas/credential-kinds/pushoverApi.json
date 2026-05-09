@@ -1,0 +1,22 @@
+{
+  "key": "pushoverApi",
+  "display_name": "Pushover API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://api.pushover.net/1/=/licenses.json?token={{$credentials?.apiKey}}"
+  }
+}

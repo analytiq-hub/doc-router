@@ -1,0 +1,44 @@
+{
+  "key": "shopifyOAuth2Api",
+  "display_name": "Shopify OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "shopSubdomain": {
+        "title": "Shop Subdomain",
+        "type": "string",
+        "description": "Only the subdomain without .myshopify.com",
+        "default": ""
+      },
+      "clientId": {
+        "title": "Client ID",
+        "type": "string",
+        "default": ""
+      },
+      "clientSecret": {
+        "title": "Client Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "clientId",
+      "clientSecret",
+      "shopSubdomain"
+    ]
+  },
+  "extends": [
+    "oAuth2Api"
+  ],
+  "runtime_fields": [
+    "grantType",
+    "authUrl",
+    "accessTokenUrl",
+    "scope",
+    "authQueryParameters",
+    "authentication"
+  ]
+}

@@ -1,0 +1,44 @@
+{
+  "key": "twilioApi",
+  "display_name": "Twilio API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "authType": {
+        "title": "Auth Type",
+        "type": "string",
+        "enum": [
+          "authToken",
+          "apiKey"
+        ],
+        "default": "authToken"
+      },
+      "accountSid": {
+        "title": "Account SID",
+        "type": "string",
+        "default": ""
+      },
+      "authToken": {
+        "title": "Auth Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "apiKeySid": {
+        "title": "API Key SID",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "apiKeySecret": {
+        "title": "API Key Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

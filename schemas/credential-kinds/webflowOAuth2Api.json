@@ -1,0 +1,29 @@
+{
+  "key": "webflowOAuth2Api",
+  "display_name": "Webflow OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "legacy": {
+        "title": "Legacy",
+        "type": "boolean",
+        "description": "If the legacy API should be used",
+        "default": true
+      }
+    },
+    "required": []
+  },
+  "extends": [
+    "oAuth2Api"
+  ],
+  "runtime_fields": [
+    "grantType",
+    "authUrl",
+    "accessTokenUrl",
+    "scope",
+    "authQueryParameters",
+    "authentication"
+  ]
+}

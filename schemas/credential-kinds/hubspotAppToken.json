@@ -1,0 +1,27 @@
+{
+  "key": "hubspotAppToken",
+  "display_name": "HubSpot App Token",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "appToken": {
+        "title": "APP Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.appToken }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://api.hubapi.com/account-info/v3/details"
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "key": "mauticApi",
+  "display_name": "Mautic API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": ""
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.url.replace(new RegExp(\"/$\"), \"\")}}/api/users/self"
+  }
+}

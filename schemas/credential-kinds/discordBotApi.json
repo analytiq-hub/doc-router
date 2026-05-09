@@ -1,0 +1,29 @@
+{
+  "key": "discordBotApi",
+  "display_name": "Discord Bot API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "botToken": {
+        "title": "Bot Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "botToken"
+    ]
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bot {{ credentials.botToken }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://discord.com/api/v10/users/@me/guilds"
+  }
+}

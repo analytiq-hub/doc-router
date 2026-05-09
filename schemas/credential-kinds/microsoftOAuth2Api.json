@@ -1,0 +1,30 @@
+{
+  "key": "microsoftOAuth2Api",
+  "display_name": "Microsoft OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "authUrl": {
+        "title": "Authorization URL",
+        "type": "string",
+        "default": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+      },
+      "accessTokenUrl": {
+        "title": "Access Token URL",
+        "type": "string",
+        "default": "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+      }
+    },
+    "required": []
+  },
+  "extends": [
+    "oAuth2Api"
+  ],
+  "runtime_fields": [
+    "grantType",
+    "authQueryParameters",
+    "authentication"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "key": "npmApi",
+  "display_name": "Npm API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "registryUrl": {
+        "title": "Registry Url",
+        "type": "string",
+        "default": "https://registry.npmjs.org"
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.accessToken }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.registryUrl}}/-/whoami"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "key": "circleCiApi",
+  "display_name": "CircleCI API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "Personal API Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

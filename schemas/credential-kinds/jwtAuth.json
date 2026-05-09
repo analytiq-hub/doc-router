@@ -1,0 +1,60 @@
+{
+  "key": "jwtAuth",
+  "display_name": "JWT Auth",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "keyType": {
+        "title": "Key Type",
+        "type": "string",
+        "enum": [
+          "passphrase",
+          "pemKey"
+        ],
+        "description": "Choose either the secret passphrase or PEM encoded public keys",
+        "default": "passphrase"
+      },
+      "secret": {
+        "title": "Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "privateKey": {
+        "title": "Private Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "publicKey": {
+        "title": "Public Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "algorithm": {
+        "title": "Algorithm",
+        "type": "string",
+        "enum": [
+          "HS256",
+          "HS384",
+          "HS512",
+          "RS256",
+          "RS384",
+          "RS512",
+          "ES256",
+          "ES384",
+          "ES512",
+          "PS256",
+          "PS384",
+          "PS512",
+          "none"
+        ],
+        "default": "HS256"
+      }
+    },
+    "required": []
+  }
+}

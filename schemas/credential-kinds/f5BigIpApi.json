@@ -1,0 +1,26 @@
+{
+  "key": "f5BigIpApi",
+  "display_name": "F5 Big-IP API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "password",
+      "username"
+    ]
+  }
+}

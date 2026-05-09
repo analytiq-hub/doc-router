@@ -1,0 +1,30 @@
+{
+  "key": "carbonBlackApi",
+  "display_name": "Carbon Black API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiUrl": {
+        "title": "URL",
+        "type": "string",
+        "default": ""
+      },
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "accessToken"
+    ]
+  },
+  "inject": {
+    "headers": {
+      "X-Auth-Token": "{{ credentials.accessToken }}"
+    }
+  }
+}

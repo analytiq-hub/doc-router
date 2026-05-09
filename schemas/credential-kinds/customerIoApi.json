@@ -1,0 +1,45 @@
+{
+  "key": "customerIoApi",
+  "display_name": "Customer.io API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "trackingApiKey": {
+        "title": "Tracking API Key",
+        "type": "string",
+        "description": "Required for tracking API",
+        "x-secret": true,
+        "default": ""
+      },
+      "region": {
+        "title": "Region",
+        "type": "string",
+        "enum": [
+          "track-eu.customer.io",
+          "track.customer.io"
+        ],
+        "description": "Should be set based on your account region",
+        "default": "track.customer.io"
+      },
+      "trackingSiteId": {
+        "title": "Tracking Site ID",
+        "type": "string",
+        "description": "Required for tracking API",
+        "default": ""
+      },
+      "appApiKey": {
+        "title": "App API Key",
+        "type": "string",
+        "description": "Required for App API",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "region",
+      "trackingApiKey"
+    ]
+  }
+}

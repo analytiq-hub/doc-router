@@ -1,0 +1,32 @@
+{
+  "key": "beeminderApi",
+  "display_name": "Beeminder API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "user": {
+        "title": "User",
+        "type": "string",
+        "default": ""
+      },
+      "authToken": {
+        "title": "Auth Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "body": {
+      "auth_token": "{{ credentials.authToken }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://www.beeminder.com/api/v1/=/users/{{$credentials.user}}.json"
+  }
+}

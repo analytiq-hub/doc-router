@@ -1,0 +1,34 @@
+{
+  "key": "n8nApi",
+  "display_name": "n8n API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "description": "The API key for the n8n instance",
+        "x-secret": true,
+        "default": ""
+      },
+      "baseUrl": {
+        "title": "Base URL",
+        "type": "string",
+        "description": "The API URL of the n8n instance",
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "X-N8N-API-KEY": "{{ credentials.apiKey }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{ $credentials.baseUrl }}/workflows?limit=5"
+  }
+}

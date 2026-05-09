@@ -1,0 +1,32 @@
+{
+  "key": "nextCloudApi",
+  "display_name": "NextCloud API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "webDavUrl": {
+        "title": "Web DAV URL",
+        "type": "string",
+        "default": ""
+      },
+      "user": {
+        "title": "User",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.webDavUrl.replace('/remote.php/webdav', '')}}/ocs/v1.php/cloud/capabilities"
+  }
+}

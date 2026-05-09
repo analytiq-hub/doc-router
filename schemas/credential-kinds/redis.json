@@ -1,0 +1,38 @@
+{
+  "key": "redis",
+  "display_name": "Redis",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": "localhost"
+      },
+      "port": {
+        "title": "Port",
+        "type": "number",
+        "default": 6379
+      },
+      "database": {
+        "title": "Database Number",
+        "type": "number",
+        "default": 0
+      },
+      "ssl": {
+        "title": "SSL",
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "required": []
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "key": "ldap",
+  "display_name": "LDAP",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "hostname": {
+        "title": "LDAP Server Address",
+        "type": "string",
+        "description": "IP or domain of the LDAP server",
+        "default": ""
+      },
+      "port": {
+        "title": "LDAP Server Port",
+        "type": "string",
+        "description": "Port used to connect to the LDAP server",
+        "default": "389"
+      },
+      "bindDN": {
+        "title": "Binding DN",
+        "type": "string",
+        "description": "Distinguished Name of the user to connect as",
+        "default": ""
+      },
+      "bindPassword": {
+        "title": "Binding Password",
+        "type": "string",
+        "description": "Password of the user provided in the Binding DN field above",
+        "x-secret": true,
+        "default": ""
+      },
+      "connectionSecurity": {
+        "title": "Connection Security",
+        "type": "string",
+        "enum": [
+          "none",
+          "tls",
+          "startTls"
+        ],
+        "default": "none"
+      },
+      "allowUnauthorizedCerts": {
+        "title": "Ignore SSL/TLS Issues",
+        "type": "boolean",
+        "description": "Whether to connect even if SSL/TLS certificate validation is not possible",
+        "default": false
+      },
+      "caCertificate": {
+        "title": "CA Certificate",
+        "type": "string",
+        "default": ""
+      },
+      "timeout": {
+        "title": "Timeout",
+        "type": "number",
+        "description": "Optional connection timeout in seconds",
+        "default": 300
+      }
+    },
+    "required": [
+      "hostname"
+    ]
+  }
+}

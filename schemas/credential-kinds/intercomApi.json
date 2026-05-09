@@ -1,0 +1,28 @@
+{
+  "key": "intercomApi",
+  "display_name": "Intercom API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.apiKey }}",
+      "Accept": "application/json"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://api.intercom.io/me"
+  }
+}

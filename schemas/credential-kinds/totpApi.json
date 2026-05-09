@@ -1,0 +1,28 @@
+{
+  "key": "totpApi",
+  "display_name": "TOTP API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "secret": {
+        "title": "Secret",
+        "type": "string",
+        "description": "Secret key encoded in the QR code during setup. <a href=\"https://github.com/google/google-authenticator/wiki/Key-Uri-Format#secret\">Learn more</a>.",
+        "x-secret": true,
+        "default": ""
+      },
+      "label": {
+        "title": "Label",
+        "type": "string",
+        "description": "Identifier for the TOTP account, in the <code>issuer:username</code> format. <a href=\"https://github.com/google/google-authenticator/wiki/Key-Uri-Format#label\">Learn more</a>.",
+        "default": ""
+      }
+    },
+    "required": [
+      "label",
+      "secret"
+    ]
+  }
+}

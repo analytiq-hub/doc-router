@@ -1,0 +1,38 @@
+{
+  "key": "zammadBasicAuthApi",
+  "display_name": "Zammad Basic Auth API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "title": "Base URL",
+        "type": "string",
+        "default": ""
+      },
+      "username": {
+        "title": "Email",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "allowUnauthorizedCerts": {
+        "title": "Ignore SSL Issues (Insecure)",
+        "type": "boolean",
+        "description": "Whether to connect even if SSL certificate validation is not possible",
+        "default": false
+      }
+    },
+    "required": [
+      "baseUrl",
+      "password",
+      "username"
+    ]
+  }
+}

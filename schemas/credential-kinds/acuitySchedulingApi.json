@@ -1,0 +1,23 @@
+{
+  "key": "acuitySchedulingApi",
+  "display_name": "Acuity Scheduling API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "userId": {
+        "title": "User ID",
+        "type": "string",
+        "default": ""
+      },
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

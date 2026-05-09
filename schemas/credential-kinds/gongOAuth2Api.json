@@ -1,0 +1,28 @@
+{
+  "key": "gongOAuth2Api",
+  "display_name": "Gong OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "title": "Base URL",
+        "type": "string",
+        "default": "https://api.gong.io"
+      }
+    },
+    "required": []
+  },
+  "extends": [
+    "oAuth2Api"
+  ],
+  "runtime_fields": [
+    "grantType",
+    "authUrl",
+    "accessTokenUrl",
+    "scope",
+    "authQueryParameters",
+    "authentication"
+  ]
+}

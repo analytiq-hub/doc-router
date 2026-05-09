@@ -1,0 +1,32 @@
+{
+  "key": "calApi",
+  "display_name": "Cal API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": "https://api.cal.com"
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "query_params": {
+      "apiKey": "{{ credentials.apiKey }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.host}}/=/v1/memberships"
+  }
+}

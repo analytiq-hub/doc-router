@@ -1,0 +1,53 @@
+{
+  "key": "elasticSecurityApi",
+  "display_name": "Elastic Security API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "title": "Base URL",
+        "type": "string",
+        "description": "Referred to as Kibana 'endpoint' in the Elastic deployment dashboard",
+        "default": ""
+      },
+      "type": {
+        "title": "Type",
+        "type": "string",
+        "enum": [
+          "apiKey",
+          "basicAuth"
+        ],
+        "default": "basicAuth"
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "apiKey",
+      "baseUrl",
+      "password",
+      "username"
+    ]
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.baseUrl}}/api/endpoint/metadata"
+  }
+}

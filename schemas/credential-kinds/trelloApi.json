@@ -1,0 +1,34 @@
+{
+  "key": "trelloApi",
+  "display_name": "Trello API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "apiToken": {
+        "title": "API Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "apiKey",
+      "apiToken"
+    ]
+  },
+  "runtime_fields": [
+    "oauthSecret"
+  ],
+  "test_request": {
+    "method": "GET",
+    "url": "https://api.trello.com/=/1/tokens/{{$credentials.apiToken}}/member"
+  }
+}

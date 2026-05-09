@@ -1,0 +1,36 @@
+{
+  "key": "openAiApi",
+  "display_name": "OpenAi",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "organizationId": {
+        "title": "Organization ID (optional)",
+        "type": "string",
+        "description": "For users who belong to multiple organizations, you can set which organization is used for an API request. Usage from these API requests will count against the specified organization's subscription quota.",
+        "default": ""
+      }
+    },
+    "required": [
+      "apiKey"
+    ]
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.apiKey }}",
+      "OpenAI-Organization": "{{ credentials.organizationId }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://api.openai.com/v1/models"
+  }
+}

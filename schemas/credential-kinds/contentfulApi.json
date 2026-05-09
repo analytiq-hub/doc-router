@@ -1,0 +1,34 @@
+{
+  "key": "contentfulApi",
+  "display_name": "Contentful API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "spaceId": {
+        "title": "Space ID",
+        "type": "string",
+        "description": "The ID for the Contentful space",
+        "default": ""
+      },
+      "ContentDeliveryaccessToken": {
+        "title": "Content Delivery API Access Token",
+        "type": "string",
+        "description": "Access token that has access to the space. Can be left empty if only Delivery API should be used.",
+        "x-secret": true,
+        "default": ""
+      },
+      "ContentPreviewaccessToken": {
+        "title": "Content Preview API Access Token",
+        "type": "string",
+        "description": "Access token that has access to the space. Can be left empty if only Preview API should be used.",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "spaceId"
+    ]
+  }
+}

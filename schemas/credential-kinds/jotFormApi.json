@@ -1,0 +1,29 @@
+{
+  "key": "jotFormApi",
+  "display_name": "JotForm API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "apiDomain": {
+        "title": "API Domain",
+        "type": "string",
+        "enum": [
+          "api.jotform.com",
+          "eu-api.jotform.com",
+          "hipaa-api.jotform.com"
+        ],
+        "description": "The API domain to use. Use \"eu-api.jotform.com\" if your account is in based in Europe.",
+        "default": "api.jotform.com"
+      }
+    },
+    "required": []
+  }
+}

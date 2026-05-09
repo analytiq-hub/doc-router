@@ -1,0 +1,50 @@
+{
+  "key": "googleApi",
+  "display_name": "Google Service Account API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "email": {
+        "title": "Service Account Email",
+        "type": "string",
+        "description": "The Google Service account similar to user-808@project.iam.gserviceaccount.com",
+        "default": ""
+      },
+      "privateKey": {
+        "title": "Private Key",
+        "type": "string",
+        "description": "Enter the private key located in the JSON file downloaded from Google Cloud Console",
+        "x-secret": true,
+        "default": ""
+      },
+      "inpersonate": {
+        "title": "Impersonate a User",
+        "type": "boolean",
+        "default": false
+      },
+      "delegatedEmail": {
+        "title": "Email",
+        "type": "string",
+        "description": "The email address of the user for which the application is requesting delegated access",
+        "default": ""
+      },
+      "httpNode": {
+        "title": "Set up for use in HTTP Request node",
+        "type": "boolean",
+        "default": false
+      },
+      "scopes": {
+        "title": "Scope(s)",
+        "type": "string",
+        "description": "You can find the scopes for services <a href=\"https://developers.google.com/identity/protocols/oauth2/scopes\" target=\"_blank\">here</a>",
+        "default": ""
+      }
+    },
+    "required": [
+      "email",
+      "privateKey"
+    ]
+  }
+}

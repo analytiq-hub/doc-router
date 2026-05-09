@@ -1,0 +1,33 @@
+{
+  "key": "invoiceNinjaApi",
+  "display_name": "Invoice Ninja API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": ""
+      },
+      "apiToken": {
+        "title": "API Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "secret": {
+        "title": "Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials?.url}}/api/v1/clients"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "key": "serviceNowBasicApi",
+  "display_name": "ServiceNow Basic Auth API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "user": {
+        "title": "User",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "subdomain": {
+        "title": "Subdomain",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": [
+      "password",
+      "subdomain",
+      "user"
+    ]
+  },
+  "extends": [
+    "httpBasicAuth"
+  ],
+  "test_request": {
+    "method": "GET",
+    "url": "=https://{{$credentials?.subdomain}}.service-now.com/api/now/table/sys_user_role"
+  }
+}

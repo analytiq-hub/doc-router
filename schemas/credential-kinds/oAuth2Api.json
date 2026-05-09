@@ -1,0 +1,73 @@
+{
+  "key": "oAuth2Api",
+  "display_name": "OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "grantType": {
+        "title": "Grant Type",
+        "type": "string",
+        "enum": [
+          "authorizationCode",
+          "clientCredentials",
+          "pkce"
+        ],
+        "default": "authorizationCode"
+      },
+      "authUrl": {
+        "title": "Authorization URL",
+        "type": "string",
+        "default": ""
+      },
+      "accessTokenUrl": {
+        "title": "Access Token URL",
+        "type": "string",
+        "default": ""
+      },
+      "clientId": {
+        "title": "Client ID",
+        "type": "string",
+        "default": ""
+      },
+      "clientSecret": {
+        "title": "Client Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "scope": {
+        "title": "Scope",
+        "type": "string",
+        "default": ""
+      },
+      "authQueryParameters": {
+        "title": "Auth URI Query Parameters",
+        "type": "string",
+        "description": "For some services additional query parameters have to be set which can be defined here",
+        "default": ""
+      },
+      "authentication": {
+        "title": "Authentication",
+        "type": "string",
+        "enum": [
+          "body",
+          "header"
+        ],
+        "default": "header"
+      },
+      "ignoreSSLIssues": {
+        "title": "Ignore SSL Issues (Insecure)",
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "required": [
+      "accessTokenUrl",
+      "authUrl",
+      "clientId",
+      "clientSecret"
+    ]
+  }
+}

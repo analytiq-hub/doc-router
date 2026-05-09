@@ -1,0 +1,24 @@
+{
+  "key": "moceanApi",
+  "display_name": "Mocean Api",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "mocean-api-key": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "mocean-api-secret": {
+        "title": "API Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

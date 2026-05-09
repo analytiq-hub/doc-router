@@ -1,0 +1,25 @@
+{
+  "key": "hybridAnalysisApi",
+  "display_name": "Hybrid Analysis API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "apiKey"
+    ]
+  },
+  "inject": {
+    "headers": {
+      "api-key": "{{ credentials.apiKey }}"
+    }
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "key": "cortexApi",
+  "display_name": "Cortex API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "cortexApiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "host": {
+        "title": "Cortex Instance",
+        "type": "string",
+        "description": "The URL of the Cortex instance",
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.cortexApiKey }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.host}}/api/analyzer"
+  }
+}

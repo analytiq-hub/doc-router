@@ -1,0 +1,26 @@
+{
+  "key": "googleAdsOAuth2Api",
+  "display_name": "Google Ads OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "developerToken": {
+        "title": "Developer Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "developerToken"
+    ]
+  },
+  "extends": [
+    "googleOAuth2Api"
+  ],
+  "runtime_fields": [
+    "scope"
+  ]
+}

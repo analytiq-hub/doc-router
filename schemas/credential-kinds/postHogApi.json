@@ -1,0 +1,23 @@
+{
+  "key": "postHogApi",
+  "display_name": "PostHog API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": "https://app.posthog.com"
+      },
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

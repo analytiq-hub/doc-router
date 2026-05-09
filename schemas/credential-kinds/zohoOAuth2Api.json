@@ -1,0 +1,45 @@
+{
+  "key": "zohoOAuth2Api",
+  "display_name": "Zoho OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "authUrl": {
+        "title": "Authorization URL",
+        "type": "string",
+        "enum": [
+          "https://accounts.zoho.com/oauth/v2/auth",
+          "https://accounts.zoho.com.cn/oauth/v2/auth"
+        ],
+        "default": "https://accounts.zoho.com/oauth/v2/auth"
+      },
+      "accessTokenUrl": {
+        "title": "Access Token URL",
+        "type": "string",
+        "enum": [
+          "https://accounts.zoho.com.au/oauth/v2/token",
+          "https://accounts.zoho.com.cn/oauth/v2/token",
+          "https://accounts.zoho.eu/oauth/v2/token",
+          "https://accounts.zoho.in/oauth/v2/token",
+          "https://accounts.zoho.com/oauth/v2/token"
+        ],
+        "default": "https://accounts.zoho.com/oauth/v2/token"
+      }
+    },
+    "required": [
+      "accessTokenUrl",
+      "authUrl"
+    ]
+  },
+  "extends": [
+    "oAuth2Api"
+  ],
+  "runtime_fields": [
+    "grantType",
+    "scope",
+    "authQueryParameters",
+    "authentication"
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "key": "linearOAuth2Api",
+  "display_name": "Linear OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "actor": {
+        "title": "Actor",
+        "type": "string",
+        "enum": [
+          "user",
+          "application"
+        ],
+        "default": "user"
+      },
+      "includeAdminScope": {
+        "title": "Include Admin Scope",
+        "type": "boolean",
+        "description": "Grants the \"Admin\" scope, Needed to create webhooks",
+        "default": false
+      }
+    },
+    "required": []
+  },
+  "extends": [
+    "oAuth2Api"
+  ],
+  "runtime_fields": [
+    "grantType",
+    "authUrl",
+    "accessTokenUrl",
+    "scope",
+    "authQueryParameters",
+    "authentication"
+  ]
+}

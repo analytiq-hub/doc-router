@@ -1,0 +1,38 @@
+{
+  "key": "httpSslAuth",
+  "display_name": "SSL Certificates",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "ca": {
+        "title": "CA",
+        "type": "string",
+        "description": "Certificate Authority certificate",
+        "x-secret": true,
+        "default": ""
+      },
+      "cert": {
+        "title": "Certificate",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "key": {
+        "title": "Private Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "passphrase": {
+        "title": "Passphrase",
+        "type": "string",
+        "description": "Optional passphrase for the private key, if the private key is encrypted",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

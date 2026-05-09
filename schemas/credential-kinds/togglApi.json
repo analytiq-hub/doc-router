@@ -1,0 +1,27 @@
+{
+  "key": "togglApi",
+  "display_name": "Toggl API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "username": {
+        "title": "Email Address",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://api.track.toggl.com/api/v9/me"
+  }
+}

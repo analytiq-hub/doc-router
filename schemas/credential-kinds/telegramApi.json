@@ -1,0 +1,29 @@
+{
+  "key": "telegramApi",
+  "display_name": "Telegram API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "description": "Chat with the <a href=\"https://telegram.me/botfather\">bot father</a> to obtain the access token",
+        "x-secret": true,
+        "default": ""
+      },
+      "baseUrl": {
+        "title": "Base URL",
+        "type": "string",
+        "description": "Base URL for Telegram Bot API",
+        "default": "https://api.telegram.org"
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.baseUrl}}/bot{{$credentials.accessToken}}/getMe"
+  }
+}

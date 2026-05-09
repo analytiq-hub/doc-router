@@ -1,0 +1,44 @@
+{
+  "key": "gristApi",
+  "display_name": "Grist API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "planType": {
+        "title": "Plan Type",
+        "type": "string",
+        "enum": [
+          "free",
+          "paid",
+          "selfHosted"
+        ],
+        "default": "free"
+      },
+      "customSubdomain": {
+        "title": "Custom Subdomain",
+        "type": "string",
+        "description": "Custom subdomain of your team",
+        "default": ""
+      },
+      "selfHostedUrl": {
+        "title": "Self-Hosted URL",
+        "type": "string",
+        "description": "URL of your Grist instance. Include http/https without /api and no trailing slash.",
+        "default": ""
+      }
+    },
+    "required": [
+      "apiKey",
+      "customSubdomain",
+      "selfHostedUrl"
+    ]
+  }
+}

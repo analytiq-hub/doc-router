@@ -1,0 +1,39 @@
+{
+  "key": "wooCommerceApi",
+  "display_name": "WooCommerce API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "consumerKey": {
+        "title": "Consumer Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "consumerSecret": {
+        "title": "Consumer Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "url": {
+        "title": "WooCommerce URL",
+        "type": "string",
+        "default": ""
+      },
+      "includeCredentialsInQuery": {
+        "title": "Include Credentials in Query",
+        "type": "boolean",
+        "description": "Whether credentials should be included in the query. Occasionally, some servers may not parse the Authorization header correctly (if you see a \u201cConsumer key is missing\u201d error when authenticating over SSL, you have a server issue). In this case, you may provide the consumer key/secret as query string parameters instead.",
+        "default": false
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.url}}/wp-json/wc/v3/products/categories"
+  }
+}

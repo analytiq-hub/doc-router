@@ -1,0 +1,18 @@
+{
+  "key": "msg91Api",
+  "display_name": "Msg91 Api",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "authkey": {
+        "title": "Authentication Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

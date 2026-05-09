@@ -1,0 +1,42 @@
+{
+  "key": "strapiTokenApi",
+  "display_name": "Strapi API Token",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiToken": {
+        "title": "API Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": ""
+      },
+      "apiVersion": {
+        "title": "API Version",
+        "type": "string",
+        "enum": [
+          "v4",
+          "v3"
+        ],
+        "description": "The version of api to be used",
+        "default": "v3"
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.apiToken }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.url}}/={{$credentials.apiVersion === \"v3\" ? \"/users/count\" : \"/api/users/count\"}}"
+  }
+}

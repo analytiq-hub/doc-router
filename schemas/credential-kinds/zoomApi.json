@@ -1,0 +1,27 @@
+{
+  "key": "zoomApi",
+  "display_name": "Zoom API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accessToken": {
+        "title": "JWT Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.accessToken }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://api.zoom.us/v2/users/me"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "key": "baserowApi",
+  "display_name": "Baserow API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": "https://api.baserow.io"
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

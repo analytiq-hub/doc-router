@@ -1,0 +1,27 @@
+{
+  "key": "paddleApi",
+  "display_name": "Paddle API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "vendorAuthCode": {
+        "title": "Vendor Auth Code",
+        "type": "string",
+        "default": ""
+      },
+      "vendorId": {
+        "title": "Vendor ID",
+        "type": "string",
+        "default": ""
+      },
+      "sandbox": {
+        "title": "Use Sandbox Environment API",
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "required": []
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "key": "httpBearerAuth",
+  "display_name": "Bearer Auth",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["token"],
+    "properties": {
+      "token": {
+        "type": "string",
+        "title": "Bearer Token",
+        "description": "Paste the token only; \"Bearer \" is added automatically in the Authorization header.",
+        "x-secret": true
+      }
+    }
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.token }}"
+    }
+  }
+}

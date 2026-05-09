@@ -1,0 +1,33 @@
+{
+  "key": "supabaseApi",
+  "display_name": "Supabase API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": ""
+      },
+      "serviceRole": {
+        "title": "Service Role Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "apikey": "{{ credentials.serviceRole }}",
+      "Authorization": "Bearer {{ credentials.serviceRole }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.host}}/rest/v1/"
+  }
+}

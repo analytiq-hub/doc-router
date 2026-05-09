@@ -1,0 +1,43 @@
+{
+  "key": "sshPrivateKey",
+  "display_name": "SSH Private Key",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": ""
+      },
+      "port": {
+        "title": "Port",
+        "type": "number",
+        "default": 22
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "default": ""
+      },
+      "privateKey": {
+        "title": "Private Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "passphrase": {
+        "title": "Passphrase",
+        "type": "string",
+        "description": "Passphase used to create the key, if no passphase was used leave empty",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "host",
+      "port"
+    ]
+  }
+}

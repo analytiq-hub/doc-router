@@ -1,0 +1,23 @@
+{
+  "key": "chargebeeApi",
+  "display_name": "Chargebee API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accountName": {
+        "title": "Account Name",
+        "type": "string",
+        "default": ""
+      },
+      "apiKey": {
+        "title": "Api Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

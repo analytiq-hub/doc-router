@@ -1,0 +1,77 @@
+{
+  "key": "rabbitmq",
+  "display_name": "RabbitMQ",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "hostname": {
+        "title": "Hostname",
+        "type": "string",
+        "default": ""
+      },
+      "port": {
+        "title": "Port",
+        "type": "number",
+        "default": 5672
+      },
+      "username": {
+        "title": "User",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "vhost": {
+        "title": "Vhost",
+        "type": "string",
+        "default": "/"
+      },
+      "ssl": {
+        "title": "SSL",
+        "type": "boolean",
+        "default": false
+      },
+      "passwordless": {
+        "title": "Passwordless",
+        "type": "boolean",
+        "description": "Whether to use passwordless connection with certificates (SASL mechanism EXTERNAL)",
+        "default": true
+      },
+      "ca": {
+        "title": "CA Certificates",
+        "type": "string",
+        "description": "SSL CA Certificates to use",
+        "x-secret": true,
+        "default": ""
+      },
+      "cert": {
+        "title": "Client Certificate",
+        "type": "string",
+        "description": "SSL Client Certificate to use",
+        "x-secret": true,
+        "default": ""
+      },
+      "key": {
+        "title": "Client Key",
+        "type": "string",
+        "description": "SSL Client Key to use",
+        "x-secret": true,
+        "default": ""
+      },
+      "passphrase": {
+        "title": "Passphrase",
+        "type": "string",
+        "description": "SSL passphrase to use",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

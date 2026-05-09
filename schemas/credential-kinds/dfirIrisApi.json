@@ -1,0 +1,41 @@
+{
+  "key": "dfirIrisApi",
+  "display_name": "DFIR-IRIS API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": {
+        "title": "Base URL",
+        "type": "string",
+        "description": "The API endpoints are reachable on the same Address and port as the web interface.",
+        "default": ""
+      },
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "skipSslCertificateValidation": {
+        "title": "Ignore SSL Issues (Insecure)",
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "required": [
+      "apiKey",
+      "baseUrl"
+    ]
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.apiKey }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.baseUrl}}/api/ping"
+  }
+}

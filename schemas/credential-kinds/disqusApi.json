@@ -1,0 +1,19 @@
+{
+  "key": "disqusApi",
+  "display_name": "Disqus API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "description": "Visit your account details page, and grab the Access Token. See <a href=\"https://disqus.com/api/docs/auth/\">Disqus auth</a>.",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

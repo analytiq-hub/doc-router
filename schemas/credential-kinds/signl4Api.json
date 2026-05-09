@@ -1,0 +1,19 @@
+{
+  "key": "signl4Api",
+  "display_name": "SIGNL4 Webhook",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "teamSecret": {
+        "title": "Team Secret",
+        "type": "string",
+        "description": "The team secret is the last part of your SIGNL4 webhook URL",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

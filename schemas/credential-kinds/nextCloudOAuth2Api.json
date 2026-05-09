@@ -1,0 +1,39 @@
+{
+  "key": "nextCloudOAuth2Api",
+  "display_name": "NextCloud OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "webDavUrl": {
+        "title": "Web DAV URL",
+        "type": "string",
+        "default": ""
+      },
+      "authUrl": {
+        "title": "Authorization URL",
+        "type": "string",
+        "default": "https://nextcloud.example.com/apps/oauth2/authorize"
+      },
+      "accessTokenUrl": {
+        "title": "Access Token URL",
+        "type": "string",
+        "default": "https://nextcloud.example.com/apps/oauth2/api/v1/token"
+      }
+    },
+    "required": [
+      "accessTokenUrl",
+      "authUrl"
+    ]
+  },
+  "extends": [
+    "oAuth2Api"
+  ],
+  "runtime_fields": [
+    "grantType",
+    "scope",
+    "authQueryParameters",
+    "authentication"
+  ]
+}

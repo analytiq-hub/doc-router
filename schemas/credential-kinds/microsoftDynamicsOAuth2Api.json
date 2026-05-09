@@ -1,0 +1,50 @@
+{
+  "key": "microsoftDynamicsOAuth2Api",
+  "display_name": "Microsoft Dynamics OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "subdomain": {
+        "title": "Subdomain",
+        "type": "string",
+        "default": ""
+      },
+      "region": {
+        "title": "Region",
+        "type": "string",
+        "enum": [
+          "crm5.dynamics.com",
+          "crm6.dynamics.com",
+          "crm3.dynamics.com",
+          "crm.dynamics.cn",
+          "crm4.dynamics.com",
+          "crm12.dynamics.com",
+          "crm16.dynamics.com",
+          "crm8.dynamics.com",
+          "crm7.dynamics.com",
+          "crm.microsoftdynamics.de",
+          "crm.dynamics.com",
+          "crm9.dynamics.com",
+          "crm14.dynamics.com",
+          "crm2.dynamics.com",
+          "crm17.dynamics.com",
+          "crm15.dynamics.com",
+          "crm11.dynamics.com",
+          "crm.microsoftdynamics.us"
+        ],
+        "default": "crm.dynamics.com"
+      }
+    },
+    "required": [
+      "subdomain"
+    ]
+  },
+  "extends": [
+    "microsoftOAuth2Api"
+  ],
+  "runtime_fields": [
+    "scope"
+  ]
+}

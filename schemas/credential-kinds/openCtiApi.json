@@ -1,0 +1,25 @@
+{
+  "key": "openCtiApi",
+  "display_name": "OpenCTI API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "apiKey"
+    ]
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.apiKey }}"
+    }
+  }
+}

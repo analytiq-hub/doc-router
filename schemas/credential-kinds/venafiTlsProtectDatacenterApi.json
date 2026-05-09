@@ -1,0 +1,47 @@
+{
+  "key": "venafiTlsProtectDatacenterApi",
+  "display_name": "Venafi TLS Protect Datacenter API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "domain": {
+        "title": "Domain",
+        "type": "string",
+        "default": ""
+      },
+      "clientId": {
+        "title": "Client ID",
+        "type": "string",
+        "default": ""
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "allowUnauthorizedCerts": {
+        "title": "Allow Self-Signed Certificates",
+        "type": "boolean",
+        "default": true
+      }
+    },
+    "required": []
+  },
+  "runtime_fields": [
+    "token",
+    "scope"
+  ],
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.token }}"
+    }
+  }
+}

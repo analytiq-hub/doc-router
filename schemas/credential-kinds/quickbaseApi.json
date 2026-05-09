@@ -1,0 +1,26 @@
+{
+  "key": "quickbaseApi",
+  "display_name": "Quick Base API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "hostname": {
+        "title": "Hostname",
+        "type": "string",
+        "default": ""
+      },
+      "userToken": {
+        "title": "User Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "hostname",
+      "userToken"
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "key": "nocoDbApiToken",
+  "display_name": "NocoDB API Token",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiToken": {
+        "title": "API Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "xc-token": "{{ credentials.apiToken }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{ $credentials.host }}/api/v1/auth/user/me"
+  }
+}

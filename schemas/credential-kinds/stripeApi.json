@@ -1,0 +1,27 @@
+{
+  "key": "stripeApi",
+  "display_name": "Stripe API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "secretKey": {
+        "title": "Secret Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.secretKey }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://api.stripe.com/v1/charges"
+  }
+}

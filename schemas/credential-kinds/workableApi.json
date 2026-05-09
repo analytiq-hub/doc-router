@@ -1,0 +1,23 @@
+{
+  "key": "workableApi",
+  "display_name": "Workable API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "subdomain": {
+        "title": "Subdomain",
+        "type": "string",
+        "default": ""
+      },
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

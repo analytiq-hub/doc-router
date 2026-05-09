@@ -1,0 +1,28 @@
+{
+  "key": "twakeServerApi",
+  "display_name": "Twake Server API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "hostUrl": {
+        "title": "Host URL",
+        "type": "string",
+        "default": ""
+      },
+      "publicId": {
+        "title": "Public ID",
+        "type": "string",
+        "default": ""
+      },
+      "privateApiKey": {
+        "title": "Private API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

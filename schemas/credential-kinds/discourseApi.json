@@ -1,0 +1,36 @@
+{
+  "key": "discourseApi",
+  "display_name": "Discourse API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": ""
+      },
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": [
+      "apiKey",
+      "url",
+      "username"
+    ]
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.url}}/groups.json"
+  }
+}

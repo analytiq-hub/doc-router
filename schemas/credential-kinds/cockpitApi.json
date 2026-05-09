@@ -1,0 +1,23 @@
+{
+  "key": "cockpitApi",
+  "display_name": "Cockpit API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "url": {
+        "title": "Cockpit URL",
+        "type": "string",
+        "default": ""
+      },
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

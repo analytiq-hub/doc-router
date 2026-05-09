@@ -1,0 +1,49 @@
+{
+  "key": "smtp",
+  "display_name": "SMTP",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "user": {
+        "title": "User",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": ""
+      },
+      "port": {
+        "title": "Port",
+        "type": "number",
+        "default": 465
+      },
+      "secure": {
+        "title": "SSL/TLS",
+        "type": "boolean",
+        "default": true
+      },
+      "disableStartTls": {
+        "title": "Disable STARTTLS",
+        "type": "boolean",
+        "default": false
+      },
+      "hostName": {
+        "title": "Client Host Name",
+        "type": "string",
+        "description": "The hostname of the client, used for identifying to the server",
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "key": "zulipApi",
+  "display_name": "Zulip API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": ""
+      },
+      "email": {
+        "title": "Email",
+        "type": "string",
+        "default": ""
+      },
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

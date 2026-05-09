@@ -1,0 +1,17 @@
+{
+  "key": "googleBooksOAuth2Api",
+  "display_name": "Google Books OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {},
+    "required": []
+  },
+  "extends": [
+    "googleOAuth2Api"
+  ],
+  "runtime_fields": [
+    "scope"
+  ]
+}

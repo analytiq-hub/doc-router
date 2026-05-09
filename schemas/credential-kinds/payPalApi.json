@@ -1,0 +1,32 @@
+{
+  "key": "payPalApi",
+  "display_name": "PayPal API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "clientId": {
+        "title": "Client ID",
+        "type": "string",
+        "default": ""
+      },
+      "secret": {
+        "title": "Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "env": {
+        "title": "Environment",
+        "type": "string",
+        "enum": [
+          "sanbox",
+          "live"
+        ],
+        "default": "live"
+      }
+    },
+    "required": []
+  }
+}

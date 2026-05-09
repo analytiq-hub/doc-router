@@ -1,0 +1,22 @@
+{
+  "key": "lemlistApi",
+  "display_name": "Lemlist API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://api.lemlist.com/api/campaigns"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "key": "mailchimpApi",
+  "display_name": "Mailchimp API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "apikey {{ credentials.apiKey }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "=https://{{$credentials.apiKey.split(\"-\").pop()}}.api.mailchimp.com/3.0/lists"
+  }
+}

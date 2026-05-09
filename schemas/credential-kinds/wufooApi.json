@@ -1,0 +1,27 @@
+{
+  "key": "wufooApi",
+  "display_name": "Wufoo API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "subdomain": {
+        "title": "Subdomain",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "=https://{{$credentials.subdomain}}.wufoo.com/api/v3/forms.json"
+  }
+}

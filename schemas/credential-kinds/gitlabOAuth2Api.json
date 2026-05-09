@@ -1,0 +1,28 @@
+{
+  "key": "gitlabOAuth2Api",
+  "display_name": "GitLab OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "server": {
+        "title": "Gitlab Server",
+        "type": "string",
+        "default": "https://gitlab.com"
+      }
+    },
+    "required": []
+  },
+  "extends": [
+    "oAuth2Api"
+  ],
+  "runtime_fields": [
+    "grantType",
+    "authUrl",
+    "accessTokenUrl",
+    "scope",
+    "authQueryParameters",
+    "authentication"
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "key": "getResponseApi",
+  "display_name": "GetResponse API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "X-Auth-Token": "api-key {{ credentials.apiKey }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://api.getresponse.com/v3/campaigns"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "key": "hubspotDeveloperApi",
+  "display_name": "HubSpot Developer API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "Developer API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "appId": {
+        "title": "APP ID",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": [
+      "apiKey",
+      "appId"
+    ]
+  },
+  "extends": [
+    "oAuth2Api"
+  ],
+  "runtime_fields": [
+    "grantType",
+    "authUrl",
+    "accessTokenUrl",
+    "authQueryParameters",
+    "authentication",
+    "scope"
+  ]
+}

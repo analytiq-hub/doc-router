@@ -1,0 +1,42 @@
+{
+  "key": "citrixAdcApi",
+  "display_name": "Netscaler ADC API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": ""
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "password",
+      "url",
+      "username"
+    ]
+  },
+  "inject": {
+    "headers": {
+      "X-NITRO-USER": "{{ credentials.username }}",
+      "X-NITRO-PASS": "{{ credentials.password }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.url}}/nitro/v1/config/nspartition?view=summary"
+  }
+}

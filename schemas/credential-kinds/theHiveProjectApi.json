@@ -1,0 +1,39 @@
+{
+  "key": "theHiveProjectApi",
+  "display_name": "The Hive 5 API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "ApiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "description": "The URL of TheHive instance",
+        "default": ""
+      },
+      "allowUnauthorizedCerts": {
+        "title": "Ignore SSL Issues (Insecure)",
+        "type": "boolean",
+        "description": "Whether to connect even if SSL certificate validation is not possible",
+        "default": false
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{$credentials?.ApiKey}}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials?.url}}/api/case"
+  }
+}

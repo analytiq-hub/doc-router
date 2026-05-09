@@ -1,0 +1,83 @@
+{
+  "key": "mongoDb",
+  "display_name": "MongoDB",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "configurationType": {
+        "title": "Configuration Type",
+        "type": "string",
+        "enum": [
+          "connectionString",
+          "values"
+        ],
+        "default": "values"
+      },
+      "connectionString": {
+        "title": "Connection String",
+        "type": "string",
+        "description": "If provided, the value here will be used as a MongoDB connection string, and the MongoDB credentials will be ignored",
+        "default": ""
+      },
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": "localhost"
+      },
+      "database": {
+        "title": "Database",
+        "type": "string",
+        "description": "Note: the database should still be provided even if using an override connection string",
+        "default": ""
+      },
+      "user": {
+        "title": "User",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "port": {
+        "title": "Port",
+        "type": "number",
+        "default": 27017
+      },
+      "tls": {
+        "title": "Use TLS",
+        "type": "boolean",
+        "default": false
+      },
+      "ca": {
+        "title": "CA Certificate",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "cert": {
+        "title": "Public Client Certificate",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "key": {
+        "title": "Private Client Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "passphrase": {
+        "title": "Passphrase",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

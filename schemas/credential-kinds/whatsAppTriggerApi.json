@@ -1,0 +1,30 @@
+{
+  "key": "whatsAppTriggerApi",
+  "display_name": "WhatsApp OAuth API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "clientId": {
+        "title": "Client ID",
+        "type": "string",
+        "default": ""
+      },
+      "clientSecret": {
+        "title": "Client Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "clientId",
+      "clientSecret"
+    ]
+  },
+  "test_request": {
+    "method": "POST",
+    "url": "https://graph.facebook.com/v19.0/oauth/access_token"
+  }
+}

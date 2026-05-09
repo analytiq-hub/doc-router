@@ -1,0 +1,44 @@
+{
+  "key": "s3",
+  "display_name": "S3",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "endpoint": {
+        "title": "S3 Endpoint",
+        "type": "string",
+        "default": ""
+      },
+      "region": {
+        "title": "Region",
+        "type": "string",
+        "default": "us-east-1"
+      },
+      "accessKeyId": {
+        "title": "Access Key ID",
+        "type": "string",
+        "default": ""
+      },
+      "secretAccessKey": {
+        "title": "Secret Access Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "forcePathStyle": {
+        "title": "Force Path Style",
+        "type": "boolean",
+        "default": false
+      },
+      "ignoreSSLIssues": {
+        "title": "Ignore SSL Issues (Insecure)",
+        "type": "boolean",
+        "description": "Whether to connect even if SSL certificate validation is not possible",
+        "default": false
+      }
+    },
+    "required": []
+  }
+}

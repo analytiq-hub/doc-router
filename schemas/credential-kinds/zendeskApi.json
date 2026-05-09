@@ -1,0 +1,33 @@
+{
+  "key": "zendeskApi",
+  "display_name": "Zendesk API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "subdomain": {
+        "title": "Subdomain",
+        "type": "string",
+        "description": "The subdomain of your Zendesk work environment",
+        "default": ""
+      },
+      "email": {
+        "title": "Email",
+        "type": "string",
+        "default": ""
+      },
+      "apiToken": {
+        "title": "API Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "=https://{{$credentials.subdomain}}.zendesk.com/api/v2/ticket_fields.json"
+  }
+}

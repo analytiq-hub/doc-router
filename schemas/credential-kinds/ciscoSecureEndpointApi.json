@@ -1,0 +1,40 @@
+{
+  "key": "ciscoSecureEndpointApi",
+  "display_name": "Cisco Secure Endpoint (AMP) API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "region": {
+        "title": "Region",
+        "type": "string",
+        "enum": [
+          "apjc.amp",
+          "eu.amp",
+          "amp"
+        ],
+        "default": "amp"
+      },
+      "clientId": {
+        "title": "Client ID",
+        "type": "string",
+        "default": ""
+      },
+      "clientSecret": {
+        "title": "Client Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "clientId",
+      "clientSecret"
+    ]
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "=https://api.{{$credentials.region}}.cisco.com/v3/organizations"
+  }
+}

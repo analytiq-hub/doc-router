@@ -1,0 +1,37 @@
+{
+  "key": "bitwardenApi",
+  "display_name": "Bitwarden API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "clientId": {
+        "title": "Client ID",
+        "type": "string",
+        "default": ""
+      },
+      "clientSecret": {
+        "title": "Client Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "environment": {
+        "title": "Environment",
+        "type": "string",
+        "enum": [
+          "cloudHosted",
+          "selfHosted"
+        ],
+        "default": "cloudHosted"
+      },
+      "domain": {
+        "title": "Self-Hosted Domain",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "key": "crateDb",
+  "display_name": "CrateDB",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": "localhost"
+      },
+      "database": {
+        "title": "Database",
+        "type": "string",
+        "default": "doc"
+      },
+      "user": {
+        "title": "User",
+        "type": "string",
+        "default": "crate"
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "ssl": {
+        "title": "SSL",
+        "type": "string",
+        "enum": [
+          "allow",
+          "disable",
+          "require"
+        ],
+        "default": "disable"
+      },
+      "port": {
+        "title": "Port",
+        "type": "number",
+        "default": 5432
+      }
+    },
+    "required": []
+  }
+}

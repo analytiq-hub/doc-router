@@ -1,0 +1,27 @@
+{
+  "key": "typeformApi",
+  "display_name": "Typeform API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "bearer {{ credentials.accessToken }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://api.typeform.com/forms"
+  }
+}

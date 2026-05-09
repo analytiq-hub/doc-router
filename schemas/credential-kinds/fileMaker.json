@@ -1,0 +1,33 @@
+{
+  "key": "fileMaker",
+  "display_name": "FileMaker API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": ""
+      },
+      "db": {
+        "title": "Database",
+        "type": "string",
+        "default": ""
+      },
+      "login": {
+        "title": "Login",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

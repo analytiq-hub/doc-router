@@ -1,0 +1,29 @@
+{
+  "key": "alienVaultApi",
+  "display_name": "AlienVault API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accessToken": {
+        "title": "OTX Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "accessToken"
+    ]
+  },
+  "inject": {
+    "headers": {
+      "X-OTX-API-KEY": "{{ credentials.accessToken }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://otx.alienvault.com/api/v1/user/me"
+  }
+}

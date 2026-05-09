@@ -1,0 +1,23 @@
+{
+  "key": "salesmateApi",
+  "display_name": "Salesmate API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "sessionToken": {
+        "title": "Session Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

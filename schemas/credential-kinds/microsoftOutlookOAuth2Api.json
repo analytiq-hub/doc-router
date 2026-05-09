@@ -1,0 +1,29 @@
+{
+  "key": "microsoftOutlookOAuth2Api",
+  "display_name": "Microsoft Outlook OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "useShared": {
+        "title": "Use Shared Mailbox",
+        "type": "boolean",
+        "default": false
+      },
+      "userPrincipalName": {
+        "title": "User Principal Name",
+        "type": "string",
+        "description": "Target user's UPN or ID",
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "extends": [
+    "microsoftOAuth2Api"
+  ],
+  "runtime_fields": [
+    "scope"
+  ]
+}

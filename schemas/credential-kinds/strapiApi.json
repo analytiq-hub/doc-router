@@ -1,0 +1,38 @@
+{
+  "key": "strapiApi",
+  "display_name": "Strapi API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "email": {
+        "title": "Email",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": ""
+      },
+      "apiVersion": {
+        "title": "API Version",
+        "type": "string",
+        "enum": [
+          "v4",
+          "v3"
+        ],
+        "description": "The version of api to be used",
+        "default": "v3"
+      }
+    },
+    "required": []
+  }
+}

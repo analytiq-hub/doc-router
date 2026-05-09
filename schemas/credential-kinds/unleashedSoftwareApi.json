@@ -1,0 +1,23 @@
+{
+  "key": "unleashedSoftwareApi",
+  "display_name": "Unleashed API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiId": {
+        "title": "API ID",
+        "type": "string",
+        "default": ""
+      },
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "key": "pipedriveApi",
+  "display_name": "Pipedrive API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiToken": {
+        "title": "API Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "query_params": {
+      "api_token": "{{ credentials.apiToken }}"
+    }
+  }
+}

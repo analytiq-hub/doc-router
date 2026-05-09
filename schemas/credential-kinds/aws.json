@@ -1,0 +1,109 @@
+{
+  "key": "aws",
+  "display_name": "AWS",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "region": {
+        "title": "Region",
+        "type": "string",
+        "enum": [
+          "af-south-1",
+          "ap-east-1",
+          "ap-south-1",
+          "ap-southeast-1",
+          "ap-southeast-2",
+          "ap-southeast-3",
+          "ap-northeast-1",
+          "ap-northeast-2",
+          "ap-northeast-3",
+          "ca-central-1",
+          "eu-central-1",
+          "eu-north-1",
+          "eu-south-1",
+          "eu-west-1",
+          "eu-west-2",
+          "eu-west-3",
+          "me-south-1",
+          "sa-east-1",
+          "us-east-1",
+          "us-east-2",
+          "us-west-1",
+          "us-west-2"
+        ],
+        "default": "us-east-1"
+      },
+      "accessKeyId": {
+        "title": "Access Key ID",
+        "type": "string",
+        "default": ""
+      },
+      "secretAccessKey": {
+        "title": "Secret Access Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "temporaryCredentials": {
+        "title": "Temporary Security Credentials",
+        "type": "boolean",
+        "description": "Support for temporary credentials from AWS STS",
+        "default": false
+      },
+      "sessionToken": {
+        "title": "Session Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "customEndpoints": {
+        "title": "Custom Endpoints",
+        "type": "boolean",
+        "default": false
+      },
+      "rekognitionEndpoint": {
+        "title": "Rekognition Endpoint",
+        "type": "string",
+        "description": "If you use Amazon VPC to host n8n, you can establish a connection between your VPC and Rekognition using a VPC endpoint. Leave blank to use the default endpoint.",
+        "default": ""
+      },
+      "lambdaEndpoint": {
+        "title": "Lambda Endpoint",
+        "type": "string",
+        "description": "If you use Amazon VPC to host n8n, you can establish a connection between your VPC and Lambda using a VPC endpoint. Leave blank to use the default endpoint.",
+        "default": ""
+      },
+      "snsEndpoint": {
+        "title": "SNS Endpoint",
+        "type": "string",
+        "description": "If you use Amazon VPC to host n8n, you can establish a connection between your VPC and SNS using a VPC endpoint. Leave blank to use the default endpoint.",
+        "default": ""
+      },
+      "sesEndpoint": {
+        "title": "SES Endpoint",
+        "type": "string",
+        "description": "If you use Amazon VPC to host n8n, you can establish a connection between your VPC and SES using a VPC endpoint. Leave blank to use the default endpoint.",
+        "default": ""
+      },
+      "sqsEndpoint": {
+        "title": "SQS Endpoint",
+        "type": "string",
+        "description": "If you use Amazon VPC to host n8n, you can establish a connection between your VPC and SQS using a VPC endpoint. Leave blank to use the default endpoint.",
+        "default": ""
+      },
+      "s3Endpoint": {
+        "title": "S3 Endpoint",
+        "type": "string",
+        "description": "If you use Amazon VPC to host n8n, you can establish a connection between your VPC and S3 using a VPC endpoint. Leave blank to use the default endpoint.",
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "POST",
+    "url": "=https://sts.{{$credentials.region}}.amazonaws.com/?Action=GetCallerIdentity&Version=2011-06-15"
+  }
+}

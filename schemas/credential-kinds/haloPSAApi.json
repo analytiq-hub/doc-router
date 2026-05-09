@@ -1,0 +1,59 @@
+{
+  "key": "haloPSAApi",
+  "display_name": "HaloPSA API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "hostingType": {
+        "title": "Hosting Type",
+        "type": "string",
+        "enum": [
+          "onPremise",
+          "hostedHalo"
+        ],
+        "default": "onPremise"
+      },
+      "authUrl": {
+        "title": "HaloPSA Authorisation Server URL",
+        "type": "string",
+        "default": ""
+      },
+      "resourceApiUrl": {
+        "title": "Resource Server",
+        "type": "string",
+        "description": "The Resource server is available at your \"Halo Web Application URL/api\"",
+        "default": ""
+      },
+      "client_id": {
+        "title": "Client ID",
+        "type": "string",
+        "description": "Must be your application client ID",
+        "default": ""
+      },
+      "client_secret": {
+        "title": "Client Secret",
+        "type": "string",
+        "description": "Must be your application client secret",
+        "x-secret": true,
+        "default": ""
+      },
+      "tenant": {
+        "title": "Tenant",
+        "type": "string",
+        "description": "An additional tenant parameter for HaloPSA hosted solution",
+        "default": ""
+      }
+    },
+    "required": [
+      "authUrl",
+      "client_id",
+      "client_secret",
+      "resourceApiUrl"
+    ]
+  },
+  "runtime_fields": [
+    "scope"
+  ]
+}

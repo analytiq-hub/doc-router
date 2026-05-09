@@ -1,0 +1,32 @@
+{
+  "key": "jiraSoftwareServerApi",
+  "display_name": "Jira SW Server API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "email": {
+        "title": "Email",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "domain": {
+        "title": "Domain",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials?.domain}}/rest/api/2/project"
+  }
+}

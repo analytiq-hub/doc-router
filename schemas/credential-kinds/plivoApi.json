@@ -1,0 +1,23 @@
+{
+  "key": "plivoApi",
+  "display_name": "Plivo API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "authId": {
+        "title": "Auth ID",
+        "type": "string",
+        "default": ""
+      },
+      "authToken": {
+        "title": "Auth Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

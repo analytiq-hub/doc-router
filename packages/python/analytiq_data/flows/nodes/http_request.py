@@ -97,6 +97,12 @@ class FlowsHttpRequestNode:
 
     credential_slots = [
         {
+            "slot": "httpBearerAuth",
+            "label": "Bearer Auth",
+            "required": False,
+            "docrouter_binding": "organization_credential_kind:httpBearerAuth",
+        },
+        {
             "slot": "httpHeaderAuth",
             "label": "Header Auth",
             "required": False,

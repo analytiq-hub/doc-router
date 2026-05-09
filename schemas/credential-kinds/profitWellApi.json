@@ -1,0 +1,19 @@
+{
+  "key": "profitWellApi",
+  "display_name": "ProfitWell API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accessToken": {
+        "title": "API Token",
+        "type": "string",
+        "description": "Your Private Token",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

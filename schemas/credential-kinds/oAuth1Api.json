@@ -1,0 +1,56 @@
+{
+  "key": "oAuth1Api",
+  "display_name": "OAuth1 API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "authUrl": {
+        "title": "Authorization URL",
+        "type": "string",
+        "default": ""
+      },
+      "accessTokenUrl": {
+        "title": "Access Token URL",
+        "type": "string",
+        "default": ""
+      },
+      "consumerKey": {
+        "title": "Consumer Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "consumerSecret": {
+        "title": "Consumer Secret",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "requestTokenUrl": {
+        "title": "Request Token URL",
+        "type": "string",
+        "default": ""
+      },
+      "signatureMethod": {
+        "title": "Signature Method",
+        "type": "string",
+        "enum": [
+          "HMAC-SHA1",
+          "HMAC-SHA256",
+          "HMAC-SHA512"
+        ],
+        "default": "HMAC-SHA1"
+      }
+    },
+    "required": [
+      "accessTokenUrl",
+      "authUrl",
+      "consumerKey",
+      "consumerSecret",
+      "requestTokenUrl",
+      "signatureMethod"
+    ]
+  }
+}

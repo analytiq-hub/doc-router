@@ -1,0 +1,22 @@
+{
+  "key": "yourlsApi",
+  "display_name": "Yourls API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "signature": {
+        "title": "Signature",
+        "type": "string",
+        "default": ""
+      },
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

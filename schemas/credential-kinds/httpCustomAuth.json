@@ -1,0 +1,11 @@
+{
+  "key": "httpCustomAuth",
+  "display_name": "Custom Auth",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {},
+    "required": []
+  }
+}

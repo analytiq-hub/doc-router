@@ -1,0 +1,37 @@
+{
+  "key": "datadogApi",
+  "display_name": "Datadog API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": "https://api.datadoghq.com"
+      },
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "appKey": {
+        "title": "APP Key",
+        "type": "string",
+        "description": "For some endpoints, you also need an Application key.",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "apiKey",
+      "url"
+    ]
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.url}}/api/v1/validate"
+  }
+}

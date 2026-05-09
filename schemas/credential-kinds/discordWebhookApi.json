@@ -1,0 +1,20 @@
+{
+  "key": "discordWebhookApi",
+  "display_name": "Discord Webhook",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "webhookUri": {
+        "title": "Webhook URL",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "webhookUri"
+    ]
+  }
+}

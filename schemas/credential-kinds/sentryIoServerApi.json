@@ -1,0 +1,23 @@
+{
+  "key": "sentryIoServerApi",
+  "display_name": "Sentry.io Server API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "token": {
+        "title": "Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

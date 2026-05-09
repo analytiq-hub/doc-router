@@ -1,0 +1,37 @@
+{
+  "key": "qualysApi",
+  "display_name": "Qualys API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "requestedWith": {
+        "title": "Requested With",
+        "type": "string",
+        "description": "User description, like a user agent",
+        "default": "n8n application"
+      }
+    },
+    "required": [
+      "password",
+      "username"
+    ]
+  },
+  "inject": {
+    "headers": {
+      "X-Requested-With": "{{ credentials.requestedWith }}"
+    }
+  }
+}

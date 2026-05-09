@@ -1,0 +1,22 @@
+{
+  "key": "facebookGraphAppApi",
+  "display_name": "Facebook Graph API (App)",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "appSecret": {
+        "title": "App Secret",
+        "type": "string",
+        "description": "(Optional) When the app secret is set the node will verify this signature to validate the integrity and origin of the payload",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "extends": [
+    "facebookGraphApi"
+  ]
+}

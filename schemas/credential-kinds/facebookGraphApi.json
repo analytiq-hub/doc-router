@@ -1,0 +1,27 @@
+{
+  "key": "facebookGraphApi",
+  "display_name": "Facebook Graph API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "query_params": {
+      "access_token": "{{ credentials.accessToken }}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "https://graph.facebook.com/v8.0/me"
+  }
+}

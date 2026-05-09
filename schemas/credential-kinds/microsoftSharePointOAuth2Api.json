@@ -1,0 +1,23 @@
+{
+  "key": "microsoftSharePointOAuth2Api",
+  "display_name": "Microsoft SharePoint OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "subdomain": {
+        "title": "Subdomain",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "extends": [
+    "microsoftOAuth2Api"
+  ],
+  "runtime_fields": [
+    "scope"
+  ]
+}

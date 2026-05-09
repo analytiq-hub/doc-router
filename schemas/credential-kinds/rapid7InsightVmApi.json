@@ -1,0 +1,36 @@
+{
+  "key": "rapid7InsightVmApi",
+  "display_name": "Rapid7 InsightVM API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "url": {
+        "title": "URL",
+        "type": "string",
+        "default": ""
+      },
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "apiKey",
+      "url"
+    ]
+  },
+  "inject": {
+    "headers": {
+      "x-api-key": "{{ credentials.apiKey }}",
+      "Accept": "application/json"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "={{$credentials.url}}/validate"
+  }
+}

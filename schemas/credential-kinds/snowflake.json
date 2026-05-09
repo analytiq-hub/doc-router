@@ -1,0 +1,59 @@
+{
+  "key": "snowflake",
+  "display_name": "Snowflake",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "account": {
+        "title": "Account",
+        "type": "string",
+        "description": "Enter the name of your Snowflake account",
+        "default": ""
+      },
+      "database": {
+        "title": "Database",
+        "type": "string",
+        "description": "Specify the database you want to use after creating the connection",
+        "default": ""
+      },
+      "warehouse": {
+        "title": "Warehouse",
+        "type": "string",
+        "description": "The default virtual warehouse to use for the session after connecting. Used for performing queries, loading data, etc.",
+        "default": ""
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "schema": {
+        "title": "Schema",
+        "type": "string",
+        "description": "Enter the schema you want to use after creating the connection",
+        "default": ""
+      },
+      "role": {
+        "title": "Role",
+        "type": "string",
+        "description": "Enter the security role you want to use after creating the connection",
+        "default": ""
+      },
+      "clientSessionKeepAlive": {
+        "title": "Client Session Keep Alive",
+        "type": "boolean",
+        "description": "Whether to keep alive the client session. By default, client connections typically time out approximately 3-4 hours after the most recent query was executed. If the parameter clientSessionKeepAlive is set to true, the client\u2019s connection to the server will be kept alive indefinitely, even if no queries are executed.",
+        "default": false
+      }
+    },
+    "required": []
+  }
+}

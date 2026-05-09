@@ -1,0 +1,44 @@
+{
+  "key": "shopifyAccessTokenApi",
+  "display_name": "Shopify Access Token API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "shopSubdomain": {
+        "title": "Shop Subdomain",
+        "type": "string",
+        "description": "Only the subdomain without .myshopify.com",
+        "default": ""
+      },
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "appSecretKey": {
+        "title": "APP Secret Key",
+        "type": "string",
+        "description": "Secret key needed to verify the webhook when using Shopify Trigger node",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "accessToken",
+      "appSecretKey",
+      "shopSubdomain"
+    ]
+  },
+  "inject": {
+    "headers": {
+      "X-Shopify-Access-Token": "{{$credentials?.accessToken}}"
+    }
+  },
+  "test_request": {
+    "method": "GET",
+    "url": "=https://{{$credentials?.shopSubdomain}}.myshopify.com/admin/api/2024-07/products.json"
+  }
+}

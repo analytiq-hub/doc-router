@@ -1,0 +1,30 @@
+{
+  "key": "adaloApi",
+  "display_name": "Adalo API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "description": "The Adalo API is available on paid Adalo plans, find more information <a href=\"https://help.adalo.com/integrations/the-adalo-api\" target=\"_blank\">here</a>",
+        "x-secret": true,
+        "default": ""
+      },
+      "appId": {
+        "title": "App ID",
+        "type": "string",
+        "description": "You can get App ID from the URL of your app. For example, if your app URL is <strong>https://app.adalo.com/apps/1234567890/screens</strong>, then your App ID is <strong>1234567890</strong>.",
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "Authorization": "Bearer {{ credentials.apiKey }}"
+    }
+  }
+}

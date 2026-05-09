@@ -1,0 +1,43 @@
+{
+  "key": "salesforceJwtApi",
+  "display_name": "Salesforce JWT API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "environment": {
+        "title": "Environment Type",
+        "type": "string",
+        "enum": [
+          "production",
+          "sandbox"
+        ],
+        "default": "production"
+      },
+      "clientId": {
+        "title": "Client ID",
+        "type": "string",
+        "description": "Consumer Key from Salesforce Connected App",
+        "default": ""
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "default": ""
+      },
+      "privateKey": {
+        "title": "Private Key",
+        "type": "string",
+        "description": "Use the multiline editor. Make sure it is in standard PEM key format:<br />-----BEGIN PRIVATE KEY-----<br />KEY DATA GOES HERE<br />-----END PRIVATE KEY-----",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": [
+      "clientId",
+      "privateKey",
+      "username"
+    ]
+  }
+}

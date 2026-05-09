@@ -1,0 +1,55 @@
+{
+  "key": "kafka",
+  "display_name": "Kafka",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "clientId": {
+        "title": "Client ID",
+        "type": "string",
+        "default": ""
+      },
+      "brokers": {
+        "title": "Brokers",
+        "type": "string",
+        "default": ""
+      },
+      "ssl": {
+        "title": "SSL",
+        "type": "boolean",
+        "default": true
+      },
+      "authentication": {
+        "title": "Authentication",
+        "type": "boolean",
+        "default": false
+      },
+      "username": {
+        "title": "Username",
+        "type": "string",
+        "description": "Optional username if authenticated is required",
+        "default": ""
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "description": "Optional password if authenticated is required",
+        "x-secret": true,
+        "default": ""
+      },
+      "saslMechanism": {
+        "title": "SASL Mechanism",
+        "type": "string",
+        "enum": [
+          "plain",
+          "scram-sha-256",
+          "scram-sha-512"
+        ],
+        "default": "plain"
+      }
+    },
+    "required": []
+  }
+}

@@ -1,0 +1,101 @@
+{
+  "key": "postgres",
+  "display_name": "Postgres",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "host": {
+        "title": "Host",
+        "type": "string",
+        "default": "localhost"
+      },
+      "database": {
+        "title": "Database",
+        "type": "string",
+        "default": "postgres"
+      },
+      "user": {
+        "title": "User",
+        "type": "string",
+        "default": "postgres"
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "allowUnauthorizedCerts": {
+        "title": "Ignore SSL Issues (Insecure)",
+        "type": "boolean",
+        "description": "Whether to connect even if SSL certificate validation is not possible",
+        "default": false
+      },
+      "ssl": {
+        "title": "SSL",
+        "type": "string",
+        "enum": [
+          "allow",
+          "disable",
+          "require"
+        ],
+        "default": "disable"
+      },
+      "port": {
+        "title": "Port",
+        "type": "number",
+        "default": 5432
+      },
+      "sshTunnel": {
+        "title": "SSH Tunnel",
+        "type": "boolean",
+        "default": false
+      },
+      "sshAuthenticateWith": {
+        "title": "SSH Authenticate with",
+        "type": "string",
+        "enum": [
+          "password",
+          "privateKey"
+        ],
+        "default": "password"
+      },
+      "sshHost": {
+        "title": "SSH Host",
+        "type": "string",
+        "default": "localhost"
+      },
+      "sshPort": {
+        "title": "SSH Port",
+        "type": "number",
+        "default": 22
+      },
+      "sshUser": {
+        "title": "SSH User",
+        "type": "string",
+        "default": "root"
+      },
+      "sshPassword": {
+        "title": "SSH Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "privateKey": {
+        "title": "Private Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "passphrase": {
+        "title": "Passphrase",
+        "type": "string",
+        "description": "Passphrase used to create the key, if no passphrase was used leave empty",
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

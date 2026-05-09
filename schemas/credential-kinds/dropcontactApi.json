@@ -1,0 +1,28 @@
+{
+  "key": "dropcontactApi",
+  "display_name": "Dropcontact API",
+  "auth_mode": "api_key",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiKey": {
+        "title": "API Key",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  },
+  "inject": {
+    "headers": {
+      "user-agent": "n8n",
+      "X-Access-Token": "{{ credentials.apiKey }}"
+    }
+  },
+  "test_request": {
+    "method": "POST",
+    "url": "https://api.dropcontact.io/batch"
+  }
+}

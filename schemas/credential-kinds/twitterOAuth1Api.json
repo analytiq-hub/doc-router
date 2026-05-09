@@ -1,0 +1,20 @@
+{
+  "key": "twitterOAuth1Api",
+  "display_name": "X OAuth API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {},
+    "required": []
+  },
+  "extends": [
+    "oAuth1Api"
+  ],
+  "runtime_fields": [
+    "requestTokenUrl",
+    "authUrl",
+    "accessTokenUrl",
+    "signatureMethod"
+  ]
+}

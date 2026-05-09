@@ -1,0 +1,79 @@
+{
+  "key": "microsoftSql",
+  "display_name": "Microsoft SQL",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "server": {
+        "title": "Server",
+        "type": "string",
+        "default": "localhost"
+      },
+      "database": {
+        "title": "Database",
+        "type": "string",
+        "default": "master"
+      },
+      "user": {
+        "title": "User",
+        "type": "string",
+        "default": "sa"
+      },
+      "password": {
+        "title": "Password",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "port": {
+        "title": "Port",
+        "type": "number",
+        "default": 1433
+      },
+      "domain": {
+        "title": "Domain",
+        "type": "string",
+        "default": ""
+      },
+      "tls": {
+        "title": "TLS",
+        "type": "boolean",
+        "default": true
+      },
+      "allowUnauthorizedCerts": {
+        "title": "Ignore SSL Issues (Insecure)",
+        "type": "boolean",
+        "description": "Whether to connect even if SSL certificate validation is not possible",
+        "default": false
+      },
+      "connectTimeout": {
+        "title": "Connect Timeout",
+        "type": "number",
+        "description": "Connection timeout in ms",
+        "default": 15000
+      },
+      "requestTimeout": {
+        "title": "Request Timeout",
+        "type": "number",
+        "description": "Request timeout in ms",
+        "default": 15000
+      },
+      "tdsVersion": {
+        "title": "TDS Version",
+        "type": "string",
+        "enum": [
+          "7_4",
+          "7_3_B",
+          "7_3_A",
+          "7_2",
+          "7_1"
+        ],
+        "description": "The version of TDS to use. If server doesn't support specified version, negotiated version is used instead.",
+        "default": "7_4"
+      }
+    },
+    "required": []
+  }
+}

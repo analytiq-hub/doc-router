@@ -1,0 +1,28 @@
+{
+  "key": "jenkinsApi",
+  "display_name": "Jenkins API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "username": {
+        "title": "Jenking Username",
+        "type": "string",
+        "default": ""
+      },
+      "apiKey": {
+        "title": "Personal API Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "baseUrl": {
+        "title": "Jenkins Instance URL",
+        "type": "string",
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

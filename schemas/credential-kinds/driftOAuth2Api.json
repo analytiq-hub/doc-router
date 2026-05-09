@@ -1,0 +1,22 @@
+{
+  "key": "driftOAuth2Api",
+  "display_name": "Drift OAuth2 API",
+  "auth_mode": "oauth2_authorization_code",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {},
+    "required": []
+  },
+  "extends": [
+    "oAuth2Api"
+  ],
+  "runtime_fields": [
+    "grantType",
+    "authUrl",
+    "accessTokenUrl",
+    "authQueryParameters",
+    "scope",
+    "authentication"
+  ]
+}

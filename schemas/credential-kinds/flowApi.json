@@ -1,0 +1,23 @@
+{
+  "key": "flowApi",
+  "display_name": "Flow API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "organizationId": {
+        "title": "Organization ID",
+        "type": "number",
+        "default": 0
+      },
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "key": "harvestApi",
+  "display_name": "Harvest API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "accessToken": {
+        "title": "Access Token",
+        "type": "string",
+        "description": "Visit your account details page, and grab the Access Token. See <a href=\"https://help.getharvest.com/api-v2/authentication-api/authentication/authentication/\">Harvest Personal Access Tokens</a>.",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}

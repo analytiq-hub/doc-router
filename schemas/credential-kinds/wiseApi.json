@@ -1,0 +1,34 @@
+{
+  "key": "wiseApi",
+  "display_name": "Wise API",
+  "auth_mode": "custom",
+  "secret_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "apiToken": {
+        "title": "API Token",
+        "type": "string",
+        "x-secret": true,
+        "default": ""
+      },
+      "environment": {
+        "title": "Environment",
+        "type": "string",
+        "enum": [
+          "live",
+          "test"
+        ],
+        "default": "live"
+      },
+      "privateKey": {
+        "title": "Private Key (Optional)",
+        "type": "string",
+        "description": "Optional private key used for Strong Customer Authentication (SCA). Only needed to retrieve statements, and execute transfers.",
+        "x-secret": true,
+        "default": ""
+      }
+    },
+    "required": []
+  }
+}
