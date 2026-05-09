@@ -43,6 +43,12 @@ _ALLOWED_HTTP_METHODS = frozenset(
 )
 
 
+def _normalized_http_method(params: dict[str, Any]) -> str:
+    """Upper-case method string (must match ``validate_parameters`` and ``execute``)."""
+
+    return str(params.get("method") or "GET").upper()
+
+
 def _parse_json_object_param(raw: Any, *, field_label: str) -> dict[str, Any]:
     """Resolve optional JSON object parameter (string from UI or dict from expressions)."""
 
@@ -394,7 +400,7 @@ class FlowsHttpRequestNode:
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
         errs: list[str] = []
-        method = str(params.get("method") or "GET").upper()
+        method = _normalized_http_method(params)
         if method not in _ALLOWED_HTTP_METHODS:
             errs.append(
                 f"method must be one of {' '.join(sorted(_ALLOWED_HTTP_METHODS))}, got {method!r}"
@@ -457,7 +463,7 @@ class FlowsHttpRequestNode:
             return [[]]
         item = slot0[0]
 
-        method = str(params.get("method") or "GET").upper()
+        method = _normalized_http_method(params)
         url = str(params.get("url") or "").strip()
         exec_log = _exec_log(context)
         nid = node.get("id", "?")
