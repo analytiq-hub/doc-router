@@ -577,7 +577,11 @@ class FlowsHttpRequestNode:
             body_obj = _coerce_json_body(raw)
             if credential_body:
                 if not isinstance(body_obj, dict):
-                    body_obj = {}
+                    raise RuntimeError(
+                        "HTTP Request cannot merge credential fields into body_json because the evaluated body "
+                        f"is not a JSON object (got {type(body_obj).__name__}). "
+                        "Use a JSON object for body_json, or remove credential body injection."
+                    )
                 for bk, bv in credential_body.items():
                     body_obj[bk] = ad.flows.coerce_template_json_value(bv)
             content = json.dumps(body_obj).encode()

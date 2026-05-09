@@ -439,6 +439,39 @@ async def test_http_json_body_auth_inject_sends_json_when_body_mode_none(
 
 
 @pytest.mark.asyncio
+async def test_json_body_credential_inject_requires_object_root(
+    http_node: FlowsHttpRequestNode,
+    minimal_ctx: ad.flows.ExecutionContext,
+):
+    """Merging ``inject.body`` into ``body_json`` requires a JSON object root; lists fail loudly."""
+
+    async def fetch_fake(_org: str, _cid: str):
+        kind = {"inject": {"body": {"token": "{{ credentials.t }}"}}}
+        return kind, {"t": "x"}
+
+    item = ad.flows.FlowItem(json={}, binary={}, meta={}, paired_item=None)
+    with patch(
+        "analytiq_data.flows.fetch_credential_kind_and_fields",
+        fetch_fake,
+    ):
+        with pytest.raises(RuntimeError, match="not a JSON object"):
+            await http_node.execute(
+                minimal_ctx,
+                {
+                    "id": "n1",
+                    "credentials": {"httpJsonBodyAuth": "507f1f77bcf86cd799439011"},
+                    "parameters": {
+                        "method": "POST",
+                        "url": _RECEIVER_HTTPS,
+                        "body_mode": "json",
+                        "body_json": "[1, 2, 3]",
+                    },
+                },
+                [[item]],
+            )
+
+
+@pytest.mark.asyncio
 async def test_basic_and_digest_credentials_conflict(
     http_node: FlowsHttpRequestNode,
     minimal_ctx: ad.flows.ExecutionContext,
