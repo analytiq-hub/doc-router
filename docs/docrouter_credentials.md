@@ -232,17 +232,17 @@ For `oauth2_authorization_code` kinds where `secret_schema` includes `grantType`
 
 1. **User fills in** Client ID, Client Secret, Authorization URL, Token URL in the credential edit form (some kinds expose Grant Type **PKCE** for public/confidential apps that require RFC 7636).
 2. **User clicks "Connect with provider"** → frontend calls `POST /oauth/initiate`.
-3. **`oauth_initiate_flow_credential`** builds the authorization URL (with `state` = signed JWT encoding `org_id`, `cred_id`, `user_id`, and for grant type **pkce** also the `code_verifier` as claim `pv`). For PKCE it adds `code_challenge` and `code_challenge_method=S256` to the authorize URL.
+3. **`oauth_initiate_flow_credential`** inserts a short-lived row in MongoDB collection `flow_oauth_states` (org, credential id, user id, **`grant_type`** as selected at initiate time, optional PKCE `code_verifier`, `expires_at`) and uses a random **opaque** `state` nonce in the authorize URL (no secrets in the query string). For grant type **pkce** it adds `code_challenge` and `code_challenge_method=S256` to the authorize URL.
 4. **Frontend sets `window.location.href`** to the provider's authorization page.
 5. **Provider redirects back** to `GET /v0/callback/flow-oauth?code=…&state=…`.
-6. **`flow_oauth_callback`** verifies the JWT state, exchanges the code for tokens via `_oauth_token_post` (`exchange_authorization_code`). For PKCE it sends `code_verifier` from decoded state `pv`. If the JSON response omits `access_token` (including HTTP 200 with an OAuth error body), a `RuntimeError` is raised and the browser is redirected with `flow_oauth=error`. Otherwise `oauthAccessToken`, `oauthRefreshToken`, and `oauthExpiresAt` are persisted on the credential.
+6. **`flow_oauth_callback`** loads and **deletes** that row by `state` (single-use, must be unexpired). Whether PKCE applies is decided **only** from `grant_type` on that row (not from the live credential), so changing `grantType` on the credential between redirect and callback cannot bypass PKCE or break a valid flow. It then exchanges the code via `_oauth_token_post` (`exchange_authorization_code`). For PKCE it sends `code_verifier` from the **server** row only. If the JSON response omits `access_token` (including HTTP 200 with an OAuth error body), a `RuntimeError` is raised and the browser is redirected with `flow_oauth=error`. Otherwise `oauthAccessToken`, `oauthRefreshToken`, and `oauthExpiresAt` are persisted on the credential.
 7. **Redirect** to `{NEXTAUTH_URL}/orgs/{orgId}/flows?tab=credentials&flow_oauth=success`. The frontend detects `flow_oauth` in the URL, shows a toast, and cleans the query string.
 
 ### Configuration
 
 | Env var | Purpose |
 |---------|---------|
-| `NEXTAUTH_SECRET` | Signs/verifies the OAuth state JWT |
+| `NEXTAUTH_SECRET` | Used elsewhere (e.g. session); **not** used to encode browser `state` for Connect — state is an opaque nonce keyed in MongoDB |
 | `FLOW_OAUTH_PUBLIC_ORIGIN` | Base URL for the redirect URI registered with the OAuth provider (falls back to `PUBLIC_API_URL`, `DOCROUTER_API_PUBLIC_ORIGIN`, `http://127.0.0.1:8000`) |
 | `NEXTAUTH_URL` | Base URL for the success/error redirect back to the frontend |
 
@@ -250,8 +250,8 @@ Redirect URI registered with the provider: `{FLOW_OAUTH_PUBLIC_ORIGIN}/v0/callba
 
 ### Security
 
-- `authQueryParameters` in credential fields may add extra query parameters to the authorization URL, but cannot override `state`, `redirect_uri`, `response_type`, or `client_id` (locked).
-- The state JWT is signed with `NEXTAUTH_SECRET` (HS256) and expires after 15 minutes.
+- `authQueryParameters` in credential fields may add extra query parameters to the authorization URL, but cannot override `state`, `redirect_uri`, `response_type`, `client_id`, `code_challenge`, or `code_challenge_method` (locked).
+- Pending OAuth context (including the PKCE **code_verifier**) lives only in **`flow_oauth_states`** until callback; the browser sees only the opaque `state` nonce. Rows expire after 15 minutes (TTL index on `expires_at`). **Single-use:** the row is removed when consumed.
 
 ---
 

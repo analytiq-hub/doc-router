@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -12,8 +13,10 @@ os.environ.setdefault("NEXTAUTH_SECRET", "test-secret-for-credential-runtime-tes
 
 import analytiq_data as ad
 from analytiq_data.flows.credential_runtime import (
+    FLOW_OAUTH_STATE_COLLECTION,
     apply_runtime_credential_updates,
     build_oauth_authorization_url,
+    consume_flow_oauth_authorization_state,
     decode_flow_oauth_state,
     encode_flow_oauth_state,
     exchange_authorization_code,
@@ -21,6 +24,7 @@ from analytiq_data.flows.credential_runtime import (
     maybe_refresh_oauth_tokens,
     maybe_run_pre_auth,
     pkce_code_challenge_s256,
+    store_flow_oauth_authorization_state,
 )
 
 
@@ -32,12 +36,53 @@ def test_oauth_state_roundtrip():
     assert payload["uid"] == "user1"
 
 
-def test_oauth_state_roundtrip_includes_pkce_verifier():
-    t = encode_flow_oauth_state(
-        "orgA", "cid1", "user1", ttl_seconds=60, pkce_verifier="pv-secret"
+@pytest.mark.asyncio
+async def test_flow_oauth_server_state_store_and_consume(test_db, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime.ad.common.get_async_db",
+        lambda: test_db,
     )
-    payload = decode_flow_oauth_state(t)
-    assert payload["pv"] == "pv-secret"
+
+    nonce = await store_flow_oauth_authorization_state(
+        organization_id="orgA",
+        credential_id="cid1",
+        user_id="u1",
+        oauth_grant_type="pkce",
+        pkce_verifier="pv-secret",
+        ttl_seconds=60,
+    )
+    assert len(nonce) > 20
+
+    row = await consume_flow_oauth_authorization_state(nonce)
+    assert row is not None
+    assert row["organization_id"] == "orgA"
+    assert row["credential_id"] == "cid1"
+    assert row["user_id"] == "u1"
+    assert row["grant_type"] == "pkce"
+    assert row["pkce_verifier"] == "pv-secret"
+
+    assert await consume_flow_oauth_authorization_state(nonce) is None
+
+
+@pytest.mark.asyncio
+async def test_flow_oauth_server_state_rejects_expired(test_db, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime.ad.common.get_async_db",
+        lambda: test_db,
+    )
+
+    await test_db[FLOW_OAUTH_STATE_COLLECTION].insert_one(
+        {
+            "_id": "stale-nonce",
+            "organization_id": "o",
+            "credential_id": "c",
+            "user_id": "u",
+            "grant_type": "authorizationCode",
+            "pkce_verifier": None,
+            "expires_at": datetime.now(UTC) - timedelta(minutes=1),
+        }
+    )
+    assert await consume_flow_oauth_authorization_state("stale-nonce") is None
 
 
 def test_pkce_code_challenge_s256_rfc7636_appendix_b():

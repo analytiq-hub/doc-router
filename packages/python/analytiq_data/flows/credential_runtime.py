@@ -12,11 +12,12 @@ import logging
 import os
 import secrets
 import time
-from datetime import datetime, UTC
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import httpx
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 from jinja2 import Environment, Undefined
 from jose import jwt
 
@@ -50,8 +51,9 @@ def encode_flow_oauth_state(
     user_id: str,
     *,
     ttl_seconds: int = 900,
-    pkce_verifier: str | None = None,
 ) -> str:
+    """Signed JWT state (tests / legacy). Browser OAuth uses opaque server-side state instead."""
+
     if not _ENV_SECRET:
         raise RuntimeError("NEXTAUTH_SECRET is not configured")
     now = int(time.time())
@@ -63,8 +65,6 @@ def encode_flow_oauth_state(
         "iat": now,
         "exp": now + ttl_seconds,
     }
-    if pkce_verifier:
-        payload["pv"] = pkce_verifier
     return jwt.encode(payload, _ENV_SECRET, algorithm=_ALGORITHM)
 
 
@@ -72,6 +72,66 @@ def decode_flow_oauth_state(token: str) -> dict[str, Any]:
     if not _ENV_SECRET:
         raise RuntimeError("NEXTAUTH_SECRET is not configured")
     return jwt.decode(token, _ENV_SECRET, algorithms=[_ALGORITHM])
+
+
+FLOW_OAUTH_STATE_COLLECTION = "flow_oauth_states"
+
+
+async def store_flow_oauth_authorization_state(
+    *,
+    organization_id: str,
+    credential_id: str,
+    user_id: str,
+    oauth_grant_type: str,
+    pkce_verifier: str | None = None,
+    ttl_seconds: int = 900,
+) -> str:
+    """Store OAuth redirect context server-side; return opaque ``state`` for the authorize URL.
+
+    The PKCE ``code_verifier`` must never be sent to the browser — only this nonce is exposed.
+
+    ``oauth_grant_type`` must match what was selected at initiate time (``authorizationCode`` or
+    ``pkce``) so the callback cannot be confused by a later edit to the credential document.
+    """
+
+    db = ad.common.get_async_db()
+    coll = db[FLOW_OAUTH_STATE_COLLECTION]
+    now = datetime.now(UTC)
+    expires_at = now + timedelta(seconds=ttl_seconds)
+
+    for _ in range(8):
+        nonce = secrets.token_urlsafe(32)
+        doc: dict[str, Any] = {
+            "_id": nonce,
+            "organization_id": organization_id,
+            "credential_id": credential_id,
+            "user_id": user_id,
+            "grant_type": oauth_grant_type,
+            "pkce_verifier": pkce_verifier,
+            "expires_at": expires_at,
+        }
+        try:
+            await coll.insert_one(doc)
+            return nonce
+        except DuplicateKeyError:
+            continue
+    raise RuntimeError("Could not allocate OAuth state nonce")
+
+
+async def consume_flow_oauth_authorization_state(
+    state_nonce: str | None,
+) -> dict[str, Any] | None:
+    """Delete and return pending OAuth state if unexpired (single-use)."""
+
+    if not state_nonce or not isinstance(state_nonce, str):
+        return None
+    db = ad.common.get_async_db()
+    coll = db[FLOW_OAUTH_STATE_COLLECTION]
+    now = datetime.now(UTC)
+    row = await coll.find_one_and_delete(
+        {"_id": state_nonce.strip(), "expires_at": {"$gt": now}},
+    )
+    return dict(row) if row else None
 
 
 def _get_json_path(obj: Any, path: str) -> Any:

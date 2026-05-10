@@ -482,9 +482,9 @@ async def oauth_initiate_flow_credential(
 ) -> OAuthInitiateResponse:
     from analytiq_data.flows.credential_runtime import (
         build_oauth_authorization_url,
-        encode_flow_oauth_state,
         generate_pkce_code_verifier,
         pkce_code_challenge_s256,
+        store_flow_oauth_authorization_state,
     )
 
     db = ad.common.get_async_db()
@@ -531,14 +531,15 @@ async def oauth_initiate_flow_credential(
             pkce_verifier = generate_pkce_code_verifier()
             pkce_challenge = pkce_code_challenge_s256(pkce_verifier)
 
-        state = encode_flow_oauth_state(
-            organization_id,
-            credential_id,
-            current_user.user_id,
+        state_nonce = await store_flow_oauth_authorization_state(
+            organization_id=organization_id,
+            credential_id=credential_id,
+            user_id=current_user.user_id,
+            oauth_grant_type=gt,
             pkce_verifier=pkce_verifier,
         )
         url = build_oauth_authorization_url(
-            fields, state, pkce_code_challenge=pkce_challenge
+            fields, state_nonce, pkce_code_challenge=pkce_challenge
         )
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
@@ -554,7 +555,7 @@ async def flow_oauth_callback(
     error_description: str | None = Query(None),
 ) -> RedirectResponse:
     from analytiq_data.flows.credential_runtime import (
-        decode_flow_oauth_state,
+        consume_flow_oauth_authorization_state,
         exchange_authorization_code,
         oauth_callback_redirect_error,
         oauth_callback_redirect_error_generic,
@@ -568,15 +569,18 @@ async def flow_oauth_callback(
     if not code or not state:
         return RedirectResponse(oauth_callback_redirect_error_generic("missing_code_or_state"))
 
-    try:
-        payload = decode_flow_oauth_state(state)
-    except Exception:
-        return RedirectResponse(oauth_callback_redirect_error_generic("invalid_oauth_state"))
+    pending = await consume_flow_oauth_authorization_state(state)
+    if not pending:
+        return RedirectResponse(
+            oauth_callback_redirect_error_generic("invalid_or_expired_oauth_state")
+        )
 
-    org_id = str(payload.get("org") or "")
-    cred_id = str(payload.get("cid") or "")
+    org_id = str(pending.get("organization_id") or "")
+    cred_id = str(pending.get("credential_id") or "")
     if not org_id or not cred_id:
-        return RedirectResponse(oauth_callback_redirect_error_generic("invalid_oauth_state_payload"))
+        return RedirectResponse(
+            oauth_callback_redirect_error_generic("invalid_oauth_state_payload")
+        )
 
     db = ad.common.get_async_db()
     try:
@@ -601,21 +605,24 @@ async def flow_oauth_callback(
     except Exception as e:
         return RedirectResponse(oauth_callback_redirect_error(org_id, f"decrypt: {e}"))
 
-    pv_raw = payload.get("pv")
-    pkce_verifier_from_state: str | None = None
+    pv_raw = pending.get("pkce_verifier")
+    pkce_verifier_from_store: str | None = None
     if isinstance(pv_raw, str) and pv_raw.strip():
-        pkce_verifier_from_state = pv_raw.strip()
+        pkce_verifier_from_store = pv_raw.strip()
 
-    grant_type = str(fields.get("grantType") or "authorizationCode")
-    if grant_type == "pkce" and not pkce_verifier_from_state:
+    grant_type_from_pending = str(pending.get("grant_type") or "authorizationCode")
+    if grant_type_from_pending not in ("authorizationCode", "pkce"):
+        grant_type_from_pending = "authorizationCode"
+
+    if grant_type_from_pending == "pkce" and not pkce_verifier_from_store:
         return RedirectResponse(
             oauth_callback_redirect_error(
-                org_id, "OAuth PKCE verifier missing from signed state"
+                org_id, "OAuth PKCE verifier missing from server session"
             )
         )
 
     verifier_for_exchange = (
-        pkce_verifier_from_state if grant_type == "pkce" else None
+        pkce_verifier_from_store if grant_type_from_pending == "pkce" else None
     )
 
     try:

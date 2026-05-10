@@ -39,6 +39,24 @@ async def ensure_credentials_indexes(analytiq_client) -> None:
             logger.warning("Could not ensure credentials indexes: %s", e)
 
 
+async def ensure_flow_oauth_state_indexes(analytiq_client) -> None:
+    """TTL cleanup for short-lived OAuth authorize pending rows (see ``credential_runtime``)."""
+
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    try:
+        await db.flow_oauth_states.create_index(
+            [("expires_at", 1)],
+            expireAfterSeconds=0,
+            name="flow_oauth_states_ttl",
+            background=True,
+        )
+        logger.info("Ensured TTL index on flow_oauth_states (expires_at)")
+    except Exception as e:
+        s = str(e).lower()
+        if "already exists" not in s and "indexoptionsconflict" not in s:
+            logger.warning("Could not ensure flow_oauth_states indexes: %s", e)
+
+
 async def _fetch_credential_fields_and_doc(
     organization_id: str, credential_id: str
 ) -> tuple[dict[str, Any], dict[str, Any] | None]:

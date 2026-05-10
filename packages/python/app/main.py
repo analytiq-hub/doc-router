@@ -104,6 +104,7 @@ async def lifespan(app):
 
     # Ensure credentials indexes (non-migration startup check)
     await ad.flows.ensure_credentials_indexes(analytiq_client)
+    await ad.flows.ensure_flow_oauth_state_indexes(analytiq_client)
 
     # Start background workers in the same event loop (replaces the worker subprocess)
     n_workers = int(os.getenv("N_WORKERS", "1"))
