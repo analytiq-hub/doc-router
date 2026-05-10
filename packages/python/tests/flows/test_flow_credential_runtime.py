@@ -17,8 +17,10 @@ from analytiq_data.flows.credential_runtime import (
     decode_flow_oauth_state,
     encode_flow_oauth_state,
     exchange_authorization_code,
+    generate_pkce_code_verifier,
     maybe_refresh_oauth_tokens,
     maybe_run_pre_auth,
+    pkce_code_challenge_s256,
 )
 
 
@@ -28,6 +30,25 @@ def test_oauth_state_roundtrip():
     assert payload["org"] == "orgA"
     assert payload["cid"] == "cid1"
     assert payload["uid"] == "user1"
+
+
+def test_oauth_state_roundtrip_includes_pkce_verifier():
+    t = encode_flow_oauth_state(
+        "orgA", "cid1", "user1", ttl_seconds=60, pkce_verifier="pv-secret"
+    )
+    payload = decode_flow_oauth_state(t)
+    assert payload["pv"] == "pv-secret"
+
+
+def test_pkce_code_challenge_s256_rfc7636_appendix_b():
+    v = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"
+    assert pkce_code_challenge_s256(v) == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+
+
+def test_generate_pkce_code_verifier_length_and_charset():
+    v = generate_pkce_code_verifier()
+    assert 43 <= len(v) <= 128
+    assert all(c.isascii() for c in v)
 
 
 def test_build_oauth_authorization_url():
@@ -56,6 +77,32 @@ def test_build_oauth_authorization_url_preserves_static_query_and_custom_json():
     assert "prompt=login" in url
     assert "resource=x" in url
     assert url.count("client_id=") == 1
+
+
+def test_build_oauth_authorization_url_adds_pkce_challenge():
+    fields = {
+        "authUrl": "https://example.com/oauth/authorize",
+        "clientId": "cid",
+        "grantType": "authorizationCode",
+    }
+    url = build_oauth_authorization_url(
+        fields, "st", pkce_code_challenge="E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+    )
+    assert "code_challenge=" in url
+    assert "code_challenge_method=S256" in url.replace("+", " ")
+
+
+def test_build_oauth_authorization_url_ignores_auth_query_override_of_pkce_challenge():
+    fields = {
+        "authUrl": "https://example.com/oauth/authorize",
+        "clientId": "cid",
+        "authQueryParameters": '{"code_challenge":"evil","code_challenge_method":"plain"}',
+    }
+    ch = "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM"
+    url = build_oauth_authorization_url(fields, "st", pkce_code_challenge=ch)
+    assert ch in url
+    assert "evil" not in url
+    assert "code_challenge_method=S256" in url.replace("+", " ")
 
 
 def test_build_oauth_authorization_url_ignores_reserved_keys_in_auth_query_parameters():
@@ -206,3 +253,63 @@ async def test_exchange_authorization_code_persists_when_access_token_present(
     assert out["oauthAccessToken"] == "atok"
     assert out["oauthRefreshToken"] == "rtok"
     persist.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_exchange_authorization_code_includes_pkce_verifier(monkeypatch: pytest.MonkeyPatch):
+    captured: dict[str, dict[str, str]] = {}
+
+    async def fake_post(url, body, **kw):
+        captured["body"] = dict(body)
+        return {"access_token": "atok"}
+
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime._oauth_token_post",
+        fake_post,
+    )
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime.persist_credential_fields",
+        AsyncMock(),
+    )
+
+    fields = {
+        "accessTokenUrl": "https://example.com/token",
+        "clientId": "a",
+        "clientSecret": "b",
+    }
+    await exchange_authorization_code(
+        "org",
+        "507f1f77bcf86cd799439011",
+        fields,
+        "auth-code",
+        pkce_verifier="pkce-verifier-value",
+    )
+    assert captured["body"].get("code_verifier") == "pkce-verifier-value"
+
+
+@pytest.mark.asyncio
+async def test_exchange_authorization_code_omits_pkce_when_not_used(monkeypatch: pytest.MonkeyPatch):
+    captured: dict[str, dict[str, str]] = {}
+
+    async def fake_post(url, body, **kw):
+        captured["body"] = dict(body)
+        return {"access_token": "atok"}
+
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime._oauth_token_post",
+        fake_post,
+    )
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime.persist_credential_fields",
+        AsyncMock(),
+    )
+
+    fields = {
+        "accessTokenUrl": "https://example.com/token",
+        "clientId": "a",
+        "clientSecret": "b",
+    }
+    await exchange_authorization_code(
+        "org", "507f1f77bcf86cd799439011", fields, "auth-code"
+    )
+    assert "code_verifier" not in captured["body"]

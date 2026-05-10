@@ -5,9 +5,12 @@ and optional ``pre_auth`` login requests (see ``docs/docrouter_credentials.md`` 
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 import logging
 import os
+import secrets
 import time
 from datetime import datetime, UTC
 from typing import Any
@@ -42,12 +45,17 @@ def flow_oauth_redirect_uri() -> str:
 
 
 def encode_flow_oauth_state(
-    organization_id: str, credential_id: str, user_id: str, *, ttl_seconds: int = 900
+    organization_id: str,
+    credential_id: str,
+    user_id: str,
+    *,
+    ttl_seconds: int = 900,
+    pkce_verifier: str | None = None,
 ) -> str:
     if not _ENV_SECRET:
         raise RuntimeError("NEXTAUTH_SECRET is not configured")
     now = int(time.time())
-    payload = {
+    payload: dict[str, Any] = {
         "sub": "flow_credential_oauth",
         "org": organization_id,
         "cid": credential_id,
@@ -55,6 +63,8 @@ def encode_flow_oauth_state(
         "iat": now,
         "exp": now + ttl_seconds,
     }
+    if pkce_verifier:
+        payload["pv"] = pkce_verifier
     return jwt.encode(payload, _ENV_SECRET, algorithm=_ALGORITHM)
 
 
@@ -204,6 +214,19 @@ async def maybe_run_pre_auth(
 
 def _grant_type(fields: dict[str, Any]) -> str:
     return str(fields.get("grantType") or "authorizationCode")
+
+
+def generate_pkce_code_verifier() -> str:
+    """RFC 7636 ``code_verifier`` (high-entropy, URL-safe; 43 chars from 32 bytes)."""
+
+    return secrets.token_urlsafe(32)
+
+
+def pkce_code_challenge_s256(code_verifier: str) -> str:
+    """RFC 7636 ``code_challenge`` for ``code_challenge_method=S256``."""
+
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 
 async def _oauth_token_post(
@@ -401,6 +424,8 @@ async def exchange_authorization_code(
     credential_id: str,
     fields: dict[str, Any],
     authorization_code: str,
+    *,
+    pkce_verifier: str | None = None,
 ) -> dict[str, Any]:
     """OAuth2 authorization-code exchange (browser callback)."""
 
@@ -408,13 +433,15 @@ async def exchange_authorization_code(
     if not token_url:
         raise RuntimeError("accessTokenUrl missing")
     redirect_uri = flow_oauth_redirect_uri()
-    body = {
+    body: dict[str, str] = {
         "grant_type": "authorization_code",
         "code": authorization_code,
         "redirect_uri": redirect_uri,
         "client_id": str(fields.get("clientId") or ""),
         "client_secret": str(fields.get("clientSecret") or ""),
     }
+    if pkce_verifier:
+        body["code_verifier"] = pkce_verifier
     data = await _oauth_token_post(token_url, body)
 
     at_raw = data.get("access_token")
@@ -472,7 +499,12 @@ def oauth_callback_redirect_error_generic(message: str) -> str:
     return f"{base}/?flow_oauth=error&flow_oauth_detail={quote(message[:300])}"
 
 
-def build_oauth_authorization_url(fields: dict[str, Any], state: str) -> str:
+def build_oauth_authorization_url(
+    fields: dict[str, Any],
+    state: str,
+    *,
+    pkce_code_challenge: str | None = None,
+) -> str:
     """Query-string for ``response_type=code`` OAuth2 authorization redirect."""
 
     from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
@@ -488,7 +520,16 @@ def build_oauth_authorization_url(fields: dict[str, Any], state: str) -> str:
             merged[qk] = qv
 
     # Never allow authQueryParameters JSON to override protocol-critical / CSRF parameters.
-    _locked_canonical = frozenset({"redirect_uri", "state", "response_type", "client_id"})
+    _locked_canonical = frozenset(
+        {
+            "redirect_uri",
+            "state",
+            "response_type",
+            "client_id",
+            "code_challenge",
+            "code_challenge_method",
+        }
+    )
     aqp = fields.get("authQueryParameters")
     if isinstance(aqp, str) and aqp.strip().startswith("{"):
         try:
@@ -510,6 +551,10 @@ def build_oauth_authorization_url(fields: dict[str, Any], state: str) -> str:
     merged["client_id"] = str(fields.get("clientId") or "")
     merged["redirect_uri"] = flow_oauth_redirect_uri()
     merged["state"] = state
+
+    if pkce_code_challenge:
+        merged["code_challenge"] = pkce_code_challenge
+        merged["code_challenge_method"] = "S256"
 
     scope = str(fields.get("scope") or "").strip()
     if scope:

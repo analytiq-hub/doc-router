@@ -95,7 +95,9 @@ def _kind_supports_oauth_browser_flow(kind: dict[str, Any]) -> bool:
         return False
     gt = props.get("grantType") or {}
     enum = gt.get("enum") if isinstance(gt, dict) else None
-    if not isinstance(enum, list) or "authorizationCode" not in enum:
+    if not isinstance(enum, list) or (
+        "authorizationCode" not in enum and "pkce" not in enum
+    ):
         return False
     return "authUrl" in props
 
@@ -481,6 +483,8 @@ async def oauth_initiate_flow_credential(
     from analytiq_data.flows.credential_runtime import (
         build_oauth_authorization_url,
         encode_flow_oauth_state,
+        generate_pkce_code_verifier,
+        pkce_code_challenge_s256,
     )
 
     db = ad.common.get_async_db()
@@ -511,20 +515,31 @@ async def oauth_initiate_flow_credential(
         raise HTTPException(status_code=500, detail=f"Decrypt failed: {e}") from None
 
     gt = str(fields.get("grantType") or "authorizationCode")
-    if gt != "authorizationCode":
+    if gt not in ("authorizationCode", "pkce"):
         raise HTTPException(
             status_code=400,
-            detail="Connect is only available when Grant Type is authorization code",
+            detail="Connect is only available when Grant Type is authorization code or PKCE",
         )
 
     if not str(fields.get("authUrl") or "").strip():
         raise HTTPException(status_code=400, detail="Authorization URL is missing")
 
     try:
+        pkce_verifier: str | None = None
+        pkce_challenge: str | None = None
+        if gt == "pkce":
+            pkce_verifier = generate_pkce_code_verifier()
+            pkce_challenge = pkce_code_challenge_s256(pkce_verifier)
+
         state = encode_flow_oauth_state(
-            organization_id, credential_id, current_user.user_id
+            organization_id,
+            credential_id,
+            current_user.user_id,
+            pkce_verifier=pkce_verifier,
         )
-        url = build_oauth_authorization_url(fields, state)
+        url = build_oauth_authorization_url(
+            fields, state, pkce_code_challenge=pkce_challenge
+        )
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
 
@@ -586,8 +601,27 @@ async def flow_oauth_callback(
     except Exception as e:
         return RedirectResponse(oauth_callback_redirect_error(org_id, f"decrypt: {e}"))
 
+    pv_raw = payload.get("pv")
+    pkce_verifier_from_state: str | None = None
+    if isinstance(pv_raw, str) and pv_raw.strip():
+        pkce_verifier_from_state = pv_raw.strip()
+
+    grant_type = str(fields.get("grantType") or "authorizationCode")
+    if grant_type == "pkce" and not pkce_verifier_from_state:
+        return RedirectResponse(
+            oauth_callback_redirect_error(
+                org_id, "OAuth PKCE verifier missing from signed state"
+            )
+        )
+
+    verifier_for_exchange = (
+        pkce_verifier_from_state if grant_type == "pkce" else None
+    )
+
     try:
-        await exchange_authorization_code(org_id, cred_id, fields, code)
+        await exchange_authorization_code(
+            org_id, cred_id, fields, code, pkce_verifier=verifier_for_exchange
+        )
     except Exception as e:
         logger.warning("oauth token exchange failed: %s", e)
         return RedirectResponse(oauth_callback_redirect_error(org_id, str(e)))

@@ -228,14 +228,14 @@ Some APIs require a login request to obtain a short-lived session token before e
 
 ## 9. OAuth2 browser connect flow
 
-For `oauth2_authorization_code` kinds where `secret_schema` includes `grantType` (with `authorizationCode` in enum) and `authUrl`:
+For `oauth2_authorization_code` kinds where `secret_schema` includes `grantType` (with `authorizationCode` or `pkce` in enum) and `authUrl`:
 
-1. **User fills in** Client ID, Client Secret, Authorization URL, Token URL in the credential edit form.
+1. **User fills in** Client ID, Client Secret, Authorization URL, Token URL in the credential edit form (some kinds expose Grant Type **PKCE** for public/confidential apps that require RFC 7636).
 2. **User clicks "Connect with provider"** → frontend calls `POST /oauth/initiate`.
-3. **`oauth_initiate_flow_credential`** builds the authorization URL (with `state` = signed JWT encoding `org_id + cred_id + user_id`) and returns it.
+3. **`oauth_initiate_flow_credential`** builds the authorization URL (with `state` = signed JWT encoding `org_id`, `cred_id`, `user_id`, and for grant type **pkce** also the `code_verifier` as claim `pv`). For PKCE it adds `code_challenge` and `code_challenge_method=S256` to the authorize URL.
 4. **Frontend sets `window.location.href`** to the provider's authorization page.
 5. **Provider redirects back** to `GET /v0/callback/flow-oauth?code=…&state=…`.
-6. **`flow_oauth_callback`** verifies the JWT state, exchanges the code for tokens via `_oauth_token_post` (`exchange_authorization_code`). If the JSON response omits `access_token` (including HTTP 200 with an OAuth error body), a `RuntimeError` is raised and the browser is redirected with `flow_oauth=error`. Otherwise `oauthAccessToken`, `oauthRefreshToken`, and `oauthExpiresAt` are persisted on the credential.
+6. **`flow_oauth_callback`** verifies the JWT state, exchanges the code for tokens via `_oauth_token_post` (`exchange_authorization_code`). For PKCE it sends `code_verifier` from decoded state `pv`. If the JSON response omits `access_token` (including HTTP 200 with an OAuth error body), a `RuntimeError` is raised and the browser is redirected with `flow_oauth=error`. Otherwise `oauthAccessToken`, `oauthRefreshToken`, and `oauthExpiresAt` are persisted on the credential.
 7. **Redirect** to `{NEXTAUTH_URL}/orgs/{orgId}/flows?tab=credentials&flow_oauth=success`. The frontend detects `flow_oauth` in the URL, shows a toast, and cleans the query string.
 
 ### Configuration
@@ -368,18 +368,14 @@ The current AES-256-CFB encryption uses a fixed IV derived from `NEXTAUTH_SECRET
 
 The `pre_auth` runtime is implemented but no shipped kind uses it. The ~7 n8n `preAuthentication` credentials (e.g. ERPNext, some CRMs) need kind JSON files with a `pre_auth` block. These are the ones the automated porter skips as unsupported.
 
-### 13.3 PKCE OAuth2 flow
-
-`oAuth2Api.json` lists `pkce` as a `grantType` option, but `exchange_authorization_code` does not generate or send a PKCE `code_verifier` / `code_challenge`. The browser flow does not use PKCE. Add PKCE support before promoting PKCE-only providers (e.g. some Shopify scopes).
-
-### 13.4 OAuth1
+### 13.3 OAuth1
 
 ~2 n8n credential kinds use OAuth1 (Twitter v1, some others). Defer unless a specific integration requires it. Would need a new `auth_mode: "oauth1"` and HMAC-SHA1 request signing in `credential_runtime`.
 
-### 13.5 Custom `authenticate()` kinds
+### 13.4 Custom `authenticate()` kinds
 
 ~24 n8n kinds use a custom TypeScript `authenticate()` function (AWS SigV4, HMAC, Digest with custom parameters, etc.). These cannot be ported as declarative JSON. Implement each as a dedicated Python credential module, similar to the existing AWS integration. Track in `PORTING_STATUS.md`.
 
-### 13.6 Predefined credential integration on the HTTP Request node
+### 13.5 Predefined credential integration on the HTTP Request node
 
 The `predefined` mode in the authentication widget currently picks any org credential whose kind matches a slot. True n8n-style "predefined credential type" would let a node declare it natively targets a specific third-party service (e.g. `slackOAuth2Api`), and the UI would filter to only that kind. This requires node-type metadata changes and new UI filtering.

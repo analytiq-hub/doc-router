@@ -836,7 +836,9 @@ const FlowCredentials: React.FC<{
             </div>
           ))}
           {editKind?.supports_oauth_browser_flow &&
-          String(editRow?.public_fields?.grantType ?? 'authorizationCode') === 'authorizationCode' ? (
+          ['authorizationCode', 'pkce'].includes(
+            String(editRow?.public_fields?.grantType ?? 'authorizationCode'),
+          ) ? (
             <div className="rounded-md border border-blue-100 bg-blue-50/90 px-3 py-3 text-sm text-blue-950">
               <button
                 type="button"
