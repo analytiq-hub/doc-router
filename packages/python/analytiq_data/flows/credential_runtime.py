@@ -417,10 +417,20 @@ async def exchange_authorization_code(
     }
     data = await _oauth_token_post(token_url, body)
 
+    at_raw = data.get("access_token")
+    if not at_raw:
+        bits: list[str] = []
+        for key in ("error", "error_description"):
+            v = data.get(key)
+            if isinstance(v, str) and v.strip():
+                bits.append(f"{key}={v.strip()[:300]}")
+        extra = (" (" + "; ".join(bits) + ")") if bits else ""
+        if not extra and data:
+            extra = f": {json.dumps(data)[:400]}"
+        raise RuntimeError(f"OAuth token response missing access_token{extra}")
+
     out = dict(fields)
-    at = data.get("access_token")
-    if at:
-        out["oauthAccessToken"] = str(at)
+    out["oauthAccessToken"] = str(at_raw)
     rt = data.get("refresh_token")
     if rt:
         out["oauthRefreshToken"] = str(rt)

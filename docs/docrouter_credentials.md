@@ -235,7 +235,7 @@ For `oauth2_authorization_code` kinds where `secret_schema` includes `grantType`
 3. **`oauth_initiate_flow_credential`** builds the authorization URL (with `state` = signed JWT encoding `org_id + cred_id + user_id`) and returns it.
 4. **Frontend sets `window.location.href`** to the provider's authorization page.
 5. **Provider redirects back** to `GET /v0/callback/flow-oauth?code=…&state=…`.
-6. **`flow_oauth_callback`** verifies the JWT state, exchanges the code for tokens via `_oauth_token_post`, and persists `oauthAccessToken`, `oauthRefreshToken`, `oauthExpiresAt` into the credential.
+6. **`flow_oauth_callback`** verifies the JWT state, exchanges the code for tokens via `_oauth_token_post` (`exchange_authorization_code`). If the JSON response omits `access_token` (including HTTP 200 with an OAuth error body), a `RuntimeError` is raised and the browser is redirected with `flow_oauth=error`. Otherwise `oauthAccessToken`, `oauthRefreshToken`, and `oauthExpiresAt` are persisted on the credential.
 7. **Redirect** to `{NEXTAUTH_URL}/orgs/{orgId}/flows?tab=credentials&flow_oauth=success`. The frontend detects `flow_oauth` in the URL, shows a toast, and cleans the query string.
 
 ### Configuration
@@ -252,10 +252,6 @@ Redirect URI registered with the provider: `{FLOW_OAUTH_PUBLIC_ORIGIN}/v0/callba
 
 - `authQueryParameters` in credential fields may add extra query parameters to the authorization URL, but cannot override `state`, `redirect_uri`, `response_type`, or `client_id` (locked).
 - The state JWT is signed with `NEXTAUTH_SECRET` (HS256) and expires after 15 minutes.
-
-### Known gap
-
-`exchange_authorization_code` does not currently raise if the token response omits `access_token` (e.g. provider returns HTTP 200 with an error body). The result is a silent "success" redirect with no token stored. Fix: raise `RuntimeError` if `access_token` is absent from the response.
 
 ---
 
@@ -372,22 +368,18 @@ The current AES-256-CFB encryption uses a fixed IV derived from `NEXTAUTH_SECRET
 
 The `pre_auth` runtime is implemented but no shipped kind uses it. The ~7 n8n `preAuthentication` credentials (e.g. ERPNext, some CRMs) need kind JSON files with a `pre_auth` block. These are the ones the automated porter skips as unsupported.
 
-### 13.3 `exchange_authorization_code` silent failure
-
-If the OAuth provider returns HTTP 200 with an error body (no `access_token`), the callback redirects to "success" without storing a token. Fix: raise `RuntimeError` in `exchange_authorization_code` if `access_token` is missing from the response.
-
-### 13.4 PKCE OAuth2 flow
+### 13.3 PKCE OAuth2 flow
 
 `oAuth2Api.json` lists `pkce` as a `grantType` option, but `exchange_authorization_code` does not generate or send a PKCE `code_verifier` / `code_challenge`. The browser flow does not use PKCE. Add PKCE support before promoting PKCE-only providers (e.g. some Shopify scopes).
 
-### 13.5 OAuth1
+### 13.4 OAuth1
 
 ~2 n8n credential kinds use OAuth1 (Twitter v1, some others). Defer unless a specific integration requires it. Would need a new `auth_mode: "oauth1"` and HMAC-SHA1 request signing in `credential_runtime`.
 
-### 13.6 Custom `authenticate()` kinds
+### 13.5 Custom `authenticate()` kinds
 
 ~24 n8n kinds use a custom TypeScript `authenticate()` function (AWS SigV4, HMAC, Digest with custom parameters, etc.). These cannot be ported as declarative JSON. Implement each as a dedicated Python credential module, similar to the existing AWS integration. Track in `PORTING_STATUS.md`.
 
-### 13.7 Predefined credential integration on the HTTP Request node
+### 13.6 Predefined credential integration on the HTTP Request node
 
 The `predefined` mode in the authentication widget currently picks any org credential whose kind matches a slot. True n8n-style "predefined credential type" would let a node declare it natively targets a specific third-party service (e.g. `slackOAuth2Api`), and the UI would filter to only that kind. This requires node-type metadata changes and new UI filtering.

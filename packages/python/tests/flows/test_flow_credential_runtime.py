@@ -16,6 +16,7 @@ from analytiq_data.flows.credential_runtime import (
     build_oauth_authorization_url,
     decode_flow_oauth_state,
     encode_flow_oauth_state,
+    exchange_authorization_code,
     maybe_refresh_oauth_tokens,
     maybe_run_pre_auth,
 )
@@ -148,3 +149,60 @@ async def test_apply_runtime_skips_persist_when_unchanged(monkeypatch: pytest.Mo
     out = await apply_runtime_credential_updates("org", "507f1f77bcf86cd799439011", kind, fields)
     assert out == fields
     persist.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_exchange_authorization_code_raises_when_access_token_missing(monkeypatch: pytest.MonkeyPatch):
+    async def fake_post(url, body):
+        return {"error": "invalid_grant", "error_description": "Code expired"}
+
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime._oauth_token_post",
+        fake_post,
+    )
+    persist = AsyncMock()
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime.persist_credential_fields",
+        persist,
+    )
+
+    fields = {
+        "accessTokenUrl": "https://example.com/token",
+        "clientId": "a",
+        "clientSecret": "b",
+    }
+    with pytest.raises(RuntimeError, match="missing access_token"):
+        await exchange_authorization_code(
+            "org", "507f1f77bcf86cd799439011", fields, "auth-code"
+        )
+    persist.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_exchange_authorization_code_persists_when_access_token_present(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    async def fake_post(url, body):
+        return {"access_token": "atok", "refresh_token": "rtok", "expires_in": 120}
+
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime._oauth_token_post",
+        fake_post,
+    )
+    persist = AsyncMock()
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime.persist_credential_fields",
+        persist,
+    )
+
+    fields = {
+        "accessTokenUrl": "https://example.com/token",
+        "clientId": "a",
+        "clientSecret": "b",
+    }
+    out = await exchange_authorization_code(
+        "org", "507f1f77bcf86cd799439011", fields, "auth-code"
+    )
+    assert out["oauthAccessToken"] == "atok"
+    assert out["oauthRefreshToken"] == "rtok"
+    persist.assert_called_once()
