@@ -5,6 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Commands
 
 ### Setup and Installation
+- The Python virtual environment is **`.venv` at the repository root**. Activate it from the repo top: `. .venv/bin/activate` (not from `packages/python` alone).
 - `make setup` - Set up Python virtual environment and install all dependencies
 - `make dev` - Start all development services (equivalent to `./start-all.sh`)
 - `make tests` - Run Python tests in packages/python/tests/
