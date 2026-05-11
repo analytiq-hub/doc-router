@@ -12,8 +12,8 @@ MAX_SPU_PER_LLM_CALL = 50
 
 LLM_SPU_COSTS = {
     "gpt-4o-mini": 1,
-    "gpt-4.1-2025-04-14": 2,
-    "claude-3-5-sonnet-latest": 3,
+    "gpt-4.1-2025-04-14": 1,
+    "claude-3-5-sonnet-latest": 1,
     # ... etc ...
 }
 
