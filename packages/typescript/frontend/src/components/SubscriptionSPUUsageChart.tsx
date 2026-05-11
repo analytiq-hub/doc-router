@@ -15,13 +15,34 @@ interface SubscriptionSPUUsageChartProps {
   };
 }
 
+interface OperationBreakdown {
+  operation: string;
+  spus: number;
+}
+
 interface ProcessedDataPoint {
   date: string;
   spus: number;
   cumulative_spus: number;
-  operation: string;
-  source: string;
+  breakdown: OperationBreakdown[];
 }
+
+const OPERATION_COLORS: Record<string, { bar: string; label: string }> = {
+  ocr:          { bar: 'bg-blue-500',   label: 'OCR' },
+  document_llm: { bar: 'bg-green-500',  label: 'Document LLM' },
+  agent_llm:    { bar: 'bg-purple-500', label: 'Agent LLM' },
+};
+
+// Normalize legacy operation names before lookup
+const normalizeOperation = (op: string): string => {
+  if (op === 'document_processing') return 'document_llm';
+  return op;
+};
+
+const operationColor = (op: string) => {
+  const normalized = normalizeOperation(op);
+  return OPERATION_COLORS[normalized] ?? { bar: 'bg-gray-400', label: normalized };
+};
 
 const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ organizationId, refreshKey, defaultBillingPeriod }) => {
   const [rangeData, setRangeData] = useState<UsageRangeResponse | null>(null);
@@ -93,57 +114,38 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
       const processData = (data: UsageDataPoint[]) => {
         if (!data || data.length === 0) return [];
 
-        // Sort data by date
         const sortedData = [...data].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-        let processed: ProcessedDataPoint[] = [];
+        // Group by date key (daily → YYYY-MM-DD, monthly → YYYY-MM)
+        const groupMap = new Map<string, { dateKey: string; breakdown: Map<string, number> }>();
+
+        sortedData.forEach(point => {
+          const date = new Date(point.date);
+          const key = granularity === 'daily'
+            ? point.date
+            : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+
+          if (!groupMap.has(key)) {
+            groupMap.set(key, { dateKey: granularity === 'daily' ? point.date : `${key}-01`, breakdown: new Map() });
+          }
+          const entry = groupMap.get(key)!;
+          const op = normalizeOperation(point.operation);
+          entry.breakdown.set(op, (entry.breakdown.get(op) ?? 0) + point.spus);
+        });
+
         let cumulative = 0;
-
-        if (granularity === 'daily') {
-          // Use daily data as-is
-          processed = sortedData.map(point => {
-            cumulative += point.spus;
-            return {
-              ...point,
-              cumulative_spus: cumulative
-            };
-          });
-        } else {
-          // Aggregate to monthly data
-          const monthlyMap = new Map<string, { spus: number; operations: string[]; sources: string[] }>();
-          
-          sortedData.forEach(point => {
-            const date = new Date(point.date);
-            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
-            
-            if (!monthlyMap.has(monthKey)) {
-              monthlyMap.set(monthKey, { spus: 0, operations: [], sources: [] });
-            }
-            
-            const monthData = monthlyMap.get(monthKey)!;
-            monthData.spus += point.spus;
-            if (!monthData.operations.includes(point.operation)) {
-              monthData.operations.push(point.operation);
-            }
-            if (!monthData.sources.includes(point.source)) {
-              monthData.sources.push(point.source);
-            }
-          });
-
-          // Convert to processed data points
-          processed = Array.from(monthlyMap.entries()).map(([monthKey, data]) => {
-            cumulative += data.spus;
-            return {
-              date: `${monthKey}-01`, // Use first day of month for display
-              spus: data.spus,
-              cumulative_spus: cumulative,
-              operation: data.operations[0] || 'unknown',
-              source: data.sources[0] || 'unknown'
-            };
-          });
-        }
-
-        return processed;
+        return Array.from(groupMap.values()).map(({ dateKey, breakdown }) => {
+          const total = Array.from(breakdown.values()).reduce((s, v) => s + v, 0);
+          cumulative += total;
+          return {
+            date: dateKey,
+            spus: total,
+            cumulative_spus: cumulative,
+            breakdown: Array.from(breakdown.entries())
+              .map(([operation, spus]) => ({ operation, spus }))
+              .sort((a, b) => a.operation.localeCompare(b.operation)),
+          };
+        });
       };
 
       const processed = processData(rangeData.data_points);
@@ -426,34 +428,60 @@ const SubscriptionSPUUsageChart: React.FC<SubscriptionSPUUsageChartProps> = ({ o
             <p>No usage data available for the selected period.</p>
           </div>
         ) : (
-          <div className="flex items-end h-64 gap-2" style={{ justifyContent: processedData.length === 1 ? 'center' : 'space-between' }}>
-            {processedData.map((point, index) => {
-              const value = point.spus;
-              const height = maxValue > 0 ? (value / maxValue) * 100 : 0;
-              
-              return (
-                <div key={index} className={`flex flex-col items-center ${processedData.length === 1 ? 'w-16' : 'flex-1'} relative`} style={{ height: '100%' }}>
-                  <div className="relative group w-full" style={{ height: `${height}%`, minHeight: '12px', marginTop: 'auto' }}>
-                    <div
-                      className="w-full h-full rounded-t transition-all duration-300 bg-gradient-to-t from-green-500 to-green-400"
-                    ></div>
-                    
-                    {/* Tooltip */}
-                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 whitespace-nowrap z-10">
-                      <div className="font-medium">{formatChartDate(point.date)}</div>
-                      <div>SPUs: {value.toLocaleString()}</div>
-                      <div>Operation: {point.operation}</div>
+          <>
+            <div className="flex items-end h-64 gap-2" style={{ justifyContent: processedData.length === 1 ? 'center' : 'space-between' }}>
+              {processedData.map((point, index) => {
+                const height = maxValue > 0 ? (point.spus / maxValue) * 100 : 0;
+
+                return (
+                  <div key={index} className={`flex flex-col items-center ${processedData.length === 1 ? 'w-16' : 'flex-1'} relative`} style={{ height: '100%' }}>
+                    <div className="relative w-full flex flex-col justify-end rounded-t overflow-visible" style={{ height: `${height}%`, minHeight: '12px', marginTop: 'auto' }}>
+                      {/* Stacked segments — rendered bottom-up, each with its own tooltip */}
+                      {[...point.breakdown].reverse().map((seg, si) => {
+                        const segHeight = point.spus > 0 ? (seg.spus / point.spus) * 100 : 0;
+                        const { bar, label } = operationColor(seg.operation);
+                        return (
+                          <div
+                            key={si}
+                            className={`group/seg relative w-full ${bar} transition-all duration-300`}
+                            style={{ height: `${segHeight}%` }}
+                          >
+                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover/seg:opacity-100 transition-opacity duration-200 whitespace-nowrap z-20 pointer-events-none">
+                              <div className="font-medium">{formatChartDate(point.date)}</div>
+                              <div>{label}: {seg.spus.toLocaleString()} SPUs</div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {/* X-axis label */}
+                    <div className="text-xs text-gray-600 mt-2 text-center">
+                      {formatChartDate(point.date)}
                     </div>
                   </div>
-                  
-                  {/* X-axis labels */}
-                  <div className="text-xs text-gray-600 mt-2 text-center">
-                    {formatChartDate(point.date)}
-                  </div>
+                );
+              })}
+            </div>
+
+            {/* Legend */}
+            {(() => {
+              const ops = Array.from(new Set(processedData.flatMap(p => p.breakdown.map(b => b.operation)))).sort();
+              return ops.length > 1 ? (
+                <div className="flex flex-wrap gap-3 mt-3 justify-center">
+                  {ops.map(op => {
+                    const { bar, label } = operationColor(op);
+                    return (
+                      <div key={op} className="flex items-center gap-1 text-xs text-gray-600">
+                        <div className={`w-3 h-3 rounded-sm ${bar}`} />
+                        {label}
+                      </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
+              ) : null;
+            })()}
+          </>
         )}
       </div>
 

@@ -1224,7 +1224,8 @@ async def run_llm(
         prompt_tokens=total_prompt_tokens,
         completion_tokens=total_completion_tokens,
         total_tokens=total_tokens,
-        actual_cost=total_cost
+        actual_cost=total_cost,
+        operation="document_llm",
     )
 
     # Skip any <think> ... </think> blocks

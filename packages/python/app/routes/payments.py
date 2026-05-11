@@ -2430,10 +2430,10 @@ async def get_usage_range(
                     "_id": {
                         "year": {"$year": "$timestamp"},
                         "month": {"$month": "$timestamp"},
-                        "day": {"$dayOfMonth": "$timestamp"}
+                        "day": {"$dayOfMonth": "$timestamp"},
+                        "operation": "$operation"
                     },
                     "total_spus": {"$sum": "$spus"},
-                    "operations": {"$addToSet": "$operation"},
                     "sources": {"$addToSet": "$source"}
                 }
             },
@@ -2441,28 +2441,25 @@ async def get_usage_range(
                 "$sort": {
                     "_id.year": 1,
                     "_id.month": 1,
-                    "_id.day": 1
+                    "_id.day": 1,
+                    "_id.operation": 1
                 }
             }
         ]
-        
+
         results = await db.payments_usage_records.aggregate(pipeline).to_list(length=None)
-        
-        # Process results
+
+        # Process results — one data point per (day, operation)
         data_points = []
         total_spus = 0
-        
+
         for result in results:
-            # Format date as YYYY-MM-DD
             date_str = f"{result['_id']['year']:04d}-{result['_id']['month']:02d}-{result['_id']['day']:02d}"
-            
             spus = result['total_spus']
             total_spus += spus
-            
-            # Get the most common operation and source for this day
-            operation = result['operations'][0] if result['operations'] else 'unknown'
+            operation = result['_id']['operation'] or 'unknown'
             source = result['sources'][0] if result['sources'] else 'unknown'
-            
+
             data_points.append(UsageDataPoint(
                 date=date_str,
                 spus=spus,

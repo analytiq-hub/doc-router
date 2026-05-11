@@ -266,6 +266,7 @@ async def _record_spu_for_llm_call(
             completion_tokens=completion_tokens,
             total_tokens=total_tokens,
             actual_cost=actual_cost,
+            operation="agent_llm",
         )
     except Exception as e:
         logger.error(f"Error recording SPU usage for document chat (model={model}): {e}")
