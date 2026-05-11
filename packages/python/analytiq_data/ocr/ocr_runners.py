@@ -14,6 +14,7 @@ from analytiq_data.aws import textract as textract_mod
 from analytiq_data.ocr.ocr_config import (
     OrgOcrConfig,
     max_reserved_spu_for_ocr_config,
+    mistral_ocr_usd_cost,
     spu_ocr_for_page_count,
     textract_spu_and_usd_charge,
 )
@@ -123,7 +124,8 @@ async def run_document_ocr(
             )
             raise
         n_pages = _mistral_page_count(payload)
-        spus = spu_ocr_for_page_count(n_pages)
+        usd = mistral_ocr_usd_cost(n_pages)
+        spus = ad.payments.compute_spu_to_charge(usd, min_spu=spu_ocr_for_page_count(n_pages))
         if spus > 0:
             await ad.payments.record_spu_usage(
                 org_id=org_id,
@@ -131,9 +133,10 @@ async def run_document_ocr(
                 llm_provider="ocr",
                 llm_model="mistral-ocr",
                 operation="ocr",
+                actual_cost=usd,
             )
         logger.info(
-            f"OCR mistral finished org_id={org_id} document_id={document_id} pages={n_pages} spus={spus}"
+            f"OCR mistral finished org_id={org_id} document_id={document_id} pages={n_pages} usd={usd:.6f} spus={spus}"
         )
         return payload
 
@@ -150,7 +153,8 @@ async def run_document_ocr(
             )
             raise
         n_pages = _mistral_page_count(payload)
-        spus = spu_ocr_for_page_count(n_pages)
+        usd = mistral_ocr_usd_cost(n_pages)
+        spus = ad.payments.compute_spu_to_charge(usd, min_spu=spu_ocr_for_page_count(n_pages))
         if spus > 0:
             await ad.payments.record_spu_usage(
                 org_id=org_id,
@@ -158,9 +162,10 @@ async def run_document_ocr(
                 llm_provider="ocr",
                 llm_model="mistral-vertex-ocr",
                 operation="ocr",
+                actual_cost=usd,
             )
         logger.info(
-            f"OCR mistral_vertex finished org_id={org_id} document_id={document_id} pages={n_pages} spus={spus}"
+            f"OCR mistral_vertex finished org_id={org_id} document_id={document_id} pages={n_pages} usd={usd:.6f} spus={spus}"
         )
         return payload
 
@@ -180,7 +185,8 @@ async def run_document_ocr(
             )
             raise
         n_pages = _llm_page_count(payload, pdf_bytes)
-        spus = spu_ocr_for_page_count(n_pages)
+        usd = mistral_ocr_usd_cost(n_pages)
+        spus = ad.payments.compute_spu_to_charge(usd, min_spu=spu_ocr_for_page_count(n_pages))
         if spus > 0:
             await ad.payments.record_spu_usage(
                 org_id=org_id,
@@ -188,9 +194,10 @@ async def run_document_ocr(
                 llm_provider="ocr",
                 llm_model=cfg.llm.model or "llm-ocr",
                 operation="ocr",
+                actual_cost=usd,
             )
         logger.info(
-            f"OCR llm finished org_id={org_id} document_id={document_id} pages={n_pages} spus={spus}"
+            f"OCR llm finished org_id={org_id} document_id={document_id} pages={n_pages} usd={usd:.6f} spus={spus}"
         )
         return payload
 

@@ -940,16 +940,13 @@ async def run_llm(
     if llm_model is None:
         llm_model = await ad.llm.get_llm_model(analytiq_client, prompt_revid)
 
-    # 3. Determine SPU cost for this LLM
-    spu_cost = await ad.payments.get_spu_cost(llm_model)
+    # 3. Determine number of pages and page-based SPU floor for pre-check
+    num_pages = doc.get("num_pages", 1)
+    from analytiq_data.ocr.ocr_config import spu_ocr_for_page_count
+    page_floor_spus = spu_ocr_for_page_count(num_pages)
 
-    # 4. Determine number of pages (example: from doc['num_pages'] or OCR)
-    num_pages = doc.get("num_pages", 1)  # You may need to adjust this
-
-    total_spu_needed = spu_cost * num_pages
-
-    # 5. Check if org has enough credits (throws SPUCreditException if insufficient)
-    await ad.payments.check_spu_limits(org_id, total_spu_needed)
+    # 4. Pre-check: ensure org has at least the page-floor SPUs available
+    await ad.payments.check_spu_limits(org_id, page_floor_spus)
 
     if not ad.llm.is_chat_model(llm_model) and not ad.llm.is_supported_model(llm_model):
         logger.info(f"{document_id}/{prompt_revid}: LLM model {llm_model} is not a chat model, falling back to default llm_model")
@@ -1217,10 +1214,11 @@ async def run_llm(
     # For agentic loops, tokens are already accumulated above
     total_tokens = total_prompt_tokens + total_completion_tokens
 
-    # 8. Deduct credits with actual metrics
+    # 8. Deduct credits: cost-based SPUs with page-floor minimum
+    spus_to_charge = ad.payments.compute_spu_to_charge(total_cost, min_spu=page_floor_spus)
     await ad.payments.record_spu_usage(
-        org_id, 
-        total_spu_needed,
+        org_id,
+        spus_to_charge,
         llm_provider=llm_provider,
         llm_model=llm_model,
         prompt_tokens=total_prompt_tokens,

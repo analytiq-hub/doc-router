@@ -10,13 +10,6 @@ logger = logging.getLogger(__name__)
 # Formula: ceil(200% * actual_cost / price_per_credit); this caps the result.
 MAX_SPU_PER_LLM_CALL = 50
 
-LLM_SPU_COSTS = {
-    "gpt-4o-mini": 1,
-    "gpt-4.1-2025-04-14": 1,
-    "claude-3-5-sonnet-latest": 1,
-    # ... etc ...
-}
-
 check_payment_limits = None
 record_payment_usage = None
 get_price_per_credit = None  # Hook: () -> float, set by app.routes.payments
@@ -46,8 +39,8 @@ def compute_spu_to_charge(actual_cost: float, min_spu: int = 1, cost_multiplier:
 
 
 async def get_spu_cost(llm_model: str) -> int:
-    """Get the SPU cost for a given LLM model"""
-    return LLM_SPU_COSTS.get(llm_model, 1)
+    """Conservative pre-check floor: 1 SPU per agent step regardless of model."""
+    return 1
 
 async def check_spu_limits(org_id: str, spus: int) -> bool:
     """Check if organization has hit usage limits and needs to upgrade"""

@@ -50,7 +50,9 @@ def spu_ocr_for_page_count(n_pages: int) -> int:
     return max(1, math.ceil(n_pages / 25))
 
 
-TEXTRACT_SPU_PER_FEATURE_MULTIPLIER = 4
+# --- OCR USD estimates -------------------------------------------------------------------
+# Mistral OCR (mistral-ocr-latest, Mistral Vertex): ~$2 per 1000 pages public pricing.
+USD_MISTRAL_OCR_PER_PAGE = 0.002
 
 # --- AWS Textract USD estimates (list price, first tier / US public examples) ---------------
 # Textract does not return dollars on the API; we approximate for SPU upsizing.
@@ -93,42 +95,31 @@ def textract_usd_cost(n_pages: int, feature_types: list[str]) -> float:
     return float(n_pages) * per_page
 
 
-def textract_spu_base_charge(n_pages: int, feature_types: list[str]) -> int:
-    """
-    Textract OCR SPUs after a successful run.
-
-    * **Base** = :func:`spu_ocr_for_page_count` (page-based).
-    * **No** ``feature_types``: charge base only (text detection / no AnalyzeDocument extras).
-    * **Each** enabled AnalyzeDocument feature: charge an **additional** ``4 × base`` (so
-      ``k`` features → ``base × 4 × k``).
-    """
-    base = spu_ocr_for_page_count(n_pages)
-    k = len(feature_types)
-    if k == 0:
-        return base
-    return base * TEXTRACT_SPU_PER_FEATURE_MULTIPLIER * k
+def mistral_ocr_usd_cost(n_pages: int) -> float:
+    """Estimated USD for Mistral OCR (native, Vertex) and LLM-based OCR."""
+    if n_pages <= 0:
+        return 0.0
+    return float(n_pages) * USD_MISTRAL_OCR_PER_PAGE
 
 
 def textract_spu_and_usd_charge(
     n_pages: int, feature_types: list[str]
 ) -> tuple[int, float]:
     """
-    Billable SPUs for Textract and the USD estimate used for cost-based charging.
+    Billable SPUs for Textract and the USD estimate.
 
-    Takes ``max`` of the internal heuristic (:func:`textract_spu_base_charge`) and
-    :func:`analytiq_data.payments.spu.compute_spu_to_charge` applied to
-    :func:`textract_usd_cost` (same pattern as LLM: cover ~200% of estimated USD
-    in credit terms when ``price_per_credit`` is configured).
+    SPUs = ceil(2 × estimated_usd / price_per_spu), minimum ceil(n_pages / 25).
+    When price_per_credit is not configured, falls back to the page-based minimum.
     """
     usd = textract_usd_cost(n_pages, feature_types)
-    heuristic = textract_spu_base_charge(n_pages, feature_types)
     if n_pages <= 0:
         return (0, usd)
 
     from analytiq_data.payments.spu import compute_spu_to_charge
 
-    cost_based_spus = compute_spu_to_charge(usd)
-    return (max(heuristic, cost_based_spus), usd)
+    page_floor = spu_ocr_for_page_count(n_pages)
+    spus = compute_spu_to_charge(usd, min_spu=page_floor)
+    return (spus, usd)
 
 
 class OrgOcrTextractSettings(BaseModel):
