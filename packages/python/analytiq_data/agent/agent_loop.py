@@ -403,9 +403,8 @@ async def run_agent_turn(
                     message = payload
                 elif event_type == "usage":
                     usage_obj = payload
-            if usage_obj is not None:
-                fake_response = type("R", (), {"usage": usage_obj})()
-                await _record_spu_for_llm_call(fake_response, organization_id, llm_provider, model)
+            fake_response = type("R", (), {"usage": usage_obj})()
+            await _record_spu_for_llm_call(fake_response, organization_id, llm_provider, model)
             if message is None:
                 return {"error": "Stream did not return a message"}
             tool_calls = getattr(message, "tool_calls", None) or []
