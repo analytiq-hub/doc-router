@@ -9,7 +9,6 @@ import {
   EyeSlashIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
-  PlusIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
 import type { FlowCredentialHeader, FlowCredentialKindSummary } from '@docrouter/sdk';
@@ -105,7 +104,7 @@ function FlowModal({
 
 const FlowCredentials: React.FC<{
   organizationId: string;
-  /** Open the “New credential” dialog (from Create flow ▾ → Create credential). */
+  /** Open the new-credential dialog (header Create credential, or legacy `newCredential` / `bootstrapCredential` in URL). */
   autoBootstrapCredential?: boolean;
   onAutoBootstrapCredentialHandled?: () => void;
 }> = ({ organizationId, autoBootstrapCredential, onAutoBootstrapCredentialHandled }) => {
@@ -158,11 +157,6 @@ const FlowCredentials: React.FC<{
     setCreateFields({});
     setShowSecret({});
   }, []);
-
-  const openCreateCredential = useCallback(() => {
-    resetCreateWizardState();
-    setCreateOpen(true);
-  }, [resetCreateWizardState]);
 
   const closeCreateCredential = useCallback(() => {
     setCreateOpen(false);
@@ -416,14 +410,8 @@ const FlowCredentials: React.FC<{
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-gray-200 px-4 py-3">
+      <div className="border-b border-gray-200 px-4 py-3">
         <p className="m-0 text-sm text-gray-600">Store API keys and auth for HTTP Request and other nodes.</p>
-        <button type="button" className={btnPrimary} onClick={openCreateCredential}>
-          <span className="inline-flex items-center gap-1.5">
-            <PlusIcon className="h-4 w-4 shrink-0" aria-hidden />
-            Add credential
-          </span>
-        </button>
       </div>
       {message && <div className="px-4 py-3 text-sm text-red-600">{message}</div>}
       <div className="overflow-x-auto" style={{ minHeight: 360 }}>
@@ -447,7 +435,7 @@ const FlowCredentials: React.FC<{
             {!loading && items.length === 0 && total === 0 && (
               <tr>
                 <td colSpan={4} className="px-3 py-8 text-center text-sm text-gray-500">
-                  No credentials yet. Add one to use in flow nodes.
+                  No credentials yet. Use Create credential in the page header to add one.
                 </td>
               </tr>
             )}
