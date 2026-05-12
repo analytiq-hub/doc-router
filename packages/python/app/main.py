@@ -106,9 +106,9 @@ async def lifespan(app):
     await ad.flows.ensure_credentials_indexes(analytiq_client)
     await ad.flows.ensure_flow_oauth_state_indexes(analytiq_client)
 
-    # Start background workers in the same event loop (replaces the worker subprocess)
-    n_workers = int(os.getenv("N_WORKERS", "1"))
-    worker_tasks = start_workers(n_workers)
+    # Start background workers in the same event loop (N_DOCROUTER_WORKERS=0 → start_workers returns []).
+    n_docrouter_workers = int(os.getenv("N_DOCROUTER_WORKERS", "1"))
+    worker_tasks = start_workers(n_docrouter_workers)
 
     yield
 

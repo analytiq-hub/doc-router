@@ -36,7 +36,7 @@ async def test_textract_and_llm_default_pipeline_sdk(test_db, mock_auth, setup_t
     }]
 
     # Start the worker appliance with mocked functions
-    with WorkerAppliance(n_workers=1) as worker_appliance:
+    with WorkerAppliance(n_docrouter_workers=1) as worker_appliance:
         # Upload the document using SDK
         upload_result = mock_docrouter_client.documents.upload(TEST_ORG_ID, upload_data)
         assert "documents" in upload_result, f"Failed to upload document: {upload_result}"
@@ -229,7 +229,7 @@ async def test_full_document_llm_processing_pipeline_sdk(org_and_users, setup_te
     })
 
     # Start the worker appliance with mocked functions
-    with WorkerAppliance(n_workers=1, mock_llm_response=mock_llm_response) as worker_appliance, \
+    with WorkerAppliance(n_docrouter_workers=1, mock_llm_response=mock_llm_response) as worker_appliance, \
          patch.object(DocRouterClient, 'request', mock_request_with_auth):
 
         # Step 1: Create a JSON schema using SDK

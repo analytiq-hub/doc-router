@@ -166,8 +166,8 @@ async def mock_litellm_acompletion_with_retry(analytiq_client, model, messages, 
 class WorkerAppliance:
     """Test appliance for spawning worker processes with mocked functions"""
 
-    def __init__(self, n_workers=1, supports_response_schema=True, supports_pdf_input=True, mock_llm_response=None):
-        self.n_workers = n_workers
+    def __init__(self, n_docrouter_workers=1, supports_response_schema=True, supports_pdf_input=True, mock_llm_response=None):
+        self.n_docrouter_workers = n_docrouter_workers
         self.supports_response_schema = supports_response_schema
         self.supports_pdf_input = supports_pdf_input
         # Create default mock LLM response if none provided
@@ -212,9 +212,9 @@ class WorkerAppliance:
             mock_llm_completion.return_value = self.mock_llm_response
 
         # Set environment variable for worker count
-        self.original_n_workers = os.environ.get('N_WORKERS')
+        self.original_n_docrouter_workers = os.environ.get("N_DOCROUTER_WORKERS")
         self.original_env = os.environ.get('ENV')
-        os.environ['N_WORKERS'] = str(self.n_workers)
+        os.environ["N_DOCROUTER_WORKERS"] = str(self.n_docrouter_workers)
 
         logger.info(f"WorkerAppliance ENV: {os.environ['ENV']}")
 
@@ -263,10 +263,10 @@ class WorkerAppliance:
         self.patches.clear()
 
         # Restore original environment variables
-        if self.original_n_workers is not None:
-            os.environ['N_WORKERS'] = self.original_n_workers
-        elif 'N_WORKERS' in os.environ:
-            del os.environ['N_WORKERS']
+        if self.original_n_docrouter_workers is not None:
+            os.environ["N_DOCROUTER_WORKERS"] = self.original_n_docrouter_workers
+        elif "N_DOCROUTER_WORKERS" in os.environ:
+            del os.environ["N_DOCROUTER_WORKERS"]
 
         if self.original_env is not None:
             os.environ['ENV'] = self.original_env

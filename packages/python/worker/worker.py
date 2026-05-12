@@ -6,8 +6,7 @@ import asyncio
 from datetime import datetime, UTC
 from datetime import timedelta
 import logging
-# Add the parent directory to the sys path
-sys.path.append("..")
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import analytiq_data as ad
 
 # Set up the environment variables. This reads the .env file.
@@ -438,13 +437,17 @@ async def recover_all_queues(analytiq_client) -> None:
             logger.error(f"Error recovering queue {queue_name} at startup: {e}")
 
 
-def start_workers(n_workers: int) -> list[asyncio.Task]:
+def start_workers(n_docrouter_workers: int) -> list[asyncio.Task]:
     """
     Start all worker coroutines as asyncio Tasks within the running event loop.
     Call from a FastAPI lifespan or any async context. Cancel returned tasks on shutdown.
+    If n_docrouter_workers is 0, returns [] (no queue pollers and no reconcile/cleanup tasks).
     """
+    if n_docrouter_workers <= 0:
+        logger.info("n_docrouter_workers is %s; not starting worker tasks", n_docrouter_workers)
+        return []
     tasks = []
-    for i in range(n_workers):
+    for i in range(n_docrouter_workers):
         tasks.append(asyncio.create_task(worker_ocr(f"ocr_{i}"),            name=f"ocr_{i}"))
         tasks.append(asyncio.create_task(worker_llm(f"llm_{i}"),            name=f"llm_{i}"))
         tasks.append(asyncio.create_task(worker_kb_index(f"kb_index_{i}"),  name=f"kb_index_{i}"))
@@ -452,18 +455,18 @@ def start_workers(n_workers: int) -> list[asyncio.Task]:
         tasks.append(asyncio.create_task(worker_flow_run(f"flow_run_{i}"),  name=f"flow_run_{i}"))
     tasks.append(asyncio.create_task(worker_kb_reconcile("kb_reconcile_0"), name="kb_reconcile_0"))
     tasks.append(asyncio.create_task(worker_flow_cleanup("flow_cleanup_0"), name="flow_cleanup_0"))
-    logger.info(f"Started {len(tasks)} worker tasks (n_workers={n_workers})")
+    logger.info(f"Started {len(tasks)} worker tasks (n_docrouter_workers={n_docrouter_workers})")
     return tasks
 
 async def main():
-    N_WORKERS = int(os.getenv("N_WORKERS", "1"))
+    n_docrouter_workers = int(os.getenv("N_DOCROUTER_WORKERS", "1"))
 
     # Run startup recovery once with a dedicated client before starting workers
     ENV = os.getenv("ENV", "dev")
     recovery_client = ad.common.get_analytiq_client(env=ENV, name="startup_recovery")
     await recover_all_queues(recovery_client)
 
-    tasks = start_workers(N_WORKERS)
+    tasks = start_workers(n_docrouter_workers)
     await asyncio.gather(*tasks)
 
 if __name__ == "__main__":

@@ -77,12 +77,53 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY}
       - SES_FROM_EMAIL=${SES_FROM_EMAIL}
-      - N_WORKERS=${N_WORKERS:-1}
+      - N_DOCROUTER_WORKERS=0
+      - N_UVICORN_WORKERS=${N_UVICORN_WORKERS:-1}
       - CORS_ORIGINS_EXTRA=${CORS_ORIGINS_EXTRA}
-    command: sh -c "cd /app/packages/python && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    command: sh -c "cd /app/packages/python && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${N_UVICORN_WORKERS:-1}"
     restart: unless-stopped
     ports:
       - "8000:8000"
+    networks:
+      - doc-router-local-network
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 512M
+
+  queue-worker:
+    image: ghcr.io/analytiq-hub/doc-router-backend:${IMAGE_TAG:-latest}
+    build:
+      context: ../..
+      dockerfile: deploy/shared/docker/Dockerfile
+      target: backend
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      - ENV=${ENV:-dev}
+      - MONGODB_URI=mongodb://mongodb:27017/?directConnection=true
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
+      - FASTAPI_SECRET=${FASTAPI_SECRET:-${NEXTAUTH_SECRET}} # Obsolete, will be removed
+      - FASTAPI_ROOT_PATH=${FASTAPI_ROOT_PATH:-/fastapi}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_S3_BUCKET_NAME=${AWS_S3_BUCKET_NAME}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - MISTRAL_API_KEY=${MISTRAL_API_KEY}
+      - SES_FROM_EMAIL=${SES_FROM_EMAIL}
+      - N_DOCROUTER_WORKERS=${N_DOCROUTER_WORKERS:-1}
+      - CORS_ORIGINS_EXTRA=${CORS_ORIGINS_EXTRA}
+    command: sh -c "cd /app/packages/python && exec python3 worker/worker.py"
+    restart: unless-stopped
     networks:
       - doc-router-local-network
     deploy:

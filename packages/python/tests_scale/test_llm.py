@@ -36,7 +36,7 @@ async def test_textract_and_llm_default_pipeline(test_db, mock_auth, setup_test_
     }
 
     # Start the worker appliance with mocked functions
-    with WorkerAppliance(n_workers=1) as worker_appliance:
+    with WorkerAppliance(n_docrouter_workers=1) as worker_appliance:
         # Upload the document
         upload_resp = client.post(f"/v0/orgs/{TEST_ORG_ID}/documents", json=upload_data, headers=get_auth_headers())
         assert upload_resp.status_code == 200, f"Failed to upload document: {upload_resp.text}"
@@ -205,7 +205,7 @@ async def test_full_document_llm_processing_pipeline(org_and_users, setup_test_m
     })
 
     # Start the worker appliance with mocked functions
-    with WorkerAppliance(n_workers=1, mock_llm_response=mock_llm_response) as worker_appliance:
+    with WorkerAppliance(n_docrouter_workers=1, mock_llm_response=mock_llm_response) as worker_appliance:
 
         # Step 1: Create a JSON schema
         schema_data = {

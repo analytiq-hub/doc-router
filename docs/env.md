@@ -185,10 +185,15 @@ The following environment variables are used for various LLM providers:
 
 ## Worker Configuration
 
-### `N_WORKERS`
-- **Purpose**: Number of worker processes to run
+### `N_DOCROUTER_WORKERS`
+- **Purpose**: Number of asyncio queue consumer task groups per process (OCR, LLM, KB index, webhook, flow_run, plus shared reconcile/cleanup when greater than zero). Set to `0` in the API process when queue work runs only in `worker/worker.py` (for example Docker Compose `queue-worker`).
 - **Default**: `"1"`
-- **Usage**: Worker process scaling (`packages/python/worker/worker.py`)
+- **Usage**: `packages/python/worker/worker.py`, `packages/python/app/main.py` lifespan
+
+### `N_UVICORN_WORKERS`
+- **Purpose**: Number of Uvicorn OS worker processes (`uvicorn ... --workers`). Each process loads the FastAPI app independently; combine with `N_DOCROUTER_WORKERS` carefully (total queue parallelism multiplies). Not used with `uvicorn --reload` (single process).
+- **Default**: `"1"`
+- **Usage**: Docker Compose and Helm backend command line; set in environment so the shell can expand it in the start command.
 
 ## Logging Configuration
 
@@ -420,7 +425,8 @@ ADMIN_EMAIL=admin@yourdomain.com
 ADMIN_PASSWORD=secure-admin-password
 
 # Workers
-N_WORKERS=1
+N_DOCROUTER_WORKERS=1
+N_UVICORN_WORKERS=1
 
 # Logging
 LOG_LEVEL=INFO

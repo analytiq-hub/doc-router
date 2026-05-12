@@ -10,7 +10,8 @@ data:
   NEXTAUTH_URL: {{ .Values.config.nextauthUrl | quote }}
   FASTAPI_ROOT_PATH: {{ .Values.config.fastapiRootPath | quote }}
   FASTAPI_BACKEND_URL: {{ printf "http://backend.%s.svc.cluster.local:8000" .Release.Namespace | quote }}
-  N_WORKERS: {{ .Values.config.nWorkers | quote }}
+  N_DOCROUTER_WORKERS: {{ .Values.config.nDocrouterWorkers | quote }}
+  N_UVICORN_WORKERS: {{ .Values.config.nUvicornWorkers | quote }}
   AWS_S3_BUCKET_NAME: {{ .Values.config.appBucketName | quote }}
   AWS_REGION: {{ .Values.config.region | quote }}
   CORS_ORIGINS_EXTRA: {{ .Values.config.corsOriginsExtra | quote }}

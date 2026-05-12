@@ -34,7 +34,8 @@ config:
   environment: prod
   nextauthUrl: ""                       # e.g. https://app.example.com
   fastapiRootPath: "/fastapi"           # must match the ingress path prefix
-  nWorkers: "4"
+  nDocrouterWorkers: "4"                 # asyncio queue consumer tasks per process (see N_DOCROUTER_WORKERS)
+  nUvicornWorkers: "1"                   # OS processes for FastAPI (--workers); use 1 with --reload locally
   appBucketName: ""                     # AWS S3 bucket for document storage
   region: ""                            # AWS region
   corsOriginsExtra: ""                  # comma-separated extra CORS origins, e.g. https://make.powerautomate.com

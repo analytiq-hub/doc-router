@@ -14,7 +14,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 @pytest.mark.asyncio
-async def test_full_document_llm_processing_pipeline(org_and_users, setup_test_models, test_db, n_workers: int = 25, n_uploads: int = 100):
+async def test_full_document_llm_processing_pipeline(org_and_users, setup_test_models, test_db, n_docrouter_workers: int = 25, n_uploads: int = 100):
     """Test the complete document processing pipeline with schema, tag, prompt, upload, and LLM processing"""
     org_id = org_and_users["org_id"]
     admin = org_and_users["admin"]
@@ -38,7 +38,7 @@ async def test_full_document_llm_processing_pipeline(org_and_users, setup_test_m
     })
 
     # Start the worker appliance with mocked functions
-    with WorkerAppliance(n_workers=n_workers, mock_llm_response=mock_llm_response) as worker_appliance:
+    with WorkerAppliance(n_docrouter_workers=n_docrouter_workers, mock_llm_response=mock_llm_response) as worker_appliance:
 
         # Step 1: Create a JSON schema
         schema_data = {
