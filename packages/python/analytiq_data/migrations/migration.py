@@ -3194,6 +3194,11 @@ class AddAccessTokenFingerprint(Migration):
       3. Re-encrypt the plaintext with ``encrypt_secret`` (v2 random IV) and
          store both the new ciphertext and the fingerprint.
 
+    Rows that cannot be decrypted with the current ``NEXTAUTH_SECRET`` (e.g.
+    ciphertext from before a secret rotation) or decrypt to empty plaintext are
+    **deleted**. They are unusable for authentication and cannot be assigned a
+    fingerprint.
+
     Index changes:
       - Drop the unique index on ``token`` (random-IV ciphertexts of the same
         plaintext no longer collide, so the index can't enforce uniqueness).
@@ -3220,9 +3225,10 @@ class AddAccessTokenFingerprint(Migration):
                 logger.info(f"access_tokens token_1 index already absent: {e}")
 
             # Step 2: backfill fingerprint + re-encrypt for every row that
-            # doesn't yet have a fingerprint.
+            # doesn't yet have a fingerprint. Un-decryptable or empty rows are
+            # deleted — they cannot authenticate and cannot receive a fingerprint.
             updated = 0
-            errors = 0
+            deleted = 0
             cursor = db.access_tokens.find(
                 {"fingerprint": {"$exists": False}},
                 projection={"_id": 1, "token": 1},
@@ -3230,11 +3236,22 @@ class AddAccessTokenFingerprint(Migration):
             async for doc in cursor:
                 try:
                     plaintext = ad.crypto.decrypt_secret(doc.get("token"))
-                    if not plaintext:
-                        logger.warning(
-                            f"access_tokens {doc['_id']}: empty token, skipping"
-                        )
-                        continue
+                except Exception as e:
+                    logger.warning(
+                        f"access_tokens {doc.get('_id')}: cannot decrypt "
+                        f"(likely rotated NEXTAUTH_SECRET), deleting row: {e}"
+                    )
+                    await db.access_tokens.delete_one({"_id": doc["_id"]})
+                    deleted += 1
+                    continue
+                if not plaintext:
+                    logger.warning(
+                        f"access_tokens {doc['_id']}: empty decrypted token, deleting row"
+                    )
+                    await db.access_tokens.delete_one({"_id": doc["_id"]})
+                    deleted += 1
+                    continue
+                try:
                     await db.access_tokens.update_one(
                         {"_id": doc["_id"]},
                         {
@@ -3246,16 +3263,41 @@ class AddAccessTokenFingerprint(Migration):
                     )
                     updated += 1
                 except Exception as e:
+                    # Real failure — abort so we don't leave the collection in
+                    # a half-migrated state and try again on next deploy.
                     logger.error(
-                        f"access_tokens {doc.get('_id')}: failed to backfill fingerprint: {e}"
+                        f"access_tokens {doc.get('_id')}: write failed: {e}"
                     )
-                    errors += 1
+                    return False
 
-            logger.info(
-                f"AddAccessTokenFingerprint: backfilled {updated} rows, {errors} errors"
-            )
+            if deleted:
+                logger.warning(
+                    f"AddAccessTokenFingerprint: backfilled {updated} rows, "
+                    f"deleted {deleted} unreadable or empty token row(s)"
+                )
+            else:
+                logger.info(
+                    f"AddAccessTokenFingerprint: backfilled {updated} rows"
+                )
 
-            # Step 3: add unique index on fingerprint.
+            # Step 3: unique index on fingerprint. Every surviving row has a
+            # fingerprint after Step 2 (unreadable rows were deleted), so no
+            # partial filter is needed.
+            #
+            # Drop any pre-existing index with the same name first — an earlier
+            # iteration of this migration created it with a partialFilterExpression,
+            # which would now conflict with the plain unique spec below.
+            try:
+                await db.access_tokens.drop_index("access_tokens_fingerprint_unique")
+                logger.info(
+                    "Dropped pre-existing access_tokens_fingerprint_unique index "
+                    "to recreate with current spec"
+                )
+            except Exception as e:
+                logger.debug(
+                    f"access_tokens_fingerprint_unique not present pre-create: {e}"
+                )
+
             await db.access_tokens.create_index(
                 "fingerprint",
                 unique=True,
@@ -3263,7 +3305,7 @@ class AddAccessTokenFingerprint(Migration):
             )
             logger.info("Created access_tokens_fingerprint_unique index")
 
-            return errors == 0
+            return True
         except Exception as e:
             logger.error(f"AddAccessTokenFingerprint migration failed: {e}")
             return False
