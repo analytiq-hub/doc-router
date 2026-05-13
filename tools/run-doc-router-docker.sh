@@ -298,7 +298,9 @@ print_signin_hint() {
   admin_pw="$(read_dotenv_value ADMIN_PASSWORD "$ef" || true)"
   admin_email="${admin_email:-admin}"
   admin_pw="${admin_pw:-admin}"
-  echo "Credentials sign-in (http://localhost:3000/auth/signin): user ${admin_email} / password ${admin_pw}" >&2
+  # OSC 8 hyperlink: \e]8;;URL\e\\ text \e]8;;\e\\
+  printf "Log into \e]8;;http://localhost:3000\e\\http://localhost:3000\e]8;;\e\\ as %s/%s\n" \
+    "$admin_email" "$admin_pw" >&2
 }
 
 do_up() {
@@ -323,9 +325,7 @@ do_up() {
   )
 
   echo >&2
-  echo "DocRouter is starting. Open http://localhost:3000 (API via http://localhost:3000/fastapi , backend :8000)." >&2
   print_signin_hint
-  echo "State directory: ${STATE_DIR}" >&2
 }
 
 do_down() {
