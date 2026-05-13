@@ -144,7 +144,8 @@ async def test_same_name_allowed_in_different_orgs(org_and_users, test_db):
             "user_id": admin["id"],
             "organization_id": other_org,
             "name": "other-org-token",
-            "token": ad.crypto.encrypt_token(token_plain),
+            "token": ad.crypto.encrypt_secret(token_plain),
+            "fingerprint": ad.crypto.fingerprint_secret(token_plain),
             "created_at": datetime.now(UTC),
             "lifetime": 30,
         }

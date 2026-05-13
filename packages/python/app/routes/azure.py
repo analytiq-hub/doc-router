@@ -78,9 +78,9 @@ async def create_azure_config(
     now = datetime.now(UTC)
     update_data = {
         "type": "azure",
-        "tenant_id": ad.crypto.encrypt_token(tenant_id),
-        "client_id": ad.crypto.encrypt_token(client_id),
-        "client_secret": ad.crypto.encrypt_token(client_secret),
+        "tenant_id": ad.crypto.encrypt_secret(tenant_id),
+        "client_id": ad.crypto.encrypt_secret(client_id),
+        "client_secret": ad.crypto.encrypt_secret(client_secret),
         "api_base": api_base_in,
         "created_at": now,
     }
@@ -110,7 +110,7 @@ async def get_azure_config(current_user: User = Depends(get_admin_user)):
         if not raw:
             return ""
         try:
-            return ad.crypto.decrypt_token(raw) or ""
+            return ad.crypto.decrypt_secret(raw) or ""
         except Exception:
             return ""
 

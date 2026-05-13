@@ -108,7 +108,7 @@ def _decrypt_secret_if_needed(secret_encrypted: str | None) -> str | None:
     if not secret_encrypted:
         return None
     try:
-        return ad.crypto.decrypt_token(secret_encrypted)
+        return ad.crypto.decrypt_secret(secret_encrypted)
     except Exception:
         # If it's already plaintext (e.g., local dev), accept it.
         return secret_encrypted
@@ -118,7 +118,7 @@ def _decrypt_token_if_needed(token_encrypted: str | None) -> str | None:
     if not token_encrypted:
         return None
     try:
-        return ad.crypto.decrypt_token(token_encrypted)
+        return ad.crypto.decrypt_secret(token_encrypted)
     except Exception:
         return token_encrypted
 

@@ -21,7 +21,7 @@ async def get_llm_key(analytiq_client, llm_provider: str) -> str:
         return ""
 
     # Decrypt the token before returning
-    return ad.crypto.decrypt_token(provider_config["token"])
+    return ad.crypto.decrypt_secret(provider_config["token"])
 
 
 async def get_vertex_ai_config(analytiq_client) -> tuple[str, str]:

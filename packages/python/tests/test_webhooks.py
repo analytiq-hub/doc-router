@@ -1555,7 +1555,7 @@ async def test_get_webhook_delivery_details(test_db, mock_auth):
     
     # Encrypt auth_header_value for the test
     test_auth_value = "test_auth_header_value"
-    encrypted_auth_value = ad.crypto.encrypt_token(test_auth_value)
+    encrypted_auth_value = ad.crypto.encrypt_secret(test_auth_value)
 
     await test_db[DELIVERIES_COLLECTION].insert_one({
         "_id": delivery_id,

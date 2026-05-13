@@ -48,7 +48,7 @@ def _decrypt_token_field(doc: dict | None) -> str | None:
     if not token:
         return None
     try:
-        decrypted = ad.crypto.decrypt_token(token)
+        decrypted = ad.crypto.decrypt_secret(token)
     except Exception as e:
         logger.warning(f"Failed to decrypt Mistral llm_providers token: {e}")
         return None

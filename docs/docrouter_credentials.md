@@ -113,9 +113,11 @@ Circular extends are detected at load time; broken kinds are skipped with a warn
 }
 ```
 
-**Encryption:** AES-256-CFB via `ad.crypto.encrypt_token`; key derived from `NEXTAUTH_SECRET`.
+**Encryption:** AES-256-CFB via `ad.crypto.encrypt_secret`; key derived from `NEXTAUTH_SECRET`. Single uniform scheme — every encrypted field in the database is written this way (credential payloads, access tokens, LLM provider keys, AWS/Azure/GCP secrets, webhook auth values, …).
 
-**Known limitation:** the IV is fixed (derived deterministically from the key), so identical plaintexts produce identical ciphertexts. A random-IV variant should replace this before storing high-value secrets (OAuth client secrets, access tokens). Track as a separate task.
+**Payload format:** `v2:<urlsafe_b64(iv || ciphertext)>` with a fresh 16-byte IV from `os.urandom` per call, so identical plaintexts produce distinct ciphertexts. `ad.crypto.decrypt_secret` auto-detects the `v2:` prefix and falls back to the pre-fingerprint legacy format (bare urlsafe-base64, fixed IV from `sha256(key)[:16]`) so existing rows remain readable indefinitely. Application code paths re-encrypt as v2 on the next write to a given row; there is no scheduled re-encryption pass.
+
+**Equality lookups (`access_tokens`).** Because the ciphertext is randomized, rows that need to be queried by their plaintext (currently only `access_tokens`) carry an extra indexed `fingerprint` column: `ad.crypto.fingerprint_secret(plaintext)` returns `HMAC-SHA256(NEXTAUTH_SECRET, plaintext)` as hex, deterministic and brute-force resistant for the high-entropy `secrets.token_urlsafe(32)` plaintexts the server issues. Authentication does `find_one({"fingerprint": fingerprint_secret(presented_token)})` and never decrypts the stored ciphertext on the hot path. Migrated in by `AddAccessTokenFingerprint`, which also swaps the unique index from `token` to `fingerprint`.
 
 **Index:** `{ organization_id: 1, kind_key: 1 }` — created at startup.
 
@@ -360,22 +362,18 @@ Track per-kind sign-off in `schemas/credential-kinds/PORTING_STATUS.md`.
 
 ## 13. What is not yet implemented
 
-### 13.1 Random-IV encryption
-
-The current AES-256-CFB encryption uses a fixed IV derived from `NEXTAUTH_SECRET`. Identical credential field values encrypt to identical ciphertexts, which leaks information. Replace with a random IV prepended to the ciphertext. Requires a migration of existing `encrypted_payload` values.
-
-### 13.2 `pre_auth` kind schemas
+### 13.1 `pre_auth` kind schemas
 
 The `pre_auth` runtime is implemented but no shipped kind uses it. The ~7 n8n `preAuthentication` credentials (e.g. ERPNext, some CRMs) need kind JSON files with a `pre_auth` block. These are the ones the automated porter skips as unsupported.
 
-### 13.3 OAuth1
+### 13.2 OAuth1
 
 ~2 n8n credential kinds use OAuth1 (Twitter v1, some others). Defer unless a specific integration requires it. Would need a new `auth_mode: "oauth1"` and HMAC-SHA1 request signing in `credential_runtime`.
 
-### 13.4 Custom `authenticate()` kinds
+### 13.3 Custom `authenticate()` kinds
 
 ~24 n8n kinds use a custom TypeScript `authenticate()` function (AWS SigV4, HMAC, Digest with custom parameters, etc.). These cannot be ported as declarative JSON. Implement each as a dedicated Python credential module, similar to the existing AWS integration. Track in `PORTING_STATUS.md`.
 
-### 13.5 Predefined credential integration on the HTTP Request node
+### 13.4 Predefined credential integration on the HTTP Request node
 
 The `predefined` mode in the authentication widget currently picks any org credential whose kind matches a slot. True n8n-style "predefined credential type" would let a node declare it natively targets a specific third-party service (e.g. `slackOAuth2Api`), and the UI would filter to only that kind. This requires node-type metadata changes and new UI filtering.

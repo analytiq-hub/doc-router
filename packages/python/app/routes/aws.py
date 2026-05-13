@@ -62,8 +62,8 @@ async def create_aws_config(
             detail="Invalid AWS Secret Access Key format. Must be 40 characters long and contain only letters, numbers, and +/."
         )
 
-    encrypted_access_key = ad.crypto.encrypt_token(config.access_key_id)
-    encrypted_secret_key = ad.crypto.encrypt_token(config.secret_access_key)
+    encrypted_access_key = ad.crypto.encrypt_secret(config.access_key_id)
+    encrypted_secret_key = ad.crypto.encrypt_secret(config.secret_access_key)
 
     update_data = {
         "type": "aws",
@@ -91,7 +91,7 @@ async def get_aws_config(current_user: User = Depends(get_admin_user)):
     if not config:
         raise HTTPException(status_code=404, detail="AWS configuration not found")
 
-    access_key = ad.crypto.decrypt_token(config["access_key_id"])
+    access_key = ad.crypto.decrypt_secret(config["access_key_id"])
     # Access Key ID is shown in full (admin UI). Do not decrypt or return the secret access key.
     return {
         "access_key_id": access_key,

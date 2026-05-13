@@ -273,7 +273,7 @@ async def setup_llm_providers(analytiq_client):
                     logger.info(f"Updating token for {provider}")
                     token = os.getenv(config["token_env"])
                     if len(token) > 0:
-                        provider_config["token"] = ad.crypto.encrypt_token(token)
+                        provider_config["token"] = ad.crypto.encrypt_secret(token)
                     provider_config["token_created_at"] = datetime.now()
                     update = True
 

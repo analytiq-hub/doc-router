@@ -202,12 +202,12 @@ async def org_and_users(test_db):
         else:
             # Organization-level token
             token = f"org_{secrets.token_urlsafe(32)}"
-        encrypted = ad.crypto.encrypt_token(token)
         token_doc = {
             "user_id": user_id,
             "organization_id": org_id,
             "name": name,
-            "token": encrypted,
+            "token": ad.crypto.encrypt_secret(token),
+            "fingerprint": ad.crypto.fingerprint_secret(token),
             "created_at": datetime.now(UTC),
             "lifetime": 30
         }
@@ -270,7 +270,7 @@ async def setup_test_models(test_db):
         "litellm_models_available": ["gpt-4o-mini", "gpt-4o"],
         "litellm_models_enabled": ["gpt-4o-mini", "gpt-4o"],
         "enabled": True,
-        "token": ad.crypto.encrypt_token("test-token"),
+        "token": ad.crypto.encrypt_secret("test-token"),
         "token_created_at": datetime.now(UTC)
     }
     

@@ -82,7 +82,7 @@ async def _fetch_credential_fields_and_doc(
         raw = doc.get("encrypted_payload")
         if not raw:
             return {}, doc
-        decrypted = ad.crypto.decrypt_token(raw)
+        decrypted = ad.crypto.decrypt_secret(raw)
         if not decrypted:
             return {}, doc
         data = json.loads(decrypted)

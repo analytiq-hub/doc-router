@@ -124,11 +124,10 @@ async def get_current_user(
     except HTTPException:
         pass
 
-    # JWT failed or absent — treat token as an API token
-    encrypted_token = ad.crypto.encrypt_token(token)
-
-    # Build query based on context
-    token_query = {"token": encrypted_token}
+    # JWT failed or absent — treat token as an API token.
+    # Look up by HMAC fingerprint so the stored ciphertext can use a random IV
+    # (see ``docs/docrouter_credentials.md`` §4).
+    token_query = {"fingerprint": ad.crypto.fingerprint_secret(token)}
 
     if context_type == "account":
         # For account APIs, only accept account-level tokens
@@ -286,9 +285,9 @@ async def get_org_id_from_token(token: str) -> Optional[str]:
         HTTPException: If the token is invalid or not found
     """
     db = ad.common.get_async_db()
-    encrypted_token = ad.crypto.encrypt_token(token)
-    
-    stored_token = await db.access_tokens.find_one({"token": encrypted_token})
+    stored_token = await db.access_tokens.find_one(
+        {"fingerprint": ad.crypto.fingerprint_secret(token)}
+    )
     if not stored_token:
         raise HTTPException(status_code=401, detail="Invalid token")
     

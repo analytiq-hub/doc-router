@@ -74,20 +74,22 @@ async def create_org_token(
     max_attempts = 10
     for attempt in range(max_attempts):
         token = f"org_{secrets.token_urlsafe(32)}"
-        encrypted_token = ad.crypto.encrypt_token(token)
-        
-        # Check if token already exists
-        existing_token = await db.access_tokens.find_one({"token": encrypted_token})
+        fingerprint = ad.crypto.fingerprint_secret(token)
+
+        # Check if token already exists (lookup by deterministic fingerprint;
+        # stored ciphertext uses a random IV).
+        existing_token = await db.access_tokens.find_one({"fingerprint": fingerprint})
         if not existing_token:
             break
     else:
         raise HTTPException(status_code=500, detail="Failed to generate unique token after multiple attempts")
-    
+
     new_token = {
         "user_id": current_user.user_id,
         "organization_id": organization_id,
         "name": request.name,
-        "token": encrypted_token,
+        "token": ad.crypto.encrypt_secret(token),
+        "fingerprint": fingerprint,
         "created_at": datetime.now(UTC),
         "lifetime": request.lifetime
     }
@@ -127,7 +129,7 @@ async def list_org_tokens(
         # Decrypt token to get preview (first 10 chars) for display
         token_preview = ""
         try:
-            decrypted_token = ad.crypto.decrypt_token(token["token"])
+            decrypted_token = ad.crypto.decrypt_secret(token["token"])
             token_preview = decrypted_token[:10] if len(decrypted_token) >= 10 else ""
         except Exception as e:
             logger.warning(f"Failed to decrypt token for preview: {e}")
@@ -246,20 +248,22 @@ async def create_account_token(
     max_attempts = 10
     for attempt in range(max_attempts):
         token = f"acc_{secrets.token_urlsafe(32)}"
-        encrypted_token = ad.crypto.encrypt_token(token)
-        
-        # Check if token already exists
-        existing_token = await db.access_tokens.find_one({"token": encrypted_token})
+        fingerprint = ad.crypto.fingerprint_secret(token)
+
+        # Check if token already exists (lookup by deterministic fingerprint;
+        # stored ciphertext uses a random IV).
+        existing_token = await db.access_tokens.find_one({"fingerprint": fingerprint})
         if not existing_token:
             break
     else:
         raise HTTPException(status_code=500, detail="Failed to generate unique token after multiple attempts")
-    
+
     new_token = {
         "user_id": current_user.user_id,
         "organization_id": None,  # Explicitly set to None for account-level tokens
         "name": request.name,
-        "token": encrypted_token,
+        "token": ad.crypto.encrypt_secret(token),
+        "fingerprint": fingerprint,
         "created_at": datetime.now(UTC),
         "lifetime": request.lifetime
     }
@@ -292,7 +296,7 @@ async def list_account_tokens(
         # Decrypt token to get preview (first 10 chars)
         token_preview = ""
         try:
-            decrypted_token = ad.crypto.decrypt_token(token["token"])
+            decrypted_token = ad.crypto.decrypt_secret(token["token"])
             token_preview = decrypted_token[:10] if len(decrypted_token) >= 10 else ""
         except Exception as e:
             logger.warning(f"Failed to decrypt token for preview: {e}")

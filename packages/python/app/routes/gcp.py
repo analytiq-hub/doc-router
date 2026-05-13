@@ -59,7 +59,7 @@ async def create_gcp_config(
         raise HTTPException(status_code=400, detail="Missing project_id or private_key in service account JSON")
 
     db = ad.common.get_async_db()
-    encrypted = ad.crypto.encrypt_token(raw)
+    encrypted = ad.crypto.encrypt_secret(raw)
     now = datetime.now(UTC)
     update_data = {
         "type": "gcp",
@@ -87,7 +87,7 @@ async def get_gcp_config(current_user: User = Depends(get_admin_user)):
     if not doc or not doc.get("service_account_json"):
         raise HTTPException(status_code=404, detail="GCP configuration not found")
 
-    raw_json = ad.crypto.decrypt_token(doc["service_account_json"])
+    raw_json = ad.crypto.decrypt_secret(doc["service_account_json"])
     project_id: str | None = None
     private_key_id: str | None = None
     client_email: str | None = None

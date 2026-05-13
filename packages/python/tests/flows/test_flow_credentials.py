@@ -25,7 +25,7 @@ TEST_ORG = "aabbccddeeff001122334455"
 
 
 def _encrypted(payload: dict) -> str:
-    return ad.crypto.encrypt_token(json.dumps(payload))
+    return ad.crypto.encrypt_secret(json.dumps(payload))
 
 
 @pytest.mark.asyncio

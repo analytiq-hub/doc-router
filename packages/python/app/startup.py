@@ -113,8 +113,8 @@ async def setup_api_creds(analytiq_client):
                 logger.warning("AWS_S3_BUCKET_NAME environment variable not set")
 
             # Encrypt configuration before storing
-            encrypted_access_key = ad.crypto.encrypt_token(aws_access_key)
-            encrypted_secret_key = ad.crypto.encrypt_token(aws_secret_key)
+            encrypted_access_key = ad.crypto.encrypt_secret(aws_access_key)
+            encrypted_secret_key = ad.crypto.encrypt_secret(aws_secret_key)
 
             update_data = {
                 "type": "aws",
@@ -151,9 +151,9 @@ async def setup_api_creds(analytiq_client):
                     "AZURE_API_BASE environment variable not set (Foundry endpoint URL)"
                 )
 
-            encrypted_tenant = ad.crypto.encrypt_token(azure_tenant_id)
-            encrypted_client = ad.crypto.encrypt_token(azure_client_id)
-            encrypted_secret = ad.crypto.encrypt_token(azure_client_secret)
+            encrypted_tenant = ad.crypto.encrypt_secret(azure_tenant_id)
+            encrypted_client = ad.crypto.encrypt_secret(azure_client_id)
+            encrypted_secret = ad.crypto.encrypt_secret(azure_client_secret)
 
             azure_update = {
                 "type": ad.cloud.TYPE_AZURE,

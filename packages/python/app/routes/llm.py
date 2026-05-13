@@ -672,7 +672,7 @@ async def list_llm_providers(
         else:
             raw_tok = provider.get("token") or ""
             if len(raw_tok) > 0:
-                token = mask_secret_plaintext(ad.crypto.decrypt_token(raw_tok))
+                token = mask_secret_plaintext(ad.crypto.decrypt_secret(raw_tok))
             else:
                 token = None
 
@@ -754,7 +754,7 @@ async def set_llm_provider_config(
                     detail="Microsoft Foundry credentials are managed under Account → Development → Azure setup (cloud_config), not here.",
                 )
         elif len(request.token) > 0:
-            elem["token"] = ad.crypto.encrypt_token(request.token)
+            elem["token"] = ad.crypto.encrypt_secret(request.token)
             elem["token_created_at"] = datetime.now(UTC)
         else:
             elem["token"] = ""

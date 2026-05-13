@@ -596,7 +596,7 @@ async def test_list_org_llm_models(org_and_users, setup_test_models, test_db):
         "litellm_models_available": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229"],
         "litellm_models_enabled": ["claude-3-5-sonnet-20241022"],
         "enabled": False,
-        "token": ad.crypto.encrypt_token("test-token"),
+        "token": ad.crypto.encrypt_secret("test-token"),
         "token_created_at": datetime.now(UTC)
     }
     await test_db.llm_providers.insert_one(disabled_provider)
@@ -609,7 +609,7 @@ async def test_list_org_llm_models(org_and_users, setup_test_models, test_db):
         "litellm_models_available": ["gemini/gemini-2.0-flash", "gemini/gemini-pro"],
         "litellm_models_enabled": ["gemini/gemini-2.0-flash"],  # Only one enabled
         "enabled": True,
-        "token": ad.crypto.encrypt_token("test-token"),
+        "token": ad.crypto.encrypt_secret("test-token"),
         "token_created_at": datetime.now(UTC)
     }
     await test_db.llm_providers.insert_one(enabled_provider_2)

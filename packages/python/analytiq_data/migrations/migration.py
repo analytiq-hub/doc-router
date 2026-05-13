@@ -1889,12 +1889,12 @@ class UpgradeTokens(Migration):
                 
                 # Try to decrypt with the fallback method
                 try:
-                    decrypted_value = ad.crypto.decrypt_token(old_encrypted_value, secret_name="FASTAPI_SECRET")
+                    decrypted_value = ad.crypto.decrypt_secret(old_encrypted_value, key_env_var="FASTAPI_SECRET")
                 except Exception as e:
                     logger.warning(f"Failed to decrypt {field_name} for {doc_name} with FASTAPI_SECRET: {e}")
                     # If fallback fails, try current method (value might already be upgraded)
                     try:
-                        decrypted_value = ad.crypto.decrypt_token(old_encrypted_value)
+                        decrypted_value = ad.crypto.decrypt_secret(old_encrypted_value)
                         logger.info(f"{field_name} for {doc_name} is already using current encryption method")
                         skipped_count += 1
                         continue
@@ -1904,7 +1904,7 @@ class UpgradeTokens(Migration):
                         continue
                 
                 # Re-encrypt with the current method
-                new_encrypted_value = ad.crypto.encrypt_token(decrypted_value)
+                new_encrypted_value = ad.crypto.encrypt_secret(decrypted_value)
                 
                 # Update the document with the new encrypted value
                 await db[collection_name].update_one(
@@ -3183,6 +3183,108 @@ class AddFlowExecutionsFlowsCredentialsListIndexes(Migration):
             return False
 
 
+class AddAccessTokenFingerprint(Migration):
+    """Convert ``access_tokens`` from deterministic ciphertext lookups to
+    HMAC-fingerprint lookups (see ``docs/docrouter_credentials.md`` §4).
+
+    For each row:
+      1. Decrypt the existing ``token`` field (handles both legacy fixed-IV and
+         v2 random-IV ciphertexts).
+      2. Compute ``fingerprint_secret`` of the plaintext.
+      3. Re-encrypt the plaintext with ``encrypt_secret`` (v2 random IV) and
+         store both the new ciphertext and the fingerprint.
+
+    Index changes:
+      - Drop the unique index on ``token`` (random-IV ciphertexts of the same
+        plaintext no longer collide, so the index can't enforce uniqueness).
+      - Add a unique index on ``fingerprint``.
+    """
+
+    def __init__(self):
+        super().__init__(
+            description=(
+                "access_tokens: backfill HMAC fingerprint, re-encrypt with random IV, "
+                "swap unique index from token to fingerprint"
+            )
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            import analytiq_data as ad
+
+            # Step 1: drop legacy unique index on token (idempotent).
+            try:
+                await db.access_tokens.drop_index("token_1")
+                logger.info("Dropped legacy access_tokens token_1 unique index")
+            except Exception as e:
+                logger.info(f"access_tokens token_1 index already absent: {e}")
+
+            # Step 2: backfill fingerprint + re-encrypt for every row that
+            # doesn't yet have a fingerprint.
+            updated = 0
+            errors = 0
+            cursor = db.access_tokens.find(
+                {"fingerprint": {"$exists": False}},
+                projection={"_id": 1, "token": 1},
+            )
+            async for doc in cursor:
+                try:
+                    plaintext = ad.crypto.decrypt_secret(doc.get("token"))
+                    if not plaintext:
+                        logger.warning(
+                            f"access_tokens {doc['_id']}: empty token, skipping"
+                        )
+                        continue
+                    await db.access_tokens.update_one(
+                        {"_id": doc["_id"]},
+                        {
+                            "$set": {
+                                "token": ad.crypto.encrypt_secret(plaintext),
+                                "fingerprint": ad.crypto.fingerprint_secret(plaintext),
+                            }
+                        },
+                    )
+                    updated += 1
+                except Exception as e:
+                    logger.error(
+                        f"access_tokens {doc.get('_id')}: failed to backfill fingerprint: {e}"
+                    )
+                    errors += 1
+
+            logger.info(
+                f"AddAccessTokenFingerprint: backfilled {updated} rows, {errors} errors"
+            )
+
+            # Step 3: add unique index on fingerprint.
+            await db.access_tokens.create_index(
+                "fingerprint",
+                unique=True,
+                name="access_tokens_fingerprint_unique",
+            )
+            logger.info("Created access_tokens_fingerprint_unique index")
+
+            return errors == 0
+        except Exception as e:
+            logger.error(f"AddAccessTokenFingerprint migration failed: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            try:
+                await db.access_tokens.drop_index("access_tokens_fingerprint_unique")
+            except Exception:
+                pass
+            await db.access_tokens.update_many({}, {"$unset": {"fingerprint": ""}})
+            # We do not restore the legacy fixed-IV ciphertext or the token_1
+            # index — rows re-encrypted with random IVs cannot satisfy a unique
+            # index on the ciphertext, and the application no longer queries
+            # by ciphertext anyway.
+            return True
+        except Exception as e:
+            logger.error(f"AddAccessTokenFingerprint revert failed: {e}")
+            return False
+
+
 MIGRATIONS = [
     OcrKeyMigration(),
     LlmResultFieldsMigration(),
@@ -3226,6 +3328,7 @@ MIGRATIONS = [
     BackfillOcrTextMetadataType(),
     AddCredentialsOrgNameUniqueIndex(),
     AddFlowExecutionsFlowsCredentialsListIndexes(),
+    AddAccessTokenFingerprint(),
     # Add more migrations here
 ]
 

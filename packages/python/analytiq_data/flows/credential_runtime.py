@@ -435,7 +435,7 @@ async def persist_credential_fields(
     updated_by: str,
 ) -> None:
     db = ad.common.get_async_db()
-    encrypted = ad.crypto.encrypt_token(json.dumps(fields))
+    encrypted = ad.crypto.encrypt_secret(json.dumps(fields))
     now = datetime.now(UTC)
     await db.credentials.update_one(
         {"_id": credential_oid, "organization_id": organization_id},

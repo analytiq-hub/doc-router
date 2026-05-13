@@ -37,8 +37,8 @@ async def get_aws_config_dict(analytiq_client) -> dict:
     access_key_id = ""
     secret_access_key = ""
     if doc:
-        access_key_id = ad.crypto.decrypt_token(doc.get("access_key_id", "") or "")
-        secret_access_key = ad.crypto.decrypt_token(doc.get("secret_access_key", "") or "")
+        access_key_id = ad.crypto.decrypt_secret(doc.get("access_key_id", "") or "")
+        secret_access_key = ad.crypto.decrypt_secret(doc.get("secret_access_key", "") or "")
 
     return {
         "aws_access_key_id": access_key_id,
@@ -58,7 +58,7 @@ async def get_gcp_service_account_json(analytiq_client) -> str:
     doc = await db.cloud_config.find_one({"type": TYPE_GCP})
     if doc and doc.get("service_account_json"):
         try:
-            return ad.crypto.decrypt_token(doc["service_account_json"])
+            return ad.crypto.decrypt_secret(doc["service_account_json"])
         except Exception as e:
             logger.warning(f"Failed to decrypt GCP service_account_json: {e}")
             return ""
@@ -66,7 +66,7 @@ async def get_gcp_service_account_json(analytiq_client) -> str:
     provider = await db.llm_providers.find_one({"litellm_provider": "vertex_ai"})
     if provider and provider.get("token"):
         try:
-            return ad.crypto.decrypt_token(provider["token"])
+            return ad.crypto.decrypt_secret(provider["token"])
         except Exception as e:
             logger.warning(f"Failed to decrypt legacy vertex_ai llm_providers token: {e}")
             return ""
@@ -122,7 +122,7 @@ async def get_azure_service_principal_dict(analytiq_client) -> dict:
         if not raw:
             return ""
         try:
-            return ad.crypto.decrypt_token(raw)
+            return ad.crypto.decrypt_secret(raw)
         except Exception as e:
             logger.warning(f"Failed to decrypt Azure cloud_config field {field}: {e}")
             return ""

@@ -135,7 +135,7 @@ def _to_header(doc: dict[str, Any], kind: dict[str, Any]) -> CredentialHeader:
         raw = doc.get("encrypted_payload")
         all_fields: dict[str, Any] = {}
         if raw:
-            decrypted = ad.crypto.decrypt_token(raw)
+            decrypted = ad.crypto.decrypt_secret(raw)
             if decrypted:
                 parsed = json.loads(decrypted)
                 if isinstance(parsed, dict):
@@ -229,7 +229,7 @@ async def create_credential(
     if not norm_name:
         raise HTTPException(status_code=422, detail="Credential name cannot be empty")
 
-    encrypted = ad.crypto.encrypt_token(json.dumps(req.fields))
+    encrypted = ad.crypto.encrypt_secret(json.dumps(req.fields))
     now = datetime.now(UTC)
     if await _credential_name_taken(db, organization_id, norm_name):
         raise HTTPException(status_code=409, detail=_DUPLICATE_NAME_DETAIL)
@@ -349,7 +349,7 @@ async def update_credential(
     if await _credential_name_taken(db, organization_id, norm_name, exclude_id=oid):
         raise HTTPException(status_code=409, detail=_DUPLICATE_NAME_DETAIL)
 
-    encrypted = ad.crypto.encrypt_token(json.dumps(req.fields))
+    encrypted = ad.crypto.encrypt_secret(json.dumps(req.fields))
     now = datetime.now(UTC)
     try:
         await db.credentials.update_one(
@@ -421,7 +421,7 @@ async def test_credential(
 
     try:
         raw = doc.get("encrypted_payload")
-        fields = json.loads(ad.crypto.decrypt_token(raw)) if raw else {}
+        fields = json.loads(ad.crypto.decrypt_secret(raw)) if raw else {}
         if not isinstance(fields, dict):
             fields = {}
     except Exception as e:
@@ -508,7 +508,7 @@ async def oauth_initiate_flow_credential(
 
     raw = doc.get("encrypted_payload")
     try:
-        fields = json.loads(ad.crypto.decrypt_token(raw)) if raw else {}
+        fields = json.loads(ad.crypto.decrypt_secret(raw)) if raw else {}
         if not isinstance(fields, dict):
             fields = {}
     except Exception as e:
@@ -599,7 +599,7 @@ async def flow_oauth_callback(
 
     raw = doc.get("encrypted_payload")
     try:
-        fields = json.loads(ad.crypto.decrypt_token(raw)) if raw else {}
+        fields = json.loads(ad.crypto.decrypt_secret(raw)) if raw else {}
         if not isinstance(fields, dict):
             fields = {}
     except Exception as e:

@@ -208,7 +208,7 @@ def _delivery_row_to_detail(row: dict) -> WebhookDeliveryDetailResponse:
     enc = row.get("auth_header_value")
     if enc:
         try:
-            plain = ad.crypto.decrypt_token(enc)
+            plain = ad.crypto.decrypt_secret(enc)
         except Exception:
             plain = None
         if plain:
@@ -403,7 +403,7 @@ async def create_org_webhook(
             doc["auth_header_preview"] = None
         else:
             val = request.auth_header_value
-            doc["auth_header_value"] = ad.crypto.encrypt_token(val)
+            doc["auth_header_value"] = ad.crypto.encrypt_secret(val)
             doc["auth_header_preview"] = f"{val[:5]}..."
 
     if request.secret is not None:
@@ -412,7 +412,7 @@ async def create_org_webhook(
             generated_secret = secret_plain
         else:
             secret_plain = request.secret
-        doc["secret"] = ad.crypto.encrypt_token(secret_plain)
+        doc["secret"] = ad.crypto.encrypt_secret(secret_plain)
         doc["secret_preview"] = f"{secret_plain[:16]}..."
 
     result = await db[ad.webhooks.ENDPOINTS_COLLECTION].insert_one(doc)
@@ -488,7 +488,7 @@ async def update_org_webhook(
             update["auth_header_preview"] = None
         else:
             val = request.auth_header_value
-            update["auth_header_value"] = ad.crypto.encrypt_token(val)
+            update["auth_header_value"] = ad.crypto.encrypt_secret(val)
             update["auth_header_preview"] = f"{val[:5]}..."
     if request.secret is not None:
         if request.secret == "":
@@ -496,7 +496,7 @@ async def update_org_webhook(
             generated_secret = secret_plain
         else:
             secret_plain = request.secret
-        update["secret"] = ad.crypto.encrypt_token(secret_plain)
+        update["secret"] = ad.crypto.encrypt_secret(secret_plain)
         update["secret_preview"] = f"{secret_plain[:16]}..."
 
     update["updated_at"] = datetime.now(UTC)
