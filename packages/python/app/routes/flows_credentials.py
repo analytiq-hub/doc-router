@@ -668,16 +668,24 @@ async def flow_oauth_callback(
     try:
         oid = ObjectId(cred_id)
     except Exception:
-        return RedirectResponse(oauth_callback_redirect_error(org_id, "invalid credential"))
+        return RedirectResponse(
+            oauth_callback_redirect_error(org_id, "invalid credential", credential_id=cred_id)
+        )
 
     doc = await db.credentials.find_one({"_id": oid, "organization_id": org_id})
     if not doc:
-        return RedirectResponse(oauth_callback_redirect_error(org_id, "credential_not_found"))
+        return RedirectResponse(
+            oauth_callback_redirect_error(
+                org_id, "credential_not_found", credential_id=cred_id
+            )
+        )
 
     try:
         kind = ad.flows.get_credential_kind(doc["kind_key"])
     except KeyError:
-        return RedirectResponse(oauth_callback_redirect_error(org_id, "unknown_kind"))
+        return RedirectResponse(
+            oauth_callback_redirect_error(org_id, "unknown_kind", credential_id=cred_id)
+        )
 
     raw = doc.get("encrypted_payload")
     try:
@@ -685,7 +693,9 @@ async def flow_oauth_callback(
         if not isinstance(fields, dict):
             fields = {}
     except Exception as e:
-        return RedirectResponse(oauth_callback_redirect_error(org_id, f"decrypt: {e}"))
+        return RedirectResponse(
+            oauth_callback_redirect_error(org_id, f"decrypt: {e}", credential_id=cred_id)
+        )
 
     pv_raw = pending.get("pkce_verifier")
     pkce_verifier_from_store: str | None = None
@@ -699,7 +709,9 @@ async def flow_oauth_callback(
     if grant_type_from_pending == "pkce" and not pkce_verifier_from_store:
         return RedirectResponse(
             oauth_callback_redirect_error(
-                org_id, "OAuth PKCE verifier missing from server session"
+                org_id,
+                "OAuth PKCE verifier missing from server session",
+                credential_id=cred_id,
             )
         )
 
@@ -713,6 +725,8 @@ async def flow_oauth_callback(
         )
     except Exception as e:
         logger.warning("oauth token exchange failed: %s", e)
-        return RedirectResponse(oauth_callback_redirect_error(org_id, str(e)))
+        return RedirectResponse(
+            oauth_callback_redirect_error(org_id, str(e), credential_id=cred_id)
+        )
 
-    return RedirectResponse(oauth_callback_redirect_success(org_id))
+    return RedirectResponse(oauth_callback_redirect_success(org_id, cred_id))

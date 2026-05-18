@@ -934,6 +934,12 @@ export class DocRouterOrg {
     );
   }
 
+  async getFlowCredential(credentialId: string): Promise<FlowCredentialHeader> {
+    return this.http.get<FlowCredentialHeader>(
+      `/v0/orgs/${this.organizationId}/credentials/${credentialId}`,
+    );
+  }
+
   async createFlowCredential(params: CreateFlowCredentialParams): Promise<FlowCredentialHeader> {
     return this.http.post<FlowCredentialHeader>(
       `/v0/orgs/${this.organizationId}/credentials`,

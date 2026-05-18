@@ -535,19 +535,29 @@ async def exchange_authorization_code(
     return out
 
 
-def oauth_callback_redirect_success(organization_id: str) -> str:
-    base = _NEXTAUTH_URL.rstrip("/")
-    return f"{base}/orgs/{organization_id}/flows?tab=credentials&flow_oauth=success"
-
-
-def oauth_callback_redirect_error(organization_id: str, message: str) -> str:
+def oauth_callback_redirect_success(organization_id: str, credential_id: str) -> str:
     from urllib.parse import quote
 
     base = _NEXTAUTH_URL.rstrip("/")
+    cid = quote(str(credential_id), safe="")
     return (
-        f"{base}/orgs/{organization_id}/flows?tab=credentials&flow_oauth=error"
-        f"&flow_oauth_detail={quote(message[:300])}"
+        f"{base}/orgs/{organization_id}/flows?tab=credentials&flow_oauth=success"
+        f"&flow_oauth_credential_id={cid}"
     )
+
+
+def oauth_callback_redirect_error(
+    organization_id: str, message: str, *, credential_id: str | None = None
+) -> str:
+    from urllib.parse import quote
+
+    base = _NEXTAUTH_URL.rstrip("/")
+    qs = (
+        f"tab=credentials&flow_oauth=error&flow_oauth_detail={quote(message[:300])}"
+    )
+    if credential_id:
+        qs += f"&flow_oauth_credential_id={quote(str(credential_id), safe='')}"
+    return f"{base}/orgs/{organization_id}/flows?{qs}"
 
 
 def oauth_callback_redirect_error_generic(message: str) -> str:

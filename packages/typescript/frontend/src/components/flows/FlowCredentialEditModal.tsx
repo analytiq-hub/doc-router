@@ -6,7 +6,14 @@ import type { FlowCredentialHeader, FlowCredentialKindSummary } from '@docrouter
 import { getApiErrorMsg } from '@/utils/api';
 import type { DocRouterOrgApi } from '@/utils/api';
 import { formatRelativeTime } from '@/utils/date';
-import { flowInputClass, flowLabelClass } from './flowUiClasses';
+import {
+  flowInlineNameInputClass,
+  flowInlineNameMeasureClass,
+  flowInlineNameReadClass,
+  flowInputClass,
+  flowLabelClass,
+} from './flowUiClasses';
+import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 import {
   CREDENTIAL_SECRET_MASK,
   credentialFieldDisplayValue,
@@ -220,24 +227,13 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
       <header className="relative shrink-0 border-b border-gray-200 px-5 py-4">
         <button
           type="button"
-          className="absolute right-3 top-3 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+          className="absolute right-4 top-4 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
           aria-label="Close"
           onClick={onClose}
         >
           <XMarkIcon className="h-5 w-5" />
         </button>
-        <CredEditModalHeader>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            maxLength={100}
-            aria-label="Credential name"
-            className="min-w-0 border-0 bg-transparent p-0 text-lg font-semibold text-gray-900 outline-none ring-0 placeholder:text-gray-400 focus:border-b focus:border-blue-500"
-            placeholder="Enter name…"
-          />
-          <span className="text-sm text-gray-500">{kindLabel}</span>
-        </CredEditModalHeader>
+        <CredEditModalHeader name={name} onNameChange={setName} kindLabel={kindLabel} />
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -352,8 +348,65 @@ function CredEditModalShell({ children, onClose }: { children: React.ReactNode; 
   );
 }
 
-function CredEditModalHeader({ children }: { children: React.ReactNode }) {
-  return <div className="flex min-w-0 flex-col gap-1 pr-8">{children}</div>;
+function CredEditModalHeader({
+  name,
+  onNameChange,
+  kindLabel,
+}: {
+  name: string;
+  onNameChange: (value: string) => void;
+  kindLabel: string;
+}) {
+  const [nameHover, setNameHover] = useState(false);
+  const [nameFocus, setNameFocus] = useState(false);
+  const showNameField = nameHover || nameFocus;
+  const measure = useInlineNameWidthPx(name, 'Credential name');
+
+  return (
+    <div className="min-w-0 pr-10">
+      <div
+        className="max-w-full shrink-0"
+        onMouseEnter={() => setNameHover(true)}
+        onMouseLeave={() => setNameHover(false)}
+      >
+        <span
+          ref={measure.spanRef}
+          className={flowInlineNameMeasureClass}
+          style={{
+            position: 'absolute',
+            visibility: 'hidden',
+            pointerEvents: 'none',
+            whiteSpace: 'pre',
+          }}
+          aria-hidden
+        >
+          {measure.basis}
+        </span>
+        {showNameField ? (
+          <input
+            type="text"
+            className={flowInlineNameInputClass}
+            style={measure.widthPx ? { width: `${measure.widthPx}px` } : undefined}
+            value={name}
+            onChange={(e) => onNameChange(e.target.value)}
+            maxLength={100}
+            placeholder="Credential name"
+            aria-label="Credential name"
+            onFocus={() => setNameFocus(true)}
+            onBlur={() => setNameFocus(false)}
+          />
+        ) : (
+          <span
+            className={flowInlineNameReadClass}
+            title={name.trim() ? name : 'Credential name'}
+          >
+            {name.trim() ? name : 'Unnamed credential'}
+          </span>
+        )}
+      </div>
+      <p className="m-0 mt-0.5 text-sm leading-snug text-gray-500">{kindLabel}</p>
+    </div>
+  );
 }
 
 function CredEditConnectionTab({

@@ -17,6 +17,7 @@ from analytiq_data.flows.credential_runtime import (
     apply_runtime_credential_updates,
     build_oauth_authorization_url,
     consume_flow_oauth_authorization_state,
+    oauth_callback_redirect_success,
     decode_flow_oauth_state,
     encode_flow_oauth_state,
     exchange_authorization_code,
@@ -108,6 +109,12 @@ def test_build_oauth_authorization_url():
     assert "state=state-xyz" in url.replace("+", " ")
     assert "client_id=cid" in url
     assert url.count("response_type=") == 1
+
+
+def test_oauth_callback_redirect_success_includes_credential_id():
+    url = oauth_callback_redirect_success("org1", "6a0b802bb023c1430b14a216")
+    assert "flow_oauth=success" in url
+    assert "flow_oauth_credential_id=6a0b802bb023c1430b14a216" in url
 
 
 def test_build_oauth_authorization_url_preserves_static_query_and_custom_json():

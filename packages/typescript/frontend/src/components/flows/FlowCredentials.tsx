@@ -107,6 +107,8 @@ const FlowCredentials: React.FC<{
   const [deleteRow, setDeleteRow] = useState<FlowCredentialHeader | null>(null);
 
   const [createDraft, setCreateDraft] = useState<{ kindKey: string; initialName: string } | null>(null);
+  /** After OAuth redirect, reopen the credential edit modal for this id. */
+  const [oauthReturnCredentialId, setOauthReturnCredentialId] = useState<string | null>(null);
 
   const [testChip, setTestChip] = useState<Record<string, { ok: boolean; detail: string }>>({});
   const [testLoadingId, setTestLoadingId] = useState<string | null>(null);
@@ -170,16 +172,50 @@ const FlowCredentials: React.FC<{
     const sp = new URLSearchParams(window.location.search);
     const st = sp.get('flow_oauth');
     if (!st) return;
+    const credId = sp.get('flow_oauth_credential_id');
     if (st === 'success') {
       toast.success('Credential connected successfully');
+      void load();
     } else if (st === 'error') {
       toast.error(sp.get('flow_oauth_detail') || 'OAuth connection failed');
     }
+    if (credId) {
+      setOauthReturnCredentialId(credId);
+    }
     sp.delete('flow_oauth');
     sp.delete('flow_oauth_detail');
+    sp.delete('flow_oauth_credential_id');
     const qs = sp.toString();
     window.history.replaceState({}, '', `${window.location.pathname}${qs ? `?${qs}` : ''}`);
-  }, []);
+  }, [load]);
+
+  useEffect(() => {
+    if (!oauthReturnCredentialId) return;
+    let cancelled = false;
+    const reopen = async () => {
+      try {
+        setCreateOpen(false);
+        resetCreateWizardState();
+        setCreateDraft(null);
+        const row = await api.getFlowCredential(oauthReturnCredentialId);
+        if (!cancelled) {
+          setEditRow(row);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setMessage(getApiErrorMsg(err) || 'Failed to open credential after OAuth');
+        }
+      } finally {
+        if (!cancelled) {
+          setOauthReturnCredentialId(null);
+        }
+      }
+    };
+    void reopen();
+    return () => {
+      cancelled = true;
+    };
+  }, [oauthReturnCredentialId, api, resetCreateWizardState]);
 
   const openEdit = useCallback((row: FlowCredentialHeader) => {
     setEditRow(row);
