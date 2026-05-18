@@ -46,6 +46,36 @@ function fieldRows(kind: FlowCredentialKindSummary | null): FieldRow[] {
   });
 }
 
+/** Map form strings to JSON types expected by credential ``secret_schema``. */
+function credentialFieldValueForSubmit(f: FieldRow, raw: string): unknown {
+  const v = raw ?? '';
+  if (f.type === 'boolean') {
+    const s = v.trim().toLowerCase();
+    if (s === '' || s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
+    if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
+    return Boolean(v);
+  }
+  if (f.type === 'integer') {
+    const s = v.trim();
+    if (!s) return 0;
+    const n = Number(s);
+    return Number.isFinite(n) ? Math.trunc(n) : v;
+  }
+  if (f.type === 'number') {
+    const s = v.trim();
+    if (!s) return 0;
+    const n = Number(s);
+    return Number.isFinite(n) ? n : v;
+  }
+  return v;
+}
+
+function credentialFieldDisplayValue(f: FieldRow, pub: unknown): string {
+  if (pub === undefined || pub === null) return '';
+  if (f.type === 'boolean') return pub === true ? 'true' : pub === false ? 'false' : String(pub);
+  return String(pub);
+}
+
 const btnSecondary =
   'rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
 const btnPrimary =
@@ -214,8 +244,7 @@ const FlowCredentials: React.FC<{
         if (!f.name) continue;
         if (f.is_secret) next[f.name] = '';
         else {
-          const pub = row.public_fields[f.name];
-          next[f.name] = pub === undefined || pub === null ? '' : String(pub);
+          next[f.name] = credentialFieldDisplayValue(f, row.public_fields[f.name]);
         }
       }
     }
@@ -281,7 +310,7 @@ const FlowCredentials: React.FC<{
     const fields: Record<string, unknown> = {};
     for (const f of fieldRows(kind)) {
       if (!f.name) continue;
-      fields[f.name] = createFields[f.name] ?? '';
+      fields[f.name] = credentialFieldValueForSubmit(f, createFields[f.name] ?? '');
     }
     try {
       setMessage('');
@@ -312,7 +341,7 @@ const FlowCredentials: React.FC<{
         setMessage(`Secret field “${f.title || f.name}” must be re-entered to update.`);
         return;
       }
-      fields[f.name] = v;
+      fields[f.name] = credentialFieldValueForSubmit(f, v);
     }
     try {
       setMessage('');

@@ -16,6 +16,7 @@ from jsonschema import Draft7Validator
 from pydantic import BaseModel
 
 import analytiq_data as ad
+from analytiq_data.flows.credential_fields import coerce_credential_fields
 from app.auth import get_org_user
 from app.models import User
 
@@ -219,9 +220,10 @@ async def create_credential(
         )
 
     schema = kind.get("secret_schema")
+    fields = coerce_credential_fields(schema if isinstance(schema, dict) else None, req.fields)
     if schema:
         try:
-            Draft7Validator(schema).validate(req.fields)
+            Draft7Validator(schema).validate(fields)
         except Exception as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
@@ -229,7 +231,7 @@ async def create_credential(
     if not norm_name:
         raise HTTPException(status_code=422, detail="Credential name cannot be empty")
 
-    encrypted = ad.crypto.encrypt_secret(json.dumps(req.fields))
+    encrypted = ad.crypto.encrypt_secret(json.dumps(fields))
     now = datetime.now(UTC)
     if await _credential_name_taken(db, organization_id, norm_name):
         raise HTTPException(status_code=409, detail=_DUPLICATE_NAME_DETAIL)
@@ -337,9 +339,10 @@ async def update_credential(
         raise HTTPException(status_code=400, detail=f"Unknown credential kind: {doc.get('kind_key')}") from None
 
     schema = kind.get("secret_schema")
+    fields = coerce_credential_fields(schema if isinstance(schema, dict) else None, req.fields)
     if schema:
         try:
-            Draft7Validator(schema).validate(req.fields)
+            Draft7Validator(schema).validate(fields)
         except Exception as e:
             raise HTTPException(status_code=422, detail=str(e)) from e
 
@@ -349,7 +352,7 @@ async def update_credential(
     if await _credential_name_taken(db, organization_id, norm_name, exclude_id=oid):
         raise HTTPException(status_code=409, detail=_DUPLICATE_NAME_DETAIL)
 
-    encrypted = ad.crypto.encrypt_secret(json.dumps(req.fields))
+    encrypted = ad.crypto.encrypt_secret(json.dumps(fields))
     now = datetime.now(UTC)
     try:
         await db.credentials.update_one(
