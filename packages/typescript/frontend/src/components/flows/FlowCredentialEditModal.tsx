@@ -54,6 +54,12 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
   );
   const row = mode === 'edit' ? props.row : savedRow;
   const kindKey = mode === 'edit' ? props.row.kind_key : props.kindKey;
+  const editRow = mode === 'edit' ? props.row : null;
+  const createInitialName = mode === 'create' ? props.initialName : '';
+  const formResetKey =
+    mode === 'edit'
+      ? `${props.row.credential_id}:${props.row.updated_at ?? ''}:${props.row.secret_fields_set?.join(',') ?? ''}`
+      : `create:${props.kindKey}`;
 
   const [tab, setTab] = useState<EditTab>('connection');
   const [name, setName] = useState(mode === 'edit' ? props.row.name : props.initialName);
@@ -74,8 +80,8 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
   );
 
   const initForm = useCallback(() => {
-    if (mode === 'edit') {
-      setName(props.row.name);
+    if (mode === 'edit' && editRow) {
+      setName(editRow.name);
     }
     setTab('connection');
     const next: Record<string, string> = {};
@@ -100,11 +106,11 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
     setShowSecret({});
     setTestDetail(null);
     setFormEpoch((n) => n + 1);
-  }, [mode, props, kind, row, secretFieldsSet]);
+  }, [mode, editRow, kind, row, secretFieldsSet]);
 
   useEffect(() => {
     initForm();
-  }, [initForm]);
+  }, [formResetKey, initForm]);
 
   useEffect(() => {
     if (!kind || formEpoch === 0) return;
@@ -118,9 +124,9 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
 
   useEffect(() => {
     if (mode === 'create') {
-      setName(props.initialName);
+      setName(createInitialName);
     }
-  }, [mode, props]);
+  }, [mode, createInitialName]);
 
   const supportsOAuth = kind?.supports_oauth_browser_flow === true;
   const oauthConnected = supportsOAuth && secretFieldsSet.has('oauthAccessToken');

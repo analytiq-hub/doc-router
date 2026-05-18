@@ -34,11 +34,14 @@ def apply_credential_kind_defaults(
 
 def credential_validation_schema(kind: dict[str, Any]) -> dict[str, Any] | None:
     """
-    Schema for create/update validation.
+    Schema for create/update validation only (``flows_credentials`` create/put).
 
-    Runtime fields (OAuth tokens, hidden defaults) are optional in ``required`` and
-    declared in ``properties`` when absent so ``additionalProperties: false`` does
-    not reject stored values merged in on update after OAuth connect.
+    Runtime-only secrets (e.g. ``oauthAccessToken``) are not in ``secret_schema.properties``
+    but may appear in stored payloads after OAuth; we add permissive property entries
+    here so ``additionalProperties: false`` does not reject merges on update. Fields that
+    are both in ``properties`` (for defaults) and ``runtime_fields`` (hidden from UI), such
+    as Gmail ``scope``, need no extra entry. No other code path validates decrypted
+    credentials against the raw kind schema.
     """
 
     from analytiq_data.flows.credential_kind_registry import credential_runtime_field_names

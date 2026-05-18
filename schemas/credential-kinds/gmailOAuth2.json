@@ -8,7 +8,8 @@
     "properties": {
       "scope": {
         "type": "string",
-        "default": "https://www.googleapis.com/auth/gmail.labels https://www.googleapis.com/auth/gmail.addons.current.action.compose https://www.googleapis.com/auth/gmail.addons.current.message.action https://mail.google.com/ https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.compose"
+        "default": "https://www.googleapis.com/auth/gmail.labels https://www.googleapis.com/auth/gmail.addons.current.action.compose https://www.googleapis.com/auth/gmail.addons.current.message.action https://mail.google.com/ https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.compose",
+        "description": "Default Gmail scopes; hidden from the form via runtime_fields but kept here so apply_credential_kind_defaults can apply the default on save."
       }
     },
     "required": []

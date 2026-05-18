@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from analytiq_data.flows.credential_fields import (
     apply_credential_kind_defaults,
     coerce_credential_fields,
@@ -76,6 +78,33 @@ def test_apply_defaults_fills_google_oauth_urls() -> None:
         from jsonschema import Draft7Validator
 
         Draft7Validator(schema).validate(fields)
+    finally:
+        _credential_kinds_bundle.cache_clear()
+
+
+def test_raw_kind_schema_rejects_oauth_tokens_validation_schema_allows() -> None:
+    """Stored payloads after OAuth: raw schema fails; credential_validation_schema passes."""
+    _credential_kinds_bundle.cache_clear()
+    try:
+        from jsonschema import Draft7Validator
+
+        kind = get_credential_kind("gmailOAuth2")
+        raw = kind.get("secret_schema")
+        assert raw is not None
+        fields = apply_credential_kind_defaults(
+            kind,
+            {
+                "clientId": "c",
+                "clientSecret": "s",
+                "oauthAccessToken": "tok",
+                "oauthRefreshToken": "rt",
+            },
+        )
+        with pytest.raises(Exception):
+            Draft7Validator(raw).validate(fields)
+        val_schema = credential_validation_schema(kind)
+        assert val_schema is not None
+        Draft7Validator(val_schema).validate(fields)
     finally:
         _credential_kinds_bundle.cache_clear()
 

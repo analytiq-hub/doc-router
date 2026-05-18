@@ -174,7 +174,6 @@ const FlowCredentials: React.FC<{
     if (!st) return;
     const credId = sp.get('flow_oauth_credential_id');
     if (st === 'success') {
-      toast.success('Credential connected successfully');
       void load();
     } else if (st === 'error') {
       toast.error(sp.get('flow_oauth_detail') || 'OAuth connection failed');
@@ -232,7 +231,6 @@ const FlowCredentials: React.FC<{
         setMessage('');
         resetCreateWizardState();
         setCreateOpen(true);
-        await loadCredentialNamesTakenLower(api);
       } catch (err) {
         if (!cancelled) setMessage(getApiErrorMsg(err) || 'Failed to prepare new credential');
       } finally {
