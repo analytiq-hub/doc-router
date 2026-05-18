@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
-from analytiq_data.flows.credential_fields import coerce_credential_fields
+from analytiq_data.flows.credential_fields import (
+    apply_credential_kind_defaults,
+    coerce_credential_fields,
+    credential_validation_schema,
+)
+from analytiq_data.flows.credential_kind_registry import (
+    _credential_kinds_bundle,
+    get_credential_kind,
+)
 
 
 def test_coerce_empty_string_boolean_to_default() -> None:
@@ -46,3 +54,51 @@ def test_merge_keeps_secret_when_incoming_empty() -> None:
     assert merged["clientSecret"] == "sekrit"
     assert merged["clientId"] == "id2"
     assert merged["scope"] == "read write"
+
+
+def test_apply_defaults_fills_google_oauth_urls() -> None:
+    _credential_kinds_bundle.cache_clear()
+    try:
+        kind = get_credential_kind("gmailOAuth2")
+        fields = apply_credential_kind_defaults(
+            kind,
+            {
+                "clientId": "cid",
+                "clientSecret": "sec",
+                "ignoreSSLIssues": False,
+            },
+        )
+        assert fields["authUrl"] == "https://accounts.google.com/o/oauth2/v2/auth"
+        assert fields["accessTokenUrl"] == "https://oauth2.googleapis.com/token"
+        assert fields.get("grantType") == "authorizationCode"
+        schema = credential_validation_schema(kind)
+        assert schema is not None
+        from jsonschema import Draft7Validator
+
+        Draft7Validator(schema).validate(fields)
+    finally:
+        _credential_kinds_bundle.cache_clear()
+
+
+def test_validation_schema_allows_stored_oauth_runtime_fields() -> None:
+    _credential_kinds_bundle.cache_clear()
+    try:
+        kind = get_credential_kind("gmailOAuth2")
+        schema = credential_validation_schema(kind)
+        assert schema is not None
+        from jsonschema import Draft7Validator
+
+        fields = apply_credential_kind_defaults(
+            kind,
+            {
+                "clientId": "cid",
+                "clientSecret": "sec",
+                "ignoreSSLIssues": False,
+                "oauthAccessToken": "access-tok",
+                "oauthRefreshToken": "refresh-tok",
+                "oauthExpiresAt": 1_700_000_000.0,
+            },
+        )
+        Draft7Validator(schema).validate(fields)
+    finally:
+        _credential_kinds_bundle.cache_clear()

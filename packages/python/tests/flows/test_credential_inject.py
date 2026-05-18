@@ -7,6 +7,18 @@ import pytest
 import analytiq_data as ad
 
 
+def test_render_skips_empty_bearer_header() -> None:
+    kind = {
+        "inject": {
+            "headers": {
+                "Authorization": "Bearer {{ credentials.oauthAccessToken }}",
+            }
+        }
+    }
+    out = ad.flows.render_credential_inject(kind, {"oauthAccessToken": ""})
+    assert out["headers"] == {}
+
+
 def test_render_dynamic_header_keys() -> None:
     kind = {
         "inject": {

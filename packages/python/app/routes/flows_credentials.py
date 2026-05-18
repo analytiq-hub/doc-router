@@ -17,7 +17,9 @@ from pydantic import BaseModel
 
 import analytiq_data as ad
 from analytiq_data.flows.credential_fields import (
+    apply_credential_kind_defaults,
     coerce_credential_fields,
+    credential_validation_schema,
     merge_credential_fields_update,
 )
 from app.auth import get_org_user
@@ -82,6 +84,30 @@ class TestCredentialResponse(BaseModel):
 _DUPLICATE_NAME_DETAIL = "A credential with this name already exists for this organization."
 
 
+def _format_credential_test_http_error(resp: httpx.Response) -> str:
+    """Prefer API ``error.message`` / ``message`` over raw JSON bodies in the UI."""
+
+    text = (resp.text or "").strip()
+    if not text:
+        return f"HTTP {resp.status_code}"
+    try:
+        data = json.loads(text)
+        if isinstance(data, dict):
+            err = data.get("error")
+            if isinstance(err, dict):
+                msg = err.get("message")
+                if isinstance(msg, str) and msg.strip():
+                    return msg.strip()[:500]
+            if isinstance(err, str) and err.strip():
+                return err.strip()[:500]
+            msg = data.get("message")
+            if isinstance(msg, str) and msg.strip():
+                return msg.strip()[:500]
+    except json.JSONDecodeError:
+        pass
+    return text[:500]
+
+
 async def _org_experimental_features_enabled(db, organization_id: str) -> bool:
     try:
         oid = ObjectId(organization_id)
@@ -94,18 +120,28 @@ async def _org_experimental_features_enabled(db, organization_id: str) -> bool:
 
 
 def _kind_supports_oauth_browser_flow(kind: dict[str, Any]) -> bool:
-    if "oauth2" not in str(kind.get("auth_mode") or "").lower():
+    """True when the kind supports the browser authorization-code / PKCE connect flow."""
+
+    mode = str(kind.get("auth_mode") or "").lower()
+    if "oauth2" not in mode:
         return False
     props = (kind.get("secret_schema") or {}).get("properties") or {}
     if not isinstance(props, dict):
         return False
-    gt = props.get("grantType") or {}
-    enum = gt.get("enum") if isinstance(gt, dict) else None
-    if not isinstance(enum, list) or (
-        "authorizationCode" not in enum and "pkce" not in enum
-    ):
+    if "authUrl" not in props and "accessTokenUrl" not in props:
         return False
-    return "authUrl" in props
+    if mode == "oauth2_authorization_code":
+        return True
+    gt = props.get("grantType")
+    if isinstance(gt, dict):
+        enum = gt.get("enum")
+        if isinstance(enum, list) and (
+            "authorizationCode" in enum or "pkce" in enum
+        ):
+            return True
+        if gt.get("default") in ("authorizationCode", "pkce"):
+            return True
+    return False
 
 
 class OAuthInitiateResponse(BaseModel):
@@ -136,7 +172,7 @@ async def _credential_name_taken(
 
 
 def _to_header(doc: dict[str, Any], kind: dict[str, Any]) -> CredentialHeader:
-    secret_names = ad.flows.credential_secret_field_names(kind)
+    non_public = ad.flows.credential_non_public_field_names(kind)
     try:
         raw = doc.get("encrypted_payload")
         all_fields: dict[str, Any] = {}
@@ -149,10 +185,10 @@ def _to_header(doc: dict[str, Any], kind: dict[str, Any]) -> CredentialHeader:
     except Exception as e:
         logger.warning("credential decrypt failed %s: %s", doc.get("_id"), e)
         all_fields = {}
-    public_fields = {k: v for k, v in all_fields.items() if k not in secret_names}
+    public_fields = {k: v for k, v in all_fields.items() if k not in non_public}
     secret_fields_set = sorted(
         k
-        for k in secret_names
+        for k in non_public
         if k in all_fields and all_fields[k] not in (None, "")
         and not (isinstance(all_fields[k], str) and not str(all_fields[k]).strip())
     )
@@ -188,9 +224,10 @@ async def list_credential_kinds(
         if not isinstance(schema_props, dict):
             schema_props = {}
         secret_names = ad.flows.credential_secret_field_names(kind)
+        runtime_names = ad.flows.credential_runtime_field_names(kind)
         fields: list[dict[str, Any]] = []
         for k, v in schema_props.items():
-            if not isinstance(v, dict):
+            if not isinstance(v, dict) or k in runtime_names:
                 continue
             row = dict(v)
             row.pop("x-secret", None)
@@ -231,8 +268,9 @@ async def create_credential(
             detail="Experimental credential types are disabled for this organization. Enable 'Show experimental features' in organization settings.",
         )
 
-    schema = kind.get("secret_schema")
-    fields = coerce_credential_fields(schema if isinstance(schema, dict) else None, req.fields)
+    schema = credential_validation_schema(kind)
+    fields = apply_credential_kind_defaults(kind, req.fields)
+    fields = coerce_credential_fields(schema, fields)
     if schema:
         try:
             Draft7Validator(schema).validate(fields)
@@ -350,7 +388,7 @@ async def update_credential(
     except KeyError:
         raise HTTPException(status_code=400, detail=f"Unknown credential kind: {doc.get('kind_key')}") from None
 
-    secret_names = frozenset(ad.flows.credential_secret_field_names(kind))
+    secret_names = frozenset(ad.flows.credential_non_public_field_names(kind))
     existing_fields: dict[str, Any] = {}
     raw = doc.get("encrypted_payload")
     if raw:
@@ -363,13 +401,12 @@ async def update_credential(
         except Exception as e:
             logger.warning("credential decrypt failed on update %s: %s", oid, e)
 
-    schema = kind.get("secret_schema")
+    schema = credential_validation_schema(kind)
     merged_in = merge_credential_fields_update(
         existing_fields, req.fields, secret_names
     )
-    fields = coerce_credential_fields(
-        schema if isinstance(schema, dict) else None, merged_in
-    )
+    fields = apply_credential_kind_defaults(kind, merged_in)
+    fields = coerce_credential_fields(schema, fields)
     if schema:
         try:
             Draft7Validator(schema).validate(fields)
@@ -474,6 +511,14 @@ async def test_credential(
     qs = rend["query_params"]
     inject_body = rend["body"]
 
+    inject_headers = (kind.get("inject") or {}).get("headers") or {}
+    if inject_headers and not headers and "oauth2" in str(kind.get("auth_mode") or "").lower():
+        if not str(fields.get("oauthAccessToken") or "").strip():
+            return TestCredentialResponse(
+                ok=False,
+                error="Connect the account first (missing OAuth access token)",
+            )
+
     jinja_env = Environment(undefined=Undefined)
     method = str(test_req.get("method", "GET")).upper()
     url = jinja_env.from_string(str(test_req.get("url") or "")).render(credentials=fields)
@@ -499,7 +544,11 @@ async def test_credential(
                 **req_kw,
             )
         ok = 200 <= resp.status_code < 300
-        return TestCredentialResponse(ok=ok, status_code=resp.status_code, error=None if ok else resp.text[:500])
+        return TestCredentialResponse(
+            ok=ok,
+            status_code=resp.status_code,
+            error=None if ok else _format_credential_test_http_error(resp),
+        )
     except Exception as e:
         return TestCredentialResponse(ok=False, error=str(e))
 

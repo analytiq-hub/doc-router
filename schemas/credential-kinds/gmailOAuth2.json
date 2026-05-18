@@ -5,7 +5,12 @@
   "secret_schema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {},
+    "properties": {
+      "scope": {
+        "type": "string",
+        "default": "https://www.googleapis.com/auth/gmail.labels https://www.googleapis.com/auth/gmail.addons.current.action.compose https://www.googleapis.com/auth/gmail.addons.current.message.action https://mail.google.com/ https://www.googleapis.com/auth/gmail.modify https://www.googleapis.com/auth/gmail.compose"
+      }
+    },
     "required": []
   },
   "extends": [
@@ -14,5 +19,9 @@
   "runtime_fields": [
     "scope"
   ],
+  "test_request": {
+    "method": "GET",
+    "url": "https://gmail.googleapis.com/gmail/v1/users/me/profile"
+  },
   "experimental": true
 }

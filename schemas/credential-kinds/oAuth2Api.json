@@ -61,23 +61,6 @@
         "title": "Ignore SSL Issues (Insecure)",
         "type": "boolean",
         "default": false
-      },
-      "oauthAccessToken": {
-        "title": "Access Token",
-        "type": "string",
-        "default": "",
-        "x-secret": true
-      },
-      "oauthRefreshToken": {
-        "title": "Refresh Token",
-        "type": "string",
-        "default": "",
-        "x-secret": true
-      },
-      "oauthExpiresAt": {
-        "title": "Access token expiry (unix epoch seconds)",
-        "type": "number",
-        "default": 0
       }
     },
     "required": [
@@ -92,5 +75,10 @@
       "Authorization": "Bearer {{ credentials.oauthAccessToken }}"
     }
   },
+  "runtime_fields": [
+    "oauthAccessToken",
+    "oauthRefreshToken",
+    "oauthExpiresAt"
+  ],
   "experimental": true
 }

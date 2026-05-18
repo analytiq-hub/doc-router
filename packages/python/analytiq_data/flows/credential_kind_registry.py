@@ -230,6 +230,15 @@ def get_credential_kind(key: str) -> dict[str, Any]:
     return dict(_resolve_kind_with_extends(key, store, ()))
 
 
+def credential_runtime_field_names(kind: dict[str, Any]) -> set[str]:
+    """Field names set at runtime (OAuth tokens, hidden n8n defaults) — not shown in create/edit forms."""
+
+    rf = kind.get("runtime_fields")
+    if not isinstance(rf, list):
+        return set()
+    return {str(x) for x in rf if isinstance(x, str) and x.strip()}
+
+
 def credential_secret_field_names(kind: dict[str, Any]) -> set[str]:
     """Return ``secret_schema`` property keys marked ``x-secret`` for a credential kind."""
 
@@ -241,3 +250,9 @@ def credential_secret_field_names(kind: dict[str, Any]) -> set[str]:
         if isinstance(sub, dict) and sub.get("x-secret"):
             names.add(str(name))
     return names
+
+
+def credential_non_public_field_names(kind: dict[str, Any]) -> set[str]:
+    """Secrets plus runtime-only fields (never returned in ``public_fields``)."""
+
+    return credential_secret_field_names(kind) | credential_runtime_field_names(kind)

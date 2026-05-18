@@ -7,9 +7,23 @@ See ``docs/docrouter_credentials.md``.
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from jinja2 import Environment, Undefined
+
+_BEARER_ONLY = re.compile(r"^Bearer\s*$", re.IGNORECASE)
+_BASIC_ONLY = re.compile(r"^Basic\s*$", re.IGNORECASE)
+
+
+def usable_http_header_value(val: str) -> bool:
+    """False when empty or a scheme prefix with no credential (e.g. ``Bearer ``)."""
+
+    if not val or not val.strip():
+        return False
+    if _BEARER_ONLY.match(val) or _BASIC_ONLY.match(val):
+        return False
+    return True
 
 
 def coerce_template_json_value(val: str) -> Any:
@@ -44,7 +58,10 @@ def render_credential_inject(
     out_h: dict[str, str] = {}
     for hk, hv in (inject.get("headers") or {}).items():
         if isinstance(hv, str):
-            out_h[_render(str(hk))] = _render(hv)
+            rendered_key = _render(str(hk))
+            rendered_val = _render(hv)
+            if usable_http_header_value(rendered_val):
+                out_h[rendered_key] = rendered_val
 
     out_q: dict[str, str] = {}
     for qk, qv in (inject.get("query_params") or {}).items():

@@ -5,7 +5,28 @@
   "secret_schema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {},
+    "properties": {
+      "grantType": {
+        "type": "string",
+        "default": "authorizationCode"
+      },
+      "authUrl": {
+        "type": "string",
+        "default": "https://accounts.google.com/o/oauth2/v2/auth"
+      },
+      "accessTokenUrl": {
+        "type": "string",
+        "default": "https://oauth2.googleapis.com/token"
+      },
+      "authQueryParameters": {
+        "type": "string",
+        "default": "{\"access_type\":\"offline\",\"prompt\":\"consent\"}"
+      },
+      "authentication": {
+        "type": "string",
+        "default": "body"
+      }
+    },
     "required": []
   },
   "extends": [

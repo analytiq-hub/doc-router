@@ -124,6 +124,18 @@ def test_build_oauth_authorization_url_preserves_static_query_and_custom_json():
     assert url.count("client_id=") == 1
 
 
+def test_build_oauth_authorization_url_parses_n8n_style_query_auth_params():
+    fields = {
+        "authUrl": "https://example.com/oauth/authorize",
+        "clientId": "cid",
+        "authQueryParameters": "access_type=offline&prompt=consent",
+        "grantType": "authorizationCode",
+    }
+    url = build_oauth_authorization_url(fields, "st")
+    assert "access_type=offline" in url
+    assert "prompt=consent" in url
+
+
 def test_build_oauth_authorization_url_adds_pkce_challenge():
     fields = {
         "authUrl": "https://example.com/oauth/authorize",

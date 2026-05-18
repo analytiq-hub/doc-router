@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircleIcon, EyeIcon, EyeSlashIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { BeakerIcon, CheckCircleIcon, EyeIcon, EyeSlashIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import type { FlowCredentialHeader, FlowCredentialKindSummary } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
 import type { DocRouterOrgApi } from '@/utils/api';
@@ -12,6 +12,8 @@ import {
   credentialFieldDisplayValue,
   credentialFieldRows,
   credentialFieldValueForSubmit,
+  credentialKindShowsTestButton,
+  formatCredentialTestDetail,
   isCredentialSecretMaskValue,
 } from './flowCredentialFieldUtils';
 
@@ -22,8 +24,7 @@ const btnPrimary =
 
 type EditTab = 'connection' | 'details';
 
-export type FlowCredentialEditModalProps = {
-  row: FlowCredentialHeader;
+type FlowCredentialEditModalBaseProps = {
   kind: FlowCredentialKindSummary | null;
   api: DocRouterOrgApi;
   onClose: () => void;
@@ -31,61 +32,77 @@ export type FlowCredentialEditModalProps = {
   onError: (message: string) => void;
 };
 
-const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = ({
-  row,
-  kind,
-  api,
-  onClose,
-  onSaved,
-  onError,
-}) => {
+export type FlowCredentialEditModalProps = FlowCredentialEditModalBaseProps &
+  (
+    | { mode: 'edit'; row: FlowCredentialHeader }
+    | { mode: 'create'; kindKey: string; initialName: string }
+  );
+
+const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) => {
+  const { kind, api, onClose, onSaved, onError, mode } = props;
+  const [savedRow, setSavedRow] = useState<FlowCredentialHeader | null>(
+    mode === 'edit' ? props.row : null,
+  );
+  const row = mode === 'edit' ? props.row : savedRow;
+  const kindKey = mode === 'edit' ? props.row.kind_key : props.kindKey;
+
   const [tab, setTab] = useState<EditTab>('connection');
-  const [name, setName] = useState(row.name);
+  const [name, setName] = useState(mode === 'edit' ? props.row.name : props.initialName);
   const [fields, setFields] = useState<Record<string, string>>({});
   const [secretMasked, setSecretMasked] = useState<Set<string>>(() => new Set());
   const [showSecret, setShowSecret] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
   const [oauthConnectLoading, setOauthConnectLoading] = useState(false);
+  const [testLoading, setTestLoading] = useState(false);
+  const [testDetail, setTestDetail] = useState<string | null>(null);
 
   const fieldDefs = useMemo(() => credentialFieldRows(kind), [kind]);
   const secretFieldsSet = useMemo(
-    () => new Set(row.secret_fields_set ?? []),
-    [row.secret_fields_set],
+    () => new Set(row?.secret_fields_set ?? []),
+    [row?.secret_fields_set],
   );
 
   const initForm = useCallback(() => {
-    setName(row.name);
+    if (mode === 'edit') {
+      setName(props.row.name);
+    }
     setTab('connection');
     const next: Record<string, string> = {};
     const masked = new Set<string>();
     if (kind) {
       for (const f of credentialFieldRows(kind)) {
         if (!f.name) continue;
-        if (f.is_secret && secretFieldsSet.has(f.name)) {
+        if (f.is_secret && row && secretFieldsSet.has(f.name)) {
           next[f.name] = CREDENTIAL_SECRET_MASK;
           masked.add(f.name);
         } else if (f.is_secret) {
           next[f.name] = '';
-        } else {
+        } else if (row) {
           next[f.name] = credentialFieldDisplayValue(f, row.public_fields[f.name]);
+        } else {
+          next[f.name] = '';
         }
       }
     }
     setFields(next);
     setSecretMasked(masked);
     setShowSecret({});
-  }, [row, kind, secretFieldsSet]);
+    setTestDetail(null);
+  }, [mode, props, kind, row, secretFieldsSet]);
 
   useEffect(() => {
     initForm();
   }, [initForm]);
 
-  const grantType = String(row.public_fields?.grantType ?? fields.grantType ?? 'authorizationCode');
-  const supportsOAuth =
-    kind?.supports_oauth_browser_flow === true &&
-    ['authorizationCode', 'pkce'].includes(grantType);
-  const oauthConnected =
-    supportsOAuth && secretFieldsSet.has('oauthAccessToken');
+  useEffect(() => {
+    if (mode === 'create') {
+      setName(props.initialName);
+    }
+  }, [mode, props]);
+
+  const supportsOAuth = kind?.supports_oauth_browser_flow === true;
+  const oauthConnected = supportsOAuth && secretFieldsSet.has('oauthAccessToken');
+  const credentialId = row?.credential_id;
 
   const buildFieldsPayload = (): Record<string, unknown> => {
     const out: Record<string, unknown> = {};
@@ -101,26 +118,37 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = ({
     return out;
   };
 
-  const submit = async () => {
+  const persist = async (): Promise<FlowCredentialHeader | null> => {
     if (!kind) {
       onError('Unknown credential kind');
-      return;
+      return null;
     }
     if (!name.trim()) {
       onError('Credential name cannot be empty');
-      return;
+      return null;
     }
+    const payload = { name: name.trim(), fields: buildFieldsPayload() };
+    if (credentialId) {
+      return api.updateFlowCredential(credentialId, payload);
+    }
+    return api.createFlowCredential({ kind_key: kindKey, ...payload });
+  };
+
+  const submit = async () => {
     try {
       setSaving(true);
       onError('');
-      await api.updateFlowCredential(row.credential_id, {
-        name: name.trim(),
-        fields: buildFieldsPayload(),
-      });
+      const result = await persist();
+      if (!result) return;
+      if (mode === 'create' && !savedRow) {
+        setSavedRow(result);
+      }
       await onSaved();
-      onClose();
+      if (mode === 'edit') {
+        onClose();
+      }
     } catch (err) {
-      onError(getApiErrorMsg(err) || 'Failed to update credential');
+      onError(getApiErrorMsg(err) || 'Failed to save credential');
     } finally {
       setSaving(false);
     }
@@ -130,15 +158,43 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = ({
     try {
       setOauthConnectLoading(true);
       onError('');
-      await api.updateFlowCredential(row.credential_id, {
-        name: name.trim(),
-        fields: buildFieldsPayload(),
-      });
-      const { authorization_url } = await api.initiateFlowOAuthConnect(row.credential_id);
+      let id = credentialId;
+      if (!id) {
+        const created = await persist();
+        if (!created) {
+          setOauthConnectLoading(false);
+          return;
+        }
+        setSavedRow(created);
+        id = created.credential_id;
+        await onSaved();
+      } else {
+        await persist();
+      }
+      const { authorization_url } = await api.initiateFlowOAuthConnect(id);
       window.location.href = authorization_url;
     } catch (err) {
       onError(getApiErrorMsg(err) || 'Could not start OAuth');
       setOauthConnectLoading(false);
+    }
+  };
+
+  const runTest = async () => {
+    if (!credentialId) {
+      onError('Save the credential before testing the connection');
+      return;
+    }
+    try {
+      setTestLoading(true);
+      setTestDetail(null);
+      onError('');
+      await persist();
+      const res = await api.testFlowCredential(credentialId);
+      setTestDetail(formatCredentialTestDetail(res));
+    } catch (err) {
+      setTestDetail(getApiErrorMsg(err) || 'Request failed');
+    } finally {
+      setTestLoading(false);
     }
   };
 
@@ -154,7 +210,10 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = ({
     }
   };
 
-  const kindLabel = kind?.display_name || row.kind_key;
+  const kindLabel = kind?.display_name || kindKey;
+  const testOk =
+    testDetail != null &&
+    (testDetail === 'OK' || /^HTTP 2\d\d/.test(testDetail));
 
   return (
     <CredEditModalShell onClose={onClose}>
@@ -167,7 +226,7 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = ({
         >
           <XMarkIcon className="h-5 w-5" />
         </button>
-        <div className="flex min-w-0 flex-col gap-1 pr-8">
+        <CredEditModalHeader>
           <input
             type="text"
             value={name}
@@ -178,7 +237,7 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = ({
             placeholder="Enter name…"
           />
           <span className="text-sm text-gray-500">{kindLabel}</span>
-        </div>
+        </CredEditModalHeader>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -218,25 +277,56 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = ({
                 supportsOAuth={supportsOAuth}
                 oauthConnected={oauthConnected}
                 oauthConnectLoading={oauthConnectLoading}
+                connectNeedsSave={!credentialId}
                 onSecretChange={onSecretChange}
                 setFields={setFields}
                 setShowSecret={setShowSecret}
                 onOAuthConnect={() => void startOAuthConnect()}
               />
-            ) : (
+            ) : row ? (
               <CredEditDetailsTab row={row} />
+            ) : (
+              <p className="m-0 text-sm text-gray-600">
+                Save the credential to see created date, last modified, and ID.
+              </p>
             )}
           </div>
         </div>
       </div>
 
-      <footer className="flex shrink-0 justify-end gap-2 border-t border-gray-200 px-5 py-3">
-        <button type="button" className={btnSecondary} onClick={onClose} disabled={saving}>
-          Cancel
-        </button>
-        <button type="button" className={btnPrimary} onClick={() => void submit()} disabled={saving}>
-          {saving ? 'Saving…' : 'Save'}
-        </button>
+      <footer className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-t border-gray-200 px-5 py-3">
+        <div className="min-w-0 flex-1">
+          {testDetail ? (
+            <span
+              className={`inline-block max-w-[min(280px,50vw)] truncate text-xs font-medium ${
+                testOk ? 'text-emerald-700' : 'text-red-700'
+              }`}
+              title={testDetail}
+            >
+              {testDetail}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          {credentialKindShowsTestButton(kind) && credentialId ? (
+            <button
+              type="button"
+              className={btnSecondary}
+              disabled={testLoading || saving}
+              onClick={() => void runTest()}
+              title="Test connection"
+            >
+              <BeakerIcon className="mr-1.5 inline h-4 w-4" aria-hidden />
+              {testLoading ? 'Testing…' : 'Test'}
+            </button>
+          ) : null}
+          <button type="button" className={btnSecondary} onClick={onClose} disabled={saving}>
+            {mode === 'create' && savedRow ? 'Done' : 'Cancel'}
+          </button>
+          <button type="button" className={btnPrimary} onClick={() => void submit()} disabled={saving || !kind}>
+            {saving ? 'Saving…' : 'Save'}
+          </button>
+        </div>
       </footer>
     </CredEditModalShell>
   );
@@ -251,21 +341,19 @@ function CredEditModalShell({ children, onClose }: { children: React.ReactNode; 
         aria-label="Close dialog"
         onClick={onClose}
       />
-      <CredEditModalPanel>{children}</CredEditModalPanel>
+      <div
+        className="relative z-10 flex max-h-[min(90vh,40rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl"
+        role="dialog"
+        aria-modal="true"
+      >
+        {children}
+      </div>
     </div>
   );
 }
 
-function CredEditModalPanel({ children }: { children: React.ReactNode }) {
-  return (
-    <div
-      className="relative z-10 flex max-h-[min(90vh,40rem)] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl"
-      role="dialog"
-      aria-modal="true"
-    >
-      {children}
-    </div>
-  );
+function CredEditModalHeader({ children }: { children: React.ReactNode }) {
+  return <div className="flex min-w-0 flex-col gap-1 pr-8">{children}</div>;
 }
 
 function CredEditConnectionTab({
@@ -276,6 +364,7 @@ function CredEditConnectionTab({
   supportsOAuth,
   oauthConnected,
   oauthConnectLoading,
+  connectNeedsSave,
   onSecretChange,
   setFields,
   setShowSecret,
@@ -288,7 +377,8 @@ function CredEditConnectionTab({
   supportsOAuth: boolean;
   oauthConnected: boolean;
   oauthConnectLoading: boolean;
-  onSecretChange: (name: string, value: string) => void;
+  connectNeedsSave: boolean;
+  onSecretChange: (fieldName: string, value: string) => void;
   setFields: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   setShowSecret: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
   onOAuthConnect: () => void;
@@ -299,6 +389,7 @@ function CredEditConnectionTab({
         <OAuthConnectBanner
           connected={oauthConnected}
           loading={oauthConnectLoading}
+          connectNeedsSave={connectNeedsSave}
           onConnect={onOAuthConnect}
         />
       ) : null}
@@ -307,7 +398,7 @@ function CredEditConnectionTab({
           <label className={flowLabelClass} htmlFor={`cred-edit-${f.name}`}>
             {f.title || f.name}
           </label>
-          <CredentialSecretInput
+          <CredEditFieldInput
             id={`cred-edit-${f.name}`}
             field={f}
             value={fields[f.name] ?? ''}
@@ -341,7 +432,7 @@ function CredEditDetailsTab({ row }: { row: FlowCredentialHeader }) {
   );
 }
 
-function CredentialSecretInput({
+function CredEditFieldInput({
   id,
   field,
   value,
@@ -351,7 +442,7 @@ function CredentialSecretInput({
   onToggleSecret,
 }: {
   id: string;
-  field: { is_secret?: boolean };
+  field: { is_secret?: boolean; name: string };
   value: string;
   showSecret?: boolean;
   isMasked: boolean;
@@ -386,10 +477,12 @@ function CredentialSecretInput({
 function OAuthConnectBanner({
   connected,
   loading,
+  connectNeedsSave,
   onConnect,
 }: {
   connected: boolean;
   loading: boolean;
+  connectNeedsSave: boolean;
   onConnect: () => void;
 }) {
   if (connected) {
@@ -408,11 +501,12 @@ function OAuthConnectBanner({
   return (
     <div className="rounded-md border border-blue-100 bg-blue-50/90 px-4 py-3 text-sm text-blue-950">
       <button type="button" className={btnPrimary} disabled={loading} onClick={onConnect}>
-        {loading ? 'Redirecting…' : 'Connect with provider'}
+        {loading ? 'Redirecting…' : connectNeedsSave ? 'Save and connect' : 'Connect with provider'}
       </button>
       <p className="mt-2 text-xs leading-relaxed text-blue-900">
-        Save connection settings first, then sign in with the provider to obtain access and refresh
-        tokens.
+        {connectNeedsSave
+          ? 'Save connection settings first, then sign in with the provider to obtain access and refresh tokens.'
+          : 'Sign in with the provider to obtain access and refresh tokens.'}
       </p>
     </div>
   );

@@ -11,6 +11,40 @@ export type CredentialFieldRow = {
 /** Mask shown for stored secrets (value is not sent on save while unchanged). */
 export const CREDENTIAL_SECRET_MASK = '••••••••';
 
+/** n8n hides credential Test for OAuth authorization-code / PKCE; Connect is the check. */
+export function credentialKindShowsTestButton(
+  kind: FlowCredentialKindSummary | null | undefined,
+): boolean {
+  return Boolean(kind?.has_test_request && kind.supports_oauth_browser_flow !== true);
+}
+
+export function formatCredentialTestDetail(res: {
+  ok: boolean;
+  status_code?: number | null;
+  error?: string | null;
+}): string {
+  if (res.ok && res.error) return String(res.error);
+  if (res.ok) {
+    return res.status_code != null ? `HTTP ${res.status_code}` : 'OK';
+  }
+  const raw = res.error || 'Failed';
+  try {
+    const data = JSON.parse(raw) as unknown;
+    if (data && typeof data === 'object' && !Array.isArray(data)) {
+      const err = (data as { error?: unknown }).error;
+      if (err && typeof err === 'object' && !Array.isArray(err)) {
+        const msg = (err as { message?: unknown }).message;
+        if (typeof msg === 'string' && msg.trim()) return msg.trim();
+      }
+      const top = (data as { message?: unknown }).message;
+      if (typeof top === 'string' && top.trim()) return top.trim();
+    }
+  } catch {
+    /* not JSON */
+  }
+  return raw.length > 280 ? `${raw.slice(0, 277)}…` : raw;
+}
+
 export function credentialFieldRows(kind: FlowCredentialKindSummary | null): CredentialFieldRow[] {
   if (!kind?.fields?.length) return [];
   return kind.fields.map((f) => {

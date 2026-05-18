@@ -573,10 +573,10 @@ def build_oauth_authorization_url(
     if not auth_url:
         raise RuntimeError("authUrl missing")
 
-    parsed = urlparse(auth_url)
+    auth_parts = urlparse(auth_url)
     merged: dict[str, str] = {}
-    if parsed.query:
-        for qk, qv in parse_qsl(parsed.query, keep_blank_values=True):
+    if auth_parts.query:
+        for qk, qv in parse_qsl(auth_parts.query, keep_blank_values=True):
             merged[qk] = qv
 
     # Never allow authQueryParameters JSON to override protocol-critical / CSRF parameters.
@@ -591,21 +591,27 @@ def build_oauth_authorization_url(
         }
     )
     aqp = fields.get("authQueryParameters")
-    if isinstance(aqp, str) and aqp.strip().startswith("{"):
-        try:
-            extra = json.loads(aqp)
-            if isinstance(extra, dict):
-                for k, v in extra.items():
-                    ks = str(k)
-                    if ks.lower() in _locked_canonical:
-                        logger.warning(
-                            "Ignoring authQueryParameters key %r (reserved for OAuth redirect safety)",
-                            ks,
-                        )
-                        continue
-                    merged[ks] = str(v)
-        except json.JSONDecodeError:
-            logger.warning("authQueryParameters is not valid JSON; ignoring")
+    if isinstance(aqp, str) and aqp.strip():
+        extra_pairs: dict[str, str] = {}
+        raw = aqp.strip()
+        if raw.startswith("{"):
+            try:
+                parsed_json = json.loads(raw)
+                if isinstance(parsed_json, dict):
+                    extra_pairs = {str(k): str(v) for k, v in parsed_json.items()}
+            except json.JSONDecodeError:
+                logger.warning("authQueryParameters is not valid JSON; ignoring")
+        else:
+            for qk, qv in parse_qsl(raw, keep_blank_values=True):
+                extra_pairs[str(qk)] = str(qv)
+        for k, v in extra_pairs.items():
+            if k.lower() in _locked_canonical:
+                logger.warning(
+                    "Ignoring authQueryParameters key %r (reserved for OAuth redirect safety)",
+                    k,
+                )
+                continue
+            merged[k] = v
 
     merged["response_type"] = "code"
     merged["client_id"] = str(fields.get("clientId") or "")
@@ -621,4 +627,13 @@ def build_oauth_authorization_url(
         merged["scope"] = scope
 
     new_query = urlencode(merged)
-    return urlunparse((parsed.scheme, parsed.netloc, parsed.path, parsed.params, new_query, parsed.fragment))
+    return urlunparse(
+        (
+            auth_parts.scheme,
+            auth_parts.netloc,
+            auth_parts.path,
+            auth_parts.params,
+            new_query,
+            auth_parts.fragment,
+        )
+    )

@@ -9,6 +9,58 @@ from __future__ import annotations
 from typing import Any
 
 
+def apply_credential_kind_defaults(
+    kind: dict[str, Any], fields: dict[str, Any]
+) -> dict[str, Any]:
+    """Fill missing keys from ``secret_schema`` property ``default`` values (incl. hidden/runtime fields)."""
+
+    schema = kind.get("secret_schema")
+    if not isinstance(schema, dict):
+        return dict(fields)
+    props = schema.get("properties")
+    if not isinstance(props, dict):
+        return dict(fields)
+
+    out = dict(fields)
+    for name, prop in props.items():
+        if not isinstance(prop, dict) or "default" not in prop:
+            continue
+        cur = out.get(name)
+        if cur is not None and not (isinstance(cur, str) and not str(cur).strip()):
+            continue
+        out[name] = prop["default"]
+    return out
+
+
+def credential_validation_schema(kind: dict[str, Any]) -> dict[str, Any] | None:
+    """
+    Schema for create/update validation.
+
+    Runtime fields (OAuth tokens, hidden defaults) are optional in ``required`` and
+    declared in ``properties`` when absent so ``additionalProperties: false`` does
+    not reject stored values merged in on update after OAuth connect.
+    """
+
+    from analytiq_data.flows.credential_kind_registry import credential_runtime_field_names
+
+    schema = kind.get("secret_schema")
+    if not isinstance(schema, dict):
+        return None
+    runtime = credential_runtime_field_names(kind)
+    if not runtime:
+        return schema
+    out = dict(schema)
+    req = out.get("required")
+    if isinstance(req, list):
+        out["required"] = [str(r) for r in req if str(r) not in runtime]
+    props = dict(out.get("properties") or {})
+    for name in runtime:
+        if name not in props:
+            props[name] = {}
+    out["properties"] = props
+    return out
+
+
 def coerce_credential_fields(
     schema: dict[str, Any] | None, fields: dict[str, Any]
 ) -> dict[str, Any]:

@@ -5,8 +5,6 @@ import { Menu, MenuButton, MenuItem, MenuItems, MenuSeparator } from '@headlessu
 import {
   BeakerIcon,
   EllipsisVerticalIcon,
-  EyeIcon,
-  EyeSlashIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
   TrashIcon,
@@ -29,11 +27,8 @@ import {
   loadCredentialNamesTakenLower,
   nextSequentialDisplayName,
 } from './flowDefaultNames';
-import {
-  credentialFieldRows,
-  credentialFieldValueForSubmit,
-} from './flowCredentialFieldUtils';
 import FlowCredentialEditModal from './FlowCredentialEditModal';
+import { credentialKindShowsTestButton, formatCredentialTestDetail } from './flowCredentialFieldUtils';
 
 const btnSecondary =
   'rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
@@ -106,17 +101,12 @@ const FlowCredentials: React.FC<{
   const [pagination, setPagination] = useState({ page: 0, pageSize: 20 });
 
   const [createOpen, setCreateOpen] = useState(false);
-  /** Step 1: search + pick kind; step 2: name + fields (n8n-style wizard). */
-  const [createWizardStep, setCreateWizardStep] = useState<'pick' | 'form'>('pick');
   const [createKindQuery, setCreateKindQuery] = useState('');
   const [createPickKindKey, setCreatePickKindKey] = useState('');
   const [editRow, setEditRow] = useState<FlowCredentialHeader | null>(null);
   const [deleteRow, setDeleteRow] = useState<FlowCredentialHeader | null>(null);
 
-  const [createKindKey, setCreateKindKey] = useState('');
-  const [createName, setCreateName] = useState('');
-  const [createFields, setCreateFields] = useState<Record<string, string>>({});
-  const [showSecret, setShowSecret] = useState<Record<string, boolean>>({});
+  const [createDraft, setCreateDraft] = useState<{ kindKey: string; initialName: string } | null>(null);
 
   const [testChip, setTestChip] = useState<Record<string, { ok: boolean; detail: string }>>({});
   const [testLoadingId, setTestLoadingId] = useState<string | null>(null);
@@ -134,13 +124,9 @@ const FlowCredentials: React.FC<{
   }, [kinds, createKindQuery]);
 
   const resetCreateWizardState = useCallback(() => {
-    setCreateWizardStep('pick');
     setCreateKindQuery('');
     setCreatePickKindKey('');
-    setCreateKindKey('');
-    setCreateName('');
-    setCreateFields({});
-    setShowSecret({});
+    setCreateDraft(null);
   }, []);
 
   const closeCreateCredential = useCallback(() => {
@@ -174,6 +160,12 @@ const FlowCredentials: React.FC<{
   }, [load]);
 
   useEffect(() => {
+    if (!editRow) return;
+    const fresh = items.find((i) => i.credential_id === editRow.credential_id);
+    if (fresh) setEditRow(fresh);
+  }, [items, editRow?.credential_id]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
     const sp = new URLSearchParams(window.location.search);
     const st = sp.get('flow_oauth');
@@ -204,9 +196,7 @@ const FlowCredentials: React.FC<{
         setMessage('');
         resetCreateWizardState();
         setCreateOpen(true);
-        const taken = await loadCredentialNamesTakenLower(api);
-        if (cancelled) return;
-        setCreateName(nextSequentialDisplayName(taken, 'My credential account'));
+        await loadCredentialNamesTakenLower(api);
       } catch (err) {
         if (!cancelled) setMessage(getApiErrorMsg(err) || 'Failed to prepare new credential');
       } finally {
@@ -227,45 +217,7 @@ const FlowCredentials: React.FC<{
     resetCreateWizardState,
   ]);
 
-  const createKind = createKindKey ? kindByKey[createKindKey] : null;
-  const createFieldDefs = useMemo(() => credentialFieldRows(createKind), [createKind]);
-
-  useEffect(() => {
-    if (!createOpen || !createKind) return;
-    setCreateFields((prev) => {
-      const next: Record<string, string> = {};
-      for (const f of credentialFieldRows(createKind)) {
-        if (f.name) next[f.name] = prev[f.name] ?? '';
-      }
-      return next;
-    });
-  }, [createOpen, createKindKey, createKind]);
-
-  const submitCreate = async () => {
-    if (!createKindKey.trim() || !createName.trim()) {
-      setMessage('Name and kind are required');
-      return;
-    }
-    const kind = kindByKey[createKindKey];
-    if (!kind) return;
-    const fields: Record<string, unknown> = {};
-    for (const f of credentialFieldRows(kind)) {
-      if (!f.name) continue;
-      fields[f.name] = credentialFieldValueForSubmit(f, createFields[f.name] ?? '');
-    }
-    try {
-      setMessage('');
-      await api.createFlowCredential({
-        kind_key: createKindKey,
-        name: createName.trim(),
-        fields,
-      });
-      closeCreateCredential();
-      await load();
-    } catch (err) {
-      setMessage(getApiErrorMsg(err) || 'Failed to create credential');
-    }
-  };
+  const createDraftKind = createDraft ? kindByKey[createDraft.kindKey] : null;
 
   const confirmDelete = async () => {
     if (!deleteRow) return;
@@ -283,17 +235,9 @@ const FlowCredentials: React.FC<{
     try {
       setTestLoadingId(row.credential_id);
       const res = await api.testFlowCredential(row.credential_id);
-      const detail =
-        res.ok && res.error
-          ? String(res.error)
-          : res.ok
-            ? res.status_code != null
-              ? `HTTP ${res.status_code}`
-              : 'OK'
-            : res.error || 'Failed';
       setTestChip((prev) => ({
         ...prev,
-        [row.credential_id]: { ok: res.ok, detail },
+        [row.credential_id]: { ok: res.ok, detail: formatCredentialTestDetail(res) },
       }));
     } catch (err) {
       setTestChip((prev) => ({
@@ -311,42 +255,28 @@ const FlowCredentials: React.FC<{
   const editKind = editRow ? kindByKey[editRow.kind_key] : null;
   const pageCount = Math.max(1, Math.ceil(total / pagination.pageSize));
 
-  const continuePickToForm = async () => {
-    if (!createPickKindKey.trim()) return;
-    const picked = kindByKey[createPickKindKey];
-    setCreateKindKey(createPickKindKey);
-    setCreateWizardStep('form');
-    if (picked) {
-      try {
-        const taken = await loadCredentialNamesTakenLower(api);
-        setCreateName(
-          nextSequentialDisplayName(
-            taken,
-            defaultCredentialAccountName(picked.display_name || picked.key),
-          ),
-        );
-      } catch {
-        setCreateName(defaultCredentialAccountName(picked.display_name || picked.key));
-      }
+  const continuePickToForm = async (pickedKindKey?: string) => {
+    const kindKey = (pickedKindKey ?? createPickKindKey).trim();
+    if (!kindKey) return;
+    const picked = kindByKey[kindKey];
+    let initialName = defaultCredentialAccountName(picked?.display_name || kindKey);
+    try {
+      const taken = await loadCredentialNamesTakenLower(api);
+      initialName = nextSequentialDisplayName(
+        taken,
+        defaultCredentialAccountName(picked?.display_name || kindKey),
+      );
+    } catch {
+      /* keep default */
     }
+    setCreateOpen(false);
+    setCreateDraft({ kindKey, initialName });
   };
 
-  const backFormToPick = () => {
-    setCreatePickKindKey(createKindKey);
-    setCreateKindKey('');
-    setCreateWizardStep('pick');
-  };
-
-  const renderSecretToggle = (key: string) => (
-    <button
-      type="button"
-      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
-      aria-label={showSecret[key] ? 'Hide value' : 'Show value'}
-      onClick={() => setShowSecret((s) => ({ ...s, [key]: !s[key] }))}
-    >
-      {showSecret[key] ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
-    </button>
-  );
+  const closeCreateEditor = useCallback(() => {
+    setCreateDraft(null);
+    resetCreateWizardState();
+  }, [resetCreateWizardState]);
 
   return (
     <div className="rounded-lg border border-gray-200 bg-white">
@@ -381,7 +311,7 @@ const FlowCredentials: React.FC<{
             )}
             {items.map((row) => {
               const kindLabel = kindByKey[row.kind_key]?.display_name || row.kind_key;
-              const canTest = kindByKey[row.kind_key]?.has_test_request === true;
+              const canTest = credentialKindShowsTestButton(kindByKey[row.kind_key]);
               const chip = canTest ? testChip[row.credential_id] : undefined;
               return (
                 <tr key={row.credential_id}>
@@ -534,50 +464,25 @@ const FlowCredentials: React.FC<{
 
       <FlowModal
         open={createOpen}
-        title={createWizardStep === 'pick' ? 'New credential' : 'Connection details'}
-        titleAccessory={
-          createWizardStep === 'form' && createKind ? (
-            <span
-              className="inline-block max-w-[14rem] truncate rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-800"
-              title={createKind.display_name}
-            >
-              {createKind.display_name}
-            </span>
-          ) : undefined
-        }
-        panelMaxWidthClassName={createWizardStep === 'pick' ? 'max-w-lg' : 'max-w-md'}
+        title="New credential"
+        panelMaxWidthClassName="max-w-lg"
         onClose={closeCreateCredential}
         footer={
-          createWizardStep === 'pick' ? (
-            <>
-              <button type="button" className={btnSecondary} onClick={closeCreateCredential}>
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={btnPrimary}
-                disabled={!createPickKindKey}
-                onClick={() => void continuePickToForm()}
-              >
-                Continue
-              </button>
-            </>
-          ) : (
-            <>
-              <button type="button" className={btnSecondary} onClick={backFormToPick}>
-                Back
-              </button>
-              <button type="button" className={btnSecondary} onClick={closeCreateCredential}>
-                Cancel
-              </button>
-              <button type="button" className={btnPrimary} onClick={() => void submitCreate()}>
-                Save
-              </button>
-            </>
-          )
+          <>
+            <button type="button" className={btnSecondary} onClick={closeCreateCredential}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={btnPrimary}
+              disabled={!createPickKindKey}
+              onClick={() => void continuePickToForm()}
+            >
+              Continue
+            </button>
+          </>
         }
       >
-        {createWizardStep === 'pick' ? (
           <div className="flex flex-col gap-4">
             <p className="m-0 text-sm leading-relaxed text-gray-700">
               Select an app or service to connect to.
@@ -646,21 +551,7 @@ const FlowCredentials: React.FC<{
                         onClick={() => setCreatePickKindKey(k.key)}
                         onDoubleClick={() => {
                           setCreatePickKindKey(k.key);
-                          void (async () => {
-                            setCreateKindKey(k.key);
-                            setCreateWizardStep('form');
-                            try {
-                              const taken = await loadCredentialNamesTakenLower(api);
-                              setCreateName(
-                                nextSequentialDisplayName(
-                                  taken,
-                                  defaultCredentialAccountName(k.display_name || k.key),
-                                ),
-                              );
-                            } catch {
-                              setCreateName(defaultCredentialAccountName(k.display_name || k.key));
-                            }
-                          })();
+                          void continuePickToForm(k.key);
                         }}
                       >
                         <span className="min-w-0 flex-1 truncate">{k.display_name}</span>
@@ -672,49 +563,27 @@ const FlowCredentials: React.FC<{
               </div>
             </div>
           </div>
-        ) : (
-          <div className="flex flex-col gap-4">
-            <div>
-              <label className={flowLabelClass} htmlFor="cred-create-name">
-                Name
-              </label>
-              <input
-                id="cred-create-name"
-                className={flowInputClass}
-                value={createName}
-                onChange={(e) => setCreateName(e.target.value)}
-                autoComplete="off"
-              />
-            </div>
-            {createFieldDefs.map((f) => (
-              <div key={f.name}>
-                <label className={flowLabelClass} htmlFor={`cred-create-${f.name}`}>
-                  {f.title || f.name}
-                </label>
-                <div className="relative">
-                  <input
-                    id={`cred-create-${f.name}`}
-                    className={f.is_secret ? `${flowInputClass} pr-10` : flowInputClass}
-                    type={f.is_secret && !showSecret[f.name] ? 'password' : 'text'}
-                    value={createFields[f.name] ?? ''}
-                    onChange={(e) =>
-                      setCreateFields((prev) => ({ ...prev, [f.name]: e.target.value }))
-                    }
-                    autoComplete="off"
-                  />
-                  {f.is_secret ? renderSecretToggle(f.name) : null}
-                </div>
-                {f.description ? (
-                  <p className="mt-1 text-xs text-gray-500">{f.description}</p>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        )}
       </FlowModal>
+
+      {createDraft ? (
+        <FlowCredentialEditModal
+          mode="create"
+          kindKey={createDraft.kindKey}
+          initialName={createDraft.initialName}
+          kind={createDraftKind}
+          api={api}
+          onClose={closeCreateEditor}
+          onSaved={async () => {
+            await load();
+          }}
+          onError={setMessage}
+        />
+      ) : null}
+
 
       {editRow ? (
         <FlowCredentialEditModal
+          mode="edit"
           row={editRow}
           kind={editKind}
           api={api}
