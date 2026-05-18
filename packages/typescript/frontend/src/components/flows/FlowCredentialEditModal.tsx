@@ -15,11 +15,13 @@ import {
 } from './flowUiClasses';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 import {
+  buildCredentialFieldsPayload,
   CREDENTIAL_SECRET_MASK,
   credentialFieldDisplayValue,
   credentialFieldRows,
-  credentialFieldValueForSubmit,
+  credentialFormSnapshotsEqual,
   credentialKindShowsTestButton,
+  type CredentialFormSnapshot,
   formatCredentialTestDetail,
   isCredentialSecretMaskValue,
 } from './flowCredentialFieldUtils';
@@ -62,6 +64,8 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
   const [oauthConnectLoading, setOauthConnectLoading] = useState(false);
   const [testLoading, setTestLoading] = useState(false);
   const [testDetail, setTestDetail] = useState<string | null>(null);
+  const [savedSnapshot, setSavedSnapshot] = useState<CredentialFormSnapshot | null>(null);
+  const [formEpoch, setFormEpoch] = useState(0);
 
   const fieldDefs = useMemo(() => credentialFieldRows(kind), [kind]);
   const secretFieldsSet = useMemo(
@@ -95,11 +99,22 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
     setSecretMasked(masked);
     setShowSecret({});
     setTestDetail(null);
+    setFormEpoch((n) => n + 1);
   }, [mode, props, kind, row, secretFieldsSet]);
 
   useEffect(() => {
     initForm();
   }, [initForm]);
+
+  useEffect(() => {
+    if (!kind || formEpoch === 0) return;
+    setSavedSnapshot({
+      name: name.trim(),
+      fields: buildCredentialFieldsPayload(fieldDefs, fields, secretMasked),
+    });
+    // Baseline is captured once per form reset (initForm), not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- formEpoch only
+  }, [formEpoch, kind]);
 
   useEffect(() => {
     if (mode === 'create') {
@@ -111,19 +126,18 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
   const oauthConnected = supportsOAuth && secretFieldsSet.has('oauthAccessToken');
   const credentialId = row?.credential_id;
 
-  const buildFieldsPayload = (): Record<string, unknown> => {
-    const out: Record<string, unknown> = {};
-    for (const f of fieldDefs) {
-      if (!f.name) continue;
-      const raw = fields[f.name] ?? '';
-      const omitSecret =
-        f.is_secret &&
-        (secretMasked.has(f.name) || isCredentialSecretMaskValue(raw) || !raw.trim());
-      const val = credentialFieldValueForSubmit(f, raw, { omitSecret });
-      if (val !== undefined) out[f.name] = val;
-    }
-    return out;
-  };
+  const currentSnapshot = useMemo(
+    (): CredentialFormSnapshot => ({
+      name: name.trim(),
+      fields: buildCredentialFieldsPayload(fieldDefs, fields, secretMasked),
+    }),
+    [name, fields, secretMasked, fieldDefs],
+  );
+
+  const hasUnsavedChanges = useMemo(() => {
+    if (!savedSnapshot) return false;
+    return !credentialFormSnapshotsEqual(currentSnapshot, savedSnapshot);
+  }, [currentSnapshot, savedSnapshot]);
 
   const persist = async (): Promise<FlowCredentialHeader | null> => {
     if (!kind) {
@@ -134,7 +148,7 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
       onError('Credential name cannot be empty');
       return null;
     }
-    const payload = { name: name.trim(), fields: buildFieldsPayload() };
+    const payload = { name: currentSnapshot.name, fields: currentSnapshot.fields };
     if (credentialId) {
       return api.updateFlowCredential(credentialId, payload);
     }
@@ -319,7 +333,12 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
           <button type="button" className={btnSecondary} onClick={onClose} disabled={saving}>
             {mode === 'create' && savedRow ? 'Done' : 'Cancel'}
           </button>
-          <button type="button" className={btnPrimary} onClick={() => void submit()} disabled={saving || !kind}>
+          <button
+            type="button"
+            className={btnPrimary}
+            onClick={() => void submit()}
+            disabled={saving || !kind || !hasUnsavedChanges}
+          >
             {saving ? 'Saving…' : 'Save'}
           </button>
         </div>

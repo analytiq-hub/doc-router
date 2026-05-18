@@ -1,9 +1,21 @@
 import { describe, expect, it } from 'vitest';
 import type { FlowCredentialKindSummary } from '@docrouter/sdk';
 import {
+  credentialFormSnapshotsEqual,
   credentialKindShowsTestButton,
   formatCredentialTestDetail,
 } from './flowCredentialFieldUtils';
+
+describe('credentialFormSnapshotsEqual', () => {
+  it('detects name and field changes', () => {
+    const base = { name: 'Gmail account', fields: { clientId: 'a' } };
+    expect(credentialFormSnapshotsEqual(base, base)).toBe(true);
+    expect(credentialFormSnapshotsEqual(base, { ...base, name: 'Other' })).toBe(false);
+    expect(
+      credentialFormSnapshotsEqual(base, { name: 'Gmail account', fields: { clientId: 'b' } }),
+    ).toBe(false);
+  });
+});
 
 describe('credentialKindShowsTestButton', () => {
   it('hides test for OAuth browser-flow kinds (n8n: isCredentialTestable false when isOAuthType)', () => {

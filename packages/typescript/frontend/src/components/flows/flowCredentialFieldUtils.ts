@@ -57,6 +57,44 @@ export function credentialFieldRows(kind: FlowCredentialKindSummary | null): Cre
   });
 }
 
+export function buildCredentialFieldsPayload(
+  fieldDefs: CredentialFieldRow[],
+  fields: Record<string, string>,
+  secretMasked: Set<string>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const f of fieldDefs) {
+    if (!f.name) continue;
+    const raw = fields[f.name] ?? '';
+    const omitSecret =
+      f.is_secret &&
+      (secretMasked.has(f.name) || isCredentialSecretMaskValue(raw) || !raw.trim());
+    const val = credentialFieldValueForSubmit(f, raw, { omitSecret });
+    if (val !== undefined) out[f.name] = val;
+  }
+  return out;
+}
+
+export type CredentialFormSnapshot = {
+  name: string;
+  fields: Record<string, unknown>;
+};
+
+export function credentialFormSnapshotsEqual(
+  a: CredentialFormSnapshot,
+  b: CredentialFormSnapshot,
+): boolean {
+  if (a.name !== b.name) return false;
+  const keys = new Set([...Object.keys(a.fields), ...Object.keys(b.fields)]);
+  for (const k of keys) {
+    const av = a.fields[k];
+    const bv = b.fields[k];
+    if (av === bv) continue;
+    if (JSON.stringify(av) !== JSON.stringify(bv)) return false;
+  }
+  return true;
+}
+
 export function credentialFieldValueForSubmit(
   f: CredentialFieldRow,
   raw: string,
