@@ -24,57 +24,16 @@ import {
   flowWorkspaceMenuTriggerIconBtnClass,
 } from './flowWorkspaceMenu';
 import { flowInputClass, flowLabelClass } from './flowUiClasses';
-import { loadCredentialNamesTakenLower, nextSequentialDisplayName } from './flowDefaultNames';
-
-type FieldRow = {
-  name: string;
-  title?: string;
-  description?: string;
-  type?: string;
-  is_secret?: boolean;
-};
-
-function fieldRows(kind: FlowCredentialKindSummary | null): FieldRow[] {
-  if (!kind?.fields?.length) return [];
-  return kind.fields.map((f) => {
-    const name = typeof f.name === 'string' ? f.name : '';
-    const title = typeof f.title === 'string' ? f.title : undefined;
-    const description = typeof f.description === 'string' ? f.description : undefined;
-    const type = typeof f.type === 'string' ? f.type : undefined;
-    const is_secret = f.is_secret === true;
-    return { name, title, description, type, is_secret };
-  });
-}
-
-/** Map form strings to JSON types expected by credential ``secret_schema``. */
-function credentialFieldValueForSubmit(f: FieldRow, raw: string): unknown {
-  const v = raw ?? '';
-  if (f.type === 'boolean') {
-    const s = v.trim().toLowerCase();
-    if (s === '' || s === 'false' || s === '0' || s === 'no' || s === 'off') return false;
-    if (s === 'true' || s === '1' || s === 'yes' || s === 'on') return true;
-    return Boolean(v);
-  }
-  if (f.type === 'integer') {
-    const s = v.trim();
-    if (!s) return 0;
-    const n = Number(s);
-    return Number.isFinite(n) ? Math.trunc(n) : v;
-  }
-  if (f.type === 'number') {
-    const s = v.trim();
-    if (!s) return 0;
-    const n = Number(s);
-    return Number.isFinite(n) ? n : v;
-  }
-  return v;
-}
-
-function credentialFieldDisplayValue(f: FieldRow, pub: unknown): string {
-  if (pub === undefined || pub === null) return '';
-  if (f.type === 'boolean') return pub === true ? 'true' : pub === false ? 'false' : String(pub);
-  return String(pub);
-}
+import {
+  defaultCredentialAccountName,
+  loadCredentialNamesTakenLower,
+  nextSequentialDisplayName,
+} from './flowDefaultNames';
+import {
+  credentialFieldRows,
+  credentialFieldValueForSubmit,
+} from './flowCredentialFieldUtils';
+import FlowCredentialEditModal from './FlowCredentialEditModal';
 
 const btnSecondary =
   'rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50';
@@ -159,12 +118,8 @@ const FlowCredentials: React.FC<{
   const [createFields, setCreateFields] = useState<Record<string, string>>({});
   const [showSecret, setShowSecret] = useState<Record<string, boolean>>({});
 
-  const [editName, setEditName] = useState('');
-  const [editFields, setEditFields] = useState<Record<string, string>>({});
-
   const [testChip, setTestChip] = useState<Record<string, { ok: boolean; detail: string }>>({});
   const [testLoadingId, setTestLoadingId] = useState<string | null>(null);
-  const [oauthConnectLoading, setOauthConnectLoading] = useState(false);
 
   const kindByKey = useMemo(() => Object.fromEntries(kinds.map((k) => [k.key, k])), [kinds]);
 
@@ -236,21 +191,7 @@ const FlowCredentials: React.FC<{
 
   const openEdit = useCallback((row: FlowCredentialHeader) => {
     setEditRow(row);
-    setEditName(row.name);
-    const k = kindByKey[row.kind_key];
-    const next: Record<string, string> = {};
-    if (k) {
-      for (const f of fieldRows(k)) {
-        if (!f.name) continue;
-        if (f.is_secret) next[f.name] = '';
-        else {
-          next[f.name] = credentialFieldDisplayValue(f, row.public_fields[f.name]);
-        }
-      }
-    }
-    setEditFields(next);
-    setShowSecret({});
-  }, [kindByKey]);
+  }, []);
 
   useEffect(() => {
     if (!autoBootstrapCredential) return;
@@ -265,7 +206,7 @@ const FlowCredentials: React.FC<{
         setCreateOpen(true);
         const taken = await loadCredentialNamesTakenLower(api);
         if (cancelled) return;
-        setCreateName(nextSequentialDisplayName(taken, 'My credential'));
+        setCreateName(nextSequentialDisplayName(taken, 'My credential account'));
       } catch (err) {
         if (!cancelled) setMessage(getApiErrorMsg(err) || 'Failed to prepare new credential');
       } finally {
@@ -287,13 +228,13 @@ const FlowCredentials: React.FC<{
   ]);
 
   const createKind = createKindKey ? kindByKey[createKindKey] : null;
-  const createFieldDefs = useMemo(() => fieldRows(createKind), [createKind]);
+  const createFieldDefs = useMemo(() => credentialFieldRows(createKind), [createKind]);
 
   useEffect(() => {
     if (!createOpen || !createKind) return;
     setCreateFields((prev) => {
       const next: Record<string, string> = {};
-      for (const f of fieldRows(createKind)) {
+      for (const f of credentialFieldRows(createKind)) {
         if (f.name) next[f.name] = prev[f.name] ?? '';
       }
       return next;
@@ -308,7 +249,7 @@ const FlowCredentials: React.FC<{
     const kind = kindByKey[createKindKey];
     if (!kind) return;
     const fields: Record<string, unknown> = {};
-    for (const f of fieldRows(kind)) {
+    for (const f of credentialFieldRows(kind)) {
       if (!f.name) continue;
       fields[f.name] = credentialFieldValueForSubmit(f, createFields[f.name] ?? '');
     }
@@ -326,36 +267,6 @@ const FlowCredentials: React.FC<{
     }
   };
 
-  const submitEdit = async () => {
-    if (!editRow) return;
-    const k = kindByKey[editRow.kind_key];
-    if (!k) {
-      setMessage('Unknown credential kind');
-      return;
-    }
-    const fields: Record<string, unknown> = {};
-    for (const f of fieldRows(k)) {
-      if (!f.name) continue;
-      const v = editFields[f.name] ?? '';
-      if (f.is_secret && !v.trim()) {
-        setMessage(`Secret field “${f.title || f.name}” must be re-entered to update.`);
-        return;
-      }
-      fields[f.name] = credentialFieldValueForSubmit(f, v);
-    }
-    try {
-      setMessage('');
-      await api.updateFlowCredential(editRow.credential_id, {
-        name: editName.trim(),
-        fields,
-      });
-      setEditRow(null);
-      await load();
-    } catch (err) {
-      setMessage(getApiErrorMsg(err) || 'Failed to update credential');
-    }
-  };
-
   const confirmDelete = async () => {
     if (!deleteRow) return;
     try {
@@ -365,19 +276,6 @@ const FlowCredentials: React.FC<{
       await load();
     } catch (err) {
       setMessage(getApiErrorMsg(err) || 'Failed to delete credential');
-    }
-  };
-
-  const startOAuthConnect = async () => {
-    if (!editRow) return;
-    try {
-      setOauthConnectLoading(true);
-      setMessage('');
-      const { authorization_url } = await api.initiateFlowOAuthConnect(editRow.credential_id);
-      window.location.href = authorization_url;
-    } catch (err) {
-      setMessage(getApiErrorMsg(err) || 'Could not start OAuth');
-      setOauthConnectLoading(false);
     }
   };
 
@@ -411,13 +309,26 @@ const FlowCredentials: React.FC<{
   const td = 'border-b border-gray-100 px-3 py-2 text-sm text-gray-800';
 
   const editKind = editRow ? kindByKey[editRow.kind_key] : null;
-  const editFieldDefs = useMemo(() => fieldRows(editKind), [editKind]);
   const pageCount = Math.max(1, Math.ceil(total / pagination.pageSize));
 
-  const continuePickToForm = () => {
+  const continuePickToForm = async () => {
     if (!createPickKindKey.trim()) return;
+    const picked = kindByKey[createPickKindKey];
     setCreateKindKey(createPickKindKey);
     setCreateWizardStep('form');
+    if (picked) {
+      try {
+        const taken = await loadCredentialNamesTakenLower(api);
+        setCreateName(
+          nextSequentialDisplayName(
+            taken,
+            defaultCredentialAccountName(picked.display_name || picked.key),
+          ),
+        );
+      } catch {
+        setCreateName(defaultCredentialAccountName(picked.display_name || picked.key));
+      }
+    }
   };
 
   const backFormToPick = () => {
@@ -646,7 +557,7 @@ const FlowCredentials: React.FC<{
                 type="button"
                 className={btnPrimary}
                 disabled={!createPickKindKey}
-                onClick={continuePickToForm}
+                onClick={() => void continuePickToForm()}
               >
                 Continue
               </button>
@@ -735,8 +646,21 @@ const FlowCredentials: React.FC<{
                         onClick={() => setCreatePickKindKey(k.key)}
                         onDoubleClick={() => {
                           setCreatePickKindKey(k.key);
-                          setCreateKindKey(k.key);
-                          setCreateWizardStep('form');
+                          void (async () => {
+                            setCreateKindKey(k.key);
+                            setCreateWizardStep('form');
+                            try {
+                              const taken = await loadCredentialNamesTakenLower(api);
+                              setCreateName(
+                                nextSequentialDisplayName(
+                                  taken,
+                                  defaultCredentialAccountName(k.display_name || k.key),
+                                ),
+                              );
+                            } catch {
+                              setCreateName(defaultCredentialAccountName(k.display_name || k.key));
+                            }
+                          })();
                         }}
                       >
                         <span className="min-w-0 flex-1 truncate">{k.display_name}</span>
@@ -789,90 +713,17 @@ const FlowCredentials: React.FC<{
         )}
       </FlowModal>
 
-      <FlowModal
-        open={editRow != null}
-        title="Edit credential"
-        titleAccessory={
-          <span
-            className="inline-block max-w-[14rem] truncate rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-800"
-            title={editKind?.display_name || editRow?.kind_key}
-          >
-            {editKind?.display_name || editRow?.kind_key}
-          </span>
-        }
-        onClose={() => setEditRow(null)}
-        footer={
-          <>
-            <button type="button" className={btnSecondary} onClick={() => setEditRow(null)}>
-              Cancel
-            </button>
-            <button type="button" className={btnPrimary} onClick={() => void submitEdit()}>
-              Save
-            </button>
-          </>
-        }
-      >
-        <div className="flex flex-col gap-4">
-          <div>
-            <label className={flowLabelClass} htmlFor="cred-edit-name">
-              Name
-            </label>
-            <input
-              id="cred-edit-name"
-              className={flowInputClass}
-              value={editName}
-              onChange={(e) => setEditName(e.target.value)}
-              autoComplete="off"
-            />
-          </div>
-          {editFieldDefs.map((f) => (
-            <div key={f.name}>
-              <label className={flowLabelClass} htmlFor={`cred-edit-${f.name}`}>
-                {f.title || f.name}
-              </label>
-              <div className="relative">
-                <input
-                  id={`cred-edit-${f.name}`}
-                  className={f.is_secret ? `${flowInputClass} pr-10` : flowInputClass}
-                  type={f.is_secret && !showSecret[`edit-${f.name}`] ? 'password' : 'text'}
-                  value={editFields[f.name] ?? ''}
-                  onChange={(e) =>
-                    setEditFields((prev) => ({ ...prev, [f.name]: e.target.value }))
-                  }
-                  autoComplete="off"
-                />
-                {f.is_secret ? renderSecretToggle(`edit-${f.name}`) : null}
-              </div>
-              {f.is_secret ? (
-                <p className="mt-1 text-xs text-gray-500">
-                  {f.description ? `${f.description} ` : ''}(re-enter to replace; required to save)
-                </p>
-              ) : f.description ? (
-                <p className="mt-1 text-xs text-gray-500">{f.description}</p>
-              ) : null}
-            </div>
-          ))}
-          {editKind?.supports_oauth_browser_flow &&
-          ['authorizationCode', 'pkce'].includes(
-            String(editRow?.public_fields?.grantType ?? 'authorizationCode'),
-          ) ? (
-            <div className="rounded-md border border-blue-100 bg-blue-50/90 px-3 py-3 text-sm text-blue-950">
-              <button
-                type="button"
-                className={btnPrimary}
-                disabled={oauthConnectLoading}
-                onClick={() => void startOAuthConnect()}
-              >
-                {oauthConnectLoading ? 'Redirecting…' : 'Connect with provider'}
-              </button>
-              <p className="mt-2 text-xs leading-relaxed text-blue-900">
-                Save Client ID, Secret, and URLs first. This opens the provider login page to obtain access and refresh
-                tokens.
-              </p>
-            </div>
-          ) : null}
-        </div>
-      </FlowModal>
+      {editRow ? (
+        <FlowCredentialEditModal
+          row={editRow}
+          kind={editKind}
+          api={api}
+          onClose={() => setEditRow(null)}
+          onSaved={load}
+          onError={setMessage}
+        />
+      ) : null}
+
 
       <FlowModal
         open={deleteRow != null}

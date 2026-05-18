@@ -3,6 +3,22 @@ import type { DocRouterOrgApi } from '@/utils/api';
 /** Dynamic route `/orgs/.../flows/[flowId]` before persistence (no `POST /flows` yet). */
 export const NEW_FLOW_URL_SEGMENT = 'new';
 
+/**
+ * Default credential label (n8n-style): kind display name with common suffixes stripped + ` account`.
+ * e.g. `Gmail OAuth2 API` → `Gmail account`.
+ */
+export function defaultCredentialAccountName(kindDisplayName: string): string {
+  let base = kindDisplayName.trim();
+  for (const suffix of [' OAuth2 API', ' OAuth2', ' API']) {
+    if (base.endsWith(suffix)) {
+      base = base.slice(0, -suffix.length).trim();
+      break;
+    }
+  }
+  const label = base || kindDisplayName.trim();
+  return `${label} account`;
+}
+
 /** Case-insensitive first free display name: `base`, then `base 2`, `base 3`, … */
 export function nextSequentialDisplayName(takenLower: ReadonlySet<string>, baseDisplay: string): string {
   const base = baseDisplay.trim();

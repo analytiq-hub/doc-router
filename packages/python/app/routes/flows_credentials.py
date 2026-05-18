@@ -16,7 +16,10 @@ from jsonschema import Draft7Validator
 from pydantic import BaseModel
 
 import analytiq_data as ad
-from analytiq_data.flows.credential_fields import coerce_credential_fields
+from analytiq_data.flows.credential_fields import (
+    coerce_credential_fields,
+    merge_credential_fields_update,
+)
 from app.auth import get_org_user
 from app.models import User
 
@@ -57,6 +60,8 @@ class CredentialHeader(BaseModel):
     kind_key: str
     name: str
     public_fields: dict[str, Any]
+    #: Secret field names that have a non-empty stored value (values are never returned).
+    secret_fields_set: list[str] = []
     created_at: datetime
     created_by: str
     updated_at: datetime
@@ -145,6 +150,12 @@ def _to_header(doc: dict[str, Any], kind: dict[str, Any]) -> CredentialHeader:
         logger.warning("credential decrypt failed %s: %s", doc.get("_id"), e)
         all_fields = {}
     public_fields = {k: v for k, v in all_fields.items() if k not in secret_names}
+    secret_fields_set = sorted(
+        k
+        for k in secret_names
+        if k in all_fields and all_fields[k] not in (None, "")
+        and not (isinstance(all_fields[k], str) and not str(all_fields[k]).strip())
+    )
     ca = doc["created_at"]
     ua = doc["updated_at"]
     return CredentialHeader(
@@ -153,6 +164,7 @@ def _to_header(doc: dict[str, Any], kind: dict[str, Any]) -> CredentialHeader:
         kind_key=doc["kind_key"],
         name=doc["name"],
         public_fields=public_fields,
+        secret_fields_set=secret_fields_set,
         created_at=ca.replace(tzinfo=UTC) if getattr(ca, "tzinfo", None) is None else ca,
         created_by=doc["created_by"],
         updated_at=ua.replace(tzinfo=UTC) if getattr(ua, "tzinfo", None) is None else ua,
@@ -338,8 +350,26 @@ async def update_credential(
     except KeyError:
         raise HTTPException(status_code=400, detail=f"Unknown credential kind: {doc.get('kind_key')}") from None
 
+    secret_names = frozenset(ad.flows.credential_secret_field_names(kind))
+    existing_fields: dict[str, Any] = {}
+    raw = doc.get("encrypted_payload")
+    if raw:
+        try:
+            decrypted = ad.crypto.decrypt_secret(raw)
+            if decrypted:
+                parsed = json.loads(decrypted)
+                if isinstance(parsed, dict):
+                    existing_fields = parsed
+        except Exception as e:
+            logger.warning("credential decrypt failed on update %s: %s", oid, e)
+
     schema = kind.get("secret_schema")
-    fields = coerce_credential_fields(schema if isinstance(schema, dict) else None, req.fields)
+    merged_in = merge_credential_fields_update(
+        existing_fields, req.fields, secret_names
+    )
+    fields = coerce_credential_fields(
+        schema if isinstance(schema, dict) else None, merged_in
+    )
     if schema:
         try:
             Draft7Validator(schema).validate(fields)

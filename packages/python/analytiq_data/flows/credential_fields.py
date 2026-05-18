@@ -75,3 +75,21 @@ def _coerce_property_value(prop: dict[str, Any], val: Any) -> Any:
         return val
 
     return val
+
+
+def merge_credential_fields_update(
+    existing: dict[str, Any],
+    incoming: dict[str, Any],
+    secret_names: frozenset[str] | set[str],
+) -> dict[str, Any]:
+    """Apply ``incoming`` on ``existing``; omit empty secret values so stored secrets are kept."""
+
+    out = dict(existing)
+    for key, val in incoming.items():
+        if key in secret_names:
+            if val is None:
+                continue
+            if isinstance(val, str) and not val.strip():
+                continue
+        out[key] = val
+    return out

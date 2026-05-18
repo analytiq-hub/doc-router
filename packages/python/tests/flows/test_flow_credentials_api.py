@@ -74,6 +74,40 @@ async def test_credential_name_trim_matches_existing(org_and_users, test_db):
 
 
 @pytest.mark.asyncio
+async def test_credential_update_preserves_secret_when_omitted(org_and_users, test_db):
+    org_id = org_and_users["org_id"]
+    member = org_and_users["member"]
+    headers = get_token_headers(member["token"])
+    created = client.post(
+        f"/v0/orgs/{org_id}/credentials",
+        json={
+            "kind_key": "httpHeaderAuth",
+            "name": "Secret keep",
+            "fields": {"name": "Authorization", "value": "Bearer original"},
+        },
+        headers=headers,
+    )
+    assert created.status_code == 200, created.text
+    cred_id = created.json()["credential_id"]
+
+    updated = client.put(
+        f"/v0/orgs/{org_id}/credentials/{cred_id}",
+        json={
+            "name": "Secret keep renamed",
+            "fields": {"name": "X-Api-Key", "value": ""},
+        },
+        headers=headers,
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["name"] == "Secret keep renamed"
+    assert "value" in (updated.json().get("secret_fields_set") or [])
+
+    listed = client.get(f"/v0/orgs/{org_id}/credentials/{cred_id}", headers=headers)
+    assert listed.status_code == 200
+    assert listed.json()["public_fields"]["name"] == "X-Api-Key"
+
+
+@pytest.mark.asyncio
 async def test_credential_rename_conflict(org_and_users, test_db):
     org_id = org_and_users["org_id"]
     member = org_and_users["member"]

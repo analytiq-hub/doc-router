@@ -225,6 +225,8 @@ export interface FlowCredentialHeader {
   kind_key: string;
   name: string;
   public_fields: Record<string, unknown>;
+  /** Secret field names with a stored value (secrets are never returned). */
+  secret_fields_set?: string[];
   created_at: string;
   created_by: string;
   updated_at: string;
