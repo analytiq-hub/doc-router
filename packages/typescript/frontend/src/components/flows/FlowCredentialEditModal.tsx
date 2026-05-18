@@ -487,12 +487,17 @@ function OAuthConnectBanner({
 }) {
   if (connected) {
     return (
-      <div className="flex flex-col gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
-        <div className="flex items-center gap-2 font-medium">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+        <div className="flex min-w-0 items-center gap-2 font-medium">
           <CheckCircleIcon className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
           Account connected
         </div>
-        <button type="button" className={btnSecondary} disabled={loading} onClick={onConnect}>
+        <button
+          type="button"
+          className={`${btnSecondary} shrink-0`}
+          disabled={loading}
+          onClick={onConnect}
+        >
           {loading ? 'Redirecting…' : 'Reconnect'}
         </button>
       </div>
@@ -500,14 +505,21 @@ function OAuthConnectBanner({
   }
   return (
     <div className="rounded-md border border-blue-100 bg-blue-50/90 px-4 py-3 text-sm text-blue-950">
-      <button type="button" className={btnPrimary} disabled={loading} onClick={onConnect}>
-        {loading ? 'Redirecting…' : connectNeedsSave ? 'Save and connect' : 'Connect with provider'}
-      </button>
-      <p className="mt-2 text-xs leading-relaxed text-blue-900">
-        {connectNeedsSave
-          ? 'Save connection settings first, then sign in with the provider to obtain access and refresh tokens.'
-          : 'Sign in with the provider to obtain access and refresh tokens.'}
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="m-0 min-w-0 flex-1 text-sm leading-snug text-blue-950">
+          {connectNeedsSave
+            ? 'Save connection settings, then sign in with the provider.'
+            : 'Sign in with the provider to obtain access and refresh tokens.'}
+        </p>
+        <button
+          type="button"
+          className={`${btnPrimary} shrink-0`}
+          disabled={loading}
+          onClick={onConnect}
+        >
+          {loading ? 'Redirecting…' : connectNeedsSave ? 'Save and connect' : 'Connect with provider'}
+        </button>
+      </div>
     </div>
   );
 }
