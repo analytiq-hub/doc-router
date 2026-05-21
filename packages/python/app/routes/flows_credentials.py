@@ -604,6 +604,8 @@ async def oauth_initiate_flow_credential(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Decrypt failed: {e}") from None
 
+    fields = apply_credential_kind_defaults(kind, fields)
+
     gt = str(fields.get("grantType") or "authorizationCode")
     if gt not in ("authorizationCode", "pkce"):
         raise HTTPException(

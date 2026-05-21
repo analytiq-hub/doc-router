@@ -15,6 +15,11 @@
           "asia-southeast1.firebasedatabase.app"
         ],
         "default": "firebaseio.com"
+      },
+      "scope": {
+        "type": "string",
+        "default": "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/firebase",
+        "description": "Default OAuth scopes for this Google service (hidden from the form via runtime_fields)."
       }
     },
     "required": []

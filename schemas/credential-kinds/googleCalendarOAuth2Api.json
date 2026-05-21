@@ -5,7 +5,13 @@
   "secret_schema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {},
+    "properties": {
+      "scope": {
+        "type": "string",
+        "default": "https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events",
+        "description": "Default OAuth scopes for this Google service (hidden from the form via runtime_fields)."
+      }
+    },
     "required": []
   },
   "extends": [

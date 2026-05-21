@@ -95,6 +95,8 @@ A kind may inherit from one or more parents via `extends`. The registry resolves
 
 Circular extends are detected at load time; broken kinds are skipped with a warning and excluded from `list_credential_kinds()`.
 
+**Google service OAuth kinds** (e.g. `googleDriveOAuth2Api`, `gmailOAuth2`) extend `googleOAuth2Api` and define a hidden `scope` property with service-specific defaults (from n8n). Without scopes, Google returns `400 invalid_request` on authorize. `oauth/initiate` applies schema defaults to stored fields before building the authorize URL.
+
 **Base `oAuth2Api` security fields** (inherited by `googleOAuth2Api`, `gmailOAuth2`, and other OAuth kinds):
 
 | Field | UI | Purpose |

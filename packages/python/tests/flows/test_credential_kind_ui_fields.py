@@ -23,6 +23,26 @@ def test_gmail_scope_is_runtime_hidden_but_schema_default() -> None:
         _credential_kinds_bundle.cache_clear()
 
 
+def test_google_drive_oauth_includes_default_scopes_in_authorize_url() -> None:
+    """Empty scope causes Google invalid_request; service kinds need property defaults."""
+    _credential_kinds_bundle.cache_clear()
+    try:
+        from analytiq_data.flows.credential_fields import apply_credential_kind_defaults
+        from analytiq_data.flows.credential_runtime import build_oauth_authorization_url
+
+        kind = get_credential_kind("googleDriveOAuth2Api")
+        fields = apply_credential_kind_defaults(
+            kind,
+            {"clientId": "cid", "clientSecret": "sec"},
+        )
+        assert "www.googleapis.com/auth/drive" in (fields.get("scope") or "")
+        url = build_oauth_authorization_url(fields, "state-xyz")
+        assert "scope=" in url
+        assert "auth%2Fdrive" in url or "auth/drive" in url
+    finally:
+        _credential_kinds_bundle.cache_clear()
+
+
 def test_google_oauth_kinds_hide_ignore_ssl_issues() -> None:
     """Google stack: ignoreSSLIssues stays false via schema default, not shown in UI."""
     _credential_kinds_bundle.cache_clear()
