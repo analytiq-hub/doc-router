@@ -25,6 +25,7 @@ from analytiq_data.flows.credential_runtime import (
     maybe_refresh_oauth_tokens,
     maybe_run_pre_auth,
     pkce_code_challenge_s256,
+    require_oauth_client_configured,
     store_flow_oauth_authorization_state,
 )
 
@@ -95,6 +96,19 @@ def test_generate_pkce_code_verifier_length_and_charset():
     v = generate_pkce_code_verifier()
     assert 43 <= len(v) <= 128
     assert all(c.isascii() for c in v)
+
+
+def test_require_oauth_client_configured_rejects_missing_secret():
+    with pytest.raises(RuntimeError, match="Client secret is missing"):
+        require_oauth_client_configured({"clientId": "abc"})
+    require_oauth_client_configured(
+        {"clientId": "abc", "clientSecret": "sec"}, require_secret=False
+    )
+
+
+def test_build_oauth_authorization_url_rejects_empty_client_id():
+    with pytest.raises(RuntimeError, match="Client ID is missing"):
+        build_oauth_authorization_url({"authUrl": "https://example.com/a", "clientId": ""}, "st")
 
 
 def test_build_oauth_authorization_url():
@@ -199,6 +213,9 @@ async def test_maybe_refresh_client_credentials(monkeypatch: pytest.MonkeyPatch)
 
     async def fake_post(url, body, **kw):
         assert body["grant_type"] == "client_credentials"
+        assert body["client_id"] == "a"
+        assert body["client_secret"] == "b"
+        assert kw.get("auth_basic") is None
         return {"access_token": "tok", "expires_in": 3600}
 
     monkeypatch.setattr(
@@ -263,8 +280,40 @@ async def test_apply_runtime_skips_persist_when_unchanged(monkeypatch: pytest.Mo
 
 
 @pytest.mark.asyncio
+async def test_exchange_authorization_code_uses_basic_auth_when_authentication_header(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    captured: dict = {}
+
+    async def fake_post(url, body, **kw):
+        captured["body"] = body
+        captured["auth_basic"] = kw.get("auth_basic")
+        return {"access_token": "tok", "expires_in": 3600}
+
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime._oauth_token_post",
+        fake_post,
+    )
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime.persist_credential_fields",
+        AsyncMock(),
+    )
+
+    fields = {
+        "accessTokenUrl": "https://example.com/token",
+        "clientId": " id ",
+        "clientSecret": " secret ",
+        "authentication": "header",
+    }
+    await exchange_authorization_code("org", "507f1f77bcf86cd799439011", fields, "code")
+    assert "client_id" not in captured["body"]
+    assert "client_secret" not in captured["body"]
+    assert captured["auth_basic"] == ("id", "secret")
+
+
+@pytest.mark.asyncio
 async def test_exchange_authorization_code_raises_when_access_token_missing(monkeypatch: pytest.MonkeyPatch):
-    async def fake_post(url, body):
+    async def fake_post(url, body, **kw):
         return {"error": "invalid_grant", "error_description": "Code expired"}
 
     monkeypatch.setattr(
@@ -281,6 +330,7 @@ async def test_exchange_authorization_code_raises_when_access_token_missing(monk
         "accessTokenUrl": "https://example.com/token",
         "clientId": "a",
         "clientSecret": "b",
+        "authentication": "body",
     }
     with pytest.raises(RuntimeError, match="missing access_token"):
         await exchange_authorization_code(
@@ -293,7 +343,7 @@ async def test_exchange_authorization_code_raises_when_access_token_missing(monk
 async def test_exchange_authorization_code_persists_when_access_token_present(
     monkeypatch: pytest.MonkeyPatch,
 ):
-    async def fake_post(url, body):
+    async def fake_post(url, body, **kw):
         return {"access_token": "atok", "refresh_token": "rtok", "expires_in": 120}
 
     monkeypatch.setattr(
@@ -310,6 +360,7 @@ async def test_exchange_authorization_code_persists_when_access_token_present(
         "accessTokenUrl": "https://example.com/token",
         "clientId": "a",
         "clientSecret": "b",
+        "authentication": "body",
     }
     out = await exchange_authorization_code(
         "org", "507f1f77bcf86cd799439011", fields, "auth-code"

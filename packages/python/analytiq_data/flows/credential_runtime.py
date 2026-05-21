@@ -289,6 +289,48 @@ def pkce_code_challenge_s256(code_verifier: str) -> str:
     return base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
 
 
+def _oauth_client_credentials(fields: dict[str, Any]) -> tuple[str, str]:
+    client_id = str(fields.get("clientId") or "").strip()
+    client_secret = str(fields.get("clientSecret") or "").strip()
+    return client_id, client_secret
+
+
+def _oauth_use_body_authentication(fields: dict[str, Any]) -> bool:
+    """True when credentials go in the POST body (``client_secret_post``); else Basic auth header."""
+
+    return str(fields.get("authentication") or "body").strip().lower() == "body"
+
+
+def require_oauth_client_configured(fields: dict[str, Any], *, require_secret: bool = True) -> None:
+    """Raise before authorize/token exchange when client credentials are missing."""
+
+    client_id, client_secret = _oauth_client_credentials(fields)
+    if not client_id:
+        raise RuntimeError(
+            "Client ID is missing. Enter your OAuth Client ID and save before connecting."
+        )
+    if require_secret and not client_secret:
+        raise RuntimeError(
+            "Client secret is missing. Paste the client secret from your provider console, "
+            "save the credential, then connect again."
+        )
+
+
+def _oauth_token_body_with_client_auth(
+    body: dict[str, str],
+    fields: dict[str, Any],
+) -> tuple[dict[str, str], tuple[str, str] | None]:
+    """Attach client credentials per ``authentication`` (matches n8n OAuth2 behavior)."""
+
+    client_id, client_secret = _oauth_client_credentials(fields)
+    out = dict(body)
+    if _oauth_use_body_authentication(fields):
+        out["client_id"] = client_id
+        out["client_secret"] = client_secret
+        return out, None
+    return out, (client_id, client_secret)
+
+
 async def _oauth_token_post(
     token_url: str,
     body: dict[str, str],
@@ -332,9 +374,6 @@ async def maybe_refresh_oauth_tokens(
     if not token_url:
         return fields, False
 
-    client_id = str(fields.get("clientId") or "")
-    client_secret = str(fields.get("clientSecret") or "")
-
     out = dict(fields)
     changed = False
 
@@ -351,16 +390,13 @@ async def maybe_refresh_oauth_tokens(
         if not need:
             return out, False
 
-        body = {
-            "grant_type": "client_credentials",
-            "client_id": client_id,
-            "client_secret": client_secret,
-        }
+        body: dict[str, str] = {"grant_type": "client_credentials"}
         scope = str(fields.get("scope") or "").strip()
         if scope:
             body["scope"] = scope
+        body, auth_basic = _oauth_token_body_with_client_auth(body, fields)
         try:
-            data = await _oauth_token_post(token_url, body)
+            data = await _oauth_token_post(token_url, body, auth_basic=auth_basic)
         except Exception as e:
             logger.warning("client_credentials failed for kind %s: %s", kind.get("key"), e)
             return fields, False
@@ -397,14 +433,13 @@ async def maybe_refresh_oauth_tokens(
     if not need_refresh or not rt:
         return fields, False
 
-    body = {
+    body: dict[str, str] = {
         "grant_type": "refresh_token",
         "refresh_token": str(rt),
-        "client_id": client_id,
-        "client_secret": client_secret,
     }
+    body, auth_basic = _oauth_token_body_with_client_auth(body, fields)
     try:
-        data = await _oauth_token_post(token_url, body)
+        data = await _oauth_token_post(token_url, body, auth_basic=auth_basic)
     except Exception as e:
         logger.warning("oauth refresh failed for kind %s: %s", kind.get("key"), e)
         return fields, False
@@ -492,17 +527,17 @@ async def exchange_authorization_code(
     token_url = str(fields.get("accessTokenUrl") or "").strip()
     if not token_url:
         raise RuntimeError("accessTokenUrl missing")
+    require_oauth_client_configured(fields)
     redirect_uri = flow_oauth_redirect_uri()
     body: dict[str, str] = {
         "grant_type": "authorization_code",
         "code": authorization_code,
         "redirect_uri": redirect_uri,
-        "client_id": str(fields.get("clientId") or ""),
-        "client_secret": str(fields.get("clientSecret") or ""),
     }
     if pkce_verifier:
         body["code_verifier"] = pkce_verifier
-    data = await _oauth_token_post(token_url, body)
+    body, auth_basic = _oauth_token_body_with_client_auth(body, fields)
+    data = await _oauth_token_post(token_url, body, auth_basic=auth_basic)
 
     at_raw = data.get("access_token")
     if not at_raw:
@@ -582,6 +617,7 @@ def build_oauth_authorization_url(
     auth_url = str(fields.get("authUrl") or "").strip()
     if not auth_url:
         raise RuntimeError("authUrl missing")
+    require_oauth_client_configured(fields, require_secret=False)
 
     auth_parts = urlparse(auth_url)
     merged: dict[str, str] = {}
@@ -624,7 +660,7 @@ def build_oauth_authorization_url(
             merged[k] = v
 
     merged["response_type"] = "code"
-    merged["client_id"] = str(fields.get("clientId") or "")
+    merged["client_id"] = _oauth_client_credentials(fields)[0]
     merged["redirect_uri"] = flow_oauth_redirect_uri()
     merged["state"] = state
 

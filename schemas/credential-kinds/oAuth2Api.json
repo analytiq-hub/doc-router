@@ -55,7 +55,8 @@
           "body",
           "header"
         ],
-        "default": "header"
+        "default": "body",
+        "description": "How client ID and secret are sent to the token URL. Google and most providers use Body."
       },
       "ignoreSSLIssues": {
         "title": "Ignore SSL Issues (Insecure)",

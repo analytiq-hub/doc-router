@@ -610,6 +610,13 @@ async def oauth_initiate_flow_credential(
     if not str(fields.get("authUrl") or "").strip():
         raise HTTPException(status_code=400, detail="Authorization URL is missing")
 
+    from analytiq_data.flows.credential_runtime import require_oauth_client_configured
+
+    try:
+        require_oauth_client_configured(fields)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+
     try:
         pkce_verifier: str | None = None
         pkce_challenge: str | None = None
