@@ -3,6 +3,7 @@ import type { FlowCredentialKindSummary } from '@docrouter/sdk';
 import {
   credentialFormSnapshotsEqual,
   credentialKindShowsTestButton,
+  credentialOAuthHintAppName,
   formatCredentialTestDetail,
 } from './flowCredentialFieldUtils';
 
@@ -14,6 +15,14 @@ describe('credentialFormSnapshotsEqual', () => {
     expect(
       credentialFormSnapshotsEqual(base, { name: 'Gmail account', fields: { clientId: 'b' } }),
     ).toBe(false);
+  });
+});
+
+describe('credentialOAuthHintAppName', () => {
+  it('strips OAuth API suffix from display names', () => {
+    expect(credentialOAuthHintAppName('Gmail OAuth2 API')).toBe('Gmail');
+    expect(credentialOAuthHintAppName('Google OAuth2 API')).toBe('Google');
+    expect(credentialOAuthHintAppName('Custom')).toBe('Custom');
   });
 });
 

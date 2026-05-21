@@ -212,6 +212,8 @@ export interface FlowCredentialKindSummary {
   has_test_request?: boolean;
   /** OAuth2 authorization-code browser redirect (Connect in UI). */
   supports_oauth_browser_flow?: boolean;
+  /** Redirect URI to register with the OAuth provider (when browser flow is supported). */
+  oauth_redirect_uri?: string | null;
   /** Kind defines `pre_auth` (session bootstrap before inject). */
   has_pre_auth?: boolean;
   /** Requires organization `experimental_features` to list this kind. */

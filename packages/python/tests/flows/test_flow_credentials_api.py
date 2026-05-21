@@ -350,6 +350,30 @@ async def test_list_credential_kinds_filters_experimental_without_org_flag(
 
 
 @pytest.mark.asyncio
+async def test_oauth_kind_includes_redirect_uri(org_and_users, test_db):
+    from bson import ObjectId
+
+    org_id = org_and_users["org_id"]
+    member = org_and_users["member"]
+    headers = get_token_headers(member["token"])
+    await test_db.organizations.update_one(
+        {"_id": ObjectId(org_id)},
+        {"$set": {"experimental_features": True}},
+    )
+    r = client.get(f"/v0/orgs/{org_id}/credential-kinds", headers=headers)
+    assert r.status_code == 200
+    kinds = {k["key"]: k for k in r.json()}
+    gmail = kinds.get("gmailOAuth2")
+    assert gmail is not None
+    assert gmail.get("supports_oauth_browser_flow") is True
+    assert gmail.get("oauth_redirect_uri") == ad.flows.flow_oauth_redirect_uri()
+    http = kinds.get("httpHeaderAuth")
+    assert http is not None
+    assert not http.get("supports_oauth_browser_flow")
+    assert http.get("oauth_redirect_uri") is None
+
+
+@pytest.mark.asyncio
 async def test_create_experimental_credential_blocked_without_org_flag(org_and_users, monkeypatch):
     org_id = org_and_users["org_id"]
     member = org_and_users["member"]

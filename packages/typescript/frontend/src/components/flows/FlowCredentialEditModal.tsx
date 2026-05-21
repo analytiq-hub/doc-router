@@ -6,6 +6,8 @@ import type { FlowCredentialHeader, FlowCredentialKindSummary } from '@docrouter
 import { getApiErrorMsg } from '@/utils/api';
 import type { DocRouterOrgApi } from '@/utils/api';
 import { formatRelativeTime } from '@/utils/date';
+import { copyToClipboard } from '@/utils/clipboard';
+import { toast } from 'react-toastify';
 import {
   flowInlineNameInputClass,
   flowInlineNameMeasureClass,
@@ -21,6 +23,7 @@ import {
   credentialFieldRows,
   credentialFormSnapshotsEqual,
   credentialKindShowsTestButton,
+  credentialOAuthHintAppName,
   type CredentialFormSnapshot,
   formatCredentialTestDetail,
   isCredentialSecretMaskValue,
@@ -291,6 +294,10 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
                 secretMasked={secretMasked}
                 showSecret={showSecret}
                 supportsOAuth={supportsOAuth}
+                oauthRedirectUri={kind?.oauth_redirect_uri ?? undefined}
+                oauthHintAppName={
+                  kind ? credentialOAuthHintAppName(kind.display_name) : undefined
+                }
                 oauthConnected={oauthConnected}
                 oauthConnectLoading={oauthConnectLoading}
                 connectNeedsSave={!credentialId}
@@ -440,6 +447,8 @@ function CredEditConnectionTab({
   secretMasked,
   showSecret,
   supportsOAuth,
+  oauthRedirectUri,
+  oauthHintAppName,
   oauthConnected,
   oauthConnectLoading,
   connectNeedsSave,
@@ -453,6 +462,8 @@ function CredEditConnectionTab({
   secretMasked: Set<string>;
   showSecret: Record<string, boolean>;
   supportsOAuth: boolean;
+  oauthRedirectUri?: string;
+  oauthHintAppName?: string;
   oauthConnected: boolean;
   oauthConnectLoading: boolean;
   connectNeedsSave: boolean;
@@ -470,6 +481,9 @@ function CredEditConnectionTab({
           connectNeedsSave={connectNeedsSave}
           onConnect={onOAuthConnect}
         />
+      ) : null}
+      {supportsOAuth && oauthRedirectUri ? (
+        <OAuthRedirectUrlField redirectUri={oauthRedirectUri} appName={oauthHintAppName} />
       ) : null}
       {fieldDefs.map((f) => (
         <div key={f.name}>
@@ -494,6 +508,43 @@ function CredEditConnectionTab({
           {f.description ? <p className="mt-1 text-xs text-gray-500">{f.description}</p> : null}
         </div>
       ))}
+    </div>
+  );
+}
+
+function OAuthRedirectUrlField({
+  redirectUri,
+  appName,
+}: {
+  redirectUri: string;
+  appName?: string;
+}) {
+  const hint = appName
+    ? `In ${appName}, use the URL above when prompted to enter an OAuth callback or redirect URL`
+    : 'Use the URL above when prompted to enter an OAuth callback or redirect URL';
+
+  const onCopy = async () => {
+    await copyToClipboard(redirectUri);
+  };
+
+  return (
+    <div>
+      <label className={flowLabelClass}>OAuth Redirect URL</label>
+      <button
+        type="button"
+        data-testid="oauth-redirect-url"
+        className="group mt-1 flex w-full cursor-pointer items-start justify-between gap-3 rounded-md border border-gray-200 bg-gray-50 px-3 py-2.5 text-left transition hover:border-gray-300 hover:bg-gray-100"
+        onClick={() => void onCopy()}
+        title="Click to copy"
+      >
+        <span className="min-w-0 break-all font-mono text-xs leading-relaxed text-gray-800">
+          {redirectUri}
+        </span>
+        <span className="hidden shrink-0 pt-0.5 text-xs font-medium text-gray-500 group-hover:inline group-hover:text-gray-700">
+          Click to copy
+        </span>
+      </button>
+      <p className="mt-2 text-xs leading-snug text-gray-500">{hint}</p>
     </div>
   );
 }

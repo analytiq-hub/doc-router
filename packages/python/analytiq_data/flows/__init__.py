@@ -21,6 +21,7 @@ from .code_runner import *
 from .credentials import *
 from .credential_inject import *
 from .credential_kind_registry import *
+from .credential_runtime import *
 from .nodes import *
 from .register_builtin import *
 from .url_ssrf_guard import *

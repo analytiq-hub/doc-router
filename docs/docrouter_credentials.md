@@ -165,6 +165,7 @@ class CredentialKindSummary(BaseModel):
     fields: list[dict]               # schema field metadata for the create form
     has_test_request: bool
     supports_oauth_browser_flow: bool
+    oauth_redirect_uri: str | None   # when browser OAuth is supported
     has_pre_auth: bool
     experimental: bool
 ```

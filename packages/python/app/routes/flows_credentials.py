@@ -39,6 +39,8 @@ class CredentialKindSummary(BaseModel):
     has_test_request: bool = False
     #: OAuth2 authorization-code redirect supported (Connect in UI).
     supports_oauth_browser_flow: bool = False
+    #: Redirect URI to register with the OAuth provider (when browser flow is supported).
+    oauth_redirect_uri: str | None = None
     #: Kind defines ``pre_auth`` (session / token bootstrap before inject).
     has_pre_auth: bool = False
     #: Gated by organization ``experimental_features`` in list/create UI.
@@ -232,6 +234,7 @@ async def list_credential_kinds(
             row = dict(v)
             row.pop("x-secret", None)
             fields.append({"name": k, **row, "is_secret": k in secret_names})
+        oauth_flow = _kind_supports_oauth_browser_flow(kind)
         result.append(
             CredentialKindSummary(
                 key=kind["key"],
@@ -239,7 +242,8 @@ async def list_credential_kinds(
                 auth_mode=str(kind.get("auth_mode") or "custom"),
                 fields=fields,
                 has_test_request=bool(kind.get("test_request")),
-                supports_oauth_browser_flow=_kind_supports_oauth_browser_flow(kind),
+                supports_oauth_browser_flow=oauth_flow,
+                oauth_redirect_uri=ad.flows.flow_oauth_redirect_uri() if oauth_flow else None,
                 has_pre_auth=isinstance(kind.get("pre_auth"), dict),
                 experimental=bool(kind.get("experimental")),
             )

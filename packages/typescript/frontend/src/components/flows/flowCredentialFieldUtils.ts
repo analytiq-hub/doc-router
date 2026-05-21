@@ -12,6 +12,13 @@ export type CredentialFieldRow = {
 export const CREDENTIAL_SECRET_MASK = '••••••••';
 
 /** n8n hides credential Test for OAuth authorization-code / PKCE; Connect is the check. */
+/** Short app label for OAuth redirect hints (e.g. "Gmail OAuth2 API" → "Gmail"). */
+export function credentialOAuthHintAppName(displayName: string): string {
+  const trimmed = displayName.trim();
+  const stripped = trimmed.replace(/\s+oauth2?\s*api$/i, '').trim();
+  return stripped || trimmed;
+}
+
 export function credentialKindShowsTestButton(
   kind: FlowCredentialKindSummary | null | undefined,
 ): boolean {
