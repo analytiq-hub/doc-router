@@ -581,11 +581,28 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
+async def _org_experimental_features_enabled(db, organization_id: str) -> bool:
+    from bson import ObjectId
+
+    try:
+        oid = ObjectId(organization_id)
+    except Exception:
+        return False
+    doc = await db.organizations.find_one({"_id": oid}, {"experimental_features": 1})
+    if not doc:
+        return False
+    return bool(doc.get("experimental_features"))
+
+
 @flows_router.get("/v0/orgs/{organization_id}/flows/node-types")
 async def list_node_types(organization_id: str, current_user: User = Depends(get_org_user)):
-    # Node types are global; org is for auth scoping and future filtering.
+    # Node types are global; org is for auth scoping and experimental gating.
+    db = await _get_db()
+    show_exp = await _org_experimental_features_enabled(db, organization_id)
     items = []
     for nt in ad.flows.list_all():
+        if getattr(nt, "experimental", False) and not show_exp:
+            continue
         slots = getattr(nt, "credential_slots", None)
         items.append(
             {
@@ -602,6 +619,7 @@ async def list_node_types(organization_id: str, current_user: User = Depends(get
                 "parameter_schema": nt.parameter_schema,
                 "icon_key": nt.icon_key,
                 "credential_slots": slots if isinstance(slots, list) else [],
+                "experimental": bool(getattr(nt, "experimental", False)),
             }
         )
     return {"items": items, "total": len(items)}

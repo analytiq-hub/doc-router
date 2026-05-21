@@ -24,6 +24,8 @@ export interface FlowNodeType {
   output_labels: string[];
   parameter_schema: Record<string, unknown>;
   credential_slots?: FlowCredentialSlot[];
+  /** Requires organization `experimental_features` to list this node type. */
+  experimental?: boolean;
 }
 
 export interface ListNodeTypesResponse {

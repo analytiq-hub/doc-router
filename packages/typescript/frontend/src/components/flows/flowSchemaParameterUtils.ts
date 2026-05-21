@@ -5,10 +5,41 @@
  */
 
 export type DocRouterShowWhen = {
-  field: string;
+  field?: string;
   in?: unknown[];
   equals?: unknown;
+  /** All clauses must pass (maps multi-field upstream ``displayOptions.show``). */
+  all?: DocRouterShowWhen[];
 };
+
+/** Resource-dependent enum options (integration nodes with per-resource ``operation`` blocks). */
+export type DocRouterEnumBy = {
+  field: string;
+  variants: Record<string, { enum?: unknown[]; 'x-ui-enum-names'?: unknown[] }>;
+};
+
+export function resolveEnumSchemaForParams(
+  subschema: Record<string, unknown>,
+  params: Record<string, unknown>,
+): { enum?: unknown[]; 'x-ui-enum-names'?: unknown[] } {
+  const base = {
+    enum: subschema.enum as unknown[] | undefined,
+    'x-ui-enum-names': subschema['x-ui-enum-names'] as unknown[] | undefined,
+  };
+  const eb = subschema['x-ui-enum-by'] as DocRouterEnumBy | undefined;
+  if (!eb?.field || !eb.variants || typeof eb.variants !== 'object') {
+    return base;
+  }
+  const key = String(params[eb.field] ?? '');
+  const variant = eb.variants[key];
+  if (!variant?.enum || !Array.isArray(variant.enum)) {
+    return base;
+  }
+  return {
+    enum: variant.enum,
+    'x-ui-enum-names': variant['x-ui-enum-names'] as unknown[] | undefined,
+  };
+}
 
 /** Renders only inside the composite widget for the named primary property (see ``x-ui-widget: credential_authentication``). */
 export const UI_COMPANION_OF = 'x-ui-companion-of';
@@ -59,6 +90,9 @@ export function evalShowWhen(showWhen: unknown, params: Record<string, unknown>)
   if (showWhen == null || showWhen === false) return true;
   if (typeof showWhen !== 'object') return true;
   const sw = showWhen as DocRouterShowWhen;
+  if (Array.isArray(sw.all) && sw.all.length > 0) {
+    return sw.all.every((clause) => evalShowWhen(clause, params));
+  }
   if (!sw.field || typeof sw.field !== 'string') return true;
   const raw = params[sw.field];
   if (Object.prototype.hasOwnProperty.call(sw, 'equals')) {
@@ -70,6 +104,11 @@ export function evalShowWhen(showWhen: unknown, params: Record<string, unknown>)
   return true;
 }
 
+function evalShowWhenAny(clauses: unknown, params: Record<string, unknown>): boolean {
+  if (!Array.isArray(clauses) || clauses.length === 0) return true;
+  return clauses.some((clause) => evalShowWhen(clause, params));
+}
+
 /** A property is visible if it appears in root `properties` and its `x-ui-show-when` passes. */
 export function isPropertyVisible(
   key: string,
@@ -79,6 +118,9 @@ export function isPropertyVisible(
   const props = getSchemaProperties(parameterSchema);
   const sub = props[key];
   if (!sub) return false;
+  if (Object.prototype.hasOwnProperty.call(sub, 'x-ui-show-when-any')) {
+    return evalShowWhenAny(sub['x-ui-show-when-any'], params);
+  }
   return evalShowWhen(sub['x-ui-show-when'], params);
 }
 

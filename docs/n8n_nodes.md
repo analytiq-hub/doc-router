@@ -521,6 +521,8 @@ Sorted alphabetically by path (506 entries).
 - `packages/nodes-base/nodes/Google/Drive/GoogleDriveTrigger.node.ts`
 - `packages/nodes-base/nodes/Google/Drive/v1/GoogleDriveV1.node.ts`
 - `packages/nodes-base/nodes/Google/Drive/v2/GoogleDriveV2.node.ts`
+
+**DocRouter port:** type version **3** is implemented as built-in node ``flows.google_drive`` (experimental). OAuth2 via ``googleDriveOAuth2Api``; service account is not implemented yet. Parameter schema is generated from the n8n v3 dump with merged per-resource ``operation`` enums (``x-ui-enum-by``). ``GoogleDriveTrigger`` is not ported.
 - `packages/nodes-base/nodes/Google/Firebase/CloudFirestore/GoogleFirebaseCloudFirestore.node.ts`
 - `packages/nodes-base/nodes/Google/Firebase/RealtimeDatabase/GoogleFirebaseRealtimeDatabase.node.ts`
 - `packages/nodes-base/nodes/Google/GSuiteAdmin/GSuiteAdmin.node.ts`

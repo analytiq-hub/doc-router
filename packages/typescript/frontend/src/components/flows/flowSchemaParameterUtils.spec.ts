@@ -10,6 +10,7 @@ import {
   isCompanionUiProperty,
   mergeParameterDefaults,
   parameterSchemaUsesCredentialAuthenticationWidget,
+  resolveEnumSchemaForParams,
 } from './flowSchemaParameterUtils';
 
 const schema = {
@@ -33,6 +34,33 @@ const schema = {
 describe('flowSchemaParameterUtils', () => {
   it('getOrderedKeys follows properties declaration order', () => {
     expect(getOrderedKeys(schema)).toEqual(['url', 'body_mode', 'body_json']);
+  });
+
+  it('resolveEnumSchemaForParams uses x-ui-enum-by', () => {
+    const sub = {
+      type: 'string',
+      enum: ['a', 'b'],
+      'x-ui-enum-by': {
+        field: 'resource',
+        variants: {
+          file: { enum: ['upload'], 'x-ui-enum-names': ['Upload'] },
+          folder: { enum: ['create'], 'x-ui-enum-names': ['Create'] },
+        },
+      },
+    };
+    expect(resolveEnumSchemaForParams(sub, { resource: 'file' }).enum).toEqual(['upload']);
+    expect(resolveEnumSchemaForParams(sub, { resource: 'folder' }).enum).toEqual(['create']);
+  });
+
+  it('evalShowWhen handles all (AND)', () => {
+    const sw = {
+      all: [
+        { field: 'resource', equals: 'file' },
+        { field: 'operation', in: ['upload'] },
+      ],
+    };
+    expect(evalShowWhen(sw, { resource: 'file', operation: 'upload' })).toBe(true);
+    expect(evalShowWhen(sw, { resource: 'file', operation: 'download' })).toBe(false);
   });
 
   it('evalShowWhen handles in and equals', () => {

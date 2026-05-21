@@ -45,7 +45,9 @@ export const FlowNodeCredentialSlots: React.FC<{
   nodeType: FlowNodeType | null;
   onChange: (patch: Partial<FlowNode>) => void;
   readOnly?: boolean;
-}> = ({ flowOrgApi, node, nodeType, onChange, readOnly = false }) => {
+  /** When true, render above parameters (no top border / section chrome). */
+  placement?: 'top' | 'bottom';
+}> = ({ flowOrgApi, node, nodeType, onChange, readOnly = false, placement = 'bottom' }) => {
   const slots = nodeType?.credential_slots;
   const [items, setItems] = useState<FlowCredentialHeader[]>([]);
   const [err, setErr] = useState<string | null>(null);
@@ -108,9 +110,14 @@ export const FlowNodeCredentialSlots: React.FC<{
     onChange({ credentials: Object.keys(next).length > 0 ? next : undefined });
   };
 
+  const shellClass =
+    placement === 'top' ? 'mb-4' : 'mt-4 border-t border-[#eceff2] pt-4';
+
   return (
-    <div className="mt-4 border-t border-[#eceff2] pt-4">
-      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#9ca3af]">Credentials</div>
+    <div className={shellClass}>
+      {placement === 'bottom' ? (
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[#9ca3af]">Credentials</div>
+      ) : null}
       {err && <div className="mb-2 text-xs text-red-600">{err}</div>}
       <div className="space-y-3">
         {slots.map((slot) => {

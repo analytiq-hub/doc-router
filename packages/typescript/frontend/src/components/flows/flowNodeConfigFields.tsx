@@ -22,6 +22,7 @@ import {
   isCompanionUiProperty,
   isPropertyVisible,
   mergeParameterDefaults,
+  resolveEnumSchemaForParams,
 } from './flowSchemaParameterUtils';
 import { FlowCredentialAuthenticationField } from './FlowCredentialAuthenticationField';
 function isExpressionValue(value: unknown): boolean {
@@ -162,11 +163,29 @@ export const FlowNodeParameterFields: React.FC<{
 
   const applyPatch = useCallback(
     (patch: Record<string, unknown>) => {
+      let nextPatch = { ...patch };
+      if (
+        rootSchema &&
+        Object.prototype.hasOwnProperty.call(patch, 'resource') &&
+        !Object.prototype.hasOwnProperty.call(patch, 'operation')
+      ) {
+        const props = getSchemaProperties(rootSchema);
+        const opSub = props.operation;
+        if (opSub) {
+          const afterResource = { ...mergedParams, ...patch };
+          const resolved = resolveEnumSchemaForParams(opSub, afterResource);
+          const allowed = resolved.enum?.map(String) ?? [];
+          const currentOp = String(afterResource.operation ?? '');
+          if (allowed.length > 0 && !allowed.includes(currentOp)) {
+            nextPatch = { ...nextPatch, operation: allowed[0] };
+          }
+        }
+      }
       if (!rootSchema) {
-        onChange({ parameters: { ...mergedParams, ...patch } });
+        onChange({ parameters: { ...mergedParams, ...nextPatch } });
         return;
       }
-      onChange({ parameters: applyParameterPatch(rootSchema, mergedParams, patch) });
+      onChange({ parameters: applyParameterPatch(rootSchema, mergedParams, nextPatch) });
     },
     [rootSchema, mergedParams, onChange],
   );
@@ -301,8 +320,12 @@ export const FlowNodeParameterFields: React.FC<{
       );
     }
 
-    if (subschema?.enum && Array.isArray(subschema.enum)) {
-      const enumNames = (subschema['x-ui-enum-names'] as unknown[] | undefined) ?? undefined;
+    const resolvedEnum = resolveEnumSchemaForParams(
+      subschema as Record<string, unknown>,
+      params,
+    );
+    if (resolvedEnum.enum && Array.isArray(resolvedEnum.enum)) {
+      const enumNames = resolvedEnum['x-ui-enum-names'] ?? undefined;
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
@@ -322,7 +345,7 @@ export const FlowNodeParameterFields: React.FC<{
             value={v == null || typeof v === 'object' ? '' : String(v)}
             onChange={(e) => applyPatch({ [key]: e.target.value })}
           >
-            {subschema.enum.map((opt: unknown, idx: number) => (
+            {resolvedEnum.enum.map((opt: unknown, idx: number) => (
               <option key={String(opt)} value={String(opt)}>
                 {enumNames != null && enumNames[idx] != null ? String(enumNames[idx]) : String(opt)}
               </option>

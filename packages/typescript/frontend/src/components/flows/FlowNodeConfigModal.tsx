@@ -26,6 +26,7 @@ import type { FlowBinaryRef, FlowNode, FlowNodeType, FlowPinData, FlowPinItem, F
 import type { DocRouterOrgApi } from '@/utils/api';
 import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfigFields';
 import { FlowNodeCredentialSlots } from './flowNodeCredentialSlots';
+import { parameterSchemaUsesCredentialAuthenticationWidget } from './flowSchemaParameterUtils';
 import {
   buildNodeInputPreview,
   buildNodeOutputPreview,
@@ -1002,6 +1003,19 @@ const FlowNodeConfigModal: React.FC<{
                               onStopWebhookTestListen={onStopWebhookTestListen}
                             />
                           ) : null}
+                          {node &&
+                          nodeType?.credential_slots?.length &&
+                          !parameterSchemaUsesCredentialAuthenticationWidget(nodeType.parameter_schema) ? (
+                            <FlowNodeCredentialSlots
+                              key={`${node.id}-${nodeType?.key ?? ''}-cred`}
+                              placement="top"
+                              flowOrgApi={flowOrgApi}
+                              node={node}
+                              nodeType={nodeType}
+                              onChange={onChange}
+                              readOnly={readOnly}
+                            />
+                          ) : null}
                           {node && (
                             <FlowNodeParameterFields
                               readOnly={readOnly}
@@ -1011,16 +1025,6 @@ const FlowNodeConfigModal: React.FC<{
                               expressionPreview={expressionPreview}
                               soleInboundParentNodeId={soleInboundParentNodeId}
                               flowOrgApi={flowOrgApi}
-                            />
-                          )}
-                          {node && (
-                            <FlowNodeCredentialSlots
-                              key={`${node.id}-${nodeType?.key ?? ''}`}
-                              flowOrgApi={flowOrgApi}
-                              node={node}
-                              nodeType={nodeType}
-                              onChange={onChange}
-                              readOnly={readOnly}
                             />
                           )}
                         </div>
