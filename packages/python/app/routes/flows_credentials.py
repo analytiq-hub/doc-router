@@ -229,7 +229,11 @@ async def list_credential_kinds(
         runtime_names = ad.flows.credential_runtime_field_names(kind)
         fields: list[dict[str, Any]] = []
         for k, v in schema_props.items():
-            if not isinstance(v, dict) or k in runtime_names:
+            if (
+                not isinstance(v, dict)
+                or k in runtime_names
+                or ad.flows.credential_property_ui_hidden(v)
+            ):
                 continue
             row = dict(v)
             row.pop("x-secret", None)

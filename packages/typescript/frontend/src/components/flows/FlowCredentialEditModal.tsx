@@ -55,7 +55,7 @@ type FlowCredentialEditModalBaseProps = {
   kind: FlowCredentialKindSummary | null;
   api: DocRouterOrgApi;
   onClose: () => void;
-  onSaved: () => void | Promise<void>;
+  onSaved: (row?: FlowCredentialHeader) => void | Promise<void>;
   onError: (message: string) => void;
 };
 
@@ -188,10 +188,7 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
       if (mode === 'create' && !savedRow) {
         setSavedRow(result);
       }
-      await onSaved();
-      if (mode === 'edit') {
-        onClose();
-      }
+      await onSaved(result);
     } catch (err) {
       onError(getApiErrorMsg(err) || 'Failed to save credential');
     } finally {

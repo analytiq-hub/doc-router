@@ -32,7 +32,7 @@ Kind definitions live in `schemas/credential-kinds/<key>.json`. Auto-discovered 
 | `key` | string | yes | Stable identifier; must match filename stem |
 | `display_name` | string | yes | Human-readable label shown in UI |
 | `auth_mode` | string | yes | `api_key`, `oauth2_authorization_code`, `oauth2_client_credentials`, `basic_auth`, `custom` |
-| `secret_schema` | JSON Schema object | yes | Fields the org fills in; `"x-secret": true` marks values stripped from API responses |
+| `secret_schema` | JSON Schema object | yes | Fields the org fills in; `"x-secret": true` marks values stripped from API responses; `"x-ui-hidden": true` omits a property from create/edit forms while keeping schema defaults (e.g. Google OAuth ``ignoreSSLIssues: false``) |
 | `inject` | object | no | `inject.headers`, `inject.query_params`, `inject.body` — Jinja2 templates using `{{ credentials.<field> }}` |
 | `test_request` | object | no | `{ "method": "GET", "url": "…" }` for the `/test` endpoint; URL may contain `{{ credentials.<field> }}` |
 | `extends` | string or array | no | Inherits and merges from named parent kind(s); see §3 |
@@ -99,7 +99,7 @@ Circular extends are detected at load time; broken kinds are skipped with a warn
 
 | Field | UI | Purpose |
 |-------|-----|---------|
-| `ignoreSSLIssues` | Toggle | Skip TLS certificate verification on outbound HTTP (insecure) |
+| `ignoreSSLIssues` | Toggle (hidden on Google OAuth kinds via ``x-ui-hidden``; default ``false``) | Skip TLS certificate verification on outbound HTTP (insecure) |
 | `allowedHttpRequestDomains` | Select (`all` / `domains` / `none`) | Restrict which hosts HTTP Request nodes may call with this credential |
 | `allowedDomains` | Text (shown when mode is `domains`) | Comma-separated allowlist; supports `*` wildcards |
 

@@ -23,6 +23,19 @@ def test_gmail_scope_is_runtime_hidden_but_schema_default() -> None:
         _credential_kinds_bundle.cache_clear()
 
 
+def test_google_oauth_kinds_hide_ignore_ssl_issues() -> None:
+    """Google stack: ignoreSSLIssues stays false via schema default, not shown in UI."""
+    _credential_kinds_bundle.cache_clear()
+    try:
+        for key in ("googleOAuth2Api", "gmailOAuth2"):
+            kind = get_credential_kind(key)
+            props = (kind.get("secret_schema") or {}).get("properties") or {}
+            assert props["ignoreSSLIssues"].get("default") is False
+            assert props["ignoreSSLIssues"].get("x-ui-hidden") is True
+    finally:
+        _credential_kinds_bundle.cache_clear()
+
+
 def test_oauth_kinds_include_http_domain_restriction_fields() -> None:
     _credential_kinds_bundle.cache_clear()
     try:

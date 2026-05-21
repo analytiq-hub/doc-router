@@ -25,6 +25,11 @@
       "authentication": {
         "type": "string",
         "default": "body"
+      },
+      "ignoreSSLIssues": {
+        "type": "boolean",
+        "default": false,
+        "x-ui-hidden": true
       }
     },
     "required": []

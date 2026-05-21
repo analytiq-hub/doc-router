@@ -622,7 +622,10 @@ const FlowCredentials: React.FC<{
           kind={editKind}
           api={api}
           onClose={() => setEditRow(null)}
-          onSaved={load}
+          onSaved={async (row) => {
+            if (row) setEditRow(row);
+            await load();
+          }}
           onError={setMessage}
         />
       ) : null}

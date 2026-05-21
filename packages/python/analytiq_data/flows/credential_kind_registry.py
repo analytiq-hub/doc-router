@@ -230,6 +230,12 @@ def get_credential_kind(key: str) -> dict[str, Any]:
     return dict(_resolve_kind_with_extends(key, store, ()))
 
 
+def credential_property_ui_hidden(prop: dict[str, Any]) -> bool:
+    """True when a ``secret_schema`` property must not appear in credential create/edit forms."""
+
+    return prop.get("x-ui-hidden") is True
+
+
 def credential_runtime_field_names(kind: dict[str, Any]) -> set[str]:
     """Field names set at runtime (OAuth tokens, hidden n8n defaults) — not shown in create/edit forms."""
 
