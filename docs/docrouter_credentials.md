@@ -102,10 +102,12 @@ Circular extends are detected at load time; broken kinds are skipped with a warn
 | Field | UI | Purpose |
 |-------|-----|---------|
 | `ignoreSSLIssues` | Toggle (hidden on Google OAuth kinds via ``x-ui-hidden``; default ``false``) | Skip TLS certificate verification on outbound HTTP (insecure) |
-| `allowedHttpRequestDomains` | Select (`all` / `domains` / `none`) | Restrict which hosts HTTP Request nodes may call with this credential |
-| `allowedDomains` | Text (shown when mode is `domains`) | Comma-separated allowlist; supports `*` wildcards |
+| `allowedHttpRequestDomains` | Select (`all` / `domains` / `none`) | Intended to restrict which hosts HTTP Request nodes may call with this credential (**not enforced yet**) |
+| `allowedDomains` | Text (shown when mode is `domains`) | Comma-separated allowlist; supports `*` wildcards (**not enforced yet**) |
 
-The credential editor uses `x-ui-show-when` on `allowedDomains` (same mechanism as flow node parameters).
+These fields are stored on the credential and shown in the editor for n8n parity. Outbound HTTP today only applies ``inject`` via ``render_credential_inject`` (headers/query/body templates); domain allowlists are not checked in ``credential_inject.py`` or the HTTP Request node executor. Enforcement should live next to request URL resolution when implemented.
+
+The credential editor uses `x-ui-show-when` on `allowedDomains` (same mechanism as flow node parameters). Supported operators: **`equals`** (single value) and **`in`** (array membership). A `show-when` object with only `field` and no operator is treated as always visible; do not add `notEquals` or other operators without extending ``evalShowWhen`` in ``flowSchemaParameterUtils.ts``.
 
 ---
 

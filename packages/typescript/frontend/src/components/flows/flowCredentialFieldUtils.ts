@@ -112,6 +112,7 @@ export function credentialFieldValuesForShowWhen(
   return out;
 }
 
+/** Conditional rows use ``x-ui-show-when`` via ``evalShowWhen`` (``equals`` or ``in`` only). */
 export function credentialFieldRowVisible(
   f: CredentialFieldRow,
   fields: Record<string, string>,

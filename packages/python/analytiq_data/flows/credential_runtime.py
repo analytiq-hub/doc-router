@@ -296,7 +296,12 @@ def _oauth_client_credentials(fields: dict[str, Any]) -> tuple[str, str]:
 
 
 def _oauth_use_body_authentication(fields: dict[str, Any]) -> bool:
-    """True when credentials go in the POST body (``client_secret_post``); else Basic auth header."""
+    """True when credentials go in the POST body (``client_secret_post``); else Basic auth header.
+
+    Missing ``authentication`` defaults to ``body``, matching ``oAuth2Api.json`` (and
+    ``googleOAuth2Api``) schema default so authorize/token exchange behave like n8n even when
+    the field was omitted from stored payload before defaults were applied.
+    """
 
     return str(fields.get("authentication") or "body").strip().lower() == "body"
 

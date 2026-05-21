@@ -46,6 +46,9 @@ def render_credential_inject(
 
     Returns dict keys ``headers``, ``query_params``, ``body`` — mapping str -> str,
     suitable for merging into HTTP requests / credential ``/test``.
+
+    Does not enforce OAuth ``allowedHttpRequestDomains`` / ``allowedDomains``; those are
+    stored credential metadata only until HTTP Request URL checks are implemented.
     """
 
     inject = kind.get("inject") if isinstance(kind.get("inject"), dict) else {}

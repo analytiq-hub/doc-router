@@ -201,18 +201,23 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
       setOauthConnectLoading(true);
       onError('');
       let id = credentialId;
+      let result: FlowCredentialHeader | null = null;
       if (!id) {
-        const created = await persist();
-        if (!created) {
+        result = await persist();
+        if (!result) {
           setOauthConnectLoading(false);
           return;
         }
-        setSavedRow(created);
-        id = created.credential_id;
-        await onSaved();
+        setSavedRow(result);
+        id = result.credential_id;
       } else {
-        await persist();
+        result = await persist();
+        if (!result) {
+          setOauthConnectLoading(false);
+          return;
+        }
       }
+      await onSaved(result);
       const { authorization_url } = await api.initiateFlowOAuthConnect(id);
       window.location.href = authorization_url;
     } catch (err) {
@@ -374,7 +379,7 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
 
 function CredEditModalShell({ children, onClose }: { children: React.ReactNode; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-[280] flex items-center justify-center p-4" role="presentation">
+    <div className="fixed inset-0 z-[280] flex items-center justify-center p-4">
       <button
         type="button"
         className="absolute inset-0 bg-black/50"
