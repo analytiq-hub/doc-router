@@ -2,7 +2,14 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Switch } from '@headlessui/react';
-import { BeakerIcon, CheckCircleIcon, EyeIcon, EyeSlashIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import {
+  BeakerIcon,
+  CheckCircleIcon,
+  EyeIcon,
+  EyeSlashIcon,
+  QuestionMarkCircleIcon,
+  XMarkIcon,
+} from '@heroicons/react/24/outline';
 import type { FlowCredentialHeader, FlowCredentialKindSummary } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
 import type { DocRouterOrgApi } from '@/utils/api';
@@ -565,6 +572,44 @@ function CredEditDetailsTab({ row }: { row: FlowCredentialHeader }) {
   );
 }
 
+function CredEditFieldLabel({
+  htmlFor,
+  label,
+  description,
+}: {
+  htmlFor?: string;
+  label: string;
+  description?: string;
+}) {
+  return (
+    <div className="mb-1 flex min-w-0 items-center gap-1">
+      {htmlFor ? (
+        <label className="mb-0 block text-xs font-medium text-gray-600" htmlFor={htmlFor}>
+          {label}
+        </label>
+      ) : (
+        <span className="text-sm text-gray-800">{label}</span>
+      )}
+      {description ? (
+        <span className="group/info relative inline-flex shrink-0 cursor-help opacity-0 transition-opacity duration-150 group-hover/field:opacity-100 group-focus-within/field:opacity-100">
+          <QuestionMarkCircleIcon className="h-4 w-4 text-gray-400" aria-hidden />
+          <span
+            role="tooltip"
+            className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-2 w-max max-w-[16rem] -translate-x-1/2 rounded-md bg-gray-900 px-2.5 py-1.5 text-xs font-normal leading-snug text-white opacity-0 shadow-lg transition-opacity duration-150 delay-300 group-hover/info:opacity-100 group-focus-within/info:opacity-100"
+          >
+            {description}
+            <span
+              className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-gray-900"
+              aria-hidden
+            />
+          </span>
+          <span className="sr-only">{description}</span>
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
 function CredEditFieldBlock({
   field,
   value,
@@ -586,9 +631,9 @@ function CredEditFieldBlock({
   if (field.type === 'boolean') {
     const checked = parseCredentialBooleanField(value, field.default === true);
     return (
-      <div>
+      <div className="group/field">
         <div className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
-          <span className="text-sm text-gray-800">{label}</span>
+          <CredEditFieldLabel label={label} description={field.description} />
           <Switch
             checked={checked}
             onChange={(next) => onChange(next ? 'true' : 'false')}
@@ -597,17 +642,14 @@ function CredEditFieldBlock({
             <span className={flowSwitchThumbClass} aria-hidden />
           </Switch>
         </div>
-        {field.description ? <p className="mt-1 text-xs text-gray-500">{field.description}</p> : null}
       </div>
     );
   }
 
   if (field.enum?.length) {
     return (
-      <div>
-        <label className={flowLabelClass} htmlFor={id}>
-          {label}
-        </label>
+      <div className="group/field">
+        <CredEditFieldLabel htmlFor={id} label={label} description={field.description} />
         <select
           id={id}
           className={flowSelectClass}
@@ -620,16 +662,13 @@ function CredEditFieldBlock({
             </option>
           ))}
         </select>
-        {field.description ? <p className="mt-1 text-xs text-gray-500">{field.description}</p> : null}
       </div>
     );
   }
 
   return (
-    <div>
-      <label className={flowLabelClass} htmlFor={id}>
-        {label}
-      </label>
+    <div className="group/field">
+      <CredEditFieldLabel htmlFor={id} label={label} description={field.description} />
       <CredEditFieldInput
         id={id}
         field={field}
@@ -639,7 +678,6 @@ function CredEditFieldBlock({
         onChange={onChange}
         onToggleSecret={onToggleSecret}
       />
-      {field.description ? <p className="mt-1 text-xs text-gray-500">{field.description}</p> : null}
     </div>
   );
 }
