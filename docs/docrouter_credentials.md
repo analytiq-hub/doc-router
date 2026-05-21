@@ -95,6 +95,16 @@ A kind may inherit from one or more parents via `extends`. The registry resolves
 
 Circular extends are detected at load time; broken kinds are skipped with a warning and excluded from `list_credential_kinds()`.
 
+**Base `oAuth2Api` security fields** (inherited by `googleOAuth2Api`, `gmailOAuth2`, and other OAuth kinds):
+
+| Field | UI | Purpose |
+|-------|-----|---------|
+| `ignoreSSLIssues` | Toggle | Skip TLS certificate verification on outbound HTTP (insecure) |
+| `allowedHttpRequestDomains` | Select (`all` / `domains` / `none`) | Restrict which hosts HTTP Request nodes may call with this credential |
+| `allowedDomains` | Text (shown when mode is `domains`) | Comma-separated allowlist; supports `*` wildcards |
+
+The credential editor uses `x-ui-show-when` on `allowedDomains` (same mechanism as flow node parameters).
+
 ---
 
 ## 4. `credentials` MongoDB collection

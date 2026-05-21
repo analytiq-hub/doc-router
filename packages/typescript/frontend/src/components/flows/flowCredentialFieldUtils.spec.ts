@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import type { FlowCredentialKindSummary } from '@docrouter/sdk';
 import {
+  credentialFieldRowVisible,
   credentialFormSnapshotsEqual,
   credentialKindShowsTestButton,
   credentialOAuthHintAppName,
   formatCredentialTestDetail,
+  parseCredentialBooleanField,
+  type CredentialFieldRow,
 } from './flowCredentialFieldUtils';
 
 describe('credentialFormSnapshotsEqual', () => {
@@ -43,6 +46,34 @@ describe('credentialKindShowsTestButton', () => {
       supports_oauth_browser_flow: false,
     } as FlowCredentialKindSummary;
     expect(credentialKindShowsTestButton(header)).toBe(true);
+  });
+});
+
+describe('credentialFieldRowVisible', () => {
+  const domainField: CredentialFieldRow = {
+    name: 'allowedDomains',
+    showWhen: { field: 'allowedHttpRequestDomains', equals: 'domains' },
+  };
+
+  it('hides allowedDomains unless restriction mode is domains', () => {
+    expect(
+      credentialFieldRowVisible(domainField, { allowedHttpRequestDomains: 'all' }, [domainField]),
+    ).toBe(false);
+    expect(
+      credentialFieldRowVisible(
+        domainField,
+        { allowedHttpRequestDomains: 'domains', allowedDomains: 'example.com' },
+        [domainField],
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('parseCredentialBooleanField', () => {
+  it('parses common boolean string forms', () => {
+    expect(parseCredentialBooleanField('true')).toBe(true);
+    expect(parseCredentialBooleanField('false')).toBe(false);
+    expect(parseCredentialBooleanField('')).toBe(false);
   });
 });
 

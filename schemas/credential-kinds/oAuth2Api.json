@@ -61,6 +61,24 @@
         "title": "Ignore SSL Issues (Insecure)",
         "type": "boolean",
         "default": false
+      },
+      "allowedHttpRequestDomains": {
+        "title": "Allowed HTTP Request Domains",
+        "type": "string",
+        "enum": ["all", "domains", "none"],
+        "default": "all",
+        "x-ui-enum-names": ["All", "Specific Domains", "None"],
+        "description": "Control which domains this credential can be used with in HTTP Request nodes"
+      },
+      "allowedDomains": {
+        "title": "Allowed Domains",
+        "type": "string",
+        "default": "",
+        "description": "Comma-separated list of allowed domains (supports wildcards with *)",
+        "x-ui-show-when": {
+          "field": "allowedHttpRequestDomains",
+          "equals": "domains"
+        }
       }
     },
     "required": [

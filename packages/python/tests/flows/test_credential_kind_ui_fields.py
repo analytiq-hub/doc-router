@@ -23,6 +23,21 @@ def test_gmail_scope_is_runtime_hidden_but_schema_default() -> None:
         _credential_kinds_bundle.cache_clear()
 
 
+def test_oauth_kinds_include_http_domain_restriction_fields() -> None:
+    _credential_kinds_bundle.cache_clear()
+    try:
+        for key in ("oAuth2Api", "gmailOAuth2"):
+            kind = get_credential_kind(key)
+            props = (kind.get("secret_schema") or {}).get("properties") or {}
+            assert props["allowedHttpRequestDomains"]["enum"] == ["all", "domains", "none"]
+            assert props["allowedDomains"]["x-ui-show-when"] == {
+                "field": "allowedHttpRequestDomains",
+                "equals": "domains",
+            }
+    finally:
+        _credential_kinds_bundle.cache_clear()
+
+
 def test_gmail_oauth_tokens_are_runtime_not_form_fields() -> None:
     _credential_kinds_bundle.cache_clear()
     try:

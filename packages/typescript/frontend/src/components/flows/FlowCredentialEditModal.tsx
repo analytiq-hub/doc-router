@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Switch } from '@headlessui/react';
 import { BeakerIcon, CheckCircleIcon, EyeIcon, EyeSlashIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import type { FlowCredentialHeader, FlowCredentialKindSummary } from '@docrouter/sdk';
 import { getApiErrorMsg } from '@/utils/api';
@@ -14,14 +15,21 @@ import {
   flowInlineNameReadClass,
   flowInputClass,
   flowLabelClass,
+  flowSelectClass,
+  flowSwitchThumbClass,
+  flowSwitchTrackClass,
 } from './flowUiClasses';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
 import {
   buildCredentialFieldsPayload,
   CREDENTIAL_SECRET_MASK,
   credentialFieldDisplayValue,
+  credentialFieldInitialValue,
+  credentialFieldRowVisible,
   credentialFieldRows,
   credentialFormSnapshotsEqual,
+  parseCredentialBooleanField,
+  type CredentialFieldRow,
   credentialKindShowsTestButton,
   credentialOAuthHintAppName,
   type CredentialFormSnapshot,
@@ -98,9 +106,9 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
         } else if (f.is_secret) {
           next[f.name] = '';
         } else if (row) {
-          next[f.name] = credentialFieldDisplayValue(f, row.public_fields[f.name]);
+          next[f.name] = credentialFieldInitialValue(f, row.public_fields[f.name]);
         } else {
-          next[f.name] = '';
+          next[f.name] = credentialFieldInitialValue(f, undefined);
         }
       }
     }
@@ -485,13 +493,11 @@ function CredEditConnectionTab({
       {supportsOAuth && oauthRedirectUri ? (
         <OAuthRedirectUrlField redirectUri={oauthRedirectUri} appName={oauthHintAppName} />
       ) : null}
-      {fieldDefs.map((f) => (
-        <div key={f.name}>
-          <label className={flowLabelClass} htmlFor={`cred-edit-${f.name}`}>
-            {f.title || f.name}
-          </label>
-          <CredEditFieldInput
-            id={`cred-edit-${f.name}`}
+      {fieldDefs
+        .filter((f) => credentialFieldRowVisible(f, fields, fieldDefs))
+        .map((f) => (
+          <CredEditFieldBlock
+            key={f.name}
             field={f}
             value={fields[f.name] ?? ''}
             showSecret={showSecret[f.name]}
@@ -505,9 +511,7 @@ function CredEditConnectionTab({
                 : undefined
             }
           />
-          {f.description ? <p className="mt-1 text-xs text-gray-500">{f.description}</p> : null}
-        </div>
-      ))}
+        ))}
     </div>
   );
 }
@@ -561,6 +565,85 @@ function CredEditDetailsTab({ row }: { row: FlowCredentialHeader }) {
   );
 }
 
+function CredEditFieldBlock({
+  field,
+  value,
+  showSecret,
+  isMasked,
+  onChange,
+  onToggleSecret,
+}: {
+  field: CredentialFieldRow;
+  value: string;
+  showSecret?: boolean;
+  isMasked: boolean;
+  onChange: (v: string) => void;
+  onToggleSecret?: () => void;
+}) {
+  const id = `cred-edit-${field.name}`;
+  const label = field.title || field.name;
+
+  if (field.type === 'boolean') {
+    const checked = parseCredentialBooleanField(value, field.default === true);
+    return (
+      <div>
+        <div className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
+          <span className="text-sm text-gray-800">{label}</span>
+          <Switch
+            checked={checked}
+            onChange={(next) => onChange(next ? 'true' : 'false')}
+            className={flowSwitchTrackClass}
+          >
+            <span className={flowSwitchThumbClass} aria-hidden />
+          </Switch>
+        </div>
+        {field.description ? <p className="mt-1 text-xs text-gray-500">{field.description}</p> : null}
+      </div>
+    );
+  }
+
+  if (field.enum?.length) {
+    return (
+      <div>
+        <label className={flowLabelClass} htmlFor={id}>
+          {label}
+        </label>
+        <select
+          id={id}
+          className={flowSelectClass}
+          value={value || field.enum[0] || ''}
+          onChange={(e) => onChange(e.target.value)}
+        >
+          {field.enum.map((opt, idx) => (
+            <option key={opt} value={opt}>
+              {field.enumNames?.[idx] ?? opt}
+            </option>
+          ))}
+        </select>
+        {field.description ? <p className="mt-1 text-xs text-gray-500">{field.description}</p> : null}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <label className={flowLabelClass} htmlFor={id}>
+        {label}
+      </label>
+      <CredEditFieldInput
+        id={id}
+        field={field}
+        value={value}
+        showSecret={showSecret}
+        isMasked={isMasked}
+        onChange={onChange}
+        onToggleSecret={onToggleSecret}
+      />
+      {field.description ? <p className="mt-1 text-xs text-gray-500">{field.description}</p> : null}
+    </div>
+  );
+}
+
 function CredEditFieldInput({
   id,
   field,
@@ -571,7 +654,7 @@ function CredEditFieldInput({
   onToggleSecret,
 }: {
   id: string;
-  field: { is_secret?: boolean; name: string };
+  field: { is_secret?: boolean; name: string; placeholder?: string };
   value: string;
   showSecret?: boolean;
   isMasked: boolean;
@@ -586,6 +669,7 @@ function CredEditFieldInput({
         className={field.is_secret ? `${flowInputClass} pr-10` : flowInputClass}
         type={usePassword ? 'password' : 'text'}
         value={value}
+        placeholder={field.placeholder}
         onChange={(e) => onChange(e.target.value)}
         autoComplete="off"
       />
