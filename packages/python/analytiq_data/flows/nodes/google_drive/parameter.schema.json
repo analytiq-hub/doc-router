@@ -1,0 +1,1263 @@
+{
+  "type": "object",
+  "properties": {
+    "resource": {
+      "type": "string",
+      "enum": [
+        "file",
+        "fileFolder",
+        "folder",
+        "drive"
+      ],
+      "x-ui-enum-names": [
+        "File",
+        "File/Folder",
+        "Folder",
+        "Shared Drive"
+      ],
+      "default": "file",
+      "title": "Resource"
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "create",
+        "deleteDrive",
+        "get",
+        "list",
+        "update",
+        "copy",
+        "createFromText",
+        "deleteFile",
+        "download",
+        "move",
+        "share",
+        "upload",
+        "search",
+        "deleteFolder"
+      ],
+      "x-ui-enum-names": [
+        "Create",
+        "Delete",
+        "Get",
+        "Get Many",
+        "Update",
+        "Copy",
+        "Create From Text",
+        "Delete",
+        "Download",
+        "Move",
+        "Share",
+        "Upload",
+        "Search",
+        "Delete"
+      ],
+      "default": "upload",
+      "x-ui-enum-by": {
+        "field": "resource",
+        "variants": {
+          "drive": {
+            "enum": [
+              "create",
+              "deleteDrive",
+              "get",
+              "list",
+              "update"
+            ],
+            "x-ui-enum-names": [
+              "Create",
+              "Delete",
+              "Get",
+              "Get Many",
+              "Update"
+            ]
+          },
+          "file": {
+            "enum": [
+              "copy",
+              "createFromText",
+              "deleteFile",
+              "download",
+              "move",
+              "share",
+              "update",
+              "upload"
+            ],
+            "x-ui-enum-names": [
+              "Copy",
+              "Create From Text",
+              "Delete",
+              "Download",
+              "Move",
+              "Share",
+              "Update",
+              "Upload"
+            ]
+          },
+          "fileFolder": {
+            "enum": [
+              "search"
+            ],
+            "x-ui-enum-names": [
+              "Search"
+            ]
+          },
+          "folder": {
+            "enum": [
+              "create",
+              "deleteFolder",
+              "share"
+            ],
+            "x-ui-enum-names": [
+              "Create",
+              "Delete",
+              "Share"
+            ]
+          }
+        }
+      },
+      "title": "Operation"
+    },
+    "name": {
+      "type": "string",
+      "default": "",
+      "x-ui-placeholder": "e.g. New Shared Drive",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "drive"
+          },
+          {
+            "field": "operation",
+            "equals": "create"
+          }
+        ]
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "drive"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "copy"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "createFromText"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "upload"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "folder"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        }
+      ]
+    },
+    "options": {
+      "type": "object",
+      "properties": {
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "canAddChildren": {
+              "type": "boolean",
+              "default": false
+            },
+            "canChangeCopyRequiresWriterPermissionRestriction": {
+              "type": "boolean",
+              "default": false
+            },
+            "canChangeDomainUsersOnlyRestriction": {
+              "type": "boolean",
+              "default": false
+            },
+            "canChangeDriveBackground": {
+              "type": "boolean",
+              "default": false
+            },
+            "canChangeDriveMembersOnlyRestriction": {
+              "type": "boolean",
+              "default": false
+            },
+            "canComment": {
+              "type": "boolean",
+              "default": false
+            },
+            "canCopy": {
+              "type": "boolean",
+              "default": false
+            },
+            "canDeleteChildren": {
+              "type": "boolean",
+              "default": false
+            },
+            "canDeleteDrive": {
+              "type": "boolean",
+              "default": false
+            },
+            "canDownload": {
+              "type": "boolean",
+              "default": false
+            },
+            "canEdit": {
+              "type": "boolean",
+              "default": false
+            },
+            "canListChildren": {
+              "type": "boolean",
+              "default": false
+            },
+            "canManageMembers": {
+              "type": "boolean",
+              "default": false
+            },
+            "canReadRevisions": {
+              "type": "boolean",
+              "default": false
+            },
+            "canRename": {
+              "type": "boolean",
+              "default": false
+            },
+            "canRenameDrive": {
+              "type": "boolean",
+              "default": false
+            },
+            "canShare": {
+              "type": "boolean",
+              "default": false
+            },
+            "canTrashChildren": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "default": {},
+          "x-ui-placeholder": "Add Field"
+        },
+        "colorRgb": {
+          "type": "string",
+          "pattern": "^#[0-9a-fA-F]{6}$",
+          "default": ""
+        },
+        "hidden": {
+          "type": "boolean",
+          "default": false
+        },
+        "restrictions": {
+          "type": "object",
+          "properties": {
+            "adminManagedRestrictions": {
+              "type": "boolean",
+              "default": false
+            },
+            "copyRequiresWriterPermission": {
+              "type": "boolean",
+              "default": false
+            },
+            "domainUsersOnly": {
+              "type": "boolean",
+              "default": false
+            },
+            "driveMembersOnly": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": false,
+          "default": {},
+          "x-ui-placeholder": "Add Field"
+        }
+      },
+      "additionalProperties": false,
+      "default": {},
+      "x-ui-placeholder": "Add option",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "drive"
+          },
+          {
+            "field": "operation",
+            "equals": "create"
+          }
+        ]
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "drive"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "drive"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "drive"
+            },
+            {
+              "field": "operation",
+              "equals": "list"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "operation",
+              "equals": "update"
+            },
+            {
+              "field": "resource",
+              "equals": "drive"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "copy"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "deleteFile"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "createFromText"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "download"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "share"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "update"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "upload"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "fileFolder"
+            },
+            {
+              "field": "operation",
+              "equals": "search"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "folder"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "folder"
+            },
+            {
+              "field": "operation",
+              "equals": "deleteFolder"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "folder"
+            },
+            {
+              "field": "operation",
+              "equals": "share"
+            }
+          ]
+        }
+      ]
+    },
+    "driveId": {
+      "type": "string",
+      "default": "",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "drive"
+          },
+          {
+            "field": "operation",
+            "equals": "deleteDrive"
+          }
+        ]
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "drive"
+            },
+            {
+              "field": "operation",
+              "equals": "deleteDrive"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "drive"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "drive"
+            },
+            {
+              "field": "operation",
+              "equals": "update"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "sameFolder",
+              "equals": false
+            },
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "copy"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "createFromText"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "move"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "upload"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "folder"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        }
+      ]
+    },
+    "returnAll": {
+      "type": "boolean",
+      "default": false,
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "drive"
+          },
+          {
+            "field": "operation",
+            "equals": "list"
+          }
+        ]
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "drive"
+            },
+            {
+              "field": "operation",
+              "equals": "list"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "fileFolder"
+            },
+            {
+              "field": "operation",
+              "equals": "search"
+            }
+          ]
+        }
+      ]
+    },
+    "limit": {
+      "type": "number",
+      "default": 100,
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "returnAll",
+            "equals": false
+          },
+          {
+            "field": "resource",
+            "equals": "drive"
+          },
+          {
+            "field": "operation",
+            "equals": "list"
+          }
+        ]
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "returnAll",
+              "equals": false
+            },
+            {
+              "field": "resource",
+              "equals": "drive"
+            },
+            {
+              "field": "operation",
+              "equals": "list"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "returnAll",
+              "equals": false
+            },
+            {
+              "field": "resource",
+              "equals": "fileFolder"
+            },
+            {
+              "field": "operation",
+              "equals": "search"
+            }
+          ]
+        }
+      ]
+    },
+    "fileId": {
+      "type": "string",
+      "default": "",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "file"
+          },
+          {
+            "field": "operation",
+            "equals": "copy"
+          }
+        ]
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "copy"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "deleteFile"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "download"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "move"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "share"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "update"
+            }
+          ]
+        }
+      ]
+    },
+    "sameFolder": {
+      "type": "boolean",
+      "default": true,
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "file"
+          },
+          {
+            "field": "operation",
+            "equals": "copy"
+          }
+        ]
+      }
+    },
+    "folderId": {
+      "type": "string",
+      "default": "root",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "sameFolder",
+            "equals": false
+          },
+          {
+            "field": "resource",
+            "equals": "file"
+          },
+          {
+            "field": "operation",
+            "equals": "copy"
+          }
+        ]
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "sameFolder",
+              "equals": false
+            },
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "copy"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "createFromText"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "move"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "upload"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "folder"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        }
+      ]
+    },
+    "content": {
+      "type": "string",
+      "default": "",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "file"
+          },
+          {
+            "field": "operation",
+            "equals": "createFromText"
+          }
+        ]
+      }
+    },
+    "permissionsUi": {
+      "type": "object",
+      "properties": {},
+      "additionalProperties": false,
+      "default": {},
+      "x-ui-placeholder": "Add Permission",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "file"
+          },
+          {
+            "field": "operation",
+            "equals": "share"
+          }
+        ]
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "share"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "folder"
+            },
+            {
+              "field": "operation",
+              "equals": "share"
+            }
+          ]
+        }
+      ]
+    },
+    "changeFileContent": {
+      "type": "boolean",
+      "default": false,
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "file"
+          },
+          {
+            "field": "operation",
+            "equals": "update"
+          }
+        ]
+      }
+    },
+    "inputDataFieldName": {
+      "type": "string",
+      "default": "data",
+      "x-ui-placeholder": "e.g. data",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "changeFileContent",
+            "equals": true
+          },
+          {
+            "field": "resource",
+            "equals": "file"
+          },
+          {
+            "field": "operation",
+            "equals": "update"
+          }
+        ]
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "changeFileContent",
+              "equals": true
+            },
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "update"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "file"
+            },
+            {
+              "field": "operation",
+              "equals": "upload"
+            }
+          ]
+        }
+      ]
+    },
+    "newUpdatedFileName": {
+      "type": "string",
+      "default": "",
+      "x-ui-placeholder": "e.g. My New File",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "file"
+          },
+          {
+            "field": "operation",
+            "equals": "update"
+          }
+        ]
+      }
+    },
+    "queryString": {
+      "type": "string",
+      "default": "",
+      "x-ui-placeholder": "e.g. My File / My Folder",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "searchMethod",
+            "equals": "name"
+          },
+          {
+            "field": "resource",
+            "equals": "fileFolder"
+          },
+          {
+            "field": "operation",
+            "equals": "search"
+          }
+        ]
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "searchMethod",
+              "equals": "name"
+            },
+            {
+              "field": "resource",
+              "equals": "fileFolder"
+            },
+            {
+              "field": "operation",
+              "equals": "search"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "searchMethod",
+              "equals": "query"
+            },
+            {
+              "field": "resource",
+              "equals": "fileFolder"
+            },
+            {
+              "field": "operation",
+              "equals": "search"
+            }
+          ]
+        }
+      ]
+    },
+    "filter": {
+      "type": "object",
+      "properties": {
+        "driveId": {
+          "type": "string",
+          "default": "My Drive"
+        },
+        "folderId": {
+          "type": "string",
+          "default": "root"
+        },
+        "whatToSearch": {
+          "type": "string",
+          "enum": [
+            "all",
+            "files",
+            "folders"
+          ],
+          "x-ui-enum-names": [
+            "Files and Folders",
+            "Files",
+            "Folders"
+          ],
+          "default": "all"
+        },
+        "fileTypes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "*",
+              "application/vnd.google-apps.drive-sdk",
+              "application/vnd.google-apps.audio",
+              "application/vnd.google-apps.script",
+              "application/vnd.google-apps.document",
+              "application/vnd.google-apps.drawing",
+              "application/vnd.google-apps.form",
+              "application/vnd.google-apps.fusiontable",
+              "application/vnd.google-apps.map",
+              "application/vnd.google-apps.spreadsheet",
+              "application/vnd.google-apps.sites",
+              "application/vnd.google-apps.presentation",
+              "application/vnd.google-apps.photo",
+              "application/vnd.google-apps.unknown",
+              "application/vnd.google-apps.video"
+            ]
+          },
+          "default": [],
+          "x-ui-show-when": {
+            "field": "whatToSearch",
+            "equals": "files"
+          }
+        },
+        "includeTrashed": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "additionalProperties": false,
+      "default": {},
+      "x-ui-placeholder": "Add Filter",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "fileFolder"
+          },
+          {
+            "field": "operation",
+            "equals": "search"
+          }
+        ]
+      }
+    },
+    "folderNoRootId": {
+      "type": "string",
+      "default": "",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "folder"
+          },
+          {
+            "field": "operation",
+            "equals": "deleteFolder"
+          }
+        ]
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "folder"
+            },
+            {
+              "field": "operation",
+              "equals": "deleteFolder"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "folder"
+            },
+            {
+              "field": "operation",
+              "equals": "share"
+            }
+          ]
+        }
+      ]
+    },
+    "searchMethod": {
+      "type": "string",
+      "enum": [
+        "name",
+        "query"
+      ],
+      "x-ui-enum-names": [
+        "Search File/Folder Name",
+        "Advanced Search"
+      ],
+      "default": "name",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "fileFolder"
+          },
+          {
+            "field": "operation",
+            "equals": "search"
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}
