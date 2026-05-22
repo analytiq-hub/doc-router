@@ -3,7 +3,13 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
+
+_DRIVE_FILE_ID_RE = re.compile(
+    r"(?:/d/|/file/d/|id=)([a-zA-Z0-9_-]{10,})",
+    re.IGNORECASE,
+)
 
 RLC_DRIVE_DEFAULT = "My Drive"
 RLC_FOLDER_DEFAULT = "root"
@@ -54,6 +60,19 @@ def rlc_value(raw: Any, *, default: str = "") -> str:
                 return str(obj["value"]) if obj["value"] is not None else default
         return s or default
     return str(raw)
+
+
+def drive_file_id_from_param(raw: Any) -> str:
+    """Normalize ``fileId``: plain ID, or extract from Docs/Drive share URLs."""
+
+    s = rlc_value(raw).strip()
+    if not s:
+        return ""
+    if "://" in s or "/" in s:
+        m = _DRIVE_FILE_ID_RE.search(s)
+        if m:
+            return m.group(1)
+    return s
 
 
 def set_parent_folder(

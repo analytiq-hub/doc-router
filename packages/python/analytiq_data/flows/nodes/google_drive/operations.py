@@ -20,6 +20,7 @@ from .helpers import (
     RLC_FOLDER_DEFAULT,
     permissions_from_ui,
     prepare_query_fields,
+    drive_file_id_from_param,
     rlc_value,
     set_file_properties,
     set_parent_folder,
@@ -258,7 +259,7 @@ async def _run_file(
     item_index: int,
 ) -> dict[str, Any] | "ad.flows.FlowItem":
     options = params.get("options") if isinstance(params.get("options"), dict) else {}
-    file_id = rlc_value(params.get("fileId"))
+    file_id = drive_file_id_from_param(params.get("fileId"))
 
     if operation == "copy":
         drive_id = rlc_value(params.get("driveId"), default=RLC_DRIVE_DEFAULT)

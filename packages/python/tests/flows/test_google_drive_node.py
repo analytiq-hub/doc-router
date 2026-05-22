@@ -33,11 +33,21 @@ def test_google_drive_node_is_experimental() -> None:
     assert nt.type_version == 3
 
 
+def test_drive_file_id_from_docs_url() -> None:
+    from analytiq_data.flows.nodes.google_drive.helpers import drive_file_id_from_param
+
+    url = "https://docs.google.com/document/d/1QLUu--7KcnD5HNeY7NaOhtSQV-EH8US7UrtNkM7zigA/edit"
+    assert drive_file_id_from_param(url) == "1QLUu--7KcnD5HNeY7NaOhtSQV-EH8US7UrtNkM7zigA"
+
+
 def test_parameter_schema_merges_operations(schema: dict) -> None:
     op = schema["properties"]["operation"]
     assert "x-ui-enum-by" in op
     assert "upload" in op["enum"]
     assert "search" in op["enum"]
+    keys = list(schema["properties"].keys())
+    assert keys.index("fileId") < keys.index("options")
+    assert schema["properties"]["fileId"]["title"] == "File"
 
 
 @pytest.mark.asyncio
