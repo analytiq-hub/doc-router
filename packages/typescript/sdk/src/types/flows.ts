@@ -169,8 +169,16 @@ export interface FlowNodeRunData {
   execution_index?: number;
   data?: Record<string, unknown>;
   error?: FlowNodeRunError | null;
+  /** Per input slot: upstream provenance (outer index = slot). */
+  source?: FlowSourceRef[][];
   logs?: string[];
   trace?: FlowTraceEvent[];
+}
+
+export interface FlowSourceRef {
+  previous_node_id: string;
+  previous_node_output?: number;
+  previous_node_run?: number;
 }
 
 export interface ListExecutionsResponse {

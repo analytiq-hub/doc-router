@@ -104,8 +104,10 @@ def timing_from_items_source_run(
     run_data: dict[str, Any] | None,
 ) -> tuple[Any, Any]:
     """
-    `start_time` and `execution_time_ms` from the **producing** node for this item
-    (`item.meta[\"source_node_id\"]` → `run_data[node_id]`).
+    ``start_time`` and ``execution_time_ms`` from the node that **produced** this item
+    (``item.meta["source_node_id"]`` → ``run_data[node_id]``).
+
+    The engine sets ``meta.source_node_id`` to the producing node id on every output item.
 
     Returned tuple is `(start_time, execution_time)` where ``execution_time`` is
     the engine's ``execution_time_ms`` value (ms). Missing data → ``(None, None)``.

@@ -120,6 +120,8 @@ Evolve the shape stored under `run_data[node_id]` (backward compatible: readers 
 | `logs` | Text lines from **`flows.code`** `print()` / captured stdout (user-owned content; see [Redaction scope](#redaction-scope)). |
 | `trace` | Engine/integration debug events (see below); capped before persist. |
 
+**Item `meta` on output rows:** After each node runs, the engine sets `meta.source_node_id` on every output item to **that node’s id** (immediate producer). Use `run_data[node].source` for “who fed this execution’s inputs”; use `meta.source_node_id` on items for “who produced this row” (timing expressions, item-level debugging). Both align on the same hop for the producing node’s output.
+
 **Multi-run per node (phase 4):** Optional migration to `run_data[node_id]` → **array** of records (true n8n parity for per-item re-executions). Phases 0–2 keep one merged record per node; store `runs: NodeRunData[]` only when a node executes multiple times with distinct errors/outputs.
 
 ### 2. Trace events (`trace[]`)
@@ -287,23 +289,23 @@ Node type keys in the diagram match registered types (`flows.http_request`, `flo
 
 **Backend**
 
-1. When enqueueing work, attach **`source[slot]`** to the node run record from `_WorkItem` (upstream node id, output slot, run index) — outer index = input slot number.
-2. Ensure `FlowItem.paired_item` is set consistently for per-item nodes (branch, HTTP, Google Drive).
+1. [x] When enqueueing work, attach **`source[slot]`** to the node run record from `_WorkItem` (upstream node id, output slot, run index) — outer index = input slot number.
+2. [x] Ensure `FlowItem.paired_item` is set on per-item engine outputs when unset (integration nodes may still override).
 3. Optional: store `input_snapshot` hash or item count in trace (not full payload — size).
 
 **Frontend**
 
-4. In IoViewer schema mode, show **“from Manual trigger · item 0”** using `source` / `paired_item`.
-5. Overview list: secondary line “← upstream node name” when available.
+4. [x] In IoViewer schema mode, show **“from Manual trigger · item 0”** via `lineageCaption` using `source` / `paired_item`.
+5. [x] Overview / Details list: secondary line “← upstream node name” when `source` is present.
 
 ### Phase 3 — Logs UI parity (2–3 PRs)
 
 Build on [`flows_logs_ui_plan.md`](./flows_logs_ui_plan.md) remaining items:
 
-1. **Log tree ordering** — Sort/filter by `execution_index` when present; **fallback to `start_time`** for older executions missing `execution_index`.
+1. [x] **Log tree ordering** — Sort/filter by `execution_index` when present; **fallback to `start_time`** for older executions missing `execution_index`.
 2. **Running state** — While `status === 'running'`, poll and append nodes as they appear (already partial).
 3. **Executions tab** — Same Details/Trace experience as editor logs panel (`FlowExecutionsView`; shared `FlowLogsPanel`).
-4. **Failed node auto-select** — On error, select the node identified by **`last_node_executed`** (or, if missing, the node with the highest `execution_index` among `status === 'error'`). Do not use “first error node” in list order — ambiguous when multiple nodes error or when `on_error: continue` leaves earlier error records.
+4. [x] **Failed node auto-select** — On error, select the node identified by **`last_node_executed`** (or, if missing, the node with the highest `execution_index` among `status === 'error'`).
 5. Resizable panels (done in node modal; mirror in logs if needed).
 
 Reference: `../n8n/packages/frontend/editor-ui/src/features/execution/logs/logs.utils.ts` (`createLogTreeRec`, `findLogEntryRec`).
@@ -457,5 +459,5 @@ Preview builders (`flowNodeIoPreview.ts`) should expose `trace` alongside `logs`
 - [x] `flow_run.py` + routes: top-level `error.stack` + `last_node_executed` on `flow_executions`
 - [x] `flowNodeRunErrorDetails.tsx`: show HTTP hint if `http_code` set
 - [x] `FlowLogsPanel`: Trace tab (stack + code logs + `trace[]` events)
-- [x] Tests for `error.stack` + trace persistence; [ ] test for `last_node_executed` on worker/Mongo path
+- [x] Tests for `error.stack` + trace persistence; [x] unit test for `last_node_executed` on `persist_run_data`; [ ] worker/API test for failed run JSON
 - [x] Cross-link from [`flows2.md`](./flows2.md) “See also”

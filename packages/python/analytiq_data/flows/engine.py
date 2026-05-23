@@ -267,6 +267,71 @@ class _WorkItem:
 
     node_id: str
     inputs: list[list["ad.flows.FlowItem"]]
+    #: Per input slot: upstream provenance (``run_data[node_id].source``).
+    source: list[list[dict[str, Any]]] | None = None
+
+
+def _source_ref(
+    previous_node_id: str,
+    *,
+    previous_node_output: int = 0,
+    previous_node_run: int = 0,
+) -> dict[str, Any]:
+    return {
+        "previous_node_id": previous_node_id,
+        "previous_node_output": previous_node_output,
+        "previous_node_run": previous_node_run,
+    }
+
+
+def _work_item_source_record(wi: _WorkItem) -> list[list[dict[str, Any]]]:
+    if wi.source is not None:
+        return wi.source
+    return [[] for _ in range(len(wi.inputs))]
+
+
+def _with_output_paired_item(
+    out: "ad.flows.FlowItem",
+    *,
+    input_slot: int,
+    input_item_index: int,
+) -> "ad.flows.FlowItem":
+    meta = dict(out.meta) if isinstance(out.meta, dict) else {}
+    meta.setdefault("item_index", input_item_index)
+    meta.setdefault("input_slot", input_slot)
+    paired = out.paired_item if out.paired_item is not None else input_item_index
+    return ad.flows.FlowItem(
+        json=out.json,
+        binary=out.binary,
+        meta=meta,
+        paired_item=paired,
+    )
+
+
+def _stamp_outputs_producer_meta(
+    out_lists: list[list["ad.flows.FlowItem"]],
+    *,
+    producer_node_id: str,
+) -> list[list["ad.flows.FlowItem"]]:
+    """Set ``meta.source_node_id`` on every output item to the node that produced it."""
+
+    stamped: list[list["ad.flows.FlowItem"]] = []
+    for slot in out_lists:
+        slot_out: list["ad.flows.FlowItem"] = []
+        for item_idx, it in enumerate(slot):
+            meta = dict(it.meta) if isinstance(it.meta, dict) else {}
+            meta["source_node_id"] = producer_node_id
+            meta.setdefault("item_index", item_idx)
+            slot_out.append(
+                ad.flows.FlowItem(
+                    json=it.json,
+                    binary=it.binary,
+                    meta=meta,
+                    paired_item=it.paired_item,
+                )
+            )
+        stamped.append(slot_out)
+    return stamped
 
 
 def _bson_serialize_value(obj: Any) -> Any:
@@ -715,6 +780,7 @@ async def _execute_loop(
     pin_data: dict[str, Any] | None,
     work: "collections.deque[_WorkItem]",
     merge_waiting: "dict[str, list[list[ad.flows.FlowItem] | None]]",
+    merge_source_waiting: "dict[str, list[list[dict[str, Any]] | None]]",
     *,
     allowed_nodes: set[str] | None = None,
     stop_after_node_id: str | None = None,
@@ -736,11 +802,21 @@ async def _execute_loop(
             for node_id, slots in list(merge_waiting.items()):
                 if partial and node_id not in allowed_nodes:  # type: ignore[operator]
                     merge_waiting.pop(node_id, None)
+                    merge_source_waiting.pop(node_id, None)
                     continue
                 node = nodes_by_id[node_id]
                 ready_inputs = [(x or []) for x in slots]
-                work.append(_WorkItem(node_id=node["id"], inputs=ready_inputs))
+                src_slots = merge_source_waiting.get(node_id)
+                ready_sources = (
+                    [(x or []) for x in src_slots]
+                    if src_slots is not None
+                    else [[] for _ in ready_inputs]
+                )
+                work.append(
+                    _WorkItem(node_id=node["id"], inputs=ready_inputs, source=ready_sources)
+                )
                 merge_waiting.pop(node_id, None)
+                merge_source_waiting.pop(node_id, None)
 
         wi = work.popleft()
         node = nodes_by_id[wi.node_id]
@@ -760,6 +836,7 @@ async def _execute_loop(
         context.active_trace_node_id = node["id"]
         status = "success"
         error_env = None
+        run_source = _work_item_source_record(wi)
 
         if node.get("disabled"):
             out_lists = _empty_outputs(outputs_count)
@@ -848,7 +925,14 @@ async def _execute_loop(
                                     f"Node {node_label} returned {len(per_out)} output slots, expected {outputs_count}"
                                 )
                             for oi in range(outputs_count):
-                                combined[oi].extend(per_out[oi])
+                                for out_item in per_out[oi]:
+                                    combined[oi].append(
+                                        _with_output_paired_item(
+                                            out_item,
+                                            input_slot=slot_idx,
+                                            input_item_index=item_idx,
+                                        )
+                                    )
                     out_lists = combined
             except Exception as e:
                 on_error = node.get("on_error") or "stop"
@@ -873,6 +957,7 @@ async def _execute_loop(
                         "execution_index": execution_index,
                         "data": {"main": []},
                         "error": error_env,
+                        "source": run_source,
                         "logs": (context.node_logs.pop(node["id"], None) if hasattr(context, "node_logs") else None),
                         "trace": pop_node_trace(context, node["id"]),
                     }
@@ -884,6 +969,8 @@ async def _execute_loop(
                     context.active_trace_node_id = None
                     raise
 
+        out_lists = _stamp_outputs_producer_meta(out_lists, producer_node_id=node["id"])
+
         context.run_data[node["id"]] = {
             "status": status,
             "start_time": start_datetime.isoformat(),
@@ -891,6 +978,7 @@ async def _execute_loop(
             "execution_index": execution_index,
             "data": {"main": out_lists},
             "error": error_env,
+            "source": run_source,
             "logs": (context.node_logs.pop(node["id"], None) if hasattr(context, "node_logs") else None),
             "trace": pop_node_trace(context, node["id"]),
         }
@@ -922,20 +1010,36 @@ async def _execute_loop(
 
                 if dst_type.is_merge:
                     waiting = merge_waiting.get(dst["id"])
+                    waiting_src = merge_source_waiting.get(dst["id"])
                     if waiting is None:
                         waiting = [None] * in_slots_count
                         merge_waiting[dst["id"]] = waiting
+                    if waiting_src is None:
+                        waiting_src = [None] * in_slots_count
+                        merge_source_waiting[dst["id"]] = waiting_src
                     if conn.index >= len(waiting):
                         waiting.extend([None] * (conn.index - len(waiting) + 1))
+                        waiting_src.extend([None] * (conn.index - len(waiting_src) + 1))
                     waiting[conn.index] = items
+                    waiting_src[conn.index] = [_source_ref(node["id"], previous_node_output=out_idx)]
                     if all(x is not None for x in waiting[: max(dst_type.min_inputs, 1)]):
                         ready_inputs = [(x or []) for x in waiting]
-                        work.append(_WorkItem(node_id=dst["id"], inputs=ready_inputs))
+                        ready_sources = [(x or []) for x in waiting_src]
+                        work.append(
+                            _WorkItem(
+                                node_id=dst["id"],
+                                inputs=ready_inputs,
+                                source=ready_sources,
+                            )
+                        )
                         merge_waiting.pop(dst["id"], None)
+                        merge_source_waiting.pop(dst["id"], None)
                 else:
                     inp = [[] for _ in range(in_slots_count)]
                     inp[conn.index] = items
-                    work.append(_WorkItem(node_id=dst["id"], inputs=inp))
+                    src_slots = [[] for _ in range(in_slots_count)]
+                    src_slots[conn.index] = [_source_ref(node["id"], previous_node_output=out_idx)]
+                    work.append(_WorkItem(node_id=dst["id"], inputs=inp, source=src_slots))
 
         if stop_after_node_id and node["id"] == stop_after_node_id:
             work.clear()
@@ -1096,7 +1200,10 @@ async def run_flow(
     dirty = dirty_node_ids or frozenset()
 
     merge_waiting: dict[str, list[list["ad.flows.FlowItem"] | None]] = {}
-    work: collections.deque[_WorkItem] = collections.deque([_WorkItem(node_id=chosen_trigger_id, inputs=[])])
+    merge_source_waiting: dict[str, list[list[dict[str, Any]] | None]] = {}
+    work: collections.deque[_WorkItem] = collections.deque(
+        [_WorkItem(node_id=chosen_trigger_id, inputs=[], source=[])]
+    )
 
     if target_node_id:
         if target_node_id not in nodes_by_id:
@@ -1114,6 +1221,7 @@ async def run_flow(
             pin_data,
             work,
             merge_waiting,
+            merge_source_waiting,
             allowed_nodes=closure,
             stop_after_node_id=target_node_id,
             dirty_node_ids=dirty,
@@ -1126,6 +1234,7 @@ async def run_flow(
             pin_data,
             work,
             merge_waiting,
+            merge_source_waiting,
         )
 
     timeout = settings.get("execution_timeout_seconds")

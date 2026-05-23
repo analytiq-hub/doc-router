@@ -23,6 +23,11 @@ import {
 import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
 import { FlowNodeTracePanel } from './flowNodeTracePanel';
 import { flowPanelColResizeHandleClass } from './flowUiClasses';
+import {
+  formatItemLineage,
+  formatUpstreamSummary,
+  pairedItemFromRunEntry,
+} from './flowRunLineage';
 
 function isRunning(e: FlowExecution) {
   return e.status === 'queued' || e.status === 'running';
@@ -41,6 +46,7 @@ type RunDataEntry = {
   error?: unknown;
   logs?: unknown;
   trace?: unknown;
+  source?: unknown;
 };
 
 /** Top-level execution failure (`flow_executions.error`), when the worker/engine recorded one. */
@@ -206,13 +212,18 @@ const FlowLogsPanel: React.FC<{
 
   useEffect(() => {
     if (!execution || execution.status !== 'error' || sortedRunEntries.length === 0) return;
-    const failed = sortedRunEntries.find(({ rec }) => rec.status === 'error');
-    if (failed) {
-      setSelectedNodeId(failed.nodeId);
-      setActiveTab('details');
-      setIoTab('trace');
+    const lastId = execution.last_node_executed?.trim();
+    if (lastId && runData?.[lastId]) {
+      setSelectedNodeId(lastId);
+    } else {
+      const failed = [...sortedRunEntries]
+        .filter(({ rec }) => rec.status === 'error')
+        .sort((a, b) => (b.rec.execution_index ?? 0) - (a.rec.execution_index ?? 0))[0];
+      if (failed) setSelectedNodeId(failed.nodeId);
     }
-  }, [execution?.execution_id, execution?.status, sortedRunEntries]);
+    setActiveTab('details');
+    setIoTab('trace');
+  }, [execution?.execution_id, execution?.status, execution?.last_node_executed, runData, sortedRunEntries]);
 
   useEffect(() => {
     if (!selectedNodeId && sortedRunEntries.length > 0) {
@@ -265,6 +276,15 @@ const FlowLogsPanel: React.FC<{
     if (!selectedNodeId) return null;
     return buildNodeOutputPreview(selectedNodeId, runData, graphPinData ?? undefined);
   }, [graphPinData, runData, selectedNodeId]);
+
+  const selectedOutputLineage = useMemo(() => {
+    if (!selectedRunEntry?.source) return null;
+    return formatItemLineage({
+      source: selectedRunEntry.source,
+      pairedItem: pairedItemFromRunEntry(selectedRunEntry),
+      nodes,
+    });
+  }, [nodes, selectedRunEntry]);
 
   const flowBlobDownloadContext = useMemo((): FlowExecutionBlobContext | null => {
     const eid = execution?.execution_id?.trim();
@@ -392,6 +412,7 @@ const FlowLogsPanel: React.FC<{
                             const selected = nodeId === selectedNodeId;
                             const canEdit = Boolean(onEditNode) && nodes.some((n) => n.id === nodeId);
                             const started = rec.start_time ? formatLocalDate(rec.start_time) : '—';
+                            const upstream = formatUpstreamSummary(rec.source, nodes);
                             return (
                               <li key={nodeId}>
                                 <div
@@ -420,7 +441,12 @@ const FlowLogsPanel: React.FC<{
                                       <ExclamationCircleIcon className="h-5 w-5 text-red-500" aria-hidden />
                                     )}
                                   </div>
-                                  <div className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">{label}</div>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="truncate text-sm font-medium text-gray-900">{label}</div>
+                                    {upstream ? (
+                                      <div className="truncate text-xs text-gray-500">{upstream}</div>
+                                    ) : null}
+                                  </div>
 
                                   <div className="shrink-0 whitespace-nowrap text-xs text-gray-600">
                                     {formatExecutionMs(rec.execution_time_ms)}
@@ -477,6 +503,7 @@ const FlowLogsPanel: React.FC<{
                                 const label = nodeLabel(nodes, nodeId);
                                 const selected = nodeId === selectedNodeId;
                                 const canEdit = Boolean(onEditNode) && nodes.some((n) => n.id === nodeId);
+                                const upstream = formatUpstreamSummary(rec.source, nodes);
                                 return (
                                   <li key={nodeId}>
                                     <div
@@ -501,8 +528,11 @@ const FlowLogsPanel: React.FC<{
                                           <ExclamationCircleIcon className="h-5 w-5 text-red-500" aria-hidden />
                                         )}
                                       </div>
-                                      <div className="min-w-0 flex-1 truncate text-sm font-medium text-gray-900">
-                                        {label}
+                                      <div className="min-w-0 flex-1">
+                                        <div className="truncate text-sm font-medium text-gray-900">{label}</div>
+                                        {upstream ? (
+                                          <div className="truncate text-xs text-gray-500">{upstream}</div>
+                                        ) : null}
                                       </div>
                                       {canEdit && (
                                         <span className="shrink-0 opacity-0 pointer-events-none transition group-hover:opacity-100 group-hover:pointer-events-auto">
@@ -605,6 +635,7 @@ const FlowLogsPanel: React.FC<{
                                           valueKind="executionItems"
                                           executionItemsBinaries={selectedOutputPreview.itemsBinaries}
                                           flowBlobDownloadContext={flowBlobDownloadContext}
+                                          lineageCaption={selectedOutputLineage}
                                           dragSource={{
                                             nodeId: selectedNodeId,
                                             source: 'nodeOutput',

@@ -825,6 +825,8 @@ export const IoViewer: React.FC<{
    * use `_json` (same as runtime inbound row); other upstream sections still use `_node[…]`.
    */
   soleInboundParentNodeId?: string | null;
+  /** Schema/table hint, e.g. ``from Manual trigger · item 0``. */
+  lineageCaption?: string | null;
 }> = ({
   title,
   value,
@@ -838,6 +840,7 @@ export const IoViewer: React.FC<{
   hideHeader = false,
   expressionConfigNodeId,
   soleInboundParentNodeId = null,
+  lineageCaption = null,
 }) => {
   const [uncontrolledMode, setUncontrolledMode] = useState<IoDataMode>(defaultMode);
   const mode = controlledMode ?? uncontrolledMode;
@@ -969,6 +972,9 @@ export const IoViewer: React.FC<{
 
       {mode === 'schema' && (
         <div className="rounded border border-[#eceff2] bg-white">
+          {lineageCaption ? (
+            <div className="border-b border-[#eceff2] px-2 py-1.5 text-[11px] text-gray-600">{lineageCaption}</div>
+          ) : null}
           <div className="max-h-[360px] overflow-auto">
             {isExecution && executionItems.length === 0 ? (
               <div className="p-3 text-sm text-gray-500">No items.</div>

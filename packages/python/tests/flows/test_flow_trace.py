@@ -144,3 +144,32 @@ async def test_engine_persists_http_trace_on_failure() -> None:
     assert len(trace) == 1
     assert trace[0]["kind"] == "http"
     assert trace[0]["detail"]["status_code"] == 404
+
+
+@pytest.mark.asyncio
+async def test_persist_run_data_sets_last_node_executed(monkeypatch) -> None:
+    import analytiq_data as ad
+
+    saved: dict = {}
+
+    class _FakeFlowExecutions:
+        async def update_one(self, _filter, update):
+            saved["update"] = update
+
+    class _FakeDb:
+        flow_executions = _FakeFlowExecutions()
+
+    monkeypatch.setattr(ad.common, "get_async_db", lambda _c: _FakeDb())
+
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="64f3a1b2c3d4e5f6a7b8c9d0",
+        flow_id="f1",
+        flow_revid="r1",
+        mode="manual",
+        trigger_data={},
+        run_data={"n1": {"status": "success", "data": {"main": [[]]}}},
+        analytiq_client=object(),
+    )
+    await ad.flows.persist_run_data(ctx, ctx.run_data, last_node_executed="n1")
+    assert saved["update"]["$set"]["last_node_executed"] == "n1"

@@ -783,6 +783,40 @@ async def test_run_flow_merge_both_inputs_concat_in_slot_order() -> None:
     assert res["status"] == "success"
     merged = ctx.run_data["m1"]["data"]["main"][0]
     assert [it.json.get("path_tag") for it in merged] == ["first", "second"]
+    m1_source = ctx.run_data["m1"]["source"]
+    assert m1_source[0][0]["previous_node_id"] == "g1"
+    assert m1_source[1][0]["previous_node_id"] == "g2"
+
+
+@pytest.mark.asyncio
+async def test_run_flow_records_source_on_downstream_node() -> None:
+    nodes = [
+        _n("t1", "Start", "flows.trigger.manual", 0),
+        _n("p1", "Pass", "tests.passthrough", 200),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="p1", connection_type="main", index=0)]]},
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+    )
+    res = await ad.flows.run_flow(
+        context=ctx, revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": None}
+    )
+    assert res["status"] == "success"
+    assert ctx.run_data["t1"]["source"] == []
+    assert ctx.run_data["p1"]["source"] == [
+        [{"previous_node_id": "t1", "previous_node_output": 0, "previous_node_run": 0}]
+    ]
+    p1_item = ctx.run_data["p1"]["data"]["main"][0][0]
+    assert p1_item.meta["source_node_id"] == "p1"
 
 
 @pytest.mark.asyncio
