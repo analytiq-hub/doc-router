@@ -42,6 +42,7 @@ import {
   flowInlineNameInputClass,
   flowInlineNameMeasureClass,
   flowInlineNameReadClass,
+  flowPanelColResizeHandleClass,
 } from './flowUiClasses';
 import type { ExpressionPreviewContext } from './FlowExpressionPreviewLine';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
@@ -898,10 +899,14 @@ const FlowNodeConfigModal: React.FC<{
             </DialogTitle>
 
             <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden">
-            <PanelGroup direction="horizontal" className="relative z-0 flex min-h-0 flex-1 overflow-hidden">
+            <PanelGroup
+              direction="horizontal"
+              autoSaveId={isTrigger ? 'flow-node-config-panels-2' : 'flow-node-config-panels-3'}
+              className="relative z-0 flex min-h-0 flex-1 overflow-hidden"
+            >
               {!isTrigger && (
                 <>
-                  <Panel defaultSize={25} minSize={18} className="flex min-h-0 min-w-[260px] overflow-hidden">
+                  <Panel defaultSize={25} minSize={18} className="flex min-h-0 min-w-0 overflow-hidden">
                     <IoBlock title="Input">
                       {inputPreview.message && <div className="mb-2 text-sm text-[#6b7280]">{inputPreview.message}</div>}
                       {!inputPreview.message && inputPreview.slots.length > 0 && (
@@ -938,11 +943,11 @@ const FlowNodeConfigModal: React.FC<{
                     </IoBlock>
                   </Panel>
 
-                  <PanelResizeHandle className="w-px bg-[#e8eaee]" />
+                  <PanelResizeHandle className={flowPanelColResizeHandleClass} />
                 </>
               )}
 
-              <Panel defaultSize={isTrigger ? 67 : 42} minSize={28} className="flex min-h-0 min-w-[320px] overflow-hidden">
+              <Panel defaultSize={isTrigger ? 67 : 42} minSize={28} className="flex min-h-0 min-w-0 overflow-hidden">
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                   <TabGroup selectedIndex={tab} onChange={setTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div className="shrink-0 border-b border-[#eceff2] bg-white px-1">
@@ -1037,9 +1042,9 @@ const FlowNodeConfigModal: React.FC<{
                 </div>
               </Panel>
 
-              <PanelResizeHandle className="w-px bg-[#e8eaee]" />
+              <PanelResizeHandle className={flowPanelColResizeHandleClass} />
 
-              <Panel defaultSize={33} minSize={18} className="flex min-h-0 min-w-[260px] overflow-hidden">
+              <Panel defaultSize={33} minSize={18} className="flex min-h-0 min-w-0 overflow-hidden">
                 <IoBlock
                   title="Output"
                   right={

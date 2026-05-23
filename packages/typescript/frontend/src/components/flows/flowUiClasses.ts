@@ -48,3 +48,7 @@ export const flowSwitchTrackClass =
 
 export const flowSwitchThumbClass =
   'inline-block h-3 w-3 translate-x-0 rounded-full bg-white shadow transition group-data-[checked]:translate-x-4';
+
+/** Draggable divider between horizontal panels in the node config modal (n8n-style grab target). */
+export const flowPanelColResizeHandleClass =
+  'relative z-10 flex w-2 shrink-0 cursor-col-resize items-stretch bg-transparent before:absolute before:inset-y-0 before:left-1/2 before:h-full before:w-px before:-translate-x-1/2 before:bg-[#e8eaee] hover:before:bg-[#c8ced6] active:before:bg-[#b8c0cc]';
