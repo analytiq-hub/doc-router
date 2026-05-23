@@ -87,6 +87,21 @@ async def test_leader_takeover_after_expiry(test_db, register_nodes, aclient):
 
 
 @pytest.mark.asyncio
+async def test_register_interval_run_immediately(test_db, register_nodes):
+    scheduler = ad.flows.FlowScheduler()
+    calls: list[str] = []
+    anchor = datetime.now(UTC)
+
+    async def on_tick() -> None:
+        calls.append("tick")
+
+    await scheduler.register_interval("job1", 60.0, on_tick, anchor=anchor, run_immediately=True)
+    await asyncio.sleep(0.05)
+    assert calls == ["tick"]
+    await scheduler.shutdown()
+
+
+@pytest.mark.asyncio
 async def test_register_cron_run_immediately(test_db, register_nodes):
     scheduler = ad.flows.FlowScheduler()
     calls: list[str] = []
@@ -137,6 +152,7 @@ async def test_registry_registers_cron_jobs(test_db, register_nodes, flow_revisi
     )
     await registry.register_flow("org1", "flow1", str(flow_revision["_id"]), flow_revision)
     assert scheduler.job_count() == 1
+    assert "flow1:trig1:0" in scheduler._interval_jobs
     await registry.deregister_flow("flow1")
     assert scheduler.job_count() == 0
 
@@ -155,7 +171,7 @@ async def test_registry_tick_enqueues_flow_run(test_db, register_nodes, flow_rev
 
     with patch.object(registry, "_run_tick", new_callable=AsyncMock) as mock_tick:
         job_id = "flow1:trig1:0"
-        job = scheduler._jobs[job_id]
+        job = scheduler._interval_jobs[job_id]
         await job.callback()
         mock_tick.assert_awaited_once()
 

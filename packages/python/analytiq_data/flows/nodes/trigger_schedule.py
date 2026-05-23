@@ -7,7 +7,7 @@ from typing import Any
 
 import analytiq_data as ad
 
-from analytiq_data.flows.triggers.cron_exprs import schedule_params_to_crons
+from analytiq_data.flows.triggers.cron_exprs import schedule_params_to_specs
 
 _INTERVAL_ITEM_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -89,7 +89,7 @@ class FlowsScheduleTriggerNode:
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
         errors: list[str] = []
         try:
-            schedule_params_to_crons(params)
+            schedule_params_to_specs(params)
         except Exception as e:
             errors.append(str(e))
         return errors

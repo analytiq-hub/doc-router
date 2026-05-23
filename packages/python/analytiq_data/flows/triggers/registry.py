@@ -10,7 +10,13 @@ from typing import Any
 import analytiq_data as ad
 
 from ..flow_settings import resolve_flow_timezone
-from .cron_exprs import CronExpressionError, poll_times_to_crons, schedule_params_to_crons
+from .cron_exprs import (
+    CronExpressionError,
+    TriggerScheduleSpec,
+    parse_schedule_anchor,
+    poll_times_to_specs,
+    schedule_params_to_specs,
+)
 from .enqueue import enqueue_scheduled_flow_run
 from .leases import acquire_tick_lease
 from .poll_context import PollContext
@@ -19,6 +25,8 @@ from .static_data import load_node_static_data, save_node_static_data
 
 
 logger = logging.getLogger(__name__)
+
+SCHEDULE_ANCHORS_KEY = "schedule_anchors"
 
 
 @dataclass
@@ -29,7 +37,7 @@ class _RegisteredTrigger:
     node: dict[str, Any]
     node_type_key: str
     timezone: str = "UTC"
-    cron_exprs: list[str] = field(default_factory=list)
+    specs: list[TriggerScheduleSpec] = field(default_factory=list)
 
 
 class ActiveFlowRegistry:
@@ -74,12 +82,12 @@ class ActiveFlowRegistry:
                 continue
 
             params = node.get("parameters") or {}
-            cron_exprs: list[str] = []
+            specs: list[TriggerScheduleSpec] = []
             trigger_kind = ""
 
             if node_type_key == "flows.trigger.schedule":
                 try:
-                    cron_exprs = schedule_params_to_crons(params)
+                    specs = schedule_params_to_specs(params)
                 except CronExpressionError as e:
                     raise ad.flows.FlowValidationError(
                         f"Schedule trigger {ad.flows.node_name(node)}: {e}"
@@ -87,7 +95,7 @@ class ActiveFlowRegistry:
                 trigger_kind = "schedule"
             elif getattr(nt, "polling", False):
                 try:
-                    cron_exprs = poll_times_to_crons(params.get("poll_times"))
+                    specs = poll_times_to_specs(params.get("poll_times"))
                 except CronExpressionError as e:
                     raise ad.flows.FlowValidationError(
                         f"Poll trigger {ad.flows.node_name(node)}: {e}"
@@ -96,6 +104,13 @@ class ActiveFlowRegistry:
             else:
                 continue
 
+            anchors = await self._resolve_schedule_anchors(
+                flow_id=flow_id,
+                node_id=node["id"],
+                specs=specs,
+                reset=run_immediately,
+            )
+
             reg = _RegisteredTrigger(
                 organization_id=organization_id,
                 flow_id=flow_id,
@@ -103,25 +118,69 @@ class ActiveFlowRegistry:
                 node=node,
                 node_type_key=node_type_key,
                 timezone=timezone,
-                cron_exprs=cron_exprs,
+                specs=specs,
             )
             registered.append(reg)
 
-            for rule_index, cron_expr in enumerate(cron_exprs):
-                job_id = self._job_id(flow_id, node["id"], rule_index)
-                await self._scheduler.register_cron(
-                    job_id,
-                    cron_expr,
-                    self._make_tick(reg, rule_index, cron_expr, trigger_kind),
-                    timezone=timezone,
-                    run_immediately=run_immediately,
-                )
+            for spec in specs:
+                job_id = self._job_id(flow_id, node["id"], spec.rule_index)
+                tick = self._make_tick(reg, spec.rule_index, trigger_kind)
+                if spec.kind == "interval":
+                    anchor = anchors.get(spec.rule_index) or datetime.now(UTC)
+                    await self._scheduler.register_interval(
+                        job_id,
+                        spec.interval_secs or 0.0,
+                        tick,
+                        anchor=anchor,
+                        run_immediately=run_immediately,
+                    )
+                else:
+                    await self._scheduler.register_cron(
+                        job_id,
+                        spec.cron_expr or "",
+                        tick,
+                        timezone=timezone,
+                        run_immediately=run_immediately,
+                    )
 
         if registered:
             self._triggers[flow_id] = registered
             logger.info(
                 f"Registered {len(registered)} trigger node(s) for active flow {flow_id!r}"
             )
+
+    async def _resolve_schedule_anchors(
+        self,
+        *,
+        flow_id: str,
+        node_id: str,
+        specs: list[TriggerScheduleSpec],
+        reset: bool,
+    ) -> dict[int, datetime]:
+        interval_indices = [s.rule_index for s in specs if s.kind == "interval"]
+        if not interval_indices:
+            return {}
+
+        now = datetime.now(UTC)
+        static_data = await load_node_static_data(self._db, flow_id, node_id)
+        raw_anchors = static_data.get(SCHEDULE_ANCHORS_KEY)
+        stored: dict[str, str] = raw_anchors if isinstance(raw_anchors, dict) else {}
+
+        anchors: dict[int, datetime] = {}
+        for rule_index in interval_indices:
+            key = str(rule_index)
+            if reset:
+                anchors[rule_index] = now
+                stored[key] = now.isoformat()
+                continue
+            parsed = parse_schedule_anchor(stored.get(key))
+            anchors[rule_index] = parsed or now
+
+        if reset:
+            static_data[SCHEDULE_ANCHORS_KEY] = stored
+            await save_node_static_data(self._db, flow_id, node_id, static_data)
+
+        return anchors
 
     async def deregister_flow(self, flow_id: str) -> None:
         self._triggers.pop(flow_id, None)
@@ -134,7 +193,6 @@ class ActiveFlowRegistry:
         self,
         reg: _RegisteredTrigger,
         rule_index: int,
-        cron_expr: str,
         trigger_kind: str,
     ):
         async def _tick() -> None:

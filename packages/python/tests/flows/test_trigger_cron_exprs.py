@@ -1,30 +1,48 @@
 """Unit tests for schedule/poll cron expression helpers."""
 
 import pytest
+from datetime import datetime, UTC
 
 from analytiq_data.flows.triggers.cron_exprs import (
     CronExpressionError,
+    next_anchored_run,
     poll_times_to_crons,
+    poll_times_to_specs,
     schedule_params_to_crons,
+    schedule_params_to_specs,
     schedule_rule_to_cron,
+    schedule_rule_to_interval_seconds,
+    schedule_rule_to_spec,
     validate_cron_expression,
 )
 
 
-def test_schedule_minutes_interval():
-    assert schedule_rule_to_cron({"field": "minutes", "minutesInterval": 5}) == "*/5 * * * *"
+def test_schedule_minutes_interval_seconds():
+    assert schedule_rule_to_interval_seconds({"field": "minutes", "minutesInterval": 5}) == 300.0
 
 
-def test_schedule_hours_interval():
-    assert schedule_rule_to_cron({"field": "hours", "hoursInterval": 2}) == "0 */2 * * *"
+def test_schedule_hours_interval_seconds():
+    assert schedule_rule_to_interval_seconds({"field": "hours", "hoursInterval": 2}) == 7200.0
 
 
-def test_schedule_days_interval():
-    assert schedule_rule_to_cron({"field": "days", "daysInterval": 1}) == "0 0 */1 * *"
+def test_schedule_days_interval_seconds():
+    assert schedule_rule_to_interval_seconds({"field": "days", "daysInterval": 1}) == 86400.0
 
 
-def test_schedule_custom_cron():
-    assert schedule_rule_to_cron({"field": "cronExpression", "cronExpression": "15 4 * * *"}) == "15 4 * * *"
+def test_schedule_rule_to_spec_interval():
+    spec = schedule_rule_to_spec({"field": "minutes", "minutesInterval": 5}, 0)
+    assert spec.kind == "interval"
+    assert spec.interval_secs == 300.0
+
+
+def test_schedule_rule_to_spec_cron():
+    spec = schedule_rule_to_spec({"field": "cronExpression", "cronExpression": "15 4 * * *"}, 1)
+    assert spec.kind == "cron"
+    assert spec.cron_expr == "15 4 * * *"
+
+
+def test_schedule_legacy_cron_helper_uses_placeholder_for_intervals():
+    assert schedule_rule_to_cron({"field": "minutes", "minutesInterval": 5}) == "* * * * *"
 
 
 def test_schedule_params_multiple_rules():
@@ -36,10 +54,25 @@ def test_schedule_params_multiple_rules():
             ]
         }
     }
-    assert schedule_params_to_crons(params) == ["0 */1 * * *", "0 9 * * 1-5"]
+    specs = schedule_params_to_specs(params)
+    assert specs[0].kind == "interval"
+    assert specs[0].interval_secs == 3600.0
+    assert specs[1].kind == "cron"
+    assert schedule_params_to_crons(params) == ["* * * * *", "0 9 * * 1-5"]
 
 
-def test_poll_times_default_every_minute():
+def test_next_anchored_run_from_configuration_time():
+    anchor = datetime(2026, 5, 21, 10, 23, 47, tzinfo=UTC)
+    after = datetime(2026, 5, 21, 10, 23, 50, tzinfo=UTC)
+    nxt = next_anchored_run(anchor, 3600.0, after=after)
+    assert nxt == datetime(2026, 5, 21, 11, 23, 47, tzinfo=UTC)
+
+
+def test_poll_times_default_every_minute_interval():
+    specs = poll_times_to_specs(None)
+    assert len(specs) == 1
+    assert specs[0].kind == "interval"
+    assert specs[0].interval_secs == 60.0
     assert poll_times_to_crons(None) == ["* * * * *"]
 
 
