@@ -40,6 +40,93 @@ def test_drive_file_id_from_docs_url() -> None:
     assert drive_file_id_from_param(url) == "1QLUu--7KcnD5HNeY7NaOhtSQV-EH8US7UrtNkM7zigA"
 
 
+def test_export_mime_defaults_match_n8n_v2() -> None:
+    from analytiq_data.flows.nodes.google_drive.helpers import export_mime_for_google_app
+
+    doc_mime = "application/vnd.google-apps.document"
+    assert (
+        export_mime_for_google_app(doc_mime, {})
+        == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    sheet_mime = "application/vnd.google-apps.spreadsheet"
+    assert export_mime_for_google_app(sheet_mime, {}) == "text/csv"
+    assert (
+        export_mime_for_google_app(
+            doc_mime,
+            {
+                "googleFileConversion": {
+                    "conversion": {"docsToFormat": "text/plain"},
+                }
+            },
+        )
+        == "text/plain"
+    )
+
+
+@pytest.mark.asyncio
+async def test_export_falls_back_on_size_limit() -> None:
+    from analytiq_data.flows.nodes.google_drive.api import (
+        GoogleDriveApiError,
+        google_export_file_bytes,
+    )
+
+    doc_mime = "application/vnd.google-apps.document"
+    heavy = GoogleDriveApiError(
+        "export failed (403): exportSizeLimitExceeded",
+        status_code=403,
+    )
+    calls: list[str] = []
+
+    async def fake_request(token, method, path, **kwargs):
+        export_mime = kwargs["query"]["mimeType"]
+        calls.append(export_mime)
+        if export_mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            raise heavy
+        return b"ok"
+
+    with patch(
+        "analytiq_data.flows.nodes.google_drive.api.google_api_request",
+        new_callable=AsyncMock,
+        side_effect=fake_request,
+    ):
+        content, out_mime = await google_export_file_bytes(
+            "tok", "file-id", doc_mime, {}
+        )
+    assert content == b"ok"
+    assert out_mime == "text/html"
+    assert calls[0] == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert "text/html" in calls
+
+
+@pytest.mark.asyncio
+async def test_file_download_preserves_meta() -> None:
+    from analytiq_data.flows.nodes.google_drive.operations import _file_download
+
+    item = ad.flows.FlowItem(json={"x": 1}, binary={}, meta={"trace": "t1"})
+    with (
+        patch(
+            "analytiq_data.flows.nodes.google_drive.operations.google_api_request",
+            new_callable=AsyncMock,
+            side_effect=[
+                {"mimeType": "application/pdf", "name": "report.pdf"},
+                b"%PDF-1.4",
+            ],
+        ),
+    ):
+        out = await _file_download(
+            context=None,  # type: ignore[arg-type]
+            token="tok",
+            file_id="fid",
+            params={},
+            item=item,
+            options={},
+        )
+    assert out.meta == {"trace": "t1"}
+    assert "data" in out.binary
+
+
 def test_parameter_schema_merges_operations(schema: dict) -> None:
     op = schema["properties"]["operation"]
     assert "x-ui-enum-by" in op

@@ -9,6 +9,7 @@ import analytiq_data as ad
 from .api import (
     google_api_request,
     google_api_request_all_items,
+    google_export_file_bytes,
     new_drive_request_id,
     resolve_oauth_access_token,
     resumable_upload,
@@ -30,13 +31,6 @@ from .helpers import (
     update_drive_scopes,
     validate_resource_operation,
 )
-
-_GOOGLE_APP_EXPORT_DEFAULTS: dict[str, str] = {
-    "application/vnd.google-apps.document": "application/pdf",
-    "application/vnd.google-apps.spreadsheet": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    "application/vnd.google-apps.presentation": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-}
-
 
 async def execute_google_drive_item(
     context: "ad.flows.ExecutionContext",
@@ -371,21 +365,7 @@ async def _file_download(
     prop = str(options.get("binaryPropertyName") or "data").strip() or "data"
 
     if mime.startswith("application/vnd.google-apps."):
-        export_mime = _GOOGLE_APP_EXPORT_DEFAULTS.get(mime, "application/pdf")
-        conv = options.get("googleFileConversion")
-        if isinstance(conv, dict):
-            for key, fmt in conv.items():
-                if fmt and isinstance(fmt, str):
-                    export_mime = fmt
-                    break
-        content = await google_api_request(
-            token,
-            "GET",
-            f"/drive/v3/files/{file_id}/export",
-            query={"mimeType": export_mime, "supportsAllDrives": True},
-            expect_json=False,
-        )
-        out_mime = export_mime
+        content, out_mime = await google_export_file_bytes(token, file_id, mime, options)
     else:
         content = await google_api_request(
             token,
@@ -405,7 +385,7 @@ async def _file_download(
         file_name=name,
         data=content,
     )
-    return ad.flows.FlowItem(json=dict(item.json), binary=binary)
+    return ad.flows.FlowItem(json=dict(item.json), binary=binary, meta=dict(item.meta))
 
 
 async def _file_create_from_text(

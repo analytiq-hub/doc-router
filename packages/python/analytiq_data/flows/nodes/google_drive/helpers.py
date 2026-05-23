@@ -16,6 +16,29 @@ RLC_FOLDER_DEFAULT = "root"
 
 DRIVE_FOLDER_MIME = "application/vnd.google-apps.folder"
 
+# n8n Google Drive v2/v3 download.operation.ts execute() defaults (per Google app subtype).
+_EXPORT_DEFAULT_BY_SUBTYPE: dict[str, str] = {
+    "document": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "presentation": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "spreadsheet": "text/csv",
+    "drawing": "image/jpeg",
+}
+
+_FORMAT_FIELD_BY_SUBTYPE: dict[str, str] = {
+    "document": "docsToFormat",
+    "presentation": "slidesToFormat",
+    "spreadsheet": "sheetsToFormat",
+    "drawing": "drawingsToFormat",
+}
+
+# Lighter export formats when the primary export hits Google's size limit.
+_EXPORT_FALLBACK_BY_SUBTYPE: dict[str, list[str]] = {
+    "document": ["text/html", "text/plain", "application/rtf"],
+    "presentation": ["application/pdf"],
+    "spreadsheet": ["application/vnd.oasis.opendocument.spreadsheet"],
+    "drawing": ["image/png", "application/pdf"],
+}
+
 _VALID_OPS: dict[str, frozenset[str]] = {
     "drive": frozenset({"create", "deleteDrive", "get", "list", "update"}),
     "file": frozenset(
@@ -33,6 +56,51 @@ _VALID_OPS: dict[str, frozenset[str]] = {
     "fileFolder": frozenset({"search"}),
     "folder": frozenset({"create", "deleteFolder", "share"}),
 }
+
+
+def google_app_subtype(google_mime: str) -> str:
+    """Subtype from ``application/vnd.google-apps.<subtype>`` (e.g. ``document``)."""
+
+    prefix = "application/vnd.google-apps."
+    if not google_mime.startswith(prefix):
+        return ""
+    return google_mime[len(prefix) :].strip()
+
+
+def _google_file_conversion_map(options: dict[str, Any]) -> dict[str, Any]:
+    """``options.googleFileConversion.conversion`` object from the node UI."""
+
+    gfc = options.get("googleFileConversion")
+    if not isinstance(gfc, dict):
+        return {}
+    conv = gfc.get("conversion")
+    return conv if isinstance(conv, dict) else {}
+
+
+def export_mime_for_google_app(google_mime: str, options: dict[str, Any]) -> str:
+    """
+    Export MIME for a native Google file (matches n8n v2 download execute defaults).
+    """
+
+    subtype = google_app_subtype(google_mime)
+    conv = _google_file_conversion_map(options)
+    field = _FORMAT_FIELD_BY_SUBTYPE.get(subtype)
+    if field:
+        chosen = conv.get(field)
+        if isinstance(chosen, str) and chosen.strip():
+            return chosen.strip()
+    return _EXPORT_DEFAULT_BY_SUBTYPE.get(subtype, "application/pdf")
+
+
+def export_fallback_mimes(google_mime: str, primary: str) -> list[str]:
+    """Additional export MIME types to try after ``exportSizeLimitExceeded``."""
+
+    subtype = google_app_subtype(google_mime)
+    out: list[str] = []
+    for mime in _EXPORT_FALLBACK_BY_SUBTYPE.get(subtype, []):
+        if mime != primary and mime not in out:
+            out.append(mime)
+    return out
 
 
 def validate_resource_operation(resource: str, operation: str) -> None:

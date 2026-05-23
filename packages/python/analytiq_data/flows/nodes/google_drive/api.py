@@ -21,6 +21,16 @@ class GoogleDriveApiError(RuntimeError):
         self.status_code = status_code
 
 
+def is_export_size_limit_error(exc: BaseException) -> bool:
+    """True when Google Drive refused export because the converted file is too large."""
+
+    if not isinstance(exc, GoogleDriveApiError) or exc.status_code != 403:
+        return False
+    msg = str(exc).lower()
+    compact = msg.replace("_", "").lower()
+    return "exportsizelimitexceeded" in compact or "too large to be exported" in msg
+
+
 async def resolve_oauth_access_token(
     context: "ad.flows.ExecutionContext",
     node: dict[str, Any],
@@ -87,6 +97,53 @@ async def google_api_request(
     if not resp.content:
         return {}
     return resp.json()
+
+
+async def google_export_file_bytes(
+    token: str,
+    file_id: str,
+    google_mime: str,
+    options: dict[str, Any],
+) -> tuple[bytes, str]:
+    """
+    Export a native Google file, using n8n-style MIME defaults and lighter fallbacks
+    when Google returns ``exportSizeLimitExceeded``.
+    """
+
+    from .helpers import export_fallback_mimes, export_mime_for_google_app
+
+    primary = export_mime_for_google_app(google_mime, options)
+    candidates = [primary]
+    for alt in export_fallback_mimes(google_mime, primary):
+        if alt not in candidates:
+            candidates.append(alt)
+
+    last_err: GoogleDriveApiError | None = None
+    for export_mime in candidates:
+        try:
+            content = await google_api_request(
+                token,
+                "GET",
+                f"/drive/v3/files/{file_id}/export",
+                query={"mimeType": export_mime, "supportsAllDrives": True},
+                expect_json=False,
+            )
+            if not isinstance(content, bytes):
+                content = bytes(content) if content is not None else b""
+            return content, export_mime
+        except GoogleDriveApiError as e:
+            if not is_export_size_limit_error(e):
+                raise
+            last_err = e
+
+    if last_err is not None:
+        raise GoogleDriveApiError(
+            "This Google file is too large to export in any supported format. "
+            "Use **File → Copy** to duplicate it in Drive, or under Download options set "
+            "**Google File Conversion** to a lighter format (e.g. Text or HTML for Docs).",
+            status_code=403,
+        ) from last_err
+    raise GoogleDriveApiError("Google Drive export failed", status_code=500)
 
 
 async def google_api_request_all_items(
