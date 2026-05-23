@@ -47,6 +47,11 @@ import {
 import type { DocRouterOrgApi } from '@/utils/api';
 import type { FlowExecutionBlobContext } from './flowExecutionBlob';
 import FlowNodePalette from './FlowNodePalette';
+import {
+  parseFlowNodeDragPayload,
+  paletteActionsForNodeType,
+  type FlowPalettePlacement,
+} from './flowPaletteActions';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import {
   paletteSectionDescription,
@@ -197,6 +202,22 @@ function initialParametersForNodeType(typeKey: string): Record<string, unknown> 
   return {};
 }
 
+function parametersForPalettePlacement(placement: FlowPalettePlacement): Record<string, unknown> {
+  return {
+    ...initialParametersForNodeType(placement.typeKey),
+    ...(placement.parameters ?? {}),
+  };
+}
+
+function baseNameForPalettePlacement(
+  placement: FlowPalettePlacement,
+  nodeTypesByKey: Record<string, FlowNodeType>,
+): string {
+  if (placement.nameHint?.trim()) return placement.nameHint.trim();
+  const nt = nodeTypesByKey[placement.typeKey];
+  return nt?.label ? `${nt.label}` : placement.typeKey;
+}
+
 function parseHandleIndex(handle: string | null | undefined, prefix: string): number | null {
   if (!handle) return null;
   if (!handle.startsWith(prefix)) return null;
@@ -290,6 +311,7 @@ const FlowEditor: React.FC<{
   const { rfCanvasNodeTypes, rfCanvasEdgeTypes } = useStableFlowRfCanvasRegistration();
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [paletteDrilledSection, setPaletteDrilledSection] = useState<FlowPaletteSectionId | null>(null);
+  const [paletteDrilledNodeTypeKey, setPaletteDrilledNodeTypeKey] = useState<string | null>(null);
   const [paletteSearching, setPaletteSearching] = useState(false);
   const [configModalNodeId, setConfigModalNodeId] = useState<string | null>(null);
   const [executeStepBusy, setExecuteStepBusy] = useState(false);
@@ -297,18 +319,42 @@ const FlowEditor: React.FC<{
   const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
 
   const paletteDrillHeading = useMemo(() => {
-    if (paletteDrilledSection === null || paletteSearching) return null;
+    if (paletteSearching) return null;
+    if (paletteDrilledNodeTypeKey) {
+      const nt = nodeTypesByKey[paletteDrilledNodeTypeKey];
+      return nt?.label ?? paletteDrilledNodeTypeKey;
+    }
+    if (paletteDrilledSection === null) return null;
     const inSection = nodeTypes.filter(
       (nt) => paletteSectionForNodeType(nt) === paletteDrilledSection,
     );
     if (inSection.length === 0) return null;
     const label = paletteSectionLabel(paletteDrilledSection);
     return `${label} (${inSection.length})`;
-  }, [paletteDrilledSection, paletteSearching, nodeTypes]);
+  }, [paletteDrilledNodeTypeKey, paletteDrilledSection, paletteSearching, nodeTypes, nodeTypesByKey]);
+
+  const paletteDrillSubtitle = useMemo(() => {
+    if (paletteSearching) return null;
+    if (paletteDrilledNodeTypeKey) {
+      const nt = nodeTypesByKey[paletteDrilledNodeTypeKey];
+      if (!nt) return null;
+      return `Actions (${paletteActionsForNodeType(nt).length})`;
+    }
+    if (paletteDrilledSection !== null) return paletteSectionDescription(paletteDrilledSection);
+    return null;
+  }, [paletteDrilledNodeTypeKey, paletteDrilledSection, paletteSearching, nodeTypesByKey]);
 
   const onPaletteSearchActiveChange = useCallback((active: boolean) => {
     setPaletteSearching(active);
-    if (active) setPaletteDrilledSection(null);
+    if (active) {
+      setPaletteDrilledSection(null);
+      setPaletteDrilledNodeTypeKey(null);
+    }
+  }, []);
+
+  const onPaletteDrilledSectionChange = useCallback((next: FlowPaletteSectionId | null) => {
+    setPaletteDrilledSection(next);
+    setPaletteDrilledNodeTypeKey(null);
   }, []);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const screenToFlowPointRef = useRef<((p: { x: number; y: number }) => { x: number; y: number }) | null>(null);
@@ -377,6 +423,7 @@ const FlowEditor: React.FC<{
     pendingEdgeInsertRef.current = null;
     pendingOutputAppendRef.current = null;
     setPaletteDrilledSection(null);
+    setPaletteDrilledNodeTypeKey(null);
     setPaletteSearching(false);
     setNodePaletteOpen(false);
   }, []);
@@ -537,7 +584,8 @@ const FlowEditor: React.FC<{
   );
 
   const insertNodeOnSplitEdge = useCallback(
-    (pending: EdgeInsertPayload, typeKey: string): boolean => {
+    (pending: EdgeInsertPayload, placement: FlowPalettePlacement): boolean => {
+      const { typeKey } = placement;
       const nt = nodeTypesByKey[typeKey];
       if (!nt) return false;
       if (inputHandleCount(nt) < 1 || (nt.outputs ?? 0) < 1) return false;
@@ -561,7 +609,7 @@ const FlowEditor: React.FC<{
 
       const newId = uuid();
       const pos = snapToFlowGrid({ x: pending.flowPosition.x, y: pending.flowPosition.y });
-      const baseName = nt.label ? `${nt.label}` : typeKey;
+      const baseName = baseNameForPalettePlacement(placement, nodeTypesByKey);
       const uniqueName = makeUniqueNodeName(
         baseName,
         nodes.map((n) => n.data.flowNode.name),
@@ -571,7 +619,7 @@ const FlowEditor: React.FC<{
         name: uniqueName,
         type: typeKey,
         position: [pos.x, pos.y],
-        parameters: initialParametersForNodeType(typeKey),
+        parameters: parametersForPalettePlacement(placement),
         disabled: false,
         on_error: 'stop',
         notes: null,
@@ -616,7 +664,8 @@ const FlowEditor: React.FC<{
   );
 
   const appendNodeAfterOutput = useCallback(
-    (pending: OutputAppendPayload, typeKey: string): boolean => {
+    (pending: OutputAppendPayload, placement: FlowPalettePlacement): boolean => {
+      const { typeKey } = placement;
       const nt = nodeTypesByKey[typeKey];
       if (!nt) return false;
       if (inputHandleCount(nt) < 1 || (nt.outputs ?? 0) < 1) return false;
@@ -633,7 +682,7 @@ const FlowEditor: React.FC<{
       const dx = FLOW_CANVAS_GRID_PX * 8;
       const pos = snapToFlowGrid({ x: srcNode.position.x + dx, y: srcNode.position.y });
       const newId = uuid();
-      const baseName = nt.label ? `${nt.label}` : typeKey;
+      const baseName = baseNameForPalettePlacement(placement, nodeTypesByKey);
       const uniqueName = makeUniqueNodeName(
         baseName,
         nodes.map((n) => n.data.flowNode.name),
@@ -643,7 +692,7 @@ const FlowEditor: React.FC<{
         name: uniqueName,
         type: typeKey,
         position: [pos.x, pos.y],
-        parameters: initialParametersForNodeType(typeKey),
+        parameters: parametersForPalettePlacement(placement),
         disabled: false,
         on_error: 'stop',
         notes: null,
@@ -678,12 +727,12 @@ const FlowEditor: React.FC<{
     [edges, nodeTypesByKey, nodes, onEdgesChange, onNodesChange],
   );
 
-  const addNodeFromTypeAtViewCenter = useCallback(
-    (typeKey: string) => {
+  const addNodeFromPalettePlacement = useCallback(
+    (placement: FlowPalettePlacement) => {
       const pendingEdge = pendingEdgeInsertRef.current;
       if (pendingEdge) {
         pendingEdgeInsertRef.current = null;
-        const ok = insertNodeOnSplitEdge(pendingEdge, typeKey);
+        const ok = insertNodeOnSplitEdge(pendingEdge, placement);
         if (ok) {
           closePalette();
           return;
@@ -695,7 +744,7 @@ const FlowEditor: React.FC<{
       const pendingAppend = pendingOutputAppendRef.current;
       if (pendingAppend) {
         pendingOutputAppendRef.current = null;
-        const ok = appendNodeAfterOutput(pendingAppend, typeKey);
+        const ok = appendNodeAfterOutput(pendingAppend, placement);
         if (ok) {
           closePalette();
           return;
@@ -708,11 +757,12 @@ const FlowEditor: React.FC<{
       const el = wrapperRef.current;
       if (!stf || !el) return;
 
+      const { typeKey } = placement;
       const r = el.getBoundingClientRect();
       const p = snapToFlowGrid(stf({ x: r.left + r.width / 2, y: r.top + r.height / 2 }));
       const nt = nodeTypesByKey[typeKey];
       const id = uuid();
-      const baseName = nt?.label ? `${nt.label}` : typeKey;
+      const baseName = baseNameForPalettePlacement(placement, nodeTypesByKey);
       const uniqueName = makeUniqueNodeName(
         baseName,
         nodes.map((n) => n.data.flowNode.name),
@@ -722,7 +772,7 @@ const FlowEditor: React.FC<{
         name: uniqueName,
         type: typeKey,
         position: [p.x, p.y],
-        parameters: initialParametersForNodeType(typeKey),
+        parameters: parametersForPalettePlacement(placement),
         disabled: false,
         on_error: 'stop',
         notes: null,
@@ -749,11 +799,12 @@ const FlowEditor: React.FC<{
         event.dataTransfer.getData('application/flow-node-type') ||
         event.dataTransfer.getData('text/plain');
       if (!typeKey) return;
+      const placement = parseFlowNodeDragPayload(typeKey, event.dataTransfer);
 
       const pendingEdge = pendingEdgeInsertRef.current;
       if (pendingEdge) {
         pendingEdgeInsertRef.current = null;
-        const ok = insertNodeOnSplitEdge(pendingEdge, typeKey);
+        const ok = insertNodeOnSplitEdge(pendingEdge, placement);
         if (ok) {
           closePalette();
           return;
@@ -765,7 +816,7 @@ const FlowEditor: React.FC<{
       const pendingAppend = pendingOutputAppendRef.current;
       if (pendingAppend) {
         pendingOutputAppendRef.current = null;
-        const ok = appendNodeAfterOutput(pendingAppend, typeKey);
+        const ok = appendNodeAfterOutput(pendingAppend, placement);
         if (ok) {
           closePalette();
           return;
@@ -777,9 +828,9 @@ const FlowEditor: React.FC<{
       const stf = screenToFlowPointRef.current;
       if (!stf) return;
       const p = snapToFlowGrid(stf({ x: event.clientX, y: event.clientY }));
-      const nt = nodeTypesByKey[typeKey];
+      const nt = nodeTypesByKey[placement.typeKey];
       const id = uuid();
-      const baseName = nt?.label ? `${nt.label}` : typeKey;
+      const baseName = baseNameForPalettePlacement(placement, nodeTypesByKey);
       const uniqueName = makeUniqueNodeName(
         baseName,
         nodes.map((n) => n.data.flowNode.name),
@@ -787,9 +838,9 @@ const FlowEditor: React.FC<{
       const flowNode: FlowNode = {
         id,
         name: uniqueName,
-        type: typeKey,
+        type: placement.typeKey,
         position: [p.x, p.y],
-        parameters: initialParametersForNodeType(typeKey),
+        parameters: parametersForPalettePlacement(placement),
         disabled: false,
         on_error: 'stop',
         notes: null,
@@ -1154,8 +1205,11 @@ const FlowEditor: React.FC<{
                     <>
                       <button
                         type="button"
-                        onClick={() => setPaletteDrilledSection(null)}
-                        aria-label="Back to categories"
+                        onClick={() => {
+                          if (paletteDrilledNodeTypeKey) setPaletteDrilledNodeTypeKey(null);
+                          else setPaletteDrilledSection(null);
+                        }}
+                        aria-label="Back"
                         className="-ml-1 -mt-0.5 shrink-0 rounded-md p-1.5 text-[#5d656e] transition hover:bg-white/70"
                       >
                         <ChevronLeftIcon className="h-5 w-5" />
@@ -1167,9 +1221,9 @@ const FlowEditor: React.FC<{
                         >
                           {paletteDrillHeading}
                         </h2>
-                        {paletteDrilledSection !== null && (
+                        {paletteDrillSubtitle && (
                           <p className="mt-1 text-sm font-normal leading-snug text-[#5d656e]">
-                            {paletteSectionDescription(paletteDrilledSection)}
+                            {paletteDrillSubtitle}
                           </p>
                         )}
                       </div>
@@ -1203,10 +1257,12 @@ const FlowEditor: React.FC<{
                 nodeTypes={nodeTypes}
                 embedInDrawer
                 drilledSection={paletteDrilledSection}
-                onDrilledSectionChange={setPaletteDrilledSection}
+                onDrilledSectionChange={onPaletteDrilledSectionChange}
+                drilledNodeTypeKey={paletteDrilledNodeTypeKey}
+                onDrilledNodeTypeKeyChange={setPaletteDrilledNodeTypeKey}
                 onSearchActiveChange={onPaletteSearchActiveChange}
                 searchInputRef={searchInputRef}
-                onNodeTypeDoubleClick={addNodeFromTypeAtViewCenter}
+                onNodeTypeDoubleClick={addNodeFromPalettePlacement}
               />
             </div>
           </aside>

@@ -14,6 +14,13 @@ import {
   paletteSectionMatchesQuery,
   type FlowPaletteSectionId,
 } from './flowPaletteGroups';
+import {
+  nodeTypeHasPaletteActions,
+  paletteActionGroupsForNodeType,
+  setFlowNodeDragData,
+  type FlowPaletteAction,
+  type FlowPalettePlacement,
+} from './flowPaletteActions';
 
 function emptyBuckets(): Record<FlowPaletteSectionId, FlowNodeType[]> {
   return {
@@ -37,65 +44,158 @@ function nodeMatchesPaletteQuery(nt: FlowNodeType, ql: string): boolean {
   return hitLabel || hitKey || Boolean(hitDesc) || Boolean(hitCat) || Boolean(hitIcon) || Boolean(hitPalette);
 }
 
+const paletteNodeRowClass = [
+  'group relative mx-3 flex cursor-grab select-none rounded-md border border-transparent py-2.5 pl-3 pr-2 transition active:cursor-grabbing',
+  'before:absolute before:inset-y-0 before:left-0 before:z-10 before:border-l-2 before:border-transparent hover:bg-white hover:shadow-[0_1px_0_rgba(0,0,0,0.04)] hover:before:border-[#5297d9]',
+].join(' ');
+
 function PaletteNodeList(props: {
   title: string;
   items: FlowNodeType[];
-  onNodeTypeDoubleClick?: (typeKey: string) => void;
+  onNodeTypeClick?: (nt: FlowNodeType) => void;
+  onNodeTypeDoubleClick?: (placement: FlowPalettePlacement) => void;
 }) {
-  const { title, items, onNodeTypeDoubleClick } = props;
+  const { title, items, onNodeTypeClick, onNodeTypeDoubleClick } = props;
   return (
     <div role="region" aria-label={`${title} nodes`}>
       <ul className="list-none pb-2">
-        {items.map((nt) => (
-          <li key={nt.key}>
-            <div
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.effectAllowed = 'copy';
-                e.dataTransfer.setData('application/flow-node-type', nt.key);
-                e.dataTransfer.setData('text/plain', nt.key);
-              }}
-              onDoubleClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                onNodeTypeDoubleClick?.(nt.key);
-              }}
-              title={nt.description}
-              className={[
-                'group relative mx-3 flex cursor-grab select-none rounded-md border border-transparent py-2.5 pl-3 pr-2 transition active:cursor-grabbing',
-                'before:absolute before:inset-y-0 before:left-0 before:z-10 before:border-l-2 before:border-transparent hover:bg-white hover:shadow-[0_1px_0_rgba(0,0,0,0.04)] hover:before:border-[#5297d9]',
-              ].join(' ')}
-            >
+        {items.map((nt) => {
+          const hasActions = nodeTypeHasPaletteActions(nt);
+          return (
+            <li key={nt.key}>
               <div
-                className={[
-                  'mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border',
-                  nt.is_trigger ? 'border-[#f0d9d6] bg-[#fff7f6]' : 'border-[#e6eaef] bg-white',
-                ].join(' ')}
-                aria-hidden
+                draggable
+                onDragStart={(e) => {
+                  setFlowNodeDragData(e.dataTransfer, { typeKey: nt.key });
+                }}
+                onClick={(e) => {
+                  if (!hasActions) return;
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onNodeTypeClick?.(nt);
+                }}
+                onDoubleClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onNodeTypeDoubleClick?.({ typeKey: nt.key });
+                }}
+                title={nt.description}
+                className={paletteNodeRowClass}
               >
-                <FlowNodeTypeIcon
-                  iconKey={nt.icon_key}
-                  fallback={nt.is_trigger ? 'trigger' : 'process'}
-                  className={
-                    nt.is_trigger ? 'h-[22px] w-[22px] text-[#a8b0ba]' : 'h-5 w-5 text-[#94a3b8]'
-                  }
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-[14px] font-semibold leading-tight text-[#22262b] group-hover:text-[#2066a9]">
-                  {nt.label}
+                <div
+                  className={[
+                    'mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border',
+                    nt.is_trigger ? 'border-[#f0d9d6] bg-[#fff7f6]' : 'border-[#e6eaef] bg-white',
+                  ].join(' ')}
+                  aria-hidden
+                >
+                  <FlowNodeTypeIcon
+                    iconKey={nt.icon_key}
+                    fallback={nt.is_trigger ? 'trigger' : 'process'}
+                    className={
+                      nt.is_trigger ? 'h-[22px] w-[22px] text-[#a8b0ba]' : 'h-5 w-5 text-[#94a3b8]'
+                    }
+                  />
                 </div>
-                {nt.description && (
-                  <div className="mt-1 line-clamp-2 text-[12px] leading-snug text-[#5d656e]">
-                    {nt.description}
+                <div className="min-w-0 flex-1">
+                  <div className="text-[14px] font-semibold leading-tight text-[#22262b] group-hover:text-[#2066a9]">
+                    {nt.label}
                   </div>
-                )}
+                  {nt.description && (
+                    <div className="mt-1 line-clamp-2 text-[12px] leading-snug text-[#5d656e]">
+                      {nt.description}
+                    </div>
+                  )}
+                </div>
+                {hasActions ? (
+                  <ChevronRightIcon className="mt-1 h-3.5 w-3.5 shrink-0 text-[#7c8796]" aria-hidden />
+                ) : null}
               </div>
-            </div>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
     </div>
+  );
+}
+
+function PaletteActionList(props: {
+  nodeType: FlowNodeType;
+  onActionDoubleClick?: (placement: FlowPalettePlacement) => void;
+}) {
+  const { nodeType, onActionDoubleClick } = props;
+  const groups = useMemo(() => paletteActionGroupsForNodeType(nodeType), [nodeType]);
+  const actionCount = useMemo(() => groups.reduce((n, g) => n + g.actions.length, 0), [groups]);
+
+  return (
+    <div role="region" aria-label={`${nodeType.label} actions`}>
+      <div className="border-b border-[#dfe3e9] bg-[#fafbfc] px-4 py-2">
+        <div className="text-[12px] font-semibold text-[#5d656e]">Actions ({actionCount})</div>
+      </div>
+      {groups.map((group) => (
+        <div key={group.label} className="border-b border-[#dfe3e9] last:border-b-0">
+          <div className="bg-[#fafbfc] px-4 py-2">
+            <div className="text-[11px] font-bold uppercase tracking-wide text-[#6b7280]">{group.label}</div>
+          </div>
+          <ul className="list-none pb-2">
+            {group.actions.map((action) => (
+              <PaletteActionRow
+                key={action.key}
+                nodeType={nodeType}
+                action={action}
+                onActionDoubleClick={onActionDoubleClick}
+              />
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PaletteActionRow(props: {
+  nodeType: FlowNodeType;
+  action: FlowPaletteAction;
+  onActionDoubleClick?: (placement: FlowPalettePlacement) => void;
+}) {
+  const { nodeType, action, onActionDoubleClick } = props;
+  const placement: FlowPalettePlacement = {
+    typeKey: nodeType.key,
+    parameters: action.parameters,
+    nameHint: action.label,
+  };
+
+  return (
+    <li>
+      <div
+        draggable
+        onDragStart={(e) => {
+          setFlowNodeDragData(e.dataTransfer, placement);
+        }}
+        onDoubleClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          onActionDoubleClick?.(placement);
+        }}
+        className={paletteNodeRowClass}
+      >
+        <div
+          className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#e6eaef] bg-white"
+          aria-hidden
+        >
+          <FlowNodeTypeIcon
+            iconKey={nodeType.icon_key}
+            fallback={nodeType.is_trigger ? 'trigger' : 'process'}
+            className="h-5 w-5 text-[#94a3b8]"
+          />
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-semibold leading-tight text-[#22262b] group-hover:text-[#2066a9]">
+            {action.label}
+          </div>
+        </div>
+      </div>
+    </li>
   );
 }
 
@@ -106,17 +206,22 @@ const FlowNodePalette: React.FC<{
   /** When set with `onDrilledSectionChange`, drill state is controlled (e.g. FlowEditor header). */
   drilledSection?: FlowPaletteSectionId | null;
   onDrilledSectionChange?: (next: FlowPaletteSectionId | null) => void;
+  /** When set with `onDrilledNodeTypeKeyChange`, node action drill is controlled by the drawer header. */
+  drilledNodeTypeKey?: string | null;
+  onDrilledNodeTypeKeyChange?: (next: string | null) => void;
   /** Fired when search has text (parent may clear drill and update the drawer title). */
   onSearchActiveChange?: (active: boolean) => void;
   searchInputRef?: React.Ref<HTMLInputElement>;
   /** Double-click: add an unconnected node on the canvas and open its configuration. */
-  onNodeTypeDoubleClick?: (typeKey: string) => void;
+  onNodeTypeDoubleClick?: (placement: FlowPalettePlacement) => void;
   className?: string;
 }> = ({
   nodeTypes,
   embedInDrawer,
   drilledSection: drilledProp,
   onDrilledSectionChange,
+  drilledNodeTypeKey: drilledNodeProp,
+  onDrilledNodeTypeKeyChange,
   onSearchActiveChange,
   searchInputRef,
   onNodeTypeDoubleClick,
@@ -124,10 +229,23 @@ const FlowNodePalette: React.FC<{
 }) => {
   const [query, setQuery] = useState('');
   const [internalDrilledSection, setInternalDrilledSection] = useState<FlowPaletteSectionId | null>(null);
+  const [internalDrilledNodeTypeKey, setInternalDrilledNodeTypeKey] = useState<string | null>(null);
   const drillControlled =
     drilledProp !== undefined && typeof onDrilledSectionChange === 'function';
   const drilledSection = drillControlled ? drilledProp! : internalDrilledSection;
   const setDrilledSection = drillControlled ? onDrilledSectionChange! : setInternalDrilledSection;
+
+  const nodeDrillControlled =
+    drilledNodeProp !== undefined && typeof onDrilledNodeTypeKeyChange === 'function';
+  const drilledNodeTypeKey = nodeDrillControlled ? drilledNodeProp! : internalDrilledNodeTypeKey;
+  const setDrilledNodeTypeKey = nodeDrillControlled
+    ? onDrilledNodeTypeKeyChange!
+    : setInternalDrilledNodeTypeKey;
+
+  const nodeTypesByKey = useMemo(
+    () => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])),
+    [nodeTypes],
+  );
 
   const buckets = useMemo(() => {
     const b = emptyBuckets();
@@ -156,6 +274,13 @@ const FlowNodePalette: React.FC<{
     return visibleSections.includes(drilledSection) ? drilledSection : null;
   }, [searching, drilledSection, visibleSections]);
 
+  const effectiveNodeDrill = useMemo((): string | null => {
+    if (!drilledNodeTypeKey) return null;
+    const nt = nodeTypesByKey[drilledNodeTypeKey];
+    if (!nt || !nodeTypeHasPaletteActions(nt)) return null;
+    return drilledNodeTypeKey;
+  }, [drilledNodeTypeKey, nodeTypesByKey]);
+
   useEffect(() => {
     onSearchActiveChange?.(searching);
   }, [searching, onSearchActiveChange]);
@@ -168,9 +293,22 @@ const FlowNodePalette: React.FC<{
     }
   }, [drillControlled, drilledProp, effectiveDrill, onDrilledSectionChange]);
 
+  useEffect(() => {
+    if (!nodeDrillControlled || !onDrilledNodeTypeKeyChange) return;
+    if (drilledNodeProp !== null && effectiveNodeDrill === null) {
+      onDrilledNodeTypeKeyChange(null);
+    }
+  }, [nodeDrillControlled, drilledNodeProp, effectiveNodeDrill, onDrilledNodeTypeKeyChange]);
+
   const drill = effectiveDrill;
   const drillItems = drill !== null ? buckets[drill] : [];
   const drillTitle = drill !== null ? paletteSectionLabel(drill) : '';
+  const drilledNodeType = effectiveNodeDrill ? nodeTypesByKey[effectiveNodeDrill] ?? null : null;
+
+  const onNodeTypeClick = (nt: FlowNodeType) => {
+    if (!nodeTypeHasPaletteActions(nt)) return;
+    setDrilledNodeTypeKey(nt.key);
+  };
 
   return (
     <div
@@ -199,7 +337,10 @@ const FlowNodePalette: React.FC<{
               onChange={(e) => {
                 const v = e.target.value;
                 setQuery(v);
-                if (v.trim()) setDrilledSection(null);
+                if (v.trim()) {
+                  setDrilledSection(null);
+                  setDrilledNodeTypeKey(null);
+                }
               }}
               placeholder="Search nodes…"
               className="w-full rounded-md border border-[#cdd3dc] bg-white py-2 pl-10 pr-3 text-sm text-[#22262b] placeholder:text-[#8b959f] focus:border-[#5297d9] focus:outline-none focus:ring-1 focus:ring-[#5297d9]"
@@ -209,7 +350,29 @@ const FlowNodePalette: React.FC<{
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto bg-[#fafbfc] pb-10">
         <div className="flex flex-col">
-          {searching ? (
+          {effectiveNodeDrill && drilledNodeType ? (
+            <div className="flex flex-col">
+              {!embedInDrawer && (
+                <div className="border-b border-[#dfe3e9]">
+                  <button
+                    type="button"
+                    onClick={() => setDrilledNodeTypeKey(null)}
+                    className={[
+                      'group relative flex w-full cursor-pointer select-none items-center gap-2 text-left',
+                      'bg-[#fafbfc] py-2.5 pl-2 pr-3 text-[13px] font-bold leading-snug text-[#22262b] outline-none transition',
+                      'before:absolute before:inset-y-0 before:left-0 before:border-l-2 before:border-transparent hover:before:border-[#5297d9]',
+                    ].join(' ')}
+                    aria-expanded
+                    aria-label={`Back to ${drillTitle || 'nodes'}`}
+                  >
+                    <ChevronLeftIcon className="h-3.5 w-3.5 shrink-0 text-[#7c8796]" aria-hidden />
+                    <span className="min-w-0 flex-1">{drilledNodeType.label}</span>
+                  </button>
+                </div>
+              )}
+              <PaletteActionList nodeType={drilledNodeType} onActionDoubleClick={onNodeTypeDoubleClick} />
+            </div>
+          ) : searching ? (
             visibleSections.map((section) => {
               const items = buckets[section];
               const count = items.length;
@@ -226,6 +389,7 @@ const FlowNodePalette: React.FC<{
                   <PaletteNodeList
                     title={title}
                     items={items}
+                    onNodeTypeClick={onNodeTypeClick}
                     onNodeTypeDoubleClick={onNodeTypeDoubleClick}
                   />
                 </div>
@@ -248,9 +412,7 @@ const FlowNodePalette: React.FC<{
                   >
                     <ChevronLeftIcon className="h-3.5 w-3.5 shrink-0 text-[#7c8796]" aria-hidden />
                     <span className="min-w-0 flex-1">
-                      {drillItems.length
-                        ? `${drillTitle} (${drillItems.length})`
-                        : drillTitle}
+                      {drillItems.length ? `${drillTitle} (${drillItems.length})` : drillTitle}
                     </span>
                   </button>
                 </div>
@@ -258,6 +420,7 @@ const FlowNodePalette: React.FC<{
               <PaletteNodeList
                 title={drillTitle}
                 items={drillItems}
+                onNodeTypeClick={onNodeTypeClick}
                 onNodeTypeDoubleClick={onNodeTypeDoubleClick}
               />
             </div>
