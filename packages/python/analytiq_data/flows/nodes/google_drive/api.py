@@ -12,7 +12,6 @@ import httpx
 import analytiq_data as ad
 
 _API_ROOT = "https://www.googleapis.com"
-_UPLOAD_ROOT = "https://www.googleapis.com/upload"
 
 
 class GoogleDriveApiError(RuntimeError):
@@ -63,14 +62,14 @@ async def google_api_request(
     headers: dict[str, str] | None = None,
     expect_json: bool = True,
 ) -> Any:
-    """Call ``www.googleapis.com`` (or upload host when *path* starts with ``/upload``)."""
+    """Call ``www.googleapis.com`` (upload paths use ``/upload/drive/v3/...``)."""
 
     qs = {k: v for k, v in (query or {}).items() if v is not None and v != ""}
     if url:
         req_url = url
     else:
-        base = _UPLOAD_ROOT if path.startswith("/upload") else _API_ROOT
-        req_url = f"{base}{path}"
+        # Upload endpoints use ``/upload/drive/v3/...`` under www.googleapis.com (not a separate host path).
+        req_url = f"{_API_ROOT}{path}"
     hdrs = {"Authorization": f"Bearer {token}"}
     if headers:
         hdrs.update(headers)
@@ -216,7 +215,7 @@ async def resumable_upload(
 
     async with httpx.AsyncClient(timeout=300.0) as client:
         init = await client.post(
-            f"{_UPLOAD_ROOT}/upload/drive/v3/files",
+            f"{_API_ROOT}/upload/drive/v3/files",
             params={"uploadType": "resumable", "supportsAllDrives": "true"},
             headers={
                 "Authorization": f"Bearer {token}",

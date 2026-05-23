@@ -127,6 +127,26 @@ async def test_file_download_preserves_meta() -> None:
     assert "data" in out.binary
 
 
+@pytest.mark.asyncio
+async def test_upload_multipart_uses_google_upload_path() -> None:
+    from analytiq_data.flows.nodes.google_drive.api import upload_multipart_file
+
+    captured: dict[str, str] = {}
+
+    async def fake_request(token, method, path, **kwargs):
+        captured["path"] = path
+        return {"id": "new-file"}
+
+    with patch(
+        "analytiq_data.flows.nodes.google_drive.api.google_api_request",
+        new_callable=AsyncMock,
+        side_effect=fake_request,
+    ):
+        out = await upload_multipart_file("tok", {"name": "x"}, b"data", "text/plain")
+    assert out["id"] == "new-file"
+    assert captured["path"] == "/upload/drive/v3/files"
+
+
 def test_parameter_schema_merges_operations(schema: dict) -> None:
     op = schema["properties"]["operation"]
     assert "x-ui-enum-by" in op

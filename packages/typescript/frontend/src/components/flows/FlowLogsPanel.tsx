@@ -21,6 +21,7 @@ import {
   flowWorkspaceMenuTriggerIconBtnClass,
 } from './flowWorkspaceMenu';
 import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
+import { flowPanelColResizeHandleClass } from './flowUiClasses';
 
 function isRunning(e: FlowExecution) {
   return e.status === 'queued' || e.status === 'running';
@@ -44,9 +45,9 @@ function ExecutionErrorBanner({ error }: { error: Record<string, unknown> | null
   const message = typeof error.message === 'string' ? error.message : null;
   if (message == null || message === '') return null;
   return (
-    <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-950">
+    <div className="min-w-0 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-950">
       <div className="text-[11px] font-semibold uppercase tracking-wide text-red-800">Execution failed</div>
-      <pre className="mt-1 whitespace-pre-wrap break-words font-mono text-xs leading-snug">{message}</pre>
+      <pre className="mt-1 min-w-0 whitespace-pre-wrap break-words font-mono text-xs leading-snug">{message}</pre>
     </div>
   );
 }
@@ -341,31 +342,27 @@ const FlowLogsPanel: React.FC<{
             )}
             {execution && (
               <>
-                {activeTab === 'overview' && (
-                  <div className="mb-3 flex items-baseline justify-between gap-2 border-b border-[#eceff2] pb-2">
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="flex-none whitespace-nowrap text-sm font-semibold text-gray-900">{summaryLine}</div>
-                      <ExecutionErrorBanner error={execution.error} />
-                    </div>
-                    <div className="inline-flex flex-none rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
-                      {(['overview', 'details'] as const).map((t) => (
-                        <button
-                          key={t}
-                          type="button"
-                          onClick={() => setActiveTab(t)}
-                          className={[
-                            'rounded px-2 py-1 font-semibold',
-                            activeTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
-                          ].join(' ')}
-                        >
-                          {t === 'overview' ? 'Overview' : 'Details'}
-                        </button>
-                      ))}
-                    </div>
+                <div className="mb-3 flex items-start justify-between gap-2 border-b border-[#eceff2] pb-2">
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="text-sm font-semibold text-gray-900">{summaryLine}</div>
+                    <ExecutionErrorBanner error={execution.error} />
                   </div>
-                )}
-
-                {/* In details mode, this strip is rendered inside the left panel (next to the divider). */}
+                  <div className="inline-flex shrink-0 rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
+                    {(['overview', 'details'] as const).map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        onClick={() => setActiveTab(t)}
+                        className={[
+                          'rounded px-2 py-1 font-semibold',
+                          activeTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
+                        ].join(' ')}
+                      >
+                        {t === 'overview' ? 'Overview' : 'Details'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
                 {sortedRunEntries.length === 0 ? (
                   <div className="text-sm text-gray-600">No node results recorded yet for this run.</div>
@@ -444,7 +441,7 @@ const FlowLogsPanel: React.FC<{
                     {activeTab === 'details' && (
                       <PanelGroup
                         direction="horizontal"
-                        className="min-h-0"
+                        className="flex min-h-[240px] w-full min-w-0"
                         onLayout={(sizes) => {
                           const left = sizes[0] ?? 0;
                           if (left > 0) {
@@ -458,33 +455,8 @@ const FlowLogsPanel: React.FC<{
                           }
                         }}
                       >
-                        <Panel defaultSize={nodeSplitLeftPct} minSize={22} className="min-w-0">
-                          <div className="group relative min-w-0">
-                            {/* Buttons must live inside this strip (details mode). */}
-                            <div className="mb-3 flex items-baseline justify-between gap-2 border-b border-[#eceff2] pb-2 pr-2">
-                              <div className="min-w-0 flex-1 space-y-2">
-                                <div className="flex-none whitespace-nowrap text-sm font-semibold text-gray-900">{summaryLine}</div>
-                                <ExecutionErrorBanner error={execution.error} />
-                              </div>
-                              <div className="pointer-events-none opacity-0 transition group-hover:opacity-100">
-                                <div className="pointer-events-auto inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px] shadow-sm">
-                                  {(['overview', 'details'] as const).map((t) => (
-                                    <button
-                                      key={t}
-                                      type="button"
-                                      onClick={() => setActiveTab(t)}
-                                      className={[
-                                        'rounded px-2 py-1 font-semibold',
-                                        activeTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
-                                      ].join(' ')}
-                                    >
-                                      {t === 'overview' ? 'Overview' : 'Details'}
-                                    </button>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-
+                        <Panel defaultSize={nodeSplitLeftPct} minSize={22} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+                          <div className="min-h-0 min-w-0 overflow-auto pr-1">
                             <ul className="divide-y divide-[#eceff2] rounded-md border border-[#e8eaed] bg-white">
                               {sortedRunEntries.map(({ nodeId, rec }) => {
                                 const ok = rec.status === 'success';
@@ -542,8 +514,8 @@ const FlowLogsPanel: React.FC<{
                             </ul>
                           </div>
                         </Panel>
-                        <PanelResizeHandle className="w-2 cursor-col-resize bg-transparent hover:bg-[#e8eaed]" />
-                        <Panel defaultSize={100 - nodeSplitLeftPct} minSize={35} className="min-w-0">
+                        <PanelResizeHandle className={flowPanelColResizeHandleClass} />
+                        <Panel defaultSize={100 - nodeSplitLeftPct} minSize={35} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
                           <div className="min-w-0">
                             <div className="rounded-md border border-gray-200 bg-white">
                               <div className="flex items-start justify-between gap-3 border-b border-[#eceff2] px-3 py-2">
