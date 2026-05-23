@@ -18,6 +18,7 @@ from .cron_exprs import (
     schedule_params_to_specs,
 )
 from .enqueue import enqueue_scheduled_flow_run
+from .registrations import delete_trigger_registrations, upsert_trigger_registrations
 from .leases import acquire_tick_lease
 from .poll_context import PollContext
 from .scheduler import FlowScheduler
@@ -143,6 +144,18 @@ class ActiveFlowRegistry:
                         run_immediately=run_immediately,
                     )
 
+            await upsert_trigger_registrations(
+                self._db,
+                organization_id=organization_id,
+                flow_id=flow_id,
+                flow_revid=flow_revid,
+                node_id=node["id"],
+                trigger_kind=trigger_kind,
+                timezone=timezone,
+                specs=specs,
+                anchors=anchors,
+            )
+
         if registered:
             self._triggers[flow_id] = registered
             logger.info(
@@ -185,6 +198,7 @@ class ActiveFlowRegistry:
     async def deregister_flow(self, flow_id: str) -> None:
         self._triggers.pop(flow_id, None)
         await self._scheduler.deregister_prefix(f"{flow_id}:")
+        await delete_trigger_registrations(self._db, flow_id=flow_id)
 
     def _job_id(self, flow_id: str, node_id: str, rule_index: int) -> str:
         return f"{flow_id}:{node_id}:{rule_index}"

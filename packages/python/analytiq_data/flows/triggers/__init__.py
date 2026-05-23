@@ -7,6 +7,8 @@ from .cron_exprs import (
     validate_cron_expression,
 )
 from .enqueue import enqueue_scheduled_flow_run
+from .registrations import delete_trigger_registrations, upsert_trigger_registrations
+from .schedule_test import enqueue_schedule_trigger_test_run
 from .leader import FlowSchedulerLeader, default_holder_id
 from .leases import acquire_tick_lease
 from .poll_context import PollContext, PollMode
@@ -31,7 +33,9 @@ __all__ = [
     "PollMode",
     "acquire_tick_lease",
     "default_holder_id",
+    "delete_trigger_registrations",
     "enqueue_scheduled_flow_run",
+    "enqueue_schedule_trigger_test_run",
     "ensure_flow_trigger_indexes",
     "get_flow_trigger_service",
     "load_node_static_data",
@@ -40,5 +44,6 @@ __all__ = [
     "schedule_params_to_crons",
     "start_flow_trigger_service",
     "stop_flow_trigger_service",
+    "upsert_trigger_registrations",
     "validate_cron_expression",
 ]

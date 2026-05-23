@@ -437,6 +437,18 @@ class StopWebhookTestRequest(BaseModel):
     revision_snapshot: FlowRevisionSnapshotRequest | None = None
 
 
+class ScheduleTriggerTestRequest(BaseModel):
+    revision_snapshot: FlowRevisionSnapshotRequest
+    trigger_node_id: str | None = Field(
+        None,
+        description="Schedule trigger node id; required when the graph has multiple schedule triggers.",
+    )
+
+
+class ScheduleTriggerTestResponse(BaseModel):
+    execution_id: str
+
+
 class ActivateFlowRequest(BaseModel):
     flow_revid: str | None = None
 
@@ -1343,6 +1355,77 @@ async def stop_listen_webhook_test(
     if leftover and not isinstance(leftover.get("production"), dict) and not isinstance(leftover.get("test"), dict):
         await db.flow_webhook_routes.delete_one({"_id": lid})
     return {"ok": True}
+
+
+@flows_router.post(
+    "/v0/orgs/{organization_id}/flows/{flow_id}/trigger-test/schedule",
+    response_model=ScheduleTriggerTestResponse,
+)
+async def trigger_test_schedule(
+    organization_id: str,
+    flow_id: str,
+    req: ScheduleTriggerTestRequest,
+    current_user: User = Depends(get_org_user),
+):
+    """
+    Run the schedule trigger once against the editor snapshot (no activation required).
+
+    Enqueues a ``flow_run`` with ``revision_snapshot`` so unsaved graph changes are included.
+    """
+    db = await _get_db()
+    h = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
+    if not h:
+        raise HTTPException(status_code=404, detail="Flow not found")
+
+    snap = req.revision_snapshot
+    nodes = snap.nodes
+    try:
+        conns_dc = ad.flows.coerce_json_connections_to_dataclasses(snap.connections)
+    except (KeyError, TypeError, ValueError) as e:
+        raise HTTPException(status_code=400, detail=f"Invalid connections: {e}") from e
+    settings = snap.settings or {}
+    pin_data = snap.pin_data
+    try:
+        ad.flows.validate_revision(nodes, conns_dc, settings, pin_data)
+    except ad.flows.FlowValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    schedule_nodes = [
+        n for n in nodes if isinstance(n, dict) and n.get("type") == "flows.trigger.schedule"
+    ]
+    if not schedule_nodes:
+        raise HTTPException(status_code=400, detail="Flow has no schedule trigger")
+
+    trigger_node_id = (req.trigger_node_id or "").strip()
+    if not trigger_node_id:
+        if len(schedule_nodes) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail="Multiple schedule triggers; pass trigger_node_id",
+            )
+        trigger_node_id = str(schedule_nodes[0]["id"])
+
+    flow_revid_lineage = await _resolve_flow_revid_lineage(flow_id, None, db)
+    revision_snapshot = {
+        "nodes": nodes,
+        "connections": snap.connections,
+        "settings": settings,
+        "pin_data": pin_data,
+    }
+
+    try:
+        exec_id = await ad.flows.enqueue_schedule_trigger_test_run(
+            ad.common.get_analytiq_client(),
+            organization_id=organization_id,
+            flow_id=flow_id,
+            flow_revid_lineage=flow_revid_lineage,
+            revision_snapshot=revision_snapshot,
+            trigger_node_id=trigger_node_id,
+        )
+    except ad.flows.FlowValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    return ScheduleTriggerTestResponse(execution_id=exec_id)
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/run")

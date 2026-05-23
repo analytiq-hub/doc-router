@@ -71,9 +71,41 @@ const IoBlock: React.FC<{
 );
 
 const WEBHOOK_NODE_KEY = 'flows.trigger.webhook';
+const SCHEDULE_NODE_KEY = 'flows.trigger.schedule';
 
 /** Must match `MAX_PIN_UPLOAD_BYTES` in `app/routes/flows.py` pin binary upload. */
 const PIN_BINARY_MAX_BYTES = 50 * 1024 * 1024;
+
+const ScheduleTriggerTestHeader: React.FC<{
+  node: FlowNode;
+  readOnly: boolean;
+  busy?: boolean;
+  onTest?: (triggerNodeId: string) => void | Promise<void>;
+}> = ({ node, readOnly, busy = false, onTest }) => (
+  <div className="rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <p className="min-w-0 text-xs text-gray-600">
+        Run this schedule once using the current editor graph. Activation is not required.
+      </p>
+      <button
+        type="button"
+        disabled={readOnly || busy || !onTest}
+        onClick={() => void onTest?.(node.id)}
+        className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-red-200 bg-[#ff6d5a] px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {busy ? (
+          <span
+            className="inline-block h-3.5 w-3.5 shrink-0 animate-spin rounded-full border-2 border-white border-t-transparent"
+            aria-hidden
+          />
+        ) : (
+          <BeakerIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+        )}
+        {busy ? 'Running…' : 'Test trigger'}
+      </button>
+    </div>
+  </div>
+);
 
 const WebhookUrlHeader: React.FC<{
   node: FlowNode;
@@ -414,6 +446,8 @@ const FlowNodeConfigModal: React.FC<{
   webhookTestListening?: boolean;
   webhookTestListeningLeaf?: string | null;
   webhookTestListenBusy?: boolean;
+  onTestScheduleTrigger?: (triggerNodeId: string) => void | Promise<void>;
+  scheduleTestBusy?: boolean;
   /** When set, Binary tab View/Download can resolve `flow_blobs:` payloads for this execution. */
   flowBlobDownloadContext?: FlowExecutionBlobContext | null;
   /** Flow id for revision pin-binary upload URLs. */
@@ -444,6 +478,8 @@ const FlowNodeConfigModal: React.FC<{
   webhookTestListening = false,
   webhookTestListeningLeaf = null,
   webhookTestListenBusy = false,
+  onTestScheduleTrigger,
+  scheduleTestBusy = false,
   flowBlobDownloadContext = null,
   flowId = null,
   flowRevidForPins = null,
@@ -1023,6 +1059,14 @@ const FlowNodeConfigModal: React.FC<{
                     <TabPanels className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain p-3 [scrollbar-gutter:stable]">
                       <TabPanel>
                         <div className="min-w-0 space-y-4">
+                          {node && nodeType?.key === SCHEDULE_NODE_KEY ? (
+                            <ScheduleTriggerTestHeader
+                              node={node}
+                              readOnly={readOnly}
+                              busy={scheduleTestBusy}
+                              onTest={onTestScheduleTrigger}
+                            />
+                          ) : null}
                           {node && nodeType?.key === WEBHOOK_NODE_KEY ? (
                             <WebhookUrlHeader
                               node={node}

@@ -147,6 +147,7 @@ export default function FlowDetailPageClient({
   /** When set, `/webhook-test/{leaf}` is wired to this editor session (until Stop or TTL on server). */
   const [webhookTestListeningLeaf, setWebhookTestListeningLeaf] = useState<string | null>(null);
   const [webhookTestListenBusy, setWebhookTestListenBusy] = useState(false);
+  const [scheduleTestBusy, setScheduleTestBusy] = useState(false);
   /** Ignore webhook_test rows started before this listen (ms since epoch). */
   const webhookTestListenEpochMsRef = useRef(0);
   /** Last execution id we surfaced from webhook-test polling (for logs focus). */
@@ -647,6 +648,34 @@ export default function FlowDetailPageClient({
     [webhookTestStopInternal],
   );
 
+  const onTestScheduleTrigger = useCallback(
+    async (triggerNodeId: string) => {
+      if (isDraftRoute) {
+        setMessage('Save the flow once before testing the schedule trigger.');
+        return;
+      }
+      const revision_snapshot = buildRevisionSnapshotForRun();
+      if (!revision_snapshot) return;
+      const tid = triggerNodeId.trim();
+      if (!tid) return;
+      try {
+        setMessage('');
+        setScheduleTestBusy(true);
+        const res = await api.getHttpClient().post<{ execution_id?: string }>(
+          `/v0/orgs/${organizationId}/flows/${flowId}/trigger-test/schedule`,
+          { revision_snapshot, trigger_node_id: tid },
+        );
+        const eid = res.data.execution_id?.trim();
+        if (eid) setLogsFocusExecutionId(eid);
+      } catch (err: unknown) {
+        setMessage(getApiErrorMsg(err) || 'Failed to test schedule trigger');
+      } finally {
+        setScheduleTestBusy(false);
+      }
+    },
+    [api, buildRevisionSnapshotForRun, flowId, isDraftRoute, organizationId],
+  );
+
   // Poll while listening; tear down the listener server-side after the first matching webhook run is seen.
   useEffect(() => {
     const leaf = webhookTestListeningLeaf?.trim();
@@ -909,6 +938,8 @@ export default function FlowDetailPageClient({
                         onStopWebhookTestListen={isDraftRoute ? undefined : onStopWebhookTestListen}
                         webhookTestListeningLeaf={webhookTestListeningLeaf}
                         webhookTestListenBusy={webhookTestListenBusy}
+                        onTestScheduleTrigger={isDraftRoute ? undefined : onTestScheduleTrigger}
+                        scheduleTestBusy={scheduleTestBusy}
                         onExecuteStep={isDraftRoute ? undefined : onExecuteFlowStep}
                         executionForIo={executionForIo}
                         pinData={revision?.pin_data ?? null}

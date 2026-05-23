@@ -264,6 +264,8 @@ const FlowEditor: React.FC<{
   onStopWebhookTestListen?: (leaf: string) => void | Promise<void>;
   webhookTestListeningLeaf?: string | null;
   webhookTestListenBusy?: boolean;
+  onTestScheduleTrigger?: (triggerNodeId: string) => void | Promise<void>;
+  scheduleTestBusy?: boolean;
   /** Flow id for execution-scoped binary download URLs in the node modal. */
   flowId?: string | null;
   /**
@@ -298,6 +300,8 @@ const FlowEditor: React.FC<{
   onStopWebhookTestListen,
   webhookTestListeningLeaf = null,
   webhookTestListenBusy = false,
+  onTestScheduleTrigger,
+  scheduleTestBusy = false,
   flowId = null,
   flowRevidForPins = null,
   executionForIo,
@@ -1177,6 +1181,8 @@ const FlowEditor: React.FC<{
         webhookTestListening={Boolean((webhookTestListeningLeaf ?? '').trim())}
         webhookTestListeningLeaf={webhookTestListeningLeaf}
         webhookTestListenBusy={webhookTestListenBusy}
+        onTestScheduleTrigger={onTestScheduleTrigger}
+        scheduleTestBusy={scheduleTestBusy}
         flowOrgApi={flowOrgApi}
         flowBlobDownloadContext={flowBlobDownloadContext}
         flowId={flowId}

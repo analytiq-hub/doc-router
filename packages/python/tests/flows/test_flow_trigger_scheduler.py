@@ -254,3 +254,69 @@ async def test_trigger_service_start_stop(test_db, register_nodes, flow_revision
     assert svc.leader.is_leader is True
     assert svc.registry._triggers.get(flow_id)
     await svc.stop()
+
+
+@pytest.mark.asyncio
+async def test_enqueue_dedupe_skips_duplicate(test_db, register_nodes, aclient):
+    """Second enqueue with the same tick_key returns the existing execution id."""
+    items = [[ad.flows.FlowItem(json={"timestamp": "t0"}, binary={}, meta={})]]
+    tick_key = "2026-05-21T12:00"
+    kwargs = dict(
+        organization_id="org1",
+        flow_id="flow-dedupe",
+        flow_revid="rev1",
+        trigger_node_id="trig1",
+        trigger_type="schedule",
+        items=items,
+        tick_key=tick_key,
+        rule_index=0,
+    )
+    exec_id_1 = await ad.flows.enqueue_scheduled_flow_run(aclient, **kwargs)
+    exec_id_2 = await ad.flows.enqueue_scheduled_flow_run(aclient, **kwargs)
+    assert exec_id_1 == exec_id_2
+
+    db = ad.common.get_async_db(aclient)
+    assert await db.flow_executions.count_documents({"flow_id": "flow-dedupe"}) == 1
+    assert await db["queues.flow_run"].count_documents({}) == 1
+
+    doc = await db.flow_executions.find_one({"_id": ObjectId(exec_id_1)})
+    assert doc["trigger"].get("dedupe_key")
+
+
+@pytest.mark.asyncio
+async def test_registry_persists_trigger_registrations(test_db, register_nodes, flow_revision, aclient):
+    scheduler = ad.flows.FlowScheduler()
+    registry = ad.flows.ActiveFlowRegistry(
+        aclient,
+        scheduler,
+        leader_check=lambda: True,
+    )
+    db = ad.common.get_async_db(aclient)
+    try:
+        await registry.register_flow("org1", "flow1", str(flow_revision["_id"]), flow_revision)
+        regs = await db.flow_trigger_registrations.find({"flow_id": "flow1"}).to_list(10)
+        assert len(regs) == 1
+        assert regs[0]["node_id"] == "trig1"
+        assert regs[0]["trigger_kind"] == "schedule"
+        assert regs[0]["schedule_kind"] == "interval"
+        assert regs[0]["interval_secs"] == 300
+    finally:
+        await registry.deregister_flow("flow1")
+        await scheduler.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_registry_deregister_clears_trigger_registrations(
+    test_db, register_nodes, flow_revision, aclient
+):
+    scheduler = ad.flows.FlowScheduler()
+    registry = ad.flows.ActiveFlowRegistry(
+        aclient,
+        scheduler,
+        leader_check=lambda: True,
+    )
+    db = ad.common.get_async_db(aclient)
+    await registry.register_flow("org1", "flow1", str(flow_revision["_id"]), flow_revision)
+    await registry.deregister_flow("flow1")
+    assert await db.flow_trigger_registrations.count_documents({"flow_id": "flow1"}) == 0
+    await scheduler.shutdown()

@@ -568,3 +568,176 @@ async def test_process_flow_run_msg_completes_http_triggered_run(test_db, mock_a
     assert ex["run_data"]["c1"]["data"]["main"][0][0]["json"]["context_ids"] == ["a", "b", "c"]
     w1_api = ex["run_data"]["w1"]["data"]["main"][0][0]
     assert w1_api["json"]["body"]["from_server"] == "e2e-webhook-mock"
+
+
+@pytest.mark.asyncio
+async def test_schedule_immediate_run_completes(test_db, mock_auth, monkeypatch):
+    """
+    Saved flow with schedule trigger → register + immediate tick → ``process_flow_run_msg`` → ``success``.
+
+    Flow is created via HTTP; trigger registration uses the in-test registry (TestClient runs on a
+    different event loop than ``FlowTriggerService``, so activate is header-only here).
+    """
+    ad.flows.register_builtin_nodes()
+    monkeypatch.setattr(ad.flows, "get_flow_trigger_service", lambda: None)
+
+    r0 = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows",
+        json={"name": "Schedule E2E"},
+        headers=get_auth_headers(),
+    )
+    assert r0.status_code == 200, r0.text
+    flow_id = r0.json()["flow"]["flow_id"]
+
+    nodes = [
+        _std_node(
+            "trig1",
+            "Schedule",
+            "flows.trigger.schedule",
+            0,
+            {"rule": {"interval": [{"field": "minutes", "minutesInterval": 5}]}},
+        ),
+        _std_node(
+            "c1",
+            "Code",
+            "flows.code",
+            200,
+            {"python_code": _CODE_SNIPPET, "timeout_seconds": 5},
+        ),
+    ]
+    conns = {
+        "trig1": {
+            "main": [[{"dest_node_id": "c1", "connection_type": "main", "index": 0}]],
+        },
+    }
+    r1 = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        json={
+            "base_flow_revid": "",
+            "name": "Schedule E2E",
+            "nodes": nodes,
+            "connections": conns,
+            "settings": {"timezone": "UTC"},
+            "pin_data": None,
+        },
+        headers=get_auth_headers(),
+    )
+    assert r1.status_code == 200, r1.text
+    flow_revid = r1.json()["revision"]["flow_revid"]
+
+    r_act = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}/activate",
+        json={},
+        headers=get_auth_headers(),
+    )
+    assert r_act.status_code == 200, r_act.text
+    assert r_act.json()["flow"]["active"] is True
+
+    db = ad.common.get_async_db()
+    rev = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
+    assert rev is not None
+
+    aclient = ad.common.get_analytiq_client()
+    scheduler = ad.flows.FlowScheduler()
+    registry = ad.flows.ActiveFlowRegistry(
+        aclient,
+        scheduler,
+        leader_check=lambda: True,
+        lease_ttl_secs=60,
+    )
+    try:
+        await registry.register_flow(
+            TEST_ORG_ID,
+            flow_id,
+            flow_revid,
+            rev,
+            run_immediately=True,
+        )
+        await scheduler.drain_immediate()
+
+        execs = await db.flow_executions.find({"flow_id": flow_id}).to_list(10)
+        assert len(execs) == 1
+        exec_id = str(execs[0]["_id"])
+        assert execs[0]["mode"] == "schedule"
+        assert execs[0]["status"] == "queued"
+
+        regs = await db.flow_trigger_registrations.find({"flow_id": flow_id}).to_list(10)
+        assert len(regs) == 1
+        assert regs[0]["node_id"] == "trig1"
+
+        q0 = await db["queues.flow_run"].find_one({"msg.execution_id": exec_id})
+        assert q0 is not None
+
+        await process_flow_run_msg(aclient, q0)
+
+        last = await db.flow_executions.find_one({"_id": ObjectId(exec_id)})
+        assert last is not None
+        assert last.get("status") == "success", f"status={last.get('status')!r} err={last.get('error')!r}"
+        c1 = (last.get("run_data") or {}).get("c1")
+        assert c1 and c1.get("status") == "success"
+        assert c1["data"]["main"][0][0]["json"].get("e2e") == "schedule"
+        assert c1["data"]["main"][0][0]["json"].get("flow_revid_echo") == flow_revid
+    finally:
+        await registry.deregister_flow(flow_id)
+        await scheduler.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_post_trigger_test_schedule_enqueues_run(test_db, mock_auth):
+    """POST trigger-test/schedule enqueues a schedule-mode run from the editor snapshot."""
+    r0 = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows",
+        json={"name": "Schedule test trigger"},
+        headers=get_auth_headers(),
+    )
+    assert r0.status_code == 200, r0.text
+    flow_id = r0.json()["flow"]["flow_id"]
+
+    nodes = [
+        _std_node(
+            "trig1",
+            "Schedule",
+            "flows.trigger.schedule",
+            0,
+            {"rule": {"interval": [{"field": "minutes", "minutesInterval": 5}]}},
+        ),
+        _std_node(
+            "c1",
+            "Code",
+            "flows.code",
+            200,
+            {"python_code": _CODE_SNIPPET, "timeout_seconds": 5},
+        ),
+    ]
+    conns = {
+        "trig1": {
+            "main": [[{"dest_node_id": "c1", "connection_type": "main", "index": 0}]],
+        },
+    }
+    snapshot = {
+        "nodes": nodes,
+        "connections": conns,
+        "settings": {"timezone": "UTC"},
+        "pin_data": None,
+    }
+
+    r = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}/trigger-test/schedule",
+        json={"revision_snapshot": snapshot, "trigger_node_id": "trig1"},
+        headers=get_auth_headers(),
+    )
+    assert r.status_code == 200, r.text
+    exec_id = r.json()["execution_id"]
+    assert exec_id
+
+    db = ad.common.get_async_db()
+    exec_doc = await db.flow_executions.find_one({"_id": ObjectId(exec_id)})
+    assert exec_doc is not None
+    assert exec_doc["mode"] == "schedule"
+    assert exec_doc["status"] == "queued"
+    assert exec_doc.get("revision_snapshot") is not None
+    assert exec_doc["trigger"].get("test") is True
+
+    qdocs = await db["queues.flow_run"].find({}).to_list(10)
+    assert len(qdocs) == 1
+    assert qdocs[0]["msg"]["execution_id"] == exec_id
