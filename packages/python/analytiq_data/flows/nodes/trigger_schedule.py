@@ -55,7 +55,6 @@ class FlowsScheduleTriggerNode:
     palette_group = "trigger"
     is_trigger = True
     polling = False
-    is_merge = False
     min_inputs = 0
     max_inputs = 0
     outputs = 1

@@ -25,6 +25,8 @@ import analytiq_data as ad
 from .errors import node_error_envelope
 from .flow_settings import validate_flow_settings
 from .trace import pop_node_trace
+from .triggers.cron_exprs import poll_times_to_specs
+from .triggers.poll_defaults import resolve_poll_times
 
 
 logger = logging.getLogger(__name__)
@@ -224,6 +226,18 @@ def validate_revision(
                 raise FlowValidationError(
                     f"Node {ad.flows.node_name(n)}: {'; '.join(param_errs)}"
                 )
+        elif getattr(nt, "polling", False):
+            param_errs = nt.validate_parameters(n.get("parameters") or {})
+            if param_errs:
+                raise FlowValidationError(
+                    f"Node {ad.flows.node_name(n)}: {'; '.join(param_errs)}"
+                )
+            try:
+                poll_times_to_specs(resolve_poll_times(n.get("parameters") or {}))
+            except Exception as e:
+                raise FlowValidationError(
+                    f"Node {ad.flows.node_name(n)}: {e}"
+                ) from e
 
     for msg in validate_flow_settings(settings):
         raise FlowValidationError(msg)

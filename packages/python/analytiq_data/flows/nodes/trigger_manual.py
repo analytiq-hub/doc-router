@@ -16,6 +16,7 @@ class FlowsManualTriggerNode:
     category = "Generic"
     palette_group = "trigger"
     is_trigger = True
+    polling = False
     is_merge = False
     min_inputs = 0
     max_inputs = 0

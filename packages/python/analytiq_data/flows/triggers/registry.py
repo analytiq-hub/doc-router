@@ -21,6 +21,7 @@ from .enqueue import enqueue_scheduled_flow_run
 from .registrations import delete_trigger_registrations, upsert_trigger_registrations
 from .leases import acquire_tick_lease
 from .poll_context import PollContext
+from .poll_defaults import resolve_poll_times
 from .scheduler import FlowScheduler
 from .static_data import load_node_static_data, save_node_static_data
 
@@ -96,7 +97,7 @@ class ActiveFlowRegistry:
                 trigger_kind = "schedule"
             elif getattr(nt, "polling", False):
                 try:
-                    specs = poll_times_to_specs(params.get("poll_times"))
+                    specs = poll_times_to_specs(resolve_poll_times(params))
                 except CronExpressionError as e:
                     raise ad.flows.FlowValidationError(
                         f"Poll trigger {ad.flows.node_name(node)}: {e}"
