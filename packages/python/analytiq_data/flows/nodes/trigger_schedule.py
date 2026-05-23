@@ -7,7 +7,7 @@ from typing import Any
 
 import analytiq_data as ad
 
-from analytiq_data.flows.triggers.cron_exprs import schedule_params_to_specs
+from analytiq_data.flows.triggers.cron_exprs import MAX_SCHEDULE_INTERVAL_RULES, schedule_params_to_specs
 from analytiq_data.flows.triggers.poll_context import PollContext, require_poll_context
 
 _INTERVAL_ITEM_SCHEMA: dict[str, Any] = {
@@ -77,6 +77,7 @@ class FlowsScheduleTriggerNode:
                     "interval": {
                         "type": "array",
                         "minItems": 1,
+                        "maxItems": MAX_SCHEDULE_INTERVAL_RULES,
                         "items": _INTERVAL_ITEM_SCHEMA,
                     },
                 },

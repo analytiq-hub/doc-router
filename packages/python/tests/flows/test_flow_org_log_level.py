@@ -19,6 +19,28 @@ def test_flow_log_level_includes_event_levels() -> None:
     assert ad.flows.flow_log_level_includes("TRACE", "debug") is True
 
 
+def test_flow_log_level_includes_none_defaults_to_error_only() -> None:
+    """Missing org level (legacy contexts) must still record error-level trace events."""
+
+    assert ad.flows.flow_log_level_includes(None, "error") is True
+    assert ad.flows.flow_log_level_includes(None, "info") is False
+    assert ad.flows.flow_log_level_includes(None, "debug") is False
+
+
+def test_append_trace_on_context_without_flow_log_level_records_errors() -> None:
+    """``getattr(context, 'flow_log_level', None)`` on pre-field execution contexts."""
+
+    class _LegacyContext:
+        active_trace_node_id = "n1"
+        node_traces: dict = {}
+
+    ctx = _LegacyContext()
+    ad.flows.append_trace(ctx, None, level="error", kind="http", message="upstream failed")
+    assert len(ctx.node_traces["n1"]) == 1
+    ad.flows.append_trace(ctx, None, level="info", kind="engine", message="step")
+    assert len(ctx.node_traces["n1"]) == 1
+
+
 def test_append_trace_respects_org_flow_log_level() -> None:
     ctx = ad.flows.ExecutionContext(
         organization_id="org",

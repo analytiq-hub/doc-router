@@ -7,13 +7,19 @@ import { CRON_FORMAT_HINT, validateCronExpression } from './flowCronValidation';
 import {
   coerceScheduleRuleValue,
   defaultScheduleIntervalRule,
+  maxScheduleIntervalRules,
   scheduleIntervalBounds,
   type ScheduleIntervalRule,
   type ScheduleRuleValue,
 } from './flowScheduleTriggerRules';
 
 export type { ScheduleIntervalRule, ScheduleRuleValue };
-export { coerceScheduleRuleValue, defaultScheduleIntervalRule, scheduleIntervalBounds } from './flowScheduleTriggerRules';
+export {
+  coerceScheduleRuleValue,
+  defaultScheduleIntervalRule,
+  maxScheduleIntervalRules,
+  scheduleIntervalBounds,
+} from './flowScheduleTriggerRules';
 export { validateScheduleRule } from './flowCronValidation';
 
 const INTERVAL_FIELD_OPTIONS: { value: ScheduleIntervalRule['field']; label: string }[] = [
@@ -35,6 +41,7 @@ export const FlowScheduleTriggerRulesField: React.FC<{
 }> = ({ label, value, readOnly, onChange }) => {
   const ruleValue = coerceScheduleRuleValue(value);
   const intervals = ruleValue.interval ?? [defaultScheduleIntervalRule()];
+  const atRuleCap = intervals.length >= maxScheduleIntervalRules;
 
   const patchIntervals = (next: ScheduleIntervalRule[]) => {
     onChange({ interval: next.length > 0 ? next : [defaultScheduleIntervalRule()] });
@@ -185,14 +192,22 @@ export const FlowScheduleTriggerRulesField: React.FC<{
       </div>
 
       {!readOnly ? (
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-          onClick={() => patchIntervals([...intervals, defaultScheduleIntervalRule()])}
-        >
-          <PlusIcon className="h-4 w-4" aria-hidden />
-          Add rule
-        </button>
+        <div className="space-y-1">
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={atRuleCap}
+            onClick={() => patchIntervals([...intervals, defaultScheduleIntervalRule()])}
+          >
+            <PlusIcon className="h-4 w-4" aria-hidden />
+            Add rule
+          </button>
+          {atRuleCap ? (
+            <p className="text-[11px] text-gray-500">
+              Maximum {maxScheduleIntervalRules} rules (matches backend limit).
+            </p>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

@@ -5,6 +5,7 @@ from datetime import datetime, UTC
 
 from analytiq_data.flows.triggers.cron_exprs import (
     CronExpressionError,
+    MAX_SCHEDULE_INTERVAL_RULES,
     next_anchored_run,
     poll_times_to_crons,
     poll_times_to_specs,
@@ -59,6 +60,12 @@ def test_schedule_params_multiple_rules():
     assert specs[0].interval_secs == 3600.0
     assert specs[1].kind == "cron"
     assert schedule_params_to_crons(params) == ["* * * * *", "0 9 * * 1-5"]
+
+
+def test_schedule_params_rejects_too_many_rules():
+    intervals = [{"field": "hours", "hoursInterval": 1} for _ in range(MAX_SCHEDULE_INTERVAL_RULES + 1)]
+    with pytest.raises(CronExpressionError, match=f"at most {MAX_SCHEDULE_INTERVAL_RULES}"):
+        schedule_params_to_specs({"rule": {"interval": intervals}})
 
 
 def test_next_anchored_run_from_configuration_time():

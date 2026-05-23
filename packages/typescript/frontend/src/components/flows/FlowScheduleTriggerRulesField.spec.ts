@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { validateScheduleRule } from './flowCronValidation';
+import { validateScheduleRule, validateScheduleRuleParameter } from './flowCronValidation';
 import { coerceScheduleRuleValue } from './flowScheduleTriggerRules';
 
 describe('coerceScheduleRuleValue', () => {

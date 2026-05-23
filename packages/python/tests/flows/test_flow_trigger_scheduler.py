@@ -326,7 +326,8 @@ async def test_registry_deregister_clears_trigger_registrations(
 async def test_scheduled_flow_run_worker_applies_org_flow_log_level(
     test_db, register_nodes, flow_revision, aclient, monkeypatch
 ):
-    """``process_flow_run_msg`` loads org ``flow_log_level`` for enqueued schedule runs."""
+    """``process_flow_run_msg`` loads org ``flow_log_level`` and honors it for trace emission."""
+
     from analytiq_data.msg_handlers import process_flow_run_msg
 
     db = ad.common.get_async_db(aclient)
@@ -338,10 +339,28 @@ async def test_scheduled_flow_run_worker_applies_org_flow_log_level(
     await db.organizations.insert_one({"_id": org_oid, "name": "Trace org", "flow_log_level": "TRACE"})
     await db.flow_revisions.insert_one(rev_doc)
 
-    captured: dict[str, str] = {}
+    captured: dict[str, object] = {}
 
     async def _spy_run_flow(*, context, **kwargs):
         captured["flow_log_level"] = context.flow_log_level
+        context.active_trace_node_id = "trig1"
+        ad.flows.append_trace(
+            context,
+            "trig1",
+            level="info",
+            kind="engine",
+            message="scheduled tick",
+        )
+        ad.flows.trace_http_on_success(
+            context,
+            "trig1",
+            method="GET",
+            url="https://example.com",
+            status_code=200,
+            duration_ms=1,
+            response_preview="ok",
+        )
+        captured["trace"] = list(context.node_traces.get("trig1") or [])
         return {"status": "success"}
 
     monkeypatch.setattr(ad.flows, "run_flow", _spy_run_flow)
@@ -364,6 +383,11 @@ async def test_scheduled_flow_run_worker_applies_org_flow_log_level(
     await process_flow_run_msg(aclient, q0)
 
     assert captured.get("flow_log_level") == "TRACE"
+    trace = captured.get("trace")
+    assert isinstance(trace, list)
+    assert len(trace) == 2
+    levels = {ev["level"] for ev in trace}
+    assert levels == {"info", "debug"}
 
 
 @pytest.mark.asyncio

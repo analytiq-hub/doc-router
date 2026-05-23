@@ -29,9 +29,40 @@ def is_export_size_limit_error(exc: BaseException) -> bool:
 
     if not isinstance(exc, GoogleDriveApiError) or exc.status_code != 403:
         return False
+    for reason in _google_error_reasons(exc):
+        if reason == "exportsizelimitexceeded":
+            return True
     msg = str(exc).lower()
-    compact = msg.replace("_", "").lower()
+    compact = msg.replace("_", "")
     return "exportsizelimitexceeded" in compact or "too large to be exported" in msg
+
+
+def _google_error_reasons(exc: GoogleDriveApiError) -> list[str]:
+    """Extract ``error.errors[].reason`` values from a Drive API JSON error body."""
+
+    msg = str(exc)
+    idx = msg.find("{")
+    if idx < 0:
+        return []
+    try:
+        payload = json.loads(msg[idx:])
+    except json.JSONDecodeError:
+        return []
+    if not isinstance(payload, dict):
+        return []
+    error_block = payload.get("error")
+    if not isinstance(error_block, dict):
+        return []
+    errors = error_block.get("errors")
+    if not isinstance(errors, list):
+        return []
+    reasons: list[str] = []
+    for entry in errors:
+        if isinstance(entry, dict):
+            reason = str(entry.get("reason") or "").strip().lower()
+            if reason:
+                reasons.append(reason)
+    return reasons
 
 
 async def resolve_oauth_access_token_for_org(organization_id: str, node: dict[str, Any]) -> str:

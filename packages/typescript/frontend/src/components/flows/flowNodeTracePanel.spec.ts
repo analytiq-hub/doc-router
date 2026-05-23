@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   filterTraceEvents,
   hasNodeTraceContent,
+  isFailedHttpEvent,
   matchesTraceFilter,
   traceEventCount,
   type FlowTraceEvent,
@@ -74,5 +75,24 @@ describe('matchesTraceFilter', () => {
     expect(matchesTraceFilter(failHttp, 'errors')).toBe(true);
     expect(matchesTraceFilter(warnEvent, 'errors')).toBe(true);
     expect(filterTraceEvents([okHttp, failHttp, warnEvent], 'errors')).toEqual([failHttp, warnEvent]);
+  });
+
+  it('does not treat HTTP events without status_code as errors', () => {
+    const noCode: FlowTraceEvent = {
+      level: 'error',
+      kind: 'http',
+      message: 'GET https://example.com failed',
+      detail: { method: 'GET', url: 'https://example.com' },
+    };
+    const nullCode: FlowTraceEvent = {
+      level: 'info',
+      kind: 'http',
+      message: 'GET https://example.com → ?',
+      detail: { method: 'GET', url: 'https://example.com', status_code: null },
+    };
+    expect(matchesTraceFilter(noCode, 'errors')).toBe(true);
+    expect(isFailedHttpEvent(noCode)).toBe(false);
+    expect(matchesTraceFilter(nullCode, 'errors')).toBe(false);
+    expect(isFailedHttpEvent(nullCode)).toBe(false);
   });
 });

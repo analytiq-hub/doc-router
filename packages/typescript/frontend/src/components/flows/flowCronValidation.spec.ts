@@ -21,4 +21,14 @@ describe('validateScheduleRuleParameter', () => {
       }),
     ).toMatch(/Rule 1:/);
   });
+
+  it('rejects more than the max interval rules', () => {
+    const interval = Array.from({ length: 21 }, () => ({
+      field: 'hours' as const,
+      hoursInterval: 1,
+    }));
+    expect(validateScheduleRuleParameter({ interval })).toBe(
+      'At most 20 trigger rules are allowed',
+    );
+  });
 });

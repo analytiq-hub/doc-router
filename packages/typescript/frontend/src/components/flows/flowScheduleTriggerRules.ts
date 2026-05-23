@@ -10,6 +10,9 @@ export type ScheduleRuleValue = {
   interval?: ScheduleIntervalRule[];
 };
 
+/** Must match ``MAX_SCHEDULE_INTERVAL_RULES`` in ``cron_exprs.py`` (schedule trigger schema ``maxItems``). */
+export const maxScheduleIntervalRules = 20;
+
 /** Must match ``schedule_rule_to_interval_seconds`` in ``cron_exprs.py`` (UI min/max attrs). */
 export const scheduleIntervalBounds = {
   minutes: { min: 1, max: 59 },

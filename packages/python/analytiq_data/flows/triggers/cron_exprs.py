@@ -9,6 +9,9 @@ from typing import Any, Literal
 from croniter import croniter
 
 
+MAX_SCHEDULE_INTERVAL_RULES = 20
+
+
 class CronExpressionError(ValueError):
     """Raised when a schedule rule cannot be parsed."""
 
@@ -88,6 +91,10 @@ def schedule_params_to_specs(parameters: dict[str, Any]) -> list[TriggerSchedule
     intervals = rule_block.get("interval") or []
     if not isinstance(intervals, list) or not intervals:
         raise CronExpressionError("Schedule trigger requires at least one interval rule")
+    if len(intervals) > MAX_SCHEDULE_INTERVAL_RULES:
+        raise CronExpressionError(
+            f"Schedule trigger supports at most {MAX_SCHEDULE_INTERVAL_RULES} interval rules"
+        )
     specs: list[TriggerScheduleSpec] = []
     for rule_index, entry in enumerate(intervals):
         if not isinstance(entry, dict):

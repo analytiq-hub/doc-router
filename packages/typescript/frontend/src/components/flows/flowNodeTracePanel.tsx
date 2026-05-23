@@ -62,7 +62,8 @@ function asTraceEvents(raw: unknown): FlowTraceEvent[] {
   return out;
 }
 
-function isFailedHttpEvent(ev: FlowTraceEvent): boolean {
+export function isFailedHttpEvent(ev: FlowTraceEvent): boolean {
+  // Backend ``trace_http`` omits ``detail.status_code`` when unknown; only numeric codes count.
   if (ev.kind !== 'http') return false;
   const code = ev.detail?.status_code;
   return typeof code === 'number' && code >= 400;

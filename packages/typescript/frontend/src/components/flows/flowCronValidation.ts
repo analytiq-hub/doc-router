@@ -1,7 +1,21 @@
-/** Lightweight cron field checks in the UI; authoritative validation is ``croniter`` on the backend. */
+/**
+ * Lightweight schedule/cron checks in the UI.
+ *
+ * Authoritative cron validation is Python **croniter** via
+ * ``validate_cron_expression`` in ``packages/python/analytiq_data/flows/triggers/cron_exprs.py``
+ * (``croniter.is_valid``). This module only rejects empty expressions before save; it does **not**
+ * mirror croniter's full grammar. Expressions that pass here may still fail on save, and
+ * croniter may accept forms this UI never pre-validates. Keep parity tests in
+ * ``packages/python/tests/flows/test_trigger_cron_exprs.py`` when changing either side.
+ *
+ * Interval bounds and max rule count must stay aligned with ``cron_exprs.py`` and
+ * ``flows.trigger.schedule`` parameter schema.
+ */
 
 import type { ScheduleIntervalRule } from './flowScheduleTriggerRules';
+import { maxScheduleIntervalRules } from './flowScheduleTriggerRules';
 
+/** Non-empty check only — semantic validation is croniter on the backend (see module doc). */
 export function validateCronExpression(expr: string): string | null {
   const trimmed = (expr || '').trim();
   if (!trimmed) {
@@ -50,6 +64,9 @@ export function validateScheduleRuleParameter(rule: unknown): string | null {
   const interval = (rule as { interval?: unknown }).interval;
   if (!Array.isArray(interval) || interval.length === 0) {
     return 'Add at least one trigger rule';
+  }
+  if (interval.length > maxScheduleIntervalRules) {
+    return `At most ${maxScheduleIntervalRules} trigger rules are allowed`;
   }
   for (let i = 0; i < interval.length; i += 1) {
     const entry = interval[i];

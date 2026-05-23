@@ -226,6 +226,30 @@ async def test_poll_activation_testing_allows_empty() -> None:
 
 
 @pytest.mark.asyncio
+async def test_poll_resolves_token_via_for_org_not_execution_context() -> None:
+    """Poll hooks use ``PollContext``; token resolution must not require ``ExecutionContext``."""
+    ctx = _poll_ctx(testing=True)
+    node = _node(
+        {
+            "triggerOn": "specificFolder",
+            "event": "fileCreated",
+            "folderToWatch": "folder-1",
+        }
+    )
+    for_org = AsyncMock(return_value="tok")
+    exec_ctx_resolve = AsyncMock()
+    with patch(f"{_GD}.resolve_oauth_access_token_for_org", for_org):
+        with patch(
+            "analytiq_data.flows.nodes.google_drive.api.resolve_oauth_access_token",
+            exec_ctx_resolve,
+        ):
+            with patch(f"{_GD}.google_api_request", new_callable=AsyncMock, return_value={"id": "folder-1"}):
+                await poll_google_drive_trigger(ctx, node)
+    for_org.assert_awaited_once_with("org1", node)
+    exec_ctx_resolve.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_trigger_node_execute_replays_items() -> None:
     ad.flows.register_builtin_nodes()
     nt = ad.flows.get("flows.trigger.google_drive")
