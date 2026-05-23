@@ -8,6 +8,7 @@ import {
   getOrderedKeys,
   getVisiblePropertyKeys,
   isCompanionUiProperty,
+  isPropertyVisible,
   mergeParameterDefaults,
   parameterSchemaUsesCredentialAuthenticationWidget,
   resolveEnumSchemaForParams,
@@ -122,5 +123,52 @@ describe('flowSchemaParameterUtils', () => {
         properties: { authentication: { 'x-ui-widget': 'credential_authentication' } },
       }),
     ).toBe(true);
+  });
+
+  it('evalShowWhen handles oneOf (alias for in)', () => {
+    const sw = { field: 'event', oneOf: ['fileCreated', 'fileUpdated'] };
+    expect(evalShowWhen(sw, { event: 'fileCreated' })).toBe(true);
+    expect(evalShowWhen(sw, { event: 'fileUpdated' })).toBe(true);
+    expect(evalShowWhen(sw, { event: 'folderCreated' })).toBe(false);
+  });
+
+  it('evalShowWhen handles all with oneOf clause', () => {
+    const sw = {
+      all: [
+        { field: 'triggerOn', equals: 'specificFolder' },
+        { field: 'event', oneOf: ['fileCreated', 'fileUpdated'] },
+      ],
+    };
+    expect(evalShowWhen(sw, { triggerOn: 'specificFolder', event: 'fileCreated' })).toBe(true);
+    expect(evalShowWhen(sw, { triggerOn: 'specificFolder', event: 'folderCreated' })).toBe(false);
+    expect(evalShowWhen(sw, { triggerOn: 'specificFile', event: 'fileCreated' })).toBe(false);
+  });
+
+  it('isPropertyVisible handles x-ui-show-when-any (OR of all-clauses)', () => {
+    const schemaWithAny = {
+      type: 'object',
+      properties: {
+        triggerOn: { type: 'string', default: 'specificFolder' },
+        event: { type: 'string', default: 'fileCreated' },
+        fileType: {
+          type: 'string',
+          default: 'all',
+          'x-ui-show-when-any': [
+            {
+              all: [
+                { field: 'triggerOn', equals: 'specificFolder' },
+                { field: 'event', oneOf: ['fileCreated', 'fileUpdated'] },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const visible = { triggerOn: 'specificFolder', event: 'fileCreated' };
+    const hiddenWrongTrigger = { triggerOn: 'specificFile', event: 'fileCreated' };
+    const hiddenWrongEvent = { triggerOn: 'specificFolder', event: 'folderCreated' };
+    expect(isPropertyVisible('fileType', schemaWithAny, visible)).toBe(true);
+    expect(isPropertyVisible('fileType', schemaWithAny, hiddenWrongTrigger)).toBe(false);
+    expect(isPropertyVisible('fileType', schemaWithAny, hiddenWrongEvent)).toBe(false);
   });
 });

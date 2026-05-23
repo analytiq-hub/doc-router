@@ -7,6 +7,8 @@
 export type DocRouterShowWhen = {
   field?: string;
   in?: unknown[];
+  /** Alias for ``in`` — value must appear in the list. */
+  oneOf?: unknown[];
   equals?: unknown;
   /** All clauses must pass (maps multi-field upstream ``displayOptions.show``). */
   all?: DocRouterShowWhen[];
@@ -100,6 +102,9 @@ export function evalShowWhen(showWhen: unknown, params: Record<string, unknown>)
   }
   if (Array.isArray(sw.in)) {
     return sw.in.includes(raw);
+  }
+  if (Array.isArray(sw.oneOf)) {
+    return sw.oneOf.includes(raw);
   }
   return true;
 }
