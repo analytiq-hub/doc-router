@@ -56,6 +56,8 @@ class ActiveFlowRegistry:
         flow_id: str,
         flow_revid: str,
         revision: dict[str, Any],
+        *,
+        run_immediately: bool = False,
     ) -> None:
         await self.deregister_flow(flow_id)
         nodes = revision.get("nodes") or []
@@ -112,6 +114,7 @@ class ActiveFlowRegistry:
                     cron_expr,
                     self._make_tick(reg, rule_index, cron_expr, trigger_kind),
                     timezone=timezone,
+                    run_immediately=run_immediately,
                 )
 
         if registered:

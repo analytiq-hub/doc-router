@@ -122,8 +122,16 @@ class FlowTriggerService:
         flow_id: str,
         flow_revid: str,
         revision: dict[str, Any],
+        *,
+        run_immediately: bool = False,
     ) -> None:
-        await self._registry.register_flow(organization_id, flow_id, flow_revid, revision)
+        await self._registry.register_flow(
+            organization_id,
+            flow_id,
+            flow_revid,
+            revision,
+            run_immediately=run_immediately,
+        )
 
     async def deregister_flow(self, flow_id: str) -> None:
         await self._registry.deregister_flow(flow_id)

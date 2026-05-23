@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta, UTC
 from unittest.mock import AsyncMock, patch
 
@@ -83,6 +84,47 @@ async def test_leader_takeover_after_expiry(test_db, register_nodes, aclient):
     leader_b = ad.flows.FlowSchedulerLeader(db, holder_id="host-b", ttl_secs=10)
     assert await leader_b.renew() is True
     assert leader_b.is_leader is True
+
+
+@pytest.mark.asyncio
+async def test_register_cron_run_immediately(test_db, register_nodes):
+    scheduler = ad.flows.FlowScheduler()
+    calls: list[str] = []
+
+    async def on_tick() -> None:
+        calls.append("tick")
+
+    await scheduler.register_cron("job1", "* * * * *", on_tick, run_immediately=True)
+    await asyncio.sleep(0.05)
+    assert calls == ["tick"]
+    await scheduler.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_registry_run_immediately_enqueues(test_db, register_nodes, flow_revision, aclient):
+    scheduler = ad.flows.FlowScheduler()
+    registry = ad.flows.ActiveFlowRegistry(
+        aclient,
+        scheduler,
+        leader_check=lambda: True,
+        lease_ttl_secs=60,
+    )
+    flow_revid = str(flow_revision["_id"])
+    await registry.register_flow(
+        "org1",
+        "flow1",
+        flow_revid,
+        flow_revision,
+        run_immediately=True,
+    )
+    await asyncio.sleep(0.05)
+
+    db = ad.common.get_async_db(aclient)
+    execs = await db.flow_executions.find({"flow_id": "flow1"}).to_list(10)
+    assert len(execs) == 1
+    assert execs[0]["mode"] == "schedule"
+
+    await registry.deregister_flow("flow1")
 
 
 @pytest.mark.asyncio

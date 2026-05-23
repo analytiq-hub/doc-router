@@ -44,12 +44,15 @@ class FlowScheduler:
         callback: TickCallback,
         *,
         timezone: str = "UTC",
+        run_immediately: bool = False,
     ) -> None:
         await self.deregister(job_id)
         job = _CronJob(job_id=job_id, cron_expr=cron_expr, timezone=timezone, callback=callback)
         job.task = asyncio.create_task(self._cron_loop(job), name=f"flow_cron:{job_id}")
         self._jobs[job_id] = job
         logger.debug(f"Registered flow cron job {job_id!r} expr={cron_expr!r} tz={timezone!r}")
+        if run_immediately:
+            asyncio.create_task(self._invoke_callback(job, reason="immediate"), name=f"flow_cron_immediate:{job_id}")
 
     async def deregister(self, job_id: str) -> None:
         job = self._jobs.pop(job_id, None)
@@ -71,6 +74,16 @@ class FlowScheduler:
         for job_id in list(self._jobs.keys()):
             await self.deregister(job_id)
 
+    async def _invoke_callback(self, job: _CronJob, *, reason: str) -> None:
+        if job.job_id not in self._jobs:
+            return
+        try:
+            await job.callback()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(f"Flow cron job {job.job_id!r} {reason} tick failed")
+
     async def _cron_loop(self, job: _CronJob) -> None:
         tz = ZoneInfo(job.timezone or "UTC")
         while True:
@@ -82,9 +95,9 @@ class FlowScheduler:
                 await asyncio.sleep(delay)
                 if job.job_id not in self._jobs:
                     return
-                await job.callback()
+                await self._invoke_callback(job, reason="scheduled")
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.exception(f"Flow cron job {job.job_id!r} tick failed")
+                logger.exception(f"Flow cron job {job.job_id!r} loop failed")
                 await asyncio.sleep(5.0)

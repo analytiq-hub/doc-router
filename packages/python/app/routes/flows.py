@@ -1142,19 +1142,30 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
         }
     )
     flow_revid = str(res.inserted_id)
+    flow_header_set: dict[str, Any] = {
+        "name": req.name,
+        "flow_version": next_version,
+        "updated_at": created_at,
+        "updated_by": current_user.user_id,
+    }
+    if h.get("active"):
+        flow_header_set["active_flow_revid"] = flow_revid
     await db.flows.update_one(
         {"_id": ObjectId(flow_id)},
-        {
-            "$set": {
-                "name": req.name,
-                "flow_version": next_version,
-                "updated_at": created_at,
-                "updated_by": current_user.user_id,
-            }
-        },
+        {"$set": flow_header_set},
     )
     h2 = await db.flows.find_one({"_id": ObjectId(flow_id)})
     r = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid)})
+    if h.get("active"):
+        trigger_svc = ad.flows.get_flow_trigger_service()
+        if trigger_svc is not None:
+            await trigger_svc.register_flow(
+                organization_id,
+                flow_id,
+                flow_revid,
+                r,
+                run_immediately=True,
+            )
     _raw = {k: h2[k] for k in h2 if k != "_id"}
     hdr = {k: (v.replace(tzinfo=UTC) if isinstance(v, datetime) else v) for k, v in _raw.items()}
     rev = FlowRevision(
@@ -1211,7 +1222,9 @@ async def activate_flow(organization_id: str, flow_id: str, req: ActivateFlowReq
     )
     trigger_svc = ad.flows.get_flow_trigger_service()
     if trigger_svc is not None:
-        await trigger_svc.register_flow(organization_id, flow_id, target, r)
+        await trigger_svc.register_flow(
+            organization_id, flow_id, target, r, run_immediately=True
+        )
     return await get_flow(organization_id, flow_id, current_user)
 
 
