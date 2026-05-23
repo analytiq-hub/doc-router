@@ -48,6 +48,7 @@ class FlowScheduler:
     def __init__(self) -> None:
         self._cron_jobs: dict[str, _CronJob] = {}
         self._interval_jobs: dict[str, _IntervalJob] = {}
+        self._immediate_tasks: dict[str, asyncio.Task] = {}
 
     def job_count(self) -> int:
         return len(self._cron_jobs) + len(self._interval_jobs)
@@ -67,10 +68,7 @@ class FlowScheduler:
         self._cron_jobs[job_id] = job
         logger.debug(f"Registered flow cron job {job_id!r} expr={cron_expr!r} tz={timezone!r}")
         if run_immediately:
-            asyncio.create_task(
-                self._invoke_callback(job.callback, job_id, reason="immediate"),
-                name=f"flow_cron_immediate:{job_id}",
-            )
+            self._spawn_immediate(job_id, job.callback)
 
     async def register_interval(
         self,
@@ -101,12 +99,40 @@ class FlowScheduler:
             f"Registered flow interval job {job_id!r} every={interval_secs}s anchor={anchor.isoformat()!r}"
         )
         if run_immediately:
-            asyncio.create_task(
-                self._invoke_callback(job.callback, job_id, reason="immediate"),
-                name=f"flow_interval_immediate:{job_id}",
-            )
+            self._spawn_immediate(job_id, job.callback)
+
+    def _spawn_immediate(self, job_id: str, callback: TickCallback) -> None:
+        existing = self._immediate_tasks.pop(job_id, None)
+        if existing is not None and not existing.done():
+            existing.cancel()
+
+        async def _run_immediate() -> None:
+            try:
+                await self._invoke_callback(callback, job_id, reason="immediate")
+            finally:
+                self._immediate_tasks.pop(job_id, None)
+
+        self._immediate_tasks[job_id] = asyncio.create_task(
+            _run_immediate(),
+            name=f"flow_immediate:{job_id}",
+        )
+
+    async def drain_immediate(self, job_id: str | None = None) -> None:
+        """Wait for in-flight immediate ticks to finish (``job_id`` or all)."""
+
+        if job_id is not None:
+            task = self._immediate_tasks.get(job_id)
+            if task is not None:
+                await task
+            return
+
+        pending = list(self._immediate_tasks.values())
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
 
     async def deregister(self, job_id: str) -> None:
+        await self.drain_immediate(job_id)
+
         cron_job = self._cron_jobs.pop(job_id, None)
         if cron_job and cron_job.task:
             cron_job.task.cancel()
@@ -133,8 +159,12 @@ class FlowScheduler:
         for job_id in list(self._interval_jobs.keys()):
             if job_id.startswith(prefix):
                 await self.deregister(job_id)
+        for job_id in list(self._immediate_tasks.keys()):
+            if job_id.startswith(prefix):
+                await self.drain_immediate(job_id)
 
     async def shutdown(self) -> None:
+        await self.drain_immediate()
         for job_id in list(self._cron_jobs.keys()):
             await self.deregister(job_id)
         for job_id in list(self._interval_jobs.keys()):

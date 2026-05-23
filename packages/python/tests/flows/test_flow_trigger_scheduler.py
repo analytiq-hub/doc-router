@@ -58,6 +58,16 @@ def aclient():
     return ad.common.get_analytiq_client()
 
 
+async def _wait_for_flow_executions(db, flow_id: str, *, timeout: float = 2.0) -> list[dict]:
+    deadline = asyncio.get_running_loop().time() + timeout
+    while asyncio.get_running_loop().time() < deadline:
+        execs = await db.flow_executions.find({"flow_id": flow_id}).to_list(10)
+        if execs:
+            return execs
+        await asyncio.sleep(0.02)
+    return []
+
+
 @pytest.mark.asyncio
 async def test_leader_election_single_holder(test_db, register_nodes, aclient):
     db = ad.common.get_async_db(aclient)
@@ -96,7 +106,7 @@ async def test_register_interval_run_immediately(test_db, register_nodes):
         calls.append("tick")
 
     await scheduler.register_interval("job1", 60.0, on_tick, anchor=anchor, run_immediately=True)
-    await asyncio.sleep(0.05)
+    await scheduler.drain_immediate("job1")
     assert calls == ["tick"]
     await scheduler.shutdown()
 
@@ -110,7 +120,7 @@ async def test_register_cron_run_immediately(test_db, register_nodes):
         calls.append("tick")
 
     await scheduler.register_cron("job1", "* * * * *", on_tick, run_immediately=True)
-    await asyncio.sleep(0.05)
+    await scheduler.drain_immediate("job1")
     assert calls == ["tick"]
     await scheduler.shutdown()
 
@@ -125,21 +135,23 @@ async def test_registry_run_immediately_enqueues(test_db, register_nodes, flow_r
         lease_ttl_secs=60,
     )
     flow_revid = str(flow_revision["_id"])
-    await registry.register_flow(
-        "org1",
-        "flow1",
-        flow_revid,
-        flow_revision,
-        run_immediately=True,
-    )
-    await asyncio.sleep(0.05)
-
     db = ad.common.get_async_db(aclient)
-    execs = await db.flow_executions.find({"flow_id": "flow1"}).to_list(10)
-    assert len(execs) == 1
-    assert execs[0]["mode"] == "schedule"
+    try:
+        await registry.register_flow(
+            "org1",
+            "flow1",
+            flow_revid,
+            flow_revision,
+            run_immediately=True,
+        )
+        await scheduler.drain_immediate()
 
-    await registry.deregister_flow("flow1")
+        execs = await _wait_for_flow_executions(db, "flow1")
+        assert len(execs) == 1
+        assert execs[0]["mode"] == "schedule"
+    finally:
+        await registry.deregister_flow("flow1")
+        await scheduler.shutdown()
 
 
 @pytest.mark.asyncio
