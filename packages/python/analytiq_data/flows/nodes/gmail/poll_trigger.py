@@ -11,7 +11,7 @@ from .api import (
     gmail_api_request,
     resolve_oauth_access_token_for_org,
 )
-from .email_parse import parse_gmail_api_message
+from .email_parse import parse_gmail_api_message, resolve_download_attachments
 from .helpers import prepare_gmail_list_query, simplify_messages
 from .operations import _fetch_label_map
 
@@ -162,7 +162,7 @@ async def poll_gmail_trigger(
             )
         else:
             prefix = str(options.get("attachmentPrefix") or "attachment_")
-            download = bool(options.get("downloadAttachments"))
+            download = resolve_download_attachments(options, simple=simple)
             parsed, binary = parse_gmail_api_message(
                 msg,
                 download_attachments=download,

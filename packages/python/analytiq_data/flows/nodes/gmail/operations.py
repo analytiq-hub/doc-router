@@ -11,8 +11,9 @@ from .api import (
     gmail_api_request_all_items,
     resolve_oauth_access_token,
 )
+from .email_attachments import resolve_outbound_attachments
 from .email_mime import encode_email_raw
-from .email_parse import parse_gmail_api_message
+from .email_parse import parse_gmail_api_message, resolve_download_attachments
 from .helpers import (
     coerce_label_ids,
     flatten_message_headers,
@@ -77,13 +78,13 @@ async def execute_gmail_item(
     node_id = str(node.get("id") or "")
 
     if resource == "message":
-        result = await _run_message(context, token, params, operation, node_id=node_id)
+        result = await _run_message(context, token, params, operation, node_id=node_id, item=item)
     elif resource == "label":
         result = await _run_label(context, token, params, operation, node_id=node_id)
     elif resource == "draft":
-        result = await _run_draft(context, token, params, operation, node_id=node_id)
+        result = await _run_draft(context, token, params, operation, node_id=node_id, item=item)
     elif resource == "thread":
-        result = await _run_thread(context, token, params, operation, node_id=node_id)
+        result = await _run_thread(context, token, params, operation, node_id=node_id, item=item)
     else:
         raise ValueError(f"Unsupported resource: {resource}")
 
@@ -97,9 +98,10 @@ async def _run_message(
     operation: str,
     *,
     node_id: str,
+    item: "ad.flows.FlowItem",
 ) -> "ad.flows.FlowItem | dict[str, Any]":
     if operation == "send":
-        return await _message_send(context, token, params, node_id=node_id)
+        return await _message_send(context, token, params, node_id=node_id, item=item)
     if operation == "get":
         return await _message_get(context, token, params, node_id=node_id)
     if operation == "getAll":
@@ -114,7 +116,7 @@ async def _run_message(
         if not message_id:
             raise ValueError("messageId is required")
         return await reply_to_message(
-            context, token, message_id=message_id, params=params, node_id=node_id
+            context, token, message_id=message_id, params=params, node_id=node_id, item=item
         )
     if operation == "delete":
         return await _message_delete(context, token, params, node_id=node_id)
@@ -230,9 +232,10 @@ async def _run_draft(
     operation: str,
     *,
     node_id: str,
+    item: "ad.flows.FlowItem",
 ) -> "ad.flows.FlowItem | dict[str, Any]":
     if operation == "create":
-        return await _draft_create(context, token, params, node_id=node_id)
+        return await _draft_create(context, token, params, node_id=node_id, item=item)
     if operation == "get":
         return await _draft_get(context, token, params, node_id=node_id)
     if operation == "getAll":
@@ -297,6 +300,7 @@ async def _run_thread(
     operation: str,
     *,
     node_id: str,
+    item: "ad.flows.FlowItem",
 ) -> "ad.flows.FlowItem | dict[str, Any]":
     if operation == "get":
         return await _thread_get(context, token, params, node_id=node_id)
@@ -354,7 +358,7 @@ async def _run_thread(
         if not message_id:
             raise ValueError("messageId is required")
         return await reply_to_message(
-            context, token, message_id=message_id, params=params, node_id=node_id
+            context, token, message_id=message_id, params=params, node_id=node_id, item=item
         )
     raise ValueError(f"Unsupported thread operation: {operation}")
 
@@ -365,6 +369,7 @@ async def _message_send(
     params: dict[str, Any],
     *,
     node_id: str,
+    item: "ad.flows.FlowItem",
 ) -> dict[str, Any]:
     send_to = prepare_emails_input(str(params.get("sendTo") or ""), "To")
     subject = str(params.get("subject") or "")
@@ -393,6 +398,7 @@ async def _message_send(
         if email_address:
             from_addr = f"{sender_name} <{email_address}>"
 
+    attachments = await resolve_outbound_attachments(context, item, options)
     raw = encode_email_raw(
         to=send_to,
         subject=subject,
@@ -402,6 +408,7 @@ async def _message_send(
         bcc=bcc or None,
         reply_to=reply_to,
         from_addr=from_addr,
+        attachments=attachments or None,
     )
     return await gmail_api_request(
         token,
@@ -445,7 +452,7 @@ async def _message_get(
         return {}
 
     if not simple:
-        download = bool(options.get("downloadAttachments"))
+        download = resolve_download_attachments(options, simple=simple)
         prefix = str(options.get("attachmentPrefix") or "attachment_")
         parsed, binary = parse_gmail_api_message(
             msg,
@@ -523,7 +530,7 @@ async def _message_get_all(
         if simple:
             results.append(msg)
         else:
-            download = bool(options.get("downloadAttachments"))
+            download = resolve_download_attachments(options, simple=simple)
             prefix = str(options.get("attachmentPrefix") or "attachment_")
             parsed, _binary = parse_gmail_api_message(
                 msg,
@@ -598,6 +605,7 @@ async def _draft_create(
     params: dict[str, Any],
     *,
     node_id: str,
+    item: "ad.flows.FlowItem",
 ) -> dict[str, Any]:
     send_to = prepare_emails_input(str(params.get("sendTo") or ""), "To")
     subject = str(params.get("subject") or "")
@@ -606,6 +614,7 @@ async def _draft_create(
     cc = prepare_emails_input(str(options.get("ccList") or ""), "CC") if options.get("ccList") else None
     bcc = prepare_emails_input(str(options.get("bccList") or ""), "BCC") if options.get("bccList") else None
 
+    attachments = await resolve_outbound_attachments(context, item, options)
     raw = encode_email_raw(
         to=send_to,
         subject=subject,
@@ -613,6 +622,7 @@ async def _draft_create(
         body_html=body_html,
         cc=cc,
         bcc=bcc,
+        attachments=attachments or None,
     )
     message_body: dict[str, Any] = {"raw": raw}
     thread_id = str(params.get("threadId") or "").strip()
@@ -669,7 +679,7 @@ async def _draft_get(
     )
     if not isinstance(msg, dict):
         return draft
-    download = bool(options.get("downloadAttachments"))
+    download = resolve_download_attachments(options, simple=simple)
     prefix = str(options.get("attachmentPrefix") or "attachment_")
     parsed, binary = parse_gmail_api_message(
         msg,

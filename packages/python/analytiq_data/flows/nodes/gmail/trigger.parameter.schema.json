@@ -26,7 +26,7 @@
       "type": "object",
       "default": {},
       "title": "Options",
-      "description": "When Simplify is off: downloadAttachments (bool), attachmentPrefix (default attachment_).",
+      "description": "When Simplify is off: downloadAttachments (defaults to true), attachmentPrefix (default attachment_).",
       "x-ui-show-when": {
         "field": "simple",
         "equals": false

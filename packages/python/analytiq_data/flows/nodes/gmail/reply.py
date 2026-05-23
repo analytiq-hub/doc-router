@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from typing import Any
 
+import analytiq_data as ad
+
 from .api import gmail_api_request
+from .email_attachments import resolve_outbound_attachments
 from .email_mime import encode_email_raw
 from .helpers import header_from_payload, prepare_emails_input, prepare_message_body
 
@@ -16,6 +19,7 @@ async def reply_to_message(
     message_id: str,
     params: dict[str, Any],
     node_id: str,
+    item: "ad.flows.FlowItem",
 ) -> dict[str, Any]:
     options = params.get("options") if isinstance(params.get("options"), dict) else {}
     if options.get("replyToSenderOnly") and options.get("replyToRecipientsOnly"):
@@ -93,6 +97,7 @@ async def reply_to_message(
         from_addr = f"{sender_name} <{own_email}>"
 
     body_text, body_html = prepare_message_body(params)
+    attachments = await resolve_outbound_attachments(context, item, options)
     raw = encode_email_raw(
         to=to_string,
         subject=subject,
@@ -103,6 +108,7 @@ async def reply_to_message(
         from_addr=from_addr,
         in_reply_to=message_id_header or None,
         references=message_id_header or None,
+        attachments=attachments or None,
     )
     body: dict[str, Any] = {"raw": raw}
     if thread_id:

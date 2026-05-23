@@ -49,6 +49,45 @@ async def test_message_send_calls_gmail_api(
 
 
 @pytest.mark.asyncio
+async def test_message_send_with_attachment(
+    gmail_ctx: ad.flows.ExecutionContext,
+    gmail_node_shell: dict[str, Any],
+    mock_gmail_token,
+    mock_gmail_api: AsyncMock,
+) -> None:
+    mock_gmail_api.return_value = {"id": "msg-2", "threadId": "t-2"}
+    item = ad.flows.FlowItem(
+        json={},
+        binary={
+            "data": ad.flows.BinaryRef(
+                mime_type="text/plain",
+                file_name="note.txt",
+                data=b"attached text",
+            )
+        },
+        meta={},
+    )
+    params = {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "to@example.com",
+        "subject": "With file",
+        "emailType": "text",
+        "message": "See attached",
+        "options": {"attachmentsBinary": ["data"]},
+    }
+    out = await execute_gmail_item(gmail_ctx, gmail_node_shell, params, item, item_index=0)
+    assert out.json["id"] == "msg-2"
+    body = mock_gmail_api.await_args.kwargs.get("body") or {}
+    raw = body.get("raw") or ""
+    from analytiq_data.flows.nodes.gmail.email_parse import decode_gmail_raw
+
+    payload = decode_gmail_raw(raw)
+    assert b"note.txt" in payload
+    assert b"attached text" in payload or b"YXR0YWNoZWQgdGV4dA==" in payload
+
+
+@pytest.mark.asyncio
 async def test_message_get_all_returns_messages_wrapper(
     gmail_ctx: ad.flows.ExecutionContext,
     gmail_item: ad.flows.FlowItem,

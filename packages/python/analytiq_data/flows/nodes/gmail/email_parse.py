@@ -27,7 +27,7 @@ def _extract_body(msg: Message) -> tuple[str | None, str | None]:
     html: str | None = None
     if msg.is_multipart():
         for part in msg.walk():
-            if part.get_content_disposition() == "attachment":
+            if part.is_multipart() or _is_attachment_part(part):
                 continue
             ctype = part.get_content_type()
             if ctype == "text/plain" and text is None:
@@ -49,6 +49,27 @@ def _extract_body(msg: Message) -> tuple[str | None, str | None]:
     return text, html
 
 
+def _is_attachment_part(part: Message) -> bool:
+    if part.is_multipart():
+        return False
+    ctype = (part.get_content_type() or "").lower()
+    if ctype in ("text/plain", "text/html"):
+        return False
+    if ctype.startswith("multipart/"):
+        return False
+    if ctype in ("message/rfc822", "message/delivery-status"):
+        return False
+    disposition = (part.get_content_disposition() or "").lower()
+    if disposition == "attachment":
+        return True
+    if part.get_filename():
+        return True
+    maintype = ctype.split("/", 1)[0]
+    if maintype in ("application", "image", "audio", "video"):
+        return True
+    return False
+
+
 def _collect_attachments(
     msg: Message,
     *,
@@ -60,10 +81,12 @@ def _collect_attachments(
     binary: dict[str, ad.flows.BinaryRef] = {}
     idx = 0
     for part in msg.walk():
-        if part.get_content_disposition() != "attachment":
+        if part.is_multipart():
+            continue
+        if not _is_attachment_part(part):
             continue
         payload = part.get_payload(decode=True)
-        if not isinstance(payload, bytes):
+        if not isinstance(payload, bytes) or not payload:
             continue
         name = part.get_filename() or f"attachment_{idx}"
         key = f"{prefix}{idx}"
@@ -74,6 +97,14 @@ def _collect_attachments(
         )
         idx += 1
     return binary
+
+
+def resolve_download_attachments(options: dict[str, Any], *, simple: bool) -> bool:
+    """Return whether to download attachments; defaults to true when not simplifying."""
+
+    if "downloadAttachments" in options:
+        return bool(options.get("downloadAttachments"))
+    return not simple
 
 
 def parse_raw_email_bytes(
