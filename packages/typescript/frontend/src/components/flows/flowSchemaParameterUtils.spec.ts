@@ -37,6 +37,48 @@ describe('flowSchemaParameterUtils', () => {
     expect(getOrderedKeys(schema)).toEqual(['url', 'body_mode', 'body_json']);
   });
 
+  it('normalizeEnumParameters coerces invalid operation for resource', () => {
+    const gmailOp = {
+      type: 'string',
+      default: 'send',
+      enum: ['send', 'get', 'getAll', 'create'],
+      'x-ui-enum-by': {
+        field: 'resource',
+        variants: {
+          message: { enum: ['send', 'get', 'getAll'] },
+          label: { enum: ['create', 'get', 'getAll'] },
+        },
+      },
+    };
+    const gmailSchema = {
+      type: 'object',
+      properties: {
+        resource: { type: 'string', enum: ['message', 'label'], default: 'message' },
+        operation: gmailOp,
+        messageId: {
+          type: 'string',
+          default: '',
+          'x-ui-show-when-any': [
+            {
+              all: [
+                { field: 'resource', equals: 'message' },
+                { field: 'operation', equals: 'get' },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const merged = mergeParameterDefaults(gmailSchema, {
+      resource: '',
+      operation: 'create',
+    });
+    expect(merged.resource).toBe('message');
+    expect(merged.operation).toBe('send');
+    const fixed = mergeParameterDefaults(gmailSchema, { resource: 'message', operation: 'get' });
+    expect(isPropertyVisible('messageId', gmailSchema, fixed)).toBe(true);
+  });
+
   it('resolveEnumSchemaForParams uses x-ui-enum-by', () => {
     const sub = {
       type: 'string',

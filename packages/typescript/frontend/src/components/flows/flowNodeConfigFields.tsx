@@ -179,18 +179,27 @@ export const FlowNodeParameterFields: React.FC<{
   const applyPatch = useCallback(
     (patch: Record<string, unknown>) => {
       let nextPatch = { ...patch };
-      if (
-        rootSchema &&
-        Object.prototype.hasOwnProperty.call(patch, 'resource') &&
-        !Object.prototype.hasOwnProperty.call(patch, 'operation')
-      ) {
+      if (rootSchema) {
         const props = getSchemaProperties(rootSchema);
         const opSub = props.operation;
-        if (opSub) {
+        if (
+          opSub &&
+          Object.prototype.hasOwnProperty.call(patch, 'resource') &&
+          !Object.prototype.hasOwnProperty.call(patch, 'operation')
+        ) {
           const afterResource = { ...mergedParams, ...patch };
           const resolved = resolveEnumSchemaForParams(opSub, afterResource);
           const allowed = resolved.enum?.map(String) ?? [];
           const currentOp = String(afterResource.operation ?? '');
+          if (allowed.length > 0 && !allowed.includes(currentOp)) {
+            nextPatch = { ...nextPatch, operation: allowed[0] };
+          }
+        }
+        if (opSub && Object.prototype.hasOwnProperty.call(patch, 'operation')) {
+          const afterOperation = { ...mergedParams, ...nextPatch };
+          const resolved = resolveEnumSchemaForParams(opSub, afterOperation);
+          const allowed = resolved.enum?.map(String) ?? [];
+          const currentOp = String(afterOperation.operation ?? '');
           if (allowed.length > 0 && !allowed.includes(currentOp)) {
             nextPatch = { ...nextPatch, operation: allowed[0] };
           }
@@ -558,11 +567,13 @@ export const FlowNodeParameterFields: React.FC<{
               ? safeJsonStringify(v ?? (t === 'array' ? [] : {}), t === 'array' ? '[]' : '{}')
               : ''
             : safeJsonStringify(v, '');
+      const objectEditorHeight =
+        key === 'options' || key === 'filters' ? '160px' : '400px';
       return (
         <div key={key} className="min-h-0 flex-1">
           <div className="mb-1 text-xs font-semibold text-gray-600">{propLabel}</div>
           <Editor
-            height="400px"
+            height={objectEditorHeight}
             language={lang}
             value={textValue}
             onChange={(val) => {

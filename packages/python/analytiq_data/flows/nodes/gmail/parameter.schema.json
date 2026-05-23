@@ -4,10 +4,20 @@
   "properties": {
     "resource": {
       "type": "string",
-      "enum": ["message", "label", "draft", "thread"],
+      "enum": [
+        "message",
+        "label",
+        "draft",
+        "thread"
+      ],
       "default": "message",
       "title": "Resource",
-      "x-ui-enum-names": ["Message", "Label", "Draft", "Thread"]
+      "x-ui-enum-names": [
+        "Message",
+        "Label",
+        "Draft",
+        "Thread"
+      ]
     },
     "operation": {
       "type": "string",
@@ -45,7 +55,7 @@
             "x-ui-enum-names": [
               "Send",
               "Get",
-              "Get Many",
+              "Get many messages",
               "Reply",
               "Delete",
               "Mark as Read",
@@ -55,12 +65,32 @@
             ]
           },
           "label": {
-            "enum": ["create", "delete", "get", "getAll"],
-            "x-ui-enum-names": ["Create", "Delete", "Get", "Get Many"]
+            "enum": [
+              "create",
+              "delete",
+              "get",
+              "getAll"
+            ],
+            "x-ui-enum-names": [
+              "Create",
+              "Delete",
+              "Get",
+              "Get Many"
+            ]
           },
           "draft": {
-            "enum": ["create", "get", "getAll", "delete"],
-            "x-ui-enum-names": ["Create", "Get", "Get Many", "Delete"]
+            "enum": [
+              "create",
+              "get",
+              "getAll",
+              "delete"
+            ],
+            "x-ui-enum-names": [
+              "Create",
+              "Get",
+              "Get Many",
+              "Delete"
+            ]
           },
           "thread": {
             "enum": [
@@ -87,173 +117,6 @@
         }
       }
     },
-    "sendTo": {
-      "type": "string",
-      "default": "",
-      "title": "To",
-      "description": "Recipient email addresses, comma-separated.",
-      "x-ui-placeholder": "info@example.com",
-      "x-ui-show-when-any": [
-        {
-          "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "send" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "draft" },
-            { "field": "operation", "equals": "create" }
-          ]
-        }
-      ]
-    },
-    "subject": {
-      "type": "string",
-      "default": "",
-      "title": "Subject",
-      "x-ui-show-when-any": [
-        {
-          "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "send" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "reply" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "reply" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "draft" },
-            { "field": "operation", "equals": "create" }
-          ]
-        }
-      ]
-    },
-    "emailType": {
-      "type": "string",
-      "enum": ["text", "html"],
-      "default": "html",
-      "title": "Email type",
-      "x-ui-enum-names": ["Text", "HTML"],
-      "x-ui-show-when-any": [
-        {
-          "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "send" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "reply" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "reply" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "draft" },
-            { "field": "operation", "equals": "create" }
-          ]
-        }
-      ]
-    },
-    "message": {
-      "type": "string",
-      "default": "",
-      "title": "Message",
-      "x-ui-widget": "textarea",
-      "x-ui-show-when-any": [
-        {
-          "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "send" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "reply" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "reply" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "draft" },
-            { "field": "operation", "equals": "create" }
-          ]
-        }
-      ]
-    },
-    "options": {
-      "type": "object",
-      "default": {},
-      "title": "Options",
-      "description": "Optional fields (JSON). Send/reply/draft attachments: omit attachmentsBinary to attach all item binaries, or set attachmentsBinary ([\"data\"] / n8n attachmentsUi). Use attachmentsBinary: [] for none. Also: ccList, bccList, replyTo, senderName. Get: downloadAttachments (defaults true when Simplify is off), attachmentPrefix. Reply: replyToSenderOnly/replyToRecipientsOnly. Thread get: onlyMessages.",
-      "x-ui-show-when-any": [
-        {
-          "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "send" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "reply" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "get" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "getAll" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "reply" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "get" }
-          ]
-        },
-        {
-          "all": [
-            { "field": "resource", "equals": "draft" },
-            { "field": "operation", "equals": "get" }
-          ]
-        }
-      ]
-    },
     "messageId": {
       "type": "string",
       "default": "",
@@ -262,50 +125,98 @@
       "x-ui-show-when-any": [
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "get" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "reply" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "delete" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "delete"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "markAsRead" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "markAsRead"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "markAsUnread" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "markAsUnread"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "addLabels" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "addLabels"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "removeLabels" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "removeLabels"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "reply" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
           ]
         }
       ]
@@ -317,44 +228,86 @@
       "x-ui-show-when-any": [
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "get" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "delete" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "delete"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "trash" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "trash"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "untrash" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "untrash"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "addLabels" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "addLabels"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "removeLabels" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "removeLabels"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "draft" },
-            { "field": "operation", "equals": "create" }
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
           ]
         }
       ]
@@ -366,14 +319,26 @@
       "x-ui-show-when-any": [
         {
           "all": [
-            { "field": "resource", "equals": "label" },
-            { "field": "operation", "equals": "get" }
+            {
+              "field": "resource",
+              "equals": "label"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "label" },
-            { "field": "operation", "equals": "delete" }
+            {
+              "field": "resource",
+              "equals": "label"
+            },
+            {
+              "field": "operation",
+              "equals": "delete"
+            }
           ]
         }
       ]
@@ -386,26 +351,50 @@
       "x-ui-show-when-any": [
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "addLabels" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "addLabels"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "removeLabels" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "removeLabels"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "addLabels" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "addLabels"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "removeLabels" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "removeLabels"
+            }
           ]
         }
       ]
@@ -416,32 +405,57 @@
       "title": "Label name",
       "x-ui-show-when": {
         "all": [
-          { "field": "resource", "equals": "label" },
-          { "field": "operation", "equals": "create" }
+          {
+            "field": "resource",
+            "equals": "label"
+          },
+          {
+            "field": "operation",
+            "equals": "create"
+          }
         ]
       }
     },
     "labelListVisibility": {
       "type": "string",
-      "enum": ["labelShow", "labelShowIfUnread", "labelHide"],
+      "enum": [
+        "labelShow",
+        "labelShowIfUnread",
+        "labelHide"
+      ],
       "default": "labelShow",
       "title": "Label list visibility",
       "x-ui-show-when": {
         "all": [
-          { "field": "resource", "equals": "label" },
-          { "field": "operation", "equals": "create" }
+          {
+            "field": "resource",
+            "equals": "label"
+          },
+          {
+            "field": "operation",
+            "equals": "create"
+          }
         ]
       }
     },
     "messageListVisibility": {
       "type": "string",
-      "enum": ["show", "hide"],
+      "enum": [
+        "show",
+        "hide"
+      ],
       "default": "show",
       "title": "Message list visibility",
       "x-ui-show-when": {
         "all": [
-          { "field": "resource", "equals": "label" },
-          { "field": "operation", "equals": "create" }
+          {
+            "field": "resource",
+            "equals": "label"
+          },
+          {
+            "field": "operation",
+            "equals": "create"
+          }
         ]
       }
     },
@@ -452,14 +466,233 @@
       "x-ui-show-when-any": [
         {
           "all": [
-            { "field": "resource", "equals": "draft" },
-            { "field": "operation", "equals": "get" }
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "draft" },
-            { "field": "operation", "equals": "delete" }
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "delete"
+            }
+          ]
+        }
+      ]
+    },
+    "sendTo": {
+      "type": "string",
+      "default": "",
+      "title": "To",
+      "description": "Recipient email addresses, comma-separated.",
+      "x-ui-placeholder": "info@example.com",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "send"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        }
+      ]
+    },
+    "subject": {
+      "type": "string",
+      "default": "",
+      "title": "Subject",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "send"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        }
+      ]
+    },
+    "emailType": {
+      "type": "string",
+      "enum": [
+        "text",
+        "html"
+      ],
+      "default": "html",
+      "title": "Email type",
+      "x-ui-enum-names": [
+        "Text",
+        "HTML"
+      ],
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "send"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        }
+      ]
+    },
+    "message": {
+      "type": "string",
+      "default": "",
+      "title": "Message",
+      "x-ui-widget": "textarea",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "send"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
           ]
         }
       ]
@@ -472,38 +705,74 @@
       "x-ui-show-when-any": [
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "get" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "getAll" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "draft" },
-            { "field": "operation", "equals": "get" }
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "draft" },
-            { "field": "operation", "equals": "getAll" }
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "get" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "getAll" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
           ]
         }
       ]
@@ -515,26 +784,50 @@
       "x-ui-show-when-any": [
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "getAll" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "label" },
-            { "field": "operation", "equals": "getAll" }
+            {
+              "field": "resource",
+              "equals": "label"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "draft" },
-            { "field": "operation", "equals": "getAll" }
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "getAll" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
           ]
         }
       ]
@@ -548,30 +841,66 @@
       "x-ui-show-when-any": [
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "getAll" },
-            { "field": "returnAll", "equals": false }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            },
+            {
+              "field": "returnAll",
+              "equals": false
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "label" },
-            { "field": "operation", "equals": "getAll" },
-            { "field": "returnAll", "equals": false }
+            {
+              "field": "resource",
+              "equals": "label"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            },
+            {
+              "field": "returnAll",
+              "equals": false
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "draft" },
-            { "field": "operation", "equals": "getAll" },
-            { "field": "returnAll", "equals": false }
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            },
+            {
+              "field": "returnAll",
+              "equals": false
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "getAll" },
-            { "field": "returnAll", "equals": false }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            },
+            {
+              "field": "returnAll",
+              "equals": false
+            }
           ]
         }
       ]
@@ -584,14 +913,118 @@
       "x-ui-show-when-any": [
         {
           "all": [
-            { "field": "resource", "equals": "message" },
-            { "field": "operation", "equals": "getAll" }
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
           ]
         },
         {
           "all": [
-            { "field": "resource", "equals": "thread" },
-            { "field": "operation", "equals": "getAll" }
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
+          ]
+        }
+      ]
+    },
+    "options": {
+      "type": "object",
+      "default": {},
+      "title": "Options",
+      "description": "Optional fields (JSON). Send/reply/draft attachments: omit attachmentsBinary to attach all item binaries, or set attachmentsBinary ([\"data\"] / n8n attachmentsUi). Use attachmentsBinary: [] for none. Also: ccList, bccList, replyTo, senderName. Get: downloadAttachments (defaults true when Simplify is off), attachmentPrefix. Reply: replyToSenderOnly/replyToRecipientsOnly. Thread get: onlyMessages.",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "send"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
           ]
         }
       ]

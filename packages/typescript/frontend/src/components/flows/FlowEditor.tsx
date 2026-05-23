@@ -875,7 +875,7 @@ const FlowEditor: React.FC<{
   const configRf = useMemo(() => {
     const n = nodes.find((x) => x.id === configModalNodeId);
     if (!n) return { node: null as FlowNode | null, nodeType: null as FlowNodeType | null };
-    return { node: n.data.flowNode, nodeType: n.data.nodeType ?? nodeTypesByKey[n.data.flowNode.type] ?? null };
+    return { node: n.data.flowNode, nodeType: nodeTypesByKey[n.data.flowNode.type] ?? n.data.nodeType ?? null };
   }, [configModalNodeId, nodeTypesByKey, nodes]);
 
   const runExecuteStepForNode = useCallback(

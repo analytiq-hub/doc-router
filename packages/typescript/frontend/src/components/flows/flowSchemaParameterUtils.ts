@@ -20,6 +20,44 @@ export type DocRouterEnumBy = {
   variants: Record<string, { enum?: unknown[]; 'x-ui-enum-names'?: unknown[] }>;
 };
 
+function hasEnumLikeSchema(sub: Record<string, unknown>): boolean {
+  if (Array.isArray(sub.enum) && sub.enum.length > 0) return true;
+  const eb = sub['x-ui-enum-by'] as DocRouterEnumBy | undefined;
+  return Boolean(eb?.variants);
+}
+
+/** Coerce invalid / empty enum values to a schema default or first allowed option. */
+export function coerceEnumParameterValue(
+  sub: Record<string, unknown>,
+  params: Record<string, unknown>,
+  raw: unknown,
+): unknown {
+  const resolved = resolveEnumSchemaForParams(sub, params);
+  const allowed = resolved.enum?.map(String) ?? [];
+  if (allowed.length === 0) return raw;
+  const current = raw === undefined || raw === null ? '' : String(raw);
+  if (!current || !allowed.includes(current)) {
+    const def = sub.default;
+    if (def !== undefined && allowed.includes(String(def))) return def;
+    return allowed[0];
+  }
+  return raw;
+}
+
+export function normalizeEnumParameters(
+  parameterSchema: unknown,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const props = getSchemaProperties(parameterSchema);
+  const out = { ...params };
+  for (const key of Object.keys(props)) {
+    const sub = props[key];
+    if (!hasEnumLikeSchema(sub)) continue;
+    out[key] = coerceEnumParameterValue(sub, out, out[key]);
+  }
+  return out;
+}
+
 export function resolveEnumSchemaForParams(
   subschema: Record<string, unknown>,
   params: Record<string, unknown>,
@@ -183,9 +221,14 @@ export function mergeParameterDefaults(
       !Array.isArray(props[key].default)
     ) {
       out[key] = { ...(props[key].default as Record<string, unknown>) };
+    } else if (
+      out[key] === '' &&
+      (Array.isArray(props[key].enum) || props[key]['x-ui-enum-by'])
+    ) {
+      out[key] = defaultFromSubschema(props[key]);
     }
   }
-  return out;
+  return normalizeEnumParameters(parameterSchema, out);
 }
 
 export function applyParameterPatch(
@@ -193,6 +236,6 @@ export function applyParameterPatch(
   currentMerged: Record<string, unknown>,
   patch: Record<string, unknown>,
 ): Record<string, unknown> {
-  const next = { ...currentMerged, ...patch };
+  const next = normalizeEnumParameters(parameterSchema, { ...currentMerged, ...patch });
   return clearHiddenFieldsToDefaults(parameterSchema, next);
 }
