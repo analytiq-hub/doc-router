@@ -84,3 +84,108 @@ async def test_message_get_all_returns_messages_wrapper(
     assert out.json["count"] == 2
     assert len(out.json["messages"]) == 2
     assert out.json["messages"][0]["Subject"] == "Hi"
+
+
+@pytest.mark.asyncio
+async def test_message_delete(
+    gmail_ctx: ad.flows.ExecutionContext,
+    gmail_item: ad.flows.FlowItem,
+    gmail_node_shell: dict[str, Any],
+    mock_gmail_token,
+    mock_gmail_api: AsyncMock,
+) -> None:
+    mock_gmail_api.return_value = None
+    params = {"resource": "message", "operation": "delete", "messageId": "m-del"}
+    out = await execute_gmail_item(gmail_ctx, gmail_node_shell, params, gmail_item, item_index=0)
+    assert out.json["success"] is True
+    call = mock_gmail_api.await_args
+    assert call is not None
+    assert call.args[1] == "DELETE"
+    assert call.args[2] == "/gmail/v1/users/me/messages/m-del"
+
+
+@pytest.mark.asyncio
+async def test_message_mark_as_read(
+    gmail_ctx: ad.flows.ExecutionContext,
+    gmail_item: ad.flows.FlowItem,
+    gmail_node_shell: dict[str, Any],
+    mock_gmail_token,
+    mock_gmail_api: AsyncMock,
+) -> None:
+    mock_gmail_api.return_value = {"id": "m1", "labelIds": []}
+    params = {"resource": "message", "operation": "markAsRead", "messageId": "m1"}
+    out = await execute_gmail_item(gmail_ctx, gmail_node_shell, params, gmail_item, item_index=0)
+    assert out.json["id"] == "m1"
+    body = mock_gmail_api.await_args.kwargs.get("body") or {}
+    assert body.get("removeLabelIds") == ["UNREAD"]
+
+
+@pytest.mark.asyncio
+async def test_label_create(
+    gmail_ctx: ad.flows.ExecutionContext,
+    gmail_item: ad.flows.FlowItem,
+    gmail_node_shell: dict[str, Any],
+    mock_gmail_token,
+    mock_gmail_api: AsyncMock,
+) -> None:
+    mock_gmail_api.return_value = {"id": "Label_1", "name": "Work"}
+    params = {"resource": "label", "operation": "create", "name": "Work"}
+    out = await execute_gmail_item(gmail_ctx, gmail_node_shell, params, gmail_item, item_index=0)
+    assert out.json["name"] == "Work"
+    call = mock_gmail_api.await_args
+    assert call is not None
+    assert call.args[2] == "/gmail/v1/users/me/labels"
+
+
+@pytest.mark.asyncio
+async def test_message_reply_sends_in_thread(
+    gmail_ctx: ad.flows.ExecutionContext,
+    gmail_item: ad.flows.FlowItem,
+    gmail_node_shell: dict[str, Any],
+    mock_gmail_token,
+    mock_gmail_api: AsyncMock,
+) -> None:
+    mock_gmail_api.side_effect = [
+        {
+            "threadId": "t-reply",
+            "payload": {
+                "headers": [
+                    {"name": "From", "value": "boss@corp.com"},
+                    {"name": "Subject", "value": "Status"},
+                    {"name": "Message-ID", "value": "<orig@corp.com>"},
+                ]
+            },
+        },
+        {"emailAddress": "me@corp.com"},
+        {"id": "sent-1", "threadId": "t-reply"},
+    ]
+    params = {
+        "resource": "message",
+        "operation": "reply",
+        "messageId": "orig-msg",
+        "emailType": "text",
+        "message": "Done",
+    }
+    out = await execute_gmail_item(gmail_ctx, gmail_node_shell, params, gmail_item, item_index=0)
+    assert out.json["threadId"] == "t-reply"
+    send_call = mock_gmail_api.await_args_list[-1]
+    body = send_call.kwargs.get("body") or {}
+    assert body.get("threadId") == "t-reply"
+    assert "raw" in body
+
+
+@pytest.mark.asyncio
+async def test_thread_trash(
+    gmail_ctx: ad.flows.ExecutionContext,
+    gmail_item: ad.flows.FlowItem,
+    gmail_node_shell: dict[str, Any],
+    mock_gmail_token,
+    mock_gmail_api: AsyncMock,
+) -> None:
+    mock_gmail_api.return_value = {"id": "t1", "labelIds": ["TRASH"]}
+    params = {"resource": "thread", "operation": "trash", "threadId": "t1"}
+    out = await execute_gmail_item(gmail_ctx, gmail_node_shell, params, gmail_item, item_index=0)
+    assert out.json["id"] == "t1"
+    call = mock_gmail_api.await_args
+    assert call is not None
+    assert call.args[2] == "/gmail/v1/users/me/threads/t1/trash"

@@ -10,10 +10,13 @@ from analytiq_data.flows.nodes.gmail.helpers import (
 )
 
 
-def test_validate_resource_operation_message_only() -> None:
+def test_validate_resource_operation_accepts_all_resources() -> None:
     validate_resource_operation("message", "send")
+    validate_resource_operation("label", "getAll")
+    validate_resource_operation("draft", "create")
+    validate_resource_operation("thread", "trash")
     with pytest.raises(ValueError, match="resource"):
-        validate_resource_operation("label", "getAll")
+        validate_resource_operation("mailbox", "getAll")
 
 
 def test_prepare_emails_input_formats_addresses() -> None:

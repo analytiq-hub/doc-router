@@ -22,7 +22,7 @@ class FlowsGmailNode:
 
     key = "flows.gmail"
     label = "Gmail"
-    description = "Consume the Gmail API (experimental; message send/get/getAll)."
+    description = "Consume the Gmail API (experimental; message, label, draft, and thread operations)."
     category = "input"
     palette_group = "app"
     experimental = True

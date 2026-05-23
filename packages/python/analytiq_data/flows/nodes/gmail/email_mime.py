@@ -16,6 +16,8 @@ def encode_email_raw(
     bcc: str | None = None,
     reply_to: str | None = None,
     from_addr: str | None = None,
+    in_reply_to: str | None = None,
+    references: str | None = None,
 ) -> str:
     """Build a MIME message and return Gmail-compatible base64url ``raw``."""
 
@@ -29,6 +31,10 @@ def encode_email_raw(
         msg["Bcc"] = bcc
     if reply_to:
         msg["Reply-To"] = reply_to
+    if in_reply_to:
+        msg["In-Reply-To"] = in_reply_to
+    if references:
+        msg["References"] = references
     msg["Subject"] = subject
 
     text = (body_text or "").strip()

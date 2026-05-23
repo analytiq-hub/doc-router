@@ -5,15 +5,43 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
-
-_MESSAGE_OPS = frozenset({"send", "get", "getAll"})
+_OPS_BY_RESOURCE: dict[str, frozenset[str]] = {
+    "message": frozenset(
+        {
+            "send",
+            "get",
+            "getAll",
+            "reply",
+            "delete",
+            "markAsRead",
+            "markAsUnread",
+            "addLabels",
+            "removeLabels",
+        }
+    ),
+    "label": frozenset({"create", "delete", "get", "getAll"}),
+    "draft": frozenset({"create", "get", "getAll", "delete"}),
+    "thread": frozenset(
+        {
+            "get",
+            "getAll",
+            "delete",
+            "trash",
+            "untrash",
+            "addLabels",
+            "removeLabels",
+            "reply",
+        }
+    ),
+}
 
 
 def validate_resource_operation(resource: str, operation: str) -> None:
-    if resource != "message":
-        raise ValueError(f"Unsupported Gmail resource: {resource!r} (Phase 1 supports message only)")
-    if operation not in _MESSAGE_OPS:
-        raise ValueError(f"Unsupported Gmail message operation: {operation!r}")
+    allowed = _OPS_BY_RESOURCE.get(resource)
+    if allowed is None:
+        raise ValueError(f"Unsupported Gmail resource: {resource!r}")
+    if operation not in allowed:
+        raise ValueError(f"Unsupported Gmail {resource} operation: {operation!r}")
 
 
 def prepare_emails_input(raw: str, field_name: str) -> str:
@@ -31,6 +59,32 @@ def prepare_emails_input(raw: str, field_name: str) -> str:
         else:
             parts.append(f"<{email}>")
     return ", ".join(parts)
+
+
+def prepare_message_body(params: dict[str, Any]) -> tuple[str | None, str | None]:
+    email_type = str(params.get("emailType") or "html")
+    body = str(params.get("message") or "")
+    if email_type == "text":
+        return body, None
+    return None, body
+
+
+def header_from_payload(payload: dict[str, Any], name: str) -> str | None:
+    headers = payload.get("headers")
+    if isinstance(headers, list):
+        for header in headers:
+            if isinstance(header, dict) and header.get("name") == name:
+                val = header.get("value")
+                return str(val) if val is not None else None
+    return None
+
+
+def coerce_label_ids(raw: Any) -> list[str]:
+    if isinstance(raw, list):
+        return [str(x).strip() for x in raw if x is not None and str(x).strip()]
+    if isinstance(raw, str):
+        return [part.strip() for part in raw.split(",") if part.strip()]
+    return []
 
 
 def _append_gmail_query(q: str | None, fragment: str) -> str:

@@ -70,7 +70,11 @@ def mock_gmail_token():
 
 @pytest.fixture
 def mock_gmail_api():
-    with patch(f"{_OPS}.gmail_api_request", new_callable=AsyncMock) as m:
+    m = AsyncMock()
+    with (
+        patch(f"{_OPS}.gmail_api_request", m),
+        patch(f"{_GMAIL}.reply.gmail_api_request", m),
+    ):
         yield m
 
 
