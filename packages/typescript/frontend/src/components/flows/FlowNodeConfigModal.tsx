@@ -34,6 +34,7 @@ import {
   soleInboundParentFromEdges,
 } from './flowNodeIoPreview';
 import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
+import { FlowNodeTracePanel, hasNodeTraceContent } from './flowNodeTracePanel';
 import { FlowInputUpstreamList } from './FlowInputUpstreamList';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
 import type { FlowExecutionBlobContext } from './flowExecutionBlob';
@@ -394,6 +395,8 @@ const FlowNodeConfigModal: React.FC<{
   runData: Record<string, unknown> | null | undefined;
   /** When set (e.g. executions viewer), pass execution ids into expression preview (`_execution`, …). */
   expressionExecution?: { execution_id: string; flow_id: string; flow_revid: string } | null;
+  /** Execution-level error when this node is `last_node_executed` (executions viewer). */
+  executionError?: Record<string, unknown> | null;
   pinData?: FlowPinData | null;
   onPinDataChange?: (next: FlowPinData | null) => void;
   onChange: (patch: Partial<FlowNode>) => void;
@@ -427,6 +430,7 @@ const FlowNodeConfigModal: React.FC<{
   edges,
   runData,
   expressionExecution,
+  executionError = null,
   pinData,
   onPinDataChange,
   onChange,
@@ -449,6 +453,7 @@ const FlowNodeConfigModal: React.FC<{
   const [nameFocus, setNameFocus] = useState(false);
   const [inputIoMode, setInputIoMode] = useState<IoDataMode>('schema');
   const [outputIoMode, setOutputIoMode] = useState<IoDataMode>('schema');
+  const [rightIoTab, setRightIoTab] = useState<'output' | 'trace'>('output');
   const [expressionPreviewItemIndex, setExpressionPreviewItemIndex] = useState(0);
   const measure = useInlineNameWidthPx(node?.name ?? '', 'Node name');
   const nodeId = node?.id ?? '';
@@ -460,6 +465,7 @@ const FlowNodeConfigModal: React.FC<{
       setNameFocus(false);
       setInputIoMode('schema');
       setOutputIoMode('schema');
+      setRightIoTab('output');
       setExpressionPreviewItemIndex(0);
     }
   }, [nodeId]);
@@ -579,6 +585,28 @@ const FlowNodeConfigModal: React.FC<{
     if (!rec || typeof rec !== 'object') return undefined;
     return (rec as { error?: unknown }).error;
   }, [nodeId, runData]);
+
+  const nodeRunTraceEvents = useMemo(() => {
+    if (!nodeId || !runData) return undefined;
+    const rec = runData[nodeId];
+    if (!rec || typeof rec !== 'object') return undefined;
+    return (rec as { trace?: unknown }).trace;
+  }, [nodeId, runData]);
+
+  const showTraceTab = useMemo(
+    () =>
+      hasNodeTraceContent({
+        nodeError: outputRunError,
+        executionError,
+        codeLogs: outputExecPreview.logs,
+        traceEvents: nodeRunTraceEvents,
+      }),
+    [outputRunError, executionError, outputExecPreview.logs, nodeRunTraceEvents],
+  );
+
+  useEffect(() => {
+    if (rightIoTab === 'trace' && !showTraceTab) setRightIoTab('output');
+  }, [rightIoTab, showTraceTab, nodeId]);
 
   const isTrigger = Boolean(nodeType?.is_trigger);
 
@@ -1045,73 +1073,107 @@ const FlowNodeConfigModal: React.FC<{
               <PanelResizeHandle className={flowPanelColResizeHandleClass} />
 
               <Panel defaultSize={33} minSize={18} className="flex min-h-0 min-w-0 overflow-hidden">
-                <IoBlock
-                  title="Output"
-                  right={
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={onTogglePin}
-                        disabled={pinUiDisabled}
-                        className={[
-                          'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold',
-                          hasPin ? 'border-violet-200 bg-violet-50 text-violet-800' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50',
-                          pinUiDisabled ? 'cursor-not-allowed opacity-50' : '',
-                        ].join(' ')}
-                        title={
-                          pinUiDisabledReason ??
-                          (hasPin ? 'Discard pinned output' : 'Pin current output for preview and execute step')
-                        }
-                        aria-pressed={hasPin}
-                      >
-                        {hasPin ? (
-                          <MapPinSolidIcon className="h-4 w-4" aria-hidden />
-                        ) : (
-                          <MapPinOutlineIcon className="h-4 w-4" aria-hidden strokeWidth={1.75} />
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-[#e8eaee] last:border-r-0">
+                  <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
+                    {showTraceTab ? (
+                      <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
+                        {(['output', 'trace'] as const).map((t) => (
+                          <button
+                            key={t}
+                            type="button"
+                            onClick={() => setRightIoTab(t)}
+                            className={[
+                              'rounded px-2 py-1 font-semibold capitalize',
+                              rightIoTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
+                            ].join(' ')}
+                          >
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">Output</span>
+                    )}
+                    {rightIoTab === 'output' ? (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={onTogglePin}
+                          disabled={pinUiDisabled}
+                          className={[
+                            'inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[11px] font-semibold',
+                            hasPin ? 'border-violet-200 bg-violet-50 text-violet-800' : 'border-gray-200 bg-white text-gray-700 hover:bg-gray-50',
+                            pinUiDisabled ? 'cursor-not-allowed opacity-50' : '',
+                          ].join(' ')}
+                          title={
+                            pinUiDisabledReason ??
+                            (hasPin ? 'Discard pinned output' : 'Pin current output for preview and execute step')
+                          }
+                          aria-pressed={hasPin}
+                        >
+                          {hasPin ? (
+                            <MapPinSolidIcon className="h-4 w-4" aria-hidden />
+                          ) : (
+                            <MapPinOutlineIcon className="h-4 w-4" aria-hidden strokeWidth={1.75} />
+                          )}
+                          {hasPin ? 'Unpin' : 'Pin'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={onOpenEditPin}
+                          disabled={pinUiDisabled}
+                          className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+                          title={
+                            pinUiDisabledReason ??
+                            (hasPin ? 'Edit pinned output JSON' : 'Edit output JSON (saves as pin when you Save)')
+                          }
+                        >
+                          <PencilSquareIcon className="h-4 w-4" aria-hidden />
+                          Edit
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-auto p-3 text-xs text-[#1a1d21]">
+                    {rightIoTab === 'trace' && showTraceTab ? (
+                      <FlowNodeTracePanel
+                        nodeError={outputRunError}
+                        executionError={executionError}
+                        codeLogs={outputExecPreview.logs}
+                        traceEvents={nodeRunTraceEvents}
+                      />
+                    ) : (
+                      <>
+                        {hasPin && (
+                          <div className="mb-2 text-[11px] font-semibold text-violet-700">Using pinned output for preview</div>
                         )}
-                        {hasPin ? 'Unpin' : 'Pin'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={onOpenEditPin}
-                        disabled={pinUiDisabled}
-                        className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-white px-2 py-1 text-[11px] font-semibold text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
-                        title={
-                          pinUiDisabledReason ??
-                          (hasPin ? 'Edit pinned output JSON' : 'Edit output JSON (saves as pin when you Save)')
-                        }
-                      >
-                        <PencilSquareIcon className="h-4 w-4" aria-hidden />
-                        Edit
-                      </button>
-                    </div>
-                  }
-                >
-                  {hasPin && <div className="mb-2 text-[11px] font-semibold text-violet-700">Using pinned output for preview</div>}
-                  {!hasPin && !runData && (
-                    <div className="mb-2 text-sm text-[#6b7280]">Run the workflow to see output data for this node.</div>
-                  )}
-                  {!hasPin && runData != null && outputExecPreview.message && (
-                    <div className="mb-2 text-sm text-amber-800">{outputExecPreview.message}</div>
-                  )}
-                  <NodeRunErrorDetails error={outputRunError} />
-                  <IoViewer
-                    title={node.name || typeLabel}
-                    value={outputExecPreview.itemsJson}
-                    valueKind="executionItems"
-                    executionItemsBinaries={outputExecPreview.itemsBinaries}
-                    flowBlobDownloadContext={flowBlobDownloadContext ?? null}
-                    dragSource={{
-                      nodeId: node.id,
-                      source: 'nodeOutput',
-                      ...((node.name ?? '').trim() ? { nodeDisplayName: (node.name ?? '').trim() } : {}),
-                    }}
-                    expressionConfigNodeId={node.id}
-                    defaultMode="schema"
-                    mode={outputIoMode}
-                    onModeChange={setOutputIoMode}
-                  />
-                </IoBlock>
+                        {!hasPin && !runData && (
+                          <div className="mb-2 text-sm text-[#6b7280]">Run the workflow to see output data for this node.</div>
+                        )}
+                        {!hasPin && runData != null && outputExecPreview.message && (
+                          <div className="mb-2 text-sm text-amber-800">{outputExecPreview.message}</div>
+                        )}
+                        <NodeRunErrorDetails error={outputRunError} />
+                        <IoViewer
+                          title={node.name || typeLabel}
+                          value={outputExecPreview.itemsJson}
+                          valueKind="executionItems"
+                          executionItemsBinaries={outputExecPreview.itemsBinaries}
+                          flowBlobDownloadContext={flowBlobDownloadContext ?? null}
+                          dragSource={{
+                            nodeId: node.id,
+                            source: 'nodeOutput',
+                            ...((node.name ?? '').trim() ? { nodeDisplayName: (node.name ?? '').trim() } : {}),
+                          }}
+                          expressionConfigNodeId={node.id}
+                          defaultMode="schema"
+                          mode={outputIoMode}
+                          onModeChange={setOutputIoMode}
+                        />
+                      </>
+                    )}
+                  </div>
+                </div>
               </Panel>
             </PanelGroup>
           </div>

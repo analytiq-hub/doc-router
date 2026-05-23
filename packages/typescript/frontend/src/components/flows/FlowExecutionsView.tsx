@@ -590,6 +590,14 @@ const FlowExecutionsView: React.FC<{
               }
             : null
         }
+        executionError={
+          detail?.status === 'error' &&
+          detail.last_node_executed === configModalId &&
+          detail.error &&
+          typeof detail.error === 'object'
+            ? detail.error
+            : null
+        }
         flowBlobDownloadContext={
           detail?.execution_id && detail.flow_id
             ? ({
