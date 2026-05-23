@@ -13,6 +13,7 @@ import {
   Squares2X2Icon,
   TagIcon,
 } from '@heroicons/react/24/solid';
+import { GoogleDriveIcon } from './icons/GoogleDriveIcon';
 
 /** Preset strings returned by `GET .../flows/node-types` for built-in nodes; UI maps to bundled icons. */
 export const FLOW_BUILTIN_ICON_KEYS = [
@@ -26,6 +27,7 @@ export const FLOW_BUILTIN_ICON_KEYS = [
   'ocr',
   'llm_extract',
   'set_tags',
+  'google_drive',
 ] as const;
 
 export type FlowBuiltinIconKey = (typeof FLOW_BUILTIN_ICON_KEYS)[number];
@@ -68,6 +70,8 @@ export function FlowNodeTypeIcon({
         return <SparklesIcon className={className} aria-hidden={ariaHidden} />;
       case 'set_tags':
         return <TagIcon className={className} aria-hidden={ariaHidden} />;
+      case 'google_drive':
+        return <GoogleDriveIcon className={className} />;
       default:
         break;
     }

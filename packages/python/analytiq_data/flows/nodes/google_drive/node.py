@@ -31,7 +31,7 @@ class FlowsGoogleDriveNode:
     max_inputs = 1
     outputs = 1
     output_labels = ["main"]
-    icon_key = None
+    icon_key = "google_drive"
     type_version = 3
     parameter_schema = _load_parameter_schema()
     credential_slots = [

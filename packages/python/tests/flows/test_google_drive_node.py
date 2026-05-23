@@ -31,6 +31,7 @@ def test_google_drive_node_is_experimental() -> None:
     nt = ad.flows.get("flows.google_drive")
     assert getattr(nt, "experimental", False) is True
     assert nt.type_version == 3
+    assert nt.icon_key == "google_drive"
 
 
 def test_drive_file_id_from_docs_url() -> None:
