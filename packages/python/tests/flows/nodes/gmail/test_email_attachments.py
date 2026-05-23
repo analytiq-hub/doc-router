@@ -28,6 +28,20 @@ def test_attachment_binary_property_names_supports_shorthand_and_n8n_shape() -> 
     ) == ["report", "a", "b"]
 
 
+def test_attachment_binary_property_names_defaults_to_all_item_binaries() -> None:
+    item = ad.flows.FlowItem(
+        json={},
+        binary={
+            "data": ad.flows.BinaryRef(mime_type="application/json", file_name="a.json", data=b"{}"),
+            "data_2": ad.flows.BinaryRef(mime_type="application/pdf", file_name="b.pdf", data=b"%PDF"),
+        },
+        meta={},
+    )
+    assert attachment_binary_property_names({}, item) == ["data", "data_2"]
+    assert attachment_binary_property_names({"attachmentsBinary": []}, item) == []
+    assert attachment_binary_property_names({"attachmentsBinary": ["data"]}, item) == ["data"]
+
+
 @pytest.mark.asyncio
 async def test_resolve_outbound_attachments_reads_item_binary() -> None:
     ctx = ad.flows.ExecutionContext(

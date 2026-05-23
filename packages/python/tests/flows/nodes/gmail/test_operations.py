@@ -88,6 +88,50 @@ async def test_message_send_with_attachment(
 
 
 @pytest.mark.asyncio
+async def test_message_send_attaches_all_item_binaries_by_default(
+    gmail_ctx: ad.flows.ExecutionContext,
+    gmail_node_shell: dict[str, Any],
+    mock_gmail_token,
+    mock_gmail_api: AsyncMock,
+) -> None:
+    from analytiq_data.flows.nodes.gmail.email_parse import decode_gmail_raw
+
+    mock_gmail_api.return_value = {"id": "msg-3", "threadId": "t-3"}
+    item = ad.flows.FlowItem(
+        json={},
+        binary={
+            "data": ad.flows.BinaryRef(
+                mime_type="application/json",
+                file_name="meta.json",
+                data=b'{"ok":true}',
+            ),
+            "data_2": ad.flows.BinaryRef(
+                mime_type="application/pdf",
+                file_name="deck.pdf",
+                data=b"%PDF-1.4",
+            ),
+        },
+        meta={},
+    )
+    params = {
+        "resource": "message",
+        "operation": "send",
+        "sendTo": "to@example.com",
+        "subject": "Files",
+        "emailType": "text",
+        "message": "See attached",
+        "options": {},
+    }
+    out = await execute_gmail_item(gmail_ctx, gmail_node_shell, params, item, item_index=0)
+    assert out.json["id"] == "msg-3"
+    body = mock_gmail_api.await_args.kwargs.get("body") or {}
+    payload = decode_gmail_raw(body.get("raw") or "")
+    assert b"meta.json" in payload
+    assert b"deck.pdf" in payload
+    assert b"%PDF" in payload or b"JVBERi" in payload
+
+
+@pytest.mark.asyncio
 async def test_message_get_all_returns_messages_wrapper(
     gmail_ctx: ad.flows.ExecutionContext,
     gmail_item: ad.flows.FlowItem,

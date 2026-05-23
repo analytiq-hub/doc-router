@@ -208,7 +208,7 @@
       "type": "object",
       "default": {},
       "title": "Options",
-      "description": "Optional fields (JSON). Send/reply/draft: attachmentsBinary ([\"data\"] or n8n attachmentsUi.attachmentsBinary), ccList, bccList, replyTo, senderName. Get: downloadAttachments (defaults true when Simplify is off), attachmentPrefix. Reply: replyToSenderOnly/replyToRecipientsOnly. Thread get: onlyMessages.",
+      "description": "Optional fields (JSON). Send/reply/draft attachments: omit attachmentsBinary to attach all item binaries, or set attachmentsBinary ([\"data\"] / n8n attachmentsUi). Use attachmentsBinary: [] for none. Also: ccList, bccList, replyTo, senderName. Get: downloadAttachments (defaults true when Simplify is off), attachmentPrefix. Reply: replyToSenderOnly/replyToRecipientsOnly. Thread get: onlyMessages.",
       "x-ui-show-when-any": [
         {
           "all": [
