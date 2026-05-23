@@ -1709,6 +1709,7 @@ async def _inbound_webhook_common(
 
     # Synchronous response modes: execute in-process and return response payload.
     if response_mode in ("respond_to_webhook", "last_node"):
+        flow_log_level = await ad.flows.fetch_org_flow_log_level(db, org_id)
         ctx = ad.flows.ExecutionContext(
             organization_id=org_id,
             execution_id=exec_id,
@@ -1720,6 +1721,7 @@ async def _inbound_webhook_common(
             analytiq_client=aq_client,
             stop_requested=False,
             logger=None,
+            flow_log_level=flow_log_level,
         )
 
         rev_for_run = revision_snapshot or revision_doc

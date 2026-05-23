@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-import os
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
+
+from .org_log_level import flow_log_level_includes, normalize_flow_log_level
 
 if TYPE_CHECKING:
     from .context import ExecutionContext
@@ -45,6 +46,8 @@ def append_trace(
 
     nid = node_id or context.active_trace_node_id
     if not nid:
+        return
+    if not flow_log_level_includes(getattr(context, "flow_log_level", None), level):
         return
     buf = _trace_buffer(context, nid)
     if len(buf) >= MAX_TRACE_EVENTS_PER_NODE:
@@ -118,7 +121,7 @@ def trace_http(
     )
 
 
-def trace_http_on_debug(
+def trace_http_on_success(
     context: ExecutionContext,
     node_id: str | None,
     *,
@@ -128,9 +131,14 @@ def trace_http_on_debug(
     duration_ms: int,
     response_preview: str | None = None,
 ) -> None:
-    """Emit a success HTTP trace when ``LOG_LEVEL=DEBUG``."""
+    """Emit a successful HTTP trace when the org ``flow_log_level`` is INFO or TRACE."""
 
-    if os.getenv("LOG_LEVEL", "INFO").upper() != "DEBUG":
+    org = normalize_flow_log_level(getattr(context, "flow_log_level", None))
+    if flow_log_level_includes(org, "debug"):
+        level: TraceLevel = "debug"
+    elif flow_log_level_includes(org, "info"):
+        level = "info"
+    else:
         return
     trace_http(
         context,
@@ -140,5 +148,9 @@ def trace_http_on_debug(
         status_code=status_code,
         duration_ms=duration_ms,
         response_preview=response_preview,
-        level="debug",
+        level=level,
     )
+
+
+# Backward-compatible alias (callers use org setting, not ``LOG_LEVEL`` env).
+trace_http_on_debug = trace_http_on_success

@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import type { LLMChatModel, OcrMode, OrgOcrConfig } from '@docrouter/sdk'
+import type { FlowLogLevel } from '@/types/organizations'
 import { OrganizationMember, OrganizationType } from '@/types/index'
 import { DocRouterAccountApi } from '@/utils/api'
 import { isAxiosError } from 'axios'
@@ -65,6 +66,9 @@ function normalizeOcrConfig(raw: OrgOcrConfig): OrgOcrConfig {
 const cloneOcrConfig = (c: OrgOcrConfig): OrgOcrConfig =>
   normalizeOcrConfig(JSON.parse(JSON.stringify(c)) as OrgOcrConfig)
 
+const settingsCheckboxClass =
+  'h-4 w-4 shrink-0 rounded border-gray-300 text-blue-600 focus:ring-blue-500'
+
 const getAvailableOrganizationTypes = (currentType: OrganizationType, isSystemAdmin: boolean): OrganizationType[] => {
   switch (currentType) {
     case 'individual':
@@ -97,6 +101,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const [members, setMembers] = useState<OrganizationMember[]>([])
   const [defaultPromptEnabled, setDefaultPromptEnabled] = useState<boolean>(true)
   const [experimentalFeatures, setExperimentalFeatures] = useState<boolean>(false)
+  const [flowLogLevel, setFlowLogLevel] = useState<FlowLogLevel>('ERROR')
   const [allUsers, setAllUsers] = useState<User[]>([])
   const [memberSearch, setMemberSearch] = useState('');
   const [originalName, setOriginalName] = useState('')
@@ -104,6 +109,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
   const [originalMembers, setOriginalMembers] = useState<OrganizationMember[]>([])
   const [originalDefaultPromptEnabled, setOriginalDefaultPromptEnabled] = useState<boolean>(true)
   const [originalExperimentalFeatures, setOriginalExperimentalFeatures] = useState<boolean>(false)
+  const [originalFlowLogLevel, setOriginalFlowLogLevel] = useState<FlowLogLevel>('ERROR')
   const [ocrConfig, setOcrConfig] = useState<OrgOcrConfig | null>(null)
   const [originalOcrConfig, setOriginalOcrConfig] = useState<OrgOcrConfig | null>(null)
   const { session } = useAppSession();
@@ -140,6 +146,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
           : true
       );
       setExperimentalFeatures(organization.experimental_features === true);
+      setFlowLogLevel(organization.flow_log_level ?? 'ERROR');
       // Store original values
       setOriginalName(organization.name);
       setOriginalType(organization.type);
@@ -150,6 +157,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
           : true
       );
       setOriginalExperimentalFeatures(organization.experimental_features === true);
+      setOriginalFlowLogLevel(organization.flow_log_level ?? 'ERROR');
 
       const oc = cloneOcrConfig(organization.ocr_config)
       setOcrConfig(oc)
@@ -265,6 +273,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
         members,
         default_prompt_enabled: defaultPromptEnabled,
         experimental_features: experimentalFeatures,
+        flow_log_level: flowLogLevel,
         ...(ocrConfig ? { ocr_config: ocrConfig as unknown as Record<string, unknown> } : {}),
       });
       await refreshData();
@@ -275,6 +284,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
       setOriginalMembers(members);
       setOriginalDefaultPromptEnabled(defaultPromptEnabled);
       setOriginalExperimentalFeatures(experimentalFeatures);
+      setOriginalFlowLogLevel(flowLogLevel);
       if (ocrConfig) {
         setOriginalOcrConfig(cloneOcrConfig(ocrConfig))
       }
@@ -491,6 +501,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
     if (members.length !== originalMembers.length) return true;
     if (defaultPromptEnabled !== originalDefaultPromptEnabled) return true;
     if (experimentalFeatures !== originalExperimentalFeatures) return true;
+    if (flowLogLevel !== originalFlowLogLevel) return true;
     if (ocrConfig && originalOcrConfig && JSON.stringify(ocrConfig) !== JSON.stringify(originalOcrConfig)) {
       return true;
     }
@@ -634,7 +645,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                   type="checkbox"
                   checked={defaultPromptEnabled}
                   onChange={(e) => setDefaultPromptEnabled(e.target.checked)}
-                  className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className={`mt-1 ${settingsCheckboxClass}`}
                 />
                 <div>
                   <label htmlFor="default-prompt-enabled" className="block text-sm font-medium text-gray-700">
@@ -652,7 +663,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                   type="checkbox"
                   checked={experimentalFeatures}
                   onChange={(e) => setExperimentalFeatures(e.target.checked)}
-                  className="mt-1 h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                  className={`mt-1 ${settingsCheckboxClass}`}
                 />
                 <div>
                   <label htmlFor="experimental-features-enabled" className="block text-sm font-medium text-gray-700">
@@ -662,6 +673,26 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                     Experimental features are still under development.
                   </p>
                 </div>
+              </div>
+
+              <div>
+                <label htmlFor="flow-log-level" className="block text-sm font-medium text-gray-700">
+                  Flow execution log level
+                </label>
+                <p className="mt-1 text-sm text-gray-500">
+                  Controls detail stored in flow run traces (Logs panel → Trace tab). ERROR records failures
+                  only; INFO adds successful HTTP summaries; TRACE adds full HTTP response previews.
+                </p>
+                <select
+                  id="flow-log-level"
+                  value={flowLogLevel}
+                  onChange={(e) => setFlowLogLevel(e.target.value as FlowLogLevel)}
+                  className="mt-2 block w-full max-w-md rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="ERROR">ERROR</option>
+                  <option value="INFO">INFO</option>
+                  <option value="TRACE">TRACE</option>
+                </select>
               </div>
             </div>
           </div>
@@ -830,7 +861,7 @@ const OrganizationEdit: React.FC<OrganizationEditProps> = ({ organizationId }) =
                             type="checkbox"
                             checked={ocrConfig.textract.feature_types.includes(ft)}
                             onChange={() => toggleTextractFeature(ft)}
-                            className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            className={settingsCheckboxClass}
                           />
                           {ft}
                         </label>

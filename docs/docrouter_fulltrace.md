@@ -152,7 +152,7 @@ Rules:
 - Engine may emit `kind: "engine"` events (parameter resolution failed, branch skipped, merge waiting).
 - **Overflow policy:** `MAX_TRACE_EVENTS_PER_NODE = 200`. When the cap is reached, **drop the newest event** (ignore further `append_trace` calls for that node). Do not shift/evict oldest events — late HTTP failure traces must remain visible. Enforcement happens in `append_trace` **before** events are flushed into `run_data`; `persist_run_data` never sees more than 200 events per node. (Optional later: insert a single overflow marker event instead of silent drop.)
 
-Successful HTTP calls are traced only when `LOG_LEVEL=DEBUG` (`trace_http_on_debug`); failed runs still get error-level HTTP events without DEBUG.
+Successful HTTP calls are traced when the organization ``flow_log_level`` is **INFO** (summary) or **TRACE** (full previews); failed runs always get error-level HTTP events at **ERROR**.
 
 ### 3. Error envelope (`error` v2)
 

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
 
 export type FlowTraceEvent = {
@@ -12,6 +12,38 @@ export type FlowTraceEvent = {
 };
 
 export type TraceEventFilter = 'all' | 'errors' | 'http';
+
+export function traceEventCount(raw: unknown): number {
+  return asTraceEvents(raw).length;
+}
+
+function hasNodeErrorMessage(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const message = (error as Record<string, unknown>).message;
+  return typeof message === 'string' && message.trim() !== '';
+}
+
+/** True when the Trace tab would show more than the empty-state placeholder. */
+export function hasNodeTraceContent(args: {
+  nodeError?: unknown;
+  executionError?: Record<string, unknown> | null;
+  codeLogs?: string[];
+  traceEvents?: unknown;
+}): boolean {
+  const logs = args.codeLogs ?? [];
+  if (hasNodeErrorMessage(args.nodeError) || logs.length > 0 || traceEventCount(args.traceEvents) > 0) {
+    return true;
+  }
+  const execErr = args.executionError;
+  if (!execErr || typeof execErr.message !== 'string' || execErr.message.trim() === '') {
+    return false;
+  }
+  return (
+    !args.nodeError ||
+    typeof args.nodeError !== 'object' ||
+    (args.nodeError as Record<string, unknown>).message !== execErr.message
+  );
+}
 
 function asTraceEvents(raw: unknown): FlowTraceEvent[] {
   if (!Array.isArray(raw)) return [];
@@ -30,14 +62,24 @@ function asTraceEvents(raw: unknown): FlowTraceEvent[] {
   return out;
 }
 
-function matchesTraceFilter(ev: FlowTraceEvent, filter: TraceEventFilter): boolean {
+function isFailedHttpEvent(ev: FlowTraceEvent): boolean {
+  if (ev.kind !== 'http') return false;
+  const code = ev.detail?.status_code;
+  return typeof code === 'number' && code >= 400;
+}
+
+export function matchesTraceFilter(ev: FlowTraceEvent, filter: TraceEventFilter): boolean {
   if (filter === 'all') return true;
   if (filter === 'http') return ev.kind === 'http';
-  const level = (ev.level ?? '').toLowerCase();
   if (filter === 'errors') {
-    return level === 'error' || level === 'warn' || ev.kind === 'http';
+    const level = (ev.level ?? '').toLowerCase();
+    return level === 'error' || level === 'warn' || isFailedHttpEvent(ev);
   }
   return true;
+}
+
+export function filterTraceEvents(events: FlowTraceEvent[], filter: TraceEventFilter): FlowTraceEvent[] {
+  return events.filter((ev) => matchesTraceFilter(ev, filter));
 }
 
 /** Node-level trace tab: error envelope, code logs, and structured ``trace[]`` events. */
@@ -50,9 +92,13 @@ export const FlowNodeTracePanel: React.FC<{
   const [eventFilter, setEventFilter] = useState<TraceEventFilter>('all');
   const events = asTraceEvents(traceEvents);
   const filteredEvents = useMemo(
-    () => events.filter((ev) => matchesTraceFilter(ev, eventFilter)),
+    () => filterTraceEvents(events, eventFilter),
     [events, eventFilter],
   );
+
+  useEffect(() => {
+    setEventFilter('all');
+  }, [traceEvents]);
   const logs = codeLogs ?? [];
   const showExecutionError =
     executionError &&
@@ -97,7 +143,7 @@ export const FlowNodeTracePanel: React.FC<{
                   onClick={() => setEventFilter(f)}
                   className={`rounded px-1.5 py-0.5 text-[10px] font-medium capitalize ${
                     eventFilter === f
-                      ? 'bg-gray-200 text-gray-900'
+                      ? 'bg-gray-900 text-white'
                       : 'text-gray-600 hover:bg-gray-100'
                   }`}
                 >

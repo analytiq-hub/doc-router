@@ -45,4 +45,6 @@ class ExecutionContext:
     node_traces: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
     #: Node currently executing; used by integration helpers when ``node_id`` is omitted.
     active_trace_node_id: str | None = None
+    #: Org setting ``organizations.flow_log_level`` (``ERROR`` | ``INFO`` | ``TRACE``).
+    flow_log_level: str = "ERROR"
 

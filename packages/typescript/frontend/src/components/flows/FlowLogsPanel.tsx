@@ -21,7 +21,7 @@ import {
   flowWorkspaceMenuTriggerIconBtnClass,
 } from './flowWorkspaceMenu';
 import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
-import { FlowNodeTracePanel } from './flowNodeTracePanel';
+import { FlowNodeTracePanel, hasNodeTraceContent, traceEventCount } from './flowNodeTracePanel';
 import { flowPanelColResizeHandleClass } from './flowUiClasses';
 import {
   formatItemLineage,
@@ -213,23 +213,50 @@ const FlowLogsPanel: React.FC<{
   useEffect(() => {
     if (!execution || execution.status !== 'error' || sortedRunEntries.length === 0) return;
     const lastId = execution.last_node_executed?.trim();
+    let nodeId: string | null = null;
     if (lastId && runData?.[lastId]) {
+      nodeId = lastId;
       setSelectedNodeId(lastId);
     } else {
       const failed = [...sortedRunEntries]
         .filter(({ rec }) => rec.status === 'error')
         .sort((a, b) => (b.rec.execution_index ?? 0) - (a.rec.execution_index ?? 0))[0];
-      if (failed) setSelectedNodeId(failed.nodeId);
+      if (failed) {
+        nodeId = failed.nodeId;
+        setSelectedNodeId(failed.nodeId);
+      }
     }
     setActiveTab('details');
-    setIoTab('trace');
-  }, [execution?.execution_id, execution?.status, execution?.last_node_executed, runData, sortedRunEntries]);
+    if (!nodeId) {
+      setIoTab('output');
+      return;
+    }
+    const rec = runData?.[nodeId] as RunDataEntry | undefined;
+    if (
+      hasNodeTraceContent({
+        nodeError: rec?.error,
+        executionError:
+          execution.last_node_executed === nodeId && execution.error
+            ? (execution.error as Record<string, unknown>)
+            : null,
+        traceEvents: rec?.trace,
+      })
+    ) {
+      setIoTab('trace');
+    } else {
+      setIoTab('output');
+    }
+  }, [execution?.execution_id, execution?.status, execution?.last_node_executed, execution?.error, runData, sortedRunEntries]);
 
   useEffect(() => {
-    if (!selectedNodeId && sortedRunEntries.length > 0) {
-      setSelectedNodeId(sortedRunEntries[0].nodeId);
+    if (selectedNodeId || sortedRunEntries.length === 0) return;
+    const lastId = execution?.last_node_executed?.trim();
+    if (lastId && runData?.[lastId]) {
+      setSelectedNodeId(lastId);
+      return;
     }
-  }, [selectedNodeId, sortedRunEntries]);
+    setSelectedNodeId(sortedRunEntries[sortedRunEntries.length - 1].nodeId);
+  }, [selectedNodeId, sortedRunEntries, execution?.last_node_executed, runData]);
 
   const summaryLine = useMemo(() => {
     if (!execution) return '';
@@ -276,6 +303,39 @@ const FlowLogsPanel: React.FC<{
     if (!selectedNodeId) return null;
     return buildNodeOutputPreview(selectedNodeId, runData, graphPinData ?? undefined);
   }, [graphPinData, runData, selectedNodeId]);
+
+  const selectedExecutionError = useMemo((): Record<string, unknown> | null => {
+    if (
+      execution?.status === 'error' &&
+      execution.last_node_executed === selectedNodeId &&
+      execution.error &&
+      typeof execution.error === 'object'
+    ) {
+      return execution.error as Record<string, unknown>;
+    }
+    return null;
+  }, [execution, selectedNodeId]);
+
+  const showTraceTab = useMemo(
+    () =>
+      hasNodeTraceContent({
+        nodeError: selectedRunEntry?.error,
+        executionError: selectedExecutionError,
+        codeLogs: selectedOutputPreview?.logs,
+        traceEvents: selectedRunEntry?.trace,
+      }),
+    [selectedRunEntry, selectedExecutionError, selectedOutputPreview?.logs],
+  );
+
+  const detailIoTabs = useMemo((): Array<'input' | 'output' | 'trace'> => {
+    if (!selectedNodeId) return [];
+    const base: Array<'input' | 'output'> = isSelectedTrigger ? ['output'] : ['input', 'output'];
+    return showTraceTab ? [...base, 'trace'] : base;
+  }, [isSelectedTrigger, selectedNodeId, showTraceTab]);
+
+  useEffect(() => {
+    if (ioTab === 'trace' && !showTraceTab) setIoTab('output');
+  }, [ioTab, showTraceTab, selectedNodeId]);
 
   const selectedOutputLineage = useMemo(() => {
     if (!selectedRunEntry?.source) return null;
@@ -413,6 +473,22 @@ const FlowLogsPanel: React.FC<{
                             const canEdit = Boolean(onEditNode) && nodes.some((n) => n.id === nodeId);
                             const started = rec.start_time ? formatLocalDate(rec.start_time) : '—';
                             const upstream = formatUpstreamSummary(rec.source, nodes);
+                            const traceCount = traceEventCount(rec.trace);
+                            const rawLogs = (rec as { logs?: unknown }).logs;
+                            const codeLogs = Array.isArray(rawLogs)
+                              ? (rawLogs.filter((x) => typeof x === 'string') as string[])
+                              : [];
+                            const openTraceOnSelect = hasNodeTraceContent({
+                              nodeError: rec.error,
+                              executionError:
+                                execution?.status === 'error' &&
+                                execution.last_node_executed === nodeId &&
+                                execution.error
+                                  ? (execution.error as Record<string, unknown>)
+                                  : null,
+                              codeLogs,
+                              traceEvents: rec.trace,
+                            });
                             return (
                               <li key={nodeId}>
                                 <div
@@ -421,12 +497,14 @@ const FlowLogsPanel: React.FC<{
                                   onClick={() => {
                                     setSelectedNodeId(nodeId);
                                     setActiveTab('details');
+                                    setIoTab(openTraceOnSelect ? 'trace' : 'output');
                                   }}
                                   onKeyDown={(e) => {
                                     if (e.key === 'Enter' || e.key === ' ') {
                                       e.preventDefault();
                                       setSelectedNodeId(nodeId);
                                       setActiveTab('details');
+                                      setIoTab(openTraceOnSelect ? 'trace' : 'output');
                                     }
                                   }}
                                   className={[
@@ -447,6 +525,12 @@ const FlowLogsPanel: React.FC<{
                                       <div className="truncate text-xs text-gray-500">{upstream}</div>
                                     ) : null}
                                   </div>
+
+                                  {traceCount > 0 ? (
+                                    <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-700">
+                                      {traceCount} trace
+                                    </span>
+                                  ) : null}
 
                                   <div className="shrink-0 whitespace-nowrap text-xs text-gray-600">
                                     {formatExecutionMs(rec.execution_time_ms)}
@@ -560,7 +644,7 @@ const FlowLogsPanel: React.FC<{
                         </Panel>
                         <PanelResizeHandle className={flowPanelColResizeHandleClass} />
                         <Panel defaultSize={100 - nodeSplitLeftPct} minSize={35} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
-                          <div className="min-w-0">
+                          <div className="min-h-0 min-w-0 flex-1 overflow-auto">
                             <div className="rounded-md border border-gray-200 bg-white">
                               <div className="flex items-start justify-between gap-3 border-b border-[#eceff2] px-3 py-2">
                                 <div className="min-w-0">
@@ -575,26 +659,9 @@ const FlowLogsPanel: React.FC<{
                                   </div>
                                 </div>
 
-                                {!isSelectedTrigger && selectedNodeId && (
+                                {selectedNodeId && detailIoTabs.length > 0 && (
                                   <div className="inline-flex shrink-0 rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
-                                    {(['input', 'output', 'trace'] as const).map((t) => (
-                                      <button
-                                        key={t}
-                                        type="button"
-                                        onClick={() => setIoTab(t)}
-                                        className={[
-                                          'rounded px-2 py-1 font-semibold capitalize',
-                                          ioTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
-                                        ].join(' ')}
-                                      >
-                                        {t}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                                {isSelectedTrigger && selectedNodeId && (
-                                  <div className="inline-flex shrink-0 rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
-                                    {(['output', 'trace'] as const).map((t) => (
+                                    {detailIoTabs.map((t) => (
                                       <button
                                         key={t}
                                         type="button"
@@ -705,7 +772,7 @@ const FlowLogsPanel: React.FC<{
                                   </div>
                                 )}
 
-                                {selectedNodeId && ioTab === 'trace' && (
+                                {selectedNodeId && ioTab === 'trace' && showTraceTab && (
                                   <div className="min-w-0">
                                     <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
                                       <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
@@ -715,12 +782,7 @@ const FlowLogsPanel: React.FC<{
                                     <div className="p-3">
                                       <FlowNodeTracePanel
                                         nodeError={selectedRunEntry?.error}
-                                        executionError={
-                                          execution?.status === 'error' &&
-                                          execution.last_node_executed === selectedNodeId
-                                            ? (execution.error as Record<string, unknown> | null)
-                                            : null
-                                        }
+                                        executionError={selectedExecutionError}
                                         codeLogs={selectedOutputPreview?.logs}
                                         traceEvents={selectedRunEntry?.trace}
                                       />

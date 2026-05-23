@@ -41,6 +41,8 @@ export interface OrganizationOcrCatalog {
   mistral_vertex_enabled?: boolean;
 }
 
+export type FlowLogLevel = 'ERROR' | 'INFO' | 'TRACE';
+
 export interface Organization {
   id: string;
   name: string;
@@ -50,6 +52,8 @@ export interface Organization {
   default_prompt_enabled?: boolean;
   /** When true, experimental flow credential kinds are shown and can be created. */
   experimental_features?: boolean;
+  /** Flow execution trace verbosity stored on execution ``run_data[].trace``. */
+  flow_log_level?: FlowLogLevel;
   ocr_config: OrgOcrConfig;
   ocr_catalog: OrganizationOcrCatalog;
   created_at: string;
@@ -61,6 +65,7 @@ export interface CreateOrganizationRequest {
   type?: OrganizationType;
   default_prompt_enabled?: boolean;
   experimental_features?: boolean;
+  flow_log_level?: FlowLogLevel;
   ocr_config?: Record<string, unknown>;
 }
 
@@ -70,6 +75,7 @@ export interface UpdateOrganizationRequest {
   members?: OrganizationMember[];
   default_prompt_enabled?: boolean;
   experimental_features?: boolean;
+  flow_log_level?: FlowLogLevel;
   ocr_config?: Record<string, unknown>;
 }
 

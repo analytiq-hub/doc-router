@@ -41,6 +41,7 @@ class OrganizationMember(BaseModel):
 
 # Add this new type definition near the top with other Literal types
 OrganizationType = Literal["individual", "team", "enterprise"]
+FlowLogLevel = Literal["ERROR", "INFO", "TRACE"]
 
 class OrganizationCreate(BaseModel):
     name: str
@@ -48,6 +49,7 @@ class OrganizationCreate(BaseModel):
     default_prompt_enabled: bool = True
     #: When True, org users see ported / experimental flow credential kinds and related UI.
     experimental_features: bool = False
+    flow_log_level: FlowLogLevel = "ERROR"
     ocr_config: Optional[dict[str, Any]] = None
 
 class OrganizationUpdate(BaseModel):
@@ -56,6 +58,7 @@ class OrganizationUpdate(BaseModel):
     members: List[OrganizationMember] | None = None
     default_prompt_enabled: Optional[bool] = None
     experimental_features: Optional[bool] = None
+    flow_log_level: Optional[FlowLogLevel] = None
     ocr_config: Optional[dict[str, Any]] = None
 
 class OrganizationOcrCatalog(BaseModel):
@@ -74,6 +77,7 @@ class Organization(BaseModel):
     type: OrganizationType = "individual"
     default_prompt_enabled: bool = True
     experimental_features: bool = False
+    flow_log_level: FlowLogLevel = "ERROR"
     ocr_config: OrgOcrConfig
     ocr_catalog: OrganizationOcrCatalog
     created_at: datetime
@@ -163,6 +167,7 @@ async def list_organizations(
                 "type": organization.get("type", "individual"),
                 "default_prompt_enabled": organization.get("default_prompt_enabled", True),
                 "experimental_features": organization.get("experimental_features", False),
+                "flow_log_level": ad.flows.normalize_flow_log_level(organization.get("flow_log_level")),
                 "ocr_config": merge_org_ocr_config(organization.get("ocr_config")),
                 "ocr_catalog": ocr_catalog,
             })
@@ -219,6 +224,7 @@ async def list_organizations(
             "type": org.get("type", "individual"),
             "default_prompt_enabled": org.get("default_prompt_enabled", True),
             "experimental_features": org.get("experimental_features", False),
+            "flow_log_level": ad.flows.normalize_flow_log_level(org.get("flow_log_level")),
             "ocr_config": merge_org_ocr_config(org.get("ocr_config")),
             "ocr_catalog": ocr_catalog,
         }) for org in organizations
@@ -280,6 +286,7 @@ async def create_organization(
         "type": organization.type or "team",  # Default to team if not specified
         "default_prompt_enabled": organization.default_prompt_enabled,
         "experimental_features": organization.experimental_features,
+        "flow_log_level": organization.flow_log_level,
         "created_at": datetime.now(UTC),
         "updated_at": datetime.now(UTC)
     }
@@ -364,6 +371,9 @@ async def update_organization(
     if organization_update.experimental_features is not None:
         update_data["experimental_features"] = organization_update.experimental_features
 
+    if organization_update.flow_log_level is not None:
+        update_data["flow_log_level"] = organization_update.flow_log_level
+
     if organization_update.ocr_config is not None:
         try:
             update_data["ocr_config"] = await apply_ocr_config_update(
@@ -398,6 +408,7 @@ async def update_organization(
         "type": updated_organization.get("type", "individual"),
         "default_prompt_enabled": updated_organization.get("default_prompt_enabled", True),
         "experimental_features": updated_organization.get("experimental_features", False),
+        "flow_log_level": ad.flows.normalize_flow_log_level(updated_organization.get("flow_log_level")),
         "ocr_config": merge_org_ocr_config(updated_organization.get("ocr_config")),
         "ocr_catalog": await _organization_ocr_catalog(),
         "created_at": updated_organization["created_at"],

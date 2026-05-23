@@ -143,6 +143,8 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
 
     lineage_revid = str(exec_doc.get("flow_revid") or flow_revid_payload or "")
 
+    flow_log_level = await ad.flows.fetch_org_flow_log_level(db, org_id)
+
     context = ad.flows.ExecutionContext(
         organization_id=org_id,
         execution_id=exec_id,
@@ -155,6 +157,7 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
         stop_requested=bool(exec_doc.get("stop_requested")),
         logger=logger,
         revision_nodes=list(revision.get("nodes") or []),
+        flow_log_level=flow_log_level,
     )
 
     try:

@@ -15,6 +15,7 @@ def test_append_trace_buffers_by_node() -> None:
         trigger_data={},
         run_data={},
         analytiq_client=None,
+        flow_log_level="INFO",
     )
     ctx.active_trace_node_id = "n1"
     ad.flows.append_trace(ctx, None, level="info", kind="engine", message="step")
@@ -42,6 +43,7 @@ def test_pop_node_trace_returns_and_clears() -> None:
         trigger_data={},
         run_data={},
         analytiq_client=None,
+        flow_log_level="INFO",
     )
     ad.flows.append_trace(ctx, "n2", level="warn", kind="validation", message="bad")
     popped = ad.flows.pop_node_trace(ctx, "n2")
@@ -60,6 +62,7 @@ def test_trace_event_cap() -> None:
         trigger_data={},
         run_data={},
         analytiq_client=None,
+        flow_log_level="TRACE",
     )
     from analytiq_data.flows.trace import MAX_TRACE_EVENTS_PER_NODE
 
