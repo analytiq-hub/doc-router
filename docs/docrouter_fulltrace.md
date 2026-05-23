@@ -247,7 +247,7 @@ Node type keys in the diagram match registered types (`flows.http_request`, `flo
 
 ## Implementation phases
 
-### Phase 0 — Quick wins (1–2 PRs) ✅ largely done
+### Phase 0 — Quick wins (1–2 PRs) ✅ done
 
 **Backend**
 
@@ -264,8 +264,8 @@ Node type keys in the diagram match registered types (`flows.http_request`, `flo
 **Tests**
 
 - [x] Engine test: failing node persists non-null `error.stack`.
-- [ ] API test: `GET execution` returns stack for failed run.
-- [ ] Worker/integration test: `last_node_executed` equals failing node id on error runs (Mongo path, not only `analytiq_client=None` unit tests).
+- [x] API test: `GET execution` returns stack for failed run.
+- [x] Worker/integration test: `last_node_executed` equals failing node id on error runs (Mongo path, not only `analytiq_client=None` unit tests).
 
 ### Phase 1 — Trace context and HTTP integration (2–3 PRs) ✅ done
 
@@ -459,5 +459,5 @@ Preview builders (`flowNodeIoPreview.ts`) should expose `trace` alongside `logs`
 - [x] `flow_run.py` + routes: top-level `error.stack` + `last_node_executed` on `flow_executions`
 - [x] `flowNodeRunErrorDetails.tsx`: show HTTP hint if `http_code` set
 - [x] `FlowLogsPanel`: Trace tab (stack + code logs + `trace[]` events)
-- [x] Tests for `error.stack` + trace persistence; [x] unit test for `last_node_executed` on `persist_run_data`; [ ] worker/API test for failed run JSON
+- [x] Tests for `error.stack` + trace persistence; [x] unit test for `last_node_executed` on `persist_run_data`; [x] worker/API tests for failed run JSON (`test_flow_execution_phase0.py`)
 - [x] Cross-link from [`flows2.md`](./flows2.md) “See also”
