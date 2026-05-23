@@ -459,5 +459,5 @@ Preview builders (`flowNodeIoPreview.ts`) should expose `trace` alongside `logs`
 - [x] `flow_run.py` + routes: top-level `error.stack` + `last_node_executed` on `flow_executions`
 - [x] `flowNodeRunErrorDetails.tsx`: show HTTP hint if `http_code` set
 - [x] `FlowLogsPanel`: Trace tab (stack + code logs + `trace[]` events)
-- [x] Tests for `error.stack` + trace persistence; [x] unit test for `last_node_executed` on `persist_run_data`; [x] worker/API tests for failed run JSON (`test_flow_execution_phase0.py`)
+- [x] Tests for `error.stack` + trace persistence; [x] unit test for `last_node_executed` on `persist_run_data`; [x] worker/API tests for failed run JSON (`test_flow_failed_run_stack_and_last_node.py`)
 - [x] Cross-link from [`flows2.md`](./flows2.md) “See also”
