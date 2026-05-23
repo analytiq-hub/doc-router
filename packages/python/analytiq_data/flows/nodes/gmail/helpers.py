@@ -106,7 +106,12 @@ def prepare_gmail_list_query(filters: dict[str, Any] | None) -> dict[str, Any]:
 
     for key in ("includeSpamTrash", "labelIds"):
         if key in filters and filters[key] not in (None, "", []):
-            qs[key] = filters[key]
+            if key == "labelIds" and isinstance(filters[key], str):
+                parts = [p.strip() for p in filters[key].split(",") if p.strip()]
+                if parts:
+                    qs[key] = parts
+            else:
+                qs[key] = filters[key]
 
     q_parts: list[str] = []
     base_q = str(filters.get("q") or "").strip()

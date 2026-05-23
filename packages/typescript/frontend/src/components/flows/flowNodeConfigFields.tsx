@@ -22,9 +22,12 @@ import {
   isCompanionUiProperty,
   isPropertyVisible,
   mergeParameterDefaults,
+  mergeObjectFieldDefaults,
+  mergeCollectionFieldDefaults,
   resolveEnumSchemaForParams,
 } from './flowSchemaParameterUtils';
 import { FlowCredentialAuthenticationField } from './FlowCredentialAuthenticationField';
+import { FlowCollectionFieldsField } from './FlowCollectionFieldsField';
 import {
   FlowScheduleTriggerRulesField,
   type ScheduleRuleValue,
@@ -232,9 +235,19 @@ export const FlowNodeParameterFields: React.FC<{
     );
   }
 
-  const renderParamField = (key: string, subschema: { type?: string; enum?: unknown[]; title?: string } & Record<string, unknown>) => {
+  const renderParamField = (
+    key: string,
+    subschema: { type?: string; enum?: unknown[]; title?: string } & Record<string, unknown>,
+    ctx?: {
+      params: Record<string, unknown>;
+      setField: (fieldKey: string, value: unknown) => void;
+      idPrefix: string;
+      suppressLabel?: boolean;
+    },
+  ) => {
     const titleRaw = subschema?.title;
     const propLabel = typeof titleRaw === 'string' && titleRaw.trim().length > 0 ? titleRaw.trim() : key;
+    const suppressLabel = Boolean(ctx?.suppressLabel);
     const t = subschema?.type;
     const uiHint = typeof subschema['x-ui-widget'] === 'string' ? (subschema['x-ui-widget'] as string) : '';
     if (uiHint === 'credential_authentication') {
@@ -259,7 +272,12 @@ export const FlowNodeParameterFields: React.FC<{
         </div>
       );
     }
-    const params = mergedParams;
+    const params = ctx?.params ?? mergedParams;
+    const idPrefix = ctx?.idPrefix ?? '';
+    const setField = (fieldKey: string, value: unknown) => {
+      if (ctx) ctx.setField(fieldKey, value);
+      else applyPatch({ [fieldKey]: value });
+    };
     const v = params[key];
     const isCode =
       key === 'python_code' || key === 'js_code' || key === 'ts_code' || uiHint === 'code';
@@ -284,7 +302,7 @@ export const FlowNodeParameterFields: React.FC<{
             label={propLabel}
             value={v}
             readOnly={readOnly}
-            onChange={(next: ScheduleRuleValue) => applyPatch({ [key]: next })}
+            onChange={(next: ScheduleRuleValue) => setField(key, next)}
           />
         </div>
       );
@@ -308,7 +326,7 @@ export const FlowNodeParameterFields: React.FC<{
             configuringNodeId={node.id}
             soleInboundParentNodeId={soleInboundParentNodeId}
             expressionPreview={expressionPreview}
-            onChange={(pairs: NameValuePair[]) => applyPatch({ [key]: pairs })}
+            onChange={(pairs: NameValuePair[]) => setField(key, pairs)}
           />
         </div>
       );
@@ -319,19 +337,19 @@ export const FlowNodeParameterFields: React.FC<{
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
-            <span className={flowLabelClass}>{propLabel}</span>
+            {!suppressLabel ? <span className={flowLabelClass}>{propLabel}</span> : null}
             {hint ? <FlowParamFieldHint text={hint} /> : null}
             <input readOnly className={flowInputClass} value={Boolean(v) ? 'true' : 'false'} />
           </div>
         );
       }
       return (
-        <div key={key} className="mb-3 rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm text-gray-800">{propLabel}</span>
+        <div key={key} className={suppressLabel ? 'mb-1' : 'mb-3 rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2'}>
+          <div className={`flex items-center gap-3 ${suppressLabel ? 'justify-end' : 'justify-between'}`}>
+            {!suppressLabel ? <span className="text-sm text-gray-800">{propLabel}</span> : null}
             <Switch
               checked={Boolean(v)}
-              onChange={(checked) => applyPatch({ [key]: checked })}
+              onChange={(checked) => setField(key, checked)}
               className={flowSwitchTrackClass}
             >
               <span className={flowSwitchThumbClass} aria-hidden />
@@ -367,7 +385,7 @@ export const FlowNodeParameterFields: React.FC<{
             min={inputMin}
             className={flowInputClass}
             value={typeof v === 'number' ? v : (v as number | '') ?? ''}
-            onChange={(e) => applyPatch({ [key]: Number(e.target.value) })}
+            onChange={(e) => setField(key, Number(e.target.value))}
           />
         </div>
       );
@@ -391,15 +409,17 @@ export const FlowNodeParameterFields: React.FC<{
       }
       return (
         <div key={key} className="mb-3">
-          <label className={flowLabelClass} htmlFor={`param-enum-${key}`}>
-            {propLabel}
-          </label>
+          {!suppressLabel ? (
+            <label className={flowLabelClass} htmlFor={`param-enum-${idPrefix}${key}`}>
+              {propLabel}
+            </label>
+          ) : null}
           {hint ? <FlowParamFieldHint text={hint} /> : null}
           <select
-            id={`param-enum-${key}`}
+            id={`param-enum-${idPrefix}${key}`}
             className={flowSelectClass}
             value={v == null || typeof v === 'object' ? '' : String(v)}
-            onChange={(e) => applyPatch({ [key]: e.target.value })}
+            onChange={(e) => setField(key, e.target.value)}
           >
             {resolvedEnum.enum.map((opt: unknown, idx: number) => (
               <option key={String(opt)} value={String(opt)}>
@@ -462,7 +482,7 @@ export const FlowNodeParameterFields: React.FC<{
               language={monacoLang}
               theme="vs"
               value={tv}
-              onChange={(val) => applyPatch({ [key]: val ?? '' })}
+              onChange={(val) => setField(key, val ?? '')}
               onMount={(editor) => {
                 requestAnimationFrame(() => editor.layout());
                 const dom = editor.getDomNode();
@@ -550,14 +570,73 @@ export const FlowNodeParameterFields: React.FC<{
             className={flowInputClass + ' min-h-[120px] font-mono text-[11px]'}
             placeholder={placeholder}
             value={tv}
-            onChange={(e) => applyPatch({ [key]: e.target.value })}
+            onChange={(e) => setField(key, e.target.value)}
           />
           {expressionPreview ? <FlowExpressionPreviewLine expression={tv} preview={expressionPreview} /> : null}
         </div>
       );
     }
 
-    if (isCode || monacoOneOf || t === 'object' || (t === 'array' && uiHint !== 'name_value_list')) {
+    if (t === 'object' && uiHint === 'collection_fields') {
+      const nestedProps = (subschema.properties ?? {}) as Record<string, Record<string, unknown>>;
+      if (Object.keys(nestedProps).length > 0) {
+        const addLabel =
+          typeof subschema['x-ui-collection-add-label'] === 'string'
+            ? (subschema['x-ui-collection-add-label'] as string)
+            : 'Add option';
+        const hint = schemaDescription(subschema);
+        return (
+          <div key={key} className="mb-3 space-y-1">
+            <FlowCollectionFieldsField
+              label={propLabel}
+              addLabel={addLabel}
+              subschema={subschema as Record<string, unknown>}
+              value={v}
+              readOnly={readOnly}
+              idPrefix={`${idPrefix}${key}-`}
+              onChange={(next) => setField(key, next)}
+              renderProperty={(nestedKey, nestedSchema, nestedCtx) =>
+                renderParamField(nestedKey, nestedSchema, nestedCtx)
+              }
+            />
+            {hint ? <FlowParamFieldHint text={hint} /> : null}
+          </div>
+        );
+      }
+    }
+
+    if (t === 'object' && uiHint === 'object_fields') {
+      const nestedProps = (subschema.properties ?? {}) as Record<string, Record<string, unknown>>;
+      const nestedKeys = Object.keys(nestedProps);
+      if (nestedKeys.length > 0) {
+        const obj = mergeObjectFieldDefaults(subschema as Record<string, unknown>, v);
+        const hint = schemaDescription(subschema);
+        const nestedCtx = {
+          params: obj,
+          setField: (fieldKey: string, value: unknown) => {
+            const parentObj = mergeObjectFieldDefaults(
+              subschema as Record<string, unknown>,
+              mergedParams[key],
+            );
+            setField(key, { ...parentObj, [fieldKey]: value });
+          },
+          idPrefix: `${idPrefix}${key}-`,
+        };
+        return (
+          <div key={key} className="mb-3 space-y-1">
+            <div className="pt-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+              {propLabel}
+            </div>
+            {hint ? <FlowParamFieldHint text={hint} /> : null}
+            {nestedKeys.map((nestedKey) =>
+              renderParamField(nestedKey, nestedProps[nestedKey], nestedCtx),
+            )}
+          </div>
+        );
+      }
+    }
+
+    if (isCode || monacoOneOf || (t === 'object' && uiHint !== 'object_fields' && uiHint !== 'collection_fields') || (t === 'array' && uiHint !== 'name_value_list')) {
       const lang = key === 'python_code' ? 'python' : key === 'ts_code' ? 'typescript' : key === 'js_code' ? 'javascript' : 'json';
       const textValue =
         typeof v === 'string'
@@ -579,12 +658,12 @@ export const FlowNodeParameterFields: React.FC<{
             onChange={(val) => {
               if (readOnly) return;
               if (isCode || uiHint === 'code') {
-                applyPatch({ [key]: val ?? '' });
+                setField(key, val ?? '');
                 return;
               }
               try {
                 const parsed = JSON.parse(val ?? 'null');
-                applyPatch({ [key]: parsed });
+                setField(key, parsed);
               } catch {
                 // ignore until valid
               }
@@ -693,17 +772,19 @@ export const FlowNodeParameterFields: React.FC<{
 
     return (
       <div key={key} className="mb-3">
-        <label className={flowLabelClass} htmlFor={`param-str-${key}`}>
-          {propLabel}
-        </label>
+        {!suppressLabel ? (
+          <label className={flowLabelClass} htmlFor={`param-str-${idPrefix}${key}`}>
+            {propLabel}
+          </label>
+        ) : null}
         {hint ? <FlowParamFieldHint text={hint} /> : null}
         <input
-          id={`param-str-${key}`}
+          id={`param-str-${idPrefix}${key}`}
           className={flowInputClass + monoClass}
           value={strVal}
           placeholder={placeholder}
           onChange={(e) => {
-            applyPatch({ [key]: e.target.value });
+            setField(key, e.target.value);
             if (fieldRegexErrors[key]) {
               setFieldRegexErrors((prev) => {
                 const next = { ...prev };
@@ -723,7 +804,7 @@ export const FlowNodeParameterFields: React.FC<{
             const p = parseDropPayload(e);
             if (!p) return;
             e.preventDefault();
-            applyPatch({ [key]: payloadToExpression(p, node.id, 0, { soleInboundParentNodeId }) });
+            setField(key, payloadToExpression(p, node.id, 0, { soleInboundParentNodeId }));
           }}
         />
         {fieldRegexErrors[key] ? <p className="mt-0.5 text-xs text-red-600">{fieldRegexErrors[key]}</p> : null}

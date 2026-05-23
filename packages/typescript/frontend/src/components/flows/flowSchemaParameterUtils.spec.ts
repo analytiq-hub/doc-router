@@ -10,6 +10,8 @@ import {
   isCompanionUiProperty,
   isPropertyVisible,
   mergeParameterDefaults,
+  mergeObjectFieldDefaults,
+  mergeCollectionFieldDefaults,
   parameterSchemaUsesCredentialAuthenticationWidget,
   resolveEnumSchemaForParams,
 } from './flowSchemaParameterUtils';
@@ -35,6 +37,40 @@ const schema = {
 describe('flowSchemaParameterUtils', () => {
   it('getOrderedKeys follows properties declaration order', () => {
     expect(getOrderedKeys(schema)).toEqual(['url', 'body_mode', 'body_json']);
+  });
+
+  it('mergeObjectFieldDefaults fills nested property defaults', () => {
+    const filtersSchema = {
+      type: 'object',
+      'x-ui-widget': 'object_fields',
+      default: {},
+      properties: {
+        q: { type: 'string', default: '' },
+        readStatus: { type: 'string', enum: ['both', 'unread', 'read'], default: 'unread' },
+        includeSpamTrash: { type: 'boolean', default: false },
+      },
+    };
+    const merged = mergeObjectFieldDefaults(filtersSchema, {});
+    expect(merged).toEqual({ q: '', readStatus: 'unread', includeSpamTrash: false });
+  });
+
+  it('mergeCollectionFieldDefaults only fills defaults for present keys', () => {
+    const filtersSchema = {
+      type: 'object',
+      'x-ui-widget': 'collection_fields',
+      default: {},
+      properties: {
+        q: { type: 'string', default: '' },
+        readStatus: { type: 'string', enum: ['both', 'unread', 'read'], default: 'unread' },
+        includeSpamTrash: { type: 'boolean', default: false },
+      },
+    };
+    expect(mergeCollectionFieldDefaults(filtersSchema, {})).toEqual({});
+    expect(mergeCollectionFieldDefaults(filtersSchema, { readStatus: '' })).toEqual({ readStatus: 'unread' });
+    expect(mergeCollectionFieldDefaults(filtersSchema, { q: 'has:attachment', readStatus: 'both' })).toEqual({
+      q: 'has:attachment',
+      readStatus: 'both',
+    });
   });
 
   it('normalizeEnumParameters coerces invalid operation for resource', () => {

@@ -909,7 +909,65 @@
       "type": "object",
       "default": {},
       "title": "Filters",
-      "description": "Gmail search filters (JSON): q, sender, readStatus (unread/read/both), labelIds, includeSpamTrash, receivedAfter, receivedBefore.",
+      "x-ui-widget": "collection_fields",
+      "x-ui-collection-add-label": "Add Filter",
+      "additionalProperties": false,
+      "properties": {
+        "includeSpamTrash": {
+          "type": "boolean",
+          "default": false,
+          "title": "Include Spam and Trash",
+          "description": "Include messages from SPAM and TRASH in the results."
+        },
+        "labelIds": {
+          "type": "string",
+          "default": "",
+          "title": "Label Names or IDs",
+          "description": "Return messages matching all listed label IDs (comma-separated).",
+          "x-ui-placeholder": "INBOX, UNREAD"
+        },
+        "q": {
+          "type": "string",
+          "default": "",
+          "title": "Search",
+          "description": "Gmail search query (same syntax as the Gmail search box).",
+          "x-ui-placeholder": "has:attachment"
+        },
+        "readStatus": {
+          "type": "string",
+          "enum": [
+            "both",
+            "unread",
+            "read"
+          ],
+          "default": "unread",
+          "title": "Read Status",
+          "x-ui-enum-names": [
+            "Unread and read emails",
+            "Unread emails only",
+            "Read emails only"
+          ]
+        },
+        "receivedAfter": {
+          "type": "string",
+          "default": "",
+          "title": "Received after",
+          "description": "ISO date/time or Unix timestamp (seconds or milliseconds)."
+        },
+        "receivedBefore": {
+          "type": "string",
+          "default": "",
+          "title": "Received Before",
+          "description": "ISO date/time or Unix timestamp (seconds or milliseconds)."
+        },
+        "sender": {
+          "type": "string",
+          "default": "",
+          "title": "Sender",
+          "description": "Filter by sender email or name.",
+          "x-ui-placeholder": "name@example.com"
+        }
+      },
       "x-ui-show-when-any": [
         {
           "all": [

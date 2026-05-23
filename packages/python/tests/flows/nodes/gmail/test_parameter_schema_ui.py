@@ -24,3 +24,13 @@ def test_message_resource_includes_get_all_operation() -> None:
     message_ops = op["x-ui-enum-by"]["variants"]["message"]["enum"]
     assert "get" in message_ops
     assert "getAll" in message_ops
+
+
+def test_get_many_messages_filters_use_collection_fields_widget() -> None:
+    filters = FlowsGmailNode.parameter_schema["properties"]["filters"]
+    assert filters.get("x-ui-widget") == "collection_fields"
+    assert filters.get("x-ui-collection-add-label") == "Add Filter"
+    props = filters["properties"]
+    assert set(props) >= {"q", "sender", "readStatus", "includeSpamTrash", "labelIds", "receivedAfter", "receivedBefore"}
+    assert props["readStatus"]["default"] == "unread"
+    assert props["labelIds"]["title"] == "Label Names or IDs"

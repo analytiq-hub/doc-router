@@ -34,6 +34,11 @@ def test_prepare_gmail_list_query_builds_q() -> None:
     assert "is:unread" in qs["q"]
 
 
+def test_prepare_gmail_list_query_parses_comma_separated_label_ids() -> None:
+    qs = prepare_gmail_list_query({"labelIds": "INBOX, UNREAD"})
+    assert qs["labelIds"] == ["INBOX", "UNREAD"]
+
+
 def test_gmail_node_registered() -> None:
     ad.flows.register_builtin_nodes()
     nt = ad.flows.get("flows.gmail")
