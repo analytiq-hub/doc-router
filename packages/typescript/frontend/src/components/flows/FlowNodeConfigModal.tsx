@@ -81,12 +81,17 @@ const ScheduleTriggerTestHeader: React.FC<{
   readOnly: boolean;
   busy?: boolean;
   onTest?: (triggerNodeId: string) => void | Promise<void>;
-}> = ({ node, readOnly, busy = false, onTest }) => (
+  description?: string;
+}> = ({
+  node,
+  readOnly,
+  busy = false,
+  onTest,
+  description = 'Run this schedule once using the current editor graph. Activation is not required.',
+}) => (
   <div className="rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
     <div className="flex flex-wrap items-center justify-between gap-2">
-      <p className="min-w-0 text-xs text-gray-600">
-        Run this schedule once using the current editor graph. Activation is not required.
-      </p>
+      <p className="min-w-0 text-xs text-gray-600">{description}</p>
       <button
         type="button"
         disabled={readOnly || busy || !onTest}
@@ -448,6 +453,8 @@ const FlowNodeConfigModal: React.FC<{
   webhookTestListenBusy?: boolean;
   onTestScheduleTrigger?: (triggerNodeId: string) => void | Promise<void>;
   scheduleTestBusy?: boolean;
+  onTestPollTrigger?: (triggerNodeId: string) => void | Promise<void>;
+  pollTestBusy?: boolean;
   /** When set, Binary tab View/Download can resolve `flow_blobs:` payloads for this execution. */
   flowBlobDownloadContext?: FlowExecutionBlobContext | null;
   /** Flow id for revision pin-binary upload URLs. */
@@ -480,6 +487,8 @@ const FlowNodeConfigModal: React.FC<{
   webhookTestListenBusy = false,
   onTestScheduleTrigger,
   scheduleTestBusy = false,
+  onTestPollTrigger,
+  pollTestBusy = false,
   flowBlobDownloadContext = null,
   flowId = null,
   flowRevidForPins = null,
@@ -1065,6 +1074,15 @@ const FlowNodeConfigModal: React.FC<{
                               readOnly={readOnly}
                               busy={scheduleTestBusy}
                               onTest={onTestScheduleTrigger}
+                            />
+                          ) : null}
+                          {node && nodeType?.polling && nodeType.key !== SCHEDULE_NODE_KEY ? (
+                            <ScheduleTriggerTestHeader
+                              node={node}
+                              readOnly={readOnly}
+                              busy={pollTestBusy}
+                              onTest={onTestPollTrigger}
+                              description="Poll Google Drive once using the current editor graph. Activation is not required."
                             />
                           ) : null}
                           {node && nodeType?.key === WEBHOOK_NODE_KEY ? (

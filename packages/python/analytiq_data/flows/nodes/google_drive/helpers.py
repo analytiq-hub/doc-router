@@ -10,6 +10,11 @@ _DRIVE_FILE_ID_RE = re.compile(
     r"(?:/d/|/file/d/|id=)([a-zA-Z0-9_-]{10,})",
     re.IGNORECASE,
 )
+_DRIVE_FOLDER_ID_RE = re.compile(
+    r"/folders/([a-zA-Z0-9_-]{2,})",
+    re.IGNORECASE,
+)
+_DRIVE_WATCH_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{2,}$")
 
 RLC_DRIVE_DEFAULT = "My Drive"
 RLC_FOLDER_DEFAULT = "root"
@@ -140,6 +145,26 @@ def drive_file_id_from_param(raw: Any) -> str:
         m = _DRIVE_FILE_ID_RE.search(s)
         if m:
             return m.group(1)
+        m = _DRIVE_FOLDER_ID_RE.search(s)
+        if m:
+            return m.group(1)
+    return s
+
+
+def normalize_drive_watch_id(raw: Any) -> str:
+    """
+    Parse a poll-trigger watch target (RLC, plain id, or share URL).
+
+    Returns ``""`` when missing or not a plausible Drive file/folder id.
+    """
+
+    s = drive_file_id_from_param(raw).strip()
+    if not s or s in (".", ".."):
+        return ""
+    if "://" in s or "/" in s:
+        return ""
+    if not _DRIVE_WATCH_ID_RE.fullmatch(s):
+        return ""
     return s
 
 

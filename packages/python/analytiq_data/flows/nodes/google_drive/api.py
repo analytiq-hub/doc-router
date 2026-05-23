@@ -34,10 +34,9 @@ def is_export_size_limit_error(exc: BaseException) -> bool:
     return "exportsizelimitexceeded" in compact or "too large to be exported" in msg
 
 
-async def resolve_oauth_access_token(
-    context: "ad.flows.ExecutionContext",
-    node: dict[str, Any],
-) -> str:
+async def resolve_oauth_access_token_for_org(organization_id: str, node: dict[str, Any]) -> str:
+    """Resolve OAuth access token from a node credential binding (poll triggers, etc.)."""
+
     bindings = node.get("credentials") if isinstance(node.get("credentials"), dict) else {}
     cred_id = bindings.get("googleDriveOAuth2Api")
     if not cred_id:
@@ -45,7 +44,7 @@ async def resolve_oauth_access_token(
             "Google Drive requires a googleDriveOAuth2Api credential on the node."
         )
     _kind, fields = await ad.flows.fetch_credential_kind_and_fields(
-        context.organization_id, str(cred_id)
+        organization_id, str(cred_id)
     )
     token = str(fields.get("oauthAccessToken") or "").strip()
     if not token:
@@ -53,6 +52,13 @@ async def resolve_oauth_access_token(
             "Google Drive OAuth2 credential has no access token. Connect the credential and try again."
         )
     return token
+
+
+async def resolve_oauth_access_token(
+    context: "ad.flows.ExecutionContext",
+    node: dict[str, Any],
+) -> str:
+    return await resolve_oauth_access_token_for_org(context.organization_id, node)
 
 
 async def google_api_request(

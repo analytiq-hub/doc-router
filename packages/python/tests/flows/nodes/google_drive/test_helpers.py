@@ -6,6 +6,7 @@ from analytiq_data.flows.nodes.google_drive.helpers import (
     drive_file_id_from_param,
     export_fallback_mimes,
     export_mime_for_google_app,
+    normalize_drive_watch_id,
     permissions_from_ui,
     prepare_query_fields,
     rlc_value,
@@ -17,6 +18,17 @@ from analytiq_data.flows.nodes.google_drive.helpers import (
 def test_drive_file_id_from_docs_url() -> None:
     url = "https://docs.google.com/document/d/1QLUu--7KcnD5HNeY7NaOhtSQV-EH8US7UrtNkM7zigA/edit"
     assert drive_file_id_from_param(url) == "1QLUu--7KcnD5HNeY7NaOhtSQV-EH8US7UrtNkM7zigA"
+
+
+def test_drive_file_id_from_folder_url() -> None:
+    url = "https://drive.google.com/drive/folders/1Tx9WHbA3wBpPB4C_HcoZDH9WZFWYxAMU"
+    assert drive_file_id_from_param(url) == "1Tx9WHbA3wBpPB4C_HcoZDH9WZFWYxAMU"
+
+
+def test_normalize_drive_watch_id_rejects_dot_and_unparsed_urls() -> None:
+    assert normalize_drive_watch_id(".") == ""
+    assert normalize_drive_watch_id("https://drive.google.com/drive/folders/") == ""
+    assert normalize_drive_watch_id("1Tx9WHbA3wBpPB4C_HcoZDH9WZFWYxAMU") == "1Tx9WHbA3wBpPB4C_HcoZDH9WZFWYxAMU"
 
 
 def test_drive_file_id_plain_id() -> None:

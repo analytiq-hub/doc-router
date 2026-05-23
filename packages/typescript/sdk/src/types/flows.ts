@@ -26,6 +26,8 @@ export interface FlowNodeType {
   credential_slots?: FlowCredentialSlot[];
   /** Requires organization `experimental_features` to list this node type. */
   experimental?: boolean;
+  /** Poll trigger: platform calls poll() on schedule ticks. */
+  polling?: boolean;
 }
 
 export interface ListNodeTypesResponse {

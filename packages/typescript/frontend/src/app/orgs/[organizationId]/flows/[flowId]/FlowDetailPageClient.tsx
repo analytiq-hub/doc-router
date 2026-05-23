@@ -148,6 +148,7 @@ export default function FlowDetailPageClient({
   const [webhookTestListeningLeaf, setWebhookTestListeningLeaf] = useState<string | null>(null);
   const [webhookTestListenBusy, setWebhookTestListenBusy] = useState(false);
   const [scheduleTestBusy, setScheduleTestBusy] = useState(false);
+  const [pollTestBusy, setPollTestBusy] = useState(false);
   /** Ignore webhook_test rows started before this listen (ms since epoch). */
   const webhookTestListenEpochMsRef = useRef(0);
   /** Last execution id we surfaced from webhook-test polling (for logs focus). */
@@ -676,6 +677,34 @@ export default function FlowDetailPageClient({
     [api, buildRevisionSnapshotForRun, flowId, isDraftRoute, organizationId],
   );
 
+  const onTestPollTrigger = useCallback(
+    async (triggerNodeId: string) => {
+      if (isDraftRoute) {
+        setMessage('Save the flow once before testing the poll trigger.');
+        return;
+      }
+      const revision_snapshot = buildRevisionSnapshotForRun();
+      if (!revision_snapshot) return;
+      const tid = triggerNodeId.trim();
+      if (!tid) return;
+      try {
+        setMessage('');
+        setPollTestBusy(true);
+        const res = await api.getHttpClient().post<{ execution_id?: string }>(
+          `/v0/orgs/${organizationId}/flows/${flowId}/trigger-test/poll`,
+          { revision_snapshot, trigger_node_id: tid },
+        );
+        const eid = res.data.execution_id?.trim();
+        if (eid) setLogsFocusExecutionId(eid);
+      } catch (err: unknown) {
+        setMessage(getApiErrorMsg(err) || 'Failed to test poll trigger');
+      } finally {
+        setPollTestBusy(false);
+      }
+    },
+    [api, buildRevisionSnapshotForRun, flowId, isDraftRoute, organizationId],
+  );
+
   // Poll while listening; tear down the listener server-side after the first matching webhook run is seen.
   useEffect(() => {
     const leaf = webhookTestListeningLeaf?.trim();
@@ -940,6 +969,8 @@ export default function FlowDetailPageClient({
                         webhookTestListenBusy={webhookTestListenBusy}
                         onTestScheduleTrigger={isDraftRoute ? undefined : onTestScheduleTrigger}
                         scheduleTestBusy={scheduleTestBusy}
+                        onTestPollTrigger={isDraftRoute ? undefined : onTestPollTrigger}
+                        pollTestBusy={pollTestBusy}
                         onExecuteStep={isDraftRoute ? undefined : onExecuteFlowStep}
                         executionForIo={executionForIo}
                         pinData={revision?.pin_data ?? null}

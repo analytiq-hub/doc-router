@@ -640,6 +640,7 @@ async def list_node_types(organization_id: str, current_user: User = Depends(get
                 "icon_key": nt.icon_key,
                 "credential_slots": slots if isinstance(slots, list) else [],
                 "experimental": bool(getattr(nt, "experimental", False)),
+                "polling": bool(getattr(nt, "polling", False)),
             }
         )
     return {"items": items, "total": len(items)}

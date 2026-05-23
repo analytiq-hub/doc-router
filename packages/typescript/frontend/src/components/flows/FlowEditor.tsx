@@ -266,6 +266,8 @@ const FlowEditor: React.FC<{
   webhookTestListenBusy?: boolean;
   onTestScheduleTrigger?: (triggerNodeId: string) => void | Promise<void>;
   scheduleTestBusy?: boolean;
+  onTestPollTrigger?: (triggerNodeId: string) => void | Promise<void>;
+  pollTestBusy?: boolean;
   /** Flow id for execution-scoped binary download URLs in the node modal. */
   flowId?: string | null;
   /**
@@ -302,6 +304,8 @@ const FlowEditor: React.FC<{
   webhookTestListenBusy = false,
   onTestScheduleTrigger,
   scheduleTestBusy = false,
+  onTestPollTrigger,
+  pollTestBusy = false,
   flowId = null,
   flowRevidForPins = null,
   executionForIo,
@@ -1183,6 +1187,8 @@ const FlowEditor: React.FC<{
         webhookTestListenBusy={webhookTestListenBusy}
         onTestScheduleTrigger={onTestScheduleTrigger}
         scheduleTestBusy={scheduleTestBusy}
+        onTestPollTrigger={onTestPollTrigger}
+        pollTestBusy={pollTestBusy}
         flowOrgApi={flowOrgApi}
         flowBlobDownloadContext={flowBlobDownloadContext}
         flowId={flowId}
