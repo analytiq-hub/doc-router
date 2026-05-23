@@ -13,6 +13,7 @@ def test_parameter_schema_merges_operations(drive_schema: dict[str, Any]) -> Non
     keys = list(drive_schema["properties"].keys())
     assert keys.index("fileId") < keys.index("options")
     assert drive_schema["properties"]["fileId"]["title"] == "File"
+    assert "file id" in drive_schema["properties"]["fileId"]["description"].lower()
 
 
 def test_schema_builder_orders_resource_operation_first() -> None:

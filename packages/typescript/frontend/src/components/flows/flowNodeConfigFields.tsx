@@ -47,6 +47,17 @@ function parseDropPayload(e: React.DragEvent): FlowValueDragPayload | null {
   return parseFlowValueDragPayload(raw);
 }
 
+const flowParamHintClass = 'mb-1.5 text-[11px] leading-snug text-gray-500';
+
+function schemaDescription(subschema: Record<string, unknown>): string | undefined {
+  const d = subschema.description;
+  return typeof d === 'string' && d.trim().length > 0 ? d.trim() : undefined;
+}
+
+function FlowParamFieldHint({ text }: { text: string }) {
+  return <p className={flowParamHintClass}>{text}</p>;
+}
+
 
 export const FlowNodeSettingsFields: React.FC<{
   node: FlowNode;
@@ -295,24 +306,29 @@ export const FlowNodeParameterFields: React.FC<{
     }
 
     if (t === 'boolean') {
+      const hint = schemaDescription(subschema);
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
             <span className={flowLabelClass}>{propLabel}</span>
+            {hint ? <FlowParamFieldHint text={hint} /> : null}
             <input readOnly className={flowInputClass} value={Boolean(v) ? 'true' : 'false'} />
           </div>
         );
       }
       return (
-        <div key={key} className="mb-3 flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
-          <span className="text-sm text-gray-800">{propLabel}</span>
-          <Switch
-            checked={Boolean(v)}
-            onChange={(checked) => applyPatch({ [key]: checked })}
-            className={flowSwitchTrackClass}
-          >
-            <span className={flowSwitchThumbClass} aria-hidden />
-          </Switch>
+        <div key={key} className="mb-3 rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm text-gray-800">{propLabel}</span>
+            <Switch
+              checked={Boolean(v)}
+              onChange={(checked) => applyPatch({ [key]: checked })}
+              className={flowSwitchTrackClass}
+            >
+              <span className={flowSwitchThumbClass} aria-hidden />
+            </Switch>
+          </div>
+          {hint ? <FlowParamFieldHint text={hint} /> : null}
         </div>
       );
     }
@@ -320,10 +336,12 @@ export const FlowNodeParameterFields: React.FC<{
     if (t === 'number' || t === 'integer') {
       const minVal = (subschema as { minimum?: number }).minimum;
       const inputMin = typeof minVal === 'number' ? minVal : undefined;
+      const hint = schemaDescription(subschema);
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
             <span className={flowLabelClass}>{propLabel}</span>
+            {hint ? <FlowParamFieldHint text={hint} /> : null}
             <input readOnly className={flowInputClass} value={v == null || v === '' ? '' : String(v)} />
           </div>
         );
@@ -333,6 +351,7 @@ export const FlowNodeParameterFields: React.FC<{
           <label className={flowLabelClass} htmlFor={`param-${key}`}>
             {propLabel}
           </label>
+          {hint ? <FlowParamFieldHint text={hint} /> : null}
           <input
             id={`param-${key}`}
             type="number"
@@ -351,10 +370,12 @@ export const FlowNodeParameterFields: React.FC<{
     );
     if (resolvedEnum.enum && Array.isArray(resolvedEnum.enum)) {
       const enumNames = resolvedEnum['x-ui-enum-names'] ?? undefined;
+      const hint = schemaDescription(subschema);
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
             <span className={flowLabelClass}>{propLabel}</span>
+            {hint ? <FlowParamFieldHint text={hint} /> : null}
             <input readOnly className={flowInputClass} value={v == null ? '' : String(v)} />
           </div>
         );
@@ -364,6 +385,7 @@ export const FlowNodeParameterFields: React.FC<{
           <label className={flowLabelClass} htmlFor={`param-enum-${key}`}>
             {propLabel}
           </label>
+          {hint ? <FlowParamFieldHint text={hint} /> : null}
           <select
             id={`param-enum-${key}`}
             className={flowSelectClass}
@@ -620,6 +642,7 @@ export const FlowNodeParameterFields: React.FC<{
 
     const monoClass = uiHint === 'monospace' ? ' font-mono text-[11px]' : '';
     const placeholder = rawPlaceholder || undefined;
+    const hint = schemaDescription(subschema);
     const regexUi = typeof subschema['x-ui-regex'] === 'string' ? (subschema['x-ui-regex'] as string) : '';
     const regexMsg =
       typeof subschema['x-ui-regex-message'] === 'string'
@@ -662,6 +685,7 @@ export const FlowNodeParameterFields: React.FC<{
         <label className={flowLabelClass} htmlFor={`param-str-${key}`}>
           {propLabel}
         </label>
+        {hint ? <FlowParamFieldHint text={hint} /> : null}
         <input
           id={`param-str-${key}`}
           className={flowInputClass + monoClass}

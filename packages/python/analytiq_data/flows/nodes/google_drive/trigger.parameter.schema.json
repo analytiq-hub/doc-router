@@ -12,7 +12,8 @@
       "type": "string",
       "default": "",
       "title": "File",
-      "description": "Google Drive file ID or share URL.",
+      "description": "Enter a Google Drive file ID or paste a Docs/Drive share link (the ID is taken from the URL when the flow runs).",
+      "x-ui-placeholder": "File ID or https://docs.google.com/document/d/…/edit",
       "x-ui-show-when": {
         "field": "triggerOn",
         "equals": "specificFile"
@@ -22,7 +23,8 @@
       "type": "string",
       "default": "",
       "title": "Folder",
-      "description": "Google Drive folder ID or folder URL.",
+      "description": "Enter a Google Drive folder ID or paste a folder link (the ID is taken from the URL when the flow runs).",
+      "x-ui-placeholder": "Folder ID or https://drive.google.com/drive/folders/…",
       "x-ui-show-when": {
         "field": "triggerOn",
         "equals": "specificFolder"

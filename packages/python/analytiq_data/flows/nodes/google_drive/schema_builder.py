@@ -31,6 +31,66 @@ _AFTER_OPERATION_KEYS = (
 )
 _TAIL_KEYS = ("options",)
 
+_FILE_ID_DESC = (
+    "Enter a Google Drive file ID or paste a Docs/Drive share link "
+    "(the ID is taken from the URL when the flow runs)."
+)
+_FILE_ID_PLACEHOLDER = (
+    "File ID or https://docs.google.com/document/d/…/edit"
+)
+_FOLDER_WATCH_DESC = (
+    "Enter a Google Drive folder ID or paste a folder link "
+    "(the ID is taken from the URL when the flow runs)."
+)
+_FOLDER_WATCH_PLACEHOLDER = "Folder ID or https://drive.google.com/drive/folders/…"
+_FOLDER_ID_DESC = "Parent folder in Google Drive. Use root for My Drive, or enter a folder ID."
+_FOLDER_ID_PLACEHOLDER = "root or folder ID"
+_FOLDER_NO_ROOT_DESC = "Google Drive folder ID (cannot be root)."
+_FOLDER_NO_ROOT_PLACEHOLDER = "Folder ID"
+_DRIVE_ID_DESC = "Shared drive ID (from the drive URL or Google Admin)."
+_DRIVE_ID_PLACEHOLDER = "Shared drive ID"
+
+
+def _set_string_field_hints(
+    prop: dict[str, Any] | None,
+    *,
+    title: str,
+    description: str,
+    placeholder: str,
+) -> None:
+    if not isinstance(prop, dict):
+        return
+    prop["title"] = title
+    prop["description"] = description
+    prop["x-ui-placeholder"] = placeholder
+
+
+def _enrich_drive_resource_fields(ordered: dict[str, Any]) -> None:
+    _set_string_field_hints(
+        ordered.get("fileId"),
+        title="File",
+        description=_FILE_ID_DESC,
+        placeholder=_FILE_ID_PLACEHOLDER,
+    )
+    _set_string_field_hints(
+        ordered.get("folderId"),
+        title="Folder",
+        description=_FOLDER_ID_DESC,
+        placeholder=_FOLDER_ID_PLACEHOLDER,
+    )
+    _set_string_field_hints(
+        ordered.get("folderNoRootId"),
+        title="Folder",
+        description=_FOLDER_NO_ROOT_DESC,
+        placeholder=_FOLDER_NO_ROOT_PLACEHOLDER,
+    )
+    _set_string_field_hints(
+        ordered.get("driveId"),
+        title="Shared Drive",
+        description=_DRIVE_ID_DESC,
+        placeholder=_DRIVE_ID_PLACEHOLDER,
+    )
+
 
 def build_google_drive_parameter_schema(description: dict[str, Any]) -> dict[str, Any]:
     """OAuth2-only schema: ``resource`` / ``operation`` first, no ``authentication``."""
@@ -60,17 +120,7 @@ def build_google_drive_parameter_schema(description: dict[str, Any]) -> dict[str
         res = ordered["resource"]
         if isinstance(res, dict):
             res["title"] = "Resource"
-    if "fileId" in ordered:
-        fid = ordered["fileId"]
-        if isinstance(fid, dict):
-            fid["title"] = "File"
-            fid["description"] = (
-                "Google Drive file ID, or paste a Google Docs/Drive link "
-                "(the ID is taken from the URL when you run the flow)."
-            )
-            fid["x-ui-placeholder"] = (
-                "e.g. 1QLUu--7KcnD5HNeY7NaOhtSQV-EH8US7UrtNkM7zigA or https://docs.google.com/document/d/…/edit"
-            )
+    _enrich_drive_resource_fields(ordered)
 
     return {"type": "object", "properties": ordered, "additionalProperties": False}
 

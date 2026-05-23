@@ -208,12 +208,15 @@
         }
       ],
       "title": "File",
-      "description": "Google Drive file ID, or paste a Google Docs/Drive link (the ID is taken from the URL when you run the flow).",
-      "x-ui-placeholder": "e.g. 1QLUu--7KcnD5HNeY7NaOhtSQV-EH8US7UrtNkM7zigA or https://docs.google.com/document/d/…/edit"
+      "description": "Enter a Google Drive file ID or paste a Docs/Drive share link (the ID is taken from the URL when the flow runs).",
+      "x-ui-placeholder": "File ID or https://docs.google.com/document/d/…/edit"
     },
     "folderNoRootId": {
       "type": "string",
       "default": "",
+      "title": "Folder",
+      "description": "Google Drive folder ID (cannot be root).",
+      "x-ui-placeholder": "Folder ID",
       "x-ui-show-when": {
         "all": [
           {
@@ -272,6 +275,9 @@
     "folderId": {
       "type": "string",
       "default": "root",
+      "title": "Folder",
+      "description": "Parent folder in Google Drive. Use root for My Drive, or enter a folder ID.",
+      "x-ui-placeholder": "root or folder ID",
       "x-ui-show-when": {
         "all": [
           {
@@ -358,6 +364,9 @@
     "driveId": {
       "type": "string",
       "default": "",
+      "title": "Shared Drive",
+      "description": "Shared drive ID (from the drive URL or Google Admin).",
+      "x-ui-placeholder": "Shared drive ID",
       "x-ui-show-when": {
         "all": [
           {
