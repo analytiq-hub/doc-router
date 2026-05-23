@@ -14,7 +14,7 @@ from .poll_test import enqueue_poll_trigger_test_run
 from .schedule_test import enqueue_schedule_trigger_test_run
 from .leader import FlowSchedulerLeader, default_holder_id
 from .leases import acquire_tick_lease
-from .poll_context import PollContext, PollMode
+from .poll_context import PollContext, PollMode, require_poll_context
 from .registry import ActiveFlowRegistry
 from .scheduler import FlowScheduler
 from .service import (
@@ -34,6 +34,7 @@ __all__ = [
     "FlowTriggerService",
     "PollContext",
     "PollMode",
+    "require_poll_context",
     "acquire_tick_lease",
     "default_holder_id",
     "delete_trigger_registrations",

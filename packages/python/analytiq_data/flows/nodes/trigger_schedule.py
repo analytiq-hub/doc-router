@@ -8,6 +8,7 @@ from typing import Any
 import analytiq_data as ad
 
 from analytiq_data.flows.triggers.cron_exprs import schedule_params_to_specs
+from analytiq_data.flows.triggers.poll_context import PollContext, require_poll_context
 
 _INTERVAL_ITEM_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -95,9 +96,10 @@ class FlowsScheduleTriggerNode:
 
     async def on_schedule_tick(
         self,
-        context: "ad.flows.triggers.PollContext",
+        context: PollContext,
         node: dict[str, Any],
     ) -> list[list[ad.flows.FlowItem]]:
+        require_poll_context(context)
         rule_index = int(context.tick_meta.get("rule_index") or 0)
         item = ad.flows.FlowItem(
             json={

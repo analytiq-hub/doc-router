@@ -750,7 +750,7 @@ class FlowsHttpRequestNode:
             )
             raise RuntimeError(msg)
 
-        ad.flows.trace_http_on_debug(
+        ad.flows.trace_http_on_success(
             context,
             nid,
             method=method,

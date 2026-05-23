@@ -1,3 +1,4 @@
+import { describe, expect, it } from 'vitest';
 import { defaultCredentialAccountName } from './flowDefaultNames';
 
 describe('defaultCredentialAccountName', () => {

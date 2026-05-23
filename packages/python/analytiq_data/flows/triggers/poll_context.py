@@ -32,3 +32,18 @@ class PollContext:
     def set_static(self, key: str, value: Any) -> None:
         self.static_data[key] = value
         self.data_changed = True
+
+
+def require_poll_context(context: Any) -> PollContext:
+    """
+    Assert ``context`` is a :class:`PollContext` (schedule tick / poll hooks).
+
+    Raises :class:`TypeError` when a full :class:`~analytiq_data.flows.context.ExecutionContext`
+    is passed by mistake.
+    """
+
+    if not isinstance(context, PollContext):
+        raise TypeError(
+            f"Expected PollContext for schedule/poll hook, got {type(context).__name__}"
+        )
+    return context

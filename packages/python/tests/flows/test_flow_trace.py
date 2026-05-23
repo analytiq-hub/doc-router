@@ -64,12 +64,19 @@ def test_trace_event_cap() -> None:
         analytiq_client=None,
         flow_log_level="TRACE",
     )
-    from analytiq_data.flows.trace import MAX_TRACE_EVENTS_PER_NODE
+    from analytiq_data.flows.trace import MAX_TRACE_EVENTS_PER_NODE, TRACE_OVERFLOW_KIND
 
     cap = MAX_TRACE_EVENTS_PER_NODE
     for i in range(cap + 5):
         ad.flows.append_trace(ctx, "n1", level="debug", kind="engine", message=str(i))
-    assert len(ctx.node_traces["n1"]) == cap
+    events = ctx.node_traces["n1"]
+    assert len(events) == cap + 1
+    assert events[-1]["kind"] == TRACE_OVERFLOW_KIND
+    assert events[-1]["level"] == "warn"
+    assert events[-1]["detail"]["dropped_count"] == 5
+    assert events[-1]["detail"]["cap"] == cap
+    assert events[0]["message"] == "0"
+    assert events[cap - 1]["message"] == str(cap - 1)
 
 
 @pytest.mark.asyncio

@@ -116,7 +116,7 @@ async def google_api_request(
             status_code=resp.status_code,
         )
     if context is not None:
-        ad.flows.trace_http_on_debug(
+        ad.flows.trace_http_on_success(
             context,
             trace_node_id,
             method=method,

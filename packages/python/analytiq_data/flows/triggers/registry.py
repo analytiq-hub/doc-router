@@ -20,7 +20,7 @@ from .cron_exprs import (
 from .enqueue import enqueue_scheduled_flow_run
 from .registrations import delete_trigger_registrations, upsert_trigger_registrations
 from .leases import acquire_tick_lease
-from .poll_context import PollContext
+from .poll_context import PollContext, require_poll_context
 from .poll_defaults import resolve_poll_times
 from .scheduler import FlowScheduler
 from .static_data import load_node_static_data, save_node_static_data
@@ -255,6 +255,8 @@ class ActiveFlowRegistry:
             tick_meta={"rule_index": rule_index, "tick_key": tick_key},
             static_data=static_data,
         )
+
+        require_poll_context(ctx)
 
         items: list[list[ad.flows.FlowItem]] | None = None
         if trigger_kind == "schedule":

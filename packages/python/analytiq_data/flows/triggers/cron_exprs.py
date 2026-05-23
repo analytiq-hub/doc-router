@@ -43,17 +43,20 @@ def schedule_rule_to_interval_seconds(rule: dict[str, Any]) -> float | None:
 
     field = (rule.get("field") or "days").strip()
     if field == "minutes":
-        n = int(rule.get("minutesInterval") or 1)
+        raw = rule.get("minutesInterval")
+        n = 1 if raw is None else int(raw)
         if n < 1 or n > 59:
             raise CronExpressionError("minutesInterval must be between 1 and 59")
         return float(n * 60)
     if field == "hours":
-        n = int(rule.get("hoursInterval") or 1)
+        raw = rule.get("hoursInterval")
+        n = 1 if raw is None else int(raw)
         if n < 1 or n > 23:
             raise CronExpressionError("hoursInterval must be between 1 and 23")
         return float(n * 3600)
     if field == "days":
-        n = int(rule.get("daysInterval") or 1)
+        raw = rule.get("daysInterval")
+        n = 1 if raw is None else int(raw)
         if n < 1 or n > 31:
             raise CronExpressionError("daysInterval must be between 1 and 31")
         return float(n * 86400)
@@ -149,7 +152,13 @@ def poll_times_to_crons(poll_times: dict[str, Any] | None) -> list[str]:
 
 
 def next_anchored_run(anchor: datetime, interval_secs: float, *, after: datetime | None = None) -> datetime:
-    """Next run strictly after ``after``, aligned to ``anchor + n * interval``."""
+    """
+    Next run strictly after ``after``, aligned to ``anchor + n * interval``.
+
+    When ``after <= anchor`` (including ``after == anchor`` at the first tick, or
+    ``after < anchor`` from clock skew / tests), returns ``anchor + interval`` —
+    the first fire is one full interval after the anchor, never before ``anchor``.
+    """
 
     if after is None:
         after = datetime.now(UTC)

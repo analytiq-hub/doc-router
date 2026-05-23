@@ -68,6 +68,37 @@ def test_next_anchored_run_from_configuration_time():
     assert nxt == datetime(2026, 5, 21, 11, 23, 47, tzinfo=UTC)
 
 
+def test_next_anchored_run_when_after_equals_anchor():
+    anchor = datetime(2026, 5, 21, 10, 0, 0, tzinfo=UTC)
+    nxt = next_anchored_run(anchor, 300.0, after=anchor)
+    assert nxt == datetime(2026, 5, 21, 10, 5, 0, tzinfo=UTC)
+
+
+def test_next_anchored_run_when_after_before_anchor():
+    """Clock skew / tests: still schedule first fire at anchor + interval."""
+    anchor = datetime(2026, 5, 21, 12, 0, 0, tzinfo=UTC)
+    after = datetime(2026, 5, 21, 11, 0, 0, tzinfo=UTC)
+    nxt = next_anchored_run(anchor, 3600.0, after=after)
+    assert nxt == datetime(2026, 5, 21, 13, 0, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "rule,msg",
+    [
+        ({"field": "minutes", "minutesInterval": 0}, "minutesInterval must be between 1 and 59"),
+        ({"field": "minutes", "minutesInterval": 60}, "minutesInterval must be between 1 and 59"),
+        ({"field": "hours", "hoursInterval": 0}, "hoursInterval must be between 1 and 23"),
+        ({"field": "hours", "hoursInterval": 24}, "hoursInterval must be between 1 and 23"),
+        ({"field": "days", "daysInterval": 0}, "daysInterval must be between 1 and 31"),
+        ({"field": "days", "daysInterval": 32}, "daysInterval must be between 1 and 31"),
+    ],
+)
+def test_schedule_interval_bounds(rule, msg):
+    with pytest.raises(CronExpressionError) as exc:
+        schedule_rule_to_interval_seconds(rule)
+    assert str(exc.value) == msg
+
+
 def test_poll_times_default_every_minute_interval():
     specs = poll_times_to_specs(None)
     assert len(specs) == 1

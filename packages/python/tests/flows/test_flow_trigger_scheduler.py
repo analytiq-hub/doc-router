@@ -320,3 +320,127 @@ async def test_registry_deregister_clears_trigger_registrations(
     await registry.deregister_flow("flow1")
     assert await db.flow_trigger_registrations.count_documents({"flow_id": "flow1"}) == 0
     await scheduler.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_scheduled_flow_run_worker_applies_org_flow_log_level(
+    test_db, register_nodes, flow_revision, aclient, monkeypatch
+):
+    """``process_flow_run_msg`` loads org ``flow_log_level`` for enqueued schedule runs."""
+    from analytiq_data.msg_handlers import process_flow_run_msg
+
+    db = ad.common.get_async_db(aclient)
+    org_oid = ObjectId()
+    flow_id = "flow-log-level"
+    flow_revid = str(flow_revision["_id"])
+    rev_doc = {**flow_revision, "_id": flow_revision["_id"], "flow_id": flow_id}
+
+    await db.organizations.insert_one({"_id": org_oid, "name": "Trace org", "flow_log_level": "TRACE"})
+    await db.flow_revisions.insert_one(rev_doc)
+
+    captured: dict[str, str] = {}
+
+    async def _spy_run_flow(*, context, **kwargs):
+        captured["flow_log_level"] = context.flow_log_level
+        return {"status": "success"}
+
+    monkeypatch.setattr(ad.flows, "run_flow", _spy_run_flow)
+
+    items = [[ad.flows.FlowItem(json={"timestamp": "t0"}, binary={}, meta={})]]
+    exec_id = await ad.flows.enqueue_scheduled_flow_run(
+        aclient,
+        organization_id=str(org_oid),
+        flow_id=flow_id,
+        flow_revid=flow_revid,
+        trigger_node_id="trig1",
+        trigger_type="schedule",
+        items=items,
+        tick_key="trace-test-tick",
+        rule_index=0,
+    )
+    q0 = await db["queues.flow_run"].find_one({"msg.execution_id": exec_id})
+    assert q0 is not None
+
+    await process_flow_run_msg(aclient, q0)
+
+    assert captured.get("flow_log_level") == "TRACE"
+
+
+@pytest.mark.asyncio
+async def test_on_schedule_tick_rejects_execution_context(register_nodes):
+    nt = ad.flows.get("flows.trigger.schedule")
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org1",
+        execution_id="e1",
+        flow_id="f1",
+        flow_revid="r1",
+        mode="schedule",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+    )
+    node = {"id": "trig1", "name": "Schedule", "type": "flows.trigger.schedule", "parameters": {}}
+    with pytest.raises(TypeError, match="Expected PollContext"):
+        await nt.on_schedule_tick(ctx, node)
+
+
+@pytest.mark.asyncio
+async def test_new_leader_resumes_scheduled_ticks_after_lease_expiry(
+    test_db, register_nodes, flow_revision, aclient
+):
+    """After the scheduler leader lease expires, a new leader can fire registered ticks."""
+    db = ad.common.get_async_db(aclient)
+    flow_revid = str(flow_revision["_id"])
+
+    leader_a = ad.flows.FlowSchedulerLeader(db, holder_id="dead-leader", ttl_secs=1)
+    assert await leader_a.renew() is True
+
+    scheduler_a = ad.flows.FlowScheduler()
+    registry_a = ad.flows.ActiveFlowRegistry(
+        aclient,
+        scheduler_a,
+        leader_check=lambda: leader_a.is_leader,
+        lease_ttl_secs=60,
+    )
+    scheduler_b = ad.flows.FlowScheduler()
+    registry_b = ad.flows.ActiveFlowRegistry(
+        aclient,
+        scheduler_b,
+        leader_check=lambda: False,
+        lease_ttl_secs=60,
+    )
+    try:
+        await registry_a.register_flow("org1", "flow1", flow_revid, flow_revision)
+        job_id = "flow1:trig1:0"
+
+        leader_a.is_leader = False
+        await scheduler_a._interval_jobs[job_id].callback()
+        assert await db.flow_executions.count_documents({"flow_id": "flow1"}) == 0
+
+        await db.flow_scheduler_leader.update_one(
+            {"_id": "leader"},
+            {"$set": {"expires_at": datetime.now(UTC) - timedelta(seconds=5)}},
+        )
+
+        leader_b = ad.flows.FlowSchedulerLeader(db, holder_id="new-leader", ttl_secs=30)
+        assert await leader_b.renew() is True
+
+        registry_b = ad.flows.ActiveFlowRegistry(
+            aclient,
+            scheduler_b,
+            leader_check=lambda: leader_b.is_leader,
+            lease_ttl_secs=60,
+        )
+        await registry_b.register_flow("org1", "flow1", flow_revid, flow_revision)
+
+        await scheduler_b._interval_jobs[job_id].callback()
+
+        execs = await db.flow_executions.find({"flow_id": "flow1"}).to_list(10)
+        assert len(execs) == 1
+        assert execs[0]["mode"] == "schedule"
+        assert execs[0]["status"] == "queued"
+    finally:
+        await registry_a.deregister_flow("flow1")
+        await registry_b.deregister_flow("flow1")
+        await scheduler_a.shutdown()
+        await scheduler_b.shutdown()

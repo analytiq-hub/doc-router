@@ -4,18 +4,17 @@ import React from 'react';
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { flowInputClass, flowLabelClass, flowSelectClass } from './flowUiClasses';
 import { CRON_FORMAT_HINT, validateCronExpression } from './flowCronValidation';
+import {
+  coerceScheduleRuleValue,
+  defaultScheduleIntervalRule,
+  scheduleIntervalBounds,
+  type ScheduleIntervalRule,
+  type ScheduleRuleValue,
+} from './flowScheduleTriggerRules';
 
-export type ScheduleIntervalRule = {
-  field: 'minutes' | 'hours' | 'days' | 'cronExpression';
-  minutesInterval?: number;
-  hoursInterval?: number;
-  daysInterval?: number;
-  cronExpression?: string;
-};
-
-export type ScheduleRuleValue = {
-  interval?: ScheduleIntervalRule[];
-};
+export type { ScheduleIntervalRule, ScheduleRuleValue };
+export { coerceScheduleRuleValue, defaultScheduleIntervalRule, scheduleIntervalBounds } from './flowScheduleTriggerRules';
+export { validateScheduleRule } from './flowCronValidation';
 
 const INTERVAL_FIELD_OPTIONS: { value: ScheduleIntervalRule['field']; label: string }[] = [
   { value: 'minutes', label: 'Minutes' },
@@ -23,38 +22,6 @@ const INTERVAL_FIELD_OPTIONS: { value: ScheduleIntervalRule['field']; label: str
   { value: 'days', label: 'Days' },
   { value: 'cronExpression', label: 'Custom (Cron)' },
 ];
-
-function defaultIntervalRule(): ScheduleIntervalRule {
-  return { field: 'hours', hoursInterval: 1 };
-}
-
-function coerceOneRule(raw: unknown): ScheduleIntervalRule {
-  if (!raw || typeof raw !== 'object') return defaultIntervalRule();
-  const o = raw as Record<string, unknown>;
-  const field = o.field;
-  const f: ScheduleIntervalRule['field'] =
-    field === 'minutes' || field === 'hours' || field === 'days' || field === 'cronExpression'
-      ? field
-      : 'hours';
-  return {
-    field: f,
-    minutesInterval: typeof o.minutesInterval === 'number' ? o.minutesInterval : 5,
-    hoursInterval: typeof o.hoursInterval === 'number' ? o.hoursInterval : 1,
-    daysInterval: typeof o.daysInterval === 'number' ? o.daysInterval : 1,
-    cronExpression: typeof o.cronExpression === 'string' ? o.cronExpression : '0 * * * *',
-  };
-}
-
-/** Normalise stored ``rule`` parameter (``{ interval: [...] }``). */
-export function coerceScheduleRuleValue(raw: unknown): ScheduleRuleValue {
-  if (raw && typeof raw === 'object') {
-    const interval = (raw as ScheduleRuleValue).interval;
-    if (Array.isArray(interval) && interval.length > 0) {
-      return { interval: interval.map(coerceOneRule) };
-    }
-  }
-  return { interval: [defaultIntervalRule()] };
-}
 
 /**
  * Repeatable trigger interval rules (n8n Schedule Trigger “Trigger Rules”).
@@ -67,10 +34,10 @@ export const FlowScheduleTriggerRulesField: React.FC<{
   onChange: (next: ScheduleRuleValue) => void;
 }> = ({ label, value, readOnly, onChange }) => {
   const ruleValue = coerceScheduleRuleValue(value);
-  const intervals = ruleValue.interval ?? [defaultIntervalRule()];
+  const intervals = ruleValue.interval ?? [defaultScheduleIntervalRule()];
 
   const patchIntervals = (next: ScheduleIntervalRule[]) => {
-    onChange({ interval: next.length > 0 ? next : [defaultIntervalRule()] });
+    onChange({ interval: next.length > 0 ? next : [defaultScheduleIntervalRule()] });
   };
 
   const updateRule = (index: number, patch: Partial<ScheduleIntervalRule>) => {
@@ -142,8 +109,8 @@ export const FlowScheduleTriggerRulesField: React.FC<{
                 <input
                   id={`sched-min-${index}`}
                   type="number"
-                  min={1}
-                  max={59}
+                  min={scheduleIntervalBounds.minutes.min}
+                  max={scheduleIntervalBounds.minutes.max}
                   className={flowInputClass}
                   value={row.minutesInterval ?? 5}
                   readOnly={readOnly}
@@ -160,8 +127,8 @@ export const FlowScheduleTriggerRulesField: React.FC<{
                 <input
                   id={`sched-hr-${index}`}
                   type="number"
-                  min={1}
-                  max={23}
+                  min={scheduleIntervalBounds.hours.min}
+                  max={scheduleIntervalBounds.hours.max}
                   className={flowInputClass}
                   value={row.hoursInterval ?? 1}
                   readOnly={readOnly}
@@ -178,8 +145,8 @@ export const FlowScheduleTriggerRulesField: React.FC<{
                 <input
                   id={`sched-day-${index}`}
                   type="number"
-                  min={1}
-                  max={31}
+                  min={scheduleIntervalBounds.days.min}
+                  max={scheduleIntervalBounds.days.max}
                   className={flowInputClass}
                   value={row.daysInterval ?? 1}
                   readOnly={readOnly}
@@ -221,7 +188,7 @@ export const FlowScheduleTriggerRulesField: React.FC<{
         <button
           type="button"
           className="inline-flex items-center gap-1.5 rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm text-gray-700 hover:bg-gray-50"
-          onClick={() => patchIntervals([...intervals, defaultIntervalRule()])}
+          onClick={() => patchIntervals([...intervals, defaultScheduleIntervalRule()])}
         >
           <PlusIcon className="h-4 w-4" aria-hidden />
           Add rule

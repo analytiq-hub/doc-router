@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 MAX_TRACE_EVENTS_PER_NODE = 200
 MAX_PREVIEW_LEN = 2048
+TRACE_OVERFLOW_KIND = "trace_overflow"
 
 TraceLevel = str
 TraceKind = str
@@ -33,6 +34,36 @@ def _trace_buffer(context: ExecutionContext, node_id: str) -> list[dict[str, Any
     return buf
 
 
+def _record_trace_overflow(buf: list[dict[str, Any]]) -> None:
+    """Append or update a single overflow sentinel (newest events are dropped)."""
+
+    for ev in buf:
+        if ev.get("kind") == TRACE_OVERFLOW_KIND:
+            detail = ev.setdefault("detail", {})
+            dropped = int(detail.get("dropped_count") or 0) + 1
+            detail["dropped_count"] = dropped
+            detail["cap"] = MAX_TRACE_EVENTS_PER_NODE
+            ev["message"] = (
+                f"Trace buffer full ({MAX_TRACE_EVENTS_PER_NODE} events); "
+                f"{dropped} newer event(s) dropped"
+            )
+            ev["ts"] = datetime.now(UTC).isoformat()
+            return
+
+    buf.append(
+        {
+            "ts": datetime.now(UTC).isoformat(),
+            "level": "warn",
+            "kind": TRACE_OVERFLOW_KIND,
+            "message": (
+                f"Trace buffer full ({MAX_TRACE_EVENTS_PER_NODE} events); "
+                "1 newer event(s) dropped"
+            ),
+            "detail": {"dropped_count": 1, "cap": MAX_TRACE_EVENTS_PER_NODE},
+        }
+    )
+
+
 def append_trace(
     context: ExecutionContext,
     node_id: str | None,
@@ -50,7 +81,9 @@ def append_trace(
     if not flow_log_level_includes(getattr(context, "flow_log_level", None), level):
         return
     buf = _trace_buffer(context, nid)
-    if len(buf) >= MAX_TRACE_EVENTS_PER_NODE:
+    content_count = sum(1 for ev in buf if ev.get("kind") != TRACE_OVERFLOW_KIND)
+    if content_count >= MAX_TRACE_EVENTS_PER_NODE:
+        _record_trace_overflow(buf)
         return
     event: dict[str, Any] = {
         "ts": datetime.now(UTC).isoformat(),
@@ -152,5 +185,27 @@ def trace_http_on_success(
     )
 
 
-# Backward-compatible alias (callers use org setting, not ``LOG_LEVEL`` env).
-trace_http_on_debug = trace_http_on_success
+def trace_http_on_debug(
+    context: ExecutionContext,
+    node_id: str | None,
+    *,
+    method: str,
+    url: str,
+    status_code: int,
+    duration_ms: int,
+    response_preview: str | None = None,
+) -> None:
+    """Emit a successful HTTP trace only when the org ``flow_log_level`` is TRACE."""
+
+    if not flow_log_level_includes(getattr(context, "flow_log_level", None), "debug"):
+        return
+    trace_http(
+        context,
+        node_id,
+        method=method,
+        url=url,
+        status_code=status_code,
+        duration_ms=duration_ms,
+        response_preview=response_preview,
+        level="debug",
+    )
