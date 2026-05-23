@@ -10,6 +10,8 @@ This document is the definitive guide for someone new to the codebase. It covers
 what we built, how it maps to n8n's architecture, what is already running, and
 what is still on the roadmap.
 
+**See also:** [Full execution trace and logging (`docrouter_fulltrace.md`)](./docrouter_fulltrace.md) for step-by-step error/stack/trace UX.
+
 ---
 
 ## 1. How this relates to n8n
@@ -165,8 +167,18 @@ execution. Items are coerced to `FlowItem` instances at runtime.
     "status": "success | error | skipped",
     "start_time": "...",
     "execution_time_ms": 312,
+    "execution_index": 3,
     "data": { "main": [[{ "json": {}, "binary": {}, "meta": {}, "paired_item": null }]] },
-    "error": null
+    "error": {
+      "message": "...",
+      "node_id": "...",
+      "node_name": "...",
+      "stack": "Traceback ...",
+      "cause": "RuntimeError",
+      "http_code": 404
+    },
+    "logs": ["optional code node console lines"],
+    "trace": []
   }
 }
 ```

@@ -144,6 +144,35 @@ export interface FlowExecution {
   initial_run_data?: Record<string, unknown> | null;
 }
 
+/** Per-node or execution-level failure envelope (`docs/docrouter_fulltrace.md`). */
+export interface FlowNodeRunError {
+  message: string;
+  node_id?: string | null;
+  node_name?: string | null;
+  stack?: string | null;
+  cause?: string | null;
+  http_code?: number | null;
+}
+
+export interface FlowTraceEvent {
+  ts?: string;
+  level?: string;
+  kind?: string;
+  message?: string;
+  detail?: Record<string, unknown>;
+}
+
+export interface FlowNodeRunData {
+  status?: string;
+  start_time?: string;
+  execution_time_ms?: number;
+  execution_index?: number;
+  data?: Record<string, unknown>;
+  error?: FlowNodeRunError | null;
+  logs?: string[];
+  trace?: FlowTraceEvent[];
+}
+
 export interface ListExecutionsResponse {
   items: FlowExecution[];
   total: number;

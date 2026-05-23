@@ -22,6 +22,9 @@ from jsonschema import Draft7Validator
 
 import analytiq_data as ad
 
+from .errors import node_error_envelope
+from .trace import pop_node_trace
+
 
 logger = logging.getLogger(__name__)
 
@@ -663,7 +666,12 @@ async def _offload_binary_refs(
                     ref.data = None
 
 
-async def persist_run_data(context: "ad.flows.ExecutionContext", run_data: dict[str, Any]) -> None:
+async def persist_run_data(
+    context: "ad.flows.ExecutionContext",
+    run_data: dict[str, Any],
+    *,
+    last_node_executed: str | None = None,
+) -> None:
     """Persist full `run_data` for a flow execution (used for incremental progress)."""
 
     # Allow pure unit tests to execute flows without a Mongo-backed client.
@@ -673,14 +681,15 @@ async def persist_run_data(context: "ad.flows.ExecutionContext", run_data: dict[
     db = ad.common.get_async_db(context.analytiq_client)
     await _offload_binary_refs(run_data, context.execution_id, context.analytiq_client)
     stored = _bson_serialize_run_data(run_data)
+    patch: dict[str, Any] = {
+        "run_data": stored,
+        "last_heartbeat_at": datetime.now(UTC),
+    }
+    if last_node_executed:
+        patch["last_node_executed"] = last_node_executed
     await db.flow_executions.update_one(
         {"_id": ObjectId(context.execution_id)},
-        {
-            "$set": {
-                "run_data": stored,
-                "last_heartbeat_at": datetime.now(UTC),
-            }
-        },
+        {"$set": patch},
     )
 
 
@@ -746,6 +755,9 @@ async def _execute_loop(
 
         start = time.time()
         start_datetime = datetime.now(UTC)
+        context.execution_index += 1
+        execution_index = context.execution_index
+        context.active_trace_node_id = node["id"]
         status = "success"
         error_env = None
 
@@ -841,12 +853,13 @@ async def _execute_loop(
             except Exception as e:
                 on_error = node.get("on_error") or "stop"
                 msg = str(e)
-                error_env = {
-                    "message": msg,
-                    "node_id": node["id"],
-                    "node_name": node_label,
-                    "stack": None,
-                }
+                include_stack = not isinstance(e, FlowValidationError)
+                error_env = node_error_envelope(
+                    e,
+                    node_id=node["id"],
+                    node_name=node_label,
+                    include_stack=include_stack,
+                )
                 if on_error == "continue":
                     out_lists = [
                         [_error_item(node["id"], node_label, msg)]
@@ -857,21 +870,36 @@ async def _execute_loop(
                         "status": "error",
                         "start_time": start_datetime.isoformat(),
                         "execution_time_ms": int((time.time() - start) * 1000),
+                        "execution_index": execution_index,
                         "data": {"main": []},
                         "error": error_env,
+                        "logs": (context.node_logs.pop(node["id"], None) if hasattr(context, "node_logs") else None),
+                        "trace": pop_node_trace(context, node["id"]),
                     }
-                    await persist_run_data(context, context.run_data)
+                    await persist_run_data(
+                        context,
+                        context.run_data,
+                        last_node_executed=node["id"],
+                    )
+                    context.active_trace_node_id = None
                     raise
 
         context.run_data[node["id"]] = {
             "status": status,
             "start_time": start_datetime.isoformat(),
             "execution_time_ms": int((time.time() - start) * 1000),
+            "execution_index": execution_index,
             "data": {"main": out_lists},
             "error": error_env,
             "logs": (context.node_logs.pop(node["id"], None) if hasattr(context, "node_logs") else None),
+            "trace": pop_node_trace(context, node["id"]),
         }
-        await persist_run_data(context, context.run_data)
+        context.active_trace_node_id = None
+        await persist_run_data(
+            context,
+            context.run_data,
+            last_node_executed=node["id"],
+        )
 
         typed = (connections or {}).get(node["id"]) or {}
         main_slots = typed.get("main") or []

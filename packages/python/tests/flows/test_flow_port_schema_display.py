@@ -24,10 +24,10 @@ def test_display_options_show_single_field_maps_to_show_when() -> None:
             "displayOptions": {"show": {"resource": ["message"]}},
         }
     )
-    assert sch["x-ui-show-when"] == {"field": "resource", "in": ["message"]}
+    assert sch["x-ui-show-when"] == {"field": "resource", "equals": "message"}
 
 
-def test_display_options_multi_field_show_not_mapped() -> None:
+def test_display_options_multi_field_show_maps_to_all() -> None:
     sch = inode_property_to_schema(
         {
             "name": "z",
@@ -35,4 +35,9 @@ def test_display_options_multi_field_show_not_mapped() -> None:
             "displayOptions": {"show": {"resource": ["a"], "operation": ["b"]}},
         }
     )
-    assert "x-ui-show-when" not in sch
+    assert sch["x-ui-show-when"] == {
+        "all": [
+            {"field": "resource", "equals": "a"},
+            {"field": "operation", "equals": "b"},
+        ]
+    }

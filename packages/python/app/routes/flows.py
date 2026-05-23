@@ -1746,6 +1746,7 @@ async def _inbound_webhook_common(
             )
         except asyncio.TimeoutError:
             ts = datetime.now(UTC)
+            err = ad.flows.execution_error_envelope(asyncio.TimeoutError("Execution timed out"))
             await db.flow_executions.update_one(
                 {"_id": ObjectId(exec_id)},
                 {
@@ -1753,33 +1754,26 @@ async def _inbound_webhook_common(
                         "status": "error",
                         "finished_at": ts,
                         "last_heartbeat_at": ts,
-                        "error": {
-                            "message": "Execution timed out",
-                            "node_id": None,
-                            "node_name": None,
-                            "stack": None,
-                        },
+                        "error": err,
                     }
                 },
             )
             raise HTTPException(status_code=500, detail="Webhook execution failed: Execution timed out") from None
         except Exception as e:
             ts = datetime.now(UTC)
+            err = ad.flows.execution_error_envelope(e, run_data=ctx.run_data)
+            patch: dict[str, Any] = {
+                "status": "error",
+                "finished_at": ts,
+                "last_heartbeat_at": ts,
+                "error": err,
+            }
+            node_id = err.get("node_id")
+            if isinstance(node_id, str) and node_id.strip():
+                patch["last_node_executed"] = node_id.strip()
             await db.flow_executions.update_one(
                 {"_id": ObjectId(exec_id)},
-                {
-                    "$set": {
-                        "status": "error",
-                        "finished_at": ts,
-                        "last_heartbeat_at": ts,
-                        "error": {
-                            "message": str(e),
-                            "node_id": None,
-                            "node_name": None,
-                            "stack": None,
-                        },
-                    }
-                },
+                {"$set": patch},
             )
             raise HTTPException(status_code=500, detail=f"Webhook execution failed: {e}") from e
 

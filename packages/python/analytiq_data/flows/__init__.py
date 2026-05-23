@@ -11,6 +11,8 @@ from .execution import *
 from .node_registry import *
 from .expressions import *
 from .node_name import *
+from .errors import execution_error_envelope, node_error_envelope
+from .trace import append_trace, pop_node_trace, trace_http, trace_http_on_debug
 from .engine import *
 from .seed_validation import (
     RunDataSeedValidationError,

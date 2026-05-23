@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, UTC
+from typing import Any
 
 from bson import ObjectId
 
@@ -191,14 +192,26 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
     except asyncio.TimeoutError:
         await db.flow_executions.update_one(
             {"_id": ObjectId(exec_id)},
-            {"$set": {"status": "error", "finished_at": datetime.now(UTC), "error": {"message": "Execution timed out", "node_id": None, "node_name": None, "stack": None}}},
+            {
+                "$set": {
+                    "status": "error",
+                    "finished_at": datetime.now(UTC),
+                    "error": ad.flows.execution_error_envelope(asyncio.TimeoutError("Execution timed out")),
+                }
+            },
         )
         await ad.queue.delete_msg(analytiq_client, "flow_run", msg_id)
     except Exception as e:
-        await db.flow_executions.update_one(
-            {"_id": ObjectId(exec_id)},
-            {"$set": {"status": "error", "finished_at": datetime.now(UTC), "error": {"message": str(e), "node_id": None, "node_name": None, "stack": None}}},
-        )
+        err = ad.flows.execution_error_envelope(e, run_data=context.run_data)
+        patch: dict[str, Any] = {
+            "status": "error",
+            "finished_at": datetime.now(UTC),
+            "error": err,
+        }
+        node_id = err.get("node_id")
+        if isinstance(node_id, str) and node_id.strip():
+            patch["last_node_executed"] = node_id.strip()
+        await db.flow_executions.update_one({"_id": ObjectId(exec_id)}, {"$set": patch})
         attempts = msg.get("attempts", 0)
         if attempts >= ad.queue.queue.MAX_QUEUE_ATTEMPTS:
             await ad.queue.move_to_dlq(analytiq_client, "flow_run", msg_id, str(e))

@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time
 import urllib.parse
 from typing import Any
 
@@ -677,6 +678,7 @@ class FlowsHttpRequestNode:
             )
             client_kw["proxy"] = proxy_raw
 
+        started = time.monotonic()
         try:
             async with httpx.AsyncClient(**client_kw) as client:
                 resp = await client.request(
@@ -695,6 +697,15 @@ class FlowsHttpRequestNode:
                 "HTTP Request url must use http:// or https:// "
                 f"(request used {url!r}: {e})"
             )
+            ad.flows.trace_http(
+                context,
+                nid,
+                method=method,
+                url=url,
+                status_code=None,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                response_preview=str(e),
+            )
             exec_log.error(
                 f"flows.http_request unsupported protocol node_name={n_disp!r} node_id={nid} execution_id={context.execution_id} "
                 f"flow_id={context.flow_id} organization_id={context.organization_id}: {msg}",
@@ -702,6 +713,15 @@ class FlowsHttpRequestNode:
             )
             raise RuntimeError(msg) from None
         except httpx.RequestError as e:
+            ad.flows.trace_http(
+                context,
+                nid,
+                method=method,
+                url=url,
+                status_code=None,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                response_preview=str(e),
+            )
             exec_log.error(
                 f"flows.http_request transport error node_name={n_disp!r} node_id={nid} execution_id={context.execution_id} "
                 f"flow_id={context.flow_id} organization_id={context.organization_id} "
@@ -710,15 +730,35 @@ class FlowsHttpRequestNode:
             )
             raise
 
+        duration_ms = int((time.monotonic() - started) * 1000)
         if not never_error and resp.status_code >= 400:
             detail = resp.text[:200]
             msg = f"HTTP {resp.status_code} from {method} {url}: {detail}"
+            ad.flows.trace_http(
+                context,
+                nid,
+                method=method,
+                url=url,
+                status_code=resp.status_code,
+                duration_ms=duration_ms,
+                response_preview=detail,
+            )
             exec_log.error(
                 f"flows.http_request HTTP error node_name={n_disp!r} node_id={nid} execution_id={context.execution_id} "
                 f"flow_id={context.flow_id} organization_id={context.organization_id} "
                 f"status={resp.status_code} method={method} url={url!r} body_snippet={detail!r}"
             )
             raise RuntimeError(msg)
+
+        ad.flows.trace_http_on_debug(
+            context,
+            nid,
+            method=method,
+            url=url,
+            status_code=resp.status_code,
+            duration_ms=duration_ms,
+            response_preview=resp.text[:500] if resp.text else None,
+        )
 
         ct_header = resp.headers.get("content-type") or ""
 

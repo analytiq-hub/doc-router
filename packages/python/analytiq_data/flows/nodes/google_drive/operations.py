@@ -32,6 +32,16 @@ from .helpers import (
     validate_resource_operation,
 )
 
+
+async def _gd_api(
+    context: "ad.flows.ExecutionContext",
+    token: str,
+    method: str,
+    path: str,
+    **kwargs: Any,
+) -> Any:
+    return await google_api_request(token, method, path, context=context, **kwargs)
+
 async def execute_google_drive_item(
     context: "ad.flows.ExecutionContext",
     node: dict[str, Any],
@@ -50,9 +60,9 @@ async def execute_google_drive_item(
     elif resource == "file":
         data = await _run_file(context, token, operation, params, item, item_index=item_index)
     elif resource == "fileFolder":
-        data = await _run_file_folder(token, operation, params)
+        data = await _run_file_folder(context, token, operation, params)
     elif resource == "folder":
-        data = await _run_folder(token, operation, params)
+        data = await _run_folder(context, token, operation, params)
     else:
         raise ValueError(f"Unknown Google Drive resource: {resource}")
 
@@ -81,8 +91,7 @@ async def _run_drive(
         for key in ("capabilities", "colorRgb", "hidden", "restrictions"):
             if key in options and options[key] is not None:
                 body[key] = options[key]
-        return await google_api_request(
-            token,
+        return await _gd_api(context, token,
             "POST",
             "/drive/v3/drives",
             body=body,
@@ -94,7 +103,7 @@ async def _run_drive(
         qs: dict[str, Any] = {}
         if options.get("useDomainAdminAccess"):
             qs["useDomainAdminAccess"] = True
-        return await google_api_request(token, "GET", f"/drive/v3/drives/{drive_id}", query=qs)
+        return await _gd_api(context, token, "GET", f"/drive/v3/drives/{drive_id}", query=qs)
 
     if operation == "list":
         qs: dict[str, Any] = {}
@@ -104,19 +113,19 @@ async def _run_drive(
             qs["useDomainAdminAccess"] = True
         if params.get("returnAll"):
             drives = await google_api_request_all_items(
-                token, "GET", "/drive/v3/drives", "drives", query=qs
+                context, token, "GET", "/drive/v3/drives", "drives", query=qs
             )
             return {"drives": drives}
         qs.setdefault("pageSize", int(params.get("limit") or 50))
-        data = await google_api_request(token, "GET", "/drive/v3/drives", query=qs)
+        data = await _gd_api(context, token, "GET", "/drive/v3/drives", query=qs)
         return data if isinstance(data, dict) else {"drives": []}
 
     if operation == "update":
         body = {k: options[k] for k in ("name", "colorRgb", "restrictions") if k in options}
-        return await google_api_request(token, "PATCH", f"/drive/v3/drives/{drive_id}", body=body)
+        return await _gd_api(context, token, "PATCH", f"/drive/v3/drives/{drive_id}", body=body)
 
     if operation == "deleteDrive":
-        await google_api_request(token, "DELETE", f"/drive/v3/drives/{drive_id}")
+        await _gd_api(context, token, "DELETE", f"/drive/v3/drives/{drive_id}")
         return {"success": True}
 
     raise ValueError(f"Unsupported drive operation: {operation}")
@@ -125,7 +134,7 @@ async def _run_drive(
 # --- folder ---
 
 
-async def _run_folder(token: str, operation: str, params: dict[str, Any]) -> dict[str, Any]:
+async def _run_folder(context: "ad.flows.ExecutionContext", token: str, operation: str, params: dict[str, Any]) -> dict[str, Any]:
     options = params.get("options") if isinstance(params.get("options"), dict) else {}
 
     if operation == "create":
@@ -141,20 +150,18 @@ async def _run_folder(token: str, operation: str, params: dict[str, Any]) -> dic
         qs = {**shared_drive_query_defaults()}
         if not options.get("simplifyOutput", True):
             qs["fields"] = "*"
-        return await google_api_request(token, "POST", "/drive/v3/files", body=body, query=qs)
+        return await _gd_api(context, token, "POST", "/drive/v3/files", body=body, query=qs)
 
     folder_id = rlc_value(params.get("folderNoRootId"))
     if operation == "deleteFolder":
         if options.get("deletePermanently"):
-            await google_api_request(
-                token,
+            await _gd_api(context, token,
                 "DELETE",
                 f"/drive/v3/files/{folder_id}",
                 query={"supportsAllDrives": True},
             )
         else:
-            await google_api_request(
-                token,
+            await _gd_api(context, token,
                 "PATCH",
                 f"/drive/v3/files/{folder_id}",
                 body={"trashed": True},
@@ -167,8 +174,7 @@ async def _run_folder(token: str, operation: str, params: dict[str, Any]) -> dic
         if not perms:
             raise ValueError("At least one permission is required to share a folder")
         qs = share_options_query(options)
-        result = await google_api_request(
-            token,
+        result = await _gd_api(context, token,
             "POST",
             f"/drive/v3/files/{folder_id}/permissions",
             body=perms[0],
@@ -182,7 +188,7 @@ async def _run_folder(token: str, operation: str, params: dict[str, Any]) -> dic
 # --- fileFolder ---
 
 
-async def _run_file_folder(token: str, operation: str, params: dict[str, Any]) -> dict[str, Any]:
+async def _run_file_folder(context: "ad.flows.ExecutionContext", token: str, operation: str, params: dict[str, Any]) -> dict[str, Any]:
     if operation != "search":
         raise ValueError(f"Unsupported fileFolder operation: {operation}")
 
@@ -232,11 +238,11 @@ async def _run_file_folder(token: str, operation: str, params: dict[str, Any]) -
 
     if params.get("returnAll"):
         files = await google_api_request_all_items(
-            token, "GET", "/drive/v3/files", "files", query=qs
+                context, token, "GET", "/drive/v3/files", "files", query=qs
         )
         return {"files": files}
     qs["pageSize"] = int(params.get("limit") or 50)
-    data = await google_api_request(token, "GET", "/drive/v3/files", query=qs)
+    data = await _gd_api(context, token, "GET", "/drive/v3/files", query=qs)
     return data if isinstance(data, dict) else {"files": []}
 
 
@@ -271,8 +277,7 @@ async def _run_file(
             body["copyRequiresWriterPermission"] = options["copyRequiresWriterPermission"]
         if options.get("description"):
             body["description"] = options["description"]
-        return await google_api_request(
-            token,
+        return await _gd_api(context, token,
             "POST",
             f"/drive/v3/files/{file_id}/copy",
             body=body,
@@ -281,15 +286,13 @@ async def _run_file(
 
     if operation == "deleteFile":
         if options.get("deletePermanently"):
-            await google_api_request(
-                token,
+            await _gd_api(context, token,
                 "DELETE",
                 f"/drive/v3/files/{file_id}",
                 query={"supportsAllDrives": True},
             )
         else:
-            await google_api_request(
-                token,
+            await _gd_api(context, token,
                 "PATCH",
                 f"/drive/v3/files/{file_id}",
                 body={"trashed": True},
@@ -303,8 +306,7 @@ async def _run_file(
     if operation == "move":
         drive_id = rlc_value(params.get("driveId"), default=RLC_DRIVE_DEFAULT)
         folder_id = rlc_value(params.get("folderId"), default=RLC_FOLDER_DEFAULT)
-        meta = await google_api_request(
-            token,
+        meta = await _gd_api(context, token,
             "GET",
             f"/drive/v3/files/{file_id}",
             query={**shared_drive_query_defaults(), "fields": "parents"},
@@ -317,8 +319,7 @@ async def _run_file(
         }
         if remove_parents:
             qs["removeParents"] = remove_parents
-        return await google_api_request(
-            token, "PATCH", f"/drive/v3/files/{file_id}", query=qs
+        return await _gd_api(context, token, "PATCH", f"/drive/v3/files/{file_id}", query=qs
         )
 
     if operation == "share":
@@ -326,8 +327,7 @@ async def _run_file(
         if not perms:
             raise ValueError("At least one permission is required to share a file")
         qs = share_options_query(options)
-        return await google_api_request(
-            token,
+        return await _gd_api(context, token,
             "POST",
             f"/drive/v3/files/{file_id}/permissions",
             body=perms[0],
@@ -335,7 +335,7 @@ async def _run_file(
         )
 
     if operation == "createFromText":
-        return await _file_create_from_text(token, params, options)
+        return await _file_create_from_text(context, token, params, options)
 
     if operation == "upload":
         return await _file_upload(context, token, params, item, options)
@@ -354,8 +354,7 @@ async def _file_download(
     item: "ad.flows.FlowItem",
     options: dict[str, Any],
 ) -> "ad.flows.FlowItem":
-    meta = await google_api_request(
-        token,
+    meta = await _gd_api(context, token,
         "GET",
         f"/drive/v3/files/{file_id}",
         query={"fields": "mimeType,name", "supportsAllDrives": True},
@@ -365,10 +364,9 @@ async def _file_download(
     prop = str(options.get("binaryPropertyName") or "data").strip() or "data"
 
     if mime.startswith("application/vnd.google-apps."):
-        content, out_mime = await google_export_file_bytes(token, file_id, mime, options)
+        content, out_mime = await google_export_file_bytes(context, token, file_id, mime, options)
     else:
-        content = await google_api_request(
-            token,
+        content = await _gd_api(context, token,
             "GET",
             f"/drive/v3/files/{file_id}",
             query={"alt": "media", "supportsAllDrives": True},
@@ -389,6 +387,7 @@ async def _file_download(
 
 
 async def _file_create_from_text(
+    context: "ad.flows.ExecutionContext",
     token: str, params: dict[str, Any], options: dict[str, Any]
 ) -> dict[str, Any]:
     content = str(params.get("content") or "")
@@ -404,16 +403,14 @@ async def _file_create_from_text(
             "parents": [parent],
         }
         body = set_file_properties(body, options)
-        created = await google_api_request(
-            token,
+        created = await _gd_api(context, token,
             "POST",
             "/drive/v3/files",
             body=body,
             query=shared_drive_query_defaults(),
         )
         doc_id = str(created.get("id") or "")
-        await google_api_request(
-            token,
+        await _gd_api(context, token,
             "POST",
             "",
             body={
@@ -435,7 +432,7 @@ async def _file_create_from_text(
         "parents": [parent],
     }
     upload = await upload_multipart_file(
-        token,
+        context, token,
         metadata,
         content.encode("utf-8"),
         "text/plain",
@@ -450,7 +447,7 @@ async def _file_create_from_text(
         "addParents": parent,
     }
     qs = set_update_common_params(qs, options)
-    await google_api_request(token, "PATCH", f"/drive/v3/files/{upload_id}", body=patch_body, query=qs)
+    await _gd_api(context, token, "PATCH", f"/drive/v3/files/{upload_id}", body=patch_body, query=qs)
     return {"id": upload_id}
 
 
@@ -495,10 +492,10 @@ async def _file_upload(
     metadata = {"name": name, "parents": [set_parent_folder(folder_id, drive_id)]}
 
     if len(data) <= 5 * 1024 * 1024:
-        upload = await upload_multipart_file(token, metadata, data, mime_type)
+        upload = await upload_multipart_file(context, token, metadata, data, mime_type)
         upload_id = str(upload.get("id") or "")
     else:
-        upload_id = await resumable_upload(token, metadata, data, mime_type)
+        upload_id = await resumable_upload(context, token, metadata, data, mime_type)
 
     qs = {**shared_drive_query_defaults(), "addParents": set_parent_folder(folder_id, drive_id)}
     qs = set_update_common_params(qs, options)
@@ -508,8 +505,7 @@ async def _file_upload(
         {"mimeType": mime_type, "name": name, "originalFilename": original_name},
         options,
     )
-    return await google_api_request(
-        token, "PATCH", f"/drive/v3/files/{upload_id}", body=patch_body, query=qs
+    return await _gd_api(context, token, "PATCH", f"/drive/v3/files/{upload_id}", body=patch_body, query=qs
     )
 
 
@@ -532,8 +528,7 @@ async def _file_update(
     if params.get("changeFileContent"):
         field = str(params.get("inputDataFieldName") or "data")
         data, original_name, mime_type = await _read_input_binary(context, item, field)
-        await google_api_request(
-            token,
+        await _gd_api(context, token,
             "PATCH",
             f"/upload/drive/v3/files/{file_id}",
             body=data,
@@ -555,4 +550,4 @@ async def _file_update(
         if new_name:
             body["name"] = new_name
 
-    return await google_api_request(token, "PATCH", f"/drive/v3/files/{file_id}", body=body, query=qs)
+    return await _gd_api(context, token, "PATCH", f"/drive/v3/files/{file_id}", body=body, query=qs)

@@ -39,4 +39,10 @@ class ExecutionContext:
     credentials: dict[str, Any] = field(default_factory=dict)
     #: Revision ``nodes`` for name-keyed ``_node`` in parameter expressions (see ``expressions.materialize_node_outputs_by_name``).
     revision_nodes: list[dict[str, Any]] | None = None
+    #: Monotonic step counter incremented before each node executes (``execution_index`` on run records).
+    execution_index: int = 0
+    #: Node id → structured trace events flushed into ``run_data[node_id].trace``.
+    node_traces: dict[str, list[dict[str, Any]]] = field(default_factory=dict)
+    #: Node currently executing; used by integration helpers when ``node_id`` is omitted.
+    active_trace_node_id: str | None = None
 

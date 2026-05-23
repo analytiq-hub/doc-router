@@ -90,7 +90,7 @@ async def test_export_falls_back_on_size_limit() -> None:
         side_effect=fake_request,
     ):
         content, out_mime = await google_export_file_bytes(
-            "tok", "file-id", doc_mime, {}
+            None, "tok", "file-id", doc_mime, {}
         )
     assert content == b"ok"
     assert out_mime == "text/html"
@@ -142,7 +142,7 @@ async def test_upload_multipart_uses_google_upload_path() -> None:
         new_callable=AsyncMock,
         side_effect=fake_request,
     ):
-        out = await upload_multipart_file("tok", {"name": "x"}, b"data", "text/plain")
+        out = await upload_multipart_file(None, "tok", {"name": "x"}, b"data", "text/plain")
     assert out["id"] == "new-file"
     assert captured["path"] == "/upload/drive/v3/files"
 

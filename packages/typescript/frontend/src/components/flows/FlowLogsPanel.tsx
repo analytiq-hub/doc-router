@@ -21,6 +21,7 @@ import {
   flowWorkspaceMenuTriggerIconBtnClass,
 } from './flowWorkspaceMenu';
 import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
+import { FlowNodeTracePanel } from './flowNodeTracePanel';
 import { flowPanelColResizeHandleClass } from './flowUiClasses';
 
 function isRunning(e: FlowExecution) {
@@ -35,8 +36,11 @@ type RunDataEntry = {
   status?: string;
   start_time?: string;
   execution_time_ms?: number;
+  execution_index?: number;
   data?: unknown;
   error?: unknown;
+  logs?: unknown;
+  trace?: unknown;
 };
 
 /** Top-level execution failure (`flow_executions.error`), when the worker/engine recorded one. */
@@ -44,12 +48,7 @@ function ExecutionErrorBanner({ error }: { error: Record<string, unknown> | null
   if (!error || typeof error !== 'object') return null;
   const message = typeof error.message === 'string' ? error.message : null;
   if (message == null || message === '') return null;
-  return (
-    <div className="min-w-0 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-950">
-      <div className="text-[11px] font-semibold uppercase tracking-wide text-red-800">Execution failed</div>
-      <pre className="mt-1 min-w-0 whitespace-pre-wrap break-words font-mono text-xs leading-snug">{message}</pre>
-    </div>
-  );
+  return <NodeRunErrorDetails error={error} />;
 }
 
 function formatExecutionMs(ms: number | undefined): string {
@@ -103,7 +102,7 @@ const FlowLogsPanel: React.FC<{
   const [execution, setExecution] = useState<FlowExecution | null>(null);
   const [activeTab, setActiveTab] = useState<LogsTab>('overview');
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [ioTab, setIoTab] = useState<'input' | 'output'>('output');
+  const [ioTab, setIoTab] = useState<'input' | 'output' | 'trace'>('output');
   const [nodeSplitLeftPct, setNodeSplitLeftPct] = useState<number>(() => {
     if (typeof window === 'undefined') return 32;
     const raw = window.localStorage.getItem(NODE_SPLIT_STORAGE_KEY);
@@ -197,8 +196,23 @@ const FlowLogsPanel: React.FC<{
     if (!runData) return [];
     return Object.entries(runData)
       .map(([nodeId, raw]) => ({ nodeId, rec: raw as RunDataEntry }))
-      .sort((a, b) => (a.rec.start_time ?? '').localeCompare(b.rec.start_time ?? ''));
+      .sort((a, b) => {
+        const ai = a.rec.execution_index;
+        const bi = b.rec.execution_index;
+        if (typeof ai === 'number' && typeof bi === 'number' && ai !== bi) return ai - bi;
+        return (a.rec.start_time ?? '').localeCompare(b.rec.start_time ?? '');
+      });
   }, [runData]);
+
+  useEffect(() => {
+    if (!execution || execution.status !== 'error' || sortedRunEntries.length === 0) return;
+    const failed = sortedRunEntries.find(({ rec }) => rec.status === 'error');
+    if (failed) {
+      setSelectedNodeId(failed.nodeId);
+      setActiveTab('details');
+      setIoTab('trace');
+    }
+  }, [execution?.execution_id, execution?.status, sortedRunEntries]);
 
   useEffect(() => {
     if (!selectedNodeId && sortedRunEntries.length > 0) {
@@ -233,8 +247,8 @@ const FlowLogsPanel: React.FC<{
   const isSelectedTrigger = Boolean(selectedNodeType?.is_trigger);
 
   useEffect(() => {
-    if (isSelectedTrigger) setIoTab('output');
-  }, [isSelectedTrigger]);
+    if (isSelectedTrigger && ioTab === 'input') setIoTab('output');
+  }, [isSelectedTrigger, ioTab]);
 
   const selectedRunEntry = useMemo(() => {
     if (!selectedNodeId) return null;
@@ -533,17 +547,34 @@ const FlowLogsPanel: React.FC<{
 
                                 {!isSelectedTrigger && selectedNodeId && (
                                   <div className="inline-flex shrink-0 rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
-                                    {(['input', 'output'] as const).map((t) => (
+                                    {(['input', 'output', 'trace'] as const).map((t) => (
                                       <button
                                         key={t}
                                         type="button"
                                         onClick={() => setIoTab(t)}
                                         className={[
-                                          'rounded px-2 py-1 font-semibold',
+                                          'rounded px-2 py-1 font-semibold capitalize',
                                           ioTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
                                         ].join(' ')}
                                       >
-                                        {t === 'input' ? 'Input' : 'Output'}
+                                        {t}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                {isSelectedTrigger && selectedNodeId && (
+                                  <div className="inline-flex shrink-0 rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
+                                    {(['output', 'trace'] as const).map((t) => (
+                                      <button
+                                        key={t}
+                                        type="button"
+                                        onClick={() => setIoTab(t)}
+                                        className={[
+                                          'rounded px-2 py-1 font-semibold capitalize',
+                                          ioTab === t ? 'bg-gray-900 text-white' : 'text-gray-700 hover:bg-gray-50',
+                                        ].join(' ')}
+                                      >
+                                        {t}
                                       </button>
                                     ))}
                                   </div>
@@ -639,6 +670,29 @@ const FlowLogsPanel: React.FC<{
                                           )}
                                         </div>
                                       )}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {selectedNodeId && ioTab === 'trace' && (
+                                  <div className="min-w-0">
+                                    <div className="border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
+                                      <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+                                        TRACE
+                                      </span>
+                                    </div>
+                                    <div className="p-3">
+                                      <FlowNodeTracePanel
+                                        nodeError={selectedRunEntry?.error}
+                                        executionError={
+                                          execution?.status === 'error' &&
+                                          execution.last_node_executed === selectedNodeId
+                                            ? (execution.error as Record<string, unknown> | null)
+                                            : null
+                                        }
+                                        codeLogs={selectedOutputPreview?.logs}
+                                        traceEvents={selectedRunEntry?.trace}
+                                      />
                                     </div>
                                   </div>
                                 )}
