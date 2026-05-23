@@ -167,6 +167,17 @@ export function mergeParameterDefaults(
   for (const key of Object.keys(props)) {
     if (out[key] === undefined) {
       out[key] = defaultFromSubschema(props[key]);
+    } else if (
+      props[key].type === 'object' &&
+      out[key] !== null &&
+      typeof out[key] === 'object' &&
+      !Array.isArray(out[key]) &&
+      Object.keys(out[key] as object).length === 0 &&
+      props[key].default !== undefined &&
+      typeof props[key].default === 'object' &&
+      !Array.isArray(props[key].default)
+    ) {
+      out[key] = { ...(props[key].default as Record<string, unknown>) };
     }
   }
   return out;

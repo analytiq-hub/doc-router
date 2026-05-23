@@ -23,6 +23,7 @@ from jsonschema import Draft7Validator
 import analytiq_data as ad
 
 from .errors import node_error_envelope
+from .flow_settings import validate_flow_settings
 from .trace import pop_node_trace
 
 
@@ -216,6 +217,16 @@ def validate_revision(
                     raise FlowValidationError(
                         f"Credential binding for slot {slot_name!r} on node {ad.flows.node_name(n)} must be a string id"
                     )
+
+        if nt.key == "flows.trigger.schedule":
+            param_errs = nt.validate_parameters(n.get("parameters") or {})
+            if param_errs:
+                raise FlowValidationError(
+                    f"Node {ad.flows.node_name(n)}: {'; '.join(param_errs)}"
+                )
+
+    for msg in validate_flow_settings(settings):
+        raise FlowValidationError(msg)
 
     if pin_data:
         for node_id in pin_data.keys():

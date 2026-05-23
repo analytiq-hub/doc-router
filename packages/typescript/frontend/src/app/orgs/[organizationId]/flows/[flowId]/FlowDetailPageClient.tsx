@@ -14,6 +14,7 @@ import type {
   ListNodeTypesResponse,
 } from '@docrouter/sdk';
 import FlowToolbar from '@/components/flows/FlowToolbar';
+import FlowSettingsModal from '@/components/flows/FlowSettingsModal';
 import FlowEditor from '@/components/flows/FlowEditor';
 import FlowCanvasViewTabs, { FlowWorkspaceTabStraddle, type FlowCanvasView } from '@/components/flows/FlowCanvasViewTabs';
 import { FLOW_WORKSPACE_HEADER_HEIGHT_CLASS, FLOW_WORKSPACE_TITLE_READ_CLASS } from '@/components/flows/flowUiClasses';
@@ -31,6 +32,7 @@ import {
   nextSequentialDisplayName,
 } from '@/components/flows/flowDefaultNames';
 import { useFlowApi } from '@/components/flows/useFlowApi';
+import { normalizeFlowSettingsForSave } from '@/components/flows/flowTimezone';
 import { getApiErrorMsg } from '@/utils/api';
 import type { Edge, Node } from 'reactflow';
 import FlowExecutionsView from '@/components/flows/FlowExecutionsView';
@@ -141,6 +143,7 @@ export default function FlowDetailPageClient({
   const [message, setMessage] = useState<string>('');
   const [logsFocusExecutionId, setLogsFocusExecutionId] = useState<string | null>(null);
   const [editorOpenConfigNodeId, setEditorOpenConfigNodeId] = useState<string | null>(null);
+  const [flowSettingsOpen, setFlowSettingsOpen] = useState(false);
   /** When set, `/webhook-test/{leaf}` is wired to this editor session (until Stop or TTL on server). */
   const [webhookTestListeningLeaf, setWebhookTestListeningLeaf] = useState<string | null>(null);
   const [webhookTestListenBusy, setWebhookTestListenBusy] = useState(false);
@@ -394,12 +397,13 @@ export default function FlowDetailPageClient({
       setIsSaving(true);
       setMessage('');
       const body = rfToRevision(rfNodes as FlowRfNode[], rfEdges as FlowRfEdge[], revision, flowName);
+      const settings = normalizeFlowSettingsForSave(body.settings as Record<string, unknown>);
       if (isDraftRoute) {
         const res = await api.createFlow({
           name: body.name,
           nodes: body.nodes,
           connections: body.connections,
-          settings: body.settings,
+          settings,
           pin_data: body.pin_data,
         });
         if (!res.revision) {
@@ -414,7 +418,7 @@ export default function FlowDetailPageClient({
         name: body.name,
         nodes: body.nodes,
         connections: body.connections,
-        settings: body.settings,
+        settings,
         pin_data: body.pin_data,
       });
       setFlowName(res.flow.name);
@@ -488,12 +492,13 @@ export default function FlowDetailPageClient({
           mergedRevision,
           ctx.flowName,
         );
+        const settings = normalizeFlowSettingsForSave(body.settings as Record<string, unknown>);
         const res = await api.saveRevision(flowId, {
           base_flow_revid: ctx.latestFlowRevid || '',
           name: body.name,
           nodes: body.nodes,
           connections: body.connections,
-          settings: body.settings,
+          settings,
           pin_data: pinData,
         });
         setFlowName(res.flow.name);
@@ -559,7 +564,7 @@ export default function FlowDetailPageClient({
     return {
       nodes: body.nodes,
       connections: body.connections,
-      settings: body.settings ?? {},
+      settings: normalizeFlowSettingsForSave(body.settings as Record<string, unknown>),
       pin_data: body.pin_data ?? null,
     };
   }, [revision, rfNodes, rfEdges, flowName]);
@@ -801,6 +806,22 @@ export default function FlowDetailPageClient({
     }
   }, [api, flowId]);
 
+  const onApplyFlowSettings = useCallback(
+    (next: { timezone?: string }) => {
+      setRevision((cur) => {
+        if (!cur) return cur;
+        return {
+          ...cur,
+          settings: {
+            ...(cur.settings || {}),
+            ...next,
+          },
+        };
+      });
+    },
+    [],
+  );
+
   return (
     <div className="p-4">
       <div className="mx-auto w-full max-w-[1920px]">
@@ -836,6 +857,7 @@ export default function FlowDetailPageClient({
                   onActivate={onActivate}
                   onDeactivate={onDeactivate}
                   onDownloadFlowJson={() => void onDownloadFlowJson()}
+                  onOpenSettings={() => setFlowSettingsOpen(true)}
                 />
                 <FlowWorkspaceTabStraddle>
                   <FlowCanvasViewTabs
@@ -957,6 +979,13 @@ export default function FlowDetailPageClient({
           )}
         </div>
       </div>
+
+      <FlowSettingsModal
+        open={flowSettingsOpen}
+        settings={(revision?.settings || {}) as { timezone?: string }}
+        onClose={() => setFlowSettingsOpen(false)}
+        onSave={onApplyFlowSettings}
+      />
     </div>
   );
 }

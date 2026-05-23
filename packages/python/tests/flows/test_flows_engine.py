@@ -202,6 +202,56 @@ def _register_nodes() -> None:
     ad.flows.register(_BinaryAttachNode())
 
 
+def test_validate_revision_accepts_schedule_trigger_croniter_valid_cron(_register_nodes) -> None:
+    nodes = [
+        {
+            "id": "t1",
+            "name": "Schedule",
+            "type": "flows.trigger.schedule",
+            "position": [0, 0],
+            "parameters": {
+                "rule": {
+                    "interval": [
+                        {"field": "cronExpression", "cronExpression": "0 * * * 1,2,3-1"},
+                        {"field": "cronExpression", "cronExpression": "0 * * * * 1"},
+                    ]
+                },
+            },
+            "webhook_id": None,
+            "disabled": False,
+            "on_error": "stop",
+            "retry_on_fail": False,
+            "max_tries": 1,
+            "wait_between_tries_ms": 1000,
+            "notes": None,
+        },
+    ]
+    ad.flows.validate_revision(nodes, {}, {}, None)
+
+
+def test_validate_revision_rejects_schedule_trigger_invalid_cron(_register_nodes) -> None:
+    nodes = [
+        {
+            "id": "t1",
+            "name": "Schedule",
+            "type": "flows.trigger.schedule",
+            "position": [0, 0],
+            "parameters": {
+                "rule": {"interval": [{"field": "cronExpression", "cronExpression": "not a cron"}]},
+            },
+            "webhook_id": None,
+            "disabled": False,
+            "on_error": "stop",
+            "retry_on_fail": False,
+            "max_tries": 1,
+            "wait_between_tries_ms": 1000,
+            "notes": None,
+        },
+    ]
+    with pytest.raises(ad.flows.FlowValidationError, match="Invalid cron expression"):
+        ad.flows.validate_revision(nodes, {}, {}, None)
+
+
 def test_validate_revision_accepts_simple_dag() -> None:
     """A 2-node DAG (trigger -> node) is accepted."""
 

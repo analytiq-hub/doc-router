@@ -25,6 +25,10 @@ import {
   resolveEnumSchemaForParams,
 } from './flowSchemaParameterUtils';
 import { FlowCredentialAuthenticationField } from './FlowCredentialAuthenticationField';
+import {
+  FlowScheduleTriggerRulesField,
+  type ScheduleRuleValue,
+} from './FlowScheduleTriggerRulesField';
 function isExpressionValue(value: unknown): boolean {
   return typeof value === 'string' && value.startsWith('=');
 }
@@ -244,6 +248,27 @@ export const FlowNodeParameterFields: React.FC<{
       Array.isArray((subschema as { oneOf?: unknown }).oneOf) && t !== 'string';
     const rawPlaceholder =
       typeof subschema['x-ui-placeholder'] === 'string' ? (subschema['x-ui-placeholder'] as string) : '';
+
+    if (uiHint === 'schedule_trigger_rules') {
+      if (readOnly) {
+        return (
+          <div key={key} className="mb-3">
+            <span className={flowLabelClass}>{propLabel}</span>
+            <input readOnly className={flowInputClass} value={safeJsonStringify(v, '{}')} />
+          </div>
+        );
+      }
+      return (
+        <div key={key} className="mb-3">
+          <FlowScheduleTriggerRulesField
+            label={propLabel}
+            value={v}
+            readOnly={readOnly}
+            onChange={(next: ScheduleRuleValue) => applyPatch({ [key]: next })}
+          />
+        </div>
+      );
+    }
 
     if (uiHint === 'name_value_list') {
       if (readOnly) {

@@ -1,4 +1,5 @@
 from .trigger_manual import FlowsManualTriggerNode
+from .trigger_schedule import FlowsScheduleTriggerNode
 from .trigger_webhook import FlowsWebhookTriggerNode
 from .respond_to_webhook import FlowsRespondToWebhookNode
 from .http_request import FlowsHttpRequestNode

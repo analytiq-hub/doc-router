@@ -1209,6 +1209,9 @@ async def activate_flow(organization_id: str, flow_id: str, req: ActivateFlowReq
         {"_id": ObjectId(flow_id)},
         {"$set": {"active": True, "active_flow_revid": target, "updated_at": _now(), "updated_by": current_user.user_id}},
     )
+    trigger_svc = ad.flows.get_flow_trigger_service()
+    if trigger_svc is not None:
+        await trigger_svc.register_flow(organization_id, flow_id, target, r)
     return await get_flow(organization_id, flow_id, current_user)
 
 
@@ -1221,6 +1224,9 @@ async def deactivate_flow(organization_id: str, flow_id: str, current_user: User
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Flow not found")
+    trigger_svc = ad.flows.get_flow_trigger_service()
+    if trigger_svc is not None:
+        await trigger_svc.deregister_flow(flow_id)
     return await get_flow(organization_id, flow_id, current_user)
 
 

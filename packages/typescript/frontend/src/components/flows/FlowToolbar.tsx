@@ -61,6 +61,7 @@ const FlowToolbar: React.FC<{
   onActivate: () => void;
   onDeactivate: () => void;
   onDownloadFlowJson: () => void;
+  onOpenSettings: () => void;
 }> = ({
   name,
   onNameChange,
@@ -75,6 +76,7 @@ const FlowToolbar: React.FC<{
   onActivate,
   onDeactivate,
   onDownloadFlowJson,
+  onOpenSettings,
 }) => {
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
@@ -155,6 +157,17 @@ const FlowToolbar: React.FC<{
             <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
           </MenuButton>
           <MenuItems anchor="bottom end" portal modal={false} className={flowWorkspaceMenuPanelClass}>
+            <MenuItem>
+              {({ focus }) => (
+                <button
+                  type="button"
+                  className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                  onClick={() => onOpenSettings()}
+                >
+                  Settings
+                </button>
+              )}
+            </MenuItem>
             <MenuItem>
               {({ focus }) => (
                 <button

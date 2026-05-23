@@ -106,7 +106,10 @@ async def lifespan(app):
     await ad.flows.ensure_credentials_indexes(analytiq_client)
     await ad.flows.ensure_flow_oauth_state_indexes(analytiq_client)
 
-    # Start background workers in the same event loop (N_DOCROUTER_WORKERS=0 → start_workers returns []).
+    if os.getenv("FLOW_SCHEDULER_ENABLED", "1") == "1":
+        await ad.flows.start_flow_trigger_service(analytiq_client)
+
+    # Start background workers
     n_docrouter_workers = int(os.getenv("N_DOCROUTER_WORKERS", "1"))
     worker_tasks = start_workers(n_docrouter_workers)
 
@@ -116,6 +119,8 @@ async def lifespan(app):
     for task in worker_tasks:
         task.cancel()
     await asyncio.gather(*worker_tasks, return_exceptions=True)
+
+    await ad.flows.stop_flow_trigger_service()
 
     await ad.mongodb.close_shared_async_client()
 

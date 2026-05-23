@@ -3,6 +3,7 @@
 import React from 'react';
 import {
   ArrowsRightLeftIcon,
+  ClockIcon,
   CodeBracketSquareIcon,
   CursorArrowRaysIcon,
   DocumentMagnifyingGlassIcon,
@@ -28,6 +29,7 @@ export const FLOW_BUILTIN_ICON_KEYS = [
   'llm_extract',
   'set_tags',
   'google_drive',
+  'schedule_trigger',
 ] as const;
 
 export type FlowBuiltinIconKey = (typeof FLOW_BUILTIN_ICON_KEYS)[number];
@@ -72,6 +74,8 @@ export function FlowNodeTypeIcon({
         return <TagIcon className={className} aria-hidden={ariaHidden} />;
       case 'google_drive':
         return <GoogleDriveIcon className={className} />;
+      case 'schedule_trigger':
+        return <ClockIcon className={className} aria-hidden={ariaHidden} />;
       default:
         break;
     }
