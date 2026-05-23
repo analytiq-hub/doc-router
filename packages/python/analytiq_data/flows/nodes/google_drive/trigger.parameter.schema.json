@@ -1,0 +1,139 @@
+{
+  "type": "object",
+  "properties": {
+    "triggerOn": {
+      "type": "string",
+      "enum": ["specificFile", "specificFolder"],
+      "default": "specificFolder",
+      "title": "Trigger on",
+      "x-ui-enum-names": ["Changes to a Specific File", "Changes Involving a Specific Folder"]
+    },
+    "fileToWatch": {
+      "type": "string",
+      "default": "",
+      "title": "File",
+      "description": "Google Drive file ID or share URL.",
+      "x-ui-show-when": {
+        "field": "triggerOn",
+        "equals": "specificFile"
+      }
+    },
+    "folderToWatch": {
+      "type": "string",
+      "default": "",
+      "title": "Folder",
+      "description": "Google Drive folder ID or folder URL.",
+      "x-ui-show-when": {
+        "field": "triggerOn",
+        "equals": "specificFolder"
+      }
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "fileCreated",
+        "fileUpdated",
+        "folderCreated",
+        "folderUpdated",
+        "watchFolderUpdated"
+      ],
+      "default": "fileCreated",
+      "title": "Watch for",
+      "x-ui-enum-by": {
+        "field": "triggerOn",
+        "variants": {
+          "specificFile": {
+            "enum": ["fileUpdated"],
+            "x-ui-enum-names": ["File Updated"]
+          },
+          "specificFolder": {
+            "enum": [
+              "fileCreated",
+              "fileUpdated",
+              "folderCreated",
+              "folderUpdated",
+              "watchFolderUpdated"
+            ],
+            "x-ui-enum-names": [
+              "File Created",
+              "File Updated",
+              "Folder Created",
+              "Folder Updated",
+              "Watch Folder Updated"
+            ]
+          }
+        }
+      }
+    },
+    "options": {
+      "type": "object",
+      "title": "Options",
+      "default": {},
+      "properties": {
+        "fileType": {
+          "type": "string",
+          "enum": [
+            "all",
+            "application/vnd.google-apps.audio",
+            "application/vnd.google-apps.document",
+            "application/vnd.google-apps.drawing",
+            "application/vnd.google-apps.presentation",
+            "application/vnd.google-apps.spreadsheet",
+            "application/vnd.google-apps.photo",
+            "application/vnd.google-apps.video"
+          ],
+          "default": "all",
+          "title": "File type",
+          "x-ui-enum-names": [
+            "[All]",
+            "Audio",
+            "Google Docs",
+            "Google Drawings",
+            "Google Slides",
+            "Google Spreadsheets",
+            "Photos and Images",
+            "Videos"
+          ],
+          "x-ui-show-when-any": [
+            {
+              "all": [
+                { "field": "triggerOn", "equals": "specificFolder" },
+                { "field": "event", "oneOf": ["fileCreated", "fileUpdated"] }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "poll_times": {
+      "type": "object",
+      "title": "Poll times",
+      "description": "Platform-managed poll schedule (minimum interval: every minute).",
+      "default": { "item": [{ "mode": "everyMinute" }] },
+      "x-ui-hidden": true,
+      "properties": {
+        "item": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["everyMinute", "everyHour", "everyDay", "custom"],
+                "default": "everyMinute"
+              },
+              "cronExpression": {
+                "type": "string",
+                "default": "* * * * *"
+              }
+            },
+            "required": ["mode"]
+          }
+        }
+      },
+      "required": ["item"]
+    }
+  },
+  "required": ["triggerOn", "event"]
+}
