@@ -6,6 +6,7 @@ from .http_request import FlowsHttpRequestNode
 from .branch import FlowsBranchNode
 from .google_drive.node import FlowsGoogleDriveNode
 from .google_drive.trigger import FlowsGoogleDriveTriggerNode
+from .gmail.node import FlowsGmailNode
 from .merge import FlowsMergeNode
 from .code import FlowsCodeNode
 

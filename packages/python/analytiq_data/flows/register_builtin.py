@@ -14,4 +14,5 @@ def register_builtin_nodes() -> None:
     ad.flows.register(ad.flows.FlowsCodeNode())
     ad.flows.register(ad.flows.FlowsGoogleDriveNode())
     ad.flows.register(ad.flows.FlowsGoogleDriveTriggerNode())
+    ad.flows.register(ad.flows.FlowsGmailNode())
 
