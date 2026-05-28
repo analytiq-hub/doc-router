@@ -22,7 +22,7 @@
   ],
   "test_request": {
     "method": "GET",
-    "url": "https://graph.microsoft.com/v1.0/me/drive"
+    "url": "https://graph.microsoft.com/v1.0/me/drive/root/delta?token=latest"
   },
   "experimental": true
 }

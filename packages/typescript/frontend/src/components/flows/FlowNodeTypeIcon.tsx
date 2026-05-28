@@ -14,8 +14,9 @@ import {
   Squares2X2Icon,
   TagIcon,
 } from '@heroicons/react/24/solid';
-import { GoogleDriveIcon } from './icons/GoogleDriveIcon';
 import { GmailIcon } from './icons/GmailIcon';
+import { GoogleDriveIcon } from './icons/GoogleDriveIcon';
+import { MicrosoftOneDriveIcon } from './icons/MicrosoftOneDriveIcon';
 
 /** Preset strings returned by `GET .../flows/node-types` for built-in nodes; UI maps to bundled icons. */
 export const FLOW_BUILTIN_ICON_KEYS = [
@@ -31,6 +32,7 @@ export const FLOW_BUILTIN_ICON_KEYS = [
   'set_tags',
   'google_drive',
   'gmail',
+  'microsoft_onedrive',
   'schedule_trigger',
 ] as const;
 
@@ -78,6 +80,8 @@ export function FlowNodeTypeIcon({
         return <GoogleDriveIcon className={className} />;
       case 'gmail':
         return <GmailIcon className={className} />;
+      case 'microsoft_onedrive':
+        return <MicrosoftOneDriveIcon className={className} />;
       case 'schedule_trigger':
         return <ClockIcon className={className} aria-hidden={ariaHidden} />;
       default:
