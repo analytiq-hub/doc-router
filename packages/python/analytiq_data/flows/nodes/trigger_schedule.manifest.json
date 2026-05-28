@@ -1,5 +1,5 @@
 {
-  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "schema": "urn:docrouter:flow-node-manifest:v1",
   "manifest_version": 1,
   "key": "flows.trigger.schedule",
   "type_version": 1,

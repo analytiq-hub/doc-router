@@ -10,7 +10,7 @@ from .http_spec import build_http_request_spec
 from .properties import iter_integration_parameter_tree
 from .schema import build_top_level_parameter_schema
 
-MANIFEST_SCHEMA_URI = "https://docrouter.example/schemas/flow-node-manifest/v1.json"
+MANIFEST_SCHEMA_URI = "urn:docrouter:flow-node-manifest:v1"
 
 FLOW_PORT_PKG = Path(__file__).resolve().parent
 DEFAULT_GENERATED_ROOT = FLOW_PORT_PKG / "generated_nodes"

@@ -11,8 +11,11 @@ from analytiq_data.flows.builtin_manifest import (
     SPEC_BY_KEY,
 )
 from analytiq_data.flows.lazy_builtin_node import LazyBuiltinNode
-from analytiq_data.flows.node_manifest_io import load_node_manifest
-from analytiq_data.flows.node_registry import is_registered, register
+from analytiq_data.flows.node_manifest_io import (
+    load_node_manifest,
+    manifest_executor_spec,
+)
+from analytiq_data.flows.node_registry import get, is_registered, register
 
 if TYPE_CHECKING:
     from analytiq_data.flows.node_registry import NodeType
@@ -21,8 +24,10 @@ _all_builtins_registered = False
 
 
 def load_builtin_node_class(spec: BuiltinNodeSpec) -> type:
-    module = importlib.import_module(spec.module)
-    return getattr(module, spec.class_name)
+    manifest = load_node_manifest(spec)
+    binding = manifest_executor_spec(manifest)
+    module = importlib.import_module(binding["module"])
+    return getattr(module, binding["class_name"])
 
 
 def instantiate_builtin(spec: BuiltinNodeSpec) -> "NodeType":
@@ -31,12 +36,11 @@ def instantiate_builtin(spec: BuiltinNodeSpec) -> "NodeType":
 
 def register_builtin_palette_node(spec: BuiltinNodeSpec) -> LazyBuiltinNode:
     if is_registered(spec.key):
-        from analytiq_data.flows.node_registry import get
-
         existing = get(spec.key)
-        if isinstance(existing, LazyBuiltinNode):
-            return existing
-        return existing  # type: ignore[return-value]
+        assert isinstance(existing, LazyBuiltinNode), (
+            f"registry entry for {spec.key!r} must be a LazyBuiltinNode, got {type(existing)!r}"
+        )
+        return existing
     manifest = load_node_manifest(spec)
     node_type = LazyBuiltinNode(spec, manifest)
     register(node_type)

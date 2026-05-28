@@ -16,12 +16,12 @@ if str(_ROOT) not in sys.path:
 from analytiq_data.flows.builtin_loader import instantiate_builtin  # noqa: E402
 from analytiq_data.flows.builtin_manifest import BUILTIN_NODES  # noqa: E402
 from analytiq_data.flows.node_manifest_io import (  # noqa: E402
-    _MANIFEST_SCHEMA_URI,
+    MANIFEST_SCHEMA_ID,
     manifest_dir_for_spec,
     manifest_path_for_spec,
 )
 
-_SCHEMA_REF_BY_SPEC: dict[str, str | None] = {
+_SCHEMA_REF_BY_KEY: dict[str, str] = {
     "flows.google_drive": "parameter.schema.json",
     "flows.trigger.google_drive": "trigger.parameter.schema.json",
     "flows.gmail": "parameter.schema.json",
@@ -32,9 +32,9 @@ _SCHEMA_REF_BY_SPEC: dict[str, str | None] = {
 
 
 def _manifest_body(spec, nt: Any) -> dict[str, Any]:
-    schema_ref = _SCHEMA_REF_BY_SPEC.get(spec.key)
+    cls = type(nt)
     body: dict[str, Any] = {
-        "schema": _MANIFEST_SCHEMA_URI,
+        "schema": MANIFEST_SCHEMA_ID,
         "manifest_version": 1,
         "key": nt.key,
         "type_version": int(getattr(nt, "type_version", 1)),
@@ -50,8 +50,8 @@ def _manifest_body(spec, nt: Any) -> dict[str, Any]:
         "icon_key": getattr(nt, "icon_key", None),
         "executor": {
             "kind": "python_class",
-            "import": spec.module,
-            "class": spec.class_name,
+            "import": cls.__module__,
+            "class": cls.__name__,
         },
     }
     palette_group = getattr(nt, "palette_group", None)
@@ -66,6 +66,7 @@ def _manifest_body(spec, nt: Any) -> dict[str, Any]:
     slots = getattr(nt, "credential_slots", None)
     if isinstance(slots, list) and slots:
         body["credential_slots"] = slots
+    schema_ref = _SCHEMA_REF_BY_KEY.get(spec.key)
     if schema_ref:
         body["parameter_schema_ref"] = schema_ref
     else:

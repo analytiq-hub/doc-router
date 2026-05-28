@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "$id": "urn:docrouter:flow-node-manifest:v1",
   "title": "DocRouter flow node manifest",
   "description": "Stable v1 shape for node packages (see docs/docrouter_nodes.md). Stub schema — tighten patterns and executor variants as the loader lands.",
   "type": "object",

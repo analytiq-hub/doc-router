@@ -55,4 +55,6 @@ class LazyBuiltinNode:
         return await self._load().execute(context, node, inputs)
 
     def __getattr__(self, name: str) -> Any:
+        # Only for attributes not defined on this class (e.g. poll). A typo here
+        # imports the full executor; prefer explicit methods for new entry points.
         return getattr(self._load(), name)

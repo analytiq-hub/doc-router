@@ -10,16 +10,12 @@ from typing import Any
 from analytiq_data.flows.builtin_manifest import BUILTIN_NODES, BuiltinNodeSpec, SPEC_BY_KEY
 
 _FLOWS_ROOT = Path(__file__).resolve().parent
-_MANIFEST_SCHEMA_URI = "https://docrouter.example/schemas/flow-node-manifest/v1.json"
+# Stable identifier for manifest format v1 (not fetched over HTTP).
+MANIFEST_SCHEMA_ID = "urn:docrouter:flow-node-manifest:v1"
 
 
 def manifest_path_for_spec(spec: BuiltinNodeSpec) -> Path:
-    parts = spec.module.split(".")
-    nodes_idx = parts.index("nodes")
-    tail = parts[nodes_idx + 1 :]
-    if len(tail) >= 2 and tail[-1] in ("node", "trigger"):
-        return _FLOWS_ROOT / "nodes" / tail[0] / f"{tail[-1]}.manifest.json"
-    return _FLOWS_ROOT / "nodes" / f"{tail[0]}.manifest.json"
+    return _FLOWS_ROOT / spec.manifest_relpath
 
 
 def manifest_dir_for_spec(spec: BuiltinNodeSpec) -> Path:
@@ -30,12 +26,15 @@ def manifest_dir_for_spec(spec: BuiltinNodeSpec) -> Path:
 def load_node_manifest(spec: BuiltinNodeSpec) -> dict[str, Any]:
     path = manifest_path_for_spec(spec)
     raw = json.loads(path.read_text(encoding="utf-8"))
+    if str(raw.get("key")) != spec.key:
+        raise ValueError(
+            f"manifest key {raw.get('key')!r} does not match builtin index {spec.key!r} ({path})"
+        )
     return _resolve_manifest(raw, path.parent)
 
 
 def load_node_manifest_by_key(key: str) -> dict[str, Any]:
-    spec = SPEC_BY_KEY[key]
-    return load_node_manifest(spec)
+    return load_node_manifest(SPEC_BY_KEY[key])
 
 
 def _resolve_manifest(raw: dict[str, Any], base_dir: Path) -> dict[str, Any]:
@@ -56,6 +55,8 @@ def list_builtin_palette_manifests() -> list[dict[str, Any]]:
 
 
 def manifest_executor_spec(manifest: dict[str, Any]) -> dict[str, str]:
+    """Python class binding from a resolved or raw manifest (``executor`` block)."""
+
     executor = manifest.get("executor") or {}
     if executor.get("kind") != "python_class":
         raise ValueError(f"unsupported executor kind for {manifest.get('key')!r}")

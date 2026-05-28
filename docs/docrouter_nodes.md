@@ -40,7 +40,7 @@ nodes/
 
 | Field | Meaning |
 |--------|--------|
-| **`schema`** | URI of the manifest JSON Schema (`docrouter.ai/flow-node-manifest/v1` or similar pegged revision). Loaded by validators only. |
+| **`schema`** | Format peg for this manifest revision (e.g. `urn:docrouter:flow-node-manifest:v1`). Used by validators only; not fetched over HTTP. |
 | **`key`** | Stable string identifier registered in the engine, e.g. `docrouter.llm_extract`, `flows.http_request`. Matches Python `NodeType.key`. |
 | **`manifest_version`** | Integer for **this file format**. Bump when mandatory fields or semantics change. |
 | **`type_version`** | Integer for **parameter / behavior contract** of this node definition (same role as **`typeVersion`** in common workflow DSLs). Workflow instances store **`type`** + **`parameters`** only; **`type_version`** is resolved via the manifest at registration/import time unless you duplicate it per instance in the revision (product choice). |
@@ -332,7 +332,7 @@ Useful for injecting constants or seed data into a flow without any Python:
 **`node.manifest.json`:**
 ```json
 {
-  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "schema": "urn:docrouter:flow-node-manifest:v1",
   "manifest_version": 1,
   "key": "flows.seed_config",
   "type_version": 1,
@@ -437,7 +437,7 @@ The formal stub lives at [`schemas/flow-node-manifest-v1.json`](../schemas/flow-
 
 ```json
 {
-  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "schema": "urn:docrouter:flow-node-manifest:v1",
   "manifest_version": 1,
   "key": "example.echo",
   "type_version": 1,
