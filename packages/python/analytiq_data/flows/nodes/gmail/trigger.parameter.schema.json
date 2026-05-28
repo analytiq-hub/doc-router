@@ -1,0 +1,65 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "event": {
+      "type": "string",
+      "enum": ["messageReceived"],
+      "default": "messageReceived",
+      "title": "Event",
+      "x-ui-enum-names": ["Message Received"],
+      "x-ui-hidden": true
+    },
+    "simple": {
+      "type": "boolean",
+      "default": true,
+      "title": "Simplify",
+      "description": "Return metadata with flattened headers. When off, fetches the full raw message (text/html and optional attachments)."
+    },
+    "filters": {
+      "type": "object",
+      "default": { "readStatus": "unread" },
+      "title": "Filters",
+      "description": "Gmail search filters (JSON). Strongly set filters.q (e.g. has:attachment, from:sender@example.com) so the trigger does not match all mail. Keys: q, readStatus (unread/read/both), labelIds, sender, includeSpamTrash, includeDrafts."
+    },
+    "options": {
+      "type": "object",
+      "default": {},
+      "title": "Options",
+      "description": "When Simplify is off: downloadAttachments (defaults to true), attachmentPrefix (default attachment_).",
+      "x-ui-show-when": {
+        "field": "simple",
+        "equals": false
+      }
+    },
+    "poll_times": {
+      "type": "object",
+      "title": "Poll times",
+      "description": "Platform-managed poll schedule (minimum interval: every minute).",
+      "default": { "item": [{ "mode": "everyMinute" }] },
+      "x-ui-hidden": true,
+      "properties": {
+        "item": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["everyMinute", "everyHour", "everyDay", "custom"],
+                "default": "everyMinute"
+              },
+              "cronExpression": {
+                "type": "string",
+                "default": "* * * * *"
+              }
+            },
+            "required": ["mode"]
+          }
+        }
+      },
+      "required": ["item"]
+    }
+  }
+}

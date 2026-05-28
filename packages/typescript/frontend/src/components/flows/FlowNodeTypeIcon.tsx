@@ -15,6 +15,7 @@ import {
   TagIcon,
 } from '@heroicons/react/24/solid';
 import { GoogleDriveIcon } from './icons/GoogleDriveIcon';
+import { GmailIcon } from './icons/GmailIcon';
 
 /** Preset strings returned by `GET .../flows/node-types` for built-in nodes; UI maps to bundled icons. */
 export const FLOW_BUILTIN_ICON_KEYS = [
@@ -29,6 +30,7 @@ export const FLOW_BUILTIN_ICON_KEYS = [
   'llm_extract',
   'set_tags',
   'google_drive',
+  'gmail',
   'schedule_trigger',
 ] as const;
 
@@ -74,6 +76,8 @@ export function FlowNodeTypeIcon({
         return <TagIcon className={className} aria-hidden={ariaHidden} />;
       case 'google_drive':
         return <GoogleDriveIcon className={className} />;
+      case 'gmail':
+        return <GmailIcon className={className} />;
       case 'schedule_trigger':
         return <ClockIcon className={className} aria-hidden={ariaHidden} />;
       default:

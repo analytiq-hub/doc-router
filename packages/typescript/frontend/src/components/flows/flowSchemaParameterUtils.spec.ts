@@ -10,6 +10,8 @@ import {
   isCompanionUiProperty,
   isPropertyVisible,
   mergeParameterDefaults,
+  mergeObjectFieldDefaults,
+  mergeCollectionFieldDefaults,
   parameterSchemaUsesCredentialAuthenticationWidget,
   resolveEnumSchemaForParams,
 } from './flowSchemaParameterUtils';
@@ -35,6 +37,82 @@ const schema = {
 describe('flowSchemaParameterUtils', () => {
   it('getOrderedKeys follows properties declaration order', () => {
     expect(getOrderedKeys(schema)).toEqual(['url', 'body_mode', 'body_json']);
+  });
+
+  it('mergeObjectFieldDefaults fills nested property defaults', () => {
+    const filtersSchema = {
+      type: 'object',
+      'x-ui-widget': 'object_fields',
+      default: {},
+      properties: {
+        q: { type: 'string', default: '' },
+        readStatus: { type: 'string', enum: ['both', 'unread', 'read'], default: 'unread' },
+        includeSpamTrash: { type: 'boolean', default: false },
+      },
+    };
+    const merged = mergeObjectFieldDefaults(filtersSchema, {});
+    expect(merged).toEqual({ q: '', readStatus: 'unread', includeSpamTrash: false });
+  });
+
+  it('mergeCollectionFieldDefaults only fills defaults for present keys', () => {
+    const filtersSchema = {
+      type: 'object',
+      'x-ui-widget': 'collection_fields',
+      default: {},
+      properties: {
+        q: { type: 'string', default: '' },
+        readStatus: { type: 'string', enum: ['both', 'unread', 'read'], default: 'unread' },
+        includeSpamTrash: { type: 'boolean', default: false },
+      },
+    };
+    expect(mergeCollectionFieldDefaults(filtersSchema, {})).toEqual({});
+    expect(mergeCollectionFieldDefaults(filtersSchema, { readStatus: '' })).toEqual({ readStatus: 'unread' });
+    expect(mergeCollectionFieldDefaults(filtersSchema, { q: 'has:attachment', readStatus: 'both' })).toEqual({
+      q: 'has:attachment',
+      readStatus: 'both',
+    });
+  });
+
+  it('normalizeEnumParameters coerces invalid operation for resource', () => {
+    const gmailOp = {
+      type: 'string',
+      default: 'send',
+      enum: ['send', 'get', 'getAll', 'create'],
+      'x-ui-enum-by': {
+        field: 'resource',
+        variants: {
+          message: { enum: ['send', 'get', 'getAll'] },
+          label: { enum: ['create', 'get', 'getAll'] },
+        },
+      },
+    };
+    const gmailSchema = {
+      type: 'object',
+      properties: {
+        resource: { type: 'string', enum: ['message', 'label'], default: 'message' },
+        operation: gmailOp,
+        messageId: {
+          type: 'string',
+          default: '',
+          'x-ui-show-when-any': [
+            {
+              all: [
+                { field: 'resource', equals: 'message' },
+                { field: 'operation', equals: 'get' },
+              ],
+            },
+          ],
+        },
+      },
+    };
+    const merged = mergeParameterDefaults(gmailSchema, {
+      resource: '',
+      operation: 'create',
+    });
+    expect(merged.resource).toBe('message');
+    expect(merged.operation).toBe('send');
+    const fixed = mergeParameterDefaults(gmailSchema, { resource: 'message', operation: 'get' });
+    expect(isPropertyVisible('messageId', gmailSchema, fixed)).toBe(true);
   });
 
   it('resolveEnumSchemaForParams uses x-ui-enum-by', () => {

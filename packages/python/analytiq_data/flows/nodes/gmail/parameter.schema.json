@@ -1,0 +1,1091 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "resource": {
+      "type": "string",
+      "enum": [
+        "message",
+        "label",
+        "draft",
+        "thread"
+      ],
+      "default": "message",
+      "title": "Resource",
+      "x-ui-enum-names": [
+        "Message",
+        "Label",
+        "Draft",
+        "Thread"
+      ]
+    },
+    "operation": {
+      "type": "string",
+      "enum": [
+        "send",
+        "get",
+        "getAll",
+        "reply",
+        "delete",
+        "markAsRead",
+        "markAsUnread",
+        "addLabels",
+        "removeLabels",
+        "create",
+        "trash",
+        "untrash"
+      ],
+      "default": "send",
+      "title": "Operation",
+      "x-ui-enum-by": {
+        "field": "resource",
+        "variants": {
+          "message": {
+            "enum": [
+              "send",
+              "get",
+              "getAll",
+              "reply",
+              "delete",
+              "markAsRead",
+              "markAsUnread",
+              "addLabels",
+              "removeLabels"
+            ],
+            "x-ui-enum-names": [
+              "Send",
+              "Get",
+              "Get many messages",
+              "Reply",
+              "Delete",
+              "Mark as Read",
+              "Mark as Unread",
+              "Add Label",
+              "Remove Label"
+            ]
+          },
+          "label": {
+            "enum": [
+              "create",
+              "delete",
+              "get",
+              "getAll"
+            ],
+            "x-ui-enum-names": [
+              "Create",
+              "Delete",
+              "Get",
+              "Get Many"
+            ]
+          },
+          "draft": {
+            "enum": [
+              "create",
+              "get",
+              "getAll",
+              "delete"
+            ],
+            "x-ui-enum-names": [
+              "Create",
+              "Get",
+              "Get Many",
+              "Delete"
+            ]
+          },
+          "thread": {
+            "enum": [
+              "get",
+              "getAll",
+              "delete",
+              "trash",
+              "untrash",
+              "addLabels",
+              "removeLabels",
+              "reply"
+            ],
+            "x-ui-enum-names": [
+              "Get",
+              "Get Many",
+              "Delete",
+              "Trash",
+              "Untrash",
+              "Add Label",
+              "Remove Label",
+              "Reply"
+            ]
+          }
+        }
+      }
+    },
+    "messageId": {
+      "type": "string",
+      "default": "",
+      "title": "Message ID",
+      "x-ui-placeholder": "172ce2c4a72cc243",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "delete"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "markAsRead"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "markAsUnread"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "addLabels"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "removeLabels"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        }
+      ]
+    },
+    "threadId": {
+      "type": "string",
+      "default": "",
+      "title": "Thread ID",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "delete"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "trash"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "untrash"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "addLabels"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "removeLabels"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        }
+      ]
+    },
+    "labelId": {
+      "type": "string",
+      "default": "",
+      "title": "Label ID",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "label"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "label"
+            },
+            {
+              "field": "operation",
+              "equals": "delete"
+            }
+          ]
+        }
+      ]
+    },
+    "labelIds": {
+      "type": "string",
+      "default": "",
+      "title": "Label IDs",
+      "description": "Comma-separated Gmail label IDs.",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "addLabels"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "removeLabels"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "addLabels"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "removeLabels"
+            }
+          ]
+        }
+      ]
+    },
+    "name": {
+      "type": "string",
+      "default": "",
+      "title": "Label name",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "label"
+          },
+          {
+            "field": "operation",
+            "equals": "create"
+          }
+        ]
+      }
+    },
+    "labelListVisibility": {
+      "type": "string",
+      "enum": [
+        "labelShow",
+        "labelShowIfUnread",
+        "labelHide"
+      ],
+      "default": "labelShow",
+      "title": "Label list visibility",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "label"
+          },
+          {
+            "field": "operation",
+            "equals": "create"
+          }
+        ]
+      }
+    },
+    "messageListVisibility": {
+      "type": "string",
+      "enum": [
+        "show",
+        "hide"
+      ],
+      "default": "show",
+      "title": "Message list visibility",
+      "x-ui-show-when": {
+        "all": [
+          {
+            "field": "resource",
+            "equals": "label"
+          },
+          {
+            "field": "operation",
+            "equals": "create"
+          }
+        ]
+      }
+    },
+    "draftId": {
+      "type": "string",
+      "default": "",
+      "title": "Draft ID",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "delete"
+            }
+          ]
+        }
+      ]
+    },
+    "sendTo": {
+      "type": "string",
+      "default": "",
+      "title": "To",
+      "description": "Recipient email addresses, comma-separated.",
+      "x-ui-placeholder": "info@example.com",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "send"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        }
+      ]
+    },
+    "subject": {
+      "type": "string",
+      "default": "",
+      "title": "Subject",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "send"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        }
+      ]
+    },
+    "emailType": {
+      "type": "string",
+      "enum": [
+        "text",
+        "html"
+      ],
+      "default": "html",
+      "title": "Email type",
+      "x-ui-enum-names": [
+        "Text",
+        "HTML"
+      ],
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "send"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        }
+      ]
+    },
+    "message": {
+      "type": "string",
+      "default": "",
+      "title": "Message",
+      "x-ui-widget": "textarea",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "send"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "create"
+            }
+          ]
+        }
+      ]
+    },
+    "simple": {
+      "type": "boolean",
+      "default": true,
+      "title": "Simplify",
+      "description": "Return metadata with flattened headers instead of the full Gmail payload.",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
+          ]
+        }
+      ]
+    },
+    "returnAll": {
+      "type": "boolean",
+      "default": false,
+      "title": "Return all",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "label"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
+          ]
+        }
+      ]
+    },
+    "limit": {
+      "type": "integer",
+      "default": 50,
+      "minimum": 1,
+      "maximum": 500,
+      "title": "Limit",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            },
+            {
+              "field": "returnAll",
+              "equals": false
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "label"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            },
+            {
+              "field": "returnAll",
+              "equals": false
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            },
+            {
+              "field": "returnAll",
+              "equals": false
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            },
+            {
+              "field": "returnAll",
+              "equals": false
+            }
+          ]
+        }
+      ]
+    },
+    "filters": {
+      "type": "object",
+      "default": {},
+      "title": "Filters",
+      "x-ui-widget": "collection_fields",
+      "x-ui-collection-add-label": "Add Filter",
+      "additionalProperties": false,
+      "properties": {
+        "includeSpamTrash": {
+          "type": "boolean",
+          "default": false,
+          "title": "Include Spam and Trash",
+          "description": "Include messages from SPAM and TRASH in the results."
+        },
+        "labelIds": {
+          "type": "string",
+          "default": "",
+          "title": "Label Names or IDs",
+          "description": "Return messages matching all listed label IDs (comma-separated).",
+          "x-ui-placeholder": "INBOX, UNREAD"
+        },
+        "q": {
+          "type": "string",
+          "default": "",
+          "title": "Search",
+          "description": "Gmail search query (same syntax as the Gmail search box).",
+          "x-ui-placeholder": "has:attachment"
+        },
+        "readStatus": {
+          "type": "string",
+          "enum": [
+            "both",
+            "unread",
+            "read"
+          ],
+          "default": "unread",
+          "title": "Read Status",
+          "x-ui-enum-names": [
+            "Unread and read emails",
+            "Unread emails only",
+            "Read emails only"
+          ]
+        },
+        "receivedAfter": {
+          "type": "string",
+          "default": "",
+          "title": "Received after",
+          "description": "ISO date/time or Unix timestamp (seconds or milliseconds)."
+        },
+        "receivedBefore": {
+          "type": "string",
+          "default": "",
+          "title": "Received Before",
+          "description": "ISO date/time or Unix timestamp (seconds or milliseconds)."
+        },
+        "sender": {
+          "type": "string",
+          "default": "",
+          "title": "Sender",
+          "description": "Filter by sender email or name.",
+          "x-ui-placeholder": "name@example.com"
+        }
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
+          ]
+        }
+      ]
+    },
+    "options": {
+      "type": "object",
+      "default": {},
+      "title": "Options",
+      "description": "Optional fields (JSON). Send/reply/draft attachments: omit attachmentsBinary to attach all item binaries, or set attachmentsBinary ([\"data\"] / n8n attachmentsUi). Use attachmentsBinary: [] for none. Also: ccList, bccList, replyTo, senderName. Get: downloadAttachments (defaults true when Simplify is off), attachmentPrefix. Reply: replyToSenderOnly/replyToRecipientsOnly. Thread get: onlyMessages.",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "send"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "message"
+            },
+            {
+              "field": "operation",
+              "equals": "getAll"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "reply"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "thread"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        },
+        {
+          "all": [
+            {
+              "field": "resource",
+              "equals": "draft"
+            },
+            {
+              "field": "operation",
+              "equals": "get"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

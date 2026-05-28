@@ -293,7 +293,7 @@ const FlowExecutionsView: React.FC<{
   const configRf = useMemo(() => {
     const n = viewNodes.find((x) => x.id === configModalId);
     if (!n) return { node: null, nodeType: null };
-    return { node: n.data.flowNode, nodeType: n.data.nodeType ?? nodeTypesByKey[n.data.flowNode.type] ?? null };
+    return { node: n.data.flowNode, nodeType: nodeTypesByKey[n.data.flowNode.type] ?? n.data.nodeType ?? null };
   }, [configModalId, nodeTypesByKey, viewNodes]);
 
   const runDataForModal = detail?.run_data as Record<string, unknown> | undefined;

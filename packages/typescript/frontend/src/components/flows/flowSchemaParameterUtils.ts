@@ -20,6 +20,44 @@ export type DocRouterEnumBy = {
   variants: Record<string, { enum?: unknown[]; 'x-ui-enum-names'?: unknown[] }>;
 };
 
+function hasEnumLikeSchema(sub: Record<string, unknown>): boolean {
+  if (Array.isArray(sub.enum) && sub.enum.length > 0) return true;
+  const eb = sub['x-ui-enum-by'] as DocRouterEnumBy | undefined;
+  return Boolean(eb?.variants);
+}
+
+/** Coerce invalid / empty enum values to a schema default or first allowed option. */
+export function coerceEnumParameterValue(
+  sub: Record<string, unknown>,
+  params: Record<string, unknown>,
+  raw: unknown,
+): unknown {
+  const resolved = resolveEnumSchemaForParams(sub, params);
+  const allowed = resolved.enum?.map(String) ?? [];
+  if (allowed.length === 0) return raw;
+  const current = raw === undefined || raw === null ? '' : String(raw);
+  if (!current || !allowed.includes(current)) {
+    const def = sub.default;
+    if (def !== undefined && allowed.includes(String(def))) return def;
+    return allowed[0];
+  }
+  return raw;
+}
+
+export function normalizeEnumParameters(
+  parameterSchema: unknown,
+  params: Record<string, unknown>,
+): Record<string, unknown> {
+  const props = getSchemaProperties(parameterSchema);
+  const out = { ...params };
+  for (const key of Object.keys(props)) {
+    const sub = props[key];
+    if (!hasEnumLikeSchema(sub)) continue;
+    out[key] = coerceEnumParameterValue(sub, out, out[key]);
+  }
+  return out;
+}
+
 export function resolveEnumSchemaForParams(
   subschema: Record<string, unknown>,
   params: Record<string, unknown>,
@@ -41,6 +79,86 @@ export function resolveEnumSchemaForParams(
     enum: variant.enum,
     'x-ui-enum-names': variant['x-ui-enum-names'] as unknown[] | undefined,
   };
+}
+
+export function isObjectFieldsWidget(sub: Record<string, unknown> | undefined): boolean {
+  if (!sub) return false;
+  return sub['x-ui-widget'] === 'object_fields' && sub.type === 'object';
+}
+
+export function isCollectionFieldsWidget(sub: Record<string, unknown> | undefined): boolean {
+  if (!sub) return false;
+  return sub['x-ui-widget'] === 'collection_fields' && sub.type === 'object';
+}
+
+/** Merge defaults only for keys already present (optional collection fields). */
+export function mergeCollectionFieldDefaults(
+  subschema: Record<string, unknown>,
+  raw: unknown,
+): Record<string, unknown> {
+  const props = subschema.properties as Record<string, Record<string, unknown>> | undefined;
+  if (!props || typeof props !== 'object') {
+    return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+      ? { ...(raw as Record<string, unknown>) }
+      : {};
+  }
+  const out =
+    typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+      ? { ...(raw as Record<string, unknown>) }
+      : {};
+  for (const [sk, ss] of Object.entries(props)) {
+    if (!Object.prototype.hasOwnProperty.call(out, sk)) continue;
+    if (out[sk] === undefined) {
+      out[sk] = defaultFromSubschema(ss);
+    } else if (
+      out[sk] === '' &&
+      (Array.isArray(ss.enum) || ss['x-ui-enum-by'])
+    ) {
+      out[sk] = defaultFromSubschema(ss);
+    }
+  }
+  return out;
+}
+
+export function defaultCollectionFieldValue(subschema: Record<string, unknown>): Record<string, unknown> {
+  const base = defaultFromSubschema(subschema);
+  if (typeof base === 'object' && base !== null && !Array.isArray(base)) {
+    return { ...(base as Record<string, unknown>) };
+  }
+  return {};
+}
+
+/** Merge nested ``properties`` defaults for ``x-ui-widget: object_fields`` objects. */
+export function mergeObjectFieldDefaults(
+  subschema: Record<string, unknown>,
+  raw: unknown,
+): Record<string, unknown> {
+  const props = subschema.properties as Record<string, Record<string, unknown>> | undefined;
+  if (!props || typeof props !== 'object') {
+    return typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+      ? { ...(raw as Record<string, unknown>) }
+      : {};
+  }
+  const out =
+    typeof raw === 'object' && raw !== null && !Array.isArray(raw)
+      ? { ...(raw as Record<string, unknown>) }
+      : {};
+  for (const [sk, ss] of Object.entries(props)) {
+    if (out[sk] === undefined) {
+      out[sk] = defaultFromSubschema(ss);
+    } else if (
+      out[sk] === '' &&
+      (Array.isArray(ss.enum) || ss['x-ui-enum-by'])
+    ) {
+      out[sk] = defaultFromSubschema(ss);
+    }
+  }
+  return out;
+}
+
+export function defaultObjectFieldValue(subschema: Record<string, unknown>): Record<string, unknown> {
+  const base = defaultFromSubschema(subschema);
+  return mergeObjectFieldDefaults(subschema, base);
 }
 
 /** Renders only inside the composite widget for the named primary property (see ``x-ui-widget: credential_authentication``). */
@@ -156,7 +274,15 @@ export function clearHiddenFieldsToDefaults(
   const out = { ...params };
   for (const k of Object.keys(props)) {
     if (!isPropertyVisible(k, parameterSchema, out)) {
-      out[k] = defaultFromSubschema(props[k]);
+      out[k] = isObjectFieldsWidget(props[k])
+        ? defaultObjectFieldValue(props[k])
+        : isCollectionFieldsWidget(props[k])
+          ? defaultCollectionFieldValue(props[k])
+          : defaultFromSubschema(props[k]);
+    } else if (isObjectFieldsWidget(props[k])) {
+      out[k] = mergeObjectFieldDefaults(props[k], out[k]);
+    } else if (isCollectionFieldsWidget(props[k])) {
+      out[k] = mergeCollectionFieldDefaults(props[k], out[k]);
     }
   }
   return out;
@@ -183,9 +309,18 @@ export function mergeParameterDefaults(
       !Array.isArray(props[key].default)
     ) {
       out[key] = { ...(props[key].default as Record<string, unknown>) };
+    } else if (
+      out[key] === '' &&
+      (Array.isArray(props[key].enum) || props[key]['x-ui-enum-by'])
+    ) {
+      out[key] = defaultFromSubschema(props[key]);
+    } else if (isObjectFieldsWidget(props[key])) {
+      out[key] = mergeObjectFieldDefaults(props[key], out[key]);
+    } else if (isCollectionFieldsWidget(props[key])) {
+      out[key] = mergeCollectionFieldDefaults(props[key], out[key]);
     }
   }
-  return out;
+  return normalizeEnumParameters(parameterSchema, out);
 }
 
 export function applyParameterPatch(
@@ -193,6 +328,6 @@ export function applyParameterPatch(
   currentMerged: Record<string, unknown>,
   patch: Record<string, unknown>,
 ): Record<string, unknown> {
-  const next = { ...currentMerged, ...patch };
+  const next = normalizeEnumParameters(parameterSchema, { ...currentMerged, ...patch });
   return clearHiddenFieldsToDefaults(parameterSchema, next);
 }

@@ -5,9 +5,11 @@ from __future__ import annotations
 from datetime import datetime, UTC
 from typing import Any
 
+from bson import ObjectId
+
 import analytiq_data as ad
 
-from .enqueue import _serialize_flow_items
+from .enqueue import serialize_flow_items_for_trigger
 from .static_data import load_node_static_data, save_node_static_data
 
 
@@ -53,16 +55,27 @@ async def enqueue_schedule_trigger_test_run(
     if not items or all(not lane for lane in items):
         raise ad.flows.FlowValidationError("Schedule trigger test produced no items")
 
+    exec_oid = ObjectId()
+    exec_id = str(exec_oid)
+
+    serialized = await serialize_flow_items_for_trigger(
+        items,
+        execution_id=exec_id,
+        trigger_node_id=trigger_node_id,
+        analytiq_client=analytiq_client,
+    )
+
     trigger: dict[str, Any] = {
         "type": "schedule",
         "node_id": trigger_node_id,
-        "items": _serialize_flow_items(items),
+        "items": serialized,
         "tick_key": "test",
         "rule_index": 0,
         "test": True,
     }
 
     exec_doc: dict[str, Any] = {
+        "_id": exec_oid,
         "flow_id": flow_id,
         "flow_revid": flow_revid_lineage,
         "organization_id": organization_id,
@@ -86,8 +99,7 @@ async def enqueue_schedule_trigger_test_run(
         "revision_snapshot": revision_snapshot,
     }
 
-    res = await db.flow_executions.insert_one(exec_doc)
-    exec_id = str(res.inserted_id)
+    await db.flow_executions.insert_one(exec_doc)
 
     await ad.queue.send_msg(
         analytiq_client,
