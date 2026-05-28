@@ -26,10 +26,9 @@ class FlowsGoogleDriveTriggerNode:
 
     key = "flows.trigger.google_drive"
     label = "Google Drive trigger"
-    description = "Starts the flow when Google Drive events occur (experimental)."
+    description = "Starts the flow when Google Drive events occur."
     category = "input"
     palette_group = "trigger"
-    experimental = True
     is_trigger = True
     polling = True
     is_merge = False

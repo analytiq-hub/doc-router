@@ -26,12 +26,11 @@ class FlowsGmailTriggerNode:
     key = "flows.trigger.gmail"
     label = "Gmail trigger"
     description = (
-        "Starts the flow when Gmail messages match your filters (experimental). "
+        "Starts the flow when Gmail messages match your filters. "
         "Set a search query in filters.q to avoid matching all mail."
     )
     category = "input"
     palette_group = "trigger"
-    experimental = True
     is_trigger = True
     polling = True
     is_merge = False

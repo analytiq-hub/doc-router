@@ -21,10 +21,9 @@ class FlowsGoogleDriveNode:
 
     key = "flows.google_drive"
     label = "Google Drive"
-    description = "Access data on Google Drive (experimental)."
+    description = "Access data on Google Drive."
     category = "input"
     palette_group = "app"
-    experimental = True
     is_trigger = False
     is_merge = False
     min_inputs = 1
