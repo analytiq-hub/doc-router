@@ -112,7 +112,9 @@ def _merge_two_kind_documents(base: dict[str, Any], overlay: dict[str, Any]) -> 
     elif "pre_auth" in out:
         del out["pre_auth"]
 
-    exp = bool(base.get("experimental")) or bool(overlay.get("experimental"))
+    # Experimental is intentionally **not inherited** through `extends`.
+    # If the overlay doesn't explicitly opt-in, treat as non-experimental.
+    exp = bool(overlay.get("experimental")) if "experimental" in overlay else False
     if exp:
         out["experimental"] = True
     else:
