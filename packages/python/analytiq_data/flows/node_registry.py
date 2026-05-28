@@ -49,9 +49,17 @@ def register(node_type: NodeType) -> None:
     _registry[node_type.key] = node_type
 
 
+def is_registered(key: str) -> bool:
+    return key in _registry
+
+
 def get(key: str) -> NodeType:
     """Fetch a registered node type by key or raise `KeyError`."""
 
+    if key not in _registry:
+        from analytiq_data.flows.builtin_loader import try_register_builtin_key
+
+        try_register_builtin_key(key)
     if key not in _registry:
         raise KeyError(f"Unknown node type: {key!r}")
     return _registry[key]
@@ -60,5 +68,8 @@ def get(key: str) -> NodeType:
 def list_all() -> list[NodeType]:
     """List all currently registered node types."""
 
+    from analytiq_data.flows.builtin_loader import ensure_all_builtin_nodes_registered
+
+    ensure_all_builtin_nodes_registered()
     return list(_registry.values())
 

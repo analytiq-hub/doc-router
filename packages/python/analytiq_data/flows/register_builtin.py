@@ -1,21 +1,15 @@
+"""Register all builtin flow node types on the global registry."""
+
 from __future__ import annotations
 
-import analytiq_data as ad
+from analytiq_data.flows.builtin_loader import (
+    ensure_all_builtin_nodes_registered,
+    register_builtin_nodes,
+    try_register_builtin_key,
+)
 
-
-def register_builtin_nodes() -> None:
-    ad.flows.register(ad.flows.FlowsManualTriggerNode())
-    ad.flows.register(ad.flows.FlowsScheduleTriggerNode())
-    ad.flows.register(ad.flows.FlowsWebhookTriggerNode())
-    ad.flows.register(ad.flows.FlowsRespondToWebhookNode())
-    ad.flows.register(ad.flows.FlowsHttpRequestNode())
-    ad.flows.register(ad.flows.FlowsBranchNode())
-    ad.flows.register(ad.flows.FlowsMergeNode())
-    ad.flows.register(ad.flows.FlowsCodeNode())
-    ad.flows.register(ad.flows.FlowsGoogleDriveNode())
-    ad.flows.register(ad.flows.FlowsGoogleDriveTriggerNode())
-    ad.flows.register(ad.flows.FlowsGmailNode())
-    ad.flows.register(ad.flows.FlowsGmailTriggerNode())
-    ad.flows.register(ad.flows.FlowsMicrosoftOneDriveNode())
-    ad.flows.register(ad.flows.FlowsMicrosoftOneDriveTriggerNode())
-
+__all__ = [
+    "ensure_all_builtin_nodes_registered",
+    "register_builtin_nodes",
+    "try_register_builtin_key",
+]

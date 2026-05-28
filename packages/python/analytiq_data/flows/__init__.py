@@ -37,12 +37,27 @@ from .credentials import *
 from .credential_inject import *
 from .credential_kind_registry import *
 from .credential_runtime import *
-from .nodes import *
 from .register_builtin import *
 from .triggers import *
 from .url_ssrf_guard import *
 from . import webhook_parse
 from . import webhook_params
+
+
+def __getattr__(name: str):
+    from analytiq_data.flows.builtin_manifest import BUILTIN_CLASS_NAMES
+
+    if name in BUILTIN_CLASS_NAMES:
+        from analytiq_data.flows import nodes
+
+        return getattr(nodes, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    from analytiq_data.flows.builtin_manifest import BUILTIN_CLASS_NAMES
+
+    return sorted(set(globals()) | BUILTIN_CLASS_NAMES)
 
 
 def register_docrouter_nodes() -> None:
