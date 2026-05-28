@@ -23,6 +23,5 @@
   "test_request": {
     "method": "GET",
     "url": "https://gmail.googleapis.com/gmail/v1/users/me/profile"
-  },
-  "experimental": false
+  }
 }
