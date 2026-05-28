@@ -133,6 +133,26 @@ def test_validation_schema_allows_stored_oauth_runtime_fields() -> None:
         _credential_kinds_bundle.cache_clear()
 
 
+def test_apply_defaults_fills_microsoft_oauth_urls_and_onedrive_scope() -> None:
+    _credential_kinds_bundle.cache_clear()
+    try:
+        kind = get_credential_kind("microsoftOneDriveOAuth2Api")
+        fields = apply_credential_kind_defaults(
+            kind,
+            {"clientId": "cid", "clientSecret": "sec"},
+        )
+        assert fields["authUrl"] == (
+            "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+        )
+        assert fields["accessTokenUrl"] == (
+            "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+        )
+        assert fields.get("grantType") == "authorizationCode"
+        assert "Files.ReadWrite.All" in (fields.get("scope") or "")
+    finally:
+        _credential_kinds_bundle.cache_clear()
+
+
 def test_apply_defaults_fills_microsoft_oauth_urls_and_outlook_scope() -> None:
     _credential_kinds_bundle.cache_clear()
     try:
@@ -269,6 +289,7 @@ def test_microsoft_product_kinds_have_test_request_and_experimental() -> None:
     try:
         for key in (
             "microsoftOutlookOAuth2Api",
+            "microsoftOneDriveOAuth2Api",
             "microsoftTeamsOAuth2Api",
             "microsoftExcelOAuth2Api",
             "microsoftSharePointOAuth2Api",

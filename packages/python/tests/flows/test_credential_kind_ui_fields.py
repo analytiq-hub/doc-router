@@ -43,6 +43,26 @@ def test_google_drive_oauth_includes_default_scopes_in_authorize_url() -> None:
         _credential_kinds_bundle.cache_clear()
 
 
+def test_microsoft_onedrive_oauth_includes_scopes_in_authorize_url() -> None:
+    _credential_kinds_bundle.cache_clear()
+    try:
+        from analytiq_data.flows.credential_fields import apply_credential_kind_defaults
+        from analytiq_data.flows.credential_runtime import build_oauth_authorization_url
+
+        kind = get_credential_kind("microsoftOneDriveOAuth2Api")
+        fields = apply_credential_kind_defaults(
+            kind,
+            {"clientId": "cid", "clientSecret": "sec"},
+        )
+        assert "Files.ReadWrite.All" in (fields.get("scope") or "")
+        url = build_oauth_authorization_url(fields, "state-xyz")
+        assert "scope=" in url
+        assert "Files.ReadWrite.All" in url or "Files.ReadWrite" in url
+        assert "response_mode=query" in url
+    finally:
+        _credential_kinds_bundle.cache_clear()
+
+
 def test_microsoft_outlook_oauth_includes_scopes_in_authorize_url() -> None:
     _credential_kinds_bundle.cache_clear()
     try:

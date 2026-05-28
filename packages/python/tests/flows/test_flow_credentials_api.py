@@ -372,6 +372,14 @@ async def test_oauth_kind_includes_redirect_uri(org_and_users, test_db):
     assert outlook.get("oauth_redirect_uri") == ad.flows.flow_oauth_redirect_uri(
         prefer_localhost_loopback=True
     )
+    onedrive = kinds.get("microsoftOneDriveOAuth2Api")
+    assert onedrive is not None
+    assert onedrive.get("supports_oauth_browser_flow") is True
+    assert onedrive.get("oauth_redirect_uri") == ad.flows.flow_oauth_redirect_uri(
+        prefer_localhost_loopback=True
+    )
+    onedrive_field_names = {f["name"] for f in onedrive.get("fields") or []}
+    assert "scope" not in onedrive_field_names
     gmail_field_names = {f["name"] for f in gmail.get("fields") or []}
     assert "ignoreSSLIssues" not in gmail_field_names
     oauth2 = kinds.get("oAuth2Api")
