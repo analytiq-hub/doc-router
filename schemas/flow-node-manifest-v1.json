@@ -182,6 +182,19 @@
         "$ref": "#/definitions/credential_slot"
       }
     },
+    "palette_group": {
+      "type": "string",
+      "enum": ["docrouter", "app", "flow", "core", "trigger"],
+      "description": "Orchestration palette section (see flows.palette_groups)"
+    },
+    "polling": {
+      "type": "boolean",
+      "description": "Poll trigger; worker runs poll() on a schedule"
+    },
+    "experimental": {
+      "type": "boolean",
+      "description": "Hidden from palette unless org experimental_features is enabled"
+    },
     "executor": {
       "oneOf": [
         {

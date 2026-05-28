@@ -42,14 +42,22 @@ def test_importing_flows_does_not_load_integration_node_modules() -> None:
 
 
 def test_get_lazy_registers_single_builtin() -> None:
+    from analytiq_data.flows.lazy_builtin_node import LazyBuiltinNode
+
     spec = SPEC_BY_KEY["flows.gmail"]
+    for name in (
+        "analytiq_data.flows.nodes.gmail.node",
+        "analytiq_data.flows.nodes.gmail.operations",
+    ):
+        sys.modules.pop(name, None)
     assert not is_registered(spec.key)
 
     nt = get(spec.key)
 
     assert nt.key == spec.key
+    assert isinstance(nt, LazyBuiltinNode)
     assert is_registered(spec.key)
-    assert "analytiq_data.flows.nodes.gmail.node" in sys.modules
+    assert "analytiq_data.flows.nodes.gmail.operations" not in sys.modules
     assert len(_registry) == 1
 
 
@@ -71,9 +79,16 @@ def test_flows_getattr_loads_one_node_class() -> None:
     assert cls.key == "flows.code"
     assert "analytiq_data.flows.nodes.code" in sys.modules
     assert not is_registered("flows.gmail")
+    # Avoid leaking the module into later tests that assert lazy get() did not import executors.
+    sys.modules.pop("analytiq_data.flows.nodes.code", None)
 
 
 def test_manifest_module_paths_resolve() -> None:
+    before = set(sys.modules)
     for spec in BUILTIN_NODES:
         cls = load_builtin_node_class(spec)
         assert cls.key == spec.key
+    # Do not leak node packages into lazy-registration tests (pytest-xdist ordering).
+    for name in list(sys.modules):
+        if name.startswith("analytiq_data.flows.nodes.") and name not in before:
+            sys.modules.pop(name, None)

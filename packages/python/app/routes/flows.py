@@ -21,7 +21,6 @@ import analytiq_data as ad
 from app.auth import get_org_user
 from app.models import User
 
-from analytiq_data.flows.palette_groups import resolve_palette_group
 
 
 logger = logging.getLogger(__name__)
@@ -620,29 +619,10 @@ async def list_node_types(organization_id: str, current_user: User = Depends(get
     db = await _get_db()
     show_exp = await _org_experimental_features_enabled(db, organization_id)
     items = []
-    for nt in ad.flows.list_all():
-        if getattr(nt, "experimental", False) and not show_exp:
+    for entry in ad.flows.list_palette_entries():
+        if entry.get("experimental") and not show_exp:
             continue
-        slots = getattr(nt, "credential_slots", None)
-        items.append(
-            {
-                "key": nt.key,
-                "label": nt.label,
-                "description": nt.description,
-                "category": nt.category,
-                "palette_group": resolve_palette_group(nt),
-                "is_trigger": nt.is_trigger,
-                "min_inputs": nt.min_inputs,
-                "max_inputs": nt.max_inputs,
-                "outputs": nt.outputs,
-                "output_labels": nt.output_labels,
-                "parameter_schema": nt.parameter_schema,
-                "icon_key": nt.icon_key,
-                "credential_slots": slots if isinstance(slots, list) else [],
-                "experimental": bool(getattr(nt, "experimental", False)),
-                "polling": bool(getattr(nt, "polling", False)),
-            }
-        )
+        items.append(entry)
     return {"items": items, "total": len(items)}
 
 

@@ -66,10 +66,18 @@ def get(key: str) -> NodeType:
 
 
 def list_all() -> list[NodeType]:
-    """List all currently registered node types."""
+    """List registered node types (lazy builtins registered without loading executors)."""
 
     from analytiq_data.flows.builtin_loader import ensure_all_builtin_nodes_registered
 
     ensure_all_builtin_nodes_registered()
     return list(_registry.values())
+
+
+def list_palette_entries() -> list[dict[str, Any]]:
+    """Palette metadata from ``node.manifest.json`` without touching the executor registry."""
+
+    from analytiq_data.flows.builtin_loader import list_builtin_palette_entries
+
+    return list_builtin_palette_entries()
 
