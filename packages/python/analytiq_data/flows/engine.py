@@ -97,6 +97,8 @@ def validate_revision(
     """
 
     settings = settings or {}
+    ad.flows.ensure_builtin_keys_for_revision(nodes=nodes)
+
     if not nodes:
         if connections:
             raise FlowValidationError("Cannot save connections when the flow has no nodes")

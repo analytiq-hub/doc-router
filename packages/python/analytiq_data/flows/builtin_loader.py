@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
 from analytiq_data.flows.builtin_manifest import (
@@ -45,6 +46,46 @@ def register_builtin_palette_node(spec: BuiltinNodeSpec) -> LazyBuiltinNode:
     node_type = LazyBuiltinNode(spec, manifest)
     register(node_type)
     return node_type
+
+
+def node_type_keys_in_revision(
+    revision: dict[str, Any] | None = None,
+    *,
+    nodes: list[dict[str, Any]] | None = None,
+) -> frozenset[str]:
+    """Distinct ``nodes[].type`` values from a revision document or node list."""
+
+    node_list = nodes if nodes is not None else (revision or {}).get("nodes") or []
+    keys: set[str] = set()
+    if isinstance(node_list, list):
+        for node in node_list:
+            if not isinstance(node, dict):
+                continue
+            raw = node.get("type")
+            if isinstance(raw, str):
+                key = raw.strip()
+                if key:
+                    keys.add(key)
+    return frozenset(keys)
+
+
+def register_builtin_keys(keys: Iterable[str]) -> None:
+    """Register lazy builtins for each key (no-op for unknown or already registered)."""
+
+    for key in keys:
+        try_register_builtin_key(key)
+
+
+def ensure_builtin_keys_for_revision(
+    revision: dict[str, Any] | None = None,
+    *,
+    nodes: list[dict[str, Any]] | None = None,
+) -> frozenset[str]:
+    """Register palette entries for all node types in a revision (Phase D)."""
+
+    keys = node_type_keys_in_revision(revision, nodes=nodes)
+    register_builtin_keys(keys)
+    return keys
 
 
 def try_register_builtin_key(key: str) -> bool:

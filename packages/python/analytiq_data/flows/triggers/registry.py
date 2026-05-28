@@ -71,6 +71,7 @@ class ActiveFlowRegistry:
     ) -> None:
         await self.deregister_flow(flow_id)
         nodes = revision.get("nodes") or []
+        ad.flows.ensure_builtin_keys_for_revision(revision)
         timezone = resolve_flow_timezone(revision.get("settings"))
         registered: list[_RegisteredTrigger] = []
 
