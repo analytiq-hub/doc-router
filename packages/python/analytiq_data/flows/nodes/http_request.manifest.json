@@ -1,0 +1,359 @@
+{
+  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "manifest_version": 1,
+  "key": "flows.http_request",
+  "type_version": 1,
+  "label": "HTTP Request",
+  "description": "Make an HTTP request to any URL.",
+  "category": "Generic",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 1,
+  "max_inputs": 1,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "http_request",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.http_request",
+    "class": "FlowsHttpRequestNode"
+  },
+  "palette_group": "core",
+  "batch_execute_inputs": false,
+  "credential_slots": [
+    {
+      "slot": "httpBearerAuth",
+      "label": "Bearer Auth",
+      "required": false,
+      "docrouter_binding": "organization_credential_kind:httpBearerAuth"
+    },
+    {
+      "slot": "httpBasicAuth",
+      "label": "Basic Auth",
+      "required": false,
+      "docrouter_binding": "organization_credential_kind:httpBasicAuth"
+    },
+    {
+      "slot": "httpDigestAuth",
+      "label": "Digest Auth",
+      "required": false,
+      "docrouter_binding": "organization_credential_kind:httpDigestAuth"
+    },
+    {
+      "slot": "httpHeaderAuth",
+      "label": "Header Auth",
+      "required": false,
+      "docrouter_binding": "organization_credential_kind:httpHeaderAuth"
+    },
+    {
+      "slot": "httpQueryAuth",
+      "label": "Query Auth",
+      "required": false,
+      "docrouter_binding": "organization_credential_kind:httpQueryAuth"
+    },
+    {
+      "slot": "httpJsonBodyAuth",
+      "label": "JSON Body Auth",
+      "required": false,
+      "docrouter_binding": "organization_credential_kind:httpJsonBodyAuth"
+    }
+  ],
+  "parameter_schema": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "method",
+      "url"
+    ],
+    "properties": {
+      "method": {
+        "type": "string",
+        "enum": [
+          "GET",
+          "HEAD",
+          "OPTIONS",
+          "POST",
+          "PUT",
+          "PATCH",
+          "DELETE"
+        ],
+        "default": "GET",
+        "x-ui-group": "Request"
+      },
+      "url": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Absolute http(s) URL or =expression (_json, etc.). Evaluated once per inbound item: if the upstream node emits N rows, this node issues up to N requests using each row's JSON.",
+        "default": "",
+        "x-ui-group": "Request",
+        "x-ui-placeholder": "https://… or =expression",
+        "x-ui-regex": "^https?://\\S+$",
+        "x-ui-regex-message": "Must be a valid HTTP/S URL"
+      },
+      "authentication": {
+        "type": "string",
+        "enum": [
+          "none",
+          "generic",
+          "predefined"
+        ],
+        "default": "none",
+        "title": "Authentication",
+        "description": "Credential attachment mode (editor UX). Execution uses node credential bindings only.",
+        "x-ui-group": "Request",
+        "x-ui-widget": "credential_authentication"
+      },
+      "generic_auth_slot": {
+        "type": "string",
+        "enum": [
+          "httpBearerAuth",
+          "httpBasicAuth",
+          "httpDigestAuth",
+          "httpHeaderAuth",
+          "httpQueryAuth",
+          "httpJsonBodyAuth"
+        ],
+        "default": "httpBearerAuth",
+        "title": "Generic auth type",
+        "description": "Which credential slot to bind when using generic credential authentication.",
+        "x-ui-show-when": {
+          "field": "authentication",
+          "equals": "generic"
+        },
+        "x-ui-companion-of": "authentication"
+      },
+      "query_params": {
+        "type": "array",
+        "x-ui-widget": "name_value_list",
+        "x-ui-group": "Request",
+        "items": {
+          "type": "object",
+          "required": [
+            "name",
+            "value"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "value": {}
+          },
+          "additionalProperties": false
+        },
+        "default": []
+      },
+      "query_json": {
+        "type": "string",
+        "default": "",
+        "description": "Optional JSON object merged after query_params (same keys overwrite). Use for dynamic query objects or =expression.",
+        "x-ui-widget": "json",
+        "x-ui-group": "Request"
+      },
+      "headers": {
+        "type": "array",
+        "x-ui-widget": "name_value_list",
+        "x-ui-group": "Request",
+        "items": {
+          "type": "object",
+          "required": [
+            "name",
+            "value"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "value": {}
+          },
+          "additionalProperties": false
+        },
+        "default": []
+      },
+      "headers_json": {
+        "type": "string",
+        "default": "",
+        "description": "Optional JSON object merged after headers (same keys overwrite). Credential headers apply after this.",
+        "x-ui-widget": "json",
+        "x-ui-group": "Request"
+      },
+      "body_mode": {
+        "type": "string",
+        "enum": [
+          "none",
+          "json",
+          "json_keypair",
+          "form_urlencoded",
+          "raw",
+          "binary",
+          "multipart_form"
+        ],
+        "default": "none",
+        "x-ui-group": "Body"
+      },
+      "body_json": {
+        "type": "string",
+        "default": "",
+        "description": "JSON text when body mode is JSON. Required (non-empty) in that mode; use =expression for dynamic values.",
+        "x-ui-widget": "json",
+        "x-ui-group": "Body",
+        "x-ui-show-when": {
+          "field": "body_mode",
+          "in": [
+            "json"
+          ]
+        }
+      },
+      "body_params": {
+        "type": "array",
+        "x-ui-widget": "name_value_list",
+        "x-ui-group": "Body",
+        "x-ui-show-when": {
+          "field": "body_mode",
+          "in": [
+            "json_keypair",
+            "form_urlencoded"
+          ]
+        },
+        "items": {
+          "type": "object",
+          "required": [
+            "name",
+            "value"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "value": {}
+          },
+          "additionalProperties": false
+        },
+        "default": []
+      },
+      "body_raw": {
+        "type": "string",
+        "default": "",
+        "description": "Raw body bytes when body mode is raw. Required (non-empty) in that mode.",
+        "x-ui-widget": "textarea",
+        "x-ui-group": "Body",
+        "x-ui-show-when": {
+          "field": "body_mode",
+          "equals": "raw"
+        }
+      },
+      "body_content_type": {
+        "type": "string",
+        "default": "text/plain",
+        "description": "Content-Type header for raw body mode.",
+        "x-ui-group": "Body",
+        "x-ui-show-when": {
+          "field": "body_mode",
+          "equals": "raw"
+        }
+      },
+      "binary_property_name": {
+        "type": "string",
+        "default": "data",
+        "description": "Name of the incoming `item.binary` property to upload.",
+        "x-ui-group": "Body",
+        "x-ui-show-when": {
+          "field": "body_mode",
+          "in": [
+            "binary",
+            "multipart_form"
+          ]
+        }
+      },
+      "multipart_file_field_name": {
+        "type": "string",
+        "default": "file",
+        "description": "Multipart form field name to use for the uploaded binary.",
+        "x-ui-group": "Body",
+        "x-ui-show-when": {
+          "field": "body_mode",
+          "equals": "multipart_form"
+        }
+      },
+      "multipart_fields": {
+        "type": "array",
+        "x-ui-widget": "name_value_list",
+        "x-ui-group": "Body",
+        "x-ui-show-when": {
+          "field": "body_mode",
+          "equals": "multipart_form"
+        },
+        "items": {
+          "type": "object",
+          "required": [
+            "name",
+            "value"
+          ],
+          "properties": {
+            "name": {
+              "type": "string"
+            },
+            "value": {}
+          },
+          "additionalProperties": false
+        },
+        "default": []
+      },
+      "full_response": {
+        "type": "boolean",
+        "default": false,
+        "description": "Include status_code and headers in the output item.",
+        "x-ui-group": "Options"
+      },
+      "never_error": {
+        "type": "boolean",
+        "default": false,
+        "description": "Treat non-2xx responses as normal output instead of errors.",
+        "x-ui-group": "Options"
+      },
+      "follow_redirects": {
+        "type": "boolean",
+        "default": true,
+        "x-ui-group": "Options"
+      },
+      "max_redirects": {
+        "type": "integer",
+        "default": 20,
+        "minimum": 1,
+        "description": "Maximum redirect hops when follow_redirects is enabled (matches httpx default).",
+        "x-ui-group": "Options"
+      },
+      "proxy": {
+        "type": "string",
+        "default": "",
+        "description": "Optional HTTP(S) proxy URL (e.g. http://proxy:8080). Validated against the same SSRF rules as the request URL.",
+        "x-ui-group": "Options"
+      },
+      "verify_tls": {
+        "type": "boolean",
+        "default": true,
+        "description": "Verify TLS certificates. Disable only for trusted debug endpoints.",
+        "x-ui-group": "Options"
+      },
+      "response_format": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "json",
+          "text",
+          "binary"
+        ],
+        "default": "auto",
+        "description": "How to interpret the response body: auto (Content-Type heuristics), json, text, or always store raw bytes as BinaryRef.",
+        "x-ui-group": "Options"
+      },
+      "timeout_seconds": {
+        "type": "number",
+        "default": 30,
+        "minimum": 1,
+        "x-ui-group": "Options"
+      }
+    }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "manifest_version": 1,
+  "key": "flows.trigger.microsoft_onedrive",
+  "type_version": 1,
+  "label": "Microsoft OneDrive Trigger",
+  "description": "Trigger for Microsoft OneDrive API.",
+  "category": "input",
+  "is_trigger": true,
+  "is_merge": false,
+  "min_inputs": 0,
+  "max_inputs": 0,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "microsoft_onedrive",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.microsoft_onedrive.trigger",
+    "class": "FlowsMicrosoftOneDriveTriggerNode"
+  },
+  "palette_group": "trigger",
+  "polling": true,
+  "experimental": true,
+  "credential_slots": [
+    {
+      "slot": "microsoftOneDriveOAuth2Api",
+      "label": "Credential to connect with",
+      "required": true,
+      "docrouter_binding": "organization_credential_kind:microsoftOneDriveOAuth2Api"
+    }
+  ],
+  "parameter_schema_ref": "trigger.parameter.schema.json"
+}

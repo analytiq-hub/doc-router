@@ -1,0 +1,31 @@
+{
+  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "manifest_version": 1,
+  "key": "flows.trigger.manual",
+  "type_version": 1,
+  "label": "Manual trigger",
+  "description": "Emits one item with empty JSON `{}`. Use a Code node or pin_data for test payloads; `trigger_data` is only in Code context.",
+  "category": "Generic",
+  "is_trigger": true,
+  "is_merge": false,
+  "min_inputs": 0,
+  "max_inputs": 0,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "manual_trigger",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.trigger_manual",
+    "class": "FlowsManualTriggerNode"
+  },
+  "palette_group": "trigger",
+  "parameter_schema": {
+    "type": "object",
+    "title": "Manual trigger",
+    "description": "No editable parameters. Downstream nodes or pin_data supply JSON fields.",
+    "properties": {},
+    "additionalProperties": true
+  }
+}

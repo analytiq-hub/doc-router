@@ -1,0 +1,31 @@
+{
+  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "manifest_version": 1,
+  "key": "flows.merge",
+  "type_version": 1,
+  "label": "Merge",
+  "description": "Waits for all inputs, then concatenates them.",
+  "category": "Generic",
+  "is_trigger": false,
+  "is_merge": true,
+  "min_inputs": 2,
+  "max_inputs": null,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "merge",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.merge",
+    "class": "FlowsMergeNode"
+  },
+  "palette_group": "flow",
+  "parameter_schema": {
+    "type": "object",
+    "title": "Merge",
+    "description": "No parameters. Items from all connected inputs are concatenated in input-slot order (0, 1, …).",
+    "properties": {},
+    "additionalProperties": false
+  }
+}

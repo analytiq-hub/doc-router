@@ -1,0 +1,92 @@
+{
+  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "manifest_version": 1,
+  "key": "flows.respond_to_webhook",
+  "type_version": 1,
+  "label": "Respond to Webhook",
+  "description": "Define the HTTP response for a synchronous webhook execution.",
+  "category": "Generic",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 1,
+  "max_inputs": 1,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "respond_to_webhook",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.respond_to_webhook",
+    "class": "FlowsRespondToWebhookNode"
+  },
+  "palette_group": "core",
+  "parameter_schema": {
+    "type": "object",
+    "title": "Respond to Webhook",
+    "additionalProperties": true,
+    "properties": {
+      "status_code": {
+        "title": "Status code",
+        "type": "integer",
+        "minimum": 100,
+        "maximum": 599,
+        "default": 200,
+        "x-ui-group": "Response"
+      },
+      "headers": {
+        "title": "Headers",
+        "type": "array",
+        "default": [],
+        "items": {},
+        "x-ui-widget": "name_value_list",
+        "x-ui-group": "Response"
+      },
+      "body_mode": {
+        "title": "Body",
+        "type": "string",
+        "enum": [
+          "json",
+          "text",
+          "none"
+        ],
+        "default": "json",
+        "x-ui-enum-names": [
+          "JSON",
+          "Text",
+          "No body"
+        ],
+        "x-ui-group": "Body"
+      },
+      "body_json": {
+        "title": "JSON body",
+        "type": "string",
+        "default": "{\n  \"ok\": true\n}\n",
+        "x-ui-widget": "json",
+        "x-ui-show-when": {
+          "field": "body_mode",
+          "equals": "json"
+        },
+        "x-ui-group": "Body"
+      },
+      "body_text": {
+        "title": "Text body",
+        "type": "string",
+        "default": "ok",
+        "x-ui-widget": "textarea",
+        "x-ui-show-when": {
+          "field": "body_mode",
+          "equals": "text"
+        },
+        "x-ui-group": "Body"
+      },
+      "content_type": {
+        "title": "Content-Type",
+        "type": "string",
+        "default": "",
+        "x-ui-placeholder": "application/json",
+        "x-ui-group": "Body"
+      }
+    }
+  }
+}

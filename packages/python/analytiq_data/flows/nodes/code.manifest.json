@@ -1,0 +1,51 @@
+{
+  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "manifest_version": 1,
+  "key": "flows.code",
+  "type_version": 1,
+  "label": "Code (Python)",
+  "description": "Runs a small Python snippet to transform items.",
+  "category": "Generic",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 1,
+  "max_inputs": 1,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "code",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.code",
+    "class": "FlowsCodeNode"
+  },
+  "palette_group": "core",
+  "batch_execute_inputs": true,
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "python_code": {
+        "type": "string",
+        "minLength": 1,
+        "default": "def run(items, context):\n  return items\n",
+        "description": "Must define def run(items: list[dict], context: dict) -> list[dict].",
+        "x-ui-widget": "code",
+        "x-ui-group": "Code"
+      },
+      "timeout_seconds": {
+        "type": "number",
+        "default": 2,
+        "minimum": 0.0001,
+        "maximum": 30,
+        "description": "Subprocess wall-clock limit in seconds (default 2, max 30).",
+        "x-ui-group": "Options",
+        "x-ui-placeholder": "e.g. 2"
+      }
+    },
+    "required": [
+      "python_code"
+    ],
+    "additionalProperties": false
+  }
+}

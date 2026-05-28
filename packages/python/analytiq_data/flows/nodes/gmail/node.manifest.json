@@ -1,0 +1,33 @@
+{
+  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "manifest_version": 1,
+  "key": "flows.gmail",
+  "type_version": 2,
+  "label": "Gmail",
+  "description": "Consume the Gmail API (message, label, draft, and thread operations).",
+  "category": "input",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 1,
+  "max_inputs": 1,
+  "outputs": 1,
+  "output_labels": [
+    "main"
+  ],
+  "icon_key": "gmail",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.gmail.node",
+    "class": "FlowsGmailNode"
+  },
+  "palette_group": "app",
+  "credential_slots": [
+    {
+      "slot": "gmailOAuth2",
+      "label": "Credential to connect with",
+      "required": true,
+      "docrouter_binding": "organization_credential_kind:gmailOAuth2"
+    }
+  ],
+  "parameter_schema_ref": "parameter.schema.json"
+}

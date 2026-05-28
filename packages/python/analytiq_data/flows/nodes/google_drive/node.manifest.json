@@ -1,0 +1,33 @@
+{
+  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "manifest_version": 1,
+  "key": "flows.google_drive",
+  "type_version": 3,
+  "label": "Google Drive",
+  "description": "Access data on Google Drive.",
+  "category": "input",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 1,
+  "max_inputs": 1,
+  "outputs": 1,
+  "output_labels": [
+    "main"
+  ],
+  "icon_key": "google_drive",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.google_drive.node",
+    "class": "FlowsGoogleDriveNode"
+  },
+  "palette_group": "app",
+  "credential_slots": [
+    {
+      "slot": "googleDriveOAuth2Api",
+      "label": "Credential to connect with",
+      "required": true,
+      "docrouter_binding": "organization_credential_kind:googleDriveOAuth2Api"
+    }
+  ],
+  "parameter_schema_ref": "parameter.schema.json"
+}

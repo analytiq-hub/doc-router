@@ -1,0 +1,98 @@
+{
+  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "manifest_version": 1,
+  "key": "flows.trigger.schedule",
+  "type_version": 1,
+  "label": "Schedule trigger",
+  "description": "Starts the flow on a recurring schedule (cron or interval rules).",
+  "category": "Generic",
+  "is_trigger": true,
+  "is_merge": false,
+  "min_inputs": 0,
+  "max_inputs": 0,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "schedule_trigger",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.trigger_schedule",
+    "class": "FlowsScheduleTriggerNode"
+  },
+  "palette_group": "trigger",
+  "parameter_schema": {
+    "type": "object",
+    "title": "Schedule trigger",
+    "properties": {
+      "rule": {
+        "type": "object",
+        "title": "Trigger rules",
+        "description": "One or more interval rules; each matching tick can start a run.",
+        "x-ui-widget": "schedule_trigger_rules",
+        "default": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 1
+            }
+          ]
+        },
+        "properties": {
+          "interval": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string",
+                  "enum": [
+                    "minutes",
+                    "hours",
+                    "days",
+                    "cronExpression"
+                  ],
+                  "default": "hours"
+                },
+                "minutesInterval": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 59,
+                  "default": 5
+                },
+                "hoursInterval": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 23,
+                  "default": 1
+                },
+                "daysInterval": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 31,
+                  "default": 1
+                },
+                "cronExpression": {
+                  "type": "string",
+                  "default": "0 * * * *",
+                  "description": "Cron expression (validated by croniter on save). Usually 5 fields: minute hour day-of-month month day-of-week."
+                }
+              },
+              "required": [
+                "field"
+              ]
+            }
+          }
+        },
+        "required": [
+          "interval"
+        ]
+      }
+    },
+    "required": [
+      "rule"
+    ]
+  }
+}

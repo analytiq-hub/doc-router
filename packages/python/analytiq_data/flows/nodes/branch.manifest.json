@@ -1,0 +1,48 @@
+{
+  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "manifest_version": 1,
+  "key": "flows.branch",
+  "type_version": 1,
+  "label": "Branch",
+  "description": "Routes items to true/false outputs based on a condition.",
+  "category": "Generic",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 1,
+  "max_inputs": 1,
+  "outputs": 2,
+  "output_labels": [
+    "true",
+    "false"
+  ],
+  "icon_key": "branch",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.branch",
+    "class": "FlowsBranchNode"
+  },
+  "palette_group": "flow",
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "field": {
+        "type": "string",
+        "minLength": 1,
+        "default": "",
+        "description": "Key on each item's `json` object to read (e.g. `status`, `ok`).",
+        "x-ui-group": "Condition",
+        "x-ui-placeholder": "Field name in each item's JSON"
+      },
+      "equals": {
+        "description": "Compared to `json[field]` (loose equality for number vs string). Use a literal or expression.",
+        "x-ui-group": "Condition",
+        "x-ui-placeholder": "Value to match, or =expression"
+      }
+    },
+    "required": [
+      "field",
+      "equals"
+    ],
+    "additionalProperties": false
+  }
+}

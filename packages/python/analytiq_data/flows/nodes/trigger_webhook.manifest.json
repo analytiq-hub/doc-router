@@ -1,0 +1,182 @@
+{
+  "schema": "https://docrouter.example/schemas/flow-node-manifest/v1.json",
+  "manifest_version": 1,
+  "key": "flows.trigger.webhook",
+  "type_version": 1,
+  "label": "Webhook",
+  "description": "Starts the flow when the webhook URL receives an HTTP request (JSON, form, or binary body).",
+  "category": "Generic",
+  "is_trigger": true,
+  "is_merge": false,
+  "min_inputs": 0,
+  "max_inputs": 0,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "webhook_trigger",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.trigger_webhook",
+    "class": "FlowsWebhookTriggerNode"
+  },
+  "palette_group": "trigger",
+  "parameter_schema": {
+    "type": "object",
+    "title": "Webhook",
+    "description": "URL path segment routing on this DocRouter webhook is keyed by webhook id (the production URL `/v0/webhooks/{webhook_id}`). Treat `path` as a human label aligned with comparable tools; enforced HTTP verbs and security options mirror that pattern.",
+    "additionalProperties": true,
+    "properties": {
+      "webhook_leaf": {
+        "title": "Path",
+        "type": "string",
+        "default": "",
+        "description": "Public URL leaf for both production and test endpoints. Should be a UUID; must be unique across the entire system.",
+        "x-ui-placeholder": "e.g. 550e8400-e29b-41d4-a716-446655440000",
+        "x-ui-regex": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        "x-ui-regex-message": "Must be a UUID (xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)",
+        "x-ui-group": "Webhook URLs"
+      },
+      "http_method": {
+        "title": "HTTP method",
+        "type": "string",
+        "enum": [
+          "DELETE",
+          "GET",
+          "HEAD",
+          "PATCH",
+          "POST",
+          "PUT"
+        ],
+        "default": "GET",
+        "description": "Single verb when multiple HTTP methods are off.",
+        "x-ui-show-when": {
+          "field": "multiple_methods",
+          "equals": false
+        },
+        "x-ui-group": "HTTP"
+      },
+      "allowed_methods": {
+        "title": "Allowed methods",
+        "type": "string",
+        "default": "",
+        "description": "Comma-separated list (e.g. \"GET, POST\"). Leave empty while multiple-methods mode is on to allow every verb the gateway accepts.",
+        "x-ui-widget": "textarea",
+        "x-ui-placeholder": "GET, POST",
+        "x-ui-show-when": {
+          "field": "multiple_methods",
+          "equals": true
+        },
+        "x-ui-group": "HTTP"
+      },
+      "response_mode": {
+        "title": "Respond",
+        "type": "string",
+        "enum": [
+          "on_received",
+          "last_node",
+          "respond_to_webhook"
+        ],
+        "default": "on_received",
+        "description": "Respond immediately: return an HTTP acknowledgement right away and queue the workflow. When last node finishes: await a synchronous run (server time limit applies) and return JSON from the last executed node's first output item (or a minimal execution envelope). Using Respond to Webhook: same synchronous run; the HTTP reply is produced by the Respond to Webhook node, or the default acknowledgement if that node does not run.",
+        "x-ui-enum-names": [
+          "Respond immediately",
+          "When last node finishes",
+          "Using Respond to Webhook"
+        ],
+        "x-ui-group": "Response"
+      },
+      "response_code": {
+        "title": "Response status code",
+        "type": "integer",
+        "default": 200,
+        "minimum": 100,
+        "maximum": 599,
+        "description": "HTTP status returned with the acknowledgement when responding immediately.",
+        "x-ui-show-when": {
+          "field": "response_mode",
+          "equals": "on_received"
+        },
+        "x-ui-group": "Response"
+      },
+      "no_response_body": {
+        "title": "No response body",
+        "type": "boolean",
+        "default": false,
+        "description": "Acknowledge without a serialized body.",
+        "x-ui-show-when": {
+          "field": "response_mode",
+          "equals": "on_received"
+        },
+        "x-ui-group": "Response"
+      },
+      "response_data": {
+        "title": "Response data",
+        "type": "string",
+        "default": "",
+        "description": "Custom acknowledgement payload (JSON string or plain text). Empty restores the default `{ \"execution_id\": \"…\" }` JSON envelope.",
+        "x-ui-widget": "textarea",
+        "x-ui-show-when": {
+          "field": "response_mode",
+          "equals": "on_received"
+        },
+        "x-ui-group": "Response"
+      },
+      "response_content_type": {
+        "title": "Response content type",
+        "type": "string",
+        "default": "",
+        "description": "Optional Content-Type for the acknowledgement (derived when empty).",
+        "x-ui-placeholder": "application/xml",
+        "x-ui-show-when": {
+          "field": "response_mode",
+          "equals": "on_received"
+        },
+        "x-ui-group": "Response"
+      },
+      "response_headers": {
+        "title": "Response headers",
+        "type": "array",
+        "description": "Optional headers added to the synchronous acknowledgement.",
+        "default": [],
+        "items": {},
+        "x-ui-widget": "name_value_list",
+        "x-ui-show-when": {
+          "field": "response_mode",
+          "equals": "on_received"
+        },
+        "x-ui-group": "Response"
+      },
+      "ignore_bots": {
+        "title": "Ignore bots",
+        "type": "boolean",
+        "default": false,
+        "description": "Reject heuristic bot / crawler traffic with HTTP 403 before enqueueing a run.",
+        "x-ui-group": "Advanced"
+      },
+      "ip_whitelist": {
+        "title": "IP whitelist",
+        "type": "string",
+        "default": "",
+        "description": "Comma-separated allow rules: each entry is a single IPv4/IPv6 address (exact match) or a CIDR network (e.g. 10.0.0.0/8). Only the TCP client IP is checked unless the deployment sets env FLOW_WEBHOOK_TRUST_X_FORWARDED_FOR for trusted reverse-proxy chains (then X-Forwarded-For is used).",
+        "x-ui-widget": "textarea",
+        "x-ui-placeholder": "203.0.113.10, 10.0.0.0/8, ::1",
+        "x-ui-group": "Advanced"
+      },
+      "raw_body": {
+        "title": "Raw body",
+        "type": "boolean",
+        "default": false,
+        "description": "For non-multipart requests, stash the uploaded bytes under the webhook binary field instead of JSON/text parsing.",
+        "x-ui-group": "Advanced"
+      },
+      "binary_property_name": {
+        "title": "Binary property name",
+        "type": "string",
+        "default": "data",
+        "description": "Output binary field/prefix used when multipart files or raw body uploads attach to GridFS.",
+        "x-ui-group": "Advanced"
+      }
+    }
+  }
+}
