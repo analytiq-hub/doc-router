@@ -62,7 +62,9 @@
     "fileId": {
       "type": "string",
       "default": "",
-      "title": "File ID",
+      "title": "File",
+      "description": "Drive item ID or https://onedrive.live.com/… link (id= or resid= query parameter).",
+      "x-ui-placeholder": "e.g. ABC!123 or https://onedrive.live.com/?id=…",
       "x-ui-show-when-any": [
         {
           "all": [
@@ -158,7 +160,9 @@
     "itemId": {
       "type": "string",
       "default": "",
-      "title": "Item ID",
+      "title": "Item",
+      "description": "Drive item ID or https://onedrive.live.com/… link.",
+      "x-ui-placeholder": "Item ID or OneDrive link",
       "x-ui-show-when": {
         "all": [
           {"field": "operation", "equals": "rename"}
@@ -212,7 +216,9 @@
     "parentId": {
       "type": "string",
       "default": "",
-      "title": "Parent ID",
+      "title": "Parent",
+      "description": "Parent folder ID or https://onedrive.live.com/… link.",
+      "x-ui-placeholder": "Folder ID or OneDrive link",
       "x-ui-show-when": {
         "all": [
           {"field": "resource", "equals": "file"},
@@ -273,7 +279,8 @@
         "parentFolderId": {
           "type": "string",
           "default": "",
-          "title": "Parent Folder ID"
+          "title": "Parent Folder",
+          "description": "Parent folder ID or https://onedrive.live.com/… link."
         }
       },
       "x-ui-show-when": {
@@ -286,7 +293,9 @@
     "folderId": {
       "type": "string",
       "default": "",
-      "title": "Folder ID",
+      "title": "Folder",
+      "description": "Folder ID or https://onedrive.live.com/… link.",
+      "x-ui-placeholder": "Folder ID or OneDrive link",
       "x-ui-show-when-any": [
         {
           "all": [

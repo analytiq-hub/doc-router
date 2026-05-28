@@ -52,3 +52,20 @@ async def test_folder_get_children(
 
 def test_search_query_path_escapes_quotes() -> None:
     assert "''" in search_query_path("foo'bar")
+
+
+@pytest.mark.asyncio
+async def test_file_get_accepts_onedrive_url(
+    onedrive_ctx: ad.flows.ExecutionContext,
+    onedrive_item: ad.flows.FlowItem,
+    onedrive_node_shell: dict[str, Any],
+    mock_oauth_token: AsyncMock,
+) -> None:
+    url = "https://onedrive.live.com/?id=ABC%21123&cid=xyz"
+    params = {"resource": "file", "operation": "get", "fileId": url}
+    with patch(f"{_OPS}._graph", new_callable=AsyncMock, return_value={"id": "ABC!123"}) as m:
+        out = await execute_microsoft_onedrive_item(
+            onedrive_ctx, onedrive_node_shell, params, onedrive_item, item_index=0
+        )
+    assert out.json["id"] == "ABC!123"
+    assert m.await_args.args[3] == "/drive/items/ABC!123"

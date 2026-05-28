@@ -46,6 +46,12 @@ def encoded_drive_item_path(parent_id: str, file_name: str) -> str:
     return f"/drive/items/{parent_id}:/{quote(str(file_name), safe='')}:/content"
 
 
+def onedrive_item_id(params: dict[str, Any], key: str) -> str:
+    """Read a node parameter and normalize plain ids or ``onedrive.live.com`` URLs."""
+
+    return normalize_onedrive_watch_id(params.get(key))
+
+
 def normalize_onedrive_watch_id(raw: Any) -> str:
     """Drive item id from plain id or ``onedrive.live.com`` URL (n8n resource locator parity)."""
 

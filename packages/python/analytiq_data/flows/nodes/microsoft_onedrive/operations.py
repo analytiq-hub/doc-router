@@ -12,7 +12,12 @@ from .api import (
     microsoft_graph_request_with_response,
     resolve_oauth_access_token,
 )
-from .helpers import encoded_drive_item_path, search_query_path, validate_resource_operation
+from .helpers import (
+    encoded_drive_item_path,
+    onedrive_item_id,
+    search_query_path,
+    validate_resource_operation,
+)
 
 
 async def _graph(
@@ -69,7 +74,7 @@ async def _run_file(
     item_index: int,
 ) -> dict[str, Any] | "ad.flows.FlowItem":
     if operation == "copy":
-        file_id = str(params.get("fileId") or "")
+        file_id = onedrive_item_id(params, "fileId")
         additional = (
             params.get("additionalFields")
             if isinstance(params.get("additionalFields"), dict)
@@ -97,7 +102,7 @@ async def _run_file(
         return {"location": location}
 
     if operation == "delete":
-        file_id = str(params.get("fileId") or "")
+        file_id = onedrive_item_id(params, "fileId")
         await _graph(context, token, "DELETE", f"/drive/items/{file_id}")
         return {"success": True}
 
@@ -105,7 +110,7 @@ async def _run_file(
         return await _file_download(context, token, params, item)
 
     if operation == "get":
-        file_id = str(params.get("fileId") or "")
+        file_id = onedrive_item_id(params, "fileId")
         return await _graph(context, token, "GET", f"/drive/items/{file_id}")
 
     if operation == "search":
@@ -120,7 +125,7 @@ async def _run_file(
         return {"value": [x for x in items if x.get("file")]}
 
     if operation == "share":
-        file_id = str(params.get("fileId") or "")
+        file_id = onedrive_item_id(params, "fileId")
         body = {
             "type": str(params.get("type") or "view"),
             "scope": str(params.get("scope") or "anonymous"),
@@ -147,7 +152,7 @@ async def _run_folder(
     if operation == "create":
         names = [s for s in str(params.get("name") or "").split("/") if s.strip()]
         options = params.get("options") if isinstance(params.get("options"), dict) else {}
-        parent_folder_id = options.get("parentFolderId") or None
+        parent_folder_id = onedrive_item_id(options, "parentFolderId") or None
         last: dict[str, Any] = {}
         for name in names:
             body: dict[str, Any] = {"name": name, "folder": {}}
@@ -161,12 +166,12 @@ async def _run_folder(
         return last
 
     if operation == "delete":
-        folder_id = str(params.get("folderId") or "")
+        folder_id = onedrive_item_id(params, "folderId")
         await _graph(context, token, "DELETE", f"/drive/items/{folder_id}")
         return {"success": True}
 
     if operation == "getChildren":
-        folder_id = str(params.get("folderId") or "")
+        folder_id = onedrive_item_id(params, "folderId")
         items = await microsoft_graph_request_all_items(
             context,
             token,
@@ -188,7 +193,7 @@ async def _run_folder(
         return {"value": [x for x in items if x.get("folder")]}
 
     if operation == "share":
-        folder_id = str(params.get("folderId") or "")
+        folder_id = onedrive_item_id(params, "folderId")
         body = {
             "type": str(params.get("type") or "view"),
             "scope": str(params.get("scope") or "anonymous"),
@@ -208,7 +213,7 @@ async def _rename_item(
     token: str,
     params: dict[str, Any],
 ) -> dict[str, Any]:
-    item_id = str(params.get("itemId") or "")
+    item_id = onedrive_item_id(params, "itemId")
     new_name = str(params.get("newName") or "")
     return await _graph(
         context, token, "PATCH", f"/drive/items/{item_id}", body={"name": new_name}
@@ -221,7 +226,7 @@ async def _file_download(
     params: dict[str, Any],
     item: "ad.flows.FlowItem",
 ) -> "ad.flows.FlowItem":
-    file_id = str(params.get("fileId") or "")
+    file_id = onedrive_item_id(params, "fileId")
     prop = str(params.get("binaryPropertyName") or "data").strip() or "data"
     meta = await _graph(context, token, "GET", f"/drive/items/{file_id}")
     if not isinstance(meta, dict) or meta.get("file") is None:
@@ -254,7 +259,7 @@ async def _file_upload(
     *,
     item_index: int,
 ) -> dict[str, Any]:
-    parent_id = str(params.get("parentId") or "")
+    parent_id = onedrive_item_id(params, "parentId")
     file_name = str(params.get("fileName") or "")
     use_binary = bool(params.get("binaryData"))
 
