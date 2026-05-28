@@ -7,20 +7,22 @@ from typing import Any
 
 import analytiq_data as ad
 
-from .api import (
+from analytiq_data.flows.integrations.microsoft import (
+    GRAPH_DRIVE_DELTA_LATEST,
+    GRAPH_DRIVE_DELTA_ROOT,
     MicrosoftGraphApiError,
-    format_onedrive_graph_error,
-    get_onedrive_folder_path,
-    microsoft_graph_request,
-    microsoft_graph_request_all_items_delta,
-    resolve_oauth_access_token_for_org,
+    format_graph_user_error,
+    get_drive_folder_path,
+    graph_request,
+    graph_request_all_items_delta,
+    normalize_drive_item_id,
+    simplify_drive_item,
 )
-from .helpers import normalize_onedrive_watch_id, simplify_onedrive_item
+
+from .api import resolve_oauth_access_token_for_org
 
 LAST_TIME_CHECKED_KEY = "last_time_checked"
 LAST_LINK_KEY = "last_link"
-_DELTA_LATEST = "https://graph.microsoft.com/v1.0/me/drive/root/delta?token=latest"
-_DELTA_ROOT = "https://graph.microsoft.com/v1.0/me/drive/root/delta"
 
 
 def _utc_now_iso() -> str:
@@ -34,7 +36,7 @@ def _event_type_and_resource(event: str) -> tuple[str, str]:
 
 
 def _raise_poll_graph_error(exc: MicrosoftGraphApiError) -> None:
-    raise ad.flows.FlowValidationError(format_onedrive_graph_error(exc)) from exc
+    raise ad.flows.FlowValidationError(format_graph_user_error(exc)) from exc
 
 
 async def _probe_onedrive_delta_sync(
@@ -44,11 +46,11 @@ async def _probe_onedrive_delta_sync(
 ) -> None:
     """Ensure delta tracking works (required for the trigger; ``/me/drive`` alone is not enough)."""
 
-    page = await microsoft_graph_request(
+    page = await graph_request(
         token,
         "GET",
         "",
-        url=_DELTA_LATEST,
+        url=GRAPH_DRIVE_DELTA_LATEST,
         trace_node_id=trace_node_id,
     )
     if isinstance(page, dict) and page.get("@odata.deltaLink"):
@@ -78,7 +80,7 @@ async def poll_microsoft_onedrive_trigger(
 
     now = _utc_now_iso()
     start = str(context.get_static(LAST_TIME_CHECKED_KEY) or now)
-    last_link = str(context.get_static(LAST_LINK_KEY) or _DELTA_LATEST)
+    last_link = str(context.get_static(LAST_LINK_KEY) or GRAPH_DRIVE_DELTA_LATEST)
 
     token = await resolve_oauth_access_token_for_org(context.organization_id, node)
     trace_id = context.node_id
@@ -86,26 +88,26 @@ async def poll_microsoft_onedrive_trigger(
     try:
         if testing:
             await _probe_onedrive_delta_sync(token, trace_node_id=trace_id)
-            file_id = normalize_onedrive_watch_id(params.get("fileId"))
-            folder_id = normalize_onedrive_watch_id(params.get("folderId"))
+            file_id = normalize_drive_item_id(params.get("fileId"))
+            folder_id = normalize_drive_item_id(params.get("folderId"))
             if watch == "selectedFile" and file_id:
-                await microsoft_graph_request(
+                await graph_request(
                     token, "GET", f"/drive/items/{file_id}", trace_node_id=trace_id
                 )
             elif folder_id and (
                 watch in ("selectedFolder", "oneSelectedFolder") or watch_folder
             ):
-                await get_onedrive_folder_path(None, token, folder_id, trace_node_id=trace_id)
+                await get_drive_folder_path(None, token, folder_id, trace_node_id=trace_id)
             context.set_static(LAST_TIME_CHECKED_KEY, now)
             context.set_static(LAST_LINK_KEY, last_link)
             return None
 
         if manual:
-            page = await microsoft_graph_request(
+            page = await graph_request(
                 token,
                 "GET",
                 "",
-                url=_DELTA_ROOT,
+                url=GRAPH_DRIVE_DELTA_ROOT,
                 trace_node_id=trace_id,
             )
             raw = page.get("value") if isinstance(page, dict) else []
@@ -113,7 +115,7 @@ async def poll_microsoft_onedrive_trigger(
                 [x for x in raw if isinstance(x, dict)] if isinstance(raw, list) else []
             )
         else:
-            delta_link, response_data = await microsoft_graph_request_all_items_delta(
+            delta_link, response_data = await graph_request_all_items_delta(
                 None,
                 token,
                 last_link,
@@ -128,8 +130,8 @@ async def poll_microsoft_onedrive_trigger(
 
     context.set_static(LAST_TIME_CHECKED_KEY, now)
 
-    file_id = normalize_onedrive_watch_id(params.get("fileId"))
-    folder_id = normalize_onedrive_watch_id(params.get("folderId"))
+    file_id = normalize_drive_item_id(params.get("fileId"))
+    folder_id = normalize_drive_item_id(params.get("folderId"))
 
     if watch == "selectedFile" and file_id:
         response_data = [x for x in response_data if str(x.get("id") or "") == file_id]
@@ -150,7 +152,7 @@ async def poll_microsoft_onedrive_trigger(
             ]
 
     if folder_child and (watch == "selectedFolder" or watch_folder) and folder_id:
-        folder_path = await get_onedrive_folder_path(
+        folder_path = await get_drive_folder_path(
             None, token, folder_id, trace_node_id=trace_id
         )
         filtered: list[dict[str, Any]] = []
@@ -173,7 +175,7 @@ async def poll_microsoft_onedrive_trigger(
         return None
 
     if simplify:
-        response_data = [simplify_onedrive_item(x) for x in response_data]
+        response_data = [simplify_drive_item(x) for x in response_data]
 
     out: list[ad.flows.FlowItem] = []
     for i, row in enumerate(response_data):

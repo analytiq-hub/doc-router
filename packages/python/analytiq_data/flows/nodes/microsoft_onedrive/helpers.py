@@ -1,19 +1,10 @@
-"""Shared helpers for ``flows.microsoft_onedrive``."""
+"""OneDrive node helpers (product-specific dispatch; shared drive utils in integrations)."""
 
 from __future__ import annotations
 
-import re
 from typing import Any
-from urllib.parse import quote, unquote
 
-_ONEDRIVE_ID_FROM_URL_RE = re.compile(
-    r"https://onedrive\.live\.com/.*?(?:\?|&)id=([^&]+)",
-    re.IGNORECASE,
-)
-_ONEDRIVE_RESID_FROM_URL_RE = re.compile(
-    r"https://onedrive\.live\.com/.*?(?:\?|&)resid=([^&]+)",
-    re.IGNORECASE,
-)
+from analytiq_data.flows.integrations.microsoft import normalize_drive_item_id
 
 _VALID_OPS: dict[str, frozenset[str]] = {
     "file": frozenset(
@@ -35,48 +26,5 @@ def validate_resource_operation(resource: str, operation: str) -> None:
         )
 
 
-def search_query_path(query: str) -> str:
-    """OData search segment for ``/drive/root/search(q='...')``."""
-
-    escaped = str(query or "").replace("'", "''")
-    return f"/drive/root/search(q='{escaped}')"
-
-
-def encoded_drive_item_path(parent_id: str, file_name: str) -> str:
-    return f"/drive/items/{parent_id}:/{quote(str(file_name), safe='')}:/content"
-
-
 def onedrive_item_id(params: dict[str, Any], key: str) -> str:
-    """Read a node parameter and normalize plain ids or ``onedrive.live.com`` URLs."""
-
-    return normalize_onedrive_watch_id(params.get(key))
-
-
-def normalize_onedrive_watch_id(raw: Any) -> str:
-    """Drive item id from plain id or ``onedrive.live.com`` URL (n8n resource locator parity)."""
-
-    s = unquote(str(raw or "").strip())
-    if not s:
-        return ""
-    s = s.replace("%21", "!")
-    for pattern in (_ONEDRIVE_ID_FROM_URL_RE, _ONEDRIVE_RESID_FROM_URL_RE):
-        m = pattern.search(s)
-        if m:
-            return unquote(m.group(1)).replace("%21", "!")
-    return s
-
-
-def simplify_onedrive_item(item: dict[str, Any]) -> dict[str, Any]:
-    fs = item.get("fileSystemInfo") if isinstance(item.get("fileSystemInfo"), dict) else {}
-    parent = item.get("parentReference") if isinstance(item.get("parentReference"), dict) else {}
-    file_meta = item.get("file") if isinstance(item.get("file"), dict) else {}
-    return {
-        "id": item.get("id"),
-        "createdDateTime": fs.get("createdDateTime"),
-        "lastModifiedDateTime": fs.get("lastModifiedDateTime"),
-        "name": item.get("name"),
-        "webUrl": item.get("webUrl"),
-        "size": item.get("size"),
-        "path": parent.get("path") or "",
-        "mimeType": file_meta.get("mimeType") or "",
-    }
+    return normalize_drive_item_id(params.get(key))

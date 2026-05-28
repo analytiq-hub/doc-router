@@ -6,18 +6,16 @@ from typing import Any
 
 import analytiq_data as ad
 
-from .api import (
-    microsoft_graph_request,
-    microsoft_graph_request_all_items,
-    microsoft_graph_request_with_response,
-    resolve_oauth_access_token,
-)
-from .helpers import (
-    encoded_drive_item_path,
-    onedrive_item_id,
+from analytiq_data.flows.integrations.microsoft import (
+    encoded_drive_item_content_path,
+    graph_request,
+    graph_request_all_items,
+    graph_request_with_response,
     search_query_path,
-    validate_resource_operation,
 )
+
+from .api import resolve_oauth_access_token
+from .helpers import onedrive_item_id, validate_resource_operation
 
 
 async def _graph(
@@ -27,7 +25,7 @@ async def _graph(
     path: str,
     **kwargs: Any,
 ) -> Any:
-    return await microsoft_graph_request(
+    return await graph_request(
         token,
         method,
         path,
@@ -90,7 +88,7 @@ async def _run_file(
             body["parentReference"] = dict(parent_ref)
         if additional.get("name"):
             body["name"] = additional["name"]
-        resp = await microsoft_graph_request_with_response(
+        resp = await graph_request_with_response(
             token,
             "POST",
             f"/drive/items/{file_id}/copy",
@@ -115,7 +113,7 @@ async def _run_file(
 
     if operation == "search":
         query = str(params.get("query") or "")
-        items = await microsoft_graph_request_all_items(
+        items = await graph_request_all_items(
             context,
             token,
             "GET",
@@ -172,7 +170,7 @@ async def _run_folder(
 
     if operation == "getChildren":
         folder_id = onedrive_item_id(params, "folderId")
-        items = await microsoft_graph_request_all_items(
+        items = await graph_request_all_items(
             context,
             token,
             "GET",
@@ -183,7 +181,7 @@ async def _run_folder(
 
     if operation == "search":
         query = str(params.get("query") or "")
-        items = await microsoft_graph_request_all_items(
+        items = await graph_request_all_items(
             context,
             token,
             "GET",
@@ -275,7 +273,7 @@ async def _file_upload(
         data = str(params.get("fileContent") or "").encode("utf-8")
         mime_type = "text/plain"
 
-    path = encoded_drive_item_path(parent_id, upload_name)
+    path = encoded_drive_item_content_path(parent_id, upload_name)
     headers = {
         "Content-Type": mime_type,
         "Content-Length": str(len(data)),

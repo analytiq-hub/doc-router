@@ -7,7 +7,7 @@ import pytest
 
 import analytiq_data as ad
 
-from analytiq_data.flows.nodes.microsoft_onedrive.helpers import normalize_onedrive_watch_id
+from analytiq_data.flows.integrations.microsoft import normalize_drive_item_id
 from analytiq_data.flows.nodes.microsoft_onedrive.poll_trigger import (
     LAST_LINK_KEY,
     LAST_TIME_CHECKED_KEY,
@@ -17,9 +17,9 @@ from analytiq_data.flows.nodes.microsoft_onedrive.poll_trigger import (
 _POLL = "analytiq_data.flows.nodes.microsoft_onedrive.poll_trigger"
 
 
-def test_normalize_onedrive_watch_id_from_url() -> None:
+def test_normalize_drive_item_id_from_url() -> None:
     url = "https://onedrive.live.com/?id=ABC%21123&cid=xyz"
-    assert normalize_onedrive_watch_id(url) == "ABC!123"
+    assert normalize_drive_item_id(url) == "ABC!123"
 
 
 def _poll_ctx(
@@ -71,7 +71,7 @@ async def test_poll_schedule_returns_items() -> None:
             return_value="tok",
         ),
         patch(
-            f"{_POLL}.microsoft_graph_request_all_items_delta",
+            f"{_POLL}.graph_request_all_items_delta",
             new_callable=AsyncMock,
             return_value=("https://graph.microsoft.com/delta-next", items),
         ),
@@ -94,7 +94,7 @@ async def test_poll_manual_no_matches_raises() -> None:
             return_value="tok",
         ),
         patch(
-            f"{_POLL}.microsoft_graph_request",
+            f"{_POLL}.graph_request",
             new_callable=AsyncMock,
             return_value={"value": []},
         ),
@@ -120,7 +120,7 @@ async def test_poll_testing_probes_delta_then_optional_file() -> None:
             return_value="tok",
         ),
         patch(
-            f"{_POLL}.microsoft_graph_request",
+            f"{_POLL}.graph_request",
             new_callable=AsyncMock,
             side_effect=[
                 {"@odata.deltaLink": "https://graph.microsoft.com/delta"},
@@ -135,7 +135,7 @@ async def test_poll_testing_probes_delta_then_optional_file() -> None:
 
 @pytest.mark.asyncio
 async def test_poll_testing_spo_error_is_actionable() -> None:
-    from analytiq_data.flows.nodes.microsoft_onedrive.api import MicrosoftGraphApiError
+    from analytiq_data.flows.integrations.microsoft import MicrosoftGraphApiError
 
     ctx = _poll_ctx(testing=True)
     node = _node({"event": "fileCreated"})
@@ -146,7 +146,7 @@ async def test_poll_testing_spo_error_is_actionable() -> None:
             return_value="tok",
         ),
         patch(
-            f"{_POLL}.microsoft_graph_request",
+            f"{_POLL}.graph_request",
             new_callable=AsyncMock,
             side_effect=MicrosoftGraphApiError(
                 "bad",

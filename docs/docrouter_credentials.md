@@ -2,7 +2,7 @@
 
 Credential kinds, org-scoped storage, backend API, runtime injection, OAuth2 browser connect, and frontend UI.
 
-**Related:** [`docrouter_http_request.md`](./docrouter_http_request.md)
+**Related:** [`docrouter_http_request.md`](./docrouter_http_request.md), [`flows_integrations.md`](./flows_integrations.md)
 
 ---
 

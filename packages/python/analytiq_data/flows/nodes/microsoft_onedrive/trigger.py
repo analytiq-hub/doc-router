@@ -11,7 +11,7 @@ import analytiq_data as ad
 from analytiq_data.flows.triggers.cron_exprs import poll_times_to_specs
 from analytiq_data.flows.triggers.poll_defaults import resolve_poll_times
 
-from .helpers import normalize_onedrive_watch_id
+from analytiq_data.flows.integrations.microsoft import normalize_drive_item_id
 from .poll_trigger import poll_microsoft_onedrive_trigger
 
 _SCHEMA_PATH = Path(__file__).resolve().parent / "trigger.parameter.schema.json"
@@ -57,10 +57,10 @@ class FlowsMicrosoftOneDriveTriggerNode:
         watch = str(params.get("watch") or "").strip()
         watch_folder = bool(params.get("watchFolder"))
         if event == "fileUpdated" and watch == "selectedFile":
-            if not normalize_onedrive_watch_id(params.get("fileId")):
+            if not normalize_drive_item_id(params.get("fileId")):
                 errors.append("fileId is required when watching a selected file")
         if watch in ("selectedFolder", "oneSelectedFolder") or watch_folder:
-            if not normalize_onedrive_watch_id(params.get("folderId")):
+            if not normalize_drive_item_id(params.get("folderId")):
                 errors.append("folderId is required for the selected folder watch")
         try:
             poll_times_to_specs(resolve_poll_times(params))

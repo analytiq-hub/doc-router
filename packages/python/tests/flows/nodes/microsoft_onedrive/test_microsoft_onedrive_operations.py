@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 import analytiq_data as ad
 import pytest
 
-from analytiq_data.flows.nodes.microsoft_onedrive.helpers import search_query_path
+from analytiq_data.flows.integrations.microsoft import search_query_path
 from analytiq_data.flows.nodes.microsoft_onedrive.operations import execute_microsoft_onedrive_item
 
 _OPS = "analytiq_data.flows.nodes.microsoft_onedrive.operations"
@@ -40,7 +40,7 @@ async def test_folder_get_children(
     params = {"resource": "folder", "operation": "getChildren", "folderId": "folder1"}
     children = [{"id": "c1", "name": "child"}]
     with patch(
-        f"{_OPS}.microsoft_graph_request_all_items",
+        f"{_OPS}.graph_request_all_items",
         new_callable=AsyncMock,
         return_value=children,
     ):
