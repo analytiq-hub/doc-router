@@ -367,6 +367,11 @@ async def test_oauth_kind_includes_redirect_uri(org_and_users, test_db):
     assert gmail is not None
     assert gmail.get("supports_oauth_browser_flow") is True
     assert gmail.get("oauth_redirect_uri") == ad.flows.flow_oauth_redirect_uri()
+    outlook = kinds.get("microsoftOutlookOAuth2Api")
+    assert outlook is not None
+    assert outlook.get("oauth_redirect_uri") == ad.flows.flow_oauth_redirect_uri(
+        prefer_localhost_loopback=True
+    )
     gmail_field_names = {f["name"] for f in gmail.get("fields") or []}
     assert "ignoreSSLIssues" not in gmail_field_names
     oauth2 = kinds.get("oAuth2Api")

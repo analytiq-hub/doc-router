@@ -10,10 +10,13 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import time
 from datetime import UTC, datetime, timedelta
 from typing import Any
+
+from urllib.parse import urlparse
 
 import httpx
 from bson import ObjectId
@@ -27,6 +30,10 @@ logger = logging.getLogger(__name__)
 
 TIME_SKEW_SEC = 120.0
 
+_SCOPE_FIELD_PLACEHOLDER = re.compile(
+    r"\{\{\s*(?:\$self\.)?([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}"
+)
+
 _ENV_SECRET = os.getenv("NEXTAUTH_SECRET")
 _ALGORITHM = "HS256"
 _FLOW_OAUTH_PUBLIC_ORIGIN = (
@@ -37,12 +44,64 @@ _FLOW_OAUTH_PUBLIC_ORIGIN = (
 )
 _NEXTAUTH_URL = os.getenv("NEXTAUTH_URL", "http://localhost:3000")
 
+# Entra ID loopback redirect URIs must use localhost, not 127.0.0.1 (AADSTS50011).
+_MICROSOFT_ENTRA_AUTH_HOSTS = frozenset(
+    {"login.microsoftonline.com", "login.windows.net"}
+)
 
-def flow_oauth_redirect_uri() -> str:
-    """Registered OAuth redirect URI (authorization + token exchange must match)."""
+
+def _is_entra_host(url: str) -> bool:
+    return (urlparse(url).hostname or "").lower() in _MICROSOFT_ENTRA_AUTH_HOSTS
+
+
+def _prefer_localhost_loopback_for_oauth_origin() -> str:
+    """``FLOW_OAUTH_PUBLIC_ORIGIN`` with 127.0.0.1 mapped to localhost when required."""
 
     base = _FLOW_OAUTH_PUBLIC_ORIGIN.rstrip("/")
+    parsed = urlparse(base)
+    if parsed.hostname == "127.0.0.1":
+        port_suffix = f":{parsed.port}" if parsed.port else ""
+        base = f"{parsed.scheme}://localhost{port_suffix}"
+    return base
+
+
+def _fields_use_microsoft_entra_oauth(fields: dict[str, Any]) -> bool:
+    auth_url = str(fields.get("authUrl") or "").strip()
+    return bool(auth_url) and _is_entra_host(auth_url)
+
+
+def _kind_uses_microsoft_entra_oauth(kind: dict[str, Any]) -> bool:
+    if str(kind.get("key") or "").startswith("microsoft"):
+        return True
+    auth_default = (
+        ((kind.get("secret_schema") or {}).get("properties") or {})
+        .get("authUrl", {})
+        .get("default") or ""
+    )
+    return bool(auth_default) and _is_entra_host(auth_default)
+
+
+def flow_oauth_redirect_uri(*, prefer_localhost_loopback: bool = False) -> str:
+    """Registered OAuth redirect URI (authorization + token exchange must match)."""
+
+    base = (
+        _prefer_localhost_loopback_for_oauth_origin()
+        if prefer_localhost_loopback
+        else _FLOW_OAUTH_PUBLIC_ORIGIN.rstrip("/")
+    )
     return f"{base}/v0/callback/flow-oauth"
+
+
+def flow_oauth_redirect_uri_for_fields(fields: dict[str, Any]) -> str:
+    return flow_oauth_redirect_uri(
+        prefer_localhost_loopback=_fields_use_microsoft_entra_oauth(fields)
+    )
+
+
+def flow_oauth_redirect_uri_for_kind(kind: dict[str, Any]) -> str:
+    return flow_oauth_redirect_uri(
+        prefer_localhost_loopback=_kind_uses_microsoft_entra_oauth(kind)
+    )
 
 
 def encode_flow_oauth_state(
@@ -533,7 +592,7 @@ async def exchange_authorization_code(
     if not token_url:
         raise RuntimeError("accessTokenUrl missing")
     require_oauth_client_configured(fields)
-    redirect_uri = flow_oauth_redirect_uri()
+    redirect_uri = flow_oauth_redirect_uri_for_fields(fields)
     body: dict[str, str] = {
         "grant_type": "authorization_code",
         "code": authorization_code,
@@ -609,6 +668,40 @@ def oauth_callback_redirect_error_generic(message: str) -> str:
     return f"{base}/?flow_oauth=error&flow_oauth_detail={quote(message[:300])}"
 
 
+def resolve_credential_scope(fields: dict[str, Any]) -> str:
+    """Substitute ``{{field}}`` / ``{{$self.field}}`` placeholders in OAuth scope strings."""
+
+    scope = str(fields.get("scope") or "").strip()
+    if not scope:
+        return ""
+
+    def repl(match: re.Match[str]) -> str:
+        key = match.group(1)
+        val = fields.get(key)
+        if val is None:
+            return match.group(0)
+        s = str(val).strip()
+        if not s:
+            return match.group(0)
+        return s
+
+    return _SCOPE_FIELD_PLACEHOLDER.sub(repl, scope)
+
+
+def require_resolved_oauth_scope(fields: dict[str, Any]) -> None:
+    """Raise when scope still contains unresolved placeholders after substitution."""
+
+    scope = resolve_credential_scope(fields)
+    if not scope:
+        raise RuntimeError("OAuth scope is missing. Save the credential and try again.")
+    if _SCOPE_FIELD_PLACEHOLDER.search(scope):
+        missing = sorted({m.group(1) for m in _SCOPE_FIELD_PLACEHOLDER.finditer(scope)})
+        labels = ", ".join(missing)
+        raise RuntimeError(
+            f"OAuth scope is incomplete: fill in {labels} on the credential and save before connecting."
+        )
+
+
 def build_oauth_authorization_url(
     fields: dict[str, Any],
     state: str,
@@ -666,14 +759,14 @@ def build_oauth_authorization_url(
 
     merged["response_type"] = "code"
     merged["client_id"] = _oauth_client_credentials(fields)[0]
-    merged["redirect_uri"] = flow_oauth_redirect_uri()
+    merged["redirect_uri"] = flow_oauth_redirect_uri_for_fields(fields)
     merged["state"] = state
 
     if pkce_code_challenge:
         merged["code_challenge"] = pkce_code_challenge
         merged["code_challenge_method"] = "S256"
 
-    scope = str(fields.get("scope") or "").strip()
+    scope = resolve_credential_scope(fields)
     if scope:
         merged["scope"] = scope
 

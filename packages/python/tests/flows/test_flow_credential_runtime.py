@@ -17,6 +17,9 @@ from analytiq_data.flows.credential_runtime import (
     apply_runtime_credential_updates,
     build_oauth_authorization_url,
     consume_flow_oauth_authorization_state,
+    flow_oauth_redirect_uri,
+    flow_oauth_redirect_uri_for_fields,
+    flow_oauth_redirect_uri_for_kind,
     oauth_callback_redirect_success,
     decode_flow_oauth_state,
     encode_flow_oauth_state,
@@ -28,6 +31,58 @@ from analytiq_data.flows.credential_runtime import (
     require_oauth_client_configured,
     store_flow_oauth_authorization_state,
 )
+from urllib.parse import parse_qs, urlparse
+
+
+def test_flow_oauth_redirect_uri_keeps_127_for_non_microsoft(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime._FLOW_OAUTH_PUBLIC_ORIGIN",
+        "http://127.0.0.1:8000",
+    )
+    assert (
+        flow_oauth_redirect_uri()
+        == "http://127.0.0.1:8000/v0/callback/flow-oauth"
+    )
+
+
+def test_flow_oauth_redirect_uri_microsoft_maps_127_to_localhost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime._FLOW_OAUTH_PUBLIC_ORIGIN",
+        "http://127.0.0.1:8000",
+    )
+    fields = {
+        "authUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "clientId": "cid",
+    }
+    assert (
+        flow_oauth_redirect_uri_for_fields(fields)
+        == "http://localhost:8000/v0/callback/flow-oauth"
+    )
+    kind = {"key": "microsoftOutlookOAuth2Api"}
+    assert (
+        flow_oauth_redirect_uri_for_kind(kind)
+        == "http://localhost:8000/v0/callback/flow-oauth"
+    )
+
+
+def test_build_oauth_authorization_url_microsoft_uses_localhost_redirect(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "analytiq_data.flows.credential_runtime._FLOW_OAUTH_PUBLIC_ORIGIN",
+        "http://127.0.0.1:8000",
+    )
+    fields = {
+        "authUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "clientId": "cid",
+    }
+    url = build_oauth_authorization_url(fields, "state-xyz")
+    redirect = parse_qs(urlparse(url).query)["redirect_uri"][0]
+    assert redirect == "http://localhost:8000/v0/callback/flow-oauth"
 
 
 def test_oauth_state_roundtrip():

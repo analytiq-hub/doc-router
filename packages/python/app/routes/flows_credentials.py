@@ -247,7 +247,9 @@ async def list_credential_kinds(
                 fields=fields,
                 has_test_request=bool(kind.get("test_request")),
                 supports_oauth_browser_flow=oauth_flow,
-                oauth_redirect_uri=ad.flows.flow_oauth_redirect_uri() if oauth_flow else None,
+                oauth_redirect_uri=(
+                    ad.flows.flow_oauth_redirect_uri_for_kind(kind) if oauth_flow else None
+                ),
                 has_pre_auth=isinstance(kind.get("pre_auth"), dict),
                 experimental=bool(kind.get("experimental")),
             )
@@ -574,6 +576,7 @@ async def oauth_initiate_flow_credential(
         build_oauth_authorization_url,
         generate_pkce_code_verifier,
         pkce_code_challenge_s256,
+        require_resolved_oauth_scope,
         store_flow_oauth_authorization_state,
     )
 
@@ -620,6 +623,11 @@ async def oauth_initiate_flow_credential(
 
     try:
         require_oauth_client_configured(fields)
+    except RuntimeError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from None
+
+    try:
+        require_resolved_oauth_scope(fields)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e)) from None
 
@@ -713,6 +721,8 @@ async def flow_oauth_callback(
         return RedirectResponse(
             oauth_callback_redirect_error(org_id, f"decrypt: {e}", credential_id=cred_id)
         )
+
+    fields = apply_credential_kind_defaults(kind, fields)
 
     pv_raw = pending.get("pkce_verifier")
     pkce_verifier_from_store: str | None = None

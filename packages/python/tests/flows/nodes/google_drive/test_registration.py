@@ -7,7 +7,7 @@ def test_google_drive_node_registration() -> None:
     ad.flows.register_builtin_nodes()
     nt = ad.flows.get("flows.google_drive")
     assert nt is not None
-    assert getattr(nt, "experimental", False) is True
+    assert getattr(nt, "experimental", False) is False
     assert nt.type_version == 3
     assert nt.icon_key == "google_drive"
     assert nt.palette_group == "app"

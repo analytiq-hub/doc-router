@@ -7,7 +7,7 @@ def test_gmail_trigger_registration() -> None:
     ad.flows.register_builtin_nodes()
     nt = ad.flows.get("flows.trigger.gmail")
     assert nt is not None
-    assert getattr(nt, "experimental", False) is True
+    assert getattr(nt, "experimental", False) is False
     assert getattr(nt, "polling", False) is True
     assert nt.is_trigger is True
     assert nt.palette_group == "trigger"

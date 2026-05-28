@@ -5,7 +5,13 @@
   "secret_schema": {
     "type": "object",
     "additionalProperties": false,
-    "properties": {},
+    "properties": {
+      "scope": {
+        "type": "string",
+        "default": "openid offline_access User.ReadWrite.All Group.ReadWrite.All Chat.ReadWrite",
+        "description": "Default Teams Graph scopes; hidden from the form via runtime_fields."
+      }
+    },
     "required": []
   },
   "extends": [
@@ -14,5 +20,9 @@
   "runtime_fields": [
     "scope"
   ],
+  "test_request": {
+    "method": "GET",
+    "url": "https://graph.microsoft.com/v1.0/me"
+  },
   "experimental": true
 }

@@ -260,7 +260,7 @@ For `oauth2_authorization_code` kinds where `secret_schema` includes `grantType`
 | Env var | Purpose |
 |---------|---------|
 | `NEXTAUTH_SECRET` | Used elsewhere (e.g. session); **not** used to encode browser `state` for Connect — state is an opaque nonce keyed in MongoDB |
-| `FLOW_OAUTH_PUBLIC_ORIGIN` | Base URL for the redirect URI registered with the OAuth provider (falls back to `PUBLIC_API_URL`, `DOCROUTER_API_PUBLIC_ORIGIN`, `http://127.0.0.1:8000`) |
+| `FLOW_OAUTH_PUBLIC_ORIGIN` | Base URL for the redirect URI registered with the OAuth provider (falls back to `PUBLIC_API_URL`, `DOCROUTER_API_PUBLIC_ORIGIN`, `http://127.0.0.1:8000`). Microsoft Entra kinds map `127.0.0.1` → `localhost` in the redirect URI only. |
 | `NEXTAUTH_URL` | Base URL for the success/error redirect back to the frontend |
 
 Redirect URI registered with the provider: `{FLOW_OAUTH_PUBLIC_ORIGIN}/v0/callback/flow-oauth`

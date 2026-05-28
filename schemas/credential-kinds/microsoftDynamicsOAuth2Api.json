@@ -6,6 +6,11 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "scope": {
+        "type": "string",
+        "default": "openid offline_access https://{{subdomain}}.{{region}}/.default",
+        "description": "Resource-scoped Dynamics scope; {{subdomain}} and {{region}} are substituted at OAuth connect."
+      },
       "subdomain": {
         "title": "Subdomain",
         "type": "string",
@@ -47,5 +52,9 @@
   "runtime_fields": [
     "scope"
   ],
+  "test_request": {
+    "method": "GET",
+    "url": "https://{{ credentials.subdomain }}.{{ credentials.region }}/api/data/v9.2/WhoAmI"
+  },
   "experimental": true
 }

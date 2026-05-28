@@ -6,6 +6,11 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "scope": {
+        "type": "string",
+        "default": "openid offline_access Contacts.Read Contacts.ReadWrite Calendars.Read Calendars.Read.Shared Calendars.ReadWrite Mail.ReadWrite Mail.ReadWrite.Shared Mail.Send Mail.Send.Shared MailboxSettings.Read",
+        "description": "Default Outlook Graph scopes; hidden from the form via runtime_fields."
+      },
       "useShared": {
         "title": "Use Shared Mailbox",
         "type": "boolean",
@@ -26,5 +31,9 @@
   "runtime_fields": [
     "scope"
   ],
+  "test_request": {
+    "method": "GET",
+    "url": "https://graph.microsoft.com/v1.0/me"
+  },
   "experimental": true
 }

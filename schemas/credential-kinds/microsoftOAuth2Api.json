@@ -6,6 +6,10 @@
     "type": "object",
     "additionalProperties": false,
     "properties": {
+      "grantType": {
+        "type": "string",
+        "default": "authorizationCode"
+      },
       "authUrl": {
         "title": "Authorization URL",
         "type": "string",
@@ -15,6 +19,14 @@
         "title": "Access Token URL",
         "type": "string",
         "default": "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+      },
+      "authQueryParameters": {
+        "type": "string",
+        "default": "response_mode=query"
+      },
+      "authentication": {
+        "type": "string",
+        "default": "body"
       }
     },
     "required": []
