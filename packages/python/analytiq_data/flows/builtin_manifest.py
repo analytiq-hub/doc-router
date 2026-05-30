@@ -36,20 +36,20 @@ def _peek_manifest_raw(relpath: str) -> dict:
     return json.loads((_FLOWS_ROOT / relpath).read_text(encoding="utf-8"))
 
 
-def _spec_from_relpath(relpath: str) -> BuiltinNodeSpec:
+def _spec_from_relpath(relpath: str) -> tuple[BuiltinNodeSpec, str]:
     raw = _peek_manifest_raw(relpath)
-    key = str(raw["key"])
-    return BuiltinNodeSpec(key=key, manifest_relpath=relpath)
+    spec = BuiltinNodeSpec(key=str(raw["key"]), manifest_relpath=relpath)
+    class_name = str(raw["executor"]["class"])
+    return spec, class_name
 
 
-BUILTIN_NODES: tuple[BuiltinNodeSpec, ...] = tuple(
-    _spec_from_relpath(relpath) for relpath in BUILTIN_MANIFEST_RELPATHS
-)
+_specs_and_classes = [_spec_from_relpath(relpath) for relpath in BUILTIN_MANIFEST_RELPATHS]
+BUILTIN_NODES: tuple[BuiltinNodeSpec, ...] = tuple(spec for spec, _ in _specs_and_classes)
 
 SPEC_BY_KEY: dict[str, BuiltinNodeSpec] = {s.key: s for s in BUILTIN_NODES}
 
 SPEC_BY_CLASS_NAME: dict[str, BuiltinNodeSpec] = {
-    str(_peek_manifest_raw(s.manifest_relpath)["executor"]["class"]): s for s in BUILTIN_NODES
+    class_name: spec for spec, class_name in _specs_and_classes
 }
 
 BUILTIN_CLASS_NAMES: frozenset[str] = frozenset(SPEC_BY_CLASS_NAME)

@@ -14,10 +14,8 @@ ad.common.setup()
 
 logger = logging.getLogger(__name__)
 
-# Flow node registrations (process-local global registry).
-# This module is used both as a standalone worker entrypoint and as an import
-# from the FastAPI app. Registering is idempotent (overwrites by key).
-ad.flows.register_builtin_nodes()
+# DocRouter product nodes only at import time; flow builtins register per revision
+# (Phase D) when a flow activates or runs — see ensure_builtin_keys_for_revision.
 ad.flows.register_docrouter_nodes()
 
 HEARTBEAT_INTERVAL_SECS = 600  # seconds

@@ -14,6 +14,14 @@ from analytiq_data.flows.lazy_builtin_node import LazyBuiltinNode
 from analytiq_data.flows.node_registry import _registry, get, is_registered
 
 
+def _pop_executor_modules(*, include_node: bool = False) -> None:
+    for name in list(sys.modules):
+        if "flows.nodes" not in name:
+            continue
+        if name.endswith(".operations") or (include_node and name.endswith(".node")):
+            sys.modules.pop(name, None)
+
+
 @pytest.fixture(autouse=True)
 def _clear_registry() -> None:
     _registry.clear()
@@ -38,6 +46,8 @@ def test_list_palette_entries_without_operations_modules() -> None:
 
 
 def test_register_builtin_nodes_registers_lazy_wrappers_only() -> None:
+    _pop_executor_modules()
+    sys.modules.pop("analytiq_data.flows.nodes.gmail.node", None)
     register_builtin_nodes()
     assert len(_registry) == len(BUILTIN_NODES)
     nt = get("flows.gmail")
@@ -46,11 +56,7 @@ def test_register_builtin_nodes_registers_lazy_wrappers_only() -> None:
 
 
 def test_executor_loads_on_first_delegate_access() -> None:
-    for name in (
-        "analytiq_data.flows.nodes.gmail.node",
-        "analytiq_data.flows.nodes.gmail.operations",
-    ):
-        sys.modules.pop(name, None)
+    _pop_executor_modules(include_node=True)
     register_builtin_nodes()
     nt = get("flows.gmail")
     assert isinstance(nt, LazyBuiltinNode)

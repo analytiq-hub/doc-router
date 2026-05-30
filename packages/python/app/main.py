@@ -178,7 +178,5 @@ app.include_router(agent_router)
 app.include_router(flows_router)
 app.include_router(flow_credentials_router)
 
-# Flow node registrations (global registry).
-# Register once at import time; idempotent overwrites are fine.
-ad.flows.register_builtin_nodes()
+# DocRouter product nodes at API startup; flow builtins register per revision (Phase D).
 ad.flows.register_docrouter_nodes()
