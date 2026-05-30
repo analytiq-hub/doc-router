@@ -36,6 +36,7 @@ def _get_int_env(name: str, default: int) -> int:
 
 
 LLM_REQUEST_TIMEOUT_SECS = _get_int_env("LLM_REQUEST_TIMEOUT_SECS", 300)  # 5 min
+LLM_RETRY_TIMEOUT_SECS = _get_int_env("LLM_RETRY_TIMEOUT_SECS", 90)
 
 def _is_valid_json(s: str) -> bool:
     """Return True if s is a non-empty, parseable JSON string."""
@@ -288,14 +289,19 @@ def is_retryable_error(exception) -> bool:
     # Check for specific retryable error patterns
     retryable_patterns = [
         "503",
+        "429",
         "model is overloaded",
         "unavailable",
         "rate limit",
+        "ratelimit",
+        "resource_exhausted",
+        "resource has been exhausted",
+        "quota",
         "timeout",
         "connection error",
         "internal server error",
         "service unavailable",
-        "temporarily unavailable"
+        "temporarily unavailable",
     ]
     
     for pattern in retryable_patterns:
@@ -325,7 +331,7 @@ def _extract_thinking_from_response(message: Any) -> str | None:
     return None
 
 
-@stamina.retry(on=is_retryable_error)
+@stamina.retry(on=is_retryable_error, timeout=LLM_RETRY_TIMEOUT_SECS)
 async def _litellm_acompletion_with_retry(
     analytiq_client,
     model: str,
@@ -562,7 +568,7 @@ async def agent_completion_stream(
         yield ("usage", usage_obj)
 
 
-@stamina.retry(on=is_retryable_error)
+@stamina.retry(on=is_retryable_error, timeout=LLM_RETRY_TIMEOUT_SECS)
 async def _litellm_acreate_file_with_retry(
     file: tuple,
     purpose: str,

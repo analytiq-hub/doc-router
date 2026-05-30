@@ -11,9 +11,14 @@ def test_is_retryable_error_with_retryable_exceptions():
         Exception("Model is overloaded"),
         Exception("Service temporarily unavailable"),
         Exception("Rate limit exceeded"),
+        Exception(
+            'litellm.RateLimitError: Vertex_aiException - {"error": {"code": 429, '
+            '"message": "Resource has been exhausted (e.g. check quota).", '
+            '"status": "RESOURCE_EXHAUSTED"}}'
+        ),
         Exception("Connection timeout"),
         Exception("Internal server error"),
-        Exception("Service unavailable")
+        Exception("Service unavailable"),
     ]
     
     for exc in retryable_exceptions:
