@@ -666,7 +666,7 @@ export default function FlowDetailPageClient({
           `/v0/orgs/${organizationId}/flows/${flowId}/trigger-test/schedule`,
           { revision_snapshot, trigger_node_id: tid },
         );
-        const eid = res.data.execution_id?.trim();
+        const eid = res.execution_id?.trim();
         if (eid) setLogsFocusExecutionId(eid);
       } catch (err: unknown) {
         setMessage(getApiErrorMsg(err) || 'Failed to test schedule trigger');
@@ -694,7 +694,7 @@ export default function FlowDetailPageClient({
           `/v0/orgs/${organizationId}/flows/${flowId}/trigger-test/poll`,
           { revision_snapshot, trigger_node_id: tid },
         );
-        const eid = res.data.execution_id?.trim();
+        const eid = res.execution_id?.trim();
         if (eid) setLogsFocusExecutionId(eid);
       } catch (err: unknown) {
         setMessage(getApiErrorMsg(err) || 'Failed to test poll trigger');
