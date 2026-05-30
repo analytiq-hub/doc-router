@@ -18,8 +18,12 @@ async def process_llm_msg(analytiq_client, msg, force: bool = False):
     
     try:
         doc = await ad.common.doc.get_doc(analytiq_client, document_id)
-        if doc:
-            org_id = doc.get("organization_id")
+        if not doc:
+            logger.info(f"Document {document_id} not found. Skipping LLM.")
+            await ad.queue.delete_msg(analytiq_client, "llm", msg_id)
+            return
+
+        org_id = doc.get("organization_id")
 
         # Determine whether the organization has default prompts enabled
         default_prompt_enabled = True

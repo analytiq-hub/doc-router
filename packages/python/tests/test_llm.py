@@ -524,3 +524,24 @@ async def test_default_prompt_does_not_run_when_disabled(test_db, mock_auth, set
         )
         assert llm_result_resp.status_code == 404
 
+
+@pytest.mark.asyncio
+async def test_process_llm_msg_deletes_queue_msg_when_document_missing():
+    """Deleted documents should drop stale LLM queue messages without retry."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    msg_id = str(ObjectId())
+    document_id = str(ObjectId())
+    analytiq_client = MagicMock()
+
+    with patch.object(ad.common.doc, "get_doc", new_callable=AsyncMock, return_value=None), \
+         patch.object(ad.queue, "delete_msg", new_callable=AsyncMock) as mock_delete, \
+         patch.object(ad.llm, "run_llm_for_prompt_revids", new_callable=AsyncMock) as mock_run:
+        await ad.msg_handlers.process_llm_msg(
+            analytiq_client,
+            {"_id": msg_id, "msg": {"document_id": document_id}},
+        )
+
+    mock_delete.assert_called_once_with(analytiq_client, "llm", msg_id)
+    mock_run.assert_not_called()
+
