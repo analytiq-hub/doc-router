@@ -1,12 +1,18 @@
 import pytest
 import asyncio
 from unittest.mock import AsyncMock, patch
-from analytiq_data.llm.llm import is_retryable_error, _litellm_acompletion_with_retry
+from analytiq_data.llm.llm import (
+    is_retryable_connection_error,
+    is_retryable_error,
+    is_retryable_overloaded_error,
+    llm_connection_retry_backoff,
+    llm_overloaded_retry_backoff,
+    _litellm_acompletion_with_retry,
+)
 
 
-def test_is_retryable_error_with_retryable_exceptions():
-    """Test that retryable exceptions are correctly identified"""
-    retryable_exceptions = [
+def test_is_retryable_overloaded_error():
+    overloaded_exceptions = [
         Exception("503 Service Unavailable"),
         Exception("Model is overloaded"),
         Exception("Service temporarily unavailable"),
@@ -16,13 +22,24 @@ def test_is_retryable_error_with_retryable_exceptions():
             '"message": "Resource has been exhausted (e.g. check quota).", '
             '"status": "RESOURCE_EXHAUSTED"}}'
         ),
-        Exception("Connection timeout"),
-        Exception("Internal server error"),
         Exception("Service unavailable"),
     ]
-    
-    for exc in retryable_exceptions:
-        assert is_retryable_error(exc), f"Exception '{exc}' should be retryable"
+    for exc in overloaded_exceptions:
+        assert is_retryable_overloaded_error(exc), f"Exception '{exc}' should be overloaded-retryable"
+        assert is_retryable_error(exc)
+        assert not is_retryable_connection_error(exc)
+
+
+def test_is_retryable_connection_error():
+    connection_exceptions = [
+        Exception("Connection error"),
+        Exception("Internal server error"),
+        Exception("Connection timeout"),
+    ]
+    for exc in connection_exceptions:
+        assert is_retryable_connection_error(exc), f"Exception '{exc}' should be connection-retryable"
+        assert is_retryable_error(exc)
+        assert not is_retryable_overloaded_error(exc)
 
 
 def test_is_retryable_error_with_non_retryable_exceptions():
@@ -35,9 +52,11 @@ def test_is_retryable_error_with_non_retryable_exceptions():
         Exception("Forbidden"),
         Exception("Validation error")
     ]
-    
+
     for exc in non_retryable_exceptions:
         assert not is_retryable_error(exc), f"Exception '{exc}' should not be retryable"
+        assert not is_retryable_overloaded_error(exc)
+        assert not is_retryable_connection_error(exc)
 
 
 def test_is_retryable_error_with_non_exception():
@@ -50,20 +69,35 @@ def test_is_retryable_error_with_non_exception():
         {},
         True
     ]
-    
+
     for obj in non_exceptions:
         assert not is_retryable_error(obj), f"Object '{obj}' should not be retryable"
+
+
+def test_llm_overloaded_retry_backoff_returns_fixed_wait():
+    exc = Exception("429 Too Many Requests")
+    assert llm_overloaded_retry_backoff(exc) == 15.0
+
+
+def test_llm_connection_retry_backoff_uses_exponential():
+    assert llm_connection_retry_backoff(Exception("Connection error")) is True
+    assert llm_connection_retry_backoff(Exception("429 Too Many Requests")) is False
+
+
+def test_overloaded_errors_do_not_use_connection_backoff_after_inner_exhausted():
+    exc = Exception("503 Service Unavailable")
+    assert llm_overloaded_retry_backoff(exc) == 15.0
+    assert llm_connection_retry_backoff(exc) is False
 
 
 @pytest.mark.asyncio
 async def test_successful_completion_no_retry():
     """Test that successful completion works without retry"""
-    # Mock successful response
     mock_response = AsyncMock()
     mock_response.choices = [AsyncMock()]
     mock_response.choices[0].message = AsyncMock()
     mock_response.choices[0].message.content = '{"result": "success"}'
-    
+
     with patch('analytiq_data.llm.llm.litellm.acompletion', return_value=mock_response) as mock_acompletion:
         result = await _litellm_acompletion_with_retry(
             analytiq_client=None,
@@ -72,27 +106,25 @@ async def test_successful_completion_no_retry():
             api_key="test-key"
         )
 
-        # Verify the function was called once (no retry)
         assert mock_acompletion.call_count == 1
         assert result == mock_response
 
 
 @pytest.mark.asyncio
-async def test_retryable_error_retries_and_succeeds():
-    """Test that retryable errors trigger retries and eventually succeed"""
-    # Mock response that fails first, then succeeds
+async def test_overloaded_error_retries_and_succeeds():
+    """Overloaded errors use inner 15s-linear retry layer."""
     mock_success_response = AsyncMock()
     mock_success_response.choices = [AsyncMock()]
     mock_success_response.choices[0].message = AsyncMock()
     mock_success_response.choices[0].message.content = '{"result": "success"}'
-    
-    # First call fails with retryable error, second call succeeds
-    with patch('analytiq_data.llm.llm.litellm.acompletion') as mock_acompletion:
+
+    with patch('stamina._core._smart_sleep', new_callable=AsyncMock), \
+         patch('analytiq_data.llm.llm.litellm.acompletion') as mock_acompletion:
         mock_acompletion.side_effect = [
-            Exception("503 Service Unavailable"),  # First call fails
-            mock_success_response  # Second call succeeds
+            Exception("503 Service Unavailable"),
+            mock_success_response,
         ]
-        
+
         result = await _litellm_acompletion_with_retry(
             analytiq_client=None,
             model="gpt-4o-mini",
@@ -100,7 +132,32 @@ async def test_retryable_error_retries_and_succeeds():
             api_key="test-key"
         )
 
-        # Verify the function was called twice (retry happened)
+        assert mock_acompletion.call_count == 2
+        assert result == mock_success_response
+
+
+@pytest.mark.asyncio
+async def test_connection_error_retries_and_succeeds():
+    """Connection errors use outer default exponential retry layer."""
+    mock_success_response = AsyncMock()
+    mock_success_response.choices = [AsyncMock()]
+    mock_success_response.choices[0].message = AsyncMock()
+    mock_success_response.choices[0].message.content = '{"result": "success"}'
+
+    with patch('stamina._core._smart_sleep', new_callable=AsyncMock), \
+         patch('analytiq_data.llm.llm.litellm.acompletion') as mock_acompletion:
+        mock_acompletion.side_effect = [
+            Exception("Connection error"),
+            mock_success_response,
+        ]
+
+        result = await _litellm_acompletion_with_retry(
+            analytiq_client=None,
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": "test"}],
+            api_key="test-key"
+        )
+
         assert mock_acompletion.call_count == 2
         assert result == mock_success_response
 
@@ -110,7 +167,7 @@ async def test_non_retryable_error_no_retry():
     """Test that non-retryable errors don't trigger retries"""
     with patch('analytiq_data.llm.llm.litellm.acompletion') as mock_acompletion:
         mock_acompletion.side_effect = Exception("Invalid API key")
-        
+
         with pytest.raises(Exception, match="Invalid API key"):
             await _litellm_acompletion_with_retry(
                 None,
@@ -118,27 +175,27 @@ async def test_non_retryable_error_no_retry():
                 messages=[{"role": "user", "content": "test"}],
                 api_key="test-key"
             )
-        
-        # Verify the function was called only once (no retry)
+
         assert mock_acompletion.call_count == 1
 
 
 @pytest.mark.asyncio
-async def test_multiple_retryable_errors_eventually_succeeds():
-    """Test that multiple retryable errors eventually succeed"""
+async def test_multiple_overloaded_errors_eventually_succeeds():
+    """Multiple overloaded errors retry on inner layer only."""
     mock_success_response = AsyncMock()
     mock_success_response.choices = [AsyncMock()]
     mock_success_response.choices[0].message = AsyncMock()
     mock_success_response.choices[0].message.content = '{"result": "success"}'
-    
-    with patch('analytiq_data.llm.llm.litellm.acompletion') as mock_acompletion:
+
+    with patch('stamina._core._smart_sleep', new_callable=AsyncMock), \
+         patch('analytiq_data.llm.llm.litellm.acompletion') as mock_acompletion:
         mock_acompletion.side_effect = [
-            Exception("503 Service Unavailable"),  # First call fails
-            Exception("Rate limit exceeded"),      # Second call fails
-            Exception("Model is overloaded"),      # Third call fails
-            mock_success_response                  # Fourth call succeeds
+            Exception("503 Service Unavailable"),
+            Exception("Rate limit exceeded"),
+            Exception("Model is overloaded"),
+            mock_success_response,
         ]
-        
+
         result = await _litellm_acompletion_with_retry(
             analytiq_client=None,
             model="gpt-4o-mini",
@@ -146,7 +203,6 @@ async def test_multiple_retryable_errors_eventually_succeeds():
             api_key="test-key"
         )
 
-        # Verify the function was called four times (3 retries)
         assert mock_acompletion.call_count == 4
         assert result == mock_success_response
 

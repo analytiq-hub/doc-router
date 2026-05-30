@@ -27,24 +27,78 @@ litellm.modify_params = True
 # Cache control directive for Anthropic/Bedrock prompt caching (ephemeral cache)
 _PROMPT_CACHE_CONTROL = {"type": "ephemeral"}
 
+LLM_REQUEST_TIMEOUT_SECS = 300  # 5 min per litellm call
+LLM_RETRY_TIMEOUT_SECS = 300  # 5 min overloaded retry window
+_LLM_OVERLOADED_RETRY_BACKOFF_SECS = 15.0
 
-def _get_int_env(name: str, default: int) -> int:
-    try:
-        return int(os.getenv(name, str(default)))
-    except Exception:
-        return default
+# Quota / capacity / rate-limit — inner stamina layer, fixed linear backoff.
+_LLM_OVERLOADED_RETRY_PATTERNS = (
+    "503",
+    "429",
+    "overloaded",
+    "unavailable",
+    "rate limit",
+    "ratelimit",
+    "exhausted",
+    "quota",
+)
+
+# Transient network / server blips — outer stamina layer, default exponential backoff.
+_LLM_CONNECTION_RETRY_PATTERNS = (
+    "connection error",
+    "internal server error",
+    "timeout",
+)
 
 
-LLM_REQUEST_TIMEOUT_SECS = _get_int_env("LLM_REQUEST_TIMEOUT_SECS", 300)  # 5 min
-LLM_RETRY_TIMEOUT_SECS = _get_int_env("LLM_RETRY_TIMEOUT_SECS", 90)
+def _llm_error_message(exception) -> str | None:
+    if not isinstance(exception, Exception):
+        return None
+    return str(exception).lower()
 
-def _is_valid_json(s: str) -> bool:
-    """Return True if s is a non-empty, parseable JSON string."""
-    try:
-        json.loads(s)
-        return True
-    except (ValueError, TypeError):
+
+def _matches_llm_retry_patterns(error_message: str, patterns: tuple[str, ...]) -> bool:
+    return any(pattern in error_message for pattern in patterns)
+
+
+def is_retryable_overloaded_error(exception) -> bool:
+    """Quota, rate-limit, and capacity errors (15s linear in-call retries)."""
+    error_message = _llm_error_message(exception)
+    if error_message is None:
         return False
+    return _matches_llm_retry_patterns(error_message, _LLM_OVERLOADED_RETRY_PATTERNS)
+
+
+def is_retryable_connection_error(exception) -> bool:
+    """Connection and transient server blips (default stamina exponential retries)."""
+    if isinstance(exception, asyncio.TimeoutError):
+        return True
+
+    error_message = _llm_error_message(exception)
+    if error_message is None:
+        return False
+
+    if is_retryable_overloaded_error(exception):
+        return False
+
+    return _matches_llm_retry_patterns(error_message, _LLM_CONNECTION_RETRY_PATTERNS)
+
+
+def is_retryable_error(exception) -> bool:
+    """True if either overloaded or connection retry policy applies."""
+    return is_retryable_overloaded_error(exception) or is_retryable_connection_error(exception)
+
+
+def llm_overloaded_retry_backoff(exception) -> bool | float:
+    """Stamina hook for inner overloaded layer: fixed wait between retries."""
+    if is_retryable_overloaded_error(exception):
+        return _LLM_OVERLOADED_RETRY_BACKOFF_SECS
+    return False
+
+
+def llm_connection_retry_backoff(exception) -> bool:
+    """Stamina hook for outer connection layer: default exponential backoff."""
+    return is_retryable_connection_error(exception)
 
 
 def _apply_prompt_caching(model: str, messages: list, *, tools: Optional[List[Dict]] = None) -> list:
@@ -265,50 +319,6 @@ def get_temperature(model: str) -> float:
     # Default temperature for other models
     return 0.1
 
-def is_retryable_error(exception) -> bool:
-    """
-    Check if an exception is retryable based on error patterns.
-    
-    Args:
-        exception: The exception to check
-        
-    Returns:
-        bool: True if the exception is retryable, False otherwise
-    """
-    # First check if it's an exception
-    if not isinstance(exception, Exception):
-        return False
-
-    # Explicitly treat asyncio.TimeoutError as retryable
-    import asyncio as _asyncio  # local import to avoid circulars in some environments
-    if isinstance(exception, _asyncio.TimeoutError):
-        return True
-
-    error_message = str(exception).lower()
-    
-    # Check for specific retryable error patterns
-    retryable_patterns = [
-        "503",
-        "429",
-        "model is overloaded",
-        "unavailable",
-        "rate limit",
-        "ratelimit",
-        "resource_exhausted",
-        "resource has been exhausted",
-        "quota",
-        "timeout",
-        "connection error",
-        "internal server error",
-        "service unavailable",
-        "temporarily unavailable",
-    ]
-    
-    for pattern in retryable_patterns:
-        if pattern in error_message:
-            return True
-    
-    return False
 
 def _extract_thinking_from_response(message: Any) -> str | None:
     """
@@ -331,7 +341,8 @@ def _extract_thinking_from_response(message: Any) -> str | None:
     return None
 
 
-@stamina.retry(on=is_retryable_error, timeout=LLM_RETRY_TIMEOUT_SECS)
+@stamina.retry(on=llm_connection_retry_backoff)
+@stamina.retry(on=llm_overloaded_retry_backoff, timeout=LLM_RETRY_TIMEOUT_SECS)
 async def _litellm_acompletion_with_retry(
     analytiq_client,
     model: str,
@@ -568,7 +579,8 @@ async def agent_completion_stream(
         yield ("usage", usage_obj)
 
 
-@stamina.retry(on=is_retryable_error, timeout=LLM_RETRY_TIMEOUT_SECS)
+@stamina.retry(on=llm_connection_retry_backoff)
+@stamina.retry(on=llm_overloaded_retry_backoff, timeout=LLM_RETRY_TIMEOUT_SECS)
 async def _litellm_acreate_file_with_retry(
     file: tuple,
     purpose: str,

@@ -31,15 +31,15 @@ def create_mock_message(
 
 @pytest.fixture(autouse=True)
 def fast_timeouts(monkeypatch):
-    """Override timeout-related env vars so code picks small values (logic is still mocked)."""
-    monkeypatch.setenv("LLM_REQUEST_TIMEOUT_SECS", "1")
+    """Override timeout constants so code picks small values (logic is still mocked)."""
     monkeypatch.setenv("OCR_TIMEOUT_SECS", "1")
     monkeypatch.setenv("QUEUE_VISIBILITY_TIMEOUT_SECS", "1")
+    monkeypatch.setattr(llm_mod, "LLM_REQUEST_TIMEOUT_SECS", 1)
+    monkeypatch.setattr(llm_mod, "LLM_RETRY_TIMEOUT_SECS", 1)
     # Reload modules that read env at import time
     import importlib
 
     importlib.reload(queue_mod)
-    importlib.reload(llm_mod)
     importlib.reload(textract_mod)
     yield
 
@@ -163,8 +163,10 @@ async def test_llm_completion_with_timeout_success(mock_litellm):
 
 @pytest.mark.asyncio
 async def test_is_retryable_error_handles_timeout():
-    """TimeoutError is treated as retryable by is_retryable_error."""
+    """TimeoutError is treated as connection-retryable, not overloaded."""
     exc = asyncio.TimeoutError("timeout")
+    assert llm_mod.is_retryable_connection_error(exc) is True
+    assert llm_mod.is_retryable_overloaded_error(exc) is False
     assert llm_mod.is_retryable_error(exc) is True
 
 
