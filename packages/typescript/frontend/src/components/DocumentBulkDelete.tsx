@@ -75,7 +75,7 @@ export const DocumentBulkDelete = forwardRef<DocumentBulkDeleteRef, DocumentBulk
     try {
       let successCount = 0;
       let failureCount = 0;
-      const limit = 100;
+      const limit = 1000;
       const BATCH_SIZE = 10; // Maximum concurrent deletions
 
       // Always fetch from skip=0 since documents shift as they're deleted

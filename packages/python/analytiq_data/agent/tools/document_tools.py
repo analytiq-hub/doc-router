@@ -45,7 +45,7 @@ async def list_documents(context: dict, params: dict) -> dict[str, Any]:
         return {"error": "No organization context"}
     skip = int(params.get("skip", 0))
     limit = int(params.get("limit", 10))
-    limit = min(max(limit, 1), 100)
+    limit = min(max(limit, 1), 1000)
     name_search = params.get("name_search")
     tag_ids = params.get("tag_ids")
     if isinstance(tag_ids, str):

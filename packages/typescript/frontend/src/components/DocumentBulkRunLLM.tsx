@@ -113,7 +113,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
     const fetchAllPrompts = useCallback(async () => {
       const allPrompts: Prompt[] = [];
       let skip = 0;
-      const limit = 100; // API maximum
+      const limit = 1000; // API maximum
 
       while (true) {
         const response = await docRouterOrgApi.listPrompts({
@@ -139,7 +139,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
     const fetchAllDocuments = useCallback(async () => {
       const allDocuments: Document[] = [];
       let skip = 0;
-      const limit = 100; // API maximum
+      const limit = 1000; // API maximum
 
       // Combine existing tag filters with the selected tag for LLM operations
       const tagFilters = [...searchParameters.selectedTagFilters.map(tag => tag.id)];

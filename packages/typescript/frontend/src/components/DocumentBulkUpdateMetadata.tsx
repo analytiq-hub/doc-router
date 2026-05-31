@@ -170,7 +170,7 @@ export const DocumentBulkUpdateMetadata = forwardRef<DocumentBulkUpdateMetadataR
       let successCount = 0;
       let failureCount = 0;
       let skip = 0;
-      const limit = 100; // Maximum allowed by API
+      const limit = 1000; // Maximum allowed by API
 
       while (true) {
         // Fetch next batch of documents

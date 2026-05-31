@@ -407,7 +407,7 @@ async def update_document(
 async def list_documents(
     organization_id: str,
     skip: int = Query(0, ge=0),
-    limit: int = Query(10, ge=1, le=100),
+    limit: int = Query(10, ge=1, le=1000),
     tag_ids: str = Query(None, description="Comma-separated list of tag IDs"),
     name_search: str = Query(None, description="Search term for document names"),
     metadata_search: str = Query(None, description="Metadata search as key=value pairs, comma-separated (e.g., 'author=John,type=invoice'). Special characters in keys/values are URL-encoded automatically."),

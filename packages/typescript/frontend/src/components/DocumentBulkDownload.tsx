@@ -110,7 +110,7 @@ export const DocumentBulkDownload = forwardRef<DocumentBulkDownloadRef, Document
       let successCount = 0;
       let failureCount = 0;
       let skip = 0;
-      const limit = 100;
+      const limit = 1000;
       const BATCH_SIZE = 10; // Maximum concurrent downloads
 
       while (true) {
