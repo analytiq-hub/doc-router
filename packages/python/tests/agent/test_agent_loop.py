@@ -19,6 +19,16 @@ from analytiq_data.agent.session import set_turn_state, get_turn_state, clear_tu
 
 
 @pytest.fixture
+def mock_session():
+    """Patch session functions in agent_loop so tests don't need a real MongoDB."""
+    with patch("analytiq_data.agent.agent_loop.set_turn_state", new_callable=AsyncMock) as mock_set, \
+         patch("analytiq_data.agent.agent_loop.get_turn_state", new_callable=AsyncMock) as mock_get, \
+         patch("analytiq_data.agent.agent_loop.clear_turn_state", new_callable=AsyncMock) as mock_clear:
+        mock_get.return_value = None  # default: turn not found
+        yield mock_set, mock_get, mock_clear
+
+
+@pytest.fixture
 def mock_analytiq_client():
     client = MagicMock()
     client.env = "test"
@@ -108,6 +118,7 @@ async def test_run_agent_turn_returns_turn_id_when_tool_calls_and_not_auto_appro
     mock_litellm,
     mock_build_system,
     mock_completion_cost,
+    mock_session,
 ):
     msg = MagicMock()
     msg.content = "I will create a schema."
@@ -218,6 +229,7 @@ async def test_run_agent_turn_auto_approved_tools_partial_whitelist_pauses(
     mock_litellm,
     mock_build_system,
     mock_completion_cost,
+    mock_session,
 ):
     """Read-write tool NOT in auto_approved_tools still pauses (create_tag whitelisted, create_schema not)."""
     msg = MagicMock()
@@ -293,6 +305,7 @@ async def test_run_agent_turn_auto_approved_tools_empty_set_pauses(
     mock_litellm,
     mock_build_system,
     mock_completion_cost,
+    mock_session,
 ):
     """Empty auto_approved_tools set: no extra whitelist; read-write tools still require approval."""
     msg = MagicMock()
@@ -461,20 +474,33 @@ def test_sanitize_messages_keeps_tool_calls_when_results_present():
 
 
 @pytest.mark.asyncio
-async def test_run_agent_approve_expired_turn():
+async def test_run_agent_approve_expired_turn(mock_session):
+    # mock_session default: get_turn_state returns None
     result = await run_agent_approve("nonexistent-turn-id", [])
     assert result.get("error") == "Turn expired or not found"
 
 
 @pytest.mark.asyncio
 async def test_session_set_get_clear():
-    turn_id = generate_turn_id()
-    set_turn_state(turn_id, {"foo": "bar"})
-    state = get_turn_state(turn_id)
-    assert state is not None
-    assert state.get("foo") == "bar"
-    clear_turn_state(turn_id)
-    assert get_turn_state(turn_id) is None
+    """Session functions round-trip through a mocked MongoDB collection."""
+    store: dict = {}
+
+    mock_col = MagicMock()
+    mock_col.replace_one = AsyncMock(side_effect=lambda q, doc, upsert=False: store.update({doc["_turn_id"]: doc}))
+    mock_col.find_one = AsyncMock(side_effect=lambda q: store.get(q.get("_turn_id")))
+    mock_col.delete_one = AsyncMock(side_effect=lambda q: store.pop(q.get("_turn_id"), None))
+
+    mock_db = MagicMock()
+    mock_db.__getitem__ = MagicMock(return_value=mock_col)
+
+    with patch("analytiq_data.agent.session.ad.common.get_async_db", return_value=mock_db):
+        turn_id = generate_turn_id()
+        await set_turn_state(turn_id, {"foo": "bar"})
+        state = await get_turn_state(turn_id)
+        assert state is not None
+        assert state.get("foo") == "bar"
+        await clear_turn_state(turn_id)
+        assert await get_turn_state(turn_id) is None
 
 
 # --- Tests for _record_spu_for_llm_call ---

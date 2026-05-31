@@ -1,6 +1,6 @@
 """
-In-memory turn state for the chat/approve loop.
-Keyed by turn_id; TTL 5 minutes. Used when backend pauses on pending tool calls.
+Turn state for the chat/approve loop, stored in MongoDB.
+Keyed by turn_id; TTL 5 minutes. Shared across all uvicorn worker processes.
 """
 from __future__ import annotations
 
@@ -9,35 +9,37 @@ import time
 import uuid
 from typing import Any
 
+import analytiq_data as ad
+
 logger = logging.getLogger(__name__)
 
-# turn_id -> { "created_at", "messages", "pending_tool_calls", "working_state", "model", ... }
-_store: dict[str, dict[str, Any]] = {}
 _TTL_SEC = 300
-
-
-def _now() -> float:
-    return time.monotonic()
+_COLLECTION = "agent_turn_states"
 
 
 def generate_turn_id() -> str:
     return str(uuid.uuid4())
 
 
-def set_turn_state(turn_id: str, state: dict[str, Any]) -> None:
-    state["_created_at"] = _now()
-    _store[turn_id] = state
+async def set_turn_state(turn_id: str, state: dict[str, Any]) -> None:
+    state = dict(state)
+    state["_turn_id"] = turn_id
+    state["_created_at"] = time.time()
+    db = ad.common.get_async_db()
+    await db[_COLLECTION].replace_one({"_turn_id": turn_id}, state, upsert=True)
 
 
-def get_turn_state(turn_id: str) -> dict[str, Any] | None:
-    entry = _store.get(turn_id)
+async def get_turn_state(turn_id: str) -> dict[str, Any] | None:
+    db = ad.common.get_async_db()
+    entry = await db[_COLLECTION].find_one({"_turn_id": turn_id})
     if not entry:
         return None
-    if _now() - entry["_created_at"] > _TTL_SEC:
-        del _store[turn_id]
+    if time.time() - entry.get("_created_at", 0) > _TTL_SEC:
+        await db[_COLLECTION].delete_one({"_turn_id": turn_id})
         return None
     return entry
 
 
-def clear_turn_state(turn_id: str) -> None:
-    _store.pop(turn_id, None)
+async def clear_turn_state(turn_id: str) -> None:
+    db = ad.common.get_async_db()
+    await db[_COLLECTION].delete_one({"_turn_id": turn_id})

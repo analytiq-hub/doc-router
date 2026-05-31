@@ -455,7 +455,7 @@ async def run_agent_turn(
         needs_approval = _any_tool_needs_approval(pending, auto_approve, auto_approved_tools)
         if needs_approval:
             turn_id = generate_turn_id()
-            set_turn_state(turn_id, {
+            await set_turn_state(turn_id, {
                 "messages": messages,
                 "llm_messages": llm_messages,
                 "pending_tool_calls": pending,
@@ -526,10 +526,10 @@ async def run_agent_approve(
     Intentional: the approve path does not loop; each POST /chat/approve is one round.
     approvals: [ {"call_id": "...", "approved": true|false}, ... ]
     """
-    state = get_turn_state(turn_id)
+    state = await get_turn_state(turn_id)
     if not state:
         return {"error": "Turn expired or not found"}
-    clear_turn_state(turn_id)
+    await clear_turn_state(turn_id)
     approval_map = {a["call_id"]: a["approved"] for a in approvals if "call_id" in a and "approved" in a}
     context = {
         "analytiq_client": ad.common.get_analytiq_client(),
@@ -595,7 +595,7 @@ async def run_agent_approve(
     needs_approval = _any_tool_needs_approval(pending, auto_approve, auto_approved_tools)
     if needs_approval:
         new_turn_id = generate_turn_id()
-        set_turn_state(new_turn_id, {
+        await set_turn_state(new_turn_id, {
             "messages": state["messages"],
             "llm_messages": llm_messages,
             "pending_tool_calls": pending,
@@ -674,7 +674,7 @@ async def run_agent_approve(
     needs_approval = _any_tool_needs_approval(pending, auto_approve, auto_approved_tools)
     if needs_approval:
         new_turn_id = generate_turn_id()
-        set_turn_state(new_turn_id, {
+        await set_turn_state(new_turn_id, {
             "messages": state["messages"],
             "llm_messages": llm_messages,
             "pending_tool_calls": pending,
