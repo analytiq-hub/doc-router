@@ -113,7 +113,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
     const fetchAllPrompts = useCallback(async () => {
       const allPrompts: Prompt[] = [];
       let skip = 0;
-      const limit = 1000; // API maximum
+      const limit = 100; // listPrompts API maximum
 
       while (true) {
         const response = await docRouterOrgApi.listPrompts({
