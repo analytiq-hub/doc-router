@@ -1,6 +1,6 @@
 import { forwardRef, useImperativeHandle, useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Prompt } from '@docrouter/sdk';
-import { Document, Tag } from '@docrouter/sdk';
+import { Prompt, BulkAnalyzeLLMResponse } from '@docrouter/sdk';
+import { Tag } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
 import { toast } from 'react-hot-toast';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
@@ -78,14 +78,35 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
     // Use ref for immediate cancellation without waiting for state updates
     const isCancelledRef = useRef(false);
     const analysisAbortController = useRef<AbortController | null>(null);
+    const isMountedRef = useRef(false);
+    const analyzeGenerationRef = useRef(0);
+    const onDataChangeRef = useRef(onDataChange);
+    onDataChangeRef.current = onDataChange;
+    const onProgressRef = useRef(onProgress);
+    onProgressRef.current = onProgress;
+    const completedExecutionsRef = useRef(0);
 
-    // Parse and URL-encode metadata search to handle special characters
-    const parseAndEncodeMetadataSearch = (searchStr: string): string | null => {
+    const notifyExecutionProgress = useCallback((processed: number) => {
+      queueMicrotask(() => {
+        if (isMountedRef.current) {
+          onProgressRef.current?.(processed);
+        }
+      });
+    }, []);
+
+    useEffect(() => {
+      isMountedRef.current = true;
+      return () => {
+        isMountedRef.current = false;
+        analysisAbortController.current?.abort();
+      };
+    }, []);
+
+    const parseMetadataSearch = (searchStr: string): Record<string, string> | undefined => {
+      if (!searchStr.trim()) return undefined;
       try {
-        const pairs: string[] = [];
-        const rawPairs = searchStr.split(',');
-
-        for (const rawPair of rawPairs) {
+        const result: Record<string, string> = {};
+        for (const rawPair of searchStr.split(',')) {
           const trimmed = rawPair.trim();
           if (!trimmed) continue;
 
@@ -94,89 +115,39 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
 
           const key = trimmed.substring(0, equalIndex).trim();
           const value = trimmed.substring(equalIndex + 1).trim();
-
           if (key && value) {
-            const encodedKey = encodeURIComponent(key);
-            const encodedValue = encodeURIComponent(value);
-            pairs.push(`${encodedKey}=${encodedValue}`);
+            result[key] = value;
           }
         }
-
-        return pairs.length > 0 ? pairs.join(',') : null;
+        return Object.keys(result).length > 0 ? result : undefined;
       } catch (error) {
         console.error('Error parsing metadata search:', error);
-        return null;
+        return undefined;
       }
     };
 
-    // Helper function to fetch all prompts with pagination
-    const fetchAllPrompts = useCallback(async () => {
-      const allPrompts: Prompt[] = [];
-      let skip = 0;
-      const limit = 100; // listPrompts API maximum
-
-      while (true) {
-        const response = await docRouterOrgApi.listPrompts({
-          tag_ids: selectedTag!.id,
-          skip,
-          limit
-        });
-
-        allPrompts.push(...response.prompts);
-
-        // If we got less than the limit, we've reached the end
-        if (response.prompts.length < limit) {
-          break;
-        }
-
-        skip += limit;
-      }
-
-      return allPrompts;
-    }, [selectedTag, docRouterOrgApi]);
-
-    // Helper function to fetch all documents with pagination
-    const fetchAllDocuments = useCallback(async () => {
-      const allDocuments: Document[] = [];
-      let skip = 0;
-      const limit = 1000; // API maximum
-
-      // Combine existing tag filters with the selected tag for LLM operations
-      const tagFilters = [...searchParameters.selectedTagFilters.map(tag => tag.id)];
+    const buildDocumentFilters = useCallback(() => {
+      const tagFilters = searchParameters.selectedTagFilters.map(tag => tag.id);
       if (selectedTag && !tagFilters.includes(selectedTag.id)) {
         tagFilters.push(selectedTag.id);
       }
 
-      while (true) {
-        const response = await docRouterOrgApi.listDocuments({
-          skip,
-          limit,
-          nameSearch: searchParameters.searchTerm.trim() || undefined,
-          tagIds: tagFilters.length > 0 ? tagFilters.join(',') : undefined,
-          metadataSearch: searchParameters.metadataSearch.trim()
-            ? parseAndEncodeMetadataSearch(searchParameters.metadataSearch.trim()) || undefined
-            : undefined,
-        });
-
-        allDocuments.push(...response.documents);
-
-        // If we got less than the limit, we've reached the end
-        if (response.documents.length < limit) {
-          break;
-        }
-
-        skip += limit;
-      }
-
-      return allDocuments;
-    }, [selectedTag, searchParameters.searchTerm, searchParameters.selectedTagFilters, searchParameters.metadataSearch, docRouterOrgApi]);
+      return {
+        name_search: searchParameters.searchTerm.trim() || undefined,
+        tag_ids: tagFilters.length > 0 ? tagFilters : undefined,
+        metadata_search: parseMetadataSearch(searchParameters.metadataSearch.trim()),
+      };
+    }, [selectedTag, searchParameters.searchTerm, searchParameters.selectedTagFilters, searchParameters.metadataSearch]);
 
     const analyzeExecutions = useCallback(async () => {
       if (!selectedTag) return;
 
-      // Create new abort controller for this analysis
+      const generation = ++analyzeGenerationRef.current;
+      analysisAbortController.current?.abort();
       analysisAbortController.current = new AbortController();
       const signal = analysisAbortController.current.signal;
+
+      if (!isMountedRef.current) return;
 
       setIsAnalyzing(true);
       setIsCancellingAnalysis(false);
@@ -185,173 +156,103 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
       setTotalAnalysisItems(0);
 
       try {
-        // Get all prompts for the selected tag using pagination
-        const allPrompts = await fetchAllPrompts();
+        const response = await docRouterOrgApi.bulkAnalyzeLLM({
+          tagId: selectedTag.id,
+          mode: executionMode,
+          documentFilters: buildDocumentFilters(),
+        });
 
-        if (signal.aborted) return;
-
-        if (allPrompts.length === 0) {
-          toast('No prompts found for the selected tag');
-          setPromptGroups([]);
-          setTotalExecutions(0);
+        if (
+          signal.aborted ||
+          !isMountedRef.current ||
+          generation !== analyzeGenerationRef.current
+        ) {
           return;
         }
 
-        // Group prompts by prompt_id and keep only the latest version of each
-        const promptGroups = allPrompts.reduce((groups: Record<string, Prompt>, prompt) => {
-          const existingPrompt = groups[prompt.prompt_id];
-          if (!existingPrompt || prompt.prompt_version > existingPrompt.prompt_version) {
-            groups[prompt.prompt_id] = prompt;
-          }
-          return groups;
-        }, {});
+        const groups: PromptExecutionGroup[] = response.groups.map((group: BulkAnalyzeLLMResponse['groups'][number]) => {
+          const prompt: Prompt = {
+            prompt_revid: group.prompt_revid,
+            prompt_id: group.prompt_id,
+            prompt_version: group.prompt_version,
+            name: group.name,
+            content: '',
+            created_at: '',
+            created_by: '',
+          };
+          const executions: PromptExecution[] = group.executions.map((exec) => ({
+            prompt,
+            documentId: exec.document_id,
+            documentName: exec.document_name,
+            status: 'pending' as const,
+          }));
+          return {
+            prompt,
+            executions,
+            totalExecutions: executions.length,
+            completedExecutions: 0,
+          };
+        });
 
-        const latestPrompts = Object.values(promptGroups);
-
-        // Get all documents that match the current filters using pagination
-        const allDocuments = await fetchAllDocuments();
-
-        if (signal.aborted) return;
-
-        if (allDocuments.length === 0) {
-          toast('No documents match the current filters');
-          setPromptGroups([]);
-          setTotalExecutions(0);
-          return;
-        }
-
-        // Calculate total analysis items for progress tracking
-        const totalAnalysisOperations = latestPrompts.length * allDocuments.length;
-        setTotalAnalysisItems(totalAnalysisOperations);
-
-        // For each prompt, check which documents need LLM execution with batching
-        const groups: PromptExecutionGroup[] = [];
-        let totalExecs = 0;
-        let completedAnalysisItems = 0;
-
-        for (const prompt of latestPrompts) {
-          if (signal.aborted) return;
-
-          const executions: PromptExecution[] = [];
-
-          // Process documents in batches to improve performance
-          for (let i = 0; i < allDocuments.length; i += BATCH_SIZE) {
-            if (signal.aborted) return;
-
-            const batch = allDocuments.slice(i, i + BATCH_SIZE);
-
-            // Process batch in parallel
-            const batchResults = await Promise.all(
-              batch.map(async (document) => {
-                if (signal.aborted) return null;
-
-                let needsExecution = false;
-
-                if (executionMode === 'all') {
-                  // Always run on all documents
-                  needsExecution = true;
-                } else if (executionMode === 'missing') {
-                  // Only run if no result exists for any version of this prompt
-                  try {
-                    await docRouterOrgApi.getLLMResult({
-                      documentId: document.id,
-                      promptRevId: prompt.prompt_revid,
-                      fallback: true
-                    });
-                    // If we get here, some result exists - skip execution
-                    needsExecution = false;
-                  } catch {
-                    // No result exists - needs execution
-                    needsExecution = true;
-                  }
-                } else if (executionMode === 'outdated') {
-                  // Run if no result exists OR if result exists but for older version
-                  try {
-                    const existingResult = await docRouterOrgApi.getLLMResult({
-                      documentId: document.id,
-                      promptRevId: prompt.prompt_revid,
-                      fallback: true
-                    });
-                    // Result exists - check if it's for the latest version
-                    needsExecution = existingResult.prompt_version < prompt.prompt_version;
-                  } catch {
-                    // No result exists - needs execution
-                    needsExecution = true;
-                  }
-                }
-
-                completedAnalysisItems++;
-                setAnalysisProgress(completedAnalysisItems);
-
-                return needsExecution ? {
-                  prompt,
-                  documentId: document.id,
-                  documentName: document.document_name,
-                  status: 'pending' as const
-                } : null;
-              })
-            );
-
-            // Filter out null results and add to executions
-            executions.push(...batchResults.filter(result => result !== null) as PromptExecution[]);
-          }
-
-          if (executions.length > 0) {
-            groups.push({
-              prompt,
-              executions,
-              totalExecutions: executions.length,
-              completedExecutions: 0
-            });
-            totalExecs += executions.length;
-          }
-        }
-
-        if (!signal.aborted) {
-          setPromptGroups(groups);
-          setTotalExecutions(totalExecs);
-        }
-
+        setPromptGroups(groups);
+        setTotalExecutions(response.total_executions);
+        setAnalysisProgress(response.total_executions);
+        setTotalAnalysisItems(response.total_executions);
       } catch (error) {
-        if (signal.aborted) {
-          // Analysis was cancelled
-          setPromptGroups([]);
-          setTotalExecutions(0);
-          setIsAnalysisCancelled(true);
-        } else {
-          console.error('Error analyzing executions:', error);
-          toast.error('Failed to analyze required executions');
+        if (
+          signal.aborted ||
+          !isMountedRef.current ||
+          generation !== analyzeGenerationRef.current
+        ) {
+          if (signal.aborted && isMountedRef.current) {
+            setPromptGroups([]);
+            setTotalExecutions(0);
+            setIsAnalysisCancelled(true);
+          }
+          return;
         }
+        console.error('Error analyzing executions:', error);
+        toast.error('Failed to analyze required executions');
       } finally {
-        setIsAnalyzing(false);
-        setIsCancellingAnalysis(false);
-        analysisAbortController.current = null;
+        if (
+          isMountedRef.current &&
+          generation === analyzeGenerationRef.current
+        ) {
+          setIsAnalyzing(false);
+          setIsCancellingAnalysis(false);
+          analysisAbortController.current = null;
+        }
       }
-    }, [selectedTag, executionMode, fetchAllPrompts, fetchAllDocuments, docRouterOrgApi]);
+    }, [selectedTag, executionMode, buildDocumentFilters, docRouterOrgApi]);
 
     // Analyze what needs to be executed when tag selection, mode, or search parameters change
     useEffect(() => {
-      if (selectedTag) {
-        analyzeExecutions();
-      } else {
+      if (!selectedTag) {
         setPromptGroups([]);
         setTotalExecutions(0);
+        return;
       }
+
+      void analyzeExecutions();
+
+      return () => {
+        analysisAbortController.current?.abort();
+      };
     }, [selectedTag, executionMode, searchParameters.searchTerm, searchParameters.selectedTagFilters, searchParameters.metadataSearch, analyzeExecutions]);
 
-    // Update parent component with data changes
+    // Update parent component with data changes (after mount, avoid parent updates during unmount)
     useEffect(() => {
-      if (onDataChange) {
-        onDataChange({
-          selectedTag,
-          executionCount: totalExecutions,
-          isCancelling,
-          isCancelled,
-          isCompleted,
-          isAnalyzing
-        });
-      }
-    }, [selectedTag, totalExecutions, isCancelling, isCancelled, isCompleted, isAnalyzing, onDataChange]);
+      if (!isMountedRef.current) return;
+
+      onDataChangeRef.current?.({
+        selectedTag,
+        executionCount: totalExecutions,
+        isCancelling,
+        isCancelled,
+        isCompleted,
+        isAnalyzing,
+      });
+    }, [selectedTag, totalExecutions, isCancelling, isCancelled, isCompleted, isAnalyzing]);
 
     const cancelAnalysis = () => {
       setIsCancellingAnalysis(true);
@@ -394,6 +295,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
       setIsCompleted(false);
       setIsCancelled(false);
       setIsCancelling(false);
+      completedExecutionsRef.current = 0;
       setCompletedExecutions(0);
       setPromptGroups([]);
       setTotalExecutions(0);
@@ -423,6 +325,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
       setIsCancelling(false);
       setIsCancelled(false);
       setIsCompleted(false);
+      completedExecutionsRef.current = 0;
       setCompletedExecutions(0);
 
       try {
@@ -497,13 +400,9 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
                 ));
 
                 // Update progress
-                setCompletedExecutions(prev => {
-                  const newCompleted = prev + 1;
-                  if (onProgress) {
-                    onProgress(newCompleted);
-                  }
-                  return newCompleted;
-                });
+                completedExecutionsRef.current += 1;
+                setCompletedExecutions(completedExecutionsRef.current);
+                notifyExecutionProgress(completedExecutionsRef.current);
 
               } catch (error) {
                 console.error(`Error running LLM for document ${execution.documentId}:`, error);
@@ -527,13 +426,9 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
                 ));
 
                 // Still update progress counter for failed executions
-                setCompletedExecutions(prev => {
-                  const newCompleted = prev + 1;
-                  if (onProgress) {
-                    onProgress(newCompleted);
-                  }
-                  return newCompleted;
-                });
+                completedExecutionsRef.current += 1;
+                setCompletedExecutions(completedExecutionsRef.current);
+                notifyExecutionProgress(completedExecutionsRef.current);
               }
             });
 

@@ -170,6 +170,63 @@ _LIST_DOCS_FIELD_MAP: dict[str, str | None] = {
 }
 
 
+async def build_docs_match_query(
+    db,
+    organization_id: str,
+    tag_ids: list[str] | None = None,
+    name_search: str | None = None,
+    metadata_search: dict[str, str] | None = None,
+    filter_model: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a MongoDB match query for documents (same filters as list_docs)."""
+    query: dict[str, Any] = {"organization_id": organization_id}
+    if tag_ids:
+        query["tag_ids"] = {"$all": tag_ids}
+    if name_search:
+        query["user_file_name"] = {"$regex": name_search, "$options": "i"}
+    if metadata_search:
+        for key, value in metadata_search.items():
+            query[f"metadata.{key}"] = value
+
+    grid_match = await build_filter_match(
+        filter_model, _LIST_DOCS_FIELD_MAP,
+        db=db, organization_id=organization_id,
+        datetime_fields={"upload_date"},
+        tag_id_fields={"tag_ids"},
+        id_field=None,
+    )
+    if grid_match:
+        query = {"$and": [query, grid_match]}
+    return query
+
+
+async def list_all_matching_docs(
+    analytiq_client,
+    organization_id: str,
+    tag_ids: list[str] | None = None,
+    name_search: str | None = None,
+    metadata_search: dict[str, str] | None = None,
+    filter_model: dict[str, Any] | None = None,
+) -> list[dict[str, str]]:
+    """
+    Return all documents matching filters as lightweight dicts with id and document_name.
+    """
+    db_name = analytiq_client.env
+    db = analytiq_client.mongodb_async[db_name]
+    query = await build_docs_match_query(
+        db, organization_id,
+        tag_ids=tag_ids,
+        name_search=name_search,
+        metadata_search=metadata_search,
+        filter_model=filter_model,
+    )
+    docs = await db.docs.find(query, {"user_file_name": 1}).to_list(None)
+    return [
+        {"id": str(doc["_id"]), "document_name": doc.get("user_file_name", "")}
+        for doc in docs
+    ]
+
+
 async def list_docs(
     analytiq_client,
     organization_id: str,
@@ -212,24 +269,13 @@ async def list_docs(
     db = analytiq_client.mongodb_async[db_name]
     collection = db["docs"]
 
-    query = {"organization_id": organization_id}
-    if tag_ids:
-        query["tag_ids"] = {"$all": tag_ids}
-    if name_search:
-        query["user_file_name"] = {"$regex": name_search, "$options": "i"}
-    if metadata_search:
-        for key, value in metadata_search.items():
-            query[f"metadata.{key}"] = value
-
-    grid_match = await build_filter_match(
-        filter_model, _LIST_DOCS_FIELD_MAP,
-        db=db, organization_id=organization_id,
-        datetime_fields={"upload_date"},
-        tag_id_fields={"tag_ids"},
-        id_field=None,
+    query = await build_docs_match_query(
+        db, organization_id,
+        tag_ids=tag_ids,
+        name_search=name_search,
+        metadata_search=metadata_search,
+        filter_model=filter_model,
     )
-    if grid_match:
-        query = {"$and": [query, grid_match]}
 
     sort_doc: dict[str, Any] = {}
     if name_search:

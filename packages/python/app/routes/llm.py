@@ -122,6 +122,43 @@ class UpdateLLMResultRequest(BaseModel):
     updated_llm_result: dict
     is_verified: bool = False
 
+
+class BulkAnalyzeDocumentFilters(BaseModel):
+    name_search: Optional[str] = None
+    tag_ids: Optional[List[str]] = None
+    metadata_search: Optional[dict[str, str]] = None
+    filters: Optional[dict] = Field(
+        default=None,
+        description="MUI DataGrid filterModel (object)",
+    )
+
+
+class BulkAnalyzeLLMRequest(BaseModel):
+    tag_id: str = Field(..., description="Tag whose prompts should be analyzed")
+    mode: Literal["all", "missing", "outdated"] = Field(
+        default="outdated",
+        description="Execution strategy matching bulk LLM UI",
+    )
+    document_filters: BulkAnalyzeDocumentFilters = Field(default_factory=BulkAnalyzeDocumentFilters)
+
+
+class BulkAnalyzeExecutionItem(BaseModel):
+    document_id: str
+    document_name: str
+
+
+class BulkAnalyzePromptGroup(BaseModel):
+    prompt_revid: str
+    prompt_id: str
+    prompt_version: int
+    name: str
+    executions: List[BulkAnalyzeExecutionItem]
+
+
+class BulkAnalyzeLLMResponse(BaseModel):
+    total_executions: int
+    groups: List[BulkAnalyzePromptGroup]
+
 class LLMMessage(BaseModel):
     role: Literal["system", "user", "assistant"] = Field(..., description="Role of the message sender")
     content: str = Field(..., description="Content of the message")
@@ -274,6 +311,36 @@ async def get_llm_result(
         )
 
     return _llm_result_response(llm_result, prompt_revid)
+
+@llm_router.post(
+    "/v0/orgs/{organization_id}/llm/bulk-analyze",
+    response_model=BulkAnalyzeLLMResponse,
+)
+async def bulk_analyze_llm(
+    organization_id: str,
+    request: BulkAnalyzeLLMRequest = Body(...),
+    current_user: User = Depends(get_org_user),
+):
+    """
+    Analyze which document-prompt pairs need LLM execution for bulk run.
+    """
+    logger.info(
+        f"bulk_analyze_llm(): org={organization_id} tag_id={request.tag_id} mode={request.mode}"
+    )
+    analytiq_client = ad.common.get_analytiq_client()
+    filters = request.document_filters
+
+    result = await ad.llm.bulk_analyze_executions(
+        analytiq_client,
+        organization_id,
+        request.tag_id,
+        request.mode,
+        tag_ids=filters.tag_ids,
+        name_search=filters.name_search,
+        metadata_search=filters.metadata_search,
+        filter_model=filters.filters,
+    )
+    return BulkAnalyzeLLMResponse(**result)
 
 @llm_router.put("/v0/orgs/{organization_id}/llm/result/{document_id}", response_model=LLMResult)
 async def update_llm_result(

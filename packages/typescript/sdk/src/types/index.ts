@@ -632,6 +632,39 @@ export interface DeleteLLMResultParams {
   promptId: string;
 }
 
+export type BulkAnalyzeLLMMode = 'all' | 'missing' | 'outdated';
+
+export interface BulkAnalyzeDocumentFilters {
+  name_search?: string;
+  tag_ids?: string[];
+  metadata_search?: Record<string, string>;
+  filters?: Record<string, unknown>;
+}
+
+export interface BulkAnalyzeLLMParams {
+  tagId: string;
+  mode: BulkAnalyzeLLMMode;
+  documentFilters?: BulkAnalyzeDocumentFilters;
+}
+
+export interface BulkAnalyzeExecutionItem {
+  document_id: string;
+  document_name: string;
+}
+
+export interface BulkAnalyzePromptGroup {
+  prompt_revid: string;
+  prompt_id: string;
+  prompt_version: number;
+  name: string;
+  executions: BulkAnalyzeExecutionItem[];
+}
+
+export interface BulkAnalyzeLLMResponse {
+  total_executions: number;
+  groups: BulkAnalyzePromptGroup[];
+}
+
 // User types
 export interface User {
   id: string;

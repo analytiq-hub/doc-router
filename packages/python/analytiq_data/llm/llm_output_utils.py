@@ -1,6 +1,4 @@
 import re
-import json
-from typing import Optional
 
 
 def extract_json_from_resp_content(resp_content: str) -> str:
@@ -52,24 +50,9 @@ def process_llm_resp_content(resp_content: str, llm_provider: str) -> str:
     """
     Process an LLM response into a parseable JSON object string.
 
-    Only `groq` and `azure_ai` get the aggressive cleanup, because the
-    reasoning models served on those providers (Groq DeepSeek, Moonshot
-    Kimi via Azure Foundry, etc.) interleave `<think>...</think>` blocks
-    or wrap JSON in markdown fences even when the system prompt asks
-    for JSON only, and neither provider supports strict JSON schema mode.
-
-    Other providers (OpenAI, Anthropic, Gemini, Bedrock, Vertex, XAI)
-    honor `response_format` and return clean JSON, so we leave their
-    output untouched aside from stripping whitespace.
-
-    Args:
-        resp_content: Raw response content from the LLM.
-        llm_provider: The LLM provider (e.g. "groq", "azure_ai", "openai").
-
-    Returns:
-        str: Cleaned JSON string ready for parsing.
+    Uses ``extract_json_from_resp_content`` for all providers. That helper is a
+    no-op for bare JSON objects and handles markdown fences, reasoning blocks, and
+    outermost ``{ ... }`` extraction when models ignore strict JSON mode.
     """
-    if llm_provider in ("groq", "azure_ai"):
-        return extract_json_from_resp_content(resp_content)
-
-    return resp_content.strip() if resp_content else resp_content
+    _ = llm_provider  # reserved for provider-specific handling if needed later
+    return extract_json_from_resp_content(resp_content)
