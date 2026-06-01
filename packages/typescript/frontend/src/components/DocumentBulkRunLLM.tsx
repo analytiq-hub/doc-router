@@ -6,8 +6,63 @@ import { toast } from 'react-hot-toast';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import SingleTagSelector from './SingleTagSelector';
 
-// Batch size constant - will be increased to 25 later
-const BATCH_SIZE = 10;
+const DEFAULT_PARALLEL_RUNS = 10;
+const MIN_PARALLEL_RUNS = 1;
+const MAX_PARALLEL_RUNS = 50;
+const BULK_LLM_PARALLEL_RUNS_KEY = 'docrouter.bulkLlmParallelRuns';
+
+function clampParallelRuns(value: number): number {
+  const n = Math.floor(value);
+  if (!Number.isFinite(n)) return DEFAULT_PARALLEL_RUNS;
+  return Math.min(MAX_PARALLEL_RUNS, Math.max(MIN_PARALLEL_RUNS, n));
+}
+
+function readParallelRunsFromSession(): number {
+  if (typeof window === 'undefined') return DEFAULT_PARALLEL_RUNS;
+  try {
+    const raw = sessionStorage.getItem(BULK_LLM_PARALLEL_RUNS_KEY);
+    if (raw === null) return DEFAULT_PARALLEL_RUNS;
+    return clampParallelRuns(parseInt(raw, 10));
+  } catch {
+    return DEFAULT_PARALLEL_RUNS;
+  }
+}
+
+function persistParallelRunsToSession(value: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(BULK_LLM_PARALLEL_RUNS_KEY, String(value));
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+type WorkItem = {
+  group: PromptExecutionGroup;
+  execution: PromptExecution;
+};
+
+async function runWithConcurrency(
+  items: WorkItem[],
+  limit: number,
+  worker: (item: WorkItem) => Promise<void>,
+  shouldStop: () => boolean,
+): Promise<void> {
+  if (items.length === 0) return;
+
+  let nextIndex = 0;
+  const runWorker = async () => {
+    while (true) {
+      if (shouldStop()) return;
+      const index = nextIndex++;
+      if (index >= items.length) return;
+      await worker(items[index]);
+    }
+  };
+
+  const workerCount = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+}
 
 interface DocumentBulkRunLLMProps {
   organizationId: string;
@@ -60,6 +115,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
     const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
     const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
     const [executionMode, setExecutionMode] = useState<ExecutionMode>('outdated');
+    const [parallelRuns, setParallelRuns] = useState(readParallelRunsFromSession);
     const [promptGroups, setPromptGroups] = useState<PromptExecutionGroup[]>([]);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [isExecuting, setIsExecuting] = useState(false);
@@ -101,6 +157,10 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
         analysisAbortController.current?.abort();
       };
     }, []);
+
+    useEffect(() => {
+      persistParallelRunsToSession(parallelRuns);
+    }, [parallelRuns]);
 
     const parseMetadataSearch = (searchStr: string): Record<string, string> | undefined => {
       if (!searchStr.trim()) return undefined;
@@ -328,117 +388,82 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
       completedExecutionsRef.current = 0;
       setCompletedExecutions(0);
 
-      try {
-        // Process all executions in batches
-        groupLoop: for (const group of promptGroups) {
-          const executions = [...group.executions];
+      const concurrencyLimit = clampParallelRuns(parallelRuns);
+      const work: WorkItem[] = promptGroups.flatMap((group) =>
+        group.executions.map((execution) => ({ group, execution })),
+      );
 
-          // Process in batches of BATCH_SIZE
-          for (let i = 0; i < executions.length; i += BATCH_SIZE) {
-            // Check for cancellation before each batch using ref for immediate response
+      const markExecutionStatus = (
+        group: PromptExecutionGroup,
+        documentId: string,
+        update: Partial<PromptExecution> & { status: PromptExecution['status'] },
+        incrementGroupCompleted = false,
+      ) => {
+        setPromptGroups((prev) =>
+          prev.map((g) =>
+            g.prompt.prompt_revid === group.prompt.prompt_revid
+              ? {
+                  ...g,
+                  executions: g.executions.map((e) =>
+                    e.documentId === documentId ? { ...e, ...update } : e,
+                  ),
+                  completedExecutions: incrementGroupCompleted
+                    ? g.completedExecutions + 1
+                    : g.completedExecutions,
+                }
+              : g,
+          ),
+        );
+      };
+
+      const recordProgress = () => {
+        completedExecutionsRef.current += 1;
+        setCompletedExecutions(completedExecutionsRef.current);
+        notifyExecutionProgress(completedExecutionsRef.current);
+      };
+
+      try {
+        await runWithConcurrency(
+          work,
+          concurrencyLimit,
+          async ({ group, execution }) => {
             if (isCancelledRef.current) {
-              break groupLoop;
+              markExecutionStatus(group, execution.documentId, { status: 'cancelled' });
+              return;
             }
 
-            const batch = executions.slice(i, i + BATCH_SIZE);
+            markExecutionStatus(group, execution.documentId, { status: 'running' });
 
-            // Execute batch in parallel
-            const batchPromises = batch.map(async (execution) => {
-              try {
-                // Check if cancelled before starting this specific execution using ref
-                if (isCancelledRef.current) {
-                  // Mark as cancelled instead of running
-                  setPromptGroups(prev => prev.map(g =>
-                    g.prompt.prompt_revid === group.prompt.prompt_revid
-                      ? {
-                          ...g,
-                          executions: g.executions.map(e =>
-                            e.documentId === execution.documentId
-                              ? { ...e, status: 'cancelled' as const }
-                              : e
-                          )
-                        }
-                      : g
-                  ));
-                  return; // Don't execute the LLM call
-                }
+            try {
+              await docRouterOrgApi.runLLM({
+                documentId: execution.documentId,
+                promptRevId: execution.prompt.prompt_revid,
+                force: executionMode === 'all',
+              });
 
-                // Update status to running
-                setPromptGroups(prev => prev.map(g =>
-                  g.prompt.prompt_revid === group.prompt.prompt_revid
-                    ? {
-                        ...g,
-                        executions: g.executions.map(e =>
-                          e.documentId === execution.documentId
-                            ? { ...e, status: 'running' as const }
-                            : e
-                        )
-                      }
-                    : g
-                ));
-
-                // Run the LLM (force=true for 'all' mode to rerun existing results)
-                await docRouterOrgApi.runLLM({
-                  documentId: execution.documentId,
-                  promptRevId: execution.prompt.prompt_revid,
-                  force: executionMode === 'all'
-                });
-
-                // Update status to completed
-                setPromptGroups(prev => prev.map(g =>
-                  g.prompt.prompt_revid === group.prompt.prompt_revid
-                    ? {
-                        ...g,
-                        executions: g.executions.map(e =>
-                          e.documentId === execution.documentId
-                            ? { ...e, status: 'completed' as const }
-                            : e
-                        ),
-                        completedExecutions: g.completedExecutions + 1
-                      }
-                    : g
-                ));
-
-                // Update progress
-                completedExecutionsRef.current += 1;
-                setCompletedExecutions(completedExecutionsRef.current);
-                notifyExecutionProgress(completedExecutionsRef.current);
-
-              } catch (error) {
-                console.error(`Error running LLM for document ${execution.documentId}:`, error);
-
-                // Update status to error
-                setPromptGroups(prev => prev.map(g =>
-                  g.prompt.prompt_revid === group.prompt.prompt_revid
-                    ? {
-                        ...g,
-                        executions: g.executions.map(e =>
-                          e.documentId === execution.documentId
-                            ? {
-                                ...e,
-                                status: 'error' as const,
-                                error: error instanceof Error ? error.message : 'Unknown error'
-                              }
-                            : e
-                        )
-                      }
-                    : g
-                ));
-
-                // Still update progress counter for failed executions
-                completedExecutionsRef.current += 1;
-                setCompletedExecutions(completedExecutionsRef.current);
-                notifyExecutionProgress(completedExecutionsRef.current);
-              }
-            });
-
-            // Wait for batch to complete before starting next batch
-            await Promise.all(batchPromises);
-          }
-        }
+              markExecutionStatus(
+                group,
+                execution.documentId,
+                { status: 'completed' },
+                true,
+              );
+              recordProgress();
+            } catch (error) {
+              console.error(`Error running LLM for document ${execution.documentId}:`, error);
+              markExecutionStatus(group, execution.documentId, {
+                status: 'error',
+                error: error instanceof Error ? error.message : 'Unknown error',
+              });
+              recordProgress();
+            }
+          },
+          () => isCancelledRef.current,
+        );
 
         if (isCancelledRef.current) {
-          toast(`LLM execution cancelled - completed ${completedExecutions} out of ${totalExecutions} executions`);
+          toast(
+            `LLM execution cancelled - completed ${completedExecutionsRef.current} out of ${totalExecutions} executions`,
+          );
         } else {
           toast.success(`Completed LLM execution on ${totalExecutions} document-prompt combinations`);
           setIsCompleted(true);
@@ -562,6 +587,27 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
             </div>
           )}
         </div>
+
+        {selectedTag && (
+          <div className="max-w-xs">
+            <label htmlFor="bulk-llm-parallel-runs" className="block text-sm font-medium text-gray-700 mb-1">
+              Parallel runs
+            </label>
+            <input
+              id="bulk-llm-parallel-runs"
+              type="number"
+              min={MIN_PARALLEL_RUNS}
+              max={MAX_PARALLEL_RUNS}
+              value={parallelRuns}
+              onChange={(e) => setParallelRuns(clampParallelRuns(Number(e.target.value)))}
+              disabled={disabled || isExecuting || isAnalyzing}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              Maximum LLM requests in flight at once (default {DEFAULT_PARALLEL_RUNS}, saved for this session).
+            </p>
+          </div>
+        )}
 
         {/* Analysis Status */}
         {isAnalyzing && (
