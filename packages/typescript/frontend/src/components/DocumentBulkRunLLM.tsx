@@ -158,8 +158,10 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
       };
     }, []);
 
-    useEffect(() => {
-      persistParallelRunsToSession(parallelRuns);
+    const handleParallelRunsCommit = useCallback(() => {
+      const clamped = clampParallelRuns(parallelRuns);
+      setParallelRuns(clamped);
+      persistParallelRunsToSession(clamped);
     }, [parallelRuns]);
 
     const parseMetadataSearch = (searchStr: string): Record<string, string> | undefined => {
@@ -598,13 +600,18 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
               type="number"
               min={MIN_PARALLEL_RUNS}
               max={MAX_PARALLEL_RUNS}
-              value={parallelRuns}
-              onChange={(e) => setParallelRuns(clampParallelRuns(Number(e.target.value)))}
+              value={Number.isFinite(parallelRuns) ? parallelRuns : ''}
+              onChange={(e) => setParallelRuns(e.target.valueAsNumber)}
+              onBlur={handleParallelRunsCommit}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleParallelRunsCommit();
+              }}
               disabled={disabled || isExecuting || isAnalyzing}
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100 disabled:cursor-not-allowed"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Maximum LLM requests in flight at once (default {DEFAULT_PARALLEL_RUNS}, saved for this session).
+              Max parallel LLM requests ({MIN_PARALLEL_RUNS}–{MAX_PARALLEL_RUNS}, default{' '}
+              {DEFAULT_PARALLEL_RUNS}).
             </p>
           </div>
         )}
