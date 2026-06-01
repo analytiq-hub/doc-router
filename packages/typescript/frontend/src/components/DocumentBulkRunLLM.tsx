@@ -105,6 +105,7 @@ interface PromptExecutionGroup {
 export interface DocumentBulkRunLLMRef {
   executeRunLLM: () => Promise<void>;
   cancelRunLLM: () => void;
+  cancelAnalysis: (options?: { notify?: boolean }) => void;
   resetRunLLM: () => void;
 }
 
@@ -154,6 +155,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
       isMountedRef.current = true;
       return () => {
         isMountedRef.current = false;
+        isCancelledRef.current = true;
         analysisAbortController.current?.abort();
       };
     }, []);
@@ -205,6 +207,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
       if (!selectedTag) return;
 
       const generation = ++analyzeGenerationRef.current;
+      isCancelledRef.current = false;
       analysisAbortController.current?.abort();
       analysisAbortController.current = new AbortController();
       const signal = analysisAbortController.current.signal;
@@ -316,20 +319,24 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
       });
     }, [selectedTag, totalExecutions, isCancelling, isCancelled, isCompleted, isAnalyzing]);
 
-    const cancelAnalysis = () => {
+    const cancelAnalysis = (options?: { notify?: boolean }) => {
+      isCancelledRef.current = true;
       setIsCancellingAnalysis(true);
+      setIsAnalyzing(false);
       if (analysisAbortController.current) {
         analysisAbortController.current.abort();
       }
 
-      // Clear execution details
       setPromptGroups([]);
       setTotalExecutions(0);
       setAnalysisProgress(0);
       setTotalAnalysisItems(0);
       setIsAnalysisCancelled(true);
+      setIsCancellingAnalysis(false);
 
-      toast('Analysis cancelled');
+      if (options?.notify !== false) {
+        toast('Analysis cancelled');
+      }
     };
 
     const cancelRunLLM = () => {
@@ -488,7 +495,8 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
     useImperativeHandle(ref, () => ({
       executeRunLLM,
       cancelRunLLM,
-      resetRunLLM
+      cancelAnalysis,
+      resetRunLLM,
     }));
 
     const getStatusIcon = (status: string) => {
@@ -627,7 +635,7 @@ export const DocumentBulkRunLLM = forwardRef<DocumentBulkRunLLMRef, DocumentBulk
                 </span>
               </div>
               <button
-                onClick={cancelAnalysis}
+                onClick={() => cancelAnalysis()}
                 disabled={isCancellingAnalysis}
                 className="px-3 py-1 text-xs font-medium text-red-700 bg-red-100 border border-red-300 rounded hover:bg-red-200 disabled:opacity-50 disabled:cursor-not-allowed"
               >

@@ -14,6 +14,7 @@ type LLMOperationData = {
   isCompleted?: boolean;
   isCancelling?: boolean;
   isCancelled?: boolean;
+  isAnalyzing?: boolean;
 };
 
 type OperationData = TagsOperationData | MetadataOperationData | MetadataKeysOperationData | LLMOperationData | null;
@@ -309,6 +310,19 @@ export function DocumentBulkUpdate({
     onClose();
   }
 
+  const handleClose = () => {
+    if (selectedOperation === 'runLLMOperations') {
+      const analyzing =
+        isLLMOperationData(operationData) && operationData.isAnalyzing === true;
+      if (isOperationLoading && !analyzing) {
+        runLLMRef.current?.cancelRunLLM();
+      } else if (analyzing) {
+        runLLMRef.current?.cancelAnalysis({ notify: false });
+      }
+    }
+    onClose();
+  }
+
   const getOperationData = () => {
     return operationData;
   }
@@ -338,7 +352,7 @@ export function DocumentBulkUpdate({
   return (
     <>
     <Transition show={isOpen} as={Fragment}>
-      <Dialog as="div" className="relative z-50" onClose={onClose}>
+      <Dialog as="div" className="relative z-50" onClose={handleClose}>
         <div className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" />
 
         <div className="fixed inset-0 overflow-hidden">
@@ -354,7 +368,7 @@ export function DocumentBulkUpdate({
                       <button
                         type="button"
                         className="rounded-md text-gray-400 hover:text-gray-500"
-                        onClick={onClose}
+                        onClick={handleClose}
                       >
                         <XMarkIcon className="h-6 w-6" />
                       </button>
@@ -623,7 +637,7 @@ export function DocumentBulkUpdate({
                     <button
                       type="button"
                       className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
-                      onClick={onClose}
+                      onClick={handleClose}
                     >
                       Close
                     </button>
