@@ -1,0 +1,34 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "flows.microsoft_outlook",
+  "type_version": 1,
+  "label": "Microsoft Outlook",
+  "description": "Consume Microsoft Outlook API",
+  "category": "input",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 1,
+  "max_inputs": 1,
+  "outputs": 1,
+  "output_labels": [
+    "main"
+  ],
+  "icon_key": "microsoft_outlook",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.microsoft_outlook.node",
+    "class": "FlowsMicrosoftOutlookNode"
+  },
+  "palette_group": "app",
+  "experimental": true,
+  "credential_slots": [
+    {
+      "slot": "microsoftOutlookOAuth2Api",
+      "label": "Credential to connect with",
+      "required": true,
+      "docrouter_binding": "organization_credential_kind:microsoftOutlookOAuth2Api"
+    }
+  ],
+  "parameter_schema_ref": "parameter.schema.json"
+}
