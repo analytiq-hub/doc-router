@@ -37,6 +37,13 @@ def load_node_manifest_by_key(key: str) -> dict[str, Any]:
     return load_node_manifest(SPEC_BY_KEY[key])
 
 
+def reload_node_manifest(spec: BuiltinNodeSpec) -> dict[str, Any]:
+    """Reload palette metadata after manifest/schema edits (clears LRU cache)."""
+
+    load_node_manifest.cache_clear()
+    return load_node_manifest(spec)
+
+
 def _resolve_manifest(raw: dict[str, Any], base_dir: Path) -> dict[str, Any]:
     out = dict(raw)
     ref = out.pop("parameter_schema_ref", None)

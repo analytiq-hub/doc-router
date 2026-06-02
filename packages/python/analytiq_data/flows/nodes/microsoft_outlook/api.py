@@ -17,13 +17,12 @@ _OUTLOOK_CREDENTIAL_SLOT = "microsoftOutlookOAuth2Api"
 _PRODUCT_LABEL = "Microsoft Outlook"
 
 
-async def resolve_outlook_auth(
-    context: "ad.flows.ExecutionContext",
+async def resolve_outlook_auth_for_org(
+    organization_id: str,
     node: dict[str, Any],
 ) -> tuple[str, dict[str, Any], str]:
     """Return ``(access_token, credential_fields, mailbox_base_url)``."""
 
-    organization_id = context.organization_id
     bindings = node.get("credentials") if isinstance(node.get("credentials"), dict) else {}
     cred_id = bindings.get(_OUTLOOK_CREDENTIAL_SLOT)
     if not cred_id:
@@ -41,6 +40,13 @@ async def resolve_outlook_auth(
     )
     mailbox_base = graph_mailbox_base_url(fields)
     return token, fields, mailbox_base
+
+
+async def resolve_outlook_auth(
+    context: "ad.flows.ExecutionContext",
+    node: dict[str, Any],
+) -> tuple[str, dict[str, Any], str]:
+    return await resolve_outlook_auth_for_org(context.organization_id, node)
 
 
 async def outlook_request(

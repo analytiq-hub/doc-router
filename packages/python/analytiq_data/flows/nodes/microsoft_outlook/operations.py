@@ -7,13 +7,21 @@ from typing import Any
 
 import analytiq_data as ad
 
+from analytiq_data.flows.integrations.microsoft.graph_api import graph_encode_id
+
 from .api import outlook_request, outlook_request_all_items, resolve_outlook_auth
+from .attachments import (
+    attachments_prefix,
+    download_message_attachments,
+    resolve_outlook_download_attachments,
+)
 from .helpers import (
+    SIMPLE_MESSAGE_SELECT,
     additional_fields,
     create_message,
     format_message_output,
     list_query,
-    options_dict,
+    message_resource_path,
     param_str,
     parse_recipients,
     validate_resource_operation,
@@ -83,7 +91,7 @@ async def _run_message(
         mid = param_str(params, "messageId")
         if not mid:
             raise ValueError("messageId is required")
-        await outlook_request(context, token, mailbox_base, "DELETE", f"/messages/{mid}")
+        await outlook_request(context, token, mailbox_base, "DELETE", message_resource_path(mid))
         return {"success": True, "id": mid}
     if operation == "move":
         mid = param_str(params, "messageId")
@@ -92,7 +100,7 @@ async def _run_message(
             raise ValueError("messageId and folderId are required")
         body = {"destinationId": folder_id}
         data = await outlook_request(
-            context, token, mailbox_base, "POST", f"/messages/{mid}/move", body=body
+            context, token, mailbox_base, "POST", message_resource_path(mid, "/move"), body=body
         )
         return data if isinstance(data, dict) else {"data": data}
     if operation == "reply":
@@ -102,7 +110,7 @@ async def _run_message(
         comment = param_str(params, "comment", default=" ")
         body = {"comment": comment}
         await outlook_request(
-            context, token, mailbox_base, "POST", f"/messages/{mid}/reply", body=body
+            context, token, mailbox_base, "POST", message_resource_path(mid, "/reply"), body=body
         )
         return {"success": True}
     if operation == "update":
@@ -114,7 +122,7 @@ async def _run_message(
         fields.setdefault("bodyContent", param_str(params, "bodyContent"))
         message = create_message(fields)
         data = await outlook_request(
-            context, token, mailbox_base, "PATCH", f"/messages/{mid}", body=message
+            context, token, mailbox_base, "PATCH", message_resource_path(mid), body=message
         )
         return data if isinstance(data, dict) else {"data": data}
     raise ValueError(f"Unsupported message operation: {operation}")
@@ -180,16 +188,35 @@ async def _message_get(
     token: str,
     mailbox_base: str,
     params: dict[str, Any],
-) -> dict[str, Any]:
+) -> dict[str, Any] | "ad.flows.FlowItem":
     mid = param_str(params, "messageId")
     if not mid:
         raise ValueError("messageId is required")
+    output = param_str(params, "output", default="simple")
+    qs: dict[str, Any] = {}
+    if output == "fields":
+        names = params.get("fields")
+        if isinstance(names, list) and names:
+            select_fields = [str(f) for f in names]
+            if resolve_outlook_download_attachments(params) and "hasAttachments" not in select_fields:
+                select_fields.append("hasAttachments")
+            qs["$select"] = ",".join(select_fields)
+    elif output == "simple":
+        qs["$select"] = SIMPLE_MESSAGE_SELECT
     data = await outlook_request(
-        context, token, mailbox_base, "GET", f"/messages/{mid}"
+        context, token, mailbox_base, "GET", message_resource_path(mid), query=qs or None
     )
     if not isinstance(data, dict):
         return {"data": data}
-    return format_message_output(data, params)  # type: ignore[return-value]
+    formatted = format_message_output(data, params)
+    if not resolve_outlook_download_attachments(params):
+        return formatted  # type: ignore[return-value]
+    prefix = attachments_prefix(params)
+    binary = await download_message_attachments(
+        context, token, mailbox_base, data, prefix=prefix
+    )
+    json_out = formatted if isinstance(formatted, dict) else {"data": formatted}
+    return ad.flows.FlowItem(json=json_out, binary=binary, meta={})
 
 
 async def _message_get_all(
@@ -286,21 +313,21 @@ async def _run_draft(
         if not did:
             raise ValueError("draftId is required")
         data = await outlook_request(
-            context, token, mailbox_base, "GET", f"/messages/{did}"
+            context, token, mailbox_base, "GET", message_resource_path(did)
         )
         return format_message_output(data, params) if isinstance(data, dict) else data
     if operation == "delete":
         did = param_str(params, "draftId") or param_str(params, "messageId")
         if not did:
             raise ValueError("draftId is required")
-        await outlook_request(context, token, mailbox_base, "DELETE", f"/messages/{did}")
+        await outlook_request(context, token, mailbox_base, "DELETE", message_resource_path(did))
         return {"success": True, "id": did}
     if operation == "send":
         did = param_str(params, "draftId") or param_str(params, "messageId")
         if not did:
             raise ValueError("draftId is required")
         await outlook_request(
-            context, token, mailbox_base, "POST", f"/messages/{did}/send"
+            context, token, mailbox_base, "POST", message_resource_path(did, "/send")
         )
         return {"success": True}
     if operation == "update":
@@ -310,7 +337,7 @@ async def _run_draft(
         fields = {**additional_fields(params)}
         message = create_message(fields)
         return await outlook_request(
-            context, token, mailbox_base, "PATCH", f"/messages/{did}", body=message
+            context, token, mailbox_base, "PATCH", message_resource_path(did), body=message
         )
     raise ValueError(f"Unsupported draft operation: {operation}")
 
@@ -538,7 +565,7 @@ async def _run_message_attachment(
             token,
             mailbox_base,
             "GET",
-            f"/messages/{mid}/attachments",
+            message_resource_path(mid, "/attachments"),
         )
         return {"attachments": rows, "count": len(rows)}
     if operation == "get":
@@ -550,7 +577,7 @@ async def _run_message_attachment(
             token,
             mailbox_base,
             "GET",
-            f"/messages/{mid}/attachments/{aid}",
+            message_resource_path(mid, f"/attachments/{graph_encode_id(aid)}"),
         )
     if operation == "add":
         prop = param_str(params, "binaryPropertyName", default="data")
@@ -568,7 +595,7 @@ async def _run_message_attachment(
             token,
             mailbox_base,
             "POST",
-            f"/messages/{mid}/attachments",
+            message_resource_path(mid, "/attachments"),
             body=body,
         )
     if operation == "download":
@@ -581,7 +608,7 @@ async def _run_message_attachment(
             token,
             mailbox_base,
             "GET",
-            f"/messages/{mid}/attachments/{aid}/$value",
+            message_resource_path(mid, f"/attachments/{graph_encode_id(aid)}/$value"),
             expect_json=False,
         )
         content = data if isinstance(data, bytes) else bytes(data)

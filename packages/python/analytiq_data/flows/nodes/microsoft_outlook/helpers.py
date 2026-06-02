@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+SIMPLE_MESSAGE_SELECT = (
+    "id,conversationId,subject,bodyPreview,from,toRecipients,categories,hasAttachments"
+)
+
+
 _VALID_OPS: dict[str, frozenset[str]] = {
     "message": frozenset(
         {"send", "get", "getAll", "delete", "move", "reply", "update"}
@@ -121,6 +126,83 @@ def simplify_messages(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def _odata_bool_literal(value: Any) -> bool | None:
+    """Parse UI / JSON values for OData boolean filters (``bool('false')`` is true in Python)."""
+
+    if value is None or value == "":
+        return None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)) and value in (0, 1):
+        return bool(value)
+    text = str(value).strip().lower()
+    if text in ("true", "1", "yes"):
+        return True
+    if text in ("false", "0", "no"):
+        return False
+    return bool(value)
+
+
+def _message_filter_parts(
+    selected: dict[str, Any],
+    *,
+    include_folders: bool = False,
+    include_received_window: bool = False,
+) -> list[str]:
+    parts: list[str] = []
+
+    if include_folders:
+        include = selected.get("foldersToInclude")
+        if isinstance(include, list) and include:
+            folder_exprs = [
+                f"parentFolderId eq '{str(f).replace(chr(39), chr(39) * 2)}'"
+                for f in include
+                if str(f).strip()
+            ]
+            if folder_exprs:
+                parts.append(f"({' or '.join(folder_exprs)})")
+        exclude = selected.get("foldersToExclude")
+        if isinstance(exclude, list):
+            for folder in exclude:
+                fid = str(folder).strip()
+                if fid:
+                    parts.append(f"parentFolderId ne '{fid.replace(chr(39), chr(39) * 2)}'")
+
+    if selected.get("sender"):
+        sender = str(selected["sender"]).replace("'", "''")
+        parts.append(
+            f"(from/emailAddress/address eq '{sender}' or from/emailAddress/name eq '{sender}')"
+        )
+
+    read_status = selected.get("readStatus")
+    if read_status and read_status != "both":
+        parts.append(f"isRead eq {str(read_status == 'read').lower()}")
+
+    has_att = _odata_bool_literal(selected.get("hasAttachments"))
+    if has_att is not None:
+        parts.append(f"hasAttachments eq {str(has_att).lower()}")
+
+    if include_received_window:
+        if selected.get("receivedAfter"):
+            parts.append(f"receivedDateTime ge {selected['receivedAfter']}")
+        if selected.get("receivedBefore"):
+            parts.append(f"receivedDateTime le {selected['receivedBefore']}")
+
+    if selected.get("custom"):
+        parts.append(str(selected["custom"]))
+
+    return parts
+
+
+def prepare_trigger_filters(filters: Any) -> str | None:
+    """OData ``$filter`` from trigger ``filters`` object (n8n ``MessageDescription``)."""
+
+    if not isinstance(filters, dict):
+        return None
+    parts = _message_filter_parts(filters, include_folders=True)
+    return " and ".join(parts) if parts else None
+
+
 def prepare_filter_string(filters_ui: Any) -> str | None:
     if not isinstance(filters_ui, dict):
         return None
@@ -136,23 +218,7 @@ def prepare_filter_string(filters_ui: Any) -> str | None:
     if not isinstance(selected, dict):
         selected = values
 
-    parts: list[str] = []
-    if selected.get("sender"):
-        sender = str(selected["sender"]).replace("'", "''")
-        parts.append(
-            f"(from/emailAddress/address eq '{sender}' or from/emailAddress/name eq '{sender}')"
-        )
-    read_status = selected.get("readStatus")
-    if read_status and read_status != "both":
-        parts.append(f"isRead eq {str(read_status == 'read').lower()}")
-    if selected.get("hasAttachments") is not None:
-        parts.append(f"hasAttachments eq {str(bool(selected['hasAttachments'])).lower()}")
-    if selected.get("receivedAfter"):
-        parts.append(f"receivedDateTime ge {selected['receivedAfter']}")
-    if selected.get("receivedBefore"):
-        parts.append(f"receivedDateTime le {selected['receivedBefore']}")
-    if selected.get("custom"):
-        parts.append(str(selected["custom"]))
+    parts = _message_filter_parts(selected, include_received_window=True)
     return " and ".join(parts) if parts else None
 
 
@@ -175,6 +241,16 @@ def list_query(params: dict[str, Any]) -> dict[str, Any]:
             if filt:
                 qs["$filter"] = filt
     return qs
+
+
+def message_resource_path(message_id: str, suffix: str = "") -> str:
+    """``/messages/{encoded-id}{suffix}`` for Graph message sub-resources."""
+
+    from analytiq_data.flows.integrations.microsoft.graph_api import graph_encode_id
+
+    if suffix and not suffix.startswith("/"):
+        suffix = f"/{suffix}"
+    return f"/messages/{graph_encode_id(message_id)}{suffix}"
 
 
 def format_message_output(

@@ -32,6 +32,14 @@ def graph_mailbox_base_url(credential_fields: dict[str, Any]) -> str:
     return GRAPH_ME
 
 
+def graph_encode_id(resource_id: str) -> str:
+    """Percent-encode Graph resource ids (message/attachment ids often end with ``=``)."""
+
+    from urllib.parse import quote
+
+    return quote(str(resource_id), safe="")
+
+
 def graph_url_for_path(path: str, *, mailbox_base: str | None = None) -> str:
     base = (mailbox_base or GRAPH_ME).rstrip("/")
     suffix = path if path.startswith("/") else f"/{path}"

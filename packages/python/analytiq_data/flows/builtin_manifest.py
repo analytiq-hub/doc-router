@@ -25,6 +25,7 @@ BUILTIN_MANIFEST_RELPATHS: tuple[str, ...] = (
     "nodes/microsoft_onedrive/node.manifest.json",
     "nodes/microsoft_onedrive/trigger.manifest.json",
     "nodes/microsoft_outlook/node.manifest.json",
+    "nodes/microsoft_outlook/trigger.manifest.json",
 )
 
 

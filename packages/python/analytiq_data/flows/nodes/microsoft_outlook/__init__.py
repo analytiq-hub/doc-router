@@ -1,5 +1,6 @@
-"""Microsoft Outlook flow node."""
+"""Microsoft Outlook flow nodes."""
 
 from .node import FlowsMicrosoftOutlookNode
+from .trigger import FlowsMicrosoftOutlookTriggerNode
 
-__all__ = ["FlowsMicrosoftOutlookNode"]
+__all__ = ["FlowsMicrosoftOutlookNode", "FlowsMicrosoftOutlookTriggerNode"]

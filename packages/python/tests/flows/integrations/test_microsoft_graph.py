@@ -8,6 +8,7 @@ from analytiq_data.flows.integrations.microsoft import (
 )
 from analytiq_data.flows.integrations.microsoft.graph_api import (
     _graph_error_message_from_body,
+    graph_encode_id,
 )
 
 
@@ -27,6 +28,10 @@ def test_format_graph_user_error_prefers_hint() -> None:
     )
     msg = format_graph_user_error(exc)
     assert "SharePoint Online" in msg
+
+
+def test_graph_encode_id() -> None:
+    assert graph_encode_id("abc=def") == "abc%3Ddef"
 
 
 def test_normalize_drive_item_id_from_url() -> None:
