@@ -27,6 +27,12 @@
       "authentication": {
         "type": "string",
         "default": "body"
+      },
+      "signInEmail": {
+        "title": "Sign-in email (optional)",
+        "type": "string",
+        "description": "Microsoft account to pre-select when connecting (login_hint), e.g. user@tenant.onmicrosoft.com",
+        "default": ""
       }
     },
     "required": []

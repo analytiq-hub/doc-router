@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from pymongo.errors import DuplicateKeyError
 from jsonschema import Draft7Validator
 from pydantic import BaseModel
@@ -144,6 +144,12 @@ def _kind_supports_oauth_browser_flow(kind: dict[str, Any]) -> bool:
         if gt.get("default") in ("authorizationCode", "pkce"):
             return True
     return False
+
+
+class OAuthInitiateRequest(BaseModel):
+    """Optional body for browser OAuth initiate (popup matches n8n credential connect UX)."""
+
+    popup: bool = True
 
 
 class OAuthInitiateResponse(BaseModel):
@@ -570,15 +576,19 @@ async def test_credential(
 async def oauth_initiate_flow_credential(
     organization_id: str,
     credential_id: str,
+    body: OAuthInitiateRequest | None = None,
     current_user: User = Depends(get_org_user),
 ) -> OAuthInitiateResponse:
     from analytiq_data.flows.credential_runtime import (
         build_oauth_authorization_url,
         generate_pkce_code_verifier,
         pkce_code_challenge_s256,
+        refresh_product_oauth_scope_from_kind_defaults,
         require_resolved_oauth_scope,
         store_flow_oauth_authorization_state,
     )
+
+    popup = body.popup if body is not None else True
 
     db = ad.common.get_async_db()
     try:
@@ -607,6 +617,7 @@ async def oauth_initiate_flow_credential(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Decrypt failed: {e}") from None
 
+    fields = refresh_product_oauth_scope_from_kind_defaults(kind, fields)
     fields = apply_credential_kind_defaults(kind, fields)
 
     gt = str(fields.get("grantType") or "authorizationCode")
@@ -644,6 +655,7 @@ async def oauth_initiate_flow_credential(
             user_id=current_user.user_id,
             oauth_grant_type=gt,
             pkce_verifier=pkce_verifier,
+            ui_mode="popup" if popup else None,
         )
         url = build_oauth_authorization_url(
             fields, state_nonce, pkce_code_challenge=pkce_challenge
@@ -660,17 +672,27 @@ async def flow_oauth_callback(
     state: str | None = Query(None),
     error: str | None = Query(None),
     error_description: str | None = Query(None),
-) -> RedirectResponse:
+):
     from analytiq_data.flows.credential_runtime import (
         consume_flow_oauth_authorization_state,
         exchange_authorization_code,
+        oauth_callback_popup_html,
         oauth_callback_redirect_error,
         oauth_callback_redirect_error_generic,
         oauth_callback_redirect_success,
     )
 
+    def _popup_mode(row: dict[str, Any] | None) -> bool:
+        return bool(row and str(row.get("ui_mode") or "") == "popup")
+
+    def _popup_fail() -> HTMLResponse:
+        return HTMLResponse(oauth_callback_popup_html(success=False))
+
     if error or error_description:
         msg = (error_description or error or "oauth_error").strip()
+        pending_err = await consume_flow_oauth_authorization_state(state) if state else None
+        if _popup_mode(pending_err):
+            return HTMLResponse(oauth_callback_popup_html(success=False))
         return RedirectResponse(oauth_callback_redirect_error_generic(msg))
 
     if not code or not state:
@@ -682,9 +704,13 @@ async def flow_oauth_callback(
             oauth_callback_redirect_error_generic("invalid_or_expired_oauth_state")
         )
 
+    use_popup = _popup_mode(pending)
+
     org_id = str(pending.get("organization_id") or "")
     cred_id = str(pending.get("credential_id") or "")
     if not org_id or not cred_id:
+        if use_popup:
+            return HTMLResponse(oauth_callback_popup_html(success=False))
         return RedirectResponse(
             oauth_callback_redirect_error_generic("invalid_oauth_state_payload")
         )
@@ -693,12 +719,16 @@ async def flow_oauth_callback(
     try:
         oid = ObjectId(cred_id)
     except Exception:
+        if use_popup:
+            return _popup_fail()
         return RedirectResponse(
             oauth_callback_redirect_error(org_id, "invalid credential", credential_id=cred_id)
         )
 
     doc = await db.credentials.find_one({"_id": oid, "organization_id": org_id})
     if not doc:
+        if use_popup:
+            return _popup_fail()
         return RedirectResponse(
             oauth_callback_redirect_error(
                 org_id, "credential_not_found", credential_id=cred_id
@@ -708,6 +738,8 @@ async def flow_oauth_callback(
     try:
         kind = ad.flows.get_credential_kind(doc["kind_key"])
     except KeyError:
+        if use_popup:
+            return _popup_fail()
         return RedirectResponse(
             oauth_callback_redirect_error(org_id, "unknown_kind", credential_id=cred_id)
         )
@@ -718,6 +750,8 @@ async def flow_oauth_callback(
         if not isinstance(fields, dict):
             fields = {}
     except Exception as e:
+        if use_popup:
+            return _popup_fail()
         return RedirectResponse(
             oauth_callback_redirect_error(org_id, f"decrypt: {e}", credential_id=cred_id)
         )
@@ -734,6 +768,8 @@ async def flow_oauth_callback(
         grant_type_from_pending = "authorizationCode"
 
     if grant_type_from_pending == "pkce" and not pkce_verifier_from_store:
+        if use_popup:
+            return _popup_fail()
         return RedirectResponse(
             oauth_callback_redirect_error(
                 org_id,
@@ -752,8 +788,12 @@ async def flow_oauth_callback(
         )
     except Exception as e:
         logger.warning("oauth token exchange failed: %s", e)
+        if use_popup:
+            return HTMLResponse(oauth_callback_popup_html(success=False))
         return RedirectResponse(
             oauth_callback_redirect_error(org_id, str(e), credential_id=cred_id)
         )
 
+    if use_popup:
+        return HTMLResponse(oauth_callback_popup_html(success=True))
     return RedirectResponse(oauth_callback_redirect_success(org_id, cred_id))

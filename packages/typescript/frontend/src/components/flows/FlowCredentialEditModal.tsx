@@ -218,8 +218,35 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
         }
       }
       await onSaved(result);
-      const { authorization_url } = await api.initiateFlowOAuthConnect(id);
-      window.location.href = authorization_url;
+      const { authorization_url } = await api.initiateFlowOAuthConnect(id, { popup: true });
+      const params =
+        'scrollbars=no,resizable=yes,status=no,location=no,toolbar=no,menubar=no,width=520,height=720';
+      const oauthPopup = window.open(authorization_url, 'OAuth Authorization', params);
+      if (!oauthPopup) {
+        onError('Allow pop-ups for this site to connect with Microsoft/Google OAuth.');
+        setOauthConnectLoading(false);
+        return;
+      }
+      const oauthChannel = new BroadcastChannel('flow-oauth-callback');
+      const onOAuthMessage = (event: MessageEvent) => {
+        oauthChannel.removeEventListener('message', onOAuthMessage);
+        setOauthConnectLoading(false);
+        try {
+          oauthPopup.close();
+        } catch {
+          /* ignore */
+        }
+        if (event.data === 'success') {
+          onError('');
+          void (async () => {
+            const refreshed = await api.getFlowCredential(id);
+            await onSaved(refreshed);
+          })();
+        } else {
+          onError('OAuth connection failed. Use the correct Microsoft work account and try again.');
+        }
+      };
+      oauthChannel.addEventListener('message', onOAuthMessage);
     } catch (err) {
       onError(getApiErrorMsg(err) || 'Could not start OAuth');
       setOauthConnectLoading(false);
@@ -751,7 +778,7 @@ function OAuthConnectBanner({
           disabled={loading}
           onClick={onConnect}
         >
-          {loading ? 'Redirecting…' : 'Reconnect'}
+          {loading ? 'Connecting…' : 'Reconnect'}
         </button>
       </div>
     );
@@ -770,7 +797,7 @@ function OAuthConnectBanner({
           disabled={loading}
           onClick={onConnect}
         >
-          {loading ? 'Redirecting…' : connectNeedsSave ? 'Save and connect' : 'Connect with provider'}
+          {loading ? 'Connecting…' : connectNeedsSave ? 'Save and connect' : 'Connect with provider'}
         </button>
       </div>
     </div>

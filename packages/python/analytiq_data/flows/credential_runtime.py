@@ -70,6 +70,40 @@ def _fields_use_microsoft_entra_oauth(fields: dict[str, Any]) -> bool:
     return bool(auth_url) and _is_entra_host(auth_url)
 
 
+def _microsoft_oauth_authorize_hint_params(fields: dict[str, Any]) -> dict[str, str]:
+    """Optional Entra authorize query params (n8n does not set these; we add hints when UPN is saved)."""
+
+    if not _fields_use_microsoft_entra_oauth(fields):
+        return {}
+    email = str(fields.get("signInEmail") or "").strip()
+    if not email:
+        email = str(fields.get("userPrincipalName") or "").strip()
+    if not email:
+        return {}
+    hints: dict[str, str] = {"login_hint": email}
+    if "@" in email:
+        hints["domain_hint"] = email.split("@", 1)[1].strip()
+    return hints
+
+
+def refresh_product_oauth_scope_from_kind_defaults(
+    kind: dict[str, Any], fields: dict[str, Any]
+) -> dict[str, Any]:
+    """Drop stored ``scope`` so kind defaults apply on reconnect (matches n8n ``getAuthUri``)."""
+
+    kind_key = str(kind.get("key") or "")
+    if kind_key == "oAuth2Api":
+        return fields
+    if "oauth2" not in str(kind.get("auth_mode") or "").lower():
+        return fields
+    props = (kind.get("secret_schema") or {}).get("properties") or {}
+    if "scope" not in props:
+        return fields
+    out = dict(fields)
+    out.pop("scope", None)
+    return out
+
+
 def _kind_uses_microsoft_entra_oauth(kind: dict[str, Any]) -> bool:
     if str(kind.get("key") or "").startswith("microsoft"):
         return True
@@ -143,6 +177,7 @@ async def store_flow_oauth_authorization_state(
     user_id: str,
     oauth_grant_type: str,
     pkce_verifier: str | None = None,
+    ui_mode: str | None = None,
     ttl_seconds: int = 900,
 ) -> str:
     """Store OAuth redirect context server-side; return opaque ``state`` for the authorize URL.
@@ -169,6 +204,8 @@ async def store_flow_oauth_authorization_state(
             "pkce_verifier": pkce_verifier,
             "expires_at": expires_at,
         }
+        if ui_mode:
+            doc["ui_mode"] = ui_mode
         try:
             await coll.insert_one(doc)
             return nonce
@@ -668,6 +705,27 @@ def oauth_callback_redirect_error_generic(message: str) -> str:
     return f"{base}/?flow_oauth=error&flow_oauth_detail={quote(message[:300])}"
 
 
+def oauth_callback_popup_html(*, success: bool) -> str:
+    """Minimal page for popup OAuth (BroadcastChannel, same channel name pattern as n8n)."""
+
+    status = "success" if success else "error"
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>OAuth</title></head>
+<body>
+<p>{"Connected." if success else "Connection failed."} You can close this window.</p>
+<script>
+(function () {{
+  try {{
+    var ch = new BroadcastChannel('flow-oauth-callback');
+    ch.postMessage({json.dumps(status)});
+  }} catch (e) {{}}
+}})();
+</script>
+</body>
+</html>"""
+
+
 def resolve_credential_scope(fields: dict[str, Any]) -> str:
     """Substitute ``{{field}}`` / ``{{$self.field}}`` placeholders in OAuth scope strings."""
 
@@ -769,6 +827,9 @@ def build_oauth_authorization_url(
     scope = resolve_credential_scope(fields)
     if scope:
         merged["scope"] = scope
+
+    for hint_key, hint_val in _microsoft_oauth_authorize_hint_params(fields).items():
+        merged[hint_key] = hint_val
 
     new_query = urlencode(merged)
     return urlunparse(

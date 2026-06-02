@@ -69,6 +69,44 @@ def test_flow_oauth_redirect_uri_microsoft_maps_127_to_localhost(
     )
 
 
+def test_build_oauth_authorization_url_microsoft_login_hint_from_sign_in_email() -> None:
+    fields = {
+        "authUrl": "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "clientId": "cid",
+        "signInEmail": "andrei@docrouter.onmicrosoft.com",
+    }
+    url = build_oauth_authorization_url(fields, "state-xyz")
+    q = parse_qs(urlparse(url).query)
+    assert q["login_hint"] == ["andrei@docrouter.onmicrosoft.com"]
+    assert q["domain_hint"] == ["docrouter.onmicrosoft.com"]
+
+
+def test_refresh_product_oauth_scope_from_kind_defaults_clears_stale_scope() -> None:
+    from analytiq_data.flows.credential_fields import apply_credential_kind_defaults
+    from analytiq_data.flows.credential_kind_registry import (
+        _credential_kinds_bundle,
+        get_credential_kind,
+    )
+    from analytiq_data.flows.credential_runtime import (
+        refresh_product_oauth_scope_from_kind_defaults,
+    )
+
+    _credential_kinds_bundle.cache_clear()
+    try:
+        kind = get_credential_kind("microsoftOutlookOAuth2Api")
+        fields = {
+            "clientId": "cid",
+            "clientSecret": "sec",
+            "scope": "openid offline_access Mail.Read",
+        }
+        refreshed = refresh_product_oauth_scope_from_kind_defaults(kind, fields)
+        assert "scope" not in refreshed
+        with_defaults = apply_credential_kind_defaults(kind, refreshed)
+        assert "Mail.ReadWrite" in (with_defaults.get("scope") or "")
+    finally:
+        _credential_kinds_bundle.cache_clear()
+
+
 def test_build_oauth_authorization_url_microsoft_uses_localhost_redirect(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -991,10 +991,13 @@ export class DocRouterOrg {
   }
 
   /** OAuth2 authorization-code: returns provider URL to redirect the browser to. */
-  async initiateFlowOAuthConnect(credentialId: string): Promise<{ authorization_url: string }> {
+  async initiateFlowOAuthConnect(
+    credentialId: string,
+    options?: { popup?: boolean },
+  ): Promise<{ authorization_url: string }> {
     return this.http.post<{ authorization_url: string }>(
       `/v0/orgs/${this.organizationId}/credentials/${credentialId}/oauth/initiate`,
-      {},
+      { popup: options?.popup ?? true },
     );
   }
 

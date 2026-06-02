@@ -19,8 +19,12 @@
       "userPrincipalName": {
         "title": "User Principal Name",
         "type": "string",
-        "description": "Target user's UPN or ID",
-        "default": ""
+        "description": "Target user's UPN or ID for shared mailbox Graph calls",
+        "default": "",
+        "x-ui-show-when": {
+          "field": "useShared",
+          "equals": true
+        }
       }
     },
     "required": []
