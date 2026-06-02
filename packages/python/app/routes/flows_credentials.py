@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import RedirectResponse
 from pymongo.errors import DuplicateKeyError
 from jsonschema import Draft7Validator
 from pydantic import BaseModel
@@ -676,7 +676,7 @@ async def flow_oauth_callback(
     from analytiq_data.flows.credential_runtime import (
         consume_flow_oauth_authorization_state,
         exchange_authorization_code,
-        oauth_callback_popup_html,
+        oauth_callback_popup_redirect,
         oauth_callback_redirect_error,
         oauth_callback_redirect_error_generic,
         oauth_callback_redirect_success,
@@ -685,14 +685,14 @@ async def flow_oauth_callback(
     def _popup_mode(row: dict[str, Any] | None) -> bool:
         return bool(row and str(row.get("ui_mode") or "") == "popup")
 
-    def _popup_fail() -> HTMLResponse:
-        return HTMLResponse(oauth_callback_popup_html(success=False))
+    def _popup_redirect(*, success: bool) -> RedirectResponse:
+        return RedirectResponse(oauth_callback_popup_redirect(success=success))
 
     if error or error_description:
         msg = (error_description or error or "oauth_error").strip()
         pending_err = await consume_flow_oauth_authorization_state(state) if state else None
         if _popup_mode(pending_err):
-            return HTMLResponse(oauth_callback_popup_html(success=False))
+            return _popup_redirect(success=False)
         return RedirectResponse(oauth_callback_redirect_error_generic(msg))
 
     if not code or not state:
@@ -710,7 +710,7 @@ async def flow_oauth_callback(
     cred_id = str(pending.get("credential_id") or "")
     if not org_id or not cred_id:
         if use_popup:
-            return HTMLResponse(oauth_callback_popup_html(success=False))
+            return _popup_redirect(success=False)
         return RedirectResponse(
             oauth_callback_redirect_error_generic("invalid_oauth_state_payload")
         )
@@ -720,7 +720,7 @@ async def flow_oauth_callback(
         oid = ObjectId(cred_id)
     except Exception:
         if use_popup:
-            return _popup_fail()
+            return _popup_redirect(success=False)
         return RedirectResponse(
             oauth_callback_redirect_error(org_id, "invalid credential", credential_id=cred_id)
         )
@@ -728,7 +728,7 @@ async def flow_oauth_callback(
     doc = await db.credentials.find_one({"_id": oid, "organization_id": org_id})
     if not doc:
         if use_popup:
-            return _popup_fail()
+            return _popup_redirect(success=False)
         return RedirectResponse(
             oauth_callback_redirect_error(
                 org_id, "credential_not_found", credential_id=cred_id
@@ -739,7 +739,7 @@ async def flow_oauth_callback(
         kind = ad.flows.get_credential_kind(doc["kind_key"])
     except KeyError:
         if use_popup:
-            return _popup_fail()
+            return _popup_redirect(success=False)
         return RedirectResponse(
             oauth_callback_redirect_error(org_id, "unknown_kind", credential_id=cred_id)
         )
@@ -751,7 +751,7 @@ async def flow_oauth_callback(
             fields = {}
     except Exception as e:
         if use_popup:
-            return _popup_fail()
+            return _popup_redirect(success=False)
         return RedirectResponse(
             oauth_callback_redirect_error(org_id, f"decrypt: {e}", credential_id=cred_id)
         )
@@ -769,7 +769,7 @@ async def flow_oauth_callback(
 
     if grant_type_from_pending == "pkce" and not pkce_verifier_from_store:
         if use_popup:
-            return _popup_fail()
+            return _popup_redirect(success=False)
         return RedirectResponse(
             oauth_callback_redirect_error(
                 org_id,
@@ -789,11 +789,11 @@ async def flow_oauth_callback(
     except Exception as e:
         logger.warning("oauth token exchange failed: %s", e)
         if use_popup:
-            return HTMLResponse(oauth_callback_popup_html(success=False))
+            return _popup_redirect(success=False)
         return RedirectResponse(
             oauth_callback_redirect_error(org_id, str(e), credential_id=cred_id)
         )
 
     if use_popup:
-        return HTMLResponse(oauth_callback_popup_html(success=True))
+        return _popup_redirect(success=True)
     return RedirectResponse(oauth_callback_redirect_success(org_id, cred_id))

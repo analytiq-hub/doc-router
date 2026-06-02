@@ -705,25 +705,14 @@ def oauth_callback_redirect_error_generic(message: str) -> str:
     return f"{base}/?flow_oauth=error&flow_oauth_detail={quote(message[:300])}"
 
 
-def oauth_callback_popup_html(*, success: bool) -> str:
-    """Minimal page for popup OAuth (BroadcastChannel, same channel name pattern as n8n)."""
+def oauth_callback_popup_redirect(*, success: bool) -> str:
+    """Redirect popup OAuth to the frontend page that notifies the opener and closes."""
 
+    from urllib.parse import urlencode
+
+    base = _NEXTAUTH_URL.rstrip("/")
     status = "success" if success else "error"
-    return f"""<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="utf-8"><title>OAuth</title></head>
-<body>
-<p>{"Connected." if success else "Connection failed."} You can close this window.</p>
-<script>
-(function () {{
-  try {{
-    var ch = new BroadcastChannel('flow-oauth-callback');
-    ch.postMessage({json.dumps(status)});
-  }} catch (e) {{}}
-}})();
-</script>
-</body>
-</html>"""
+    return f"{base}/oauth/flow-callback?{urlencode({'status': status})}"
 
 
 def resolve_credential_scope(fields: dict[str, Any]) -> str:

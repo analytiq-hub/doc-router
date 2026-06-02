@@ -20,6 +20,7 @@ from analytiq_data.flows.credential_runtime import (
     flow_oauth_redirect_uri,
     flow_oauth_redirect_uri_for_fields,
     flow_oauth_redirect_uri_for_kind,
+    oauth_callback_popup_redirect,
     oauth_callback_redirect_success,
     decode_flow_oauth_state,
     encode_flow_oauth_state,
@@ -216,6 +217,15 @@ def test_build_oauth_authorization_url():
     assert "state=state-xyz" in url.replace("+", " ")
     assert "client_id=cid" in url
     assert url.count("response_type=") == 1
+
+
+def test_oauth_callback_popup_redirect_targets_frontend_page():
+    url = oauth_callback_popup_redirect(success=True)
+    parsed = urlparse(url)
+    assert parsed.path == "/oauth/flow-callback"
+    assert parse_qs(parsed.query)["status"] == ["success"]
+    err = oauth_callback_popup_redirect(success=False)
+    assert parse_qs(urlparse(err).query)["status"] == ["error"]
 
 
 def test_oauth_callback_redirect_success_includes_credential_id():

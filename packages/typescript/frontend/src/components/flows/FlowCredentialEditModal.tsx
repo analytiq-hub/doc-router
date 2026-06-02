@@ -227,26 +227,78 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
         setOauthConnectLoading(false);
         return;
       }
+      const wasConnectedAtStart = secretFieldsSet.has('oauthAccessToken');
       const oauthChannel = new BroadcastChannel('flow-oauth-callback');
-      const onOAuthMessage = (event: MessageEvent) => {
+      let settled = false;
+      let pollTimer: ReturnType<typeof setInterval> | undefined;
+
+      const stopWaiting = () => {
+        if (pollTimer !== undefined) {
+          clearInterval(pollTimer);
+          pollTimer = undefined;
+        }
         oauthChannel.removeEventListener('message', onOAuthMessage);
         setOauthConnectLoading(false);
+      };
+
+      const refreshCredentialRow = async () => {
+        const refreshed = await api.getFlowCredential(id);
+        await onSaved(refreshed);
+        return refreshed;
+      };
+
+      const settle = (success: boolean) => {
+        if (settled) return;
+        settled = true;
+        stopWaiting();
         try {
           oauthPopup.close();
         } catch {
           /* ignore */
         }
-        if (event.data === 'success') {
-          onError('');
-          void (async () => {
-            const refreshed = await api.getFlowCredential(id);
-            await onSaved(refreshed);
-          })();
-        } else {
-          onError('OAuth connection failed. Use the correct Microsoft work account and try again.');
-        }
+        void (async () => {
+          try {
+            if (success) {
+              onError('');
+              await refreshCredentialRow();
+              return;
+            }
+            onError(
+              'OAuth connection failed. Use the correct Microsoft work account and try again.',
+            );
+          } catch {
+            onError('OAuth finished but the credential could not be refreshed.');
+          }
+        })();
+      };
+
+      const onOAuthMessage = (event: MessageEvent) => {
+        settle(event.data === 'success');
       };
       oauthChannel.addEventListener('message', onOAuthMessage);
+
+      pollTimer = setInterval(() => {
+        if (!oauthPopup.closed) return;
+        void (async () => {
+          if (settled) {
+            stopWaiting();
+            return;
+          }
+          try {
+            const refreshed = await refreshCredentialRow();
+            const nowConnected = refreshed.secret_fields_set?.includes('oauthAccessToken');
+            if (!wasConnectedAtStart && nowConnected) {
+              settled = true;
+              onError('');
+              stopWaiting();
+              return;
+            }
+          } catch {
+            /* ignore */
+          }
+          stopWaiting();
+        })();
+      }, 400);
     } catch (err) {
       onError(getApiErrorMsg(err) || 'Could not start OAuth');
       setOauthConnectLoading(false);
@@ -778,7 +830,7 @@ function OAuthConnectBanner({
           disabled={loading}
           onClick={onConnect}
         >
-          {loading ? 'Connecting…' : 'Reconnect'}
+          {loading ? 'Reconnecting…' : 'Reconnect'}
         </button>
       </div>
     );
