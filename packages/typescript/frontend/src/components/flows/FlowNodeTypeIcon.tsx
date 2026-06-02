@@ -8,7 +8,6 @@ import {
   CursorArrowRaysIcon,
   DocumentMagnifyingGlassIcon,
   DocumentTextIcon,
-  EnvelopeIcon,
   GlobeAltIcon,
   SparklesIcon,
   Square2StackIcon,
@@ -18,6 +17,7 @@ import {
 import { GmailIcon } from './icons/GmailIcon';
 import { GoogleDriveIcon } from './icons/GoogleDriveIcon';
 import { MicrosoftOneDriveIcon } from './icons/MicrosoftOneDriveIcon';
+import { MicrosoftOutlookIcon } from './icons/MicrosoftOutlookIcon';
 
 /** Preset strings returned by `GET .../flows/node-types` for built-in nodes; UI maps to bundled icons. */
 export const FLOW_BUILTIN_ICON_KEYS = [
@@ -85,7 +85,7 @@ export function FlowNodeTypeIcon({
       case 'microsoft_onedrive':
         return <MicrosoftOneDriveIcon className={className} />;
       case 'microsoft_outlook':
-        return <EnvelopeIcon className={className} aria-hidden={ariaHidden} />;
+        return <MicrosoftOutlookIcon className={className} />;
       case 'schedule_trigger':
         return <ClockIcon className={className} aria-hidden={ariaHidden} />;
       default:
