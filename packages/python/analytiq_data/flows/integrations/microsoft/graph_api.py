@@ -15,8 +15,27 @@ if TYPE_CHECKING:
     from analytiq_data.flows.context import ExecutionContext
 
 GRAPH_ME = "https://graph.microsoft.com/v1.0/me"
+GRAPH_ROOT = "https://graph.microsoft.com/v1.0"
 GRAPH_DRIVE_DELTA_LATEST = f"{GRAPH_ME}/drive/root/delta?token=latest"
 GRAPH_DRIVE_DELTA_ROOT = f"{GRAPH_ME}/drive/root/delta"
+
+
+def graph_mailbox_base_url(credential_fields: dict[str, Any]) -> str:
+    """``/me`` or ``/users/{upn}`` for Outlook shared mailbox credentials."""
+
+    use_shared = credential_fields.get("useShared") in (True, "true", "True", 1, "1")
+    upn = str(credential_fields.get("userPrincipalName") or "").strip()
+    if use_shared and upn:
+        from urllib.parse import quote
+
+        return f"{GRAPH_ROOT}/users/{quote(upn, safe='')}"
+    return GRAPH_ME
+
+
+def graph_url_for_path(path: str, *, mailbox_base: str | None = None) -> str:
+    base = (mailbox_base or GRAPH_ME).rstrip("/")
+    suffix = path if path.startswith("/") else f"/{path}"
+    return f"{base}{suffix}"
 
 
 class MicrosoftGraphApiError(RuntimeError):
@@ -100,13 +119,14 @@ async def graph_request(
     body: Any = None,
     query: dict[str, Any] | None = None,
     url: str | None = None,
+    mailbox_base: str | None = None,
     headers: dict[str, str] | None = None,
     expect_json: bool = True,
     context: ExecutionContext | None = None,
     trace_node_id: str | None = None,
 ) -> Any:
     qs = {k: v for k, v in (query or {}).items() if v is not None and v != ""}
-    req_url = url if url else f"{GRAPH_ME}{path}"
+    req_url = url if url else graph_url_for_path(path, mailbox_base=mailbox_base)
     hdrs: dict[str, str] = {"Authorization": f"Bearer {token}"}
     if headers:
         hdrs.update(headers)
@@ -167,12 +187,13 @@ async def graph_request_with_response(
     body: Any = None,
     query: dict[str, Any] | None = None,
     url: str | None = None,
+    mailbox_base: str | None = None,
     headers: dict[str, str] | None = None,
     context: ExecutionContext | None = None,
     trace_node_id: str | None = None,
 ) -> httpx.Response:
     qs = {k: v for k, v in (query or {}).items() if v is not None and v != ""}
-    req_url = url if url else f"{GRAPH_ME}{path}"
+    req_url = url if url else graph_url_for_path(path, mailbox_base=mailbox_base)
     hdrs: dict[str, str] = {"Authorization": f"Bearer {token}"}
     if headers:
         hdrs.update(headers)
@@ -230,6 +251,7 @@ async def graph_request_all_items(
     property_name: str = "value",
     body: Any = None,
     query: dict[str, Any] | None = None,
+    mailbox_base: str | None = None,
     trace_node_id: str | None = None,
 ) -> list[dict[str, Any]]:
     qs = dict(query or {})
@@ -255,6 +277,7 @@ async def graph_request_all_items(
                 path,
                 body=body,
                 query=qs,
+                mailbox_base=mailbox_base,
                 context=context,
                 trace_node_id=trace_node_id,
             )

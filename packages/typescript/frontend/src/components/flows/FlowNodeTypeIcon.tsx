@@ -8,6 +8,7 @@ import {
   CursorArrowRaysIcon,
   DocumentMagnifyingGlassIcon,
   DocumentTextIcon,
+  EnvelopeIcon,
   GlobeAltIcon,
   SparklesIcon,
   Square2StackIcon,
@@ -33,6 +34,7 @@ export const FLOW_BUILTIN_ICON_KEYS = [
   'google_drive',
   'gmail',
   'microsoft_onedrive',
+  'microsoft_outlook',
   'schedule_trigger',
 ] as const;
 
@@ -82,6 +84,8 @@ export function FlowNodeTypeIcon({
         return <GmailIcon className={className} />;
       case 'microsoft_onedrive':
         return <MicrosoftOneDriveIcon className={className} />;
+      case 'microsoft_outlook':
+        return <EnvelopeIcon className={className} aria-hidden={ariaHidden} />;
       case 'schedule_trigger':
         return <ClockIcon className={className} aria-hidden={ariaHidden} />;
       default:
