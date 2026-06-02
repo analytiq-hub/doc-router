@@ -1,0 +1,94 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "event": {
+      "type": "string",
+      "enum": ["messageReceived"],
+      "default": "messageReceived",
+      "title": "Trigger On",
+      "x-ui-enum-names": ["Message Received"]
+    },
+    "output": {
+      "type": "string",
+      "enum": ["simple", "raw", "fields"],
+      "default": "simple",
+      "title": "Output",
+      "description": "Simplified: metadata only, no binaries. Raw: full message plus downloaded attachments (attachment_0, …).",
+      "x-ui-enum-names": ["Simplified", "Raw", "Select Included Fields"]
+    },
+    "fields": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": [],
+      "title": "Fields",
+      "description": "Graph message fields when output is Select Included Fields.",
+      "x-ui-show-when": {
+        "field": "output",
+        "equals": "fields"
+      }
+    },
+    "filters": {
+      "type": "object",
+      "default": { "readStatus": "unread" },
+      "title": "Filters",
+      "description": "OData filters: custom (Graph filter query), readStatus (unread/read/both), sender, hasAttachments, foldersToInclude, foldersToExclude (folder IDs)."
+    },
+    "downloadAttachments": {
+      "type": "boolean",
+      "default": false,
+      "title": "Download Attachments",
+      "description": "Only used when output is Select Included Fields.",
+      "x-ui-show-when": {
+        "field": "output",
+        "equals": "fields"
+      }
+    },
+    "attachmentsPrefix": {
+      "type": "string",
+      "default": "attachment_",
+      "title": "Attachments Prefix",
+      "x-ui-show-when-any": [
+        { "field": "output", "equals": "raw" },
+        { "field": "output", "equals": "fields" }
+      ]
+    },
+    "options": {
+      "type": "object",
+      "default": {},
+      "title": "Options",
+      "x-ui-hidden": true,
+      "additionalProperties": true,
+      "description": "Legacy n8n bucket; use top-level downloadAttachments and attachmentsPrefix."
+    },
+    "poll_times": {
+      "type": "object",
+      "title": "Poll times",
+      "description": "Platform-managed poll schedule (minimum interval: every minute).",
+      "default": { "item": [{ "mode": "everyMinute" }] },
+      "x-ui-hidden": true,
+      "properties": {
+        "item": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["everyMinute", "everyHour", "everyDay", "custom"],
+                "default": "everyMinute"
+              },
+              "cronExpression": {
+                "type": "string",
+                "default": "* * * * *"
+              }
+            },
+            "required": ["mode"]
+          }
+        }
+      },
+      "required": ["item"]
+    }
+  }
+}

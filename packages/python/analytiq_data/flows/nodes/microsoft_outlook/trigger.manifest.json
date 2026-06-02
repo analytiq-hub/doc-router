@@ -1,0 +1,35 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "flows.trigger.microsoft_outlook",
+  "type_version": 1,
+  "label": "Microsoft Outlook Trigger",
+  "description": "Starts the flow when Outlook messages match your filters. Uses receivedDateTime since the last poll (or the latest message in manual test).",
+  "category": "input",
+  "is_trigger": true,
+  "is_merge": false,
+  "min_inputs": 0,
+  "max_inputs": 0,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "microsoft_outlook",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.microsoft_outlook.trigger",
+    "class": "FlowsMicrosoftOutlookTriggerNode"
+  },
+  "palette_group": "trigger",
+  "polling": true,
+  "experimental": true,
+  "credential_slots": [
+    {
+      "slot": "microsoftOutlookOAuth2Api",
+      "label": "Credential to connect with",
+      "required": true,
+      "docrouter_binding": "organization_credential_kind:microsoftOutlookOAuth2Api"
+    }
+  ],
+  "parameter_schema_ref": "trigger.parameter.schema.json"
+}
