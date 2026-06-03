@@ -1,6 +1,7 @@
 import type { FlowNodeType, FlowRevision } from '../../src/types/flows';
 import {
   inputHandleCount,
+  prunePinDataToNodeIds,
   revisionContentFingerprint,
   revisionToRF,
   rfToConnections,
@@ -184,6 +185,18 @@ describe('flow-rf', () => {
     expect(fp1).toBe(fp2);
     const fp3 = revisionContentFingerprint('Other', nodes, edges, rev);
     expect(fp3).not.toBe(fp1);
+  });
+
+  it('rfToRevision drops pin_data for nodes not on the canvas', () => {
+    const manual = _node('M', 0, 0, 'tests.passthrough', 'M');
+    const rev = baseRev([manual], {});
+    rev.pin_data = { M: { main: [[]] }, gone: { main: [[]] } };
+    const byKey = { 'tests.passthrough': simpleNodeType };
+    const { nodes, edges } = revisionToRF(rev, byKey);
+    const out = rfToRevision(nodes, edges, rev, 'Pins');
+    expect(out.pin_data).toEqual({ M: { main: [[]] } });
+    expect(prunePinDataToNodeIds(rev.pin_data, ['M'])).toEqual({ M: { main: [[]] } });
+    expect(prunePinDataToNodeIds(rev.pin_data, [])).toBeNull();
   });
 
   it('rfToRevision fills schema defaults when parameters were never edited', () => {

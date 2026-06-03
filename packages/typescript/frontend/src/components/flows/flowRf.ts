@@ -8,6 +8,7 @@ export {
   type FlowRfNodeData,
   inputHandleCount,
   parseHandleIndex,
+  prunePinDataToNodeIds,
   revisionContentFingerprint,
   revisionToRF,
   rfToConnections,

@@ -91,9 +91,9 @@ def validate_revision(
     """
     Validate a flow revision against v1 rules.
 
-    At least one trigger node is required (including for an otherwise empty graph). Then enforces
-    uniqueness (ids/names), reachability from a trigger, DAG, connection bounds, and structural
-    credential checks.
+    An empty graph must include at least one trigger node. Non-empty graphs may be saved without
+    triggers (draft edits); reachability from a trigger is enforced only when triggers exist.
+    Then enforces uniqueness (ids/names), DAG, connection bounds, and structural credential checks.
     """
 
     settings = settings or {}
@@ -125,28 +125,26 @@ def validate_revision(
         if nt.is_trigger:
             trigger_nodes.append(n)
 
-    if len(trigger_nodes) < 1:
-        raise FlowValidationError("Flow must contain at least one trigger node")
-
-    # Reachability: every node must lie on a path from at least one trigger (union of subgraphs).
-    reachable: set[str] = set()
-    frontier = [t["id"] for t in trigger_nodes]
-    for tid in frontier:
-        reachable.add(tid)
-    while frontier:
-        cur = frontier.pop()
-        typed = (connections or {}).get(cur) or {}
-        main_slots = typed.get("main") or []
-        for slot in main_slots:
-            if not slot:
-                continue
-            for conn in slot:
-                if conn.dest_node_id not in reachable:
-                    reachable.add(conn.dest_node_id)
-                    frontier.append(conn.dest_node_id)
-    for n in nodes:
-        if n["id"] not in reachable:
-            raise FlowValidationError(f"Node {ad.flows.node_name(n)} is not reachable from any trigger")
+    # Reachability: when triggers exist, every node must lie on a path from at least one trigger.
+    if trigger_nodes:
+        reachable: set[str] = set()
+        frontier = [t["id"] for t in trigger_nodes]
+        for tid in frontier:
+            reachable.add(tid)
+        while frontier:
+            cur = frontier.pop()
+            typed = (connections or {}).get(cur) or {}
+            main_slots = typed.get("main") or []
+            for slot in main_slots:
+                if not slot:
+                    continue
+                for conn in slot:
+                    if conn.dest_node_id not in reachable:
+                        reachable.add(conn.dest_node_id)
+                        frontier.append(conn.dest_node_id)
+        for n in nodes:
+            if n["id"] not in reachable:
+                raise FlowValidationError(f"Node {ad.flows.node_name(n)} is not reachable from any trigger")
 
     # Connection validation.
     for src, typed in (connections or {}).items():

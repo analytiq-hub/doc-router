@@ -9,13 +9,14 @@
       "scope": {
         "type": "string",
         "default": "openid offline_access https://{{subdomain}}.sharepoint.com/.default",
-        "description": "Resource-scoped SharePoint scope; {{subdomain}} is substituted from the Subdomain field at OAuth connect."
+        "description": "SharePoint resource scope; {{subdomain}} is replaced from the Subdomain field when connecting."
       },
       "subdomain": {
         "title": "Subdomain",
         "type": "string",
         "default": "",
-        "description": "Tenant slug from your SharePoint URL (e.g. tenant123 in https://tenant123.sharepoint.com)."
+        "description": "Tenant slug from your SharePoint URL (e.g. tenant123 in https://tenant123.sharepoint.com). Required for OAuth scope and REST API host.",
+        "x-ui-placeholder": "e.g. tenant123"
       }
     },
     "required": []
@@ -28,7 +29,7 @@
   ],
   "test_request": {
     "method": "GET",
-    "url": "https://graph.microsoft.com/v1.0/sites/root"
+    "url": "https://{{ credentials.subdomain }}.sharepoint.com/_api/v2.0/sites/root"
   },
   "experimental": true
 }

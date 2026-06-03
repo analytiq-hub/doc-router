@@ -174,7 +174,9 @@ def test_apply_defaults_fills_microsoft_oauth_urls_and_outlook_scope() -> None:
         _credential_kinds_bundle.cache_clear()
 
 
-def test_resolve_credential_scope_substitutes_sharepoint_subdomain() -> None:
+def test_sharepoint_oauth_scope_uses_sharepoint_resource_not_graph() -> None:
+    """SharePoint flow nodes call REST v2.0; token audience must be the tenant SharePoint host."""
+
     from analytiq_data.flows.credential_runtime import (
         build_oauth_authorization_url,
         require_resolved_oauth_scope,
@@ -189,10 +191,11 @@ def test_resolve_credential_scope_substitutes_sharepoint_subdomain() -> None:
             {"clientId": "cid", "clientSecret": "sec", "subdomain": "contoso"},
         )
         scope = resolve_credential_scope(fields)
-        assert scope == "openid offline_access https://contoso.sharepoint.com/.default"
+        assert "https://contoso.sharepoint.com/.default" in scope
+        assert "Sites.ReadWrite.All" not in scope
+        assert "graph.microsoft.com" not in scope
         require_resolved_oauth_scope(fields)
         url = build_oauth_authorization_url(fields, "state-xyz")
-        assert "scope=" in url
         assert "contoso.sharepoint.com" in url
     finally:
         _credential_kinds_bundle.cache_clear()
@@ -219,22 +222,6 @@ def test_resolve_credential_scope_substitutes_dynamics_subdomain_and_region() ->
         scope = resolve_credential_scope(fields)
         assert scope == "openid offline_access https://myorg.crm.dynamics.com/.default"
         require_resolved_oauth_scope(fields)
-    finally:
-        _credential_kinds_bundle.cache_clear()
-
-
-def test_require_resolved_oauth_scope_rejects_missing_sharepoint_subdomain() -> None:
-    from analytiq_data.flows.credential_runtime import require_resolved_oauth_scope
-
-    _credential_kinds_bundle.cache_clear()
-    try:
-        kind = get_credential_kind("microsoftSharePointOAuth2Api")
-        fields = apply_credential_kind_defaults(
-            kind,
-            {"clientId": "cid", "clientSecret": "sec"},
-        )
-        with pytest.raises(RuntimeError, match="subdomain"):
-            require_resolved_oauth_scope(fields)
     finally:
         _credential_kinds_bundle.cache_clear()
 

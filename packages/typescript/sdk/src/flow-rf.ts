@@ -1,5 +1,13 @@
 import { finalizePersistedFlowNodeParameters } from './flow-parameter-merge';
-import type { FlowConnections, FlowNode, FlowNodeConnection, FlowNodeType, FlowRevision, SaveRevisionParams } from './types/flows';
+import type {
+  FlowConnections,
+  FlowNode,
+  FlowNodeConnection,
+  FlowNodeType,
+  FlowPinData,
+  FlowRevision,
+  SaveRevisionParams,
+} from './types/flows';
 
 /** React Flow data payload (rendered in the app; `nodeType` is optional in saved graphs). */
 export type FlowRfNodeData = {
@@ -102,6 +110,20 @@ export function inputHandleCount(nt: FlowNodeType | undefined | null): number {
   return Math.max(0, nt.min_inputs);
 }
 
+/** Drop pin entries for node ids that are not on the canvas (e.g. after deleting a node). */
+export function prunePinDataToNodeIds(
+  pinData: FlowPinData | null | undefined,
+  nodeIds: Iterable<string>,
+): FlowPinData | null {
+  if (!pinData || typeof pinData !== 'object') return null;
+  const ids = new Set(nodeIds);
+  const pruned: FlowPinData = {};
+  for (const [nodeId, value] of Object.entries(pinData)) {
+    if (ids.has(nodeId)) pruned[nodeId] = value;
+  }
+  return Object.keys(pruned).length > 0 ? pruned : null;
+}
+
 export function rfToRevision(
   rfNodes: FlowRfNode[],
   rfEdges: FlowRfEdge[],
@@ -129,7 +151,7 @@ export function rfToRevision(
     nodes,
     connections,
     settings: current.settings || {},
-    pin_data: current.pin_data ?? null,
+    pin_data: prunePinDataToNodeIds(current.pin_data, nodes.map((n) => n.id)),
   };
 }
 

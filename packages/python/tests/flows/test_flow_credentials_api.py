@@ -380,6 +380,19 @@ async def test_oauth_kind_includes_redirect_uri(org_and_users, test_db):
     )
     onedrive_field_names = {f["name"] for f in onedrive.get("fields") or []}
     assert "scope" not in onedrive_field_names
+    sharepoint = kinds.get("microsoftSharePointOAuth2Api")
+    assert sharepoint is not None
+    assert sharepoint.get("supports_oauth_browser_flow") is True
+    assert sharepoint.get("oauth_redirect_uri") == ad.flows.flow_oauth_redirect_uri(
+        prefer_localhost_loopback=True
+    )
+    sharepoint_field_names = {f["name"] for f in sharepoint.get("fields") or []}
+    assert "scope" not in sharepoint_field_names
+    assert "subdomain" in sharepoint_field_names
+    subdomain_field = next(
+        f for f in sharepoint.get("fields") or [] if f.get("name") == "subdomain"
+    )
+    assert subdomain_field.get("placeholder") == "e.g. tenant123"
     gmail_field_names = {f["name"] for f in gmail.get("fields") or []}
     assert "ignoreSSLIssues" not in gmail_field_names
     oauth2 = kinds.get("oAuth2Api")

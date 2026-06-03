@@ -715,6 +715,22 @@ def oauth_callback_popup_redirect(*, success: bool) -> str:
     return f"{base}/oauth/flow-callback?{urlencode({'status': status})}"
 
 
+def normalize_sharepoint_subdomain(raw: Any) -> str:
+    """Tenant slug for ``https://{{subdomain}}.sharepoint.com/.default`` (n8n parity)."""
+
+    s = str(raw or "").strip()
+    if not s:
+        return ""
+    if s.lower().startswith(("http://", "https://")):
+        host = (urlparse(s).netloc or "").strip()
+        s = host or s
+    lower = s.lower()
+    suffix = ".sharepoint.com"
+    if lower.endswith(suffix):
+        s = s[: -len(suffix)]
+    return s.strip()
+
+
 def resolve_credential_scope(fields: dict[str, Any]) -> str:
     """Substitute ``{{field}}`` / ``{{$self.field}}`` placeholders in OAuth scope strings."""
 
@@ -730,6 +746,10 @@ def resolve_credential_scope(fields: dict[str, Any]) -> str:
         s = str(val).strip()
         if not s:
             return match.group(0)
+        if key == "subdomain" and ".sharepoint.com" in scope.lower():
+            s = normalize_sharepoint_subdomain(s)
+            if not s:
+                return match.group(0)
         return s
 
     return _SCOPE_FIELD_PLACEHOLDER.sub(repl, scope)

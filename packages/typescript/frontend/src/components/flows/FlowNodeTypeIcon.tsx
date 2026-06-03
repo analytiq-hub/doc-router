@@ -18,6 +18,7 @@ import { GmailIcon } from './icons/GmailIcon';
 import { GoogleDriveIcon } from './icons/GoogleDriveIcon';
 import { MicrosoftOneDriveIcon } from './icons/MicrosoftOneDriveIcon';
 import { MicrosoftOutlookIcon } from './icons/MicrosoftOutlookIcon';
+import { MicrosoftSharePointIcon } from './icons/MicrosoftSharePointIcon';
 
 /** Preset strings returned by `GET .../flows/node-types` for built-in nodes; UI maps to bundled icons. */
 export const FLOW_BUILTIN_ICON_KEYS = [
@@ -35,6 +36,7 @@ export const FLOW_BUILTIN_ICON_KEYS = [
   'gmail',
   'microsoft_onedrive',
   'microsoft_outlook',
+  'microsoft_sharepoint',
   'schedule_trigger',
 ] as const;
 
@@ -86,6 +88,8 @@ export function FlowNodeTypeIcon({
         return <MicrosoftOneDriveIcon className={className} />;
       case 'microsoft_outlook':
         return <MicrosoftOutlookIcon className={className} />;
+      case 'microsoft_sharepoint':
+        return <MicrosoftSharePointIcon className={className} />;
       case 'schedule_trigger':
         return <ClockIcon className={className} aria-hidden={ariaHidden} />;
       default:

@@ -32,6 +32,22 @@ def apply_credential_kind_defaults(
     return out
 
 
+def normalize_credential_fields_for_kind(
+    kind: dict[str, Any], fields: dict[str, Any]
+) -> dict[str, Any]:
+    """Kind-specific field cleanup before schema validation (e.g. SharePoint tenant slug)."""
+
+    key = str(kind.get("key") or "")
+    out = dict(fields)
+    if key == "microsoftSharePointOAuth2Api":
+        from analytiq_data.flows.credential_runtime import normalize_sharepoint_subdomain
+
+        raw = str(out.get("subdomain") or "").strip()
+        if raw:
+            out["subdomain"] = normalize_sharepoint_subdomain(raw)
+    return out
+
+
 def credential_validation_schema(kind: dict[str, Any]) -> dict[str, Any] | None:
     """
     Schema for create/update validation only (``flows_credentials`` create/put).

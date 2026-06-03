@@ -385,6 +385,7 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
           <div className="flex-1 px-5 py-4">
             {tab === 'connection' ? (
               <CredEditConnectionTab
+                kindKey={kindKey}
                 fieldDefs={fieldDefs}
                 fields={fields}
                 secretMasked={secretMasked}
@@ -537,7 +538,37 @@ function CredEditModalHeader({
   );
 }
 
+function SharePointCredentialHelp() {
+  return (
+    <div className="rounded-md border border-teal-100 bg-teal-50/80 px-3 py-2.5 text-xs leading-relaxed text-gray-700">
+      <p className="m-0 font-medium text-gray-800">SharePoint REST (tenant subdomain)</p>
+      <p className="mt-1.5 m-0">
+        Set <strong>Subdomain</strong> to the slug from your SharePoint URL (e.g.{' '}
+        <span className="font-mono text-[11px]">tenant123</span> in{' '}
+        <span className="font-mono text-[11px]">https://tenant123.sharepoint.com</span>). OAuth uses a
+        resource scope for that host; flow nodes call{' '}
+        <span className="font-mono text-[11px]">/_api/v2.0/</span>, not Microsoft Graph.
+      </p>
+      <p className="mt-2 m-0">
+        In <strong>Entra ID → App registration → API permissions</strong>, add delegated permissions
+        under <strong>Office 365 SharePoint Online</strong> (e.g.{' '}
+        <span className="font-mono text-[11px]">Sites.Read.All</span> or{' '}
+        <span className="font-mono text-[11px]">Sites.ReadWrite.All</span>), then{' '}
+        <strong>Grant admin consent</strong>. Graph-only <span className="font-mono text-[11px]">Sites.*</span>{' '}
+        permissions do not work with this credential.
+      </p>
+      <p className="mt-2 m-0">
+        Which site collection to use (e.g.{' '}
+        <span className="font-mono text-[11px]">contoso.sharepoint.com:/sites/Team</span> or{' '}
+        <span className="font-mono text-[11px]">root</span>) is set on each SharePoint node under{' '}
+        <strong>Site</strong>.
+      </p>
+    </div>
+  );
+}
+
 function CredEditConnectionTab({
+  kindKey,
   fieldDefs,
   fields,
   secretMasked,
@@ -553,6 +584,7 @@ function CredEditConnectionTab({
   setShowSecret,
   onOAuthConnect,
 }: {
+  kindKey: string;
   fieldDefs: ReturnType<typeof credentialFieldRows>;
   fields: Record<string, string>;
   secretMasked: Set<string>;
@@ -581,6 +613,7 @@ function CredEditConnectionTab({
       {supportsOAuth && oauthRedirectUri ? (
         <OAuthRedirectUrlField redirectUri={oauthRedirectUri} appName={oauthHintAppName} />
       ) : null}
+      {kindKey === 'microsoftSharePointOAuth2Api' ? <SharePointCredentialHelp /> : null}
       {fieldDefs
         .filter((f) => credentialFieldRowVisible(f, fields, fieldDefs))
         .map((f) => (

@@ -20,12 +20,14 @@ import FlowCanvasViewTabs, { FlowWorkspaceTabStraddle, type FlowCanvasView } fro
 import { FLOW_WORKSPACE_HEADER_HEIGHT_CLASS, FLOW_WORKSPACE_TITLE_READ_CLASS } from '@/components/flows/flowUiClasses';
 import FlowLogsPanel from '@/components/flows/FlowLogsPanel';
 import { snapRfNodesPositions } from '@/components/flows/canvasGrid';
-import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNodeData } from '@/components/flows/flowRf';
 import {
-  GRAPH_BLOCKED_MESSAGE,
-  MISSING_TRIGGER_MESSAGE,
-  triggerReachabilityFromGraph,
-} from '@/components/flows/flowTriggerReachability';
+  prunePinDataToNodeIds,
+  revisionContentFingerprint,
+  revisionToRF,
+  rfToRevision,
+  type FlowRfNodeData,
+} from '@/components/flows/flowRf';
+import { graphSaveBlockedMessage, MISSING_TRIGGER_MESSAGE } from '@/components/flows/flowTriggerReachability';
 import {
   loadFlowNamesTakenLower,
   NEW_FLOW_URL_SEGMENT,
@@ -244,12 +246,6 @@ export default function FlowDetailPageClient({
     return revisionContentFingerprint(flowName, rfNodes as FlowRfNode[], rfEdges as FlowRfEdge[], revision);
   }, [flowName, rfNodes, rfEdges, revision]);
 
-  const graphStructurallyValid = useMemo(() => {
-    if (rfNodes.length === 0) return true;
-    const flowNodes = (rfNodes as Node<FlowRfNodeData>[]).map((x) => x.data.flowNode);
-    return triggerReachabilityFromGraph(flowNodes, rfEdges, nodeTypesByKey).allReachable;
-  }, [nodeTypesByKey, rfEdges, rfNodes]);
-
   const executeWorkflowTriggers = useMemo(() => {
     const flowNodes = (rfNodes as Node<FlowRfNodeData>[]).map((x) => x.data.flowNode);
     const triggers = flowNodes.filter((fn) => nodeTypesByKey[fn.type]?.is_trigger);
@@ -270,15 +266,10 @@ export default function FlowDetailPageClient({
   }, [executeWorkflowTriggers, lastRunTriggerId]);
 
   const graphSaveBlockedReason = useMemo(() => {
-    if (nodeTypes.length > 0 && executeWorkflowTriggers.length === 0) {
-      return MISSING_TRIGGER_MESSAGE;
-    }
-    return graphStructurallyValid ? null : GRAPH_BLOCKED_MESSAGE;
-  }, [
-    executeWorkflowTriggers.length,
-    graphStructurallyValid,
-    nodeTypes.length,
-  ]);
+    if (nodeTypes.length === 0) return null;
+    const flowNodes = (rfNodes as Node<FlowRfNodeData>[]).map((x) => x.data.flowNode);
+    return graphSaveBlockedMessage(flowNodes, rfEdges, nodeTypesByKey);
+  }, [nodeTypes.length, nodeTypesByKey, rfEdges, rfNodes]);
 
   const isDirty = useMemo(() => {
     if (graphFingerprint == null || savedContentFingerprint == null) return false;
@@ -379,6 +370,13 @@ export default function FlowDetailPageClient({
 
   const onNodesChange = useCallback((next: Node[]) => {
     setRfNodes(next);
+    const liveIds = new Set(next.map((n) => n.id));
+    setRevision((cur) => {
+      if (!cur?.pin_data) return cur;
+      const pruned = prunePinDataToNodeIds(cur.pin_data, liveIds);
+      if (pruned === cur.pin_data) return cur;
+      return { ...cur, pin_data: pruned };
+    });
   }, []);
 
   const onEdgesChange = useCallback((next: Edge[]) => {
@@ -387,12 +385,8 @@ export default function FlowDetailPageClient({
 
   const onSave = useCallback(async () => {
     if (!revision) return;
-    if (nodeTypes.length > 0 && executeWorkflowTriggers.length === 0) {
-      setMessage(MISSING_TRIGGER_MESSAGE);
-      return;
-    }
-    if (rfNodes.length > 0 && !graphStructurallyValid) {
-      setMessage(GRAPH_BLOCKED_MESSAGE);
+    if (graphSaveBlockedReason) {
+      setMessage(graphSaveBlockedReason);
       return;
     }
     try {
@@ -447,10 +441,9 @@ export default function FlowDetailPageClient({
     }
   }, [
     api,
-    executeWorkflowTriggers.length,
     flowId,
     flowName,
-    graphStructurallyValid,
+    graphSaveBlockedReason,
     isDraftRoute,
     latestFlowRevid,
     nodeTypes.length,
@@ -467,23 +460,13 @@ export default function FlowDetailPageClient({
       if (isDraftRoute) return;
       const ctx = persistCtxRef.current;
       const typeCatalogLoaded = Object.keys(ctx.nodeTypesByKey).length > 0;
-      const triggersOnGraph = (
-        (ctx.rfNodes as Node<FlowRfNodeData>[]).map((x) => x.data.flowNode) as FlowNode[]
-      ).filter((fn) => ctx.nodeTypesByKey[fn.type]?.is_trigger);
-      if (typeCatalogLoaded && triggersOnGraph.length === 0) {
-        setMessage(MISSING_TRIGGER_MESSAGE);
-        throw new Error(MISSING_TRIGGER_MESSAGE);
-      }
-      if (
-        ctx.rfNodes.length > 0 &&
-        !triggerReachabilityFromGraph(
-          (ctx.rfNodes as Node<FlowRfNodeData>[]).map((x) => x.data.flowNode),
-          ctx.rfEdges,
-          ctx.nodeTypesByKey,
-        ).allReachable
-      ) {
-        setMessage(GRAPH_BLOCKED_MESSAGE);
-        throw new Error(GRAPH_BLOCKED_MESSAGE);
+      const flowNodes = (ctx.rfNodes as Node<FlowRfNodeData>[]).map((x) => x.data.flowNode);
+      if (typeCatalogLoaded) {
+        const blocked = graphSaveBlockedMessage(flowNodes, ctx.rfEdges, ctx.nodeTypesByKey);
+        if (blocked) {
+          setMessage(blocked);
+          throw new Error(blocked);
+        }
       }
       setIsSaving(true);
       setMessage('');

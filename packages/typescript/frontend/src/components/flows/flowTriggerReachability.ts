@@ -4,15 +4,26 @@ import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
 const GRAPH_BLOCKED_MESSAGE =
   'Every node must be reachable from at least one trigger through the graph connections. Connect or remove stray nodes before saving.';
 
-/** Saving or activating requires at least one trigger on the revision (covers an empty canvas). */
-const MISSING_TRIGGER_MESSAGE =
-  'Add at least one trigger node before saving or activating.';
+/** Activating (and running) requires at least one trigger on the revision. */
+const MISSING_TRIGGER_MESSAGE = 'Add at least one trigger node before activating.';
 
 export { GRAPH_BLOCKED_MESSAGE, MISSING_TRIGGER_MESSAGE };
 
-/**
- * Computes nodes reachable along directed edges (`source → target`) starting from every trigger node.
- */
+/** Save reachability rules: skip when the canvas is empty or has no triggers (draft edits). */
+export function graphSaveBlockedMessage(
+  flowNodes: readonly FlowNode[],
+  edges: readonly Pick<Edge, 'source' | 'target'>[],
+  nodeTypesByKey: Record<string, FlowNodeType | undefined>,
+): string | null {
+  if (flowNodes.length === 0) return null;
+  const hasTrigger = flowNodes.some((n) => nodeTypesByKey[n.type]?.is_trigger);
+  if (!hasTrigger) return null;
+  return triggerReachabilityFromGraph(flowNodes, edges, nodeTypesByKey).allReachable
+    ? null
+    : GRAPH_BLOCKED_MESSAGE;
+}
+
+/** Computes nodes reachable along directed edges (`source → target`) starting from every trigger node. */
 export function triggerReachabilityFromGraph(
   flowNodes: readonly FlowNode[],
   edges: readonly Pick<Edge, 'source' | 'target'>[],

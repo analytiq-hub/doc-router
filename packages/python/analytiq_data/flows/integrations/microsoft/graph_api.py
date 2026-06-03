@@ -46,6 +46,15 @@ def graph_url_for_path(path: str, *, mailbox_base: str | None = None) -> str:
     return f"{base}{suffix}"
 
 
+def _http_api_label_for_url(url: str) -> str:
+    lower = url.lower()
+    if "sharepoint.com" in lower:
+        return "SharePoint REST"
+    if "graph.microsoft.com" in lower:
+        return "Microsoft Graph"
+    return "HTTP API"
+
+
 class MicrosoftGraphApiError(RuntimeError):
     def __init__(
         self,
@@ -53,10 +62,30 @@ class MicrosoftGraphApiError(RuntimeError):
         *,
         status_code: int | None = None,
         graph_message: str | None = None,
+        request_url: str | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.graph_message = graph_message
+        self.request_url = request_url
+
+
+def _raise_http_api_error(
+    *,
+    method: str,
+    path: str,
+    status_code: int,
+    detail: str,
+    request_url: str,
+    graph_message: str | None,
+) -> None:
+    label = _http_api_label_for_url(request_url)
+    raise MicrosoftGraphApiError(
+        f"{label} {method} {path} failed ({status_code}): {detail}",
+        status_code=status_code,
+        graph_message=graph_message,
+        request_url=request_url,
+    )
 
 
 def _graph_error_message_from_body(body: str) -> str | None:
@@ -73,10 +102,28 @@ def _graph_error_message_from_body(body: str) -> str | None:
     return str(msg).strip() if msg else None
 
 
-def graph_user_hint(graph_message: str | None) -> str | None:
+def graph_user_hint(
+    graph_message: str | None,
+    *,
+    request_url: str | None = None,
+) -> str | None:
     if not graph_message:
         return None
     lower = graph_message.lower()
+    is_sharepoint = bool(request_url and "sharepoint.com" in request_url.lower())
+    if "invalid audience" in lower:
+        return (
+            "The access token is not valid for this API host. "
+            "For SharePoint REST, reconnect the credential (Connect) with the tenant subdomain set "
+            "so the token is issued for https://{subdomain}.sharepoint.com/.default, not Graph scopes."
+        )
+    if "access denied" in lower and is_sharepoint:
+        return (
+            "SharePoint denied access. In Entra → App registration → API permissions, add delegated "
+            "permissions under Office 365 SharePoint Online (e.g. Sites.Read.All or Sites.ReadWrite.All), "
+            "grant admin consent, then Connect again. Microsoft Graph → Sites.* permissions do not apply "
+            "to SharePoint REST. Also confirm the node Site is a site you can open in the browser."
+        )
     if "spo license" in lower or "sharepoint online" in lower:
         return (
             "This Microsoft account cannot use OneDrive sync via Graph: the tenant does not "
@@ -88,7 +135,7 @@ def graph_user_hint(graph_message: str | None) -> str | None:
 
 
 def format_graph_user_error(exc: MicrosoftGraphApiError) -> str:
-    hint = graph_user_hint(exc.graph_message)
+    hint = graph_user_hint(exc.graph_message, request_url=exc.request_url)
     if hint:
         return hint
     return str(exc)
@@ -165,9 +212,12 @@ async def graph_request(
                 response_preview=detail,
             )
         graph_msg = _graph_error_message_from_body(detail)
-        raise MicrosoftGraphApiError(
-            f"Microsoft Graph {method} {path} failed ({resp.status_code}): {detail}",
+        _raise_http_api_error(
+            method=method,
+            path=path,
             status_code=resp.status_code,
+            detail=detail,
+            request_url=req_url,
             graph_message=graph_msg,
         )
     if context is not None:
@@ -232,9 +282,12 @@ async def graph_request_with_response(
                 response_preview=detail,
             )
         graph_msg = _graph_error_message_from_body(detail)
-        raise MicrosoftGraphApiError(
-            f"Microsoft Graph {method} {path} failed ({resp.status_code}): {detail}",
+        _raise_http_api_error(
+            method=method,
+            path=path,
             status_code=resp.status_code,
+            detail=detail,
+            request_url=req_url,
             graph_message=graph_msg,
         )
     if context is not None:
@@ -365,12 +418,14 @@ async def get_drive_folder_path(
     token: str,
     folder_id: str,
     *,
+    mailbox_base: str | None = None,
     trace_node_id: str | None = None,
 ) -> str:
     data = await graph_request(
         token,
         "GET",
         f"/drive/items/{folder_id}",
+        mailbox_base=mailbox_base,
         context=context,
         trace_node_id=trace_node_id,
     )

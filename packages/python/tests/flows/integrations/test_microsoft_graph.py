@@ -21,6 +21,23 @@ def test_graph_user_hint_spo_license() -> None:
     assert graph_user_hint("Tenant does not have a SPO license.") is not None
 
 
+def test_graph_user_hint_invalid_audience() -> None:
+    hint = graph_user_hint("Access token validation failure. Invalid audience.")
+    assert hint is not None
+    assert "sharepoint.com" in hint.lower()
+    assert "reconnect" in hint.lower()
+
+
+def test_graph_user_hint_sharepoint_access_denied() -> None:
+    hint = graph_user_hint(
+        "Access denied",
+        request_url="https://contoso.sharepoint.com/_api/v2.0/sites/root/lists",
+    )
+    assert hint is not None
+    assert "Office 365 SharePoint Online" in hint
+    assert "Graph" in hint
+
+
 def test_format_graph_user_error_prefers_hint() -> None:
     exc = MicrosoftGraphApiError(
         "raw",
@@ -28,6 +45,17 @@ def test_format_graph_user_error_prefers_hint() -> None:
     )
     msg = format_graph_user_error(exc)
     assert "SharePoint Online" in msg
+
+
+def test_sharepoint_rest_error_message_label() -> None:
+    exc = MicrosoftGraphApiError(
+        "SharePoint REST GET /lists failed (403): x",
+        request_url="https://contoso.sharepoint.com/_api/v2.0/sites/root/lists",
+        graph_message="Access denied",
+    )
+    msg = format_graph_user_error(exc)
+    assert "Office 365 SharePoint Online" in msg
+    assert "Microsoft Graph GET" not in msg
 
 
 def test_graph_encode_id() -> None:

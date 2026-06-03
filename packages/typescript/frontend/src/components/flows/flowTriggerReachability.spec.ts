@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { triggerReachabilityFromGraph } from './flowTriggerReachability';
+import { graphSaveBlockedMessage, triggerReachabilityFromGraph } from './flowTriggerReachability';
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
 
 const triggerT: FlowNodeType = {
@@ -61,5 +61,17 @@ describe('triggerReachabilityFromGraph', () => {
   it('empty node list is all reachable', () => {
     const r = triggerReachabilityFromGraph([], [], byKey);
     expect(r.allReachable).toBe(true);
+  });
+});
+
+describe('graphSaveBlockedMessage', () => {
+  it('allows save when graph has nodes but no triggers', () => {
+    const nodes = [nf('a', processP.key)];
+    expect(graphSaveBlockedMessage(nodes, [], byKey)).toBeNull();
+  });
+
+  it('blocks save when a trigger subgraph leaves orphans', () => {
+    const nodes = [nf('t', triggerT.key), nf('o', processP.key)];
+    expect(graphSaveBlockedMessage(nodes, [], byKey)).not.toBeNull();
   });
 });

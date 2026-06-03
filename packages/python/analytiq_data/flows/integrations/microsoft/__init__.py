@@ -6,6 +6,16 @@ from .drive_helpers import (
     search_query_path,
     simplify_drive_item,
 )
+from .site_helpers import (
+    normalize_site_id,
+    sharepoint_host_slug_from_subdomain,
+    sharepoint_rest_api_base,
+    sharepoint_tenant_rest_api_base,
+    site_drive_delta_latest,
+    site_drive_delta_root,
+    site_encoded_drive_item_content_path,
+    site_search_query_path,
+)
 from .graph_api import (
     GRAPH_DRIVE_DELTA_LATEST,
     GRAPH_DRIVE_DELTA_ROOT,
@@ -44,4 +54,12 @@ __all__ = [
     "resolve_graph_oauth_token",
     "search_query_path",
     "simplify_drive_item",
+    "normalize_site_id",
+    "sharepoint_host_slug_from_subdomain",
+    "sharepoint_rest_api_base",
+    "sharepoint_tenant_rest_api_base",
+    "site_drive_delta_latest",
+    "site_drive_delta_root",
+    "site_encoded_drive_item_content_path",
+    "site_search_query_path",
 ]

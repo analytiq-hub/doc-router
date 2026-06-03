@@ -346,12 +346,20 @@ def _pass_next(nid: str, name: str) -> dict[str, Any]:
     }
 
 
-def test_validate_revision_rejects_graph_with_no_trigger() -> None:
+def test_validate_revision_accepts_non_trigger_nodes_without_trigger() -> None:
+    """Draft edits may persist action-only graphs (e.g. while replacing a trigger)."""
     nodes = [
         _pass_next("n1", "A"),
     ]
-    with pytest.raises(ad.flows.FlowValidationError, match="at least one trigger"):
-        ad.flows.validate_revision(nodes, {}, {}, None)
+    ad.flows.validate_revision(nodes, {}, {}, None)
+
+
+def test_validate_revision_rejects_orphan_pin_for_deleted_node() -> None:
+    nodes = [
+        _pass_next("n1", "A"),
+    ]
+    with pytest.raises(ad.flows.FlowValidationError, match="pin_data references unknown node"):
+        ad.flows.validate_revision(nodes, {}, {}, {"deleted": {"main": []}})
 
 
 def test_validate_revision_rejects_empty_graph() -> None:

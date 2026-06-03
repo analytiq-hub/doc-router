@@ -21,6 +21,7 @@ from analytiq_data.flows.credential_fields import (
     coerce_credential_fields,
     credential_validation_schema,
     merge_credential_fields_update,
+    normalize_credential_fields_for_kind,
 )
 from app.auth import get_org_user
 from app.models import User
@@ -243,6 +244,9 @@ async def list_credential_kinds(
                 continue
             row = dict(v)
             row.pop("x-secret", None)
+            ph = v.get("x-ui-placeholder")
+            if isinstance(ph, str) and ph.strip():
+                row["placeholder"] = ph.strip()
             fields.append({"name": k, **row, "is_secret": k in secret_names})
         oauth_flow = _kind_supports_oauth_browser_flow(kind)
         result.append(
@@ -286,6 +290,7 @@ async def create_credential(
 
     schema = credential_validation_schema(kind)
     fields = apply_credential_kind_defaults(kind, req.fields)
+    fields = normalize_credential_fields_for_kind(kind, fields)
     fields = coerce_credential_fields(schema, fields)
     if schema:
         try:
@@ -422,6 +427,7 @@ async def update_credential(
         existing_fields, req.fields, secret_names
     )
     fields = apply_credential_kind_defaults(kind, merged_in)
+    fields = normalize_credential_fields_for_kind(kind, fields)
     fields = coerce_credential_fields(schema, fields)
     if schema:
         try:
