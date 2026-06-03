@@ -34,7 +34,7 @@ def test_graph_user_hint_sharepoint_access_denied() -> None:
         request_url="https://contoso.sharepoint.com/_api/v2.0/sites/root/lists",
     )
     assert hint is not None
-    assert "Office 365 SharePoint Online" in hint
+    assert "AllSites.Read" in hint
     assert "Graph" in hint
 
 
@@ -54,7 +54,7 @@ def test_sharepoint_rest_error_message_label() -> None:
         graph_message="Access denied",
     )
     msg = format_graph_user_error(exc)
-    assert "Office 365 SharePoint Online" in msg
+    assert "AllSites.Read" in msg
     assert "Microsoft Graph GET" not in msg
 
 

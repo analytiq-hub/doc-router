@@ -550,12 +550,14 @@ function SharePointCredentialHelp() {
         <span className="font-mono text-[11px]">/_api/v2.0/</span>, not Microsoft Graph.
       </p>
       <p className="mt-2 m-0">
-        In <strong>Entra ID → App registration → API permissions</strong>, add delegated permissions
-        under <strong>Office 365 SharePoint Online</strong> (e.g.{' '}
-        <span className="font-mono text-[11px]">Sites.Read.All</span> or{' '}
-        <span className="font-mono text-[11px]">Sites.ReadWrite.All</span>), then{' '}
-        <strong>Grant admin consent</strong>. Graph-only <span className="font-mono text-[11px]">Sites.*</span>{' '}
-        permissions do not work with this credential.
+        In <strong>Entra ID → App registration → API permissions</strong>, add <strong>Delegated</strong>{' '}
+        permissions under <strong>SharePoint</strong> (Office 365 SharePoint Online): use{' '}
+        <span className="font-mono text-[11px]">AllSites.Read</span> or{' '}
+        <span className="font-mono text-[11px]">AllSites.Write</span> for lists/files (not{' '}
+        <span className="font-mono text-[11px]">Sites.Search.All</span>).{' '}
+        <span className="font-mono text-[11px]">Sites.Selected</span> only works after an admin grants
+        your app to specific sites. Microsoft Graph <span className="font-mono text-[11px]">Sites.Read.All</span>{' '}
+        does not apply to this REST credential.
       </p>
       <p className="mt-2 m-0">
         Which site collection to use (e.g.{' '}

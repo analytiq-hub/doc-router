@@ -6,8 +6,8 @@
       "type": "string",
       "default": "root",
       "title": "Site",
-      "description": "Site ID, root, hostname:/sites/Name composite, or full SharePoint site URL.",
-      "x-ui-placeholder": "root or contoso.sharepoint.com:/sites/Team"
+      "description": "Site collection: root, /sites/Team, docrouter.sharepoint.com:/sites/Team, or paste the site URL from your browser.",
+      "x-ui-placeholder": "/sites/GreenieRE or docrouter.sharepoint.com:/sites/GreenieRE"
     },
     "resource": {
       "type": "string",
@@ -320,7 +320,7 @@
       "type": "string",
       "default": "",
       "title": "Folder",
-      "description": "Folder ID in the site document library.",
+      "description": "Folder ID in the site document library. Leave empty for Get Children to list the library root.",
       "x-ui-placeholder": "Folder ID",
       "x-ui-show-when-any": [
         {

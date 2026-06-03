@@ -119,10 +119,11 @@ def graph_user_hint(
         )
     if "access denied" in lower and is_sharepoint:
         return (
-            "SharePoint denied access. In Entra → App registration → API permissions, add delegated "
-            "permissions under Office 365 SharePoint Online (e.g. Sites.Read.All or Sites.ReadWrite.All), "
-            "grant admin consent, then Connect again. Microsoft Graph → Sites.* permissions do not apply "
-            "to SharePoint REST. Also confirm the node Site is a site you can open in the browser."
+            "SharePoint denied access. In Entra → App registration → API permissions, add SharePoint "
+            "delegated permissions such as AllSites.Read or AllSites.Write (not Sites.Search.All; "
+            "Sites.Selected needs per-site grants). Grant admin consent if shown, then Connect again. "
+            "Microsoft Graph Sites.Read.All does not apply to SharePoint REST. Confirm the node Site "
+            "is a site you can open in the browser."
         )
     if "spo license" in lower or "sharepoint online" in lower:
         return (

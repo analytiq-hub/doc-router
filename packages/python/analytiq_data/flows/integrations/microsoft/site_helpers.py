@@ -2,12 +2,40 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 from urllib.parse import quote, urlparse
 
 from analytiq_data.flows.credential_runtime import normalize_sharepoint_subdomain
 
 _DEFAULT_SITE = "root"
+_SITE_COLLECTION_PATH_RE = re.compile(r"^/(?:sites|teams)/[^/]+", re.IGNORECASE)
+_SITE_GUID_RE = re.compile(r"^[0-9a-f-]{20,}$", re.IGNORECASE)
+
+
+def _looks_like_site_guid(value: str) -> bool:
+    return bool(_SITE_GUID_RE.match(value.replace(" ", "")))
+
+
+def _bare_site_slug_to_path(value: str) -> str:
+    """Map ``GreenieRE`` → ``/sites/GreenieRE`` (common team site URL slug)."""
+
+    s = value.strip()
+    if not s or s.startswith("/") or s.lower().startswith(("sites/", "teams/")):
+        return s
+    if ".sharepoint.com" in s.lower() or _looks_like_site_guid(s):
+        return s
+    return f"/sites/{s}"
+
+
+def _site_collection_path_from_url_path(path: str) -> str:
+    """Extract ``/sites/Name`` or ``/teams/Name`` from a SharePoint browser URL path."""
+
+    normalized = (path or "/").strip() or "/"
+    match = _SITE_COLLECTION_PATH_RE.match(normalized)
+    if match:
+        return match.group(0)
+    return normalized
 
 
 def normalize_site_id(raw: Any) -> str:
@@ -19,11 +47,15 @@ def normalize_site_id(raw: Any) -> str:
     if s.startswith("http://") or s.startswith("https://"):
         parsed = urlparse(s)
         host = parsed.netloc.strip()
-        path = parsed.path.strip() or "/"
+        path = _site_collection_path_from_url_path(parsed.path.strip() or "/")
         if not host:
             return _DEFAULT_SITE
+        if path in ("/", ""):
+            return _DEFAULT_SITE
         return f"{host}:{path}"
-    return s
+    if s.lower().startswith(("sites/", "teams/")):
+        return f"/{s}"
+    return _bare_site_slug_to_path(s)
 
 
 def sharepoint_host_slug_from_subdomain(subdomain: str) -> str:

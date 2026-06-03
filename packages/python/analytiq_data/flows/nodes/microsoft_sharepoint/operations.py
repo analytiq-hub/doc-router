@@ -281,11 +281,16 @@ async def _run_folder(
 
     if operation == "getChildren":
         folder_id = sharepoint_item_id(params, "folderId")
+        endpoint = (
+            f"/drive/items/{folder_id}/children"
+            if folder_id
+            else "/drive/root/children"
+        )
         items = await graph_request_all_items(
             context,
             token,
             "GET",
-            f"/drive/items/{folder_id}/children",
+            endpoint,
             mailbox_base=site_base,
             trace_node_id=context.active_trace_node_id,
         )
