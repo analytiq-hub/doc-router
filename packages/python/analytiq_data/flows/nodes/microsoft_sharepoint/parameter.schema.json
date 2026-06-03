@@ -1,0 +1,347 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "siteId": {
+      "type": "string",
+      "default": "root",
+      "title": "Site",
+      "description": "Site ID, root, hostname:/sites/Name composite, or full SharePoint site URL.",
+      "x-ui-placeholder": "root or contoso.sharepoint.com:/sites/Team"
+    },
+    "resource": {
+      "type": "string",
+      "enum": ["file", "folder", "list", "site"],
+      "default": "file",
+      "title": "Resource",
+      "x-ui-enum-names": ["File", "Folder", "List", "Site"]
+    },
+    "operation": {
+      "type": "string",
+      "default": "upload",
+      "title": "Operation",
+      "x-ui-enum-by": {
+        "field": "resource",
+        "variants": {
+          "file": {
+            "enum": [
+              "copy",
+              "delete",
+              "download",
+              "get",
+              "rename",
+              "search",
+              "share",
+              "upload"
+            ],
+            "x-ui-enum-names": [
+              "Copy",
+              "Delete",
+              "Download",
+              "Get",
+              "Rename",
+              "Search",
+              "Share",
+              "Upload"
+            ]
+          },
+          "folder": {
+            "enum": [
+              "create",
+              "delete",
+              "getChildren",
+              "rename",
+              "search",
+              "share"
+            ],
+            "x-ui-enum-names": [
+              "Create",
+              "Delete",
+              "Get Children",
+              "Rename",
+              "Search",
+              "Share"
+            ]
+          },
+          "list": {
+            "enum": ["get", "getItems", "getMany"],
+            "x-ui-enum-names": ["Get", "Get Items", "Get Many"]
+          },
+          "site": {
+            "enum": ["get", "search"],
+            "x-ui-enum-names": ["Get", "Search"]
+          }
+        }
+      }
+    },
+    "listId": {
+      "type": "string",
+      "default": "",
+      "title": "List",
+      "description": "SharePoint list ID.",
+      "x-ui-show-when": {
+        "all": [
+          {"field": "resource", "equals": "list"}
+        ]
+      }
+    },
+    "fileId": {
+      "type": "string",
+      "default": "",
+      "title": "File",
+      "description": "Drive item ID from the site document library.",
+      "x-ui-placeholder": "Drive item ID",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {"field": "resource", "equals": "file"},
+            {"field": "operation", "equals": "copy"}
+          ]
+        },
+        {
+          "all": [
+            {"field": "resource", "equals": "file"},
+            {"field": "operation", "equals": "delete"}
+          ]
+        },
+        {
+          "all": [
+            {"field": "resource", "equals": "file"},
+            {"field": "operation", "equals": "download"}
+          ]
+        },
+        {
+          "all": [
+            {"field": "resource", "equals": "file"},
+            {"field": "operation", "equals": "get"}
+          ]
+        },
+        {
+          "all": [
+            {"field": "resource", "equals": "file"},
+            {"field": "operation", "equals": "share"}
+          ]
+        }
+      ]
+    },
+    "additionalFields": {
+      "type": "object",
+      "default": {},
+      "title": "Additional Fields",
+      "properties": {
+        "name": {
+          "type": "string",
+          "default": "",
+          "title": "Name"
+        }
+      },
+      "x-ui-show-when": {
+        "all": [
+          {"field": "resource", "equals": "file"},
+          {"field": "operation", "equals": "copy"}
+        ]
+      }
+    },
+    "parentReference": {
+      "type": "object",
+      "default": {},
+      "title": "Parent Reference",
+      "properties": {
+        "driveId": {"type": "string", "default": "", "title": "Drive ID"},
+        "driveType": {"type": "string", "default": "", "title": "Drive Type"},
+        "id": {"type": "string", "default": "", "title": "ID"},
+        "listId": {"type": "string", "default": "", "title": "List ID"},
+        "name": {"type": "string", "default": "", "title": "Name"},
+        "path": {"type": "string", "default": "", "title": "Path"},
+        "shareId": {"type": "string", "default": "", "title": "Share ID"},
+        "siteId": {"type": "string", "default": "", "title": "Site ID"}
+      },
+      "x-ui-show-when": {
+        "all": [
+          {"field": "resource", "equals": "file"},
+          {"field": "operation", "equals": "copy"}
+        ]
+      }
+    },
+    "binaryPropertyName": {
+      "type": "string",
+      "default": "data",
+      "title": "Binary Property",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {"field": "resource", "equals": "file"},
+            {"field": "operation", "equals": "download"}
+          ]
+        },
+        {
+          "all": [
+            {"field": "resource", "equals": "file"},
+            {"field": "operation", "equals": "upload"},
+            {"field": "binaryData", "equals": true}
+          ]
+        }
+      ]
+    },
+    "itemId": {
+      "type": "string",
+      "default": "",
+      "title": "Item",
+      "description": "Drive item ID from the site document library.",
+      "x-ui-placeholder": "Drive item ID",
+      "x-ui-show-when": {
+        "all": [
+          {"field": "operation", "equals": "rename"}
+        ]
+      }
+    },
+    "newName": {
+      "type": "string",
+      "default": "",
+      "title": "New Name",
+      "x-ui-show-when": {
+        "all": [
+          {"field": "operation", "equals": "rename"}
+        ]
+      }
+    },
+    "query": {
+      "type": "string",
+      "default": "",
+      "title": "Query",
+      "x-ui-show-when": {
+        "all": [
+          {"field": "operation", "equals": "search"}
+        ]
+      }
+    },
+    "type": {
+      "type": "string",
+      "enum": ["view", "edit", "embed"],
+      "default": "view",
+      "title": "Type",
+      "x-ui-enum-names": ["View", "Edit", "Embed"],
+      "x-ui-show-when": {
+        "all": [
+          {"field": "operation", "equals": "share"}
+        ]
+      }
+    },
+    "scope": {
+      "type": "string",
+      "enum": ["anonymous", "organization"],
+      "default": "anonymous",
+      "title": "Scope",
+      "x-ui-enum-names": ["Anonymous", "Organization"],
+      "x-ui-show-when": {
+        "all": [
+          {"field": "operation", "equals": "share"}
+        ]
+      }
+    },
+    "parentId": {
+      "type": "string",
+      "default": "",
+      "title": "Parent",
+      "description": "Parent folder ID in the site document library.",
+      "x-ui-placeholder": "Folder ID",
+      "x-ui-show-when": {
+        "all": [
+          {"field": "resource", "equals": "file"},
+          {"field": "operation", "equals": "upload"}
+        ]
+      }
+    },
+    "fileName": {
+      "type": "string",
+      "default": "",
+      "title": "File Name",
+      "x-ui-show-when": {
+        "all": [
+          {"field": "resource", "equals": "file"},
+          {"field": "operation", "equals": "upload"}
+        ]
+      }
+    },
+    "binaryData": {
+      "type": "boolean",
+      "default": true,
+      "title": "Binary Data",
+      "x-ui-show-when": {
+        "all": [
+          {"field": "resource", "equals": "file"},
+          {"field": "operation", "equals": "upload"}
+        ]
+      }
+    },
+    "fileContent": {
+      "type": "string",
+      "default": "",
+      "title": "File Content",
+      "x-ui-show-when": {
+        "all": [
+          {"field": "resource", "equals": "file"},
+          {"field": "operation", "equals": "upload"},
+          {"field": "binaryData", "equals": false}
+        ]
+      }
+    },
+    "name": {
+      "type": "string",
+      "default": "",
+      "title": "Name",
+      "x-ui-show-when": {
+        "all": [
+          {"field": "resource", "equals": "folder"},
+          {"field": "operation", "equals": "create"}
+        ]
+      }
+    },
+    "options": {
+      "type": "object",
+      "default": {},
+      "title": "Options",
+      "properties": {
+        "parentFolderId": {
+          "type": "string",
+          "default": "",
+          "title": "Parent Folder",
+          "description": "Parent folder ID in the site document library."
+        }
+      },
+      "x-ui-show-when": {
+        "all": [
+          {"field": "resource", "equals": "folder"},
+          {"field": "operation", "equals": "create"}
+        ]
+      }
+    },
+    "folderId": {
+      "type": "string",
+      "default": "",
+      "title": "Folder",
+      "description": "Folder ID in the site document library.",
+      "x-ui-placeholder": "Folder ID",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {"field": "resource", "equals": "folder"},
+            {"field": "operation", "equals": "delete"}
+          ]
+        },
+        {
+          "all": [
+            {"field": "resource", "equals": "folder"},
+            {"field": "operation", "equals": "getChildren"}
+          ]
+        },
+        {
+          "all": [
+            {"field": "resource", "equals": "folder"},
+            {"field": "operation", "equals": "share"}
+          ]
+        }
+      ]
+    }
+  }
+}

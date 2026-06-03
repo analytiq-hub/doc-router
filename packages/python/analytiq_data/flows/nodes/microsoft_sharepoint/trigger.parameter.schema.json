@@ -1,0 +1,157 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "siteId": {
+      "type": "string",
+      "default": "root",
+      "title": "Site",
+      "description": "Site ID, root, hostname:/sites/Name composite, or full SharePoint site URL.",
+      "x-ui-placeholder": "root or contoso.sharepoint.com:/sites/Team"
+    },
+    "event": {
+      "type": "string",
+      "enum": ["fileCreated", "fileUpdated", "folderCreated", "folderUpdated"],
+      "default": "fileCreated",
+      "title": "Trigger On",
+      "x-ui-enum-names": [
+        "File Created",
+        "File Updated",
+        "Folder Created",
+        "Folder Updated"
+      ]
+    },
+    "simple": {
+      "type": "boolean",
+      "default": true,
+      "title": "Simplify",
+      "description": "Return a simplified version of the response instead of raw REST payload."
+    },
+    "watchFolder": {
+      "type": "boolean",
+      "default": false,
+      "title": "Watch Folder",
+      "description": "Watch for changes in a given folder rather than the entire site document library.",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {"field": "event", "equals": "fileCreated"}
+          ]
+        },
+        {
+          "all": [
+            {"field": "event", "equals": "folderCreated"}
+          ]
+        }
+      ]
+    },
+    "watch": {
+      "type": "string",
+      "enum": ["anyFile", "selectedFolder", "selectedFile", "anyFolder", "oneSelectedFolder"],
+      "default": "anyFile",
+      "title": "Watch",
+      "x-ui-enum-by": {
+        "field": "event",
+        "variants": {
+          "fileUpdated": {
+            "enum": ["anyFile", "selectedFolder", "selectedFile"],
+            "x-ui-enum-names": ["Any File", "Inside a Folder", "A Selected File"]
+          },
+          "folderUpdated": {
+            "enum": ["anyFolder", "selectedFolder", "oneSelectedFolder"],
+            "x-ui-enum-names": ["Any Folder", "Inside a Folder", "A Selected Folder"]
+          }
+        }
+      },
+      "x-ui-show-when-any": [
+        {"field": "event", "equals": "fileUpdated"},
+        {"field": "event", "equals": "folderUpdated"}
+      ]
+    },
+    "fileId": {
+      "type": "string",
+      "default": "",
+      "title": "File",
+      "description": "File ID in the site document library.",
+      "x-ui-show-when": {
+        "all": [
+          {"field": "event", "equals": "fileUpdated"},
+          {"field": "watch", "equals": "selectedFile"}
+        ]
+      }
+    },
+    "folderId": {
+      "type": "string",
+      "default": "",
+      "title": "Folder",
+      "description": "Folder ID in the site document library.",
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {"field": "watch", "oneOf": ["selectedFolder", "oneSelectedFolder"]}
+          ]
+        },
+        {
+          "all": [
+            {"field": "watchFolder", "equals": true}
+          ]
+        }
+      ]
+    },
+    "options": {
+      "type": "object",
+      "default": {},
+      "title": "Options",
+      "properties": {
+        "folderChild": {
+          "type": "boolean",
+          "default": false,
+          "title": "Watch Nested Folders",
+          "description": "Include items in nested folders, not only direct children."
+        }
+      },
+      "x-ui-show-when-any": [
+        {
+          "all": [
+            {"field": "watch", "equals": "selectedFolder"}
+          ]
+        },
+        {
+          "all": [
+            {"field": "watchFolder", "equals": true}
+          ]
+        }
+      ]
+    },
+    "poll_times": {
+      "type": "object",
+      "title": "Poll times",
+      "description": "Platform-managed poll schedule (minimum interval: every minute).",
+      "default": { "item": [{ "mode": "everyMinute" }] },
+      "x-ui-hidden": true,
+      "properties": {
+        "item": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": ["everyMinute", "everyHour", "everyDay", "custom"],
+                "default": "everyMinute"
+              },
+              "cronExpression": {
+                "type": "string",
+                "default": "* * * * *"
+              }
+            },
+            "required": ["mode"]
+          }
+        }
+      },
+      "required": ["item"]
+    }
+  },
+  "required": ["event"]
+}

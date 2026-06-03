@@ -1,0 +1,34 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "flows.microsoft_sharepoint",
+  "type_version": 1,
+  "label": "Microsoft SharePoint",
+  "description": "Consume Microsoft SharePoint API",
+  "category": "input",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 1,
+  "max_inputs": 1,
+  "outputs": 1,
+  "output_labels": [
+    "main"
+  ],
+  "icon_key": "microsoft_sharepoint",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.microsoft_sharepoint.node",
+    "class": "FlowsMicrosoftSharePointNode"
+  },
+  "palette_group": "app",
+  "experimental": true,
+  "credential_slots": [
+    {
+      "slot": "microsoftSharePointOAuth2Api",
+      "label": "Credential to connect with",
+      "required": true,
+      "docrouter_binding": "organization_credential_kind:microsoftSharePointOAuth2Api"
+    }
+  ],
+  "parameter_schema_ref": "parameter.schema.json"
+}
