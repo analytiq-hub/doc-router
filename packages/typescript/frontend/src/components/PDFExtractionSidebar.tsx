@@ -1120,7 +1120,7 @@ const PDFExtractionSidebarContent = ({ organizationId, id, pdfDocument, onHighli
   return (
     <div className="w-full h-full flex flex-col border-r border-black/10">
       <div className="h-12 min-h-[48px] flex items-center justify-between px-4 bg-gray-100 text-black font-bold border-b border-black/10">
-        <span>Available Prompts</span>
+        <span>Prompts</span>
         <div className="flex items-center gap-2">
           {editMode && (
             <span className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded-md">
