@@ -65,7 +65,8 @@ RUN apt-get update && \
 COPY packages/python/requirements.txt ./packages/python/
 RUN uv pip install --system --no-cache-dir -r packages/python/requirements.txt
 
-# Copy the packages
+# Copy the packages and repo-root schemas (credential kinds, etc.)
 COPY packages/ ./packages/
+COPY schemas/ ./schemas/
 
 EXPOSE 8000

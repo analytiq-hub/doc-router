@@ -222,7 +222,7 @@ const FlowCredentials: React.FC<{
 
   useEffect(() => {
     if (!autoBootstrapCredential) return;
-    if (loading || kinds.length === 0) return;
+    if (loading) return;
 
     let cancelled = false;
 
@@ -245,8 +245,6 @@ const FlowCredentials: React.FC<{
   }, [
     autoBootstrapCredential,
     loading,
-    kinds.length,
-    api,
     onAutoBootstrapCredentialHandled,
     resetCreateWizardState,
   ]);
