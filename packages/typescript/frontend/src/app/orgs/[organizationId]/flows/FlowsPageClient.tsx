@@ -36,6 +36,7 @@ export default function FlowsPageClient({
   const [splitWidthPx, setSplitWidthPx] = useState<number | null>(null);
   const [createFlowBusy, setCreateFlowBusy] = useState(false);
   const [createFlowError, setCreateFlowError] = useState('');
+  const [openCreateCredential, setOpenCreateCredential] = useState(false);
 
   const measureSplitWidth = useCallback(() => {
     const el = splitRef.current;
@@ -93,6 +94,7 @@ export default function FlowsPageClient({
   );
 
   const onCredentialBootstrapHandled = useCallback(() => {
+    setOpenCreateCredential(false);
     stripQueryKeys(['newCredential', 'bootstrapCredential']);
   }, [stripQueryKeys]);
 
@@ -184,11 +186,7 @@ export default function FlowsPageClient({
               disabled={primaryActionDisabled}
               onClick={() => {
                 if (tab === 'credentials') {
-                  pushWithSearch((q) => {
-                    q.set('tab', 'credentials');
-                    q.set('newCredential', '1');
-                    q.delete('bootstrapCredential');
-                  });
+                  setOpenCreateCredential(true);
                   return;
                 }
                 void handleCreateFlowNavigate();
@@ -278,7 +276,7 @@ export default function FlowsPageClient({
           {tab === 'credentials' && (
             <FlowCredentials
               organizationId={organizationId}
-              autoBootstrapCredential={autoCreateCredential}
+              autoBootstrapCredential={autoCreateCredential || openCreateCredential}
               onAutoBootstrapCredentialHandled={onCredentialBootstrapHandled}
             />
           )}
