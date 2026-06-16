@@ -316,7 +316,7 @@ def test_apply_prompt_caching_converts_system_string_when_supported():
     assert len(out[0]["content"]) == 1
     assert out[0]["content"][0]["type"] == "text"
     assert out[0]["content"][0]["text"] == "You are a helpful assistant."
-    assert out[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert out[0]["content"][0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
     assert out[1] == {"role": "user", "content": "Hello"}
 
 
@@ -375,7 +375,17 @@ def test_apply_prompt_caching_applied_for_claude_when_tools_passed():
         tools = [{"type": "function", "function": {"name": "test", "description": "test"}}]
         out = _apply_prompt_caching("anthropic/claude-sonnet-4-5-20250929", messages, tools=tools)
     assert len(out) == 2
-    assert out[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert out[0]["content"][0]["cache_control"] == {"type": "ephemeral", "ttl": "1h"}
+
+
+def test_cache_breakpoint_ttl_defaults_to_5m():
+    """Prompt component cache breakpoint TTL defaults to 5m when missing."""
+    from analytiq_data.llm.llm import _cache_breakpoint_ttl
+
+    assert _cache_breakpoint_ttl(None) == "5m"
+    assert _cache_breakpoint_ttl({}) == "5m"
+    assert _cache_breakpoint_ttl({"type": "ephemeral"}) == "5m"
+    assert _cache_breakpoint_ttl({"type": "ephemeral", "ttl": "1h"}) == "1h"
 
 
 @pytest.mark.asyncio
