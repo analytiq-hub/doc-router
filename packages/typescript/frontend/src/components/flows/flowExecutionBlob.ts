@@ -6,7 +6,7 @@ export type FlowExecutionBlobContext = {
   executionId: string;
 };
 
-/** Fetches execution-scoped GridFS payload (`storage_id` must be `flow_blobs:...`); uses API session cookie / bearer. */
+/** Fetches binary payload for an execution trace (`storage_id`: `flow_blobs:…`, `flow_pins:…`, or `files:…`). */
 export async function fetchFlowExecutionBlob(
   ctx: FlowExecutionBlobContext,
   storageId: string,

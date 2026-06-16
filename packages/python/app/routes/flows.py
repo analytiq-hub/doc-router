@@ -208,6 +208,81 @@ def _blob_response_media_type(stored_mime: str, *, content_disposition_is_inline
     return essence
 
 
+def _parse_binary_storage_id(storage_id: str) -> tuple[str, str]:
+    """Parse ``BinaryRef.storage_id`` as ``bucket:key``."""
+
+    sid = storage_id.strip()
+    parts = sid.split(":", 1)
+    if len(parts) != 2 or not parts[0].strip() or not parts[1].strip():
+        raise HTTPException(status_code=400, detail="Invalid storage_id")
+    return parts[0].strip(), parts[1].strip()
+
+
+def _gridfs_blob_bytes(result: dict[str, Any] | None) -> bytes:
+    if not result:
+        raise HTTPException(status_code=404, detail="Blob not found")
+    blob_raw = result.get("blob")
+    if blob_raw is None:
+        raise HTTPException(status_code=404, detail="Blob payload missing")
+    return blob_raw if isinstance(blob_raw, (bytes, bytearray)) else bytes(blob_raw)
+
+
+def _gridfs_meta_mime_and_filename(meta_raw: Any) -> tuple[str, str]:
+    meta: dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
+    mime = meta.get("mime_type") if isinstance(meta.get("mime_type"), str) else "application/octet-stream"
+    fname = meta.get("file_name") if isinstance(meta.get("file_name"), str) else ""
+    return mime, fname
+
+
+def _binary_blob_http_response(
+    *,
+    blob: bytes,
+    mime: str,
+    file_name: str,
+    action: Literal["view", "download"],
+) -> Response:
+    headers: dict[str, str] = {}
+    want_inline = action == "view" and _pin_blob_mime_allows_inline(mime)
+    disp = "inline" if want_inline else "attachment"
+    if file_name.strip():
+        safe = _safe_content_disposition_filename(file_name)
+        headers["Content-Disposition"] = f'{disp}; filename="{safe}"'
+    elif not want_inline:
+        headers["Content-Disposition"] = disp
+    media_type = _blob_response_media_type(mime, content_disposition_is_inline=want_inline)
+    return Response(content=blob, media_type=media_type, headers=headers)
+
+
+async def _load_org_document_file_blob(
+    db,
+    analytiq_client,
+    *,
+    organization_id: str,
+    file_key: str,
+) -> tuple[bytes, str, str]:
+    """Load a permanent document GridFS object after verifying org ownership."""
+
+    doc_rec = await db.docs.find_one(
+        {
+            "organization_id": organization_id,
+            "$or": [{"pdf_file_name": file_key}, {"mongo_file_name": file_key}],
+        }
+    )
+    if not doc_rec:
+        raise HTTPException(status_code=404, detail="Blob not found")
+
+    file_result = await ad.common.get_file_async(analytiq_client, file_key)
+    if not file_result:
+        raise HTTPException(status_code=404, detail="Blob not found")
+
+    blob_bytes = _gridfs_blob_bytes(file_result)
+    meta = file_result.get("metadata") if isinstance(file_result.get("metadata"), dict) else {}
+    mime = meta.get("type") if isinstance(meta.get("type"), str) else "application/octet-stream"
+    user_fn = doc_rec.get("user_file_name")
+    fname = user_fn if isinstance(user_fn, str) and user_fn.strip() else file_key
+    return blob_bytes, mime, fname
+
+
 def _object_id_or_400(value: str, *, field: str) -> ObjectId:
     try:
         return ObjectId(value)
@@ -1019,27 +1094,9 @@ async def get_revision_pin_blob(
 
     aq_client = ad.common.get_analytiq_client()
     result = await ad.mongodb.blob.get_blob_async(aq_client, bucket="flow_pins", key=key)
-    if not result:
-        raise HTTPException(status_code=404, detail="Blob not found")
-    blob_raw = result.get("blob")
-    if blob_raw is None:
-        raise HTTPException(status_code=404, detail="Blob payload missing")
-    blob = blob_raw if isinstance(blob_raw, (bytes, bytearray)) else bytes(blob_raw)
-
-    meta_raw = result.get("metadata") or {}
-    meta: dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
-    mime = meta.get("mime_type") if isinstance(meta.get("mime_type"), str) else "application/octet-stream"
-    fname = meta.get("file_name") if isinstance(meta.get("file_name"), str) else ""
-    headers: dict[str, str] = {}
-    want_inline = action == "view" and _pin_blob_mime_allows_inline(mime)
-    disp = "inline" if want_inline else "attachment"
-    if fname.strip():
-        safe = _safe_content_disposition_filename(fname)
-        headers["Content-Disposition"] = f'{disp}; filename="{safe}"'
-    elif not want_inline:
-        headers["Content-Disposition"] = disp
-    media_type = _blob_response_media_type(mime, content_disposition_is_inline=want_inline)
-    return Response(content=blob, media_type=media_type, headers=headers)
+    blob = _gridfs_blob_bytes(result)
+    mime, fname = _gridfs_meta_mime_and_filename(result.get("metadata"))
+    return _binary_blob_http_response(blob=blob, mime=mime, file_name=fname, action=action)
 
 
 @flows_router.put("/v0/orgs/{organization_id}/flows/{flow_id}", response_model=SaveFlowResponse)
@@ -1699,7 +1756,14 @@ async def get_execution_blob(
     organization_id: str,
     flow_id: str,
     exec_id: str,
-    storage_id: str = Query(..., min_length=1, description='BinaryRef.storage_id (bucket:key), e.g. flow_blobs:execId/node/item/prop'),
+    storage_id: str = Query(
+        ...,
+        min_length=1,
+        description=(
+            "BinaryRef.storage_id (bucket:key). Supports flow_blobs:, flow_pins:, and files: "
+            "(permanent document GridFS keys; org ownership verified)."
+        ),
+    ),
     action: Literal["view", "download"] = Query(
         "download",
         description=(
@@ -1709,7 +1773,7 @@ async def get_execution_blob(
     ),
     current_user: User = Depends(get_org_user),
 ):
-    """Return bytes for an item binary stored under this execution (`flow_blobs` GridFS keys are scoped per execution)."""
+    """Return bytes for a binary referenced in this execution's run data."""
 
     _ = current_user
     try:
@@ -1718,41 +1782,41 @@ async def get_execution_blob(
         raise HTTPException(status_code=404, detail="Execution not found")
 
     db = await _get_db()
-    doc = await db.flow_executions.find_one({"_id": oid, "flow_id": flow_id, "organization_id": organization_id})
-    if not doc:
+    exec_doc = await db.flow_executions.find_one(
+        {"_id": oid, "flow_id": flow_id, "organization_id": organization_id}
+    )
+    if not exec_doc:
         raise HTTPException(status_code=404, detail="Execution not found")
 
-    sid = storage_id.strip()
-    parts = sid.split(":", 1)
-    if len(parts) != 2 or parts[0] != "flow_blobs" or not parts[1]:
-        raise HTTPException(status_code=400, detail="Invalid storage_id")
-    key = parts[1]
-    if not key.startswith(f"{exec_id}/"):
-        raise HTTPException(status_code=403, detail="Blob key does not belong to this execution")
-
+    bucket, key = _parse_binary_storage_id(storage_id)
     aq_client = ad.common.get_analytiq_client()
-    result = await ad.mongodb.blob.get_blob_async(aq_client, bucket="flow_blobs", key=key)
-    if not result:
-        raise HTTPException(status_code=404, detail="Blob not found")
-    blob_raw = result.get("blob")
-    if blob_raw is None:
-        raise HTTPException(status_code=404, detail="Blob payload missing")
-    blob = blob_raw if isinstance(blob_raw, (bytes, bytearray)) else bytes(blob_raw)
 
-    meta_raw = result.get("metadata") or {}
-    meta: dict[str, Any] = meta_raw if isinstance(meta_raw, dict) else {}
-    mime = meta.get("mime_type") if isinstance(meta.get("mime_type"), str) else "application/octet-stream"
-    fname = meta.get("file_name") if isinstance(meta.get("file_name"), str) else ""
-    headers: dict[str, str] = {}
-    want_inline = action == "view" and _pin_blob_mime_allows_inline(mime)
-    disp = "inline" if want_inline else "attachment"
-    if fname.strip():
-        safe = _safe_content_disposition_filename(fname)
-        headers["Content-Disposition"] = f'{disp}; filename="{safe}"'
-    elif not want_inline:
-        headers["Content-Disposition"] = disp
-    media_type = _blob_response_media_type(mime, content_disposition_is_inline=want_inline)
-    return Response(content=blob, media_type=media_type, headers=headers)
+    if bucket == "flow_blobs":
+        if not key.startswith(f"{exec_id}/"):
+            raise HTTPException(status_code=403, detail="Blob key does not belong to this execution")
+        result = await ad.mongodb.blob.get_blob_async(aq_client, bucket="flow_blobs", key=key)
+        blob = _gridfs_blob_bytes(result)
+        mime, fname = _gridfs_meta_mime_and_filename(result.get("metadata"))
+        return _binary_blob_http_response(blob=blob, mime=mime, file_name=fname, action=action)
+
+    if bucket == "flow_pins":
+        flow_revid = exec_doc.get("flow_revid")
+        if not isinstance(flow_revid, str) or not flow_revid.strip():
+            raise HTTPException(status_code=404, detail="Execution not found")
+        if not key.startswith(f"pin/{flow_revid}/"):
+            raise HTTPException(status_code=403, detail="Blob key does not belong to this execution")
+        result = await ad.mongodb.blob.get_blob_async(aq_client, bucket="flow_pins", key=key)
+        blob = _gridfs_blob_bytes(result)
+        mime, fname = _gridfs_meta_mime_and_filename(result.get("metadata"))
+        return _binary_blob_http_response(blob=blob, mime=mime, file_name=fname, action=action)
+
+    if bucket == "files":
+        blob, mime, fname = await _load_org_document_file_blob(
+            db, aq_client, organization_id=organization_id, file_key=key
+        )
+        return _binary_blob_http_response(blob=blob, mime=mime, file_name=fname, action=action)
+
+    raise HTTPException(status_code=400, detail="Invalid storage_id")
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/executions/{exec_id}/stop")
