@@ -27,6 +27,7 @@ import {
   resolveEnumSchemaForParams,
 } from './flowSchemaParameterUtils';
 import { FlowCredentialAuthenticationField } from './FlowCredentialAuthenticationField';
+import { FlowOrgEntityPickerField } from './FlowOrgEntityPickerField';
 import { FlowCollectionFieldsField } from './FlowCollectionFieldsField';
 import {
   FlowScheduleTriggerRulesField,
@@ -286,6 +287,38 @@ export const FlowNodeParameterFields: React.FC<{
       Array.isArray((subschema as { oneOf?: unknown }).oneOf) && t !== 'string';
     const rawPlaceholder =
       typeof subschema['x-ui-placeholder'] === 'string' ? (subschema['x-ui-placeholder'] as string) : '';
+
+    if (uiHint === 'org_tag_picker') {
+      return (
+        <div key={key} className="mb-3">
+          <FlowOrgEntityPickerField
+            kind="tag"
+            label={propLabel}
+            description={schemaDescription(subschema)}
+            value={v}
+            readOnly={readOnly}
+            flowOrgApi={flowOrgApi}
+            onChange={(id) => setField(key, id)}
+          />
+        </div>
+      );
+    }
+
+    if (uiHint === 'org_prompt_picker') {
+      return (
+        <div key={key} className="mb-3">
+          <FlowOrgEntityPickerField
+            kind="prompt"
+            label={propLabel}
+            description={schemaDescription(subschema)}
+            value={v}
+            readOnly={readOnly}
+            flowOrgApi={flowOrgApi}
+            onChange={(id) => setField(key, id)}
+          />
+        </div>
+      );
+    }
 
     if (uiHint === 'schedule_trigger_rules') {
       if (readOnly) {

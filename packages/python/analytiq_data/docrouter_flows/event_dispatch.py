@@ -39,6 +39,42 @@ def _metadata_str_map(raw: Any) -> dict[str, str]:
     return out
 
 
+async def _lookup_tag_name(analytiq_client, tag_id: str | None) -> str:
+    if not tag_id or not ad.common.is_valid_object_id(tag_id):
+        return ""
+    try:
+        return await ad.common.get_tag_name(analytiq_client, tag_id)
+    except Exception:
+        return ""
+
+
+async def _lookup_tag_names(analytiq_client, tag_ids: list[str]) -> list[str]:
+    if not tag_ids:
+        return []
+    valid = [t for t in tag_ids if ad.common.is_valid_object_id(t)]
+    if not valid:
+        return [""] * len(tag_ids)
+    db = ad.common.get_async_db(analytiq_client)
+    rows = await db.tags.find(
+        {"_id": {"$in": [ObjectId(t) for t in valid]}},
+        {"name": 1},
+    ).to_list(length=None)
+    by_id = {str(r["_id"]): str(r.get("name") or "") for r in rows}
+    return [by_id.get(tid, "") for tid in tag_ids]
+
+
+async def _lookup_prompt_name(analytiq_client, prompt_id: str | None) -> str:
+    if not prompt_id:
+        return ""
+    if prompt_id == "default":
+        return "Default"
+    if not ad.common.is_valid_object_id(prompt_id):
+        return ""
+    db = ad.common.get_async_db(analytiq_client)
+    row = await db.prompts.find_one({"_id": ObjectId(prompt_id)}, {"name": 1})
+    return str(row.get("name") or "") if row else ""
+
+
 async def ensure_docrouter_flow_trigger_indexes(db) -> None:
     await db[FLOW_TRIGGERS_COLLECTION].create_index(
         [("flow_id", 1), ("trigger_node_id", 1)],
@@ -163,20 +199,30 @@ async def build_docrouter_event_payload(
     file_name = user_file if isinstance(user_file, str) else ""
     mime_type = mime_for_storage_key(file_name) if file_name else "application/octet-stream"
 
+    tag_ids = [str(t) for t in (doc.get("tag_ids") or []) if t is not None]
+    tag_names = await _lookup_tag_names(analytiq_client, tag_ids)
+    matched_tag_name: str | None = None
+    if matched_tag_id:
+        name = await _lookup_tag_name(analytiq_client, matched_tag_id)
+        matched_tag_name = name or None
+
     payload: dict[str, Any] = {
         "event_type": event_type,
         "document_id": doc_id,
         "file_name": file_name,
         "mime_type": mime_type,
         "upload_date": _iso_datetime(doc.get("upload_date")),
-        "tag_ids": [str(t) for t in (doc.get("tag_ids") or []) if t is not None],
+        "tag_ids": tag_ids,
+        "tag_names": tag_names,
         "metadata": _metadata_str_map(doc.get("metadata")),
         "matched_tag_id": matched_tag_id,
+        "matched_tag_name": matched_tag_name,
     }
 
     if event_type in {"llm.completed", "llm.error"}:
         payload["prompt_id"] = prompt_id or ""
         payload["prompt_revid"] = prompt_revid or ""
+        payload["prompt_name"] = await _lookup_prompt_name(analytiq_client, prompt_id)
     if event_type == "llm.completed":
         payload["llm_run_id"] = llm_run_id or ""
         payload["trigger_llm_result"] = trigger_llm_result

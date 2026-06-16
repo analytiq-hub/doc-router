@@ -38,11 +38,15 @@ class DocRouterEventTriggerNode:
             },
             "tag_id": {
                 "type": "string",
+                "title": "Tag filter",
                 "description": "Optional tag filter — fires only when the document has this tag.",
+                "x-ui-widget": "org_tag_picker",
             },
             "prompt_id": {
                 "type": "string",
+                "title": "Prompt filter",
                 "description": "Optional prompt filter for LLM events.",
+                "x-ui-widget": "org_prompt_picker",
                 "x-ui-show-when-any": [
                     {"field": "event_type", "equals": "llm.completed"},
                     {"field": "event_type", "equals": "llm.error"},
@@ -93,8 +97,10 @@ class DocRouterEventTriggerNode:
                 "mime_type": "application/octet-stream",
                 "upload_date": datetime.now(UTC).isoformat(),
                 "tag_ids": [],
+                "tag_names": [],
                 "metadata": {},
                 "matched_tag_id": None,
+                "matched_tag_name": None,
             },
             binary={},
             meta={"source_node_id": node["id"], "item_index": 0, "manual_sample": True},

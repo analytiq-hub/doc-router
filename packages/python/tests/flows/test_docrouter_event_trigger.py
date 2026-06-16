@@ -113,6 +113,35 @@ async def _insert_document(test_db, *, tag_ids: list[str] | None = None) -> tupl
     return document_id, file_key
 
 
+async def _insert_org_tag(test_db, name: str) -> str:
+    tag_id = ObjectId()
+    await test_db.tags.insert_one(
+        {
+            "_id": tag_id,
+            "name": name,
+            "color": "#3B82F6",
+            "organization_id": TEST_ORG_ID,
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
+    )
+    return str(tag_id)
+
+
+async def _insert_org_prompt(test_db, name: str) -> str:
+    prompt_id = ObjectId()
+    await test_db.prompts.insert_one(
+        {
+            "_id": prompt_id,
+            "name": name,
+            "organization_id": TEST_ORG_ID,
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
+    )
+    return str(prompt_id)
+
+
 async def _create_and_activate_event_flow(
     test_db,
     *,
@@ -266,7 +295,8 @@ async def test_dispatch_skips_when_tag_filter_mismatch(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_dispatch_llm_completed_prompt_id_filter(test_db, mock_auth):
-    await _create_and_activate_event_flow(test_db, event_type="llm.completed", prompt_id="prompt-a")
+    prompt_id = await _insert_org_prompt(test_db, "Invoice Extract")
+    await _create_and_activate_event_flow(test_db, event_type="llm.completed", prompt_id=prompt_id)
     document_id, _ = await _insert_document(test_db)
     aq_client = ad.common.get_analytiq_client()
 
@@ -287,7 +317,7 @@ async def test_dispatch_llm_completed_prompt_id_filter(test_db, mock_auth):
         organization_id=TEST_ORG_ID,
         event_type="llm.completed",
         document_id=document_id,
-        prompt_id="prompt-a",
+        prompt_id=prompt_id,
         prompt_revid="rev-prompt-a",
         llm_run_id="6a31799ec5729d2678e16ecc",
         trigger_llm_result={"ok": True},
@@ -298,20 +328,46 @@ async def test_dispatch_llm_completed_prompt_id_filter(test_db, mock_auth):
     exec_doc = await db.flow_executions.find_one({"_id": ObjectId(exec_ids[0])})
     assert exec_doc is not None
     assert exec_doc["trigger"]["event_type"] == "llm.completed"
-    assert exec_doc["trigger"]["prompt_id"] == "prompt-a"
+    assert exec_doc["trigger"]["prompt_id"] == prompt_id
     assert exec_doc["trigger"]["prompt_revid"] == "rev-prompt-a"
+    assert exec_doc["trigger"]["prompt_name"] == "Invoice Extract"
     assert exec_doc["trigger"]["llm_run_id"] == "6a31799ec5729d2678e16ecc"
-    assert "prompt_name" not in exec_doc["trigger"]
     item_json = exec_doc["trigger"]["items"][0][0]["json"]
     assert item_json["llm_run_id"] == "6a31799ec5729d2678e16ecc"
-    assert item_json["prompt_id"] == "prompt-a"
+    assert item_json["prompt_id"] == prompt_id
     assert item_json["prompt_revid"] == "rev-prompt-a"
-    assert "prompt_name" not in item_json
+    assert item_json["prompt_name"] == "Invoice Extract"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_includes_tag_names(test_db, mock_auth):
+    tag_a = await _insert_org_tag(test_db, "Invoices")
+    tag_b = await _insert_org_tag(test_db, "Urgent")
+    await _create_and_activate_event_flow(test_db, tag_id=tag_a)
+    document_id, _ = await _insert_document(test_db, tag_ids=[tag_a, tag_b])
+    aq_client = ad.common.get_analytiq_client()
+
+    exec_ids = await dispatch_docrouter_event(
+        aq_client,
+        organization_id=TEST_ORG_ID,
+        event_type="document.uploaded",
+        document_id=document_id,
+    )
+    assert len(exec_ids) == 1
+
+    db = ad.common.get_async_db()
+    exec_doc = await db.flow_executions.find_one({"_id": ObjectId(exec_ids[0])})
+    trigger = exec_doc["trigger"]
+    assert trigger["tag_ids"] == [tag_a, tag_b]
+    assert trigger["tag_names"] == ["Invoices", "Urgent"]
+    assert trigger["matched_tag_id"] == tag_a
+    assert trigger["matched_tag_name"] == "Invoices"
 
 
 @pytest.mark.asyncio
 async def test_dispatch_llm_error_prompt_id_filter(test_db, mock_auth):
-    await _create_and_activate_event_flow(test_db, event_type="llm.error", prompt_id="prompt-a")
+    prompt_id = await _insert_org_prompt(test_db, "Error Prompt")
+    await _create_and_activate_event_flow(test_db, event_type="llm.error", prompt_id=prompt_id)
     document_id, _ = await _insert_document(test_db)
     aq_client = ad.common.get_analytiq_client()
 
@@ -333,7 +389,7 @@ async def test_dispatch_llm_error_prompt_id_filter(test_db, mock_auth):
         organization_id=TEST_ORG_ID,
         event_type="llm.error",
         document_id=document_id,
-        prompt_id="prompt-a",
+        prompt_id=prompt_id,
         prompt_revid="rev-prompt-a",
         error_message="boom",
         error_code="llm",
@@ -344,8 +400,9 @@ async def test_dispatch_llm_error_prompt_id_filter(test_db, mock_auth):
     exec_doc = await db.flow_executions.find_one({"_id": ObjectId(exec_ids[0])})
     assert exec_doc is not None
     assert exec_doc["trigger"]["event_type"] == "llm.error"
-    assert exec_doc["trigger"]["prompt_id"] == "prompt-a"
+    assert exec_doc["trigger"]["prompt_id"] == prompt_id
     assert exec_doc["trigger"]["prompt_revid"] == "rev-prompt-a"
+    assert exec_doc["trigger"]["prompt_name"] == "Error Prompt"
     assert exec_doc["trigger"]["error_message"] == "boom"
 
 
@@ -442,7 +499,8 @@ async def test_save_rejects_invalid_docrouter_trigger_event_type(test_db, mock_a
 
 @pytest.mark.asyncio
 async def test_notify_llm_completed_docrouter_event_dispatches(test_db, mock_auth):
-    await _create_and_activate_event_flow(test_db, event_type="llm.completed", prompt_id="prompt-a")
+    prompt_id = await _insert_org_prompt(test_db, "Notify Prompt")
+    await _create_and_activate_event_flow(test_db, event_type="llm.completed", prompt_id=prompt_id)
     document_id, _ = await _insert_document(test_db)
     aq_client = ad.common.get_analytiq_client()
     prompt_revid = str(ObjectId())
@@ -450,7 +508,7 @@ async def test_notify_llm_completed_docrouter_event_dispatches(test_db, mock_aut
     await test_db.prompt_revisions.insert_one(
         {
             "_id": ObjectId(prompt_revid),
-            "prompt_id": "prompt-a",
+            "prompt_id": prompt_id,
             "prompt_version": 1,
             "organization_id": TEST_ORG_ID,
         }
