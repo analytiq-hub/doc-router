@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Editor from '@monaco-editor/react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { FlowExecutionBlobContext } from './flowExecutionBlob';
-import { fetchFlowExecutionBlob } from './flowExecutionBlob';
+import { fetchFlowExecutionBlob, isFetchableExecutionBlobStorageId } from './flowExecutionBlob';
 
 export type JsonPath = Array<string | number>;
 
@@ -607,7 +607,7 @@ const IoBinaryPanel: React.FC<{
           const mime = r.ref.mime_type && r.ref.mime_type.trim() ? r.ref.mime_type : '—';
           const sizeLabel = r.ref.file_size != null ? formatFileSizeBytes(r.ref.file_size) : '—';
           const displayName = r.ref.file_name?.trim() || r.propertyName;
-          const canFetch = Boolean(flowBlobDownloadContext && sid && sid.startsWith('flow_blobs:'));
+          const canFetch = Boolean(flowBlobDownloadContext && isFetchableExecutionBlobStorageId(sid));
           const busy = busyKey === cardKey;
           const viewKind = inferBinaryViewKind(r.ref.mime_type, r.ref.file_name);
           const canView = Boolean(canFetch && viewKind);
@@ -814,7 +814,7 @@ export const IoViewer: React.FC<{
    * When `valueKind` is `executionItems`, parallel `FlowItem.binary` maps (same length as rows; omit or pad with `{}`).
    */
   executionItemsBinaries?: Array<Record<string, unknown>> | null;
-  /** Enables View/Download using `fetchFlowExecutionBlob` for `flow_blobs:` refs. */
+  /** Enables View/Download using `fetchFlowExecutionBlob` for execution-scoped binary refs. */
   flowBlobDownloadContext?: FlowExecutionBlobContext | null;
   /** When true, only the schema/table/json body is rendered (parent supplies chrome). */
   hideHeader?: boolean;

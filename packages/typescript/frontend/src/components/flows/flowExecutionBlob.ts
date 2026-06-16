@@ -6,6 +6,14 @@ export type FlowExecutionBlobContext = {
   executionId: string;
 };
 
+const FETCHABLE_STORAGE_PREFIXES = ['flow_blobs:', 'flow_pins:', 'files:'] as const;
+
+/** True when the execution blob endpoint can resolve this ``storage_id``. */
+export function isFetchableExecutionBlobStorageId(storageId: string | undefined | null): boolean {
+  if (!storageId || !storageId.trim()) return false;
+  return FETCHABLE_STORAGE_PREFIXES.some((prefix) => storageId.startsWith(prefix));
+}
+
 /** Fetches binary payload for an execution trace (`storage_id`: `flow_blobs:…`, `flow_pins:…`, or `files:…`). */
 export async function fetchFlowExecutionBlob(
   ctx: FlowExecutionBlobContext,
