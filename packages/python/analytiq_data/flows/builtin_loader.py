@@ -6,16 +6,10 @@ import importlib
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Any
 
-from analytiq_data.flows.builtin_manifest import (
-    BUILTIN_NODES,
-    BuiltinNodeSpec,
-    SPEC_BY_KEY,
-)
+from analytiq_data.docrouter_flows.docrouter_builtin_manifest import DOCROUTER_SPEC_BY_KEY
+from analytiq_data.flows.builtin_manifest import BUILTIN_NODES, BuiltinNodeSpec, SPEC_BY_KEY
 from analytiq_data.flows.lazy_builtin_node import LazyBuiltinNode
-from analytiq_data.flows.node_manifest_io import (
-    load_node_manifest,
-    manifest_executor_spec,
-)
+from analytiq_data.flows.node_manifest_io import load_node_manifest, manifest_executor_spec
 from analytiq_data.flows.node_registry import get, is_registered, register
 
 if TYPE_CHECKING:
@@ -91,7 +85,7 @@ def ensure_builtin_keys_for_revision(
 def try_register_builtin_key(key: str) -> bool:
     """Register a lazy builtin palette entry by key. Returns False if not builtin."""
 
-    spec = SPEC_BY_KEY.get(key)
+    spec = SPEC_BY_KEY.get(key) or DOCROUTER_SPEC_BY_KEY.get(key)
     if spec is None:
         return False
     if not is_registered(key):

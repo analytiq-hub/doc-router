@@ -86,12 +86,20 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
                 logger.error(f"Document metadata for {document_id} not found or missing mongo_file_name. Skipping OCR.")
                 await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_FAILED)
                 if org_id:
+                    err_payload = {"stage": "ocr", "message": "missing mongo_file_name"}
                     await ad.webhooks.enqueue_event(
                         analytiq_client,
                         organization_id=org_id,
                         event_type="document.error",
                         document_id=document_id,
-                        error={"stage": "ocr", "message": "missing mongo_file_name"},
+                        error=err_payload,
+                    )
+                    await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+                        analytiq_client,
+                        organization_id=org_id,
+                        event_type="document.error",
+                        document_id=document_id,
+                        error=err_payload,
                     )
                 # For this hard failure, decide between retry and DLQ based on attempts
                 if attempts >= MAX_QUEUE_ATTEMPTS:
@@ -109,12 +117,20 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
                 logger.error(f"Document metadata for {document_id} not found or missing pdf_file_name. Skipping OCR.")
                 await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_FAILED)
                 if org_id:
+                    err_payload = {"stage": "ocr", "message": "missing pdf_file_name"}
                     await ad.webhooks.enqueue_event(
                         analytiq_client,
                         organization_id=org_id,
                         event_type="document.error",
                         document_id=document_id,
-                        error={"stage": "ocr", "message": "missing pdf_file_name"},
+                        error=err_payload,
+                    )
+                    await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+                        analytiq_client,
+                        organization_id=org_id,
+                        event_type="document.error",
+                        document_id=document_id,
+                        error=err_payload,
                     )
                 if attempts >= MAX_QUEUE_ATTEMPTS:
                     await ad.queue.move_to_dlq(
@@ -130,12 +146,20 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
                 logger.error(f"File for {document_id} not found. Skipping OCR.")
                 await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_FAILED)
                 if org_id:
+                    err_payload = {"stage": "ocr", "message": "file not found"}
                     await ad.webhooks.enqueue_event(
                         analytiq_client,
                         organization_id=org_id,
                         event_type="document.error",
                         document_id=document_id,
-                        error={"stage": "ocr", "message": "file not found"},
+                        error=err_payload,
+                    )
+                    await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+                        analytiq_client,
+                        organization_id=org_id,
+                        event_type="document.error",
+                        document_id=document_id,
+                        error=err_payload,
                     )
                 if attempts >= MAX_QUEUE_ATTEMPTS:
                     await ad.queue.move_to_dlq(
@@ -201,17 +225,25 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
                 await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_FAILED)
             try:
                 if org_id and document_id:
+                    err_payload = {
+                        "stage": "ocr",
+                        "message": "insufficient_spu_credits",
+                        "required_spus": getattr(e, "required_spus", None),
+                        "available_spus": getattr(e, "available_spus", None),
+                    }
                     await ad.webhooks.enqueue_event(
                         analytiq_client,
                         organization_id=org_id,
                         event_type="document.error",
                         document_id=document_id,
-                        error={
-                            "stage": "ocr",
-                            "message": "insufficient_spu_credits",
-                            "required_spus": getattr(e, "required_spus", None),
-                            "available_spus": getattr(e, "available_spus", None),
-                        },
+                        error=err_payload,
+                    )
+                    await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+                        analytiq_client,
+                        organization_id=org_id,
+                        event_type="document.error",
+                        document_id=document_id,
+                        error=err_payload,
                     )
             except Exception:
                 pass
@@ -225,12 +257,20 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
             await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_FAILED)
         try:
             if org_id and document_id:
+                err_payload = {"stage": "ocr", "message": str(e)}
                 await ad.webhooks.enqueue_event(
                     analytiq_client,
                     organization_id=org_id,
                     event_type="document.error",
                     document_id=document_id,
-                    error={"stage": "ocr", "message": str(e)},
+                    error=err_payload,
+                )
+                await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+                    analytiq_client,
+                    organization_id=org_id,
+                    event_type="document.error",
+                    document_id=document_id,
+                    error=err_payload,
                 )
         except Exception:
             pass

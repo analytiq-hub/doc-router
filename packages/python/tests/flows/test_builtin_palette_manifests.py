@@ -10,6 +10,7 @@ from analytiq_data.flows.builtin_loader import (
     register_builtin_nodes,
 )
 from analytiq_data.flows.builtin_manifest import BUILTIN_NODES
+from analytiq_data.docrouter_flows.docrouter_builtin_manifest import DOCROUTER_NODES
 from analytiq_data.flows.lazy_builtin_node import LazyBuiltinNode
 from analytiq_data.flows.node_registry import _registry, get, is_registered
 
@@ -39,7 +40,7 @@ def test_list_palette_entries_without_operations_modules() -> None:
             sys.modules.pop(name, None)
 
     entries = list_builtin_palette_entries()
-    assert len(entries) == len(BUILTIN_NODES)
+    assert len(entries) == len(BUILTIN_NODES) + len(DOCROUTER_NODES)
     assert entries[0]["key"]
     assert "parameter_schema" in entries[0]
     assert "analytiq_data.flows.nodes.gmail.operations" not in sys.modules
@@ -67,7 +68,12 @@ def test_executor_loads_on_first_delegate_access() -> None:
 
 def test_list_palette_entries_matches_manifest_keys() -> None:
     keys = {e["key"] for e in ad.flows.list_palette_entries()}
-    assert keys == {s.key for s in BUILTIN_NODES}
+    assert keys == {s.key for s in BUILTIN_NODES} | {s.key for s in DOCROUTER_NODES}
+
+
+def test_list_palette_entries_includes_docrouter_event_trigger() -> None:
+    keys = {e["key"] for e in ad.flows.list_palette_entries()}
+    assert "docrouter.trigger" in keys
 
 
 def test_get_registers_lazy_without_executor() -> None:

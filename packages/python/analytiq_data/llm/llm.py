@@ -1337,7 +1337,17 @@ async def run_llm(
             )
         except Exception as e:
             logger.warning(f"{document_id}/{prompt_revid}: webhook enqueue failed: {e}")
-    
+
+    prompt_id, _ = await get_prompt_info_from_rev_id(analytiq_client, prompt_revid)
+    await ad.docrouter_flows.try_dispatch_docrouter_event(
+        analytiq_client,
+        organization_id=org_id,
+        event_type="llm.completed",
+        document_id=document_id,
+        prompt_id=prompt_id,
+        trigger_llm_result=resp_dict,
+    )
+
     return resp_dict
 
 async def get_llm_result(analytiq_client,

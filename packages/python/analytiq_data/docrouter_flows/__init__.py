@@ -6,5 +6,6 @@ Lives under `analytiq_data` (not `app`) so any process that loads `analytiq_data
 importing the FastAPI package tree.
 """
 
-from .register import register_docrouter_nodes
+from .register import *
+from .event_dispatch import *
 from .services import *

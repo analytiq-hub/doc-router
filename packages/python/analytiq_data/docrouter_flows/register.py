@@ -5,6 +5,7 @@ from __future__ import annotations
 import analytiq_data as ad
 
 from .nodes import (
+    DocRouterEventTriggerNode,
     DocRouterLlmExtractNode,
     DocRouterManualTriggerNode,
     DocRouterOcrNode,
@@ -16,6 +17,7 @@ def register_docrouter_nodes() -> None:
     """Register all DocRouter-provided node type instances (idempotent by key)."""
 
     ad.flows.register(DocRouterManualTriggerNode())
+    ad.flows.register(DocRouterEventTriggerNode())
     ad.flows.register(DocRouterOcrNode())
     ad.flows.register(DocRouterLlmExtractNode())
     ad.flows.register(DocRouterSetTagsNode())

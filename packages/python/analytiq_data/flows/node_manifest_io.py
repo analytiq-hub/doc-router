@@ -7,14 +7,18 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from analytiq_data.flows.builtin_manifest import BUILTIN_NODES, BuiltinNodeSpec, SPEC_BY_KEY
+from analytiq_data.docrouter_flows.docrouter_builtin_manifest import DOCROUTER_NODES, DOCROUTER_SPEC_BY_KEY
+from analytiq_data.flows.builtin_manifest import BUILTIN_NODES, SPEC_BY_KEY, BuiltinNodeSpec
 
 _FLOWS_ROOT = Path(__file__).resolve().parent
+_DOCROUTER_ROOT = Path(__file__).resolve().parent.parent / "docrouter_flows"
 # Stable identifier for manifest format v1 (not fetched over HTTP).
 MANIFEST_SCHEMA_ID = "urn:docrouter:flow-node-manifest:v1"
 
 
 def manifest_path_for_spec(spec: BuiltinNodeSpec) -> Path:
+    if spec.key in DOCROUTER_SPEC_BY_KEY:
+        return _DOCROUTER_ROOT / spec.manifest_relpath
     return _FLOWS_ROOT / spec.manifest_relpath
 
 
@@ -58,7 +62,7 @@ def _resolve_manifest(raw: dict[str, Any], base_dir: Path) -> dict[str, Any]:
 def list_builtin_palette_manifests() -> list[dict[str, Any]]:
     """All builtin palette metadata from JSON manifests (no Python executor import)."""
 
-    return [load_node_manifest(spec) for spec in BUILTIN_NODES]
+    return [load_node_manifest(spec) for spec in (*BUILTIN_NODES, *DOCROUTER_NODES)]
 
 
 def manifest_executor_spec(manifest: dict[str, Any]) -> dict[str, str]:

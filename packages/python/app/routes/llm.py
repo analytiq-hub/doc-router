@@ -231,6 +231,7 @@ async def run_llm_analysis(
         logger.warning(f"{document_id}/{prompt_revid}: SPU credit exhausted in LLM run: {str(e)}")
         try:
             prompt_id, prompt_version = await ad.llm.get_prompt_info_from_rev_id(analytiq_client, prompt_revid)
+            err_payload = {"stage": "llm_api", "message": str(e)}
             await ad.webhooks.enqueue_event(
                 analytiq_client,
                 organization_id=organization_id,
@@ -241,7 +242,15 @@ async def run_llm_analysis(
                     "prompt_id": prompt_id,
                     "prompt_version": prompt_version,
                 },
-                error={"stage": "llm_api", "message": str(e)},
+                error=err_payload,
+            )
+            await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+                analytiq_client,
+                organization_id=organization_id,
+                event_type="llm.error",
+                document_id=document_id,
+                error=err_payload,
+                prompt_id=prompt_id,
             )
         except Exception:
             pass
@@ -253,6 +262,7 @@ async def run_llm_analysis(
         logger.error(f"{document_id}/{prompt_revid}: Error in LLM run: {str(e)}")
         try:
             prompt_id, prompt_version = await ad.llm.get_prompt_info_from_rev_id(analytiq_client, prompt_revid)
+            err_payload = {"stage": "llm_api", "message": str(e)}
             await ad.webhooks.enqueue_event(
                 analytiq_client,
                 organization_id=organization_id,
@@ -263,7 +273,15 @@ async def run_llm_analysis(
                     "prompt_id": prompt_id,
                     "prompt_version": prompt_version,
                 },
-                error={"stage": "llm_api", "message": str(e)},
+                error=err_payload,
+            )
+            await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+                analytiq_client,
+                organization_id=organization_id,
+                event_type="llm.error",
+                document_id=document_id,
+                error=err_payload,
+                prompt_id=prompt_id,
             )
         except Exception:
             pass

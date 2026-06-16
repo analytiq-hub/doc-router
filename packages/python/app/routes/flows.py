@@ -924,6 +924,8 @@ async def delete_flow(organization_id: str, flow_id: str, current_user: User = D
     except Exception:
         logger.warning(f"Flow delete: failed flow_pins sweep for flow_id={flow_id}", exc_info=True)
 
+    await ad.docrouter_flows.event_dispatch.delete_docrouter_flow_triggers(db, flow_id=flow_id)
+
     res = await db.flows.delete_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Flow not found")
@@ -1123,6 +1125,18 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
     except ad.flows.FlowValidationError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
+    try:
+        ad.docrouter_flows.event_dispatch.validate_docrouter_trigger_params(
+            {
+                "nodes": nodes,
+                "connections": req.connections,
+                "settings": settings,
+                "pin_data": pin_data,
+            }
+        )
+    except ad.flows.FlowValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
     # Ensure webhook trigger leaf is persisted and system-wide unique (if this graph uses webhook trigger).
     leaf = _extract_webhook_leaf_from_nodes(nodes)
     if leaf is None:
@@ -1285,6 +1299,17 @@ async def activate_flow(organization_id: str, flow_id: str, req: ActivateFlowReq
     except ad.flows.FlowValidationError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
+    try:
+        await ad.docrouter_flows.event_dispatch.sync_docrouter_flow_triggers(
+            db,
+            org_id=organization_id,
+            flow_id=flow_id,
+            flow_revid=target,
+            revision=r,
+        )
+    except ad.flows.FlowValidationError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
     await db.flows.update_one(
         {"_id": ObjectId(flow_id)},
         {"$set": {"active": True, "active_flow_revid": target, "updated_at": _now(), "updated_by": current_user.user_id}},
@@ -1306,6 +1331,7 @@ async def deactivate_flow(organization_id: str, flow_id: str, current_user: User
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Flow not found")
+    await ad.docrouter_flows.event_dispatch.delete_docrouter_flow_triggers(db, flow_id=flow_id)
     trigger_svc = ad.flows.get_flow_trigger_service()
     if trigger_svc is not None:
         await trigger_svc.deregister_flow(flow_id)

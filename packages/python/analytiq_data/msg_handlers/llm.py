@@ -102,12 +102,20 @@ async def process_llm_msg(analytiq_client, msg, force: bool = False):
             # Optional per-org webhook: error
             try:
                 if org_id:
+                    err_payload = {"stage": "llm", "message": error_summary}
                     await ad.webhooks.enqueue_event(
                         analytiq_client,
                         organization_id=org_id,
                         event_type="llm.error",
                         document_id=document_id,
-                        error={"stage": "llm", "message": error_summary},
+                        error=err_payload,
+                    )
+                    await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+                        analytiq_client,
+                        organization_id=org_id,
+                        event_type="llm.error",
+                        document_id=document_id,
+                        error=err_payload,
                     )
             except Exception:
                 pass
@@ -157,12 +165,20 @@ async def process_llm_msg(analytiq_client, msg, force: bool = False):
         # Optional per-org webhook: error
         try:
             if org_id:
+                err_payload = {"stage": "llm", "message": str(e)}
                 await ad.webhooks.enqueue_event(
                     analytiq_client,
                     organization_id=org_id,
                     event_type="llm.error",
                     document_id=document_id,
-                    error={"stage": "llm", "message": str(e)},
+                    error=err_payload,
+                )
+                await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+                    analytiq_client,
+                    organization_id=org_id,
+                    event_type="llm.error",
+                    document_id=document_id,
+                    error=err_payload,
                 )
         except Exception:
             pass
