@@ -110,7 +110,7 @@ async def process_llm_msg(analytiq_client, msg, force: bool = False):
                         document_id=document_id,
                         error=err_payload,
                     )
-                    await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+                    await ad.docrouter_flows.send_docrouter_error_event(
                         analytiq_client,
                         organization_id=org_id,
                         event_type="llm.error",
@@ -173,7 +173,7 @@ async def process_llm_msg(analytiq_client, msg, force: bool = False):
                     document_id=document_id,
                     error=err_payload,
                 )
-                await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+                await ad.docrouter_flows.send_docrouter_error_event(
                     analytiq_client,
                     organization_id=org_id,
                     event_type="llm.error",

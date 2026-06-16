@@ -199,7 +199,7 @@ async def _save_single_uploaded_document(
     except Exception as e:
         logger.warning(f"Webhook enqueue failed for uploaded doc {document_id}: {e}")
 
-    await ad.docrouter_flows.try_dispatch_docrouter_event(
+    await ad.docrouter_flows.send_docrouter_event(
         analytiq_client,
         organization_id=organization_id,
         event_type="document.uploaded",
@@ -391,7 +391,7 @@ async def update_document(
             await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
             logger.info(f"Queued KB indexing for document {document_id} due to tag changes")
 
-            await ad.docrouter_flows.try_dispatch_docrouter_event(
+            await ad.docrouter_flows.send_docrouter_event(
                 analytiq_client,
                 organization_id=organization_id,
                 event_type="document.uploaded",

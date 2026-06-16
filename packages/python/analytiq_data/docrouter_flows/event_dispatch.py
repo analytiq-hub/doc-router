@@ -385,7 +385,7 @@ async def dispatch_docrouter_event(
     return exec_ids
 
 
-async def try_dispatch_docrouter_event(
+async def send_docrouter_event(
     analytiq_client,
     *,
     organization_id: str,
@@ -393,7 +393,7 @@ async def try_dispatch_docrouter_event(
     document_id: str,
     **kwargs: Any,
 ) -> list[str]:
-    """Dispatch wrapper that logs and swallows errors (for lifecycle hooks)."""
+    """Best-effort dispatch from lifecycle hooks; logs and swallows errors."""
 
     try:
         return await dispatch_docrouter_event(
@@ -410,7 +410,7 @@ async def try_dispatch_docrouter_event(
         return []
 
 
-async def try_dispatch_docrouter_error_event(
+async def send_docrouter_error_event(
     analytiq_client,
     *,
     organization_id: str,
@@ -422,7 +422,7 @@ async def try_dispatch_docrouter_error_event(
     err = error if isinstance(error, dict) else {}
     stage = err.get("stage")
     message = err.get("message")
-    return await try_dispatch_docrouter_event(
+    return await send_docrouter_event(
         analytiq_client,
         organization_id=organization_id,
         event_type=event_type,

@@ -244,7 +244,7 @@ async def run_llm_analysis(
                 },
                 error=err_payload,
             )
-            await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+            await ad.docrouter_flows.send_docrouter_error_event(
                 analytiq_client,
                 organization_id=organization_id,
                 event_type="llm.error",
@@ -275,7 +275,7 @@ async def run_llm_analysis(
                 },
                 error=err_payload,
             )
-            await ad.docrouter_flows.try_dispatch_docrouter_error_event(
+            await ad.docrouter_flows.send_docrouter_error_event(
                 analytiq_client,
                 organization_id=organization_id,
                 event_type="llm.error",
