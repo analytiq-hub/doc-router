@@ -671,12 +671,29 @@ The following order minimises dependency risk:
      dispatch time so execution records are self-contained.
    - ✅ Execution trace UI: renders `[deleted]` where tag/prompt name is empty.
 
-4. **Typed connection ports** — extend `connection_type` in `connections.py` beyond
-   `Literal["main"]` to support `"docrouter.ocr"`; update `flow-rf.ts` to preserve
-   edge connection types rather than mapping all edges to `"main"`; add UI drag-layer
-   validation to reject drops when source and target port types differ; add
-   activation-time connection-type validation to the engine.  Required before the OCR
-   and LLM run nodes (steps 5–6).
+4. ✅ **Typed connection ports**:
+   - ✅ `port_types.py` — `ConnectionType = Literal["main", "docrouter.ocr"]`,
+     `normalize_connection_type`, `input_port_types_for`, `output_port_types_for`.
+   - ✅ `connections.py` — `NodeConnection.connection_type` widened to `ConnectionType`;
+     `coerce_json_connections_to_dataclasses` preserves `connection_type` from JSON
+     instead of hardcoding `"main"`.
+   - ✅ `engine.py` `validate_revision` — checks edge `connection_type` against both
+     the source output port type and the destination input port type; raises
+     `FlowValidationError` on mismatch.
+   - ✅ `lazy_builtin_node.py` / `builtin_loader.py` — load `input_port_types` and
+     `output_port_types` from node manifests; `ocr.manifest.json` declares
+     `output_port_types: ["docrouter.ocr"]`.
+   - ✅ SDK `flow-port-types.ts` — `inputPortType`, `outputPortType`,
+     `portTypesCompatible`, `edgeConnectionType`; `FlowNodeType` gains
+     `input_port_types` / `output_port_types`; `FlowNodeConnection.connection_type`
+     widened; `revisionToRF` stores `data.connectionType` on edges; `rfToConnections`
+     reads it back.
+   - ✅ `FlowCanvasNode.tsx` — OCR input handles rendered at `Position.Bottom`
+     (bottom-left) with a distinct violet style; output handles coloured by port type.
+   - ✅ `FlowEditor.tsx` — `isValidConnection` rejects drops when port types are
+     incompatible; `onConnect` stores `connectionType` in edge data; inline node
+     insertion checks compatibility on both sides.
+   - Tests: `test_flow_connection_types.py` (backend), `flow-rf.test.ts` (SDK roundtrip).
 
 5. **OCR node** (§3) — reimplement; per-page `ocr_pages` array output; flow-blob
    `ocr_json`.
