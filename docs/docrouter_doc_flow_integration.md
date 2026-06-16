@@ -58,11 +58,11 @@ docrouter.trigger
 ### 2.3 Parameter schema
 
 
-| Parameter    | Type                                                                     | Applicable events            | Description                                                                                |
-| ------------ | ------------------------------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------ |
-| `event_type` | `"document.uploaded" | "document.error" | "llm.completed" | "llm.error"` | all                          | Required.                                                                                  |
-| `tag_id`     | `string`                                                                 | all                          | Optional tag filter — fires only if the document has this tag. Empty = match any document. |
-| `prompt_id`  | `string`                                                                 | `llm.completed`, `llm.error` | Optional prompt filter — fires only for this prompt. Empty = any prompt.                   |
+| Parameter    | Type                                                                     | Applicable events            | Description                                                                                        |
+| ------------ | ------------------------------------------------------------------------ | ---------------------------- | -------------------------------------------------------------------------------------------------- |
+| `event_type` | `"document.uploaded" | "document.error" | "llm.completed" | "llm.error"` | all                          | Required.                                                                                          |
+| `tag_ids`    | `array[string]`                                                          | all                          | Optional tag filter — fires if the document has **any** of these tags. Empty = match any document. |
+| `prompt_id`  | `string`                                                                 | `llm.completed`, `llm.error` | Optional prompt filter — fires only for this prompt. Empty = any prompt.                           |
 
 
 ### 2.4 Trigger output
@@ -72,18 +72,19 @@ present only for the relevant `event_type`.
 
 ```
 json:
-  event_type:     str                  # one of the four event names
-  document_id:    str
-  file_name:      str                  # original filename as uploaded
-  mime_type:      str
-  upload_date:    str                  # ISO 8601 datetime
-  tag_ids:        list[str]            # all tags on the document at trigger time
-  metadata:       dict[str, str]       # user-provided key-value pairs
-  matched_tag_id: str | null           # the configured tag_id if a filter was set
+  event_type:   str          # one of the four event names
+  document_id:  str
+  file_name:    str          # original filename as uploaded
+  mime_type:    str
+  upload_date:  str          # ISO 8601 datetime
+  tag_ids:      list[str]   # all tag IDs on the document at trigger time
+  tag_names:    list[str]   # parallel array of tag names (snapshot; "" for unknown)
+  metadata:     dict[str, str]
 
   # llm.completed and llm.error
-  prompt_id:     str
-  prompt_revid:  str
+  prompt_id:    str
+  prompt_revid: str
+  prompt_name:  str          # snapshot at dispatch time
 
   # llm.completed only
   llm_run_id:          str
@@ -168,36 +169,29 @@ event regardless of `include_retagged`.
 
 ### 2.7 Deletion safety for `tag_id` and `prompt_id` references
 
-`docrouter.trigger` nodes can reference a `tag_id` or `prompt_id` as a filter.
+`docrouter.trigger` nodes can reference `tag_ids` or a `prompt_id` as filters.
 Tags and prompts can be deleted at any time — deletion is not blocked.  Instead,
 the UI surfaces the broken reference directly in the trigger node config panel so
 the user is aware and can correct it.
 
-**Trigger config panel warnings.**  When the config panel loads, it resolves the
-stored `tag_id` and `prompt_id` against the org's current tags and prompts.  If
-either no longer exists, the panel shows an inline warning on that field:
-
-- `tag_id` field: *"This tag has been deleted.  Clear the filter or select another tag."*
-- `prompt_id` field: *"This prompt has been deleted.  Clear the filter or select another prompt."*
-
-The flow remains saveable and activatable with a deleted reference; at dispatch time
-the filter simply never matches (no documents carry the deleted tag; no LLM run uses
-the deleted prompt), so the trigger is effectively silenced until the user corrects
-the node config.  This is intentional — blocking activation would require a
-server-round-trip check and would prevent users from viewing or editing a broken flow.
+**Trigger config panel warnings** ✅ implemented.  Each picker component
+(`FlowOrgTagMultiPickerField`, `FlowOrgEntityPickerField`) individually resolves its
+stored IDs against the org's current entities on load.  Tags or prompts that no
+longer exist are shown with a `deleted` chip in-place so the user can see and clear
+them.  The flow remains saveable and activatable with a deleted reference; at
+dispatch time the filter simply never matches, so the trigger is silenced until the
+user corrects the node.
 
 **Historic run records.**  Flow executions are immutable event logs.  The only
 impact of a deletion is display: the UI cannot resolve a name for a deleted entity.
-Two mitigations:
 
-1. **Snapshot names at dispatch time.**  `build_docrouter_event_payload` already
-   stores `prompt_name`.  Extend it to also store `matched_tag_name` at the moment
-   the trigger fires.  The execution record then carries everything needed to render
-   itself without live lookups.
-2. **Graceful UI fallback.**  When displaying execution records, if a tag or prompt
-   name cannot be resolved (entity deleted after the run), show `[deleted tag]` /
-   `[deleted prompt]` rather than a blank or an error.  This covers runs that
-   predate the `matched_tag_name` snapshot field.
+1. **Snapshot names at dispatch time** ✅ implemented.  `build_docrouter_event_payload`
+   stores `tag_names` (parallel array to `tag_ids`, one name per tag on the document)
+   and `prompt_name`.  All names are resolved at the moment the trigger fires so
+   execution records are self-contained.
+2. **Graceful UI fallback** ✅ implemented.  The execution trace view displays
+   `[deleted]` for any tag or prompt name that resolves to an empty string, covering
+   runs that predate the name snapshot fields.
 
 ---
 
@@ -585,7 +579,7 @@ discriminator determines which fields are relevant for dispatch.
   "flow_revid": "…",        // revision the trigger was registered against
   "trigger_node_id": "…",
   "trigger_type": "document.uploaded" | "document.error" | "llm.completed" | "llm.error",
-  "tag_id": "…",            // optional tag filter (all types)
+  "tag_ids": ["…"],          // optional tag filter — any-match (all types)
   "prompt_id": "…",         // optional prompt filter (llm.completed / llm.error only)
   "created_at": "…",
   "updated_at": "…"
@@ -668,16 +662,14 @@ The following order minimises dependency risk:
    `flows.py`; `validate_docrouter_trigger_params` called on save for early feedback
    without touching trigger rows.  Tests: `test_docrouter_event_trigger.py`.
 
-3. **Stale reference warnings for `tag_id` / `prompt_id`** (§2.7) — two pieces:
-   - **Trigger config panel:** when the panel loads, resolve `tag_id` and `prompt_id`
-     against the org's current entities; show an inline warning on each field if the
-     referenced entity no longer exists.  Backend: add a lightweight
-     `GET /v0/orgs/{org}/flows/trigger-ref-status?tag_id=…&prompt_id=…` (or piggyback
-     on the existing tag/prompt list endpoints) so the frontend can check existence
-     without a full list fetch.
-   - **Execution display:** extend `build_docrouter_event_payload` to also snapshot
-     `matched_tag_name` alongside the existing `prompt_name`; add `[deleted tag]` /
-     `[deleted prompt]` fallback rendering in the execution trace UI.
+3. ✅ **Stale reference warnings for `tag_ids` / `prompt_id`** (§2.7):
+   - ✅ `tag_id` → `tag_ids` (array, any-match); `FlowOrgTagMultiPickerField` component
+     resolves each tag ID and renders a `deleted` chip for any that no longer exist.
+   - ✅ `FlowOrgEntityPickerField` resolves `prompt_id` and renders a `deleted` chip if
+     missing; wired via `x-ui-widget: org_prompt_picker` in the node manifest.
+   - ✅ `build_docrouter_event_payload` snapshots `tag_names` and `prompt_name` at
+     dispatch time so execution records are self-contained.
+   - ✅ Execution trace UI: renders `[deleted]` where tag/prompt name is empty.
 
 4. **Typed connection ports** — extend `connection_type` in `connections.py` beyond
    `Literal["main"]` to support `"docrouter.ocr"`; update `flow-rf.ts` to preserve
