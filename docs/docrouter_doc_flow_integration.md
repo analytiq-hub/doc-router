@@ -201,6 +201,23 @@ deletion (treating it as "match all") would expand the trigger's scope in an
 unexpected and potentially expensive way — a flow scoped to one tag would suddenly
 fire for every document upload.  Blocking the delete is the safer default.
 
+**Historic run records (separate concern).** Flow executions are immutable event
+logs; their stored `tag_id` and `prompt_id` values are correct even after the
+referenced entity is deleted.  The only impact is display: the UI cannot resolve a
+name for a deleted entity.  Two mitigations:
+
+1. **Snapshot names at dispatch time.** `build_docrouter_event_payload` already
+   stores `prompt_name` as a snapshot.  Extend it to also store `matched_tag_name`
+   at the moment the trigger fires.  The execution record then carries everything
+   needed to render itself without live lookups.
+2. **Graceful UI fallback.** Anywhere the UI resolves a `tag_id` or `prompt_id`
+   from an execution record, handle the missing case explicitly — display
+   `[deleted tag]` / `[deleted prompt]` rather than a blank or an error.  This
+   covers runs that predate the snapshot field and any other edge cases.
+
+Do **not** block tag/prompt deletion based on historic run references — that would
+make entities undeletable in any system with meaningful execution history.
+
 ---
 
 ## 3. OCR Node
