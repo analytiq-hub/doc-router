@@ -40,12 +40,6 @@ class DocRouterEventTriggerNode:
                 "type": "string",
                 "description": "Optional tag filter — fires only when the document has this tag.",
             },
-            "include_retagged": {
-                "type": "boolean",
-                "default": False,
-                "description": "Also fire when an existing document is re-tagged.",
-                "x-ui-show-when": {"field": "event_type", "equals": "document.uploaded"},
-            },
             "prompt_id": {
                 "type": "string",
                 "description": "Optional prompt filter for LLM events.",
@@ -64,8 +58,6 @@ class DocRouterEventTriggerNode:
         event_type = params.get("event_type")
         if not isinstance(event_type, str) or event_type not in DOCROUTER_EVENT_TYPES:
             errs.append("parameters.event_type is required")
-        if params.get("include_retagged") and event_type != "document.uploaded":
-            errs.append("parameters.include_retagged applies only to document.uploaded")
         prompt_id = params.get("prompt_id")
         if isinstance(prompt_id, str) and prompt_id.strip() and event_type not in DOCROUTER_LLM_EVENT_TYPES:
             errs.append("parameters.prompt_id applies only to llm.completed / llm.error")

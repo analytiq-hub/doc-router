@@ -109,7 +109,6 @@ async def sync_docrouter_flow_triggers(
             "trigger_node_id": node["id"],
             "trigger_type": event_type,
             "tag_id": tag_id.strip() if isinstance(tag_id, str) and tag_id.strip() else "",
-            "include_retagged": bool(params.get("include_retagged")),
             "prompt_id": prompt_id.strip() if isinstance(prompt_id, str) and prompt_id.strip() else "",
             "updated_at": now,
         }
@@ -125,13 +124,9 @@ def _evaluate_trigger_row(
     *,
     event_type: str,
     doc: dict[str, Any],
-    was_retagged: bool,
     prompt_id: str | None,
 ) -> tuple[bool, str | None]:
     """Return ``(matches, matched_tag_id)`` for a ``flow_triggers`` row."""
-
-    if event_type == "document.uploaded" and was_retagged and not row.get("include_retagged"):
-        return False, None
 
     configured_tag = row.get("tag_id")
     matched_tag_id: str | None = None
@@ -156,7 +151,6 @@ async def build_docrouter_event_payload(
     event_type: str,
     doc: dict[str, Any],
     matched_tag_id: str | None = None,
-    was_retagged: bool = False,
     prompt_id: str | None = None,
     prompt_revid: str | None = None,
     llm_run_id: str | None = None,
@@ -180,8 +174,6 @@ async def build_docrouter_event_payload(
         "matched_tag_id": matched_tag_id,
     }
 
-    if event_type == "document.uploaded":
-        payload["was_retagged"] = bool(was_retagged)
     if event_type in {"llm.completed", "llm.error"}:
         payload["prompt_id"] = prompt_id or ""
         payload["prompt_revid"] = prompt_revid or ""
@@ -281,7 +273,6 @@ async def dispatch_docrouter_event(
     organization_id: str,
     event_type: str,
     document_id: str,
-    was_retagged: bool = False,
     prompt_id: str | None = None,
     prompt_revid: str | None = None,
     llm_run_id: str | None = None,
@@ -338,7 +329,6 @@ async def dispatch_docrouter_event(
             row,
             event_type=event_type,
             doc=doc,
-            was_retagged=was_retagged,
             prompt_id=prompt_id,
         )
         if not matches:
@@ -349,7 +339,6 @@ async def dispatch_docrouter_event(
             event_type=event_type,
             doc=doc,
             matched_tag_id=matched_tag_id,
-            was_retagged=was_retagged,
             prompt_id=prompt_id,
             prompt_revid=prompt_revid,
             llm_run_id=llm_run_id,

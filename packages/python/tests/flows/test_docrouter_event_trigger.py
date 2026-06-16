@@ -25,7 +25,6 @@ def _event_trigger_node(
     *,
     event_type: str = "document.uploaded",
     tag_id: str = "",
-    include_retagged: bool = False,
     prompt_id: str = "",
 ) -> dict:
     return {
@@ -36,7 +35,6 @@ def _event_trigger_node(
         "parameters": {
             "event_type": event_type,
             "tag_id": tag_id,
-            "include_retagged": include_retagged,
             "prompt_id": prompt_id,
         },
         "webhook_id": None,
@@ -120,7 +118,6 @@ async def _create_and_activate_event_flow(
     *,
     event_type: str = "document.uploaded",
     tag_id: str = "",
-    include_retagged: bool = False,
     prompt_id: str = "",
     with_code_downstream: bool = True,
 ) -> tuple[str, str]:
@@ -134,7 +131,6 @@ async def _create_and_activate_event_flow(
     nodes = [_event_trigger_node(
         event_type=event_type,
         tag_id=tag_id,
-        include_retagged=include_retagged,
         prompt_id=prompt_id,
     )]
     connections: dict = {}
@@ -168,46 +164,37 @@ async def _create_and_activate_event_flow(
     return flow_id, rev_id
 
 
-def test_evaluate_trigger_row_retag_requires_include_retagged() -> None:
-    row = {"include_retagged": False, "tag_id": ""}
-    doc = {"tag_ids": []}
-    matches, _ = _evaluate_trigger_row(
-        row, event_type="document.uploaded", doc=doc, was_retagged=True, prompt_id=None
-    )
-    assert matches is False
-
-
 def test_evaluate_trigger_row_tag_filter() -> None:
-    row = {"include_retagged": False, "tag_id": "tag-a"}
+    row = {"tag_id": "tag-a"}
     doc = {"tag_ids": ["tag-b"]}
     matches, _ = _evaluate_trigger_row(
-        row, event_type="document.uploaded", doc=doc, was_retagged=False, prompt_id=None
+        row, event_type="document.uploaded", doc=doc, prompt_id=None
     )
     assert matches is False
 
     doc2 = {"tag_ids": ["tag-a"]}
     matches2, matched = _evaluate_trigger_row(
-        row, event_type="document.uploaded", doc=doc2, was_retagged=False, prompt_id=None
+        row, event_type="document.uploaded", doc=doc2, prompt_id=None
     )
     assert matches2 is True
     assert matched == "tag-a"
 
 
 def test_evaluate_trigger_row_prompt_filter() -> None:
-    row = {"include_retagged": False, "tag_id": "", "prompt_id": "prompt-a"}
+    row = {"tag_id": "", "prompt_id": "prompt-a"}
     doc = {"tag_ids": []}
     matches, _ = _evaluate_trigger_row(
-        row, event_type="llm.completed", doc=doc, was_retagged=False, prompt_id="prompt-b"
+        row, event_type="llm.completed", doc=doc, prompt_id="prompt-b"
     )
     assert matches is False
 
     matches2, _ = _evaluate_trigger_row(
-        row, event_type="llm.completed", doc=doc, was_retagged=False, prompt_id="prompt-a"
+        row, event_type="llm.completed", doc=doc, prompt_id="prompt-a"
     )
     assert matches2 is True
 
     matches3, _ = _evaluate_trigger_row(
-        row, event_type="llm.error", doc=doc, was_retagged=False, prompt_id="prompt-a"
+        row, event_type="llm.error", doc=doc, prompt_id="prompt-a"
     )
     assert matches3 is True
 
@@ -247,7 +234,6 @@ async def test_dispatch_document_uploaded_enqueues_flow_run(test_db, mock_auth):
         organization_id=TEST_ORG_ID,
         event_type="document.uploaded",
         document_id=document_id,
-        was_retagged=False,
     )
     assert len(exec_ids) == 1
 
@@ -276,35 +262,6 @@ async def test_dispatch_skips_when_tag_filter_mismatch(test_db, mock_auth):
         document_id=document_id,
     )
     assert exec_ids == []
-
-
-@pytest.mark.asyncio
-async def test_dispatch_retag_respects_include_retagged(test_db, mock_auth):
-    await _create_and_activate_event_flow(test_db, include_retagged=False)
-    document_id, _ = await _insert_document(test_db)
-    aq_client = ad.common.get_analytiq_client()
-    exec_ids = await dispatch_docrouter_event(
-        aq_client,
-        organization_id=TEST_ORG_ID,
-        event_type="document.uploaded",
-        document_id=document_id,
-        was_retagged=True,
-    )
-    assert exec_ids == []
-
-    flow_id2, _ = await _create_and_activate_event_flow(test_db, include_retagged=True)
-    exec_ids2 = await dispatch_docrouter_event(
-        aq_client,
-        organization_id=TEST_ORG_ID,
-        event_type="document.uploaded",
-        document_id=document_id,
-        was_retagged=True,
-    )
-    assert len(exec_ids2) == 1
-    db = ad.common.get_async_db()
-    exec_doc = await db.flow_executions.find_one({"_id": ObjectId(exec_ids2[0])})
-    assert exec_doc["flow_id"] == flow_id2
-    assert exec_doc["trigger"]["was_retagged"] is True
 
 
 @pytest.mark.asyncio

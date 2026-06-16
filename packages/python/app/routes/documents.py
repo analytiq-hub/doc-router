@@ -204,7 +204,6 @@ async def _save_single_uploaded_document(
         organization_id=organization_id,
         event_type="document.uploaded",
         document_id=document_id,
-        was_retagged=False,
     )
 
     await ad.queue.send_msg(analytiq_client, "ocr", msg={"document_id": document_id})
@@ -390,14 +389,6 @@ async def update_document(
             kb_msg = {"document_id": document_id}
             await ad.queue.send_msg(analytiq_client, "kb_index", msg=kb_msg)
             logger.info(f"Queued KB indexing for document {document_id} due to tag changes")
-
-            await ad.docrouter_flows.send_docrouter_event(
-                analytiq_client,
-                organization_id=organization_id,
-                event_type="document.uploaded",
-                document_id=document_id,
-                was_retagged=True,
-            )
 
             # If tags were removed, reconcile only this document across KBs
             removed_tag_ids = old_tag_ids_set - new_tag_ids

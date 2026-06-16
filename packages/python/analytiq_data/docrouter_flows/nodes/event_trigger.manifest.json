@@ -40,15 +40,6 @@
         "type": "string",
         "description": "Optional tag filter — fires only when the document has this tag."
       },
-      "include_retagged": {
-        "type": "boolean",
-        "default": false,
-        "description": "Also fire when an existing document is re-tagged.",
-        "x-ui-show-when": {
-          "field": "event_type",
-          "equals": "document.uploaded"
-        }
-      },
       "prompt_id": {
         "type": "string",
         "description": "Optional prompt filter for LLM events.",
