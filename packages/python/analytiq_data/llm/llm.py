@@ -1311,7 +1311,7 @@ async def run_llm(
     if peer_run is not None:
         run_payload["match_values"] = peer_run["match_values"]
         run_payload["match_document_ids"] = peer_run["match_document_ids"]
-    await save_llm_result(
+    llm_run_id = await save_llm_result(
         analytiq_client,
         document_id,
         prompt_revid,
@@ -1345,6 +1345,7 @@ async def run_llm(
         event_type="llm.completed",
         document_id=document_id,
         prompt_id=prompt_id,
+        llm_run_id=llm_run_id,
         trigger_llm_result=resp_dict,
     )
 

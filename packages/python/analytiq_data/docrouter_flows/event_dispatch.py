@@ -120,16 +120,6 @@ async def sync_docrouter_flow_triggers(
         )
 
 
-async def _prompt_name(db, prompt_id: str | None) -> str:
-    if not isinstance(prompt_id, str) or not prompt_id.strip():
-        return ""
-    row = await db.prompts.find_one({"prompt_id": prompt_id.strip()})
-    if not row:
-        return ""
-    name = row.get("name")
-    return name if isinstance(name, str) else ""
-
-
 def _evaluate_trigger_row(
     row: dict[str, Any],
     *,
@@ -168,7 +158,7 @@ async def build_docrouter_event_payload(
     matched_tag_id: str | None = None,
     was_retagged: bool = False,
     prompt_id: str | None = None,
-    prompt_name: str | None = None,
+    llm_run_id: str | None = None,
     trigger_llm_result: Any = None,
     error_message: str | None = None,
     error_code: str | None = None,
@@ -194,10 +184,7 @@ async def build_docrouter_event_payload(
         payload["was_retagged"] = bool(was_retagged)
     if event_type == "llm.completed":
         payload["prompt_id"] = prompt_id or ""
-        if prompt_name is None and prompt_id:
-            db = ad.common.get_async_db(analytiq_client)
-            prompt_name = await _prompt_name(db, prompt_id)
-        payload["prompt_name"] = prompt_name or ""
+        payload["llm_run_id"] = llm_run_id or ""
         payload["trigger_llm_result"] = trigger_llm_result
     if event_type in {"document.error", "llm.error"}:
         payload["error_message"] = error_message or ""
@@ -294,7 +281,7 @@ async def dispatch_docrouter_event(
     document_id: str,
     was_retagged: bool = False,
     prompt_id: str | None = None,
-    prompt_name: str | None = None,
+    llm_run_id: str | None = None,
     trigger_llm_result: Any = None,
     error_message: str | None = None,
     error_code: str | None = None,
@@ -361,7 +348,7 @@ async def dispatch_docrouter_event(
             matched_tag_id=matched_tag_id,
             was_retagged=was_retagged,
             prompt_id=prompt_id,
-            prompt_name=prompt_name,
+            llm_run_id=llm_run_id,
             trigger_llm_result=trigger_llm_result,
             error_message=error_message,
             error_code=error_code,

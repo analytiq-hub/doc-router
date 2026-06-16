@@ -331,6 +331,7 @@ async def test_dispatch_llm_completed_prompt_id_filter(test_db, mock_auth):
         event_type="llm.completed",
         document_id=document_id,
         prompt_id="prompt-a",
+        llm_run_id="6a31799ec5729d2678e16ecc",
         trigger_llm_result={"ok": True},
     )
     assert len(exec_ids) == 1
@@ -340,6 +341,11 @@ async def test_dispatch_llm_completed_prompt_id_filter(test_db, mock_auth):
     assert exec_doc is not None
     assert exec_doc["trigger"]["event_type"] == "llm.completed"
     assert exec_doc["trigger"]["prompt_id"] == "prompt-a"
+    assert exec_doc["trigger"]["llm_run_id"] == "6a31799ec5729d2678e16ecc"
+    assert "prompt_name" not in exec_doc["trigger"]
+    item_json = exec_doc["trigger"]["items"][0][0]["json"]
+    assert item_json["llm_run_id"] == "6a31799ec5729d2678e16ecc"
+    assert "prompt_name" not in item_json
 
 
 @pytest.mark.asyncio
