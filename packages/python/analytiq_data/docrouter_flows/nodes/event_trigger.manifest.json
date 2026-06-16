@@ -1,0 +1,72 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "docrouter.trigger",
+  "type_version": 1,
+  "label": "Document event trigger",
+  "description": "Starts the flow when a document is uploaded, errors, or completes LLM processing.",
+  "category": "DocRouter",
+  "is_trigger": true,
+  "is_merge": false,
+  "min_inputs": 0,
+  "max_inputs": 0,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "document_event_trigger",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.docrouter_flows.nodes.event_trigger_node",
+    "class": "DocRouterEventTriggerNode"
+  },
+  "palette_group": "trigger",
+  "parameter_schema": {
+    "type": "object",
+    "title": "Document event trigger",
+    "properties": {
+      "event_type": {
+        "type": "string",
+        "enum": [
+          "document.uploaded",
+          "document.error",
+          "llm.completed",
+          "llm.error"
+        ],
+        "default": "document.uploaded",
+        "description": "Document lifecycle event that starts this flow."
+      },
+      "tag_id": {
+        "type": "string",
+        "description": "Optional tag filter — fires only when the document has this tag."
+      },
+      "include_retagged": {
+        "type": "boolean",
+        "default": false,
+        "description": "Also fire when an existing document is re-tagged.",
+        "x-ui-show-when": {
+          "field": "event_type",
+          "equals": "document.uploaded"
+        }
+      },
+      "prompt_id": {
+        "type": "string",
+        "description": "Optional prompt filter for LLM events.",
+        "x-ui-show-when-any": [
+          {
+            "field": "event_type",
+            "equals": "llm.completed"
+          },
+          {
+            "field": "event_type",
+            "equals": "llm.error"
+          }
+        ]
+      }
+    },
+    "required": [
+      "event_type"
+    ],
+    "additionalProperties": false
+  }
+}
