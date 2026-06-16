@@ -142,13 +142,19 @@ event regardless of `include_retagged`.
 
 ### 2.6 Activation / deactivation
 
-- `POST /v0/orgs/{org}/flows/{id}/activate` scans the flow's trigger nodes.
-For each `docrouter.trigger` node found, upsert one `flow_triggers` document
-keyed on `(flow_id, trigger_node_id)`:
+- **Save (`PUT /v0/orgs/{org}/flows/{id}`)** — validates `docrouter.trigger` node
+  parameters (e.g. `event_type` must be one of the four values) and returns `400`
+  on error.  Does **not** write or modify `flow_triggers` rows — trigger rows are
+  only written at activation time.  This ensures that saving a new revision while a
+  flow is already active never disrupts ongoing dispatch.
+
+- **Activate (`POST /v0/orgs/{org}/flows/{id}/activate`)** — deletes any existing
+  `flow_triggers` rows for the flow, then upserts one row per `docrouter.trigger`
+  node found in the target revision:
   ```json
   {
     "trigger_type": "document.uploaded" | "document.error" | "llm.completed" | "llm.error",
-    "flow_id": "…", "org_id": "…", "trigger_node_id": "…",
+    "flow_id": "…", "org_id": "…", "flow_revid": "…", "trigger_node_id": "…",
     "tag_id": "…",
     "include_retagged": false,
     "prompt_id": "…"
@@ -156,9 +162,12 @@ keyed on `(flow_id, trigger_node_id)`:
   ```
   A unique index on `(flow_id, trigger_node_id)` ensures repeated activation calls
   are idempotent and cannot produce duplicate dispatch rows.
-- Deactivation removes the row(s) for that flow.
-- The dispatcher queries `flow_triggers` by `(org_id, trigger_type)` — no full
-flow scan needed at event time.
+
+- **Deactivate / delete** — removes all `flow_triggers` rows for that flow.
+
+- The dispatcher queries `flow_triggers` by `(org_id, trigger_type)`, then confirms
+  the matched flow is still active and that `flow.active_flow_revid == row.flow_revid`
+  before enqueuing — no full flow scan needed at event time.
 
 ---
 
@@ -616,16 +625,19 @@ that the codebase uses this plan's names throughout.
 
 The following order minimises dependency risk:
 
-1. **Dual blob resolution** (§7.4) — extend the blob endpoint to serve `files:`
-   prefixed storage IDs.  No new node needed; unblocks manual testing of document
-   binaries in flows.
-2. **DocRouter event trigger** (§2) — `flow_triggers` collection, single dispatcher,
-   node registration with `event_type` dropdown.  UI: palette entry, config panel.
-   Start with `document.uploaded`; add remaining events incrementally.
-   **Net-new hook:** the tag PATCH handler (`PATCH /v0/orgs/{org}/documents/{id}/tags`)
-   currently only queues KB indexing — it does not emit any flow or webhook event.
-   Wiring it to call `_dispatch_docrouter_event` with `document.uploaded` (for rows
-   where `include_retagged` is set) is new work that must be scoped into this step.
+1. ✅ **Dual blob resolution** (§7.4) — `get_execution_blob` extended to dispatch on
+   `files:`, `flow_blobs:`, and `flow_pins:` prefixes; org-ownership check on `files:`
+   keys; `_parse_binary_storage_id` / `_binary_blob_http_response` helpers extracted.
+   Frontend `flowExecutionBlob.ts` comment updated; `isFetchableExecutionBlobStorageId`
+   guard added.  Tests: `test_flow_execution_blob_http.py`.
+
+2. ✅ **DocRouter event trigger** (§2) — `flow_triggers` collection with indexes;
+   `dispatch_docrouter_event` / `try_dispatch_docrouter_event` dispatcher; lifecycle
+   hooks wired in `documents.py` (upload + retag), `msg_handlers/ocr.py` (document
+   error), `llm/llm.py` (llm.completed), `msg_handlers/llm.py` + `routes/llm.py`
+   (llm.error); `DocRouterEventTriggerNode` registered; activate/deactivate/delete
+   wired in `flows.py`; `validate_docrouter_trigger_params` called on save for early
+   feedback without touching trigger rows.  Tests: `test_docrouter_event_trigger.py`.
 3. **Typed connection ports** — extend `connection_type` in `connections.py` beyond
    `Literal["main"]` to support `"docrouter.ocr"`; update `flow-rf.ts` to preserve
    edge connection types rather than mapping all edges to `"main"`; add UI drag-layer
