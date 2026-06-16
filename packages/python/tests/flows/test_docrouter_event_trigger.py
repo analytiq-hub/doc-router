@@ -409,7 +409,7 @@ async def test_event_trigger_node_replays_trigger_items(test_db, mock_auth):
 
 
 @pytest.mark.asyncio
-async def test_save_active_flow_does_not_update_flow_triggers(test_db, mock_auth):
+async def test_save_active_flow_updates_flow_triggers(test_db, mock_auth):
     flow_id, rev_id_r1 = await _create_and_activate_event_flow(test_db, tag_id="")
     db = ad.common.get_async_db()
     row_before = await db.flow_triggers.find_one({"flow_id": flow_id, "trigger_node_id": TRIGGER_NODE_ID})
@@ -422,7 +422,7 @@ async def test_save_active_flow_does_not_update_flow_triggers(test_db, mock_auth
         json={
             "base_flow_revid": rev_id_r1,
             "name": "doc event flow",
-            "nodes": [_event_trigger_node(tag_id="new-tag-on-draft")],
+            "nodes": [_event_trigger_node(event_type="llm.completed", tag_id="new-tag-on-draft")],
             "connections": {},
             "settings": {},
             "pin_data": None,
@@ -435,8 +435,9 @@ async def test_save_active_flow_does_not_update_flow_triggers(test_db, mock_auth
 
     row_after = await db.flow_triggers.find_one({"flow_id": flow_id, "trigger_node_id": TRIGGER_NODE_ID})
     assert row_after is not None
-    assert row_after["flow_revid"] == rev_id_r1
-    assert row_after["tag_id"] == ""
+    assert row_after["flow_revid"] == rev_id_r2
+    assert row_after["trigger_type"] == "llm.completed"
+    assert row_after["tag_id"] == "new-tag-on-draft"
 
     hdr = await db.flows.find_one({"_id": ObjectId(flow_id)})
     assert hdr is not None

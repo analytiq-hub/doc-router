@@ -337,6 +337,11 @@ async def dispatch_docrouter_event(
             {"_id": ObjectId(flow_id), "organization_id": organization_id, "active": True}
         )
         if not hdr or str(hdr.get("active_flow_revid") or "") != flow_revid:
+            logger.debug(
+                f"dispatch_docrouter_event: skip flow_id={flow_id!r} "
+                f"(active={bool(hdr)}, active_flow_revid={hdr.get('active_flow_revid') if hdr else None!r}, "
+                f"row_flow_revid={flow_revid!r})"
+            )
             continue
 
         matches, matched_tag_id = _evaluate_trigger_row(

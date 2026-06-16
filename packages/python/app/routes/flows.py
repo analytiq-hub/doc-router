@@ -1229,6 +1229,16 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
     h2 = await db.flows.find_one({"_id": ObjectId(flow_id)})
     r = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid)})
     if h.get("active"):
+        try:
+            await ad.docrouter_flows.event_dispatch.sync_docrouter_flow_triggers(
+                db,
+                org_id=organization_id,
+                flow_id=flow_id,
+                flow_revid=flow_revid,
+                revision=r,
+            )
+        except ad.flows.FlowValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
         trigger_svc = ad.flows.get_flow_trigger_service()
         if trigger_svc is not None:
             await trigger_svc.register_flow(
