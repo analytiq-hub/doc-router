@@ -543,14 +543,21 @@ discriminator determines which fields are relevant for dispatch.
   "_id": "<trigger_row_id>",
   "org_id": "…",
   "flow_id": "…",
+  "flow_revid": "…",        // revision the trigger was registered against
   "trigger_node_id": "…",
   "trigger_type": "document.uploaded" | "document.error" | "llm.completed" | "llm.error",
   "tag_id": "…",           // all types: optional tag filter
   "include_retagged": false, // document.uploaded only
   "prompt_id": "…",         // llm.completed / llm.error only
-  "created_at": "…"
+  "created_at": "…",
+  "updated_at": "…"
 }
 ```
+
+`flow_revid` is written by `sync_docrouter_flow_triggers` at activation time.  The
+dispatcher checks that `flow.active_flow_revid == row.flow_revid` before enqueuing,
+so stale trigger rows left over from a previous activation cannot fire against a newer
+(or rolled-back) revision.
 
 Unique index: `(flow_id, trigger_node_id)` — enforces idempotent activation.
 Index: `(org_id, trigger_type)` — primary dispatch index.
