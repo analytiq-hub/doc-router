@@ -216,7 +216,7 @@ async def run_llm_analysis(
             analytiq_client,
             document_id=document_id,
             prompt_revid=prompt_revid,
-            force=force
+            force=force,
         )
         
         # Update state to LLM completed
@@ -251,6 +251,7 @@ async def run_llm_analysis(
                 document_id=document_id,
                 error=err_payload,
                 prompt_id=prompt_id,
+                prompt_revid=prompt_revid,
             )
         except Exception:
             pass
@@ -282,6 +283,7 @@ async def run_llm_analysis(
                 document_id=document_id,
                 error=err_payload,
                 prompt_id=prompt_id,
+                prompt_revid=prompt_revid,
             )
         except Exception:
             pass

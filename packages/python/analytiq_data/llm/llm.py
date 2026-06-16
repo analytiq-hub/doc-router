@@ -907,6 +907,38 @@ async def _build_prompt_context(
     return messages, peer_run, prompt_used_text
 
 
+async def notify_llm_completed_docrouter_event(
+    analytiq_client,
+    *,
+    organization_id: str,
+    document_id: str,
+    prompt_revid: str,
+    llm_result: dict | None = None,
+    llm_run_id: str | None = None,
+) -> list[str]:
+    """Enqueue ``llm.completed`` flow triggers for a document/prompt pair."""
+
+    if llm_run_id is None or llm_result is None:
+        row = await get_llm_result(analytiq_client, document_id, prompt_revid)
+        if row:
+            if llm_run_id is None:
+                llm_run_id = str(row["_id"])
+            if llm_result is None:
+                llm_result = row.get("updated_llm_result") or row.get("llm_result") or {}
+
+    prompt_id, _ = await get_prompt_info_from_rev_id(analytiq_client, prompt_revid)
+    return await ad.docrouter_flows.send_docrouter_event(
+        analytiq_client,
+        organization_id=organization_id,
+        event_type="llm.completed",
+        document_id=document_id,
+        prompt_id=prompt_id,
+        prompt_revid=prompt_revid,
+        llm_run_id=llm_run_id,
+        trigger_llm_result=llm_result if isinstance(llm_result, dict) else {},
+    )
+
+
 async def run_llm(
     analytiq_client,
     document_id: str,
@@ -1338,15 +1370,13 @@ async def run_llm(
         except Exception as e:
             logger.warning(f"{document_id}/{prompt_revid}: webhook enqueue failed: {e}")
 
-    prompt_id, _ = await get_prompt_info_from_rev_id(analytiq_client, prompt_revid)
-    await ad.docrouter_flows.send_docrouter_event(
+    await notify_llm_completed_docrouter_event(
         analytiq_client,
         organization_id=org_id,
-        event_type="llm.completed",
         document_id=document_id,
-        prompt_id=prompt_id,
+        prompt_revid=prompt_revid,
+        llm_result=resp_dict,
         llm_run_id=llm_run_id,
-        trigger_llm_result=resp_dict,
     )
 
     return resp_dict
@@ -1509,7 +1539,13 @@ async def delete_llm_result(analytiq_client,
     return result.deleted_count > 0
 
 
-async def run_llm_for_prompt_revids(analytiq_client, document_id: str, prompt_revids: list[str], llm_model: str = None, force: bool = False) -> None:
+async def run_llm_for_prompt_revids(
+    analytiq_client,
+    document_id: str,
+    prompt_revids: list[str],
+    llm_model: str = None,
+    force: bool = False,
+) -> None:
     """
     Run the LLM for the given prompt IDs.
 

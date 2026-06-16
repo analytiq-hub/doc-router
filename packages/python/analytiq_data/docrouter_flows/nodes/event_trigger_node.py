@@ -100,7 +100,6 @@ class DocRouterEventTriggerNode:
                 "file_name": "",
                 "mime_type": "application/octet-stream",
                 "upload_date": datetime.now(UTC).isoformat(),
-                "state": "",
                 "tag_ids": [],
                 "metadata": {},
                 "matched_tag_id": None,

@@ -158,6 +158,7 @@ async def build_docrouter_event_payload(
     matched_tag_id: str | None = None,
     was_retagged: bool = False,
     prompt_id: str | None = None,
+    prompt_revid: str | None = None,
     llm_run_id: str | None = None,
     trigger_llm_result: Any = None,
     error_message: str | None = None,
@@ -174,7 +175,6 @@ async def build_docrouter_event_payload(
         "file_name": file_name,
         "mime_type": mime_type,
         "upload_date": _iso_datetime(doc.get("upload_date")),
-        "state": str(doc.get("state") or ""),
         "tag_ids": [str(t) for t in (doc.get("tag_ids") or []) if t is not None],
         "metadata": _metadata_str_map(doc.get("metadata")),
         "matched_tag_id": matched_tag_id,
@@ -182,8 +182,10 @@ async def build_docrouter_event_payload(
 
     if event_type == "document.uploaded":
         payload["was_retagged"] = bool(was_retagged)
-    if event_type == "llm.completed":
+    if event_type in {"llm.completed", "llm.error"}:
         payload["prompt_id"] = prompt_id or ""
+        payload["prompt_revid"] = prompt_revid or ""
+    if event_type == "llm.completed":
         payload["llm_run_id"] = llm_run_id or ""
         payload["trigger_llm_result"] = trigger_llm_result
     if event_type in {"document.error", "llm.error"}:
@@ -281,6 +283,7 @@ async def dispatch_docrouter_event(
     document_id: str,
     was_retagged: bool = False,
     prompt_id: str | None = None,
+    prompt_revid: str | None = None,
     llm_run_id: str | None = None,
     trigger_llm_result: Any = None,
     error_message: str | None = None,
@@ -348,6 +351,7 @@ async def dispatch_docrouter_event(
             matched_tag_id=matched_tag_id,
             was_retagged=was_retagged,
             prompt_id=prompt_id,
+            prompt_revid=prompt_revid,
             llm_run_id=llm_run_id,
             trigger_llm_result=trigger_llm_result,
             error_message=error_message,
@@ -405,6 +409,7 @@ async def send_docrouter_error_event(
     document_id: str,
     error: dict | None = None,
     prompt_id: str | None = None,
+    prompt_revid: str | None = None,
 ) -> list[str]:
     err = error if isinstance(error, dict) else {}
     stage = err.get("stage")
@@ -415,6 +420,7 @@ async def send_docrouter_error_event(
         event_type=event_type,
         document_id=document_id,
         prompt_id=prompt_id,
+        prompt_revid=prompt_revid,
         error_message=str(message) if message is not None else "",
         error_code=str(stage) if isinstance(stage, str) else None,
     )

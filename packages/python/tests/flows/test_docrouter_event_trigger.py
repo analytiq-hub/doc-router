@@ -331,6 +331,7 @@ async def test_dispatch_llm_completed_prompt_id_filter(test_db, mock_auth):
         event_type="llm.completed",
         document_id=document_id,
         prompt_id="prompt-a",
+        prompt_revid="rev-prompt-a",
         llm_run_id="6a31799ec5729d2678e16ecc",
         trigger_llm_result={"ok": True},
     )
@@ -341,10 +342,13 @@ async def test_dispatch_llm_completed_prompt_id_filter(test_db, mock_auth):
     assert exec_doc is not None
     assert exec_doc["trigger"]["event_type"] == "llm.completed"
     assert exec_doc["trigger"]["prompt_id"] == "prompt-a"
+    assert exec_doc["trigger"]["prompt_revid"] == "rev-prompt-a"
     assert exec_doc["trigger"]["llm_run_id"] == "6a31799ec5729d2678e16ecc"
     assert "prompt_name" not in exec_doc["trigger"]
     item_json = exec_doc["trigger"]["items"][0][0]["json"]
     assert item_json["llm_run_id"] == "6a31799ec5729d2678e16ecc"
+    assert item_json["prompt_id"] == "prompt-a"
+    assert item_json["prompt_revid"] == "rev-prompt-a"
     assert "prompt_name" not in item_json
 
 
@@ -373,6 +377,7 @@ async def test_dispatch_llm_error_prompt_id_filter(test_db, mock_auth):
         event_type="llm.error",
         document_id=document_id,
         prompt_id="prompt-a",
+        prompt_revid="rev-prompt-a",
         error_message="boom",
         error_code="llm",
     )
@@ -382,6 +387,8 @@ async def test_dispatch_llm_error_prompt_id_filter(test_db, mock_auth):
     exec_doc = await db.flow_executions.find_one({"_id": ObjectId(exec_ids[0])})
     assert exec_doc is not None
     assert exec_doc["trigger"]["event_type"] == "llm.error"
+    assert exec_doc["trigger"]["prompt_id"] == "prompt-a"
+    assert exec_doc["trigger"]["prompt_revid"] == "rev-prompt-a"
     assert exec_doc["trigger"]["error_message"] == "boom"
 
 
@@ -474,3 +481,69 @@ async def test_save_rejects_invalid_docrouter_trigger_event_type(test_db, mock_a
         headers=get_auth_headers(),
     )
     assert r1.status_code == 400, r1.text
+
+
+@pytest.mark.asyncio
+async def test_notify_llm_completed_docrouter_event_dispatches(test_db, mock_auth):
+    await _create_and_activate_event_flow(test_db, event_type="llm.completed", prompt_id="prompt-a")
+    document_id, _ = await _insert_document(test_db)
+    aq_client = ad.common.get_analytiq_client()
+    prompt_revid = str(ObjectId())
+
+    await test_db.prompt_revisions.insert_one(
+        {
+            "_id": ObjectId(prompt_revid),
+            "prompt_id": "prompt-a",
+            "prompt_version": 1,
+            "organization_id": TEST_ORG_ID,
+        }
+    )
+    llm_run_id = str(
+        (
+            await test_db.llm_runs.insert_one(
+                {
+                    "document_id": document_id,
+                    "prompt_revid": prompt_revid,
+                    "prompt_id": "prompt-a",
+                    "prompt_version": 1,
+                    "llm_result": {"field": "value"},
+                }
+            )
+        ).inserted_id
+    )
+
+    exec_ids = await ad.llm.notify_llm_completed_docrouter_event(
+        aq_client,
+        organization_id=TEST_ORG_ID,
+        document_id=document_id,
+        prompt_revid=prompt_revid,
+        llm_result={"field": "value"},
+        llm_run_id=llm_run_id,
+    )
+    assert len(exec_ids) == 1
+
+
+@pytest.mark.asyncio
+async def test_run_llm_skips_dispatch_on_cache_hit(test_db, mock_auth, monkeypatch):
+    document_id, _ = await _insert_document(test_db)
+    aq_client = ad.common.get_analytiq_client()
+    notify_calls: list[dict] = []
+
+    async def track_notify(*_args, **kwargs):
+        notify_calls.append(kwargs)
+        return []
+
+    async def fake_get_llm_result(*_args, **_kwargs):
+        return {"llm_result": {"cached": True}}
+
+    monkeypatch.setattr("analytiq_data.llm.llm.notify_llm_completed_docrouter_event", track_notify)
+    monkeypatch.setattr("analytiq_data.llm.llm.get_llm_result", fake_get_llm_result)
+
+    result = await ad.llm.run_llm(
+        aq_client,
+        document_id=document_id,
+        prompt_revid="default",
+        force=False,
+    )
+    assert result == {"cached": True}
+    assert notify_calls == []
