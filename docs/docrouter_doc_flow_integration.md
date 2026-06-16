@@ -58,12 +58,11 @@ docrouter.trigger
 ### 2.3 Parameter schema
 
 
-| Parameter          | Type                                                                     | Applicable events            | Description                                                                                |
-| ------------------ | ------------------------------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------ |
-| `event_type`       | `"document.uploaded" | "document.error" | "llm.completed" | "llm.error"` | all                          | Required.                                                                                  |
-| `tag_id`           | `string`                                                                 | all                          | Optional tag filter — fires only if the document has this tag. Empty = match any document. |
-| `include_retagged` | `boolean`                                                                | `document.uploaded`          | Whether to also fire when an existing document is re-tagged. Default `false`. Re-uploads always fire regardless of this flag (a re-upload creates a new document record). |
-| `prompt_id`        | `string`                                                                 | `llm.completed`, `llm.error` | Optional prompt filter — fires only for this prompt. Empty = any prompt.                   |
+| Parameter    | Type                                                                     | Applicable events            | Description                                                                                |
+| ------------ | ------------------------------------------------------------------------ | ---------------------------- | ------------------------------------------------------------------------------------------ |
+| `event_type` | `"document.uploaded" | "document.error" | "llm.completed" | "llm.error"` | all                          | Required.                                                                                  |
+| `tag_id`     | `string`                                                                 | all                          | Optional tag filter — fires only if the document has this tag. Empty = match any document. |
+| `prompt_id`  | `string`                                                                 | `llm.completed`, `llm.error` | Optional prompt filter — fires only for this prompt. Empty = any prompt.                   |
 
 
 ### 2.4 Trigger output
@@ -78,17 +77,16 @@ json:
   file_name:      str                  # original filename as uploaded
   mime_type:      str
   upload_date:    str                  # ISO 8601 datetime
-  state:          str                  # document state at trigger time
-  tag_ids:        list[str]            # all tags on the document
+  tag_ids:        list[str]            # all tags on the document at trigger time
   metadata:       dict[str, str]       # user-provided key-value pairs
   matched_tag_id: str | null           # the configured tag_id if a filter was set
 
-  # document.uploaded only
-  was_retagged: bool                   # true if this fired due to a retag rather than a fresh upload
+  # llm.completed and llm.error
+  prompt_id:     str
+  prompt_revid:  str
 
   # llm.completed only
-  prompt_id:           str
-  prompt_name:         str
+  llm_run_id:          str
   trigger_llm_result:  <result JSON>   # renamed to avoid collision with docrouter.llm_run output
 
   # document.error / llm.error
@@ -121,13 +119,12 @@ node will have `context.trigger_data` set to `None`.
 A single dispatcher function `_dispatch_docrouter_event(org_id, event_type, doc_id, **event_kwargs)` is called from each lifecycle hook:
 
 
-| Lifecycle hook                               | Event emitted                                          |
-| -------------------------------------------- | ------------------------------------------------------ |
-| Upload handler (`app/routes/documents.py`)   | `document.uploaded`                                    |
-| Tag-set handler (PATCH documents)            | `document.uploaded` when `include_retagged` rows exist |
-| Document error path (worker)                 | `document.error`                                       |
-| LLM completion path (`llm/llm.py` or worker) | `llm.completed`                                        |
-| LLM error path                               | `llm.error`                                            |
+| Lifecycle hook                               | Event emitted       |
+| -------------------------------------------- | ------------------- |
+| Upload handler (`app/routes/documents.py`)   | `document.uploaded` |
+| Document error path (worker)                 | `document.error`    |
+| LLM completion path (`llm/llm.py`)           | `llm.completed`     |
+| LLM error path (worker + API route)          | `llm.error`         |
 
 
 The dispatcher queries `flow_triggers` by `(org_id, trigger_type)`, evaluates
@@ -168,6 +165,41 @@ event regardless of `include_retagged`.
 - The dispatcher queries `flow_triggers` by `(org_id, trigger_type)`, then confirms
   the matched flow is still active and that `flow.active_flow_revid == row.flow_revid`
   before enqueuing — no full flow scan needed at event time.
+
+### 2.7 Deletion safety for `tag_id` and `prompt_id` references
+
+`docrouter.trigger` nodes can reference a `tag_id` or `prompt_id` as a filter.  If
+the referenced entity is deleted after the flow is saved (or activated), the trigger
+row silently never fires — no error is surfaced to the user and no document ever
+matches the filter.  This is the most dangerous failure mode because it is invisible.
+
+**What cannot be protected:** An unsaved flow draft in the editor may reference a
+tag or prompt that is then deleted before the user saves.  Since unsaved state is
+client-side only, server-side enforcement cannot reach it.  The save-time check
+below handles this case on next save.
+
+**Recommended enforcement at two points:**
+
+1. **Block deletion if referenced by any saved flow revision.**
+   When `DELETE /v0/orgs/{org}/tags/{id}` or `DELETE /v0/orgs/{org}/prompts/{id}`
+   is called, query `flow_revisions` (or `flow_triggers` for the activated case)
+   for any node whose `parameters.tag_id` or `parameters.prompt_id` matches.  If
+   found, return `409 Conflict` with a message listing the affected flows by name.
+   The user must either update those flow nodes first or accept that the trigger
+   will never match.  *Checking only `flow_triggers` (active flows) is insufficient
+   — saved but inactive flows would be silently broken on next activation.*
+
+2. **Validate at activation time.**
+   `sync_docrouter_flow_triggers` already validates `event_type`.  Extend it to
+   also verify that a non-empty `tag_id` exists in the org's tags collection and
+   that a non-empty `prompt_id` exists in the org's prompts collection.  Return a
+   `FlowValidationError` (→ HTTP 400) if either is missing.  This catches the gap
+   between save and activate.
+
+**Rationale for rejecting soft-deletion:** Silently clearing a filter on entity
+deletion (treating it as "match all") would expand the trigger's scope in an
+unexpected and potentially expensive way — a flow scoped to one tag would suddenly
+fire for every document upload.  Blocking the delete is the safer default.
 
 ---
 
@@ -555,9 +587,8 @@ discriminator determines which fields are relevant for dispatch.
   "flow_revid": "…",        // revision the trigger was registered against
   "trigger_node_id": "…",
   "trigger_type": "document.uploaded" | "document.error" | "llm.completed" | "llm.error",
-  "tag_id": "…",           // all types: optional tag filter
-  "include_retagged": false, // document.uploaded only
-  "prompt_id": "…",         // llm.completed / llm.error only
+  "tag_id": "…",            // optional tag filter (all types)
+  "prompt_id": "…",         // optional prompt filter (llm.completed / llm.error only)
   "created_at": "…",
   "updated_at": "…"
 }
@@ -632,27 +663,43 @@ The following order minimises dependency risk:
    guard added.  Tests: `test_flow_execution_blob_http.py`.
 
 2. ✅ **DocRouter event trigger** (§2) — `flow_triggers` collection with indexes;
-   `dispatch_docrouter_event` / `try_dispatch_docrouter_event` dispatcher; lifecycle
-   hooks wired in `documents.py` (upload + retag), `msg_handlers/ocr.py` (document
-   error), `llm/llm.py` (llm.completed), `msg_handlers/llm.py` + `routes/llm.py`
-   (llm.error); `DocRouterEventTriggerNode` registered; activate/deactivate/delete
-   wired in `flows.py`; `validate_docrouter_trigger_params` called on save for early
-   feedback without touching trigger rows.  Tests: `test_docrouter_event_trigger.py`.
-3. **Typed connection ports** — extend `connection_type` in `connections.py` beyond
+   `send_docrouter_event` / `send_docrouter_error_event` dispatcher; lifecycle hooks
+   wired in `documents.py` (upload), `msg_handlers/ocr.py` (document error),
+   `llm/llm.py` (llm.completed), `msg_handlers/llm.py` + `routes/llm.py` (llm.error);
+   `DocRouterEventTriggerNode` registered; activate/deactivate/delete wired in
+   `flows.py`; `validate_docrouter_trigger_params` called on save for early feedback
+   without touching trigger rows.  Tests: `test_docrouter_event_trigger.py`.
+
+3. **Deletion safety for `tag_id` / `prompt_id`** (§2.7) — two pieces:
+   - **Block deletion at the tag and prompt DELETE endpoints** if any saved flow
+     revision references the entity in a `docrouter.trigger` node parameter.  Return
+     `409 Conflict` listing the affected flows by name.  Must scan `flow_revisions`,
+     not just `flow_triggers`, to protect saved-but-inactive flows.
+   - **Extend `validate_docrouter_trigger_params`** (called at save and activate) to
+     verify that a non-empty `tag_id` exists in the org's tags collection and a
+     non-empty `prompt_id` exists in the org's prompts collection; raise
+     `FlowValidationError` if either is missing.
+
+4. **Typed connection ports** — extend `connection_type` in `connections.py` beyond
    `Literal["main"]` to support `"docrouter.ocr"`; update `flow-rf.ts` to preserve
    edge connection types rather than mapping all edges to `"main"`; add UI drag-layer
    validation to reject drops when source and target port types differ; add
    activation-time connection-type validation to the engine.  Required before the OCR
-   and LLM run nodes (steps 4–5).
-4. **OCR node** (§3) — reimplement; per-page `ocr_pages` array output; flow-blob
+   and LLM run nodes (steps 5–6).
+
+5. **OCR node** (§3) — reimplement; per-page `ocr_pages` array output; flow-blob
    `ocr_json`.
-5. **LLM run node** (§4) — reimplement; optional OCR input port (port 1); automatic
+
+6. **LLM run node** (§4) — reimplement; optional OCR input port (port 1); automatic
    `ocr_pages` injection when port is connected.
-6. **`docrouter.save_result` node + document page Flows section** (§6) —
+
+7. **`docrouter.save_result` node + document page Flows section** (§6) —
    `flow_results` collection, node backend + registration, REST endpoint
    `GET /v0/orgs/{org}/documents/{id}/flow-results`, Flows tab on document page.
-7. **`docrouter.map_reduce` node** (§5) — most complex; depends on OCR being reliable and
-   PyMuPDF page extraction.  Ship after steps 1–6 are stable.
-8. **`docrouter.save_as_document` node** (§7.3) — convenience bridge; ship together with or
+
+8. **`docrouter.map_reduce` node** (§5) — most complex; depends on OCR being reliable and
+   PyMuPDF page extraction.  Ship after steps 1–7 are stable.
+
+9. **`docrouter.save_as_document` node** (§7.3) — convenience bridge; ship together with or
    after map/reduce.
 
