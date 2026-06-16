@@ -36,10 +36,11 @@ class DocRouterEventTriggerNode:
                 "default": "document.uploaded",
                 "description": "Document lifecycle event that starts this flow.",
             },
-            "tag_id": {
-                "type": "string",
+            "tag_ids": {
+                "type": "array",
+                "items": {"type": "string"},
                 "title": "Tag filter",
-                "description": "Optional tag filter — fires only when the document has this tag.",
+                "description": "Optional tags — fires when the document has any of these tags.",
                 "x-ui-widget": "org_tag_picker",
             },
             "prompt_id": {
@@ -62,6 +63,9 @@ class DocRouterEventTriggerNode:
         event_type = params.get("event_type")
         if not isinstance(event_type, str) or event_type not in DOCROUTER_EVENT_TYPES:
             errs.append("parameters.event_type is required")
+        tag_ids = params.get("tag_ids")
+        if tag_ids is not None and not isinstance(tag_ids, list):
+            errs.append("parameters.tag_ids must be a list of strings")
         prompt_id = params.get("prompt_id")
         if isinstance(prompt_id, str) and prompt_id.strip() and event_type not in DOCROUTER_LLM_EVENT_TYPES:
             errs.append("parameters.prompt_id applies only to llm.completed / llm.error")
@@ -99,8 +103,6 @@ class DocRouterEventTriggerNode:
                 "tag_ids": [],
                 "tag_names": [],
                 "metadata": {},
-                "matched_tag_id": None,
-                "matched_tag_name": None,
             },
             binary={},
             meta={"source_node_id": node["id"], "item_index": 0, "manual_sample": True},

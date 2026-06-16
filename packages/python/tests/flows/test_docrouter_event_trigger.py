@@ -24,7 +24,7 @@ CODE_NODE_ID = "c1"
 def _event_trigger_node(
     *,
     event_type: str = "document.uploaded",
-    tag_id: str = "",
+    tag_ids: list[str] | None = None,
     prompt_id: str = "",
 ) -> dict:
     return {
@@ -34,7 +34,7 @@ def _event_trigger_node(
         "position": [0, 0],
         "parameters": {
             "event_type": event_type,
-            "tag_id": tag_id,
+            "tag_ids": tag_ids if tag_ids is not None else [],
             "prompt_id": prompt_id,
         },
         "webhook_id": None,
@@ -146,7 +146,7 @@ async def _create_and_activate_event_flow(
     test_db,
     *,
     event_type: str = "document.uploaded",
-    tag_id: str = "",
+    tag_ids: list[str] | None = None,
     prompt_id: str = "",
     with_code_downstream: bool = True,
 ) -> tuple[str, str]:
@@ -159,7 +159,7 @@ async def _create_and_activate_event_flow(
     flow_id = r0.json()["flow"]["flow_id"]
     nodes = [_event_trigger_node(
         event_type=event_type,
-        tag_id=tag_id,
+        tag_ids=tag_ids,
         prompt_id=prompt_id,
     )]
     connections: dict = {}
@@ -194,38 +194,40 @@ async def _create_and_activate_event_flow(
 
 
 def test_evaluate_trigger_row_tag_filter() -> None:
-    row = {"tag_id": "tag-a"}
+    row = {"tag_ids": ["tag-a"]}
     doc = {"tag_ids": ["tag-b"]}
-    matches, _ = _evaluate_trigger_row(
+    assert _evaluate_trigger_row(
         row, event_type="document.uploaded", doc=doc, prompt_id=None
-    )
-    assert matches is False
+    ) is False
 
     doc2 = {"tag_ids": ["tag-a"]}
-    matches2, matched = _evaluate_trigger_row(
+    assert _evaluate_trigger_row(
         row, event_type="document.uploaded", doc=doc2, prompt_id=None
     )
-    assert matches2 is True
-    assert matched == "tag-a"
+
+
+def test_evaluate_trigger_row_tag_filter_any_match() -> None:
+    row = {"tag_ids": ["tag-a", "tag-b"]}
+    doc = {"tag_ids": ["tag-c", "tag-b"]}
+    assert _evaluate_trigger_row(
+        row, event_type="document.uploaded", doc=doc, prompt_id=None
+    )
 
 
 def test_evaluate_trigger_row_prompt_filter() -> None:
-    row = {"tag_id": "", "prompt_id": "prompt-a"}
+    row = {"tag_ids": [], "prompt_id": "prompt-a"}
     doc = {"tag_ids": []}
-    matches, _ = _evaluate_trigger_row(
+    assert _evaluate_trigger_row(
         row, event_type="llm.completed", doc=doc, prompt_id="prompt-b"
-    )
-    assert matches is False
+    ) is False
 
-    matches2, _ = _evaluate_trigger_row(
+    assert _evaluate_trigger_row(
         row, event_type="llm.completed", doc=doc, prompt_id="prompt-a"
     )
-    assert matches2 is True
 
-    matches3, _ = _evaluate_trigger_row(
+    assert _evaluate_trigger_row(
         row, event_type="llm.error", doc=doc, prompt_id="prompt-a"
     )
-    assert matches3 is True
 
 
 @pytest.mark.asyncio
@@ -281,7 +283,7 @@ async def test_dispatch_document_uploaded_enqueues_flow_run(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_dispatch_skips_when_tag_filter_mismatch(test_db, mock_auth):
-    await _create_and_activate_event_flow(test_db, tag_id="wanted-tag")
+    await _create_and_activate_event_flow(test_db, tag_ids=["wanted-tag"])
     document_id, _ = await _insert_document(test_db, tag_ids=["other-tag"])
     aq_client = ad.common.get_analytiq_client()
     exec_ids = await dispatch_docrouter_event(
@@ -343,7 +345,7 @@ async def test_dispatch_llm_completed_prompt_id_filter(test_db, mock_auth):
 async def test_dispatch_includes_tag_names(test_db, mock_auth):
     tag_a = await _insert_org_tag(test_db, "Invoices")
     tag_b = await _insert_org_tag(test_db, "Urgent")
-    await _create_and_activate_event_flow(test_db, tag_id=tag_a)
+    await _create_and_activate_event_flow(test_db, tag_ids=[tag_a])
     document_id, _ = await _insert_document(test_db, tag_ids=[tag_a, tag_b])
     aq_client = ad.common.get_analytiq_client()
 
@@ -360,8 +362,6 @@ async def test_dispatch_includes_tag_names(test_db, mock_auth):
     trigger = exec_doc["trigger"]
     assert trigger["tag_ids"] == [tag_a, tag_b]
     assert trigger["tag_names"] == ["Invoices", "Urgent"]
-    assert trigger["matched_tag_id"] == tag_a
-    assert trigger["matched_tag_name"] == "Invoices"
 
 
 @pytest.mark.asyncio
@@ -437,19 +437,19 @@ async def test_event_trigger_node_replays_trigger_items(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_save_active_flow_updates_flow_triggers(test_db, mock_auth):
-    flow_id, rev_id_r1 = await _create_and_activate_event_flow(test_db, tag_id="")
+    flow_id, rev_id_r1 = await _create_and_activate_event_flow(test_db, tag_ids=[])
     db = ad.common.get_async_db()
     row_before = await db.flow_triggers.find_one({"flow_id": flow_id, "trigger_node_id": TRIGGER_NODE_ID})
     assert row_before is not None
     assert row_before["flow_revid"] == rev_id_r1
-    assert row_before["tag_id"] == ""
+    assert row_before["tag_ids"] == []
 
     r_save = client.put(
         f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
         json={
             "base_flow_revid": rev_id_r1,
             "name": "doc event flow",
-            "nodes": [_event_trigger_node(event_type="llm.completed", tag_id="new-tag-on-draft")],
+            "nodes": [_event_trigger_node(event_type="llm.completed", tag_ids=["new-tag-on-draft"])],
             "connections": {},
             "settings": {},
             "pin_data": None,
@@ -464,7 +464,7 @@ async def test_save_active_flow_updates_flow_triggers(test_db, mock_auth):
     assert row_after is not None
     assert row_after["flow_revid"] == rev_id_r2
     assert row_after["trigger_type"] == "llm.completed"
-    assert row_after["tag_id"] == "new-tag-on-draft"
+    assert row_after["tag_ids"] == ["new-tag-on-draft"]
 
     hdr = await db.flows.find_one({"_id": ObjectId(flow_id)})
     assert hdr is not None
@@ -495,6 +495,27 @@ async def test_save_rejects_invalid_docrouter_trigger_event_type(test_db, mock_a
         headers=get_auth_headers(),
     )
     assert r1.status_code == 400, r1.text
+
+
+@pytest.mark.asyncio
+async def test_dispatch_multi_tag_filter_any_match(test_db, mock_auth):
+    tag_a = await _insert_org_tag(test_db, "Invoices")
+    tag_b = await _insert_org_tag(test_db, "Urgent")
+    await _create_and_activate_event_flow(test_db, tag_ids=[tag_a, tag_b])
+    document_id, _ = await _insert_document(test_db, tag_ids=[tag_b])
+    aq_client = ad.common.get_analytiq_client()
+
+    exec_ids = await dispatch_docrouter_event(
+        aq_client,
+        organization_id=TEST_ORG_ID,
+        event_type="document.uploaded",
+        document_id=document_id,
+    )
+    assert len(exec_ids) == 1
+
+    db = ad.common.get_async_db()
+    exec_doc = await db.flow_executions.find_one({"_id": ObjectId(exec_ids[0])})
+    assert exec_doc is not None
 
 
 @pytest.mark.asyncio

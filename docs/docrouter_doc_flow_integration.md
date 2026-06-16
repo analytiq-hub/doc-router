@@ -168,55 +168,36 @@ event regardless of `include_retagged`.
 
 ### 2.7 Deletion safety for `tag_id` and `prompt_id` references
 
-`docrouter.trigger` nodes can reference a `tag_id` or `prompt_id` as a filter.  If
-the referenced entity is deleted after the flow is saved (or activated), the trigger
-row silently never fires — no error is surfaced to the user and no document ever
-matches the filter.  This is the most dangerous failure mode because it is invisible.
+`docrouter.trigger` nodes can reference a `tag_id` or `prompt_id` as a filter.
+Tags and prompts can be deleted at any time — deletion is not blocked.  Instead,
+the UI surfaces the broken reference directly in the trigger node config panel so
+the user is aware and can correct it.
 
-**What cannot be protected:** An unsaved flow draft in the editor may reference a
-tag or prompt that is then deleted before the user saves.  Since unsaved state is
-client-side only, server-side enforcement cannot reach it.  The save-time check
-below handles this case on next save.
+**Trigger config panel warnings.**  When the config panel loads, it resolves the
+stored `tag_id` and `prompt_id` against the org's current tags and prompts.  If
+either no longer exists, the panel shows an inline warning on that field:
 
-**Recommended enforcement at two points:**
+- `tag_id` field: *"This tag has been deleted.  Clear the filter or select another tag."*
+- `prompt_id` field: *"This prompt has been deleted.  Clear the filter or select another prompt."*
 
-1. **Block deletion if referenced by any saved flow revision.**
-   When `DELETE /v0/orgs/{org}/tags/{id}` or `DELETE /v0/orgs/{org}/prompts/{id}`
-   is called, query `flow_revisions` (or `flow_triggers` for the activated case)
-   for any node whose `parameters.tag_id` or `parameters.prompt_id` matches.  If
-   found, return `409 Conflict` with a message listing the affected flows by name.
-   The user must either update those flow nodes first or accept that the trigger
-   will never match.  *Checking only `flow_triggers` (active flows) is insufficient
-   — saved but inactive flows would be silently broken on next activation.*
+The flow remains saveable and activatable with a deleted reference; at dispatch time
+the filter simply never matches (no documents carry the deleted tag; no LLM run uses
+the deleted prompt), so the trigger is effectively silenced until the user corrects
+the node config.  This is intentional — blocking activation would require a
+server-round-trip check and would prevent users from viewing or editing a broken flow.
 
-2. **Validate at activation time.**
-   `sync_docrouter_flow_triggers` already validates `event_type`.  Extend it to
-   also verify that a non-empty `tag_id` exists in the org's tags collection and
-   that a non-empty `prompt_id` exists in the org's prompts collection.  Return a
-   `FlowValidationError` (→ HTTP 400) if either is missing.  This catches the gap
-   between save and activate.
+**Historic run records.**  Flow executions are immutable event logs.  The only
+impact of a deletion is display: the UI cannot resolve a name for a deleted entity.
+Two mitigations:
 
-**Rationale for rejecting soft-deletion:** Silently clearing a filter on entity
-deletion (treating it as "match all") would expand the trigger's scope in an
-unexpected and potentially expensive way — a flow scoped to one tag would suddenly
-fire for every document upload.  Blocking the delete is the safer default.
-
-**Historic run records (separate concern).** Flow executions are immutable event
-logs; their stored `tag_id` and `prompt_id` values are correct even after the
-referenced entity is deleted.  The only impact is display: the UI cannot resolve a
-name for a deleted entity.  Two mitigations:
-
-1. **Snapshot names at dispatch time.** `build_docrouter_event_payload` already
-   stores `prompt_name` as a snapshot.  Extend it to also store `matched_tag_name`
-   at the moment the trigger fires.  The execution record then carries everything
-   needed to render itself without live lookups.
-2. **Graceful UI fallback.** Anywhere the UI resolves a `tag_id` or `prompt_id`
-   from an execution record, handle the missing case explicitly — display
-   `[deleted tag]` / `[deleted prompt]` rather than a blank or an error.  This
-   covers runs that predate the snapshot field and any other edge cases.
-
-Do **not** block tag/prompt deletion based on historic run references — that would
-make entities undeletable in any system with meaningful execution history.
+1. **Snapshot names at dispatch time.**  `build_docrouter_event_payload` already
+   stores `prompt_name`.  Extend it to also store `matched_tag_name` at the moment
+   the trigger fires.  The execution record then carries everything needed to render
+   itself without live lookups.
+2. **Graceful UI fallback.**  When displaying execution records, if a tag or prompt
+   name cannot be resolved (entity deleted after the run), show `[deleted tag]` /
+   `[deleted prompt]` rather than a blank or an error.  This covers runs that
+   predate the `matched_tag_name` snapshot field.
 
 ---
 
@@ -687,15 +668,16 @@ The following order minimises dependency risk:
    `flows.py`; `validate_docrouter_trigger_params` called on save for early feedback
    without touching trigger rows.  Tests: `test_docrouter_event_trigger.py`.
 
-3. **Deletion safety for `tag_id` / `prompt_id`** (§2.7) — two pieces:
-   - **Block deletion at the tag and prompt DELETE endpoints** if any saved flow
-     revision references the entity in a `docrouter.trigger` node parameter.  Return
-     `409 Conflict` listing the affected flows by name.  Must scan `flow_revisions`,
-     not just `flow_triggers`, to protect saved-but-inactive flows.
-   - **Extend `validate_docrouter_trigger_params`** (called at save and activate) to
-     verify that a non-empty `tag_id` exists in the org's tags collection and a
-     non-empty `prompt_id` exists in the org's prompts collection; raise
-     `FlowValidationError` if either is missing.
+3. **Stale reference warnings for `tag_id` / `prompt_id`** (§2.7) — two pieces:
+   - **Trigger config panel:** when the panel loads, resolve `tag_id` and `prompt_id`
+     against the org's current entities; show an inline warning on each field if the
+     referenced entity no longer exists.  Backend: add a lightweight
+     `GET /v0/orgs/{org}/flows/trigger-ref-status?tag_id=…&prompt_id=…` (or piggyback
+     on the existing tag/prompt list endpoints) so the frontend can check existence
+     without a full list fetch.
+   - **Execution display:** extend `build_docrouter_event_payload` to also snapshot
+     `matched_tag_name` alongside the existing `prompt_name`; add `[deleted tag]` /
+     `[deleted prompt]` fallback rendering in the execution trace UI.
 
 4. **Typed connection ports** — extend `connection_type` in `connections.py` beyond
    `Literal["main"]` to support `"docrouter.ocr"`; update `flow-rf.ts` to preserve

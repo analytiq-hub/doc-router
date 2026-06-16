@@ -28,6 +28,7 @@ import {
 } from './flowSchemaParameterUtils';
 import { FlowCredentialAuthenticationField } from './FlowCredentialAuthenticationField';
 import { FlowOrgEntityPickerField } from './FlowOrgEntityPickerField';
+import { FlowOrgTagMultiPickerField } from './FlowOrgTagMultiPickerField';
 import { FlowCollectionFieldsField } from './FlowCollectionFieldsField';
 import {
   FlowScheduleTriggerRulesField,
@@ -291,14 +292,13 @@ export const FlowNodeParameterFields: React.FC<{
     if (uiHint === 'org_tag_picker') {
       return (
         <div key={key} className="mb-3">
-          <FlowOrgEntityPickerField
-            kind="tag"
+          <FlowOrgTagMultiPickerField
             label={propLabel}
             description={schemaDescription(subschema)}
             value={v}
             readOnly={readOnly}
             flowOrgApi={flowOrgApi}
-            onChange={(id) => setField(key, id)}
+            onChange={(ids) => setField(key, ids)}
           />
         </div>
       );

@@ -22,6 +22,13 @@ DOCROUTER_TRIGGER_TYPE = "docrouter.trigger"
 DOCROUTER_EVENT_TRIGGER_KIND = "docrouter.event"
 
 
+def _configured_tag_ids(row: dict[str, Any]) -> list[str]:
+    raw = row.get("tag_ids")
+    if not isinstance(raw, list):
+        return []
+    return [str(t).strip() for t in raw if isinstance(t, str) and str(t).strip()]
+
+
 def _iso_datetime(value: Any) -> str:
     if isinstance(value, datetime):
         dt = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
@@ -37,15 +44,6 @@ def _metadata_str_map(raw: Any) -> dict[str, str]:
         if isinstance(k, str):
             out[k] = "" if v is None else str(v)
     return out
-
-
-async def _lookup_tag_name(analytiq_client, tag_id: str | None) -> str:
-    if not tag_id or not ad.common.is_valid_object_id(tag_id):
-        return ""
-    try:
-        return await ad.common.get_tag_name(analytiq_client, tag_id)
-    except Exception:
-        return ""
 
 
 async def _lookup_tag_names(analytiq_client, tag_ids: list[str]) -> list[str]:
@@ -136,7 +134,6 @@ async def sync_docrouter_flow_triggers(
             continue
         params = node.get("parameters") or {}
         event_type = params.get("event_type")
-        tag_id = params.get("tag_id")
         prompt_id = params.get("prompt_id")
         doc: dict[str, Any] = {
             "org_id": org_id,
@@ -144,7 +141,7 @@ async def sync_docrouter_flow_triggers(
             "flow_revid": flow_revid,
             "trigger_node_id": node["id"],
             "trigger_type": event_type,
-            "tag_id": tag_id.strip() if isinstance(tag_id, str) and tag_id.strip() else "",
+            "tag_ids": list(params.get("tag_ids") or []),
             "prompt_id": prompt_id.strip() if isinstance(prompt_id, str) and prompt_id.strip() else "",
             "updated_at": now,
         }
@@ -161,24 +158,22 @@ def _evaluate_trigger_row(
     event_type: str,
     doc: dict[str, Any],
     prompt_id: str | None,
-) -> tuple[bool, str | None]:
-    """Return ``(matches, matched_tag_id)`` for a ``flow_triggers`` row."""
+) -> bool:
+    """Return whether a ``flow_triggers`` row matches the document event."""
 
-    configured_tag = row.get("tag_id")
-    matched_tag_id: str | None = None
-    if isinstance(configured_tag, str) and configured_tag.strip():
-        tag_ids = doc.get("tag_ids") or []
-        if not isinstance(tag_ids, list) or configured_tag not in {str(t) for t in tag_ids}:
-            return False, None
-        matched_tag_id = configured_tag
+    configured_tags = _configured_tag_ids(row)
+    if configured_tags:
+        doc_tag_ids = {str(t) for t in (doc.get("tag_ids") or [])}
+        if not any(tag_id in doc_tag_ids for tag_id in configured_tags):
+            return False
 
     if event_type in DOCROUTER_LLM_EVENT_TYPES:
         configured_prompt = row.get("prompt_id")
         if isinstance(configured_prompt, str) and configured_prompt.strip():
             if (prompt_id or "").strip() != configured_prompt.strip():
-                return False, None
+                return False
 
-    return True, matched_tag_id
+    return True
 
 
 async def build_docrouter_event_payload(
@@ -186,7 +181,6 @@ async def build_docrouter_event_payload(
     *,
     event_type: str,
     doc: dict[str, Any],
-    matched_tag_id: str | None = None,
     prompt_id: str | None = None,
     prompt_revid: str | None = None,
     llm_run_id: str | None = None,
@@ -201,10 +195,6 @@ async def build_docrouter_event_payload(
 
     tag_ids = [str(t) for t in (doc.get("tag_ids") or []) if t is not None]
     tag_names = await _lookup_tag_names(analytiq_client, tag_ids)
-    matched_tag_name: str | None = None
-    if matched_tag_id:
-        name = await _lookup_tag_name(analytiq_client, matched_tag_id)
-        matched_tag_name = name or None
 
     payload: dict[str, Any] = {
         "event_type": event_type,
@@ -215,8 +205,6 @@ async def build_docrouter_event_payload(
         "tag_ids": tag_ids,
         "tag_names": tag_names,
         "metadata": _metadata_str_map(doc.get("metadata")),
-        "matched_tag_id": matched_tag_id,
-        "matched_tag_name": matched_tag_name,
     }
 
     if event_type in {"llm.completed", "llm.error"}:
@@ -371,20 +359,18 @@ async def dispatch_docrouter_event(
             )
             continue
 
-        matches, matched_tag_id = _evaluate_trigger_row(
+        if not _evaluate_trigger_row(
             row,
             event_type=event_type,
             doc=doc,
             prompt_id=prompt_id,
-        )
-        if not matches:
+        ):
             continue
 
         payload = await build_docrouter_event_payload(
             analytiq_client,
             event_type=event_type,
             doc=doc,
-            matched_tag_id=matched_tag_id,
             prompt_id=prompt_id,
             prompt_revid=prompt_revid,
             llm_run_id=llm_run_id,
