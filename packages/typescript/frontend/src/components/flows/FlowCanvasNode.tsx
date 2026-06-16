@@ -14,7 +14,8 @@ import {
   TrashIcon,
 } from '@heroicons/react/24/solid';
 import { BeakerIcon, NoSymbolIcon } from '@heroicons/react/24/outline';
-import { inputHandleCount } from './flowRf';
+import { inputHandleCount, inputPortTypes, outputPortTypes } from './flowRf';
+import type { FlowConnectionType } from './flowRf';
 import type { FlowRfNodeDataWithRun, NodeRunStatusBadge } from './flowNodeRunStatus';
 import { getNodeRunStatusFromRunData } from './flowNodeRunStatus';
 import type { FlowCanvasActions } from './flowCanvasActionsContext';
@@ -30,6 +31,13 @@ import {
 
 const handleClass =
   '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-emerald-500 hover:!bg-emerald-50';
+
+const ocrHandleClass =
+  '!w-2.5 !h-2.5 !border-2 !border-violet-400 !bg-violet-50 hover:!border-violet-600 hover:!bg-violet-100';
+
+function handleClassForPortType(portType: FlowConnectionType): string {
+  return portType === 'docrouter.ocr' ? ocrHandleClass : handleClass;
+}
 
 const TRIGGER_EXECUTE_BUTTON_BG = '#ff6d5a';
 const TRIGGER_EXECUTE_BUTTON_BG_HOVER = '#e85d4d';
@@ -53,11 +61,13 @@ function OutputHandleWithContinuation({
   nodeId,
   handleId,
   topPct,
+  portType,
   actions,
 }: {
   nodeId: string;
   handleId: string;
   topPct: number;
+  portType: FlowConnectionType;
   actions: FlowCanvasActions | null;
 }) {
   const canAppend = Boolean(actions?.onBeginAppendFromOutput);
@@ -74,7 +84,7 @@ function OutputHandleWithContinuation({
         id={handleId}
         type="source"
         position={Position.Right}
-        className={handleClass}
+        className={handleClassForPortType(portType)}
         style={{ top: `${topPct}%` }}
       />
       {canAppend ? (
@@ -104,10 +114,12 @@ function OutputHandleWithContinuation({
 
 function OutputHandlesWithContinuation({
   outputs,
+  outputPortTypesList,
   actions,
   nodeId,
 }: {
   outputs: number;
+  outputPortTypesList: FlowConnectionType[];
   actions: FlowCanvasActions | null;
   nodeId: string;
 }) {
@@ -123,6 +135,7 @@ function OutputHandlesWithContinuation({
             nodeId={nodeId}
             handleId={handleId}
             topPct={topPct}
+            portType={outputPortTypesList[i] ?? 'main'}
             actions={actions}
           />
         );
@@ -253,6 +266,8 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
 
   const inputs = inputHandleCount(nt);
   const outputs = Math.max(0, nt?.outputs ?? 1);
+  const inputTypes = useMemo(() => inputPortTypes(nt), [nt]);
+  const outputTypes = useMemo(() => outputPortTypes(nt), [nt]);
 
   const typeLabel = nt?.label ?? node.type;
   const displayLabel = node.name?.trim() ? node.name : typeLabel;
@@ -445,7 +460,12 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
             <div className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 p-1 text-[#ff6d5a]">
               <BoltIcon className="h-5 w-5" aria-hidden />
             </div>
-            <OutputHandlesWithContinuation outputs={outputs} actions={actions} nodeId={id} />
+            <OutputHandlesWithContinuation
+              outputs={outputs}
+              outputPortTypesList={outputTypes}
+              actions={actions}
+              nodeId={id}
+            />
             {runSt && <ExecutionStatusBadge status={runSt} />}
           </div>
           {labelBlock}
@@ -473,22 +493,35 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
         >
           {disabledStrike}
           {isPinned && <PinnedBadge />}
-          {Array.from({ length: Math.max(inputs, 0) }).map((_, i) => (
-            <Handle
-              key={`in-${i}`}
-              id={`in-${i}`}
-              type="target"
-              position={Position.Left}
-              className={handleClass}
-              style={{ top: `${(100 * (i + 1)) / (inputs + 1)}%` }}
-            />
-          ))}
+          {Array.from({ length: Math.max(inputs, 0) }).map((_, i) => {
+            const portType = inputTypes[i] ?? 'main';
+            const isOcrPort = portType === 'docrouter.ocr';
+            return (
+              <Handle
+                key={`in-${i}`}
+                id={`in-${i}`}
+                type="target"
+                position={isOcrPort ? Position.Bottom : Position.Left}
+                className={handleClassForPortType(portType)}
+                style={
+                  isOcrPort
+                    ? { left: '14%', bottom: '-6px', top: 'auto', transform: 'none' }
+                    : { top: `${(100 * (i + 1)) / (inputs + 1)}%` }
+                }
+              />
+            );
+          })}
           <FlowNodeTypeIcon
             iconKey={nt?.icon_key}
             fallback="process"
             className="h-9 w-9 text-[#94a3b8]"
           />
-          <OutputHandlesWithContinuation outputs={outputs} actions={actions} nodeId={id} />
+          <OutputHandlesWithContinuation
+            outputs={outputs}
+            outputPortTypesList={outputTypes}
+            actions={actions}
+            nodeId={id}
+          />
           {runSt && <ExecutionStatusBadge status={runSt} />}
         </div>
         {labelBlock}

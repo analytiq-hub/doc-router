@@ -13,3 +13,12 @@ export {
   rfToConnections,
   rfToRevision,
 } from '@docrouter/sdk';
+export {
+  edgeConnectionType,
+  inputPortType,
+  inputPortTypes,
+  outputPortType,
+  outputPortTypes,
+  portTypesCompatible,
+  type FlowConnectionType,
+} from '@docrouter/sdk';

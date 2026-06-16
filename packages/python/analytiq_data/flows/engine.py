@@ -24,6 +24,7 @@ import analytiq_data as ad
 
 from .errors import node_error_envelope
 from .flow_settings import validate_flow_settings
+from .port_types import input_port_types_for, output_port_types_for
 from .trace import pop_node_trace
 from .triggers.cron_exprs import poll_times_to_specs
 from .triggers.poll_defaults import resolve_poll_times
@@ -187,6 +188,26 @@ def validate_revision(
                             f"Connection destination index out of range for node "
                             f"{ad.flows.node_name(nodes_by_id[conn.dest_node_id])}: {conn.index}"
                         )
+                src_out_types = output_port_types_for(src_type)
+                dst_in_types = input_port_types_for(dst_type)
+                expected_type = src_out_types[out_idx] if out_idx < len(src_out_types) else "main"
+                if conn.connection_type != expected_type:
+                    raise FlowValidationError(
+                        f"Connection from {ad.flows.node_name(nodes_by_id[src])} output {out_idx} "
+                        f"must use connection_type {expected_type!r}, got {conn.connection_type!r}"
+                    )
+                if conn.index >= len(dst_in_types):
+                    raise FlowValidationError(
+                        f"Connection destination index out of range for node "
+                        f"{ad.flows.node_name(nodes_by_id[conn.dest_node_id])}: {conn.index}"
+                    )
+                accepted_type = dst_in_types[conn.index]
+                if conn.connection_type != accepted_type:
+                    raise FlowValidationError(
+                        f"Connection to {ad.flows.node_name(nodes_by_id[conn.dest_node_id])} "
+                        f"input {conn.index} requires connection_type {accepted_type!r}, "
+                        f"got {conn.connection_type!r}"
+                    )
 
     # Acyclic.
     _toposort(nodes, connections or {})

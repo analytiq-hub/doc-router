@@ -8,6 +8,8 @@ export interface FlowCredentialSlot {
   docrouter_binding?: string;
 }
 
+export type FlowConnectionType = 'main' | 'docrouter.ocr';
+
 export interface FlowNodeType {
   key: string;
   label: string;
@@ -22,6 +24,10 @@ export interface FlowNodeType {
   max_inputs: number | null;
   outputs: number;
   output_labels: string[];
+  /** Connection type accepted by each input port (defaults to `main`). */
+  input_port_types?: FlowConnectionType[];
+  /** Connection type emitted by each output port (defaults to `main`). */
+  output_port_types?: FlowConnectionType[];
   parameter_schema: Record<string, unknown>;
   credential_slots?: FlowCredentialSlot[];
   /** Requires organization `experimental_features` to list this node type. */
@@ -72,7 +78,7 @@ export interface FlowNode {
 
 export interface FlowNodeConnection {
   dest_node_id: string;
-  connection_type: 'main';
+  connection_type: FlowConnectionType;
   index: number;
 }
 

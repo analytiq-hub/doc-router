@@ -14,6 +14,9 @@
   "output_labels": [
     "output"
   ],
+  "output_port_types": [
+    "docrouter.ocr"
+  ],
   "icon_key": "ocr",
   "executor": {
     "kind": "python_class",

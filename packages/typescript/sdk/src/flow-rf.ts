@@ -1,5 +1,14 @@
 import { finalizePersistedFlowNodeParameters } from './flow-parameter-merge';
-import type { FlowConnections, FlowNode, FlowNodeConnection, FlowNodeType, FlowRevision, SaveRevisionParams } from './types/flows';
+import { edgeConnectionType } from './flow-port-types';
+import type {
+  FlowConnectionType,
+  FlowConnections,
+  FlowNode,
+  FlowNodeConnection,
+  FlowNodeType,
+  FlowRevision,
+  SaveRevisionParams,
+} from './types/flows';
 
 /** React Flow data payload (rendered in the app; `nodeType` is optional in saved graphs). */
 export type FlowRfNodeData = {
@@ -23,6 +32,7 @@ export type FlowRfEdge = {
   sourceHandle?: string | null;
   targetHandle?: string | null;
   type?: string;
+  data?: { connectionType?: FlowConnectionType };
 };
 
 const OUT_HANDLE_PREFIX = 'out-';
@@ -55,6 +65,7 @@ export function revisionToRF(
           sourceHandle: `${OUT_HANDLE_PREFIX}${outIdx}`,
           targetHandle: `${IN_HANDLE_PREFIX}${c.index}`,
           type: 'default',
+          data: { connectionType: c.connection_type },
         });
       }
     }
@@ -86,7 +97,11 @@ export function rfToConnections(edges: FlowRfEdge[]): FlowConnections {
     const inIdx = parseHandleIndex(e.targetHandle, IN_HANDLE_PREFIX);
     if (outIdx == null || inIdx == null) continue;
     const slot = ensureSlot(e.source, outIdx);
-    slot.push({ dest_node_id: e.target, connection_type: 'main', index: inIdx });
+    slot.push({
+      dest_node_id: e.target,
+      connection_type: edgeConnectionType(e),
+      index: inIdx,
+    });
   }
 
   return connections;

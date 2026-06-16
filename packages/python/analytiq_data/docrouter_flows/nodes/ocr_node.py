@@ -23,6 +23,7 @@ class DocRouterOcrNode:
     max_inputs = 1
     outputs = 1
     output_labels = ["output"]
+    output_port_types = ["docrouter.ocr"]
     icon_key = "ocr"
     parameter_schema: dict[str, Any] = {"type": "object", "properties": {}, "additionalProperties": False}
 

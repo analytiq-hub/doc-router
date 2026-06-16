@@ -132,6 +132,8 @@ def palette_entry_dict(manifest: dict[str, Any]) -> dict[str, Any]:
         "max_inputs": manifest.get("max_inputs"),
         "outputs": manifest["outputs"],
         "output_labels": manifest.get("output_labels") or [],
+        "input_port_types": manifest.get("input_port_types") or [],
+        "output_port_types": manifest.get("output_port_types") or [],
         "parameter_schema": manifest["parameter_schema"],
         "icon_key": manifest.get("icon_key"),
         "credential_slots": slots if isinstance(slots, list) else [],

@@ -26,6 +26,8 @@ class LazyBuiltinNode:
         self.max_inputs = None if max_inputs is None else int(max_inputs)
         self.outputs = int(manifest["outputs"])
         self.output_labels = list(manifest.get("output_labels") or [])
+        self.input_port_types = list(manifest.get("input_port_types") or [])
+        self.output_port_types = list(manifest.get("output_port_types") or [])
         self.parameter_schema = manifest["parameter_schema"]
         self.icon_key = manifest.get("icon_key")
         self.credential_slots = list(manifest.get("credential_slots") or [])

@@ -186,6 +186,51 @@ describe('flow-rf', () => {
     expect(fp3).not.toBe(fp1);
   });
 
+  it('round-trips typed docrouter.ocr connection through RF', () => {
+    const ocrType: FlowNodeType = {
+      key: 'docrouter.ocr',
+      label: 'OCR',
+      description: 'ocr',
+      category: 'DocRouter',
+      is_trigger: false,
+      min_inputs: 1,
+      max_inputs: 1,
+      outputs: 1,
+      output_labels: ['output'],
+      output_port_types: ['docrouter.ocr'],
+      parameter_schema: {},
+    };
+    const llmType: FlowNodeType = {
+      key: 'docrouter.llm_run',
+      label: 'LLM',
+      description: 'llm',
+      category: 'DocRouter',
+      is_trigger: false,
+      min_inputs: 2,
+      max_inputs: 2,
+      outputs: 1,
+      output_labels: ['output'],
+      input_port_types: ['main', 'docrouter.ocr'],
+      parameter_schema: {},
+    };
+    const ocr = _node('OCR', 0, 0, 'docrouter.ocr', 'OCR');
+    const llm = _node('LLM', 200, 0, 'docrouter.llm_run', 'LLM');
+    const rev = baseRev(
+      [ocr, llm],
+      {
+        OCR: {
+          main: [[{ dest_node_id: 'LLM', connection_type: 'docrouter.ocr', index: 1 }]],
+        },
+      },
+    );
+    const byKey = { 'docrouter.ocr': ocrType, 'docrouter.llm_run': llmType };
+    const { nodes, edges } = revisionToRF(rev, byKey);
+    expect(edges[0].data?.connectionType).toBe('docrouter.ocr');
+    expect(rfToConnections(edges)).toEqual(rev.connections);
+    const out = rfToRevision(nodes, edges, rev, 'Typed');
+    expect(out.connections).toEqual(rev.connections);
+  });
+
   it('rfToRevision fills schema defaults when parameters were never edited', () => {
     const py = _node('C', 10, 20, 'tests.code_like', 'C');
     const rev = baseRev([py], {});

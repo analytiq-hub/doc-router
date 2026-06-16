@@ -69,8 +69,8 @@ import {
 } from './flowCanvasActionsContext';
 import { FLOW_CANVAS_GRID_PX, snapToFlowGrid } from './canvasGrid';
 import { edgesWithRunDataItemCounts } from './flowNodeIoPreview';
-import { inputHandleCount } from './flowRf';
-import type { FlowRfNodeData } from './flowRf';
+import { inputHandleCount, inputPortType, outputPortType, portTypesCompatible, edgeConnectionType } from './flowRf';
+import type { FlowConnectionType, FlowRfNodeData } from './flowRf';
 import { triggerReachabilityFromGraph } from './flowTriggerReachability';
 import { flowWorkspaceDropdownItemSimpleClass, flowWorkspaceMenuPanelClass } from './flowWorkspaceMenu';
 
@@ -493,6 +493,9 @@ const FlowEditor: React.FC<{
       const maxIn = inputHandleCount(dstType);
       if (inIdx < 0 || inIdx >= maxIn) return;
 
+      const connectionType = outputPortType(srcType, outIdx);
+      if (!portTypesCompatible(connectionType, inputPortType(dstType, inIdx))) return;
+
       const duplicate = edges.some(
         (e) =>
           e.source === params.source &&
@@ -509,12 +512,32 @@ const FlowEditor: React.FC<{
             type: FLOW_RF_LABELED_EDGE_TYPE,
             style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
             markerEnd: FLOW_EDGE_MARKER,
+            data: { connectionType },
           },
           edges,
         ),
       );
     },
     [edges, nodeTypesByKey, nodes, onEdgesChange],
+  );
+
+  const isValidConnection = useCallback(
+    (connection: Connection) => {
+      const outIdx = parseHandleIndex(connection.sourceHandle, 'out-');
+      const inIdx = parseHandleIndex(connection.targetHandle, 'in-');
+      if (outIdx == null || inIdx == null) return false;
+
+      const src = nodes.find((n) => n.id === connection.source);
+      const dst = nodes.find((n) => n.id === connection.target);
+      const srcType = src ? nodeTypesByKey[src.data.flowNode.type] : undefined;
+      const dstType = dst ? nodeTypesByKey[dst.data.flowNode.type] : undefined;
+
+      if (outIdx < 0 || (srcType && outIdx >= (srcType.outputs ?? 0))) return false;
+      if (inIdx < 0 || inIdx >= inputHandleCount(dstType)) return false;
+
+      return portTypesCompatible(outputPortType(srcType, outIdx), inputPortType(dstType, inIdx));
+    },
+    [nodeTypesByKey, nodes],
   );
 
   const onNodeDoubleClick = useCallback(
@@ -600,6 +623,11 @@ const FlowEditor: React.FC<{
 
       if (!edges.some((e) => e.id === pending.edgeId)) return false;
 
+      const originalEdge = edges.find((e) => e.id === pending.edgeId);
+      const connectionType: FlowConnectionType = originalEdge
+        ? edgeConnectionType(originalEdge)
+        : 'main';
+
       const srcNode = nodes.find((n) => n.id === pending.source);
       const dstNode = nodes.find((n) => n.id === pending.target);
       if (!srcNode?.data.flowNode || !dstNode?.data.flowNode) return false;
@@ -614,6 +642,12 @@ const FlowEditor: React.FC<{
       const dstType = dstNode.data.nodeType ?? nodeTypesByKey[dstNode.data.flowNode.type];
       if (outIdx < 0 || (srcType && outIdx >= (srcType.outputs ?? 0))) return false;
       if (inIdx < 0 || inIdx >= inputHandleCount(dstType)) return false;
+      if (
+        !portTypesCompatible(connectionType, inputPortType(nt, 0)) ||
+        !portTypesCompatible(outputPortType(nt, 0), connectionType)
+      ) {
+        return false;
+      }
 
       const newId = uuid();
       const pos = snapToFlowGrid({ x: pending.flowPosition.x, y: pending.flowPosition.y });
@@ -652,6 +686,7 @@ const FlowEditor: React.FC<{
         target: newId,
         sourceHandle: sh,
         targetHandle: 'in-0',
+        data: { connectionType },
         ...edgeBase,
       };
       const e2: Edge = {
@@ -660,6 +695,7 @@ const FlowEditor: React.FC<{
         target: pending.target,
         sourceHandle: 'out-0',
         targetHandle: th,
+        data: { connectionType },
         ...edgeBase,
       };
 
@@ -1012,6 +1048,7 @@ const FlowEditor: React.FC<{
                 onEdgesChange(applyEdgeChanges(changes, edges));
               }}
               onConnect={onConnect}
+              isValidConnection={isValidConnection}
               onNodeDoubleClick={onNodeDoubleClick}
               snapToGrid
               snapGrid={[FLOW_CANVAS_GRID_PX, FLOW_CANVAS_GRID_PX]}

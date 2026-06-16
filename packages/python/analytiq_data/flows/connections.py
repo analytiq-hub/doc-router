@@ -10,12 +10,14 @@ describes a fan-out edge to a *destination* node input port.
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict
 
+from .port_types import ConnectionType, normalize_connection_type
+
 @dataclass
 class NodeConnection:
     """One edge from a source output slot to a destination input slot."""
 
     dest_node_id: str
-    connection_type: Literal["main"]
+    connection_type: ConnectionType
     index: int
 
 class NodeConnections(TypedDict, total=False):
@@ -57,7 +59,7 @@ def coerce_json_connections_to_dataclasses(raw: dict[str, Any] | None) -> "Conne
                 conns.append(
                     NodeConnection(
                         dest_node_id=dest_node_id,
-                        connection_type="main",
+                        connection_type=normalize_connection_type(c.get("connection_type")),
                         index=int(c["index"]),
                     )
                 )
