@@ -43,7 +43,7 @@ occurs.  The `event_type` parameter selects which of four events to listen for:
 
 | `event_type`        | Fires when                                                          |
 | ------------------- | ------------------------------------------------------------------- |
-| `document.uploaded` | A document is uploaded (or re-tagged, if `include_retagged` is set) |
+| `document.uploaded` | A document is uploaded |
 | `document.error`    | A document enters an error state during processing                  |
 | `llm.completed`     | An LLM run finishes successfully for a document                     |
 | `llm.error`         | An LLM run fails for a document                                     |
@@ -153,8 +153,7 @@ event regardless of `include_retagged`.
   {
     "trigger_type": "document.uploaded" | "document.error" | "llm.completed" | "llm.error",
     "flow_id": "…", "org_id": "…", "flow_revid": "…", "trigger_node_id": "…",
-    "tag_id": "…",
-    "include_retagged": false,
+    "tag_ids": ["…"],
     "prompt_id": "…"
   }
   ```
@@ -211,10 +210,9 @@ docrouter.ocr
 ### 3.3 Parameter schema
 
 
-| Parameter                | Type                                         | Required | Description         |
-| ------------------------ | -------------------------------------------- | -------- | ------------------- |
-| `ocr_provider`           | `"textract" \| "mistral" \| "pymupdf"`       | yes      | OCR backend to use. |
-| `textract_feature_types` | `("FORMS" \| "LAYOUT" \| "SIGNATURES" \| "TABLES")[]` | no       | Textract AnalyzeDocument features (shown when `ocr_provider` is `textract`). Empty = text detection only. |
+| Parameter      | Type                                                       | Required | Description         |
+| -------------- | ---------------------------------------------------------- | -------- | ------------------- |
+| `ocr_provider` | `"textract" \| "mistral" \| "pymupdf" \| "llm"` | yes      | OCR backend to use. |
 
 
 ### 3.4 Input
@@ -237,21 +235,20 @@ docrouter.ocr
 
 | Topic | Detail |
 | --- | --- |
-| Provider enum | ``OCR_PROVIDER_CHOICES`` in ``services.py``; ``ocr.manifest.json`` enum should match. |
-| Textract features | ``TEXTRACT_FEATURE_CHOICES`` mirrors org OCR ``TEXTRACT_FEATURES``; flow OCR bills SPUs via ``run_document_ocr`` (same as document OCR). |
-| OCR job correlation | ``run_flow_ocr_on_pdf`` tags provider logs with ``execution_id`` (not the item's ``document_id``). |
+| Provider enum | ``OCR_PROVIDER_CHOICES`` in ``services.py`` is the single source; ``parameter_schema`` in ``ocr_node.py`` and ``ocr.manifest.json`` derive from / must match it. |
+| OCR job correlation | ``flow_ocr_document_id()`` in ``services.py`` tags provider logs with the item's ``document_id`` when present; falls back to ``execution_id`` for pinned/manual PDFs. |
+| No document store write | ``run_flow_ocr_on_pdf`` does not persist to the document OCR store — flow-scoped only. |
 
 ### 3.6 Output
 
 ```
 json:
   ocr_provider: str        # provider that ran
-  textract_feature_types: list[str]  # present when provider is textract
   ocr_pages:    list[str]  # plain-text per page, one entry per page (0-based)
 
 binary:
   pdf:      BinaryRef      # passthrough
-  ocr_json: BinaryRef      # full structured OCR result stored as a flow blob
+  ocr_json: BinaryRef      # full structured OCR result stored as a flow blob (flow_blobs bucket)
 ```
 
 `ocr_pages[N]` is the plain-text of page N.  Downstream nodes (`docrouter.llm_run`,
@@ -263,7 +260,6 @@ The output port uses connection type `"docrouter.ocr"` — it can only be wired 
 ### 3.7 UI
 
 - `ocr_provider` rendered as a dropdown.
-- `textract_feature_types` rendered as `enum_multi_checkbox` when `ocr_provider` is `textract`.
 
 ---
 
@@ -710,8 +706,27 @@ The following order minimises dependency risk:
      insertion checks compatibility on both sides.
    - Tests: `test_flow_connection_types.py` (backend), `flow-rf.test.ts` (SDK roundtrip).
 
-5. ✅ **OCR node** (§3) — reimplement; per-page `ocr_pages` array output; flow-blob
-   `ocr_json`.
+5. ✅ **OCR node** (§3) — reimplemented with `ocr_provider` parameter
+   (`"textract" | "mistral" | "pymupdf" | "llm"`).
+   - `resolve_pdf_binary_ref` helper (`document_binary.py`) locates the input PDF from
+     `binary["pdf"]`, the sole PDF-mime ref, or the single binary property.
+   - `run_flow_ocr_on_pdf` in `services.py` runs the selected provider on in-memory
+     bytes without writing to the document OCR store; `flow_ocr_document_id` tags
+     provider logs with the item's `document_id` (falls back to `execution_id`).
+   - `ocr_pages_plain_text_list` in `ocr.py` extracts per-page plain text for all four
+     OCR formats.
+   - `ocr_json` stored as a flow blob via `save_execution_binary_blob` (GridFS
+     `flow_blobs`, purged with the execution); falls back to inline `data` in unit tests
+     (no real client).
+   - `get_revision_pin_blob` endpoint extended to accept `files:` prefix in addition to
+     `flow_pins:`, with `_require_flow_pins_key_for_revision` / `_flow_pins_key_authorized_for_revision`
+     helpers that also accept cross-revision `pin_data` keys.
+   - Frontend: `FlowRevisionPinBlobContext` added to `flowExecutionBlob.ts`; `canFetchFlowBinaryRef` /
+     `fetchFlowBinaryRef` route download requests to execution or pin endpoint;
+     `IoViewer`, `IoBinaryPanel`, `FlowInputUpstreamList`, `FlowNodeConfigModal` wired.
+   - Tests: `test_docrouter_ocr_node.py` (node unit tests), `test_flow_pins_http.py`
+     (pin endpoint including `files:` prefix and cross-revision auth),
+     `test_flow_execution_blob_http.py` (execution blob roundtrip and error cases).
 
 6. **LLM run node** (§4) — reimplement; optional OCR input port (port 1); automatic
    `ocr_pages` injection when port is connected.
