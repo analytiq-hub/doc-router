@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
-import type { FlowExecutionBlobContext } from './flowExecutionBlob';
-import { fetchFlowExecutionBlob, isFetchableExecutionBlobStorageId } from './flowExecutionBlob';
+import type { FlowExecutionBlobContext, FlowRevisionPinBlobContext } from './flowExecutionBlob';
+import { canFetchFlowBinaryRef, fetchFlowBinaryRef } from './flowExecutionBlob';
 
 export type JsonPath = Array<string | number>;
 
@@ -344,12 +344,18 @@ function coerceBinaryRefLike(v: unknown): BinaryRefLike | null {
   if (v == null || typeof v !== 'object' || Array.isArray(v)) return null;
   const o = v as Record<string, unknown>;
   const storage_id = o.storage_id;
-  if (typeof storage_id !== 'string' || !storage_id.trim()) return null;
   const mime_type = typeof o.mime_type === 'string' ? o.mime_type : undefined;
   const file_name = typeof o.file_name === 'string' ? o.file_name : undefined;
   const fs = o.file_size;
   const file_size = typeof fs === 'number' && Number.isFinite(fs) ? fs : undefined;
-  return { mime_type, file_name, storage_id: storage_id.trim(), file_size };
+  if (typeof storage_id === 'string' && storage_id.trim()) {
+    return { mime_type, file_name, storage_id: storage_id.trim(), file_size };
+  }
+  // Inline bytes (unit tests / pre-offload); list in UI but download stays disabled without storage_id.
+  if (o.data != null && mime_type) {
+    return { mime_type, file_name, storage_id: '', file_size };
+  }
+  return null;
 }
 
 function binaryAttachmentRows(itemsBinaries: Array<Record<string, unknown>>): Array<{
@@ -471,7 +477,8 @@ const IoBinaryPanel: React.FC<{
   itemsBinaries: Array<Record<string, unknown>>;
   itemCount: number;
   flowBlobDownloadContext: FlowExecutionBlobContext | null;
-}> = ({ itemsBinaries, itemCount, flowBlobDownloadContext }) => {
+  flowRevisionPinBlobContext?: FlowRevisionPinBlobContext | null;
+}> = ({ itemsBinaries, itemCount, flowBlobDownloadContext, flowRevisionPinBlobContext = null }) => {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [preview, setPreview] = useState<IoBinaryPreview | null>(null);
@@ -500,7 +507,7 @@ const IoBinaryPanel: React.FC<{
   const openPreview = useCallback(
     async (cardKey: string, ref: BinaryRefLike, title: string) => {
       const viewKind = inferBinaryViewKind(ref.mime_type, ref.file_name);
-      if (!viewKind || !flowBlobDownloadContext) return;
+      if (!viewKind || !canFetchFlowBinaryRef(ref.storage_id, flowBlobDownloadContext, flowRevisionPinBlobContext)) return;
 
       setError(null);
       setBusyKey(cardKey);
@@ -510,7 +517,9 @@ const IoBinaryPanel: React.FC<{
           previewBlobUrlRef.current = null;
         }
 
-        const { blob } = await fetchFlowExecutionBlob(flowBlobDownloadContext, ref.storage_id!, { action: 'view' });
+        const { blob } = await fetchFlowBinaryRef(ref.storage_id!, flowBlobDownloadContext, flowRevisionPinBlobContext, {
+          action: 'view',
+        });
         const effectiveMime =
           blob.type && blob.type.trim() ? blob.type.split(';')[0].trim() : ref.mime_type || 'application/octet-stream';
 
@@ -552,19 +561,19 @@ const IoBinaryPanel: React.FC<{
         setBusyKey(null);
       }
     },
-    [flowBlobDownloadContext],
+    [flowBlobDownloadContext, flowRevisionPinBlobContext],
   );
 
   const downloadBlob = useCallback(
     async (key: string, storageId: string, fallbackName: string | undefined) => {
-      if (!flowBlobDownloadContext) {
-        setError('Run the workflow and select an execution to download binaries.');
+      if (!canFetchFlowBinaryRef(storageId, flowBlobDownloadContext, flowRevisionPinBlobContext)) {
+        setError('Save the flow and run it, or use pinned binaries on a saved revision to download attachments.');
         return;
       }
       setError(null);
       setBusyKey(key);
       try {
-        const { blob, downloadName } = await fetchFlowExecutionBlob(flowBlobDownloadContext, storageId, {
+        const { blob, downloadName } = await fetchFlowBinaryRef(storageId, flowBlobDownloadContext, flowRevisionPinBlobContext, {
           action: 'download',
         });
         const url = URL.createObjectURL(blob);
@@ -581,7 +590,7 @@ const IoBinaryPanel: React.FC<{
         setBusyKey(null);
       }
     },
-    [flowBlobDownloadContext],
+    [flowBlobDownloadContext, flowRevisionPinBlobContext],
   );
 
   if (rows.length === 0) {
@@ -595,19 +604,19 @@ const IoBinaryPanel: React.FC<{
       {preview ? <IoBinaryPreviewOverlay preview={preview} onClose={closePreview} /> : null}
       <div className="max-h-[360px] space-y-3 overflow-auto">
         {error ? <div className="rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[11px] text-red-900">{error}</div> : null}
-        {!flowBlobDownloadContext ? (
+        {!flowBlobDownloadContext && !flowRevisionPinBlobContext ? (
           <div className="text-[11px] text-gray-500">
-            View and Download need a saved execution context (run the flow from the editor or open an execution).
+            View and Download need a saved flow revision (for pinned binaries) or a workflow execution.
           </div>
         ) : null}
         {rows.map((r) => {
           const sid = typeof r.ref.storage_id === 'string' ? r.ref.storage_id : '';
-          const cardKey = `${r.itemIndex}:${r.propertyName}:${sid}`;
+          const cardKey = `${r.itemIndex}:${r.propertyName}:${sid || r.ref.mime_type || 'inline'}`;
           const ext = displayFileExtension(r.ref.file_name, r.ref.mime_type);
           const mime = r.ref.mime_type && r.ref.mime_type.trim() ? r.ref.mime_type : '—';
           const sizeLabel = r.ref.file_size != null ? formatFileSizeBytes(r.ref.file_size) : '—';
           const displayName = r.ref.file_name?.trim() || r.propertyName;
-          const canFetch = Boolean(flowBlobDownloadContext && isFetchableExecutionBlobStorageId(sid));
+          const canFetch = canFetchFlowBinaryRef(sid, flowBlobDownloadContext, flowRevisionPinBlobContext);
           const busy = busyKey === cardKey;
           const viewKind = inferBinaryViewKind(r.ref.mime_type, r.ref.file_name);
           const canView = Boolean(canFetch && viewKind);
@@ -816,6 +825,8 @@ export const IoViewer: React.FC<{
   executionItemsBinaries?: Array<Record<string, unknown>> | null;
   /** Enables View/Download using `fetchFlowExecutionBlob` for execution-scoped binary refs. */
   flowBlobDownloadContext?: FlowExecutionBlobContext | null;
+  /** Enables View/Download for revision-scoped pin blobs without an execution trace. */
+  flowRevisionPinBlobContext?: FlowRevisionPinBlobContext | null;
   /** When true, only the schema/table/json body is rendered (parent supplies chrome). */
   hideHeader?: boolean;
   /** When set, drag hints and payloads use inbound `_json` vs `_node[…].json` consistently with the modal node. */
@@ -837,6 +848,7 @@ export const IoViewer: React.FC<{
   valueKind = 'json',
   executionItemsBinaries = null,
   flowBlobDownloadContext = null,
+  flowRevisionPinBlobContext = null,
   hideHeader = false,
   expressionConfigNodeId,
   soleInboundParentNodeId = null,
@@ -1128,6 +1140,7 @@ export const IoViewer: React.FC<{
             itemsBinaries={paddedItemBinaries}
             itemCount={executionItems.length}
             flowBlobDownloadContext={flowBlobDownloadContext ?? null}
+            flowRevisionPinBlobContext={flowRevisionPinBlobContext ?? null}
           />
         </div>
       )}

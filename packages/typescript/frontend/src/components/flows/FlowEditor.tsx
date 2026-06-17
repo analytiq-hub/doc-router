@@ -45,7 +45,7 @@ import {
   rewriteRfNodesDisplayRefsRename,
 } from './flowExpressionNodeRefs';
 import type { DocRouterOrgApi } from '@/utils/api';
-import type { FlowExecutionBlobContext } from './flowExecutionBlob';
+import type { FlowExecutionBlobContext, FlowRevisionPinBlobContext } from './flowExecutionBlob';
 import FlowNodePalette from './FlowNodePalette';
 import {
   parseFlowNodeDragPayload,
@@ -381,6 +381,14 @@ const FlowEditor: React.FC<{
     if (!eid || !oid || !fid) return null;
     return { organizationId: oid, flowId: fid, executionId: eid };
   }, [executionForIo?.execution_id, flowId, flowOrgApi?.organizationId]);
+
+  const flowRevisionPinBlobContext = useMemo((): FlowRevisionPinBlobContext | null => {
+    const revid = flowRevidForPins?.trim();
+    const oid = flowOrgApi?.organizationId?.trim();
+    const fid = flowId?.trim();
+    if (!revid || !oid || !fid) return null;
+    return { organizationId: oid, flowId: fid, flowRevid: revid };
+  }, [flowRevidForPins, flowId, flowOrgApi?.organizationId]);
   const canvasEdges = useMemo(
     () => edgesWithRunDataItemCounts(toCanvasEdges(edges), runData, pinData ?? undefined),
     [edges, runData, pinData],
@@ -1228,6 +1236,7 @@ const FlowEditor: React.FC<{
         pollTestBusy={pollTestBusy}
         flowOrgApi={flowOrgApi}
         flowBlobDownloadContext={flowBlobDownloadContext}
+        flowRevisionPinBlobContext={flowRevisionPinBlobContext}
         flowId={flowId}
         flowRevidForPins={flowRevidForPins}
       />

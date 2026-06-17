@@ -147,6 +147,49 @@ def _flow_pins_keys_from_pin_data(pin_data: Any, *, prefix: str) -> set[str]:
     return out
 
 
+def _flow_pins_key_in_pin_data(pin_data: Any, key: str) -> bool:
+    """True when ``key`` is a ``flow_pins`` ref embedded in ``pin_data`` (any upload-time rev segment)."""
+
+    if not key.startswith("pin/"):
+        return False
+    return key in _flow_pins_keys_from_pin_data(pin_data, prefix="pin/")
+
+
+def _flow_pins_key_authorized_for_revision(pin_data: Any, key: str, flow_revid: str) -> bool:
+    """
+    Allow download when the key is referenced in ``pin_data`` (upload rev may differ from ``flow_revid``),
+    or when the key is scoped to this revision id (upload not yet saved into ``pin_data``).
+    """
+
+    if not key.startswith("pin/"):
+        return False
+    if _flow_pins_key_in_pin_data(pin_data, key):
+        return True
+    return key.startswith(f"pin/{flow_revid}/")
+
+
+async def _require_flow_pins_key_for_revision(
+    db: Any,
+    *,
+    flow_id: str,
+    flow_revid: str,
+    key: str,
+) -> None:
+    """Raise 403/404 when ``key`` is not allowed for this revision."""
+
+    if not key.startswith("pin/"):
+        raise HTTPException(status_code=400, detail="Invalid storage_id")
+    try:
+        rev_oid = ObjectId(flow_revid)
+    except InvalidId:
+        raise HTTPException(status_code=404, detail="Revision not found") from None
+    rev = await db.flow_revisions.find_one({"_id": rev_oid, "flow_id": flow_id})
+    if not rev:
+        raise HTTPException(status_code=404, detail="Revision not found")
+    if not _flow_pins_key_authorized_for_revision(rev.get("pin_data"), key, flow_revid):
+        raise HTTPException(status_code=403, detail="Blob key is not referenced by this revision")
+
+
 def _safe_content_disposition_filename(fname: str) -> str:
     """
     Safe ``filename="…"`` value for RFC 7230 field lines: ASCII printable only.
@@ -1063,7 +1106,14 @@ async def get_revision_pin_blob(
     organization_id: str,
     flow_id: str,
     flow_revid: str,
-    storage_id: str = Query(..., min_length=1, description="FlowBinaryRef.storage_id, e.g. flow_pins:pin/<flowRevid>/..."),
+    storage_id: str = Query(
+        ...,
+        min_length=1,
+        description=(
+            "FlowBinaryRef.storage_id: flow_pins:pin/<flowRevid>/… or files:<gridfs-key> "
+            "(org document ownership verified)."
+        ),
+    ),
     action: Literal["view", "download"] = Query(
         "download",
         description=(
@@ -1073,7 +1123,7 @@ async def get_revision_pin_blob(
     ),
     current_user: User = Depends(get_org_user),
 ):
-    """Return bytes for a pinned binary (`flow_pins`) scoped to this flow revision."""
+    """Return bytes for a pinned binary (`flow_pins`) or org document file (`files:`) scoped to this revision."""
 
     _ = current_user
     db = await _get_db()
@@ -1088,17 +1138,26 @@ async def get_revision_pin_blob(
 
     sid = storage_id.strip()
     parts = sid.split(":", 1)
-    if len(parts) != 2 or parts[0] != "flow_pins" or not parts[1]:
+    if len(parts) != 2 or not parts[1]:
         raise HTTPException(status_code=400, detail="Invalid storage_id")
-    key = parts[1]
-    if not key.startswith(f"pin/{flow_revid}/"):
-        raise HTTPException(status_code=403, detail="Blob key does not belong to this revision")
+    bucket, key = parts[0], parts[1]
 
     aq_client = ad.common.get_analytiq_client()
-    result = await ad.mongodb.blob.get_blob_async(aq_client, bucket="flow_pins", key=key)
-    blob = _gridfs_blob_bytes(result)
-    mime, fname = _gridfs_meta_mime_and_filename(result.get("metadata"))
-    return _binary_blob_http_response(blob=blob, mime=mime, file_name=fname, action=action)
+
+    if bucket == "flow_pins":
+        await _require_flow_pins_key_for_revision(db, flow_id=flow_id, flow_revid=flow_revid, key=key)
+        result = await ad.mongodb.blob.get_blob_async(aq_client, bucket="flow_pins", key=key)
+        blob = _gridfs_blob_bytes(result)
+        mime, fname = _gridfs_meta_mime_and_filename(result.get("metadata"))
+        return _binary_blob_http_response(blob=blob, mime=mime, file_name=fname, action=action)
+
+    if bucket == "files":
+        blob, mime, fname = await _load_org_document_file_blob(
+            db, aq_client, organization_id=organization_id, file_key=key
+        )
+        return _binary_blob_http_response(blob=blob, mime=mime, file_name=fname, action=action)
+
+    raise HTTPException(status_code=400, detail="Invalid storage_id")
 
 
 @flows_router.put("/v0/orgs/{organization_id}/flows/{flow_id}", response_model=SaveFlowResponse)
@@ -1839,8 +1898,7 @@ async def get_execution_blob(
         flow_revid = exec_doc.get("flow_revid")
         if not isinstance(flow_revid, str) or not flow_revid.strip():
             raise HTTPException(status_code=404, detail="Execution not found")
-        if not key.startswith(f"pin/{flow_revid}/"):
-            raise HTTPException(status_code=403, detail="Blob key does not belong to this execution")
+        await _require_flow_pins_key_for_revision(db, flow_id=flow_id, flow_revid=flow_revid, key=key)
         result = await ad.mongodb.blob.get_blob_async(aq_client, bucket="flow_pins", key=key)
         blob = _gridfs_blob_bytes(result)
         mime, fname = _gridfs_meta_mime_and_filename(result.get("metadata"))

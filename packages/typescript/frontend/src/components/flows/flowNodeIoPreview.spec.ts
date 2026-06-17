@@ -100,6 +100,29 @@ describe('buildNodeOutputPreview', () => {
     expect(outPrev.itemsJson).toEqual([{ ok: true }]);
     expect(outPrev.itemsBinaries).toEqual([{}]);
   });
+
+  it('prefers terminal run_data over pin for this node output panel', () => {
+    const pin: FlowPinData = {
+      ocr: { main: [[{ json: { pinned: true }, binary: { pdf: { storage_id: 'files:x.pdf', mime_type: 'application/pdf' } } }]] },
+    };
+    const run = {
+      ocr: runEntry([
+        {
+          json: { ocr_pages: ['page one'], ocr_provider: 'pymupdf' },
+          binary: {
+            pdf: { storage_id: 'files:x.pdf', mime_type: 'application/pdf' },
+            ocr_json: { storage_id: 'flow_blobs:exec/ocr/0/ocr_json', mime_type: 'application/json', file_name: 'ocr.json' },
+          },
+        },
+      ]),
+    };
+    const outPrev = buildNodeOutputPreview('ocr', run, pin);
+    expect(outPrev.itemsJson).toEqual([{ ocr_pages: ['page one'], ocr_provider: 'pymupdf' }]);
+    expect(outPrev.itemsBinaries[0]?.ocr_json).toMatchObject({
+      storage_id: 'flow_blobs:exec/ocr/0/ocr_json',
+      mime_type: 'application/json',
+    });
+  });
 });
 
 describe('runDataMergedWithPins', () => {

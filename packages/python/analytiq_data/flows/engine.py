@@ -382,6 +382,52 @@ def _stamp_outputs_producer_meta(
     return stamped
 
 
+async def save_execution_binary_blob(
+    analytiq_client: Any,
+    *,
+    execution_id: str,
+    node_id: str,
+    item_index: int,
+    property_name: str,
+    blob: bytes,
+    mime_type: str,
+    file_name: str | None = None,
+) -> "ad.flows.BinaryRef":
+    """
+    Upload bytes to GridFS ``flow_blobs`` for this execution and return a by-reference ``BinaryRef``.
+
+    Key shape matches ``_offload_binary_refs`` so execution blob download and purge stay consistent.
+    When ``analytiq_client`` is None (engine unit tests without Mongo), returns inline ``data`` instead.
+    """
+
+    fname = (file_name or "").strip() or property_name
+    if analytiq_client is None:
+        return ad.flows.BinaryRef(
+            mime_type=mime_type,
+            file_name=fname,
+            data=blob,
+            file_size=len(blob),
+        )
+    key = f"{execution_id}/{node_id}/{item_index}/{property_name}"
+    await ad.mongodb.blob.save_blob_async(
+        analytiq_client,
+        bucket="flow_blobs",
+        key=key,
+        blob=blob,
+        metadata={
+            "mime_type": mime_type,
+            "file_name": fname,
+            "file_size": len(blob),
+        },
+    )
+    return ad.flows.BinaryRef(
+        mime_type=mime_type,
+        file_name=fname,
+        storage_id=f"flow_blobs:{key}",
+        file_size=len(blob),
+    )
+
+
 def _bson_serialize_value(obj: Any) -> Any:
     """Recursively turn `FlowItem` / `BinaryRef` (and containers) into BSON-safe data."""
 

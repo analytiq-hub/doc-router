@@ -81,6 +81,12 @@ function hasPinMainLane(pin: FlowPinNodeOutput | null | undefined): pin is FlowP
   return pin != null && typeof pin === 'object' && 'main' in pin && Array.isArray(pin.main);
 }
 
+function nodeRunHasTerminalStatus(runEntry: unknown): boolean {
+  if (!runEntry || typeof runEntry !== 'object') return false;
+  const st = (runEntry as NodeRun).status;
+  return st === 'success' || st === 'error' || st === 'skipped';
+}
+
 /**
  * Merge revision pin outputs into the execution `run_data` shape so backend `_node[…]` preview
  * matches the INPUT panel (which prefers pin over `run_data` per {@link upstreamOutputItemsPreview}).
@@ -316,6 +322,20 @@ export function buildNodeOutputPreview(
   runData: RunData,
   pinData?: FlowPinData | null,
 ): { itemsJson: unknown[]; itemsBinaries: Record<string, unknown>[]; logs: string[]; message: string | null } {
+  const runEntry = runData?.[nodeId];
+  if (nodeRunHasTerminalStatus(runEntry)) {
+    const snaps = laneMain0Snapshots(runEntry);
+    const itemsJson = snaps.map((s) => s.json);
+    const itemsBinaries = snaps.map((s) => s.binary);
+    const rawLogs = (runEntry as unknown as { logs?: unknown }).logs;
+    const logs = Array.isArray(rawLogs) ? rawLogs.filter((x) => typeof x === 'string') as string[] : [];
+    const msg =
+      (runEntry as NodeRun).status && (runEntry as NodeRun).status !== 'success'
+        ? `Status: ${(runEntry as NodeRun).status}`
+        : null;
+    return { itemsJson, itemsBinaries, logs, message: msg };
+  }
+
   const pinned = pinData?.[nodeId];
   if (hasPinMainLane(pinned)) {
     const snaps = laneMain0SnapshotsFromPin(pinned);

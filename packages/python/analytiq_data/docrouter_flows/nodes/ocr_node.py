@@ -1,20 +1,25 @@
 from __future__ import annotations
 
-"""DocRouter node implementation that runs OCR for document items."""
+"""DocRouter flow node that runs OCR on ``binary.pdf`` and emits ``ocr_pages``."""
 
+import json
 from typing import Any
 
 import analytiq_data as ad
 
 from .. import services as flow_services
+from ..document_binary import resolve_pdf_binary_ref
+
+
+OCR_PROVIDERS = ("textract", "mistral", "pymupdf", "llm")
 
 
 class DocRouterOcrNode:
-    """Run organization-configured OCR for each input document item."""
+    """Run a selected OCR provider on each input item's PDF binary."""
 
     key = "docrouter.ocr"
     label = "Run OCR"
-    description = "Runs OCR on the input document(s)."
+    description = "Runs OCR on the input PDF and exposes per-page text for downstream nodes."
     category = "DocRouter"
     palette_group = "docrouter"
     is_trigger = False
@@ -25,12 +30,27 @@ class DocRouterOcrNode:
     output_labels = ["output"]
     output_port_types = ["docrouter.ocr"]
     icon_key = "ocr"
-    parameter_schema: dict[str, Any] = {"type": "object", "properties": {}, "additionalProperties": False}
+    parameter_schema: dict[str, Any] = {
+        "type": "object",
+        "title": "Run OCR",
+        "properties": {
+            "ocr_provider": {
+                "type": "string",
+                "enum": list(OCR_PROVIDERS),
+                "default": "textract",
+                "description": "OCR backend to use.",
+            },
+        },
+        "required": ["ocr_provider"],
+        "additionalProperties": False,
+    }
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
-        """No extra parameters for v1 OCR node."""
-
-        return []
+        errs: list[str] = []
+        provider = params.get("ocr_provider")
+        if not isinstance(provider, str) or provider not in OCR_PROVIDERS:
+            errs.append("parameters.ocr_provider is required")
+        return errs
 
     async def execute(
         self,
@@ -38,19 +58,50 @@ class DocRouterOcrNode:
         node: dict[str, Any],
         inputs: list[list["ad.flows.FlowItem"]],
     ):
-        """Ensure OCR exists for each document and attach the OCR result under `json.ocr`."""
+        params = node.get("parameters") or {}
+        ocr_provider = params.get("ocr_provider") if isinstance(params.get("ocr_provider"), str) else "textract"
 
         out: list["ad.flows.FlowItem"] = []
-        for it in inputs[0]:
-            doc_id = it.json.get("document_id") or (it.json.get("document") or {}).get("_id")
-            if not doc_id:
-                raise ValueError("Input item missing document_id")
-            result = await flow_services.run_ocr(context.analytiq_client, context.organization_id, doc_id)
-            merged = dict(it.json)
-            merged["ocr"] = result
+        for item_index, it in enumerate(inputs[0]):
+            pdf_ref = resolve_pdf_binary_ref(it.binary)
+            if pdf_ref is None:
+                raise ValueError("Input item missing binary.pdf")
+            pdf_bytes = await ad.flows.get_binary_stream(pdf_ref, context.analytiq_client)
+
+            doc_id = it.json.get("document_id") if isinstance(it.json.get("document_id"), str) else None
+            ocr_json, ocr_pages = await flow_services.run_flow_ocr_on_pdf(
+                context.analytiq_client,
+                context.organization_id,
+                pdf_bytes,
+                ocr_provider=ocr_provider,
+                document_id=doc_id,
+            )
+
+            ocr_json_bytes = json.dumps(ocr_json, default=str).encode("utf-8")
+            binary: dict[str, ad.flows.BinaryRef] = {
+                "pdf": pdf_ref,
+                "ocr_json": await ad.flows.save_execution_binary_blob(
+                    context.analytiq_client,
+                    execution_id=context.execution_id,
+                    node_id=str(node["id"]),
+                    item_index=item_index,
+                    property_name="ocr_json",
+                    blob=ocr_json_bytes,
+                    mime_type="application/json",
+                    file_name="ocr.json",
+                ),
+            }
+
+            merged_json = dict(it.json)
+            merged_json["ocr_provider"] = ocr_provider
+            merged_json["ocr_pages"] = ocr_pages
+
             out.append(
                 ad.flows.FlowItem(
-                    json=merged, binary=it.binary, meta=it.meta, paired_item=it.paired_item
+                    json=merged_json,
+                    binary=binary,
+                    meta={"source_node_id": node["id"], "item_index": item_index},
+                    paired_item=it.paired_item,
                 )
             )
         return [out]

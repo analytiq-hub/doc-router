@@ -256,4 +256,4 @@ async def test_execution_blob_flow_pins_wrong_revision_forbidden(flow_with_execu
         params={"storage_id": storage_id, "action": "download"},
         headers=get_auth_headers(),
     )
-    assert r.status_code == 403, r.text
+    assert r.status_code in (403, 404), r.text

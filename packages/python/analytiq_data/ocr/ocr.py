@@ -53,6 +53,23 @@ def infer_ocr_type(ocr_json: Any) -> Literal["textract", "mistral", "mistral_ver
     return "textract"
 
 
+def ocr_pages_plain_text_list(ocr_json: dict) -> list[str]:
+    """Return 0-based plain-text strings, one per page, from an OCR JSON payload."""
+
+    ot = infer_ocr_type(ocr_json)
+    if ot in ("mistral", "mistral_vertex", "llm", "pymupdf"):
+        page_map = _page_text_map_from_pages_markdown(ocr_json)
+    else:
+        doc = ad.aws.textract.open_textract_document_from_ocr_json(
+            ocr_json, document_id="", org_id=None
+        )
+        page_map = ad.aws.textract.page_text_map_from_ocr_document(doc)
+    if not page_map:
+        return []
+    max_idx = max(page_map.keys())
+    return [page_map.get(i, "") for i in range(max_idx + 1)]
+
+
 def decode_ocr_blob_bytes(blob_bytes: bytes) -> Any:
     """Load OCR JSON: UTF-8 JSON first, else legacy pickle."""
     if not blob_bytes:

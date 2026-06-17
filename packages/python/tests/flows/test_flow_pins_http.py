@@ -179,6 +179,88 @@ def test_pin_binary_upload_get_roundtrip(flow_with_revision, mock_auth, test_db)
     assert r_get.content == payload
 
 
+def test_pin_binary_download_when_storage_key_uses_prior_upload_revision(mock_auth, test_db):
+    """
+    Blob keys embed the revision id at upload time. After save creates a new revision row, download
+    must still work when the current revision's pin_data references the older key.
+    """
+
+    r0 = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows",
+        json={"name": "pin download cross-revision"},
+        headers=get_auth_headers(),
+    )
+    assert r0.status_code == 200, r0.text
+    flow_id = r0.json()["flow"]["flow_id"]
+    r1 = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        json={
+            "base_flow_revid": "",
+            "name": "pin download cross-revision",
+            "nodes": [_std_manual_node()],
+            "connections": {},
+            "settings": {},
+            "pin_data": None,
+        },
+        headers=get_auth_headers(),
+    )
+    assert r1.status_code == 200, r1.text
+    rev_upload = r1.json()["revision"]["flow_revid"]
+
+    payload = b"cross-rev-pin"
+    files = {"file": ("doc.pdf", BytesIO(payload), "application/pdf")}
+    data = {"node_id": "t1", "slot": "0", "item_index": "0", "property": "pdf"}
+    r_up = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}/revisions/{rev_upload}/pins/binary",
+        data=data,
+        files=files,
+        headers=_auth_multipart_headers(),
+    )
+    assert r_up.status_code == 200, r_up.text
+    storage_id = r_up.json()["storage_id"]
+    assert f"pin/{rev_upload}/" in storage_id
+
+    pin_payload = {
+        "t1": {
+            "main": [
+                [
+                    {
+                        "json": {},
+                        "binary": {
+                            "pdf": {
+                                **r_up.json(),
+                            }
+                        },
+                    }
+                ]
+            ]
+        }
+    }
+    r2 = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        json={
+            "base_flow_revid": rev_upload,
+            "name": "pin download cross-revision",
+            "nodes": [_std_manual_node()],
+            "connections": {},
+            "settings": {},
+            "pin_data": pin_payload,
+        },
+        headers=get_auth_headers(),
+    )
+    assert r2.status_code == 200, r2.text
+    rev_current = r2.json()["revision"]["flow_revid"]
+    assert rev_current != rev_upload
+
+    r_get = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}/revisions/{rev_current}/pins/blob",
+        params={"storage_id": storage_id, "action": "download"},
+        headers=get_auth_headers(),
+    )
+    assert r_get.status_code == 200, r_get.text
+    assert r_get.content == payload
+
+
 def test_pin_binary_wrong_revision_forbidden(flow_with_revision, mock_auth, test_db):
     flow_id, rev_id = flow_with_revision
     files = {"file": ("hello.bin", BytesIO(b"a"), "application/octet-stream")}

@@ -1173,6 +1173,35 @@ async def test_persist_run_data_offloads_binaryref_data_and_persists_storage_id(
 
 
 @pytest.mark.asyncio
+async def test_save_execution_binary_blob_writes_flow_blobs(monkeypatch) -> None:
+    saved: dict[str, Any] = {}
+
+    async def _fake_save_blob_async(_client, *, bucket: str, key: str, blob: bytes, metadata: dict[str, Any], **_kw):
+        saved["bucket"] = bucket
+        saved["key"] = key
+        saved["blob"] = blob
+        saved["metadata"] = metadata
+
+    monkeypatch.setattr(ad.mongodb.blob, "save_blob_async", _fake_save_blob_async)
+
+    ref = await ad.flows.save_execution_binary_blob(
+        object(),
+        execution_id="exec1",
+        node_id="ocr1",
+        item_index=0,
+        property_name="ocr_json",
+        blob=b'{"pages":[]}',
+        mime_type="application/json",
+        file_name="ocr.json",
+    )
+
+    assert ref.storage_id == "flow_blobs:exec1/ocr1/0/ocr_json"
+    assert ref.data is None
+    assert saved["bucket"] == "flow_blobs"
+    assert saved["key"] == "exec1/ocr1/0/ocr_json"
+
+
+@pytest.mark.asyncio
 async def test_flows_code_context_includes_nodes_materialized_run_data() -> None:
     """`flows.code` gets context['nodes'][node_id]['main'] with JSON-only prior outputs."""
 

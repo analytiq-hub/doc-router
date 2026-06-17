@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
 import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
-import type { FlowExecutionBlobContext } from './flowExecutionBlob';
+import type { FlowExecutionBlobContext, FlowRevisionPinBlobContext } from './flowExecutionBlob';
 import { IoDataModeTabs, IoViewer, type IoDataMode } from './IoViewer';
 
 export type UpstreamInputSlot = {
@@ -35,6 +35,7 @@ export const FlowInputUpstreamList: React.FC<{
   /** When the configured node has a single inbound wire, drags from that source use `_json` (see `payloadToExpression`). */
   soleInboundParentNodeId?: string | null;
   flowBlobDownloadContext?: FlowExecutionBlobContext | null;
+  flowRevisionPinBlobContext?: FlowRevisionPinBlobContext | null;
 }> = ({
   slots,
   nodeLabelById,
@@ -44,6 +45,7 @@ export const FlowInputUpstreamList: React.FC<{
   expressionConfigNodeId,
   soleInboundParentNodeId = null,
   flowBlobDownloadContext = null,
+  flowRevisionPinBlobContext = null,
 }) => {
   if (slots.length === 0) return null;
 
@@ -109,6 +111,7 @@ export const FlowInputUpstreamList: React.FC<{
                     valueKind="executionItems"
                     executionItemsBinaries={s.itemsBinaries}
                     flowBlobDownloadContext={flowBlobDownloadContext ?? null}
+                    flowRevisionPinBlobContext={flowRevisionPinBlobContext ?? null}
                     dragSource={{
                       nodeId: s.fromNodeId,
                       source: 'nodeOutput',

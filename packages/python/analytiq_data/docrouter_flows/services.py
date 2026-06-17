@@ -18,6 +18,8 @@ import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
+FLOW_OCR_PROVIDERS = frozenset({"textract", "mistral", "pymupdf", "llm"})
+
 
 async def get_document(analytiq_client, org_id: str, doc_id: str) -> dict:
     """Load a document and verify it belongs to `org_id`."""
@@ -74,6 +76,40 @@ async def run_ocr(analytiq_client, org_id: str, doc_id: str) -> dict:
     )
     await ad.common.doc.update_doc_state(analytiq_client, doc_id, ad.common.doc.DOCUMENT_STATE_OCR_COMPLETED)
     return {"document_id": doc_id, "ocr": "completed", "mode": cfg.mode}
+
+
+async def run_flow_ocr_on_pdf(
+    analytiq_client,
+    org_id: str,
+    pdf_bytes: bytes,
+    *,
+    ocr_provider: str,
+    document_id: str | None = None,
+) -> tuple[dict[str, Any], list[str]]:
+    """
+    Run OCR on in-memory PDF bytes for a flow execution.
+
+    Returns ``(ocr_json_payload, ocr_pages)`` without persisting to the document OCR store.
+    """
+
+    provider = (ocr_provider or "").strip()
+    if provider not in FLOW_OCR_PROVIDERS:
+        raise ValueError(f"Unsupported ocr_provider: {ocr_provider!r}")
+
+    cfg = await ad.ocr.ocr_config.fetch_org_ocr_config(analytiq_client, org_id)
+    if cfg.mode != provider:
+        cfg = cfg.model_copy(update={"mode": provider})
+
+    doc_id = (document_id or "").strip() or "flow"
+    payload = await ad.ocr.ocr_runners.run_document_ocr(
+        analytiq_client,
+        pdf_bytes,
+        org_id=org_id,
+        document_id=doc_id,
+        cfg=cfg,
+    )
+    pages = ad.ocr.ocr_pages_plain_text_list(payload)
+    return payload, pages
 
 
 async def run_llm_extract(

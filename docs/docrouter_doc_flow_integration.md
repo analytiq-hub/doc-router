@@ -223,10 +223,19 @@ docrouter.ocr
 ### 3.5 Behavior
 
 1. Load `binary.pdf` into memory.
-2. Run the selected OCR provider against the PDF bytes.
-3. Store `ocr_json` as a **flow blob** tied to this execution (deleted when execution is purged).
+2. Run the selected OCR provider against the PDF bytes (does **not** write to the
+   document OCR store — flow-scoped only).
+3. Store `ocr_json` as a **flow blob** in GridFS `flow_blobs` keyed to this execution
+   (purged when the execution is deleted).
 4. Pass `binary.pdf` from the input through to the output unchanged.
 5. Emit one output item per input item.
+
+**Implementation notes:**
+
+| Topic | Detail |
+| --- | --- |
+| `document_id` for Textract | `run_flow_ocr_on_pdf` passes `document_id="flow"` when the input item has no `document_id`. Textract job metadata may show that placeholder instead of a real document id. |
+| Provider enum | `OCR_PROVIDERS` in `ocr_node.py` and `FLOW_OCR_PROVIDERS` in `services.py` are duplicated; could be unified later. |
 
 ### 3.6 Output
 
@@ -695,7 +704,7 @@ The following order minimises dependency risk:
      insertion checks compatibility on both sides.
    - Tests: `test_flow_connection_types.py` (backend), `flow-rf.test.ts` (SDK roundtrip).
 
-5. **OCR node** (§3) — reimplement; per-page `ocr_pages` array output; flow-blob
+5. ✅ **OCR node** (§3) — reimplement; per-page `ocr_pages` array output; flow-blob
    `ocr_json`.
 
 6. **LLM run node** (§4) — reimplement; optional OCR input port (port 1); automatic

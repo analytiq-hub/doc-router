@@ -37,7 +37,7 @@ import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
 import { FlowNodeTracePanel, hasNodeTraceContent } from './flowNodeTracePanel';
 import { FlowInputUpstreamList } from './FlowInputUpstreamList';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
-import type { FlowExecutionBlobContext } from './flowExecutionBlob';
+import type { FlowExecutionBlobContext, FlowRevisionPinBlobContext } from './flowExecutionBlob';
 import { FLOW_VALUE_MIME, IoViewer, type IoDataMode } from './IoViewer';
 import {
   flowInlineNameInputClass,
@@ -457,6 +457,7 @@ const FlowNodeConfigModal: React.FC<{
   pollTestBusy?: boolean;
   /** When set, Binary tab View/Download can resolve `flow_blobs:` payloads for this execution. */
   flowBlobDownloadContext?: FlowExecutionBlobContext | null;
+  flowRevisionPinBlobContext?: FlowRevisionPinBlobContext | null;
   /** Flow id for revision pin-binary upload URLs. */
   flowId?: string | null;
   /** Saved revision id used for pin-binary uploads. */
@@ -490,6 +491,7 @@ const FlowNodeConfigModal: React.FC<{
   onTestPollTrigger,
   pollTestBusy = false,
   flowBlobDownloadContext = null,
+  flowRevisionPinBlobContext = null,
   flowId = null,
   flowRevidForPins = null,
 }) => {
@@ -714,7 +716,7 @@ const FlowNodeConfigModal: React.FC<{
       }
       setPinEditError('');
       setPinBinaryUploadProgress({ itemIndex, percent: 0 });
-      const prop = (pinEditBinaryAddProp[itemIndex] ?? 'data').trim() || 'data';
+      const prop = (pinEditBinaryAddProp[itemIndex] ?? 'pdf').trim() || 'pdf';
       const fd = new FormData();
       fd.set('node_id', node?.id ?? '');
       fd.set('slot', '0');
@@ -992,6 +994,7 @@ const FlowNodeConfigModal: React.FC<{
                           expressionConfigNodeId={node.id}
                           soleInboundParentNodeId={soleInboundParentNodeId}
                           flowBlobDownloadContext={flowBlobDownloadContext ?? null}
+                          flowRevisionPinBlobContext={flowRevisionPinBlobContext ?? null}
                         />
                       )}
                       {!inputPreview.message && inputPreview.slots.length === 0 && (
@@ -1001,6 +1004,7 @@ const FlowNodeConfigModal: React.FC<{
                           valueKind="executionItems"
                           executionItemsBinaries={[]}
                           flowBlobDownloadContext={flowBlobDownloadContext ?? null}
+                          flowRevisionPinBlobContext={flowRevisionPinBlobContext ?? null}
                           dragSource={{
                             nodeId: node.id,
                             source: 'nodeInput',
@@ -1222,6 +1226,7 @@ const FlowNodeConfigModal: React.FC<{
                           valueKind="executionItems"
                           executionItemsBinaries={outputExecPreview.itemsBinaries}
                           flowBlobDownloadContext={flowBlobDownloadContext ?? null}
+                          flowRevisionPinBlobContext={flowRevisionPinBlobContext ?? null}
                           dragSource={{
                             nodeId: node.id,
                             source: 'nodeOutput',
@@ -1458,7 +1463,7 @@ const FlowNodeConfigModal: React.FC<{
                                     className="w-44 rounded-md border border-gray-200 px-2 py-1 text-xs"
                                     placeholder="property name (e.g. pdf)"
                                     disabled={pinBinaryUploadProgress !== null}
-                                    value={pinEditBinaryAddProp[itemIndex] ?? 'data'}
+                                    value={pinEditBinaryAddProp[itemIndex] ?? 'pdf'}
                                     onChange={(e) =>
                                       setPinEditBinaryAddProp((cur) => ({ ...cur, [itemIndex]: e.target.value }))
                                     }

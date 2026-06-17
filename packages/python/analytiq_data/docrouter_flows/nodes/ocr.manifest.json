@@ -4,7 +4,7 @@
   "key": "docrouter.ocr",
   "type_version": 1,
   "label": "Run OCR",
-  "description": "Runs OCR on the input document(s).",
+  "description": "Runs OCR on the input PDF and exposes per-page text for downstream nodes.",
   "category": "DocRouter",
   "is_trigger": false,
   "is_merge": false,
@@ -26,7 +26,23 @@
   "palette_group": "docrouter",
   "parameter_schema": {
     "type": "object",
-    "properties": {},
+    "title": "Run OCR",
+    "properties": {
+      "ocr_provider": {
+        "type": "string",
+        "enum": [
+          "textract",
+          "mistral",
+          "pymupdf",
+          "llm"
+        ],
+        "default": "textract",
+        "description": "OCR backend to use."
+      }
+    },
+    "required": [
+      "ocr_provider"
+    ],
     "additionalProperties": false
   }
 }
