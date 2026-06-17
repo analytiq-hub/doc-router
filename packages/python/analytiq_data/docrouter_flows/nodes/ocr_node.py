@@ -38,6 +38,21 @@ class DocRouterOcrNode:
                 "default": "textract",
                 "description": "OCR backend to use.",
             },
+            "textract_feature_types": {
+                "type": "array",
+                "items": {
+                    "type": "string",
+                    "enum": list(flow_services.TEXTRACT_FEATURE_CHOICES),
+                },
+                "default": [],
+                "title": "Textract features",
+                "description": (
+                    "AWS Textract AnalyzeDocument feature types. "
+                    "Leave empty for text detection only (plain lines)."
+                ),
+                "x-ui-widget": "textract_feature_picker",
+                "x-ui-show-when": {"field": "ocr_provider", "equals": "textract"},
+            },
         },
         "required": ["ocr_provider"],
         "additionalProperties": False,
@@ -48,6 +63,17 @@ class DocRouterOcrNode:
         provider = params.get("ocr_provider")
         if not isinstance(provider, str) or provider not in flow_services.OCR_PROVIDER_CHOICES:
             errs.append("parameters.ocr_provider is required")
+            return errs
+        raw_features = params.get("textract_feature_types")
+        if raw_features is None:
+            return errs
+        if not isinstance(raw_features, list):
+            errs.append("parameters.textract_feature_types must be an array")
+            return errs
+        try:
+            flow_services.normalize_textract_feature_types(raw_features)
+        except ValueError:
+            errs.append("parameters.textract_feature_types contains invalid feature types")
         return errs
 
     async def execute(
@@ -58,12 +84,19 @@ class DocRouterOcrNode:
     ):
         params = node.get("parameters") or {}
         ocr_provider = params.get("ocr_provider") if isinstance(params.get("ocr_provider"), str) else "textract"
+        textract_feature_types: list[str] | None = None
+        if ocr_provider == "textract":
+            raw_features = params.get("textract_feature_types")
+            if isinstance(raw_features, list):
+                textract_feature_types = flow_services.normalize_textract_feature_types(
+                    [x for x in raw_features if isinstance(x, str)]
+                )
 
         out: list["ad.flows.FlowItem"] = []
         for item_index, it in enumerate(inputs[0]):
             pdf_ref = resolve_pdf_binary_ref(it.binary)
             if pdf_ref is None:
-                raise ValueError("Input item has no PDF binary")
+                continue
 
             blob_item_index = item_index
             if isinstance(it.meta, dict) and isinstance(it.meta.get("item_index"), int):
@@ -77,6 +110,7 @@ class DocRouterOcrNode:
                 pdf_bytes,
                 ocr_provider=ocr_provider,
                 execution_id=context.execution_id,
+                textract_feature_types=textract_feature_types,
             )
 
             ocr_json_bytes = json.dumps(ocr_json, default=str).encode("utf-8")
@@ -96,6 +130,8 @@ class DocRouterOcrNode:
 
             merged_json = dict(it.json)
             merged_json["ocr_provider"] = ocr_provider
+            if ocr_provider == "textract":
+                merged_json["textract_feature_types"] = textract_feature_types or []
             merged_json["ocr_pages"] = ocr_pages
 
             out.append(

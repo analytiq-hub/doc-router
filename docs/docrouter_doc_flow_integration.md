@@ -211,16 +211,17 @@ docrouter.ocr
 ### 3.3 Parameter schema
 
 
-| Parameter      | Type                                         | Required | Description         |
-| -------------- | -------------------------------------------- | -------- | ------------------- |
-| `ocr_provider` | `"textract" | "mistral" | "pymupdf"` | yes      | OCR backend to use. |
+| Parameter                | Type                                         | Required | Description         |
+| ------------------------ | -------------------------------------------- | -------- | ------------------- |
+| `ocr_provider`           | `"textract" \| "mistral" \| "pymupdf"`       | yes      | OCR backend to use. |
+| `textract_feature_types` | `("FORMS" \| "LAYOUT" \| "SIGNATURES" \| "TABLES")[]` | no       | Textract AnalyzeDocument features (shown when `ocr_provider` is `textract`). Empty = text detection only. |
 
 
 ### 3.4 Input
 
 - `binary.pdf` — preferred; when absent, the first binary property on the item (stable
-  property-name order) is used and any additional attachments are ignored. Raises an error
-  when the item has no binary attachments.
+  property-name order) is used and any additional attachments are ignored. Input items with
+  no binary attachment are skipped (no output item).
 
 ### 3.5 Behavior
 
@@ -237,6 +238,7 @@ docrouter.ocr
 | Topic | Detail |
 | --- | --- |
 | Provider enum | ``OCR_PROVIDER_CHOICES`` in ``services.py``; ``ocr.manifest.json`` enum should match. |
+| Textract features | ``TEXTRACT_FEATURE_CHOICES`` mirrors org OCR ``TEXTRACT_FEATURES``; flow OCR bills SPUs via ``run_document_ocr`` (same as document OCR). |
 | OCR job correlation | ``run_flow_ocr_on_pdf`` tags provider logs with ``execution_id`` (not the item's ``document_id``). |
 
 ### 3.6 Output
@@ -244,6 +246,7 @@ docrouter.ocr
 ```
 json:
   ocr_provider: str        # provider that ran
+  textract_feature_types: list[str]  # present when provider is textract
   ocr_pages:    list[str]  # plain-text per page, one entry per page (0-based)
 
 binary:
@@ -260,6 +263,7 @@ The output port uses connection type `"docrouter.ocr"` — it can only be wired 
 ### 3.7 UI
 
 - `ocr_provider` rendered as a dropdown.
+- `textract_feature_types` rendered as checkboxes when `ocr_provider` is `textract`.
 
 ---
 

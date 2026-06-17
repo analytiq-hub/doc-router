@@ -34,12 +34,122 @@ def test_validate_parameters_requires_ocr_provider() -> None:
     assert node.validate_parameters({"ocr_provider": "pymupdf"}) == []
 
 
+def test_validate_parameters_rejects_invalid_textract_features() -> None:
+    node = DocRouterOcrNode()
+    assert node.validate_parameters(
+        {"ocr_provider": "textract", "textract_feature_types": ["NOT_A_FEATURE"]}
+    ) == ["parameters.textract_feature_types contains invalid feature types"]
+    assert node.validate_parameters(
+        {"ocr_provider": "textract", "textract_feature_types": ["TABLES", "FORMS"]}
+    ) == []
+
+
 @pytest.mark.asyncio
-async def test_execute_requires_binary_pdf() -> None:
+async def test_execute_passes_textract_feature_types() -> None:
+    item = ad.flows.FlowItem(
+        json={},
+        binary={"pdf": ad.flows.BinaryRef(mime_type="application/pdf", data=b"%PDF-1.4")},
+        meta={},
+        paired_item=None,
+    )
+
+    with patch(
+        "analytiq_data.docrouter_flows.nodes.ocr_node.flow_services.run_flow_ocr_on_pdf",
+        new=AsyncMock(return_value=({"pages": []}, [])),
+    ) as mock_ocr:
+        node = DocRouterOcrNode()
+        out = await node.execute(
+            _ctx(),
+            {
+                "id": "ocr1",
+                "parameters": {
+                    "ocr_provider": "textract",
+                    "textract_feature_types": ["TABLES", "LAYOUT"],
+                },
+            },
+            [[item]],
+        )
+
+    assert mock_ocr.await_args.kwargs["textract_feature_types"] == ["TABLES", "LAYOUT"]
+    assert out[0][0].json["textract_feature_types"] == ["TABLES", "LAYOUT"]
+
+
+@pytest.mark.asyncio
+async def test_run_flow_ocr_on_pdf_textract_records_spus(monkeypatch) -> None:
+    from analytiq_data.docrouter_flows import services as flow_services
+    from analytiq_data.ocr.ocr_config import USD_TEXTRACT_TABLES_PER_PAGE, merge_org_ocr_config
+
+    async def fake_fetch_org_ocr_config(_client, _org_id):
+        return merge_org_ocr_config({"mode": "pymupdf"})
+
+    async def fake_textract(*_a, feature_types=None, **_k):
+        assert feature_types == ["TABLES"]
+        return {"DocumentMetadata": {"Pages": 1}, "Blocks": []}
+
+    import analytiq_data.payments.spu as spu_module
+
+    monkeypatch.setattr(
+        ad.ocr.ocr_config,
+        "fetch_org_ocr_config",
+        fake_fetch_org_ocr_config,
+    )
+    monkeypatch.setattr(ad.ocr, "ocr_pages_plain_text_list", lambda _payload: [])
+    with (
+        patch("analytiq_data.ocr.ocr_runners.textract_mod.run_textract", side_effect=fake_textract),
+        patch("analytiq_data.ocr.ocr_runners.ad.payments.check_spu_limits"),
+        patch("analytiq_data.ocr.ocr_runners.ad.payments.record_spu_usage") as rec,
+        patch.object(spu_module, "get_price_per_credit", return_value=0.05),
+    ):
+        await flow_services.run_flow_ocr_on_pdf(
+            None,
+            "org1",
+            b"%PDF-1.4",
+            ocr_provider="textract",
+            execution_id="exec1",
+            textract_feature_types=["TABLES"],
+        )
+
+    rec.assert_called_once()
+    assert rec.call_args.kwargs["operation"] == "ocr"
+    assert rec.call_args.kwargs["actual_cost"] == pytest.approx(USD_TEXTRACT_TABLES_PER_PAGE)
+
+
+@pytest.mark.asyncio
+async def test_execute_skips_item_without_pdf() -> None:
     node = DocRouterOcrNode()
     item = ad.flows.FlowItem(json={"document_id": "doc1"}, binary={}, meta={}, paired_item=None)
-    with pytest.raises(ValueError, match="no PDF binary"):
-        await node.execute(_ctx(), {"id": "ocr1", "parameters": {"ocr_provider": "pymupdf"}}, [[item]])
+    out = await node.execute(_ctx(), {"id": "ocr1", "parameters": {"ocr_provider": "pymupdf"}}, [[item]])
+    assert out == [[]]
+
+
+@pytest.mark.asyncio
+async def test_execute_skips_empty_items_in_batch() -> None:
+    items = [
+        ad.flows.FlowItem(
+            json={},
+            binary={"pdf": ad.flows.BinaryRef(mime_type="application/pdf", data=b"%PDF-1.4")},
+            meta={"item_index": 0},
+            paired_item=0,
+        ),
+        ad.flows.FlowItem(json={}, binary={}, meta={"item_index": 1}, paired_item=1),
+        ad.flows.FlowItem(json={}, binary={}, meta={"item_index": 2}, paired_item=2),
+    ]
+
+    with patch(
+        "analytiq_data.docrouter_flows.nodes.ocr_node.flow_services.run_flow_ocr_on_pdf",
+        new=AsyncMock(return_value=({"pages": []}, ["page"])),
+    ) as mock_ocr:
+        node = DocRouterOcrNode()
+        out = await node.execute(
+            _ctx(),
+            {"id": "ocr1", "parameters": {"ocr_provider": "pymupdf"}},
+            [items],
+        )
+
+    mock_ocr.assert_awaited_once()
+    assert len(out[0]) == 1
+    assert out[0][0].json["ocr_pages"] == ["page"]
+    assert out[0][0].paired_item == 0
 
 
 @pytest.mark.asyncio
@@ -234,7 +344,7 @@ async def test_execute_preserves_multiple_input_items() -> None:
         for i in range(2)
     ]
 
-    async def _fake_ocr(_client, _org, pdf_bytes, *, ocr_provider, execution_id):
+    async def _fake_ocr(_client, _org, pdf_bytes, *, ocr_provider, execution_id, textract_feature_types=None):
         return ({"pages": [{"index": 0, "markdown": pdf_bytes.decode()}]}, [pdf_bytes.decode()])
 
     with patch(

@@ -37,6 +37,26 @@
         ],
         "default": "textract",
         "description": "OCR backend to use."
+      },
+      "textract_feature_types": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": [
+            "FORMS",
+            "LAYOUT",
+            "SIGNATURES",
+            "TABLES"
+          ]
+        },
+        "default": [],
+        "title": "Textract features",
+        "description": "AWS Textract AnalyzeDocument feature types. Leave empty for text detection only (plain lines).",
+        "x-ui-widget": "textract_feature_picker",
+        "x-ui-show-when": {
+          "field": "ocr_provider",
+          "equals": "textract"
+        }
       }
     },
     "required": [

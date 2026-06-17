@@ -29,6 +29,7 @@ import {
 import { FlowCredentialAuthenticationField } from './FlowCredentialAuthenticationField';
 import { FlowOrgEntityPickerField } from './FlowOrgEntityPickerField';
 import { FlowOrgTagMultiPickerField } from './FlowOrgTagMultiPickerField';
+import { FlowTextractFeaturePickerField } from './FlowTextractFeaturePickerField';
 import { FlowCollectionFieldsField } from './FlowCollectionFieldsField';
 import {
   FlowScheduleTriggerRulesField,
@@ -315,6 +316,37 @@ export const FlowNodeParameterFields: React.FC<{
             readOnly={readOnly}
             flowOrgApi={flowOrgApi}
             onChange={(id) => setField(key, id)}
+          />
+        </div>
+      );
+    }
+
+    if (uiHint === 'textract_feature_picker') {
+      const itemsSchema = (subschema.items ?? {}) as Record<string, unknown>;
+      const enumValues = Array.isArray(itemsSchema.enum)
+        ? itemsSchema.enum.filter((entry): entry is string => typeof entry === 'string')
+        : [];
+      if (readOnly) {
+        return (
+          <div key={key} className="mb-3">
+            <span className={flowLabelClass}>{propLabel}</span>
+            <input
+              readOnly
+              className={flowInputClass}
+              value={Array.isArray(v) ? v.join(', ') : ''}
+            />
+          </div>
+        );
+      }
+      return (
+        <div key={key} className="mb-3">
+          <FlowTextractFeaturePickerField
+            label={propLabel}
+            description={schemaDescription(subschema)}
+            value={v}
+            options={enumValues}
+            readOnly={readOnly}
+            onChange={(next) => setField(key, next)}
           />
         </div>
       );

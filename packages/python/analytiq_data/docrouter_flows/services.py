@@ -14,12 +14,32 @@ from typing import Any
 from bson import ObjectId
 
 import analytiq_data as ad
+from analytiq_data.ocr.ocr_config import TEXTRACT_FEATURES
 
 
 logger = logging.getLogger(__name__)
 
 # Single source for flow OCR provider enum (manifest ``ocr.manifest.json`` must stay in sync).
 OCR_PROVIDER_CHOICES = ("textract", "mistral", "pymupdf")
+TEXTRACT_FEATURE_CHOICES = tuple(sorted(TEXTRACT_FEATURES))
+
+
+def normalize_textract_feature_types(values: list[str] | None) -> list[str]:
+    """Validate and de-duplicate Textract AnalyzeDocument feature types."""
+
+    if not values:
+        return []
+    out: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        ft = (raw or "").strip()
+        if not ft or ft in seen:
+            continue
+        if ft not in TEXTRACT_FEATURES:
+            raise ValueError(f"Unsupported Textract feature type: {raw!r}")
+        seen.add(ft)
+        out.append(ft)
+    return out
 
 
 async def get_document(analytiq_client, org_id: str, doc_id: str) -> dict:
@@ -86,12 +106,14 @@ async def run_flow_ocr_on_pdf(
     *,
     ocr_provider: str,
     execution_id: str,
+    textract_feature_types: list[str] | None = None,
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Run OCR on in-memory PDF bytes for a flow execution.
 
     Returns ``(ocr_json_payload, ocr_pages)`` without persisting to the document OCR store.
     ``execution_id`` is passed to OCR runners as the correlation label (logs / Textract metadata).
+    Textract feature types and SPU billing follow the same rules as document OCR.
     """
 
     provider = (ocr_provider or "").strip()
@@ -99,8 +121,14 @@ async def run_flow_ocr_on_pdf(
         raise ValueError(f"Unsupported ocr_provider: {ocr_provider!r}")
 
     cfg = await ad.ocr.ocr_config.fetch_org_ocr_config(analytiq_client, org_id)
+    cfg_updates: dict[str, Any] = {}
     if cfg.mode != provider:
-        cfg = cfg.model_copy(update={"mode": provider})
+        cfg_updates["mode"] = provider
+    if provider == "textract":
+        feats = normalize_textract_feature_types(textract_feature_types)
+        cfg_updates["textract"] = cfg.textract.model_copy(update={"feature_types": feats})
+    if cfg_updates:
+        cfg = cfg.model_copy(update=cfg_updates)
 
     exec_id = (execution_id or "").strip()
     if not exec_id:
