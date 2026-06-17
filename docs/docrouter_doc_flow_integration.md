@@ -213,7 +213,7 @@ docrouter.ocr
 
 | Parameter      | Type                                         | Required | Description         |
 | -------------- | -------------------------------------------- | -------- | ------------------- |
-| `ocr_provider` | `"textract" | "mistral" | "pymupdf" | "llm"` | yes      | OCR backend to use. |
+| `ocr_provider` | `"textract" | "mistral" | "pymupdf"` | yes      | OCR backend to use. |
 
 
 ### 3.4 Input

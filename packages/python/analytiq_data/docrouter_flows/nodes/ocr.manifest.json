@@ -33,8 +33,7 @@
         "enum": [
           "textract",
           "mistral",
-          "pymupdf",
-          "llm"
+          "pymupdf"
         ],
         "default": "textract",
         "description": "OCR backend to use."

@@ -46,7 +46,7 @@ class DocRouterOcrNode:
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
         errs: list[str] = []
         provider = params.get("ocr_provider")
-        if not isinstance(provider, str) or provider not in flow_services.FLOW_OCR_PROVIDERS:
+        if not isinstance(provider, str) or provider not in flow_services.OCR_PROVIDER_CHOICES:
             errs.append("parameters.ocr_provider is required")
         return errs
 

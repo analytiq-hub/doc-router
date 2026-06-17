@@ -30,6 +30,7 @@ def test_validate_parameters_requires_ocr_provider() -> None:
     node = DocRouterOcrNode()
     assert node.validate_parameters({}) == ["parameters.ocr_provider is required"]
     assert node.validate_parameters({"ocr_provider": "nope"}) == ["parameters.ocr_provider is required"]
+    assert node.validate_parameters({"ocr_provider": "llm"}) == ["parameters.ocr_provider is required"]
     assert node.validate_parameters({"ocr_provider": "pymupdf"}) == []
 
 

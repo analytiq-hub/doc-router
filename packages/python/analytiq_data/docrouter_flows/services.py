@@ -18,9 +18,8 @@ import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
-# Single source for provider enum (manifest ``ocr.manifest.json`` must stay in sync).
-OCR_PROVIDER_CHOICES = ("textract", "mistral", "pymupdf", "llm")
-FLOW_OCR_PROVIDERS = frozenset(OCR_PROVIDER_CHOICES)
+# Single source for flow OCR provider enum (manifest ``ocr.manifest.json`` must stay in sync).
+OCR_PROVIDER_CHOICES = ("textract", "mistral", "pymupdf")
 
 
 async def get_document(analytiq_client, org_id: str, doc_id: str) -> dict:
@@ -96,7 +95,7 @@ async def run_flow_ocr_on_pdf(
     """
 
     provider = (ocr_provider or "").strip()
-    if provider not in FLOW_OCR_PROVIDERS:
+    if provider not in OCR_PROVIDER_CHOICES:
         raise ValueError(f"Unsupported ocr_provider: {ocr_provider!r}")
 
     cfg = await ad.ocr.ocr_config.fetch_org_ocr_config(analytiq_client, org_id)
