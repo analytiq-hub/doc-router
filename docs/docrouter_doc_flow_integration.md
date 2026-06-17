@@ -263,7 +263,7 @@ The output port uses connection type `"docrouter.ocr"` — it can only be wired 
 ### 3.7 UI
 
 - `ocr_provider` rendered as a dropdown.
-- `textract_feature_types` rendered as checkboxes when `ocr_provider` is `textract`.
+- `textract_feature_types` rendered as `enum_multi_checkbox` when `ocr_provider` is `textract`.
 
 ---
 

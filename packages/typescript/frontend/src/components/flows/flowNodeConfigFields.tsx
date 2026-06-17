@@ -29,7 +29,7 @@ import {
 import { FlowCredentialAuthenticationField } from './FlowCredentialAuthenticationField';
 import { FlowOrgEntityPickerField } from './FlowOrgEntityPickerField';
 import { FlowOrgTagMultiPickerField } from './FlowOrgTagMultiPickerField';
-import { FlowTextractFeaturePickerField } from './FlowTextractFeaturePickerField';
+import { FlowEnumMultiCheckboxField } from './FlowEnumMultiCheckboxField';
 import { FlowCollectionFieldsField } from './FlowCollectionFieldsField';
 import {
   FlowScheduleTriggerRulesField,
@@ -321,11 +321,15 @@ export const FlowNodeParameterFields: React.FC<{
       );
     }
 
-    if (uiHint === 'textract_feature_picker') {
+    if (uiHint === 'enum_multi_checkbox') {
       const itemsSchema = (subschema.items ?? {}) as Record<string, unknown>;
       const enumValues = Array.isArray(itemsSchema.enum)
         ? itemsSchema.enum.filter((entry): entry is string => typeof entry === 'string')
         : [];
+      const enumNamesRaw = subschema['x-ui-enum-names'] ?? itemsSchema['x-ui-enum-names'];
+      const enumNames = Array.isArray(enumNamesRaw)
+        ? enumNamesRaw.map((entry) => (entry == null ? '' : String(entry)))
+        : undefined;
       if (readOnly) {
         return (
           <div key={key} className="mb-3">
@@ -340,11 +344,12 @@ export const FlowNodeParameterFields: React.FC<{
       }
       return (
         <div key={key} className="mb-3">
-          <FlowTextractFeaturePickerField
+          <FlowEnumMultiCheckboxField
             label={propLabel}
             description={schemaDescription(subschema)}
             value={v}
             options={enumValues}
+            enumNames={enumNames}
             readOnly={readOnly}
             onChange={(next) => setField(key, next)}
           />

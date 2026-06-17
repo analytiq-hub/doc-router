@@ -50,7 +50,7 @@ class DocRouterOcrNode:
                     "AWS Textract AnalyzeDocument feature types. "
                     "Leave empty for text detection only (plain lines)."
                 ),
-                "x-ui-widget": "textract_feature_picker",
+                "x-ui-widget": "enum_multi_checkbox",
                 "x-ui-show-when": {"field": "ocr_provider", "equals": "textract"},
             },
         },
