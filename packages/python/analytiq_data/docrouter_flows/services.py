@@ -18,7 +18,9 @@ import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
-FLOW_OCR_PROVIDERS = frozenset({"textract", "mistral", "pymupdf", "llm"})
+# Single source for provider enum (manifest ``ocr.manifest.json`` must stay in sync).
+OCR_PROVIDER_CHOICES = ("textract", "mistral", "pymupdf", "llm")
+FLOW_OCR_PROVIDERS = frozenset(OCR_PROVIDER_CHOICES)
 
 
 async def get_document(analytiq_client, org_id: str, doc_id: str) -> dict:
@@ -84,12 +86,13 @@ async def run_flow_ocr_on_pdf(
     pdf_bytes: bytes,
     *,
     ocr_provider: str,
-    document_id: str | None = None,
+    execution_id: str,
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Run OCR on in-memory PDF bytes for a flow execution.
 
     Returns ``(ocr_json_payload, ocr_pages)`` without persisting to the document OCR store.
+    ``execution_id`` is passed to OCR runners as the correlation label (logs / Textract metadata).
     """
 
     provider = (ocr_provider or "").strip()
@@ -100,12 +103,14 @@ async def run_flow_ocr_on_pdf(
     if cfg.mode != provider:
         cfg = cfg.model_copy(update={"mode": provider})
 
-    doc_id = (document_id or "").strip() or "flow"
+    exec_id = (execution_id or "").strip()
+    if not exec_id:
+        raise ValueError("execution_id is required for flow OCR")
     payload = await ad.ocr.ocr_runners.run_document_ocr(
         analytiq_client,
         pdf_bytes,
         org_id=org_id,
-        document_id=doc_id,
+        document_id=exec_id,
         cfg=cfg,
     )
     pages = ad.ocr.ocr_pages_plain_text_list(payload)

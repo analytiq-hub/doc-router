@@ -61,7 +61,7 @@ async def test_execute_accepts_pinned_pdf_under_data_property() -> None:
     with patch(
         "analytiq_data.docrouter_flows.nodes.ocr_node.flow_services.run_flow_ocr_on_pdf",
         new=AsyncMock(return_value=(ocr_payload, [])),
-    ):
+    ) as mock_ocr:
         node = DocRouterOcrNode()
         out = await node.execute(
             _ctx(),
@@ -69,9 +69,37 @@ async def test_execute_accepts_pinned_pdf_under_data_property() -> None:
             [[item]],
         )
 
+    mock_ocr.assert_awaited_once()
+    assert mock_ocr.await_args.kwargs["execution_id"] == "exec1"
+
     assert out[0][0].binary["pdf"].data == pdf_bytes
     assert set(out[0][0].binary.keys()) == {"pdf", "ocr_json"}
     assert out[0][0].binary["ocr_json"].mime_type == "application/json"
+
+
+@pytest.mark.asyncio
+async def test_execute_passes_execution_id_to_flow_ocr() -> None:
+    item = ad.flows.FlowItem(
+        json={},
+        binary={
+            "pdf": ad.flows.BinaryRef(mime_type="application/pdf", data=b"%PDF-1.4"),
+        },
+        meta={},
+        paired_item=None,
+    )
+
+    with patch(
+        "analytiq_data.docrouter_flows.nodes.ocr_node.flow_services.run_flow_ocr_on_pdf",
+        new=AsyncMock(return_value=({"pages": []}, [])),
+    ) as mock_ocr:
+        node = DocRouterOcrNode()
+        await node.execute(
+            _ctx(),
+            {"id": "ocr1", "parameters": {"ocr_provider": "pymupdf"}},
+            [[item]],
+        )
+
+    assert mock_ocr.await_args.kwargs["execution_id"] == "exec1"
 
 
 @pytest.mark.asyncio
@@ -145,7 +173,7 @@ async def test_execute_preserves_multiple_input_items() -> None:
         for i in range(2)
     ]
 
-    async def _fake_ocr(_client, _org, pdf_bytes, *, ocr_provider, document_id=None):
+    async def _fake_ocr(_client, _org, pdf_bytes, *, ocr_provider, execution_id):
         return ({"pages": [{"index": 0, "markdown": pdf_bytes.decode()}]}, [pdf_bytes.decode()])
 
     with patch(

@@ -11,9 +11,6 @@ from .. import services as flow_services
 from ..document_binary import resolve_pdf_binary_ref
 
 
-OCR_PROVIDERS = ("textract", "mistral", "pymupdf", "llm")
-
-
 class DocRouterOcrNode:
     """Run a selected OCR provider on each input item's PDF binary."""
 
@@ -30,13 +27,14 @@ class DocRouterOcrNode:
     output_labels = ["output"]
     output_port_types = ["docrouter.ocr"]
     icon_key = "ocr"
+    # Keep in sync with ``ocr.manifest.json`` (palette / validation source of truth).
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "title": "Run OCR",
         "properties": {
             "ocr_provider": {
                 "type": "string",
-                "enum": list(OCR_PROVIDERS),
+                "enum": list(flow_services.OCR_PROVIDER_CHOICES),
                 "default": "textract",
                 "description": "OCR backend to use.",
             },
@@ -48,7 +46,7 @@ class DocRouterOcrNode:
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
         errs: list[str] = []
         provider = params.get("ocr_provider")
-        if not isinstance(provider, str) or provider not in OCR_PROVIDERS:
+        if not isinstance(provider, str) or provider not in flow_services.FLOW_OCR_PROVIDERS:
             errs.append("parameters.ocr_provider is required")
         return errs
 
@@ -68,13 +66,12 @@ class DocRouterOcrNode:
                 raise ValueError("Input item missing binary.pdf")
             pdf_bytes = await ad.flows.get_binary_stream(pdf_ref, context.analytiq_client)
 
-            doc_id = it.json.get("document_id") if isinstance(it.json.get("document_id"), str) else None
             ocr_json, ocr_pages = await flow_services.run_flow_ocr_on_pdf(
                 context.analytiq_client,
                 context.organization_id,
                 pdf_bytes,
                 ocr_provider=ocr_provider,
-                document_id=doc_id,
+                execution_id=context.execution_id,
             )
 
             ocr_json_bytes = json.dumps(ocr_json, default=str).encode("utf-8")

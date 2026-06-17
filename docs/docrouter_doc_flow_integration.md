@@ -234,8 +234,8 @@ docrouter.ocr
 
 | Topic | Detail |
 | --- | --- |
-| `document_id` for Textract | `run_flow_ocr_on_pdf` passes `document_id="flow"` when the input item has no `document_id`. Textract job metadata may show that placeholder instead of a real document id. |
-| Provider enum | `OCR_PROVIDERS` in `ocr_node.py` and `FLOW_OCR_PROVIDERS` in `services.py` are duplicated; could be unified later. |
+| Provider enum | ``OCR_PROVIDER_CHOICES`` in ``services.py``; ``ocr.manifest.json`` enum should match. |
+| OCR job correlation | ``run_flow_ocr_on_pdf`` tags provider logs with ``execution_id`` (not the item's ``document_id``). |
 
 ### 3.6 Output
 
