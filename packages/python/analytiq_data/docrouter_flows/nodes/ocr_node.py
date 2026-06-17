@@ -63,7 +63,12 @@ class DocRouterOcrNode:
         for item_index, it in enumerate(inputs[0]):
             pdf_ref = resolve_pdf_binary_ref(it.binary)
             if pdf_ref is None:
-                raise ValueError("Input item missing binary.pdf")
+                raise ValueError("Input item has no PDF binary")
+
+            blob_item_index = item_index
+            if isinstance(it.meta, dict) and isinstance(it.meta.get("item_index"), int):
+                blob_item_index = it.meta["item_index"]
+
             pdf_bytes = await ad.flows.get_binary_stream(pdf_ref, context.analytiq_client)
 
             ocr_json, ocr_pages = await flow_services.run_flow_ocr_on_pdf(
@@ -81,7 +86,7 @@ class DocRouterOcrNode:
                     context.analytiq_client,
                     execution_id=context.execution_id,
                     node_id=str(node["id"]),
-                    item_index=item_index,
+                    item_index=blob_item_index,
                     property_name="ocr_json",
                     blob=ocr_json_bytes,
                     mime_type="application/json",
@@ -97,7 +102,7 @@ class DocRouterOcrNode:
                 ad.flows.FlowItem(
                     json=merged_json,
                     binary=binary,
-                    meta={"source_node_id": node["id"], "item_index": item_index},
+                    meta={"source_node_id": node["id"], "item_index": blob_item_index},
                     paired_item=it.paired_item,
                 )
             )

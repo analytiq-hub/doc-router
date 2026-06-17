@@ -218,11 +218,13 @@ docrouter.ocr
 
 ### 3.4 Input
 
-- `binary.pdf` — required; raises an error if absent.
+- `binary.pdf` — preferred; when absent, the first binary property on the item (stable
+  property-name order) is used and any additional attachments are ignored. Raises an error
+  when the item has no binary attachments.
 
 ### 3.5 Behavior
 
-1. Load `binary.pdf` into memory.
+1. Load the selected PDF binary into memory (`binary.pdf`, or the first binary property).
 2. Run the selected OCR provider against the PDF bytes (does **not** write to the
    document OCR store — flow-scoped only).
 3. Store `ocr_json` as a **flow blob** in GridFS `flow_blobs` keyed to this execution

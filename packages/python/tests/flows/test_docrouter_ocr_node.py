@@ -38,7 +38,7 @@ def test_validate_parameters_requires_ocr_provider() -> None:
 async def test_execute_requires_binary_pdf() -> None:
     node = DocRouterOcrNode()
     item = ad.flows.FlowItem(json={"document_id": "doc1"}, binary={}, meta={}, paired_item=None)
-    with pytest.raises(ValueError, match="binary.pdf"):
+    with pytest.raises(ValueError, match="no PDF binary"):
         await node.execute(_ctx(), {"id": "ocr1", "parameters": {"ocr_provider": "pymupdf"}}, [[item]])
 
 
@@ -155,6 +155,66 @@ async def test_execute_emits_ocr_pages_and_flow_blob(monkeypatch) -> None:
     assert saved["bucket"] == "flow_blobs"
     assert saved["key"] == "exec1/ocr1/0/ocr_json"
     assert b"pymupdf" in saved["blob"]
+
+
+@pytest.mark.asyncio
+async def test_execute_uses_first_binary_when_pdf_property_missing() -> None:
+    item = ad.flows.FlowItem(
+        json={"document_id": "doc1"},
+        binary={
+            "foo": ad.flows.BinaryRef(
+                mime_type="application/pdf",
+                file_name="a.pdf",
+                data=b"%PDF-1.4 a",
+            ),
+            "foo_2": ad.flows.BinaryRef(
+                mime_type="application/pdf",
+                file_name="b.pdf",
+                data=b"%PDF-1.4 b",
+            ),
+        },
+        meta={"item_index": 2},
+        paired_item=2,
+    )
+
+    with patch(
+        "analytiq_data.docrouter_flows.nodes.ocr_node.flow_services.run_flow_ocr_on_pdf",
+        new=AsyncMock(return_value=({"pages": []}, ["first only"])),
+    ) as mock_ocr:
+        node = DocRouterOcrNode()
+        out = await node.execute(
+            _ctx(),
+            {"id": "ocr1", "parameters": {"ocr_provider": "pymupdf"}},
+            [[item]],
+        )
+
+    mock_ocr.assert_awaited_once()
+    assert mock_ocr.await_args.args[2] == b"%PDF-1.4 a"
+    assert len(out[0]) == 1
+    assert out[0][0].json["ocr_pages"] == ["first only"]
+    assert out[0][0].binary["pdf"].data == b"%PDF-1.4 a"
+
+
+@pytest.mark.asyncio
+async def test_execute_prefers_pdf_property_over_other_binaries() -> None:
+    item = ad.flows.FlowItem(
+        json={},
+        binary={
+            "foo": ad.flows.BinaryRef(mime_type="application/pdf", data=b"%PDF-1.4 foo"),
+            "pdf": ad.flows.BinaryRef(mime_type="application/pdf", data=b"%PDF-1.4 chosen"),
+        },
+        meta={},
+        paired_item=None,
+    )
+
+    with patch(
+        "analytiq_data.docrouter_flows.nodes.ocr_node.flow_services.run_flow_ocr_on_pdf",
+        new=AsyncMock(return_value=({"pages": []}, [])),
+    ) as mock_ocr:
+        node = DocRouterOcrNode()
+        await node.execute(_ctx(), {"id": "ocr1", "parameters": {"ocr_provider": "pymupdf"}}, [[item]])
+
+    assert mock_ocr.await_args.args[2] == b"%PDF-1.4 chosen"
 
 
 @pytest.mark.asyncio

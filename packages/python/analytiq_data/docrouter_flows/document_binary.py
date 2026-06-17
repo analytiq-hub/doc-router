@@ -44,24 +44,18 @@ def resolve_pdf_binary_ref(binary: dict[str, ad.flows.BinaryRef] | None) -> ad.f
     """
     Pick the input PDF ``BinaryRef`` for OCR and similar nodes.
 
-    Prefers ``binary["pdf"]`` (DocRouter document triggers). Falls back to the sole
-    ``application/pdf`` attachment, then a single binary property (pinned uploads often
-  use ``data``).
+    Uses ``binary["pdf"]`` when present (DocRouter document triggers). Otherwise uses
+    the first binary property in stable property-name order; additional attachments are
+    ignored.
     """
 
     if not binary:
         return None
     pdf_ref = binary.get("pdf")
-    if pdf_ref is not None:
+    if isinstance(pdf_ref, ad.flows.BinaryRef):
         return pdf_ref
-    pdf_mime_refs = [
-        ref
-        for ref in binary.values()
-        if isinstance(ref, ad.flows.BinaryRef) and (ref.mime_type or "").lower().startswith("application/pdf")
-    ]
-    if len(pdf_mime_refs) == 1:
-        return pdf_mime_refs[0]
-    if len(binary) == 1:
-        only = next(iter(binary.values()))
-        return only if isinstance(only, ad.flows.BinaryRef) else None
+    for name in sorted(binary.keys()):
+        ref = binary[name]
+        if isinstance(ref, ad.flows.BinaryRef):
+            return ref
     return None
