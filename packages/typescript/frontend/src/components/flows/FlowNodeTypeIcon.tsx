@@ -30,7 +30,7 @@ export const FLOW_BUILTIN_ICON_KEYS = [
   'merge',
   'code',
   'ocr',
-  'llm_extract',
+  'llm_run',
   'set_tags',
   'google_drive',
   'gmail',
@@ -77,7 +77,7 @@ export function FlowNodeTypeIcon({
         return <CodeBracketSquareIcon className={className} aria-hidden={ariaHidden} />;
       case 'ocr':
         return <DocumentMagnifyingGlassIcon className={className} aria-hidden={ariaHidden} />;
-      case 'llm_extract':
+      case 'llm_run':
         return <SparklesIcon className={className} aria-hidden={ariaHidden} />;
       case 'set_tags':
         return <TagIcon className={className} aria-hidden={ariaHidden} />;

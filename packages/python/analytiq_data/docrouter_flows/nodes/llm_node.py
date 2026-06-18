@@ -1,47 +1,51 @@
 from __future__ import annotations
 
-"""DocRouter node implementation that runs a prompt-based LLM extraction."""
+"""DocRouter flow node that runs a configured prompt against flow item context."""
 
 from typing import Any
 
 import analytiq_data as ad
 
 from .. import services as flow_services
+from ..document_binary import resolve_pdf_binary_ref
 
 
-class DocRouterLlmExtractNode:
-    """Execute a configured prompt+schema extraction for each input document item."""
+class DocRouterLlmRunNode:
+    """Run a prompt against each main input item, optionally with paired OCR text."""
 
-    key = "docrouter.llm_extract"
-    label = "LLM extract"
-    description = "Runs linked prompt-based extraction."
+    key = "docrouter.llm_run"
+    label = "Run LLM"
+    description = "Runs a configured prompt on flow item data with optional OCR context."
     category = "DocRouter"
     palette_group = "docrouter"
     is_trigger = False
-    is_merge = False
+    is_merge = True
     min_inputs = 1
-    max_inputs = 1
+    max_inputs = 2
     outputs = 1
     output_labels = ["output"]
-    icon_key = "llm_extract"
+    input_port_types = ["main", "docrouter.ocr"]
+    icon_key = "llm_run"
+    # Keep in sync with ``llm_run.manifest.json``.
     parameter_schema: dict[str, Any] = {
         "type": "object",
+        "title": "Run LLM",
         "properties": {
-            "prompt_id": {"type": "string"},
-            "schema_id": {"type": "string"},
+            "prompt_id": {
+                "type": "string",
+                "title": "Prompt",
+                "description": "Prompt to run.",
+                "x-ui-widget": "org_prompt_picker",
+            },
         },
-        "required": ["prompt_id", "schema_id"],
+        "required": ["prompt_id"],
         "additionalProperties": False,
     }
 
     def validate_parameters(self, params: dict[str, Any]) -> list[str]:
-        """Require both `prompt_id` and `schema_id` parameters for v1 extraction."""
-
-        errs = []
-        if not isinstance(params.get("prompt_id"), str) or not params["prompt_id"]:
+        errs: list[str] = []
+        if not isinstance(params.get("prompt_id"), str) or not params["prompt_id"].strip():
             errs.append("parameters.prompt_id is required")
-        if not isinstance(params.get("schema_id"), str) or not params["schema_id"]:
-            errs.append("parameters.schema_id is required")
         return errs
 
     async def execute(
@@ -50,28 +54,43 @@ class DocRouterLlmExtractNode:
         node: dict[str, Any],
         inputs: list[list["ad.flows.FlowItem"]],
     ):
-        """Run extraction and attach results under `json.llm_extract`."""
-
         params = node.get("parameters") or {}
-        prompt_id = params["prompt_id"]
-        schema_id = params["schema_id"]
+        prompt_id = str(params["prompt_id"]).strip()
+        main_items = inputs[0] if inputs else []
+        ocr_items = inputs[1] if len(inputs) > 1 else []
+
         out: list["ad.flows.FlowItem"] = []
-        for it in inputs[0]:
-            doc_id = it.json.get("document_id") or (it.json.get("document") or {}).get("_id")
-            if not doc_id:
-                raise ValueError("Input item missing document_id")
-            res = await flow_services.run_llm_extract(
+        for item_index, it in enumerate(main_items):
+            ocr_pages: list[str] | None = None
+            if item_index < len(ocr_items):
+                ocr_item = ocr_items[item_index]
+                raw_pages = ocr_item.json.get("ocr_pages")
+                if isinstance(raw_pages, list):
+                    ocr_pages = [str(page) for page in raw_pages]
+
+            llm_result = await flow_services.run_flow_llm_run(
                 context.analytiq_client,
                 context.organization_id,
-                doc_id,
-                prompt_id,
-                schema_id,
+                prompt_id=prompt_id,
+                item_json=dict(it.json),
+                ocr_pages=ocr_pages,
             )
-            merged = dict(it.json)
-            merged["llm_extract"] = res
+
+            pdf_ref = resolve_pdf_binary_ref(it.binary)
+            binary: dict[str, ad.flows.BinaryRef] = {}
+            if pdf_ref is not None:
+                binary["pdf"] = pdf_ref
+
+            meta = dict(it.meta) if isinstance(it.meta, dict) else {}
+            if "item_index" not in meta:
+                meta["item_index"] = item_index
+
             out.append(
                 ad.flows.FlowItem(
-                    json=merged, binary=it.binary, meta=it.meta, paired_item=it.paired_item
+                    json={"prompt_id": prompt_id, "llm_result": llm_result},
+                    binary=binary,
+                    meta=meta,
+                    paired_item=it.paired_item,
                 )
             )
         return [out]

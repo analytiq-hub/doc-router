@@ -6,7 +6,7 @@ import analytiq_data as ad
 
 from .nodes import (
     DocRouterEventTriggerNode,
-    DocRouterLlmExtractNode,
+    DocRouterLlmRunNode,
     DocRouterManualTriggerNode,
     DocRouterOcrNode,
     DocRouterSetTagsNode,
@@ -19,5 +19,5 @@ def register_docrouter_nodes() -> None:
     ad.flows.register(DocRouterManualTriggerNode())
     ad.flows.register(DocRouterEventTriggerNode())
     ad.flows.register(DocRouterOcrNode())
-    ad.flows.register(DocRouterLlmExtractNode())
+    ad.flows.register(DocRouterLlmRunNode())
     ad.flows.register(DocRouterSetTagsNode())

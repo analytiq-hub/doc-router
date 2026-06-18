@@ -65,37 +65,13 @@ def test_validate_rejects_mismatched_connection_type() -> None:
 
 
 def test_validate_accepts_docrouter_ocr_edge() -> None:
-    llm_like = _node("llm", "flows.code")
+    llm = _node("llm", "docrouter.llm_run")
+    llm["parameters"] = {"prompt_id": "p1"}
     nodes = [
         _trigger(),
         _node("ocr", "docrouter.ocr"),
-        llm_like,
+        llm,
     ]
-    # Stand-in downstream node with a typed OCR input port (future llm_run shape).
-    class _LlmLike:
-        key = "docrouter.llm_run"
-        label = "LLM"
-        description = ""
-        category = "DocRouter"
-        is_trigger = False
-        is_merge = False
-        min_inputs = 2
-        max_inputs = 2
-        outputs = 1
-        output_labels = ["output"]
-        input_port_types = ["main", "docrouter.ocr"]
-        output_port_types = ["main"]
-        parameter_schema = {"type": "object", "properties": {}, "additionalProperties": False}
-        icon_key = None
-
-        def validate_parameters(self, params):
-            return []
-
-        async def execute(self, context, node, inputs):
-            return [[]]
-
-    ad.flows.register(_LlmLike())
-    llm_like["type"] = "docrouter.llm_run"
 
     connections = {
         "t1": {"main": [[NodeConnection(dest_node_id="ocr", connection_type="main", index=0)]]},

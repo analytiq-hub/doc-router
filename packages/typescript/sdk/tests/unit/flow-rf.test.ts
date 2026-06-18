@@ -206,7 +206,7 @@ describe('flow-rf', () => {
       description: 'llm',
       category: 'DocRouter',
       is_trigger: false,
-      min_inputs: 2,
+      min_inputs: 1,
       max_inputs: 2,
       outputs: 1,
       output_labels: ['output'],

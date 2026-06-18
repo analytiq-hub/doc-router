@@ -7,14 +7,19 @@ These functions are the DocRouter-specific integration boundary used by flow
 nodes (document fetch, OCR, LLM extraction, tagging, and runtime state).
 """
 
+import json
 import logging
+from collections import OrderedDict
 from datetime import datetime, UTC
 from typing import Any
 
+import litellm
 from bson import ObjectId
 
 import analytiq_data as ad
-from analytiq_data.ocr.ocr_config import TEXTRACT_FEATURES
+from analytiq_data.llm.llm import _litellm_acompletion_with_retry
+from analytiq_data.llm.llm_output_utils import process_llm_resp_content
+from analytiq_data.ocr.ocr_config import TEXTRACT_FEATURES, spu_ocr_for_page_count
 
 
 logger = logging.getLogger(__name__)
@@ -144,34 +149,141 @@ async def run_flow_ocr_on_pdf(
     return payload, pages
 
 
-async def run_llm_extract(
-    analytiq_client, org_id: str, doc_id: str, prompt_id: str, schema_id: str
-) -> dict:
-    """
-    Run a prompt-based extraction for a document.
-
-    Resolves the latest prompt revision for `prompt_id` and uses the existing LLM
-    runner (`run_llm_for_prompt_revids`) to execute it.
-    """
+async def _resolve_latest_prompt_revision(analytiq_client, prompt_id: str) -> dict[str, Any]:
+    """Return the latest ``prompt_revisions`` document for a logical ``prompt_id``."""
 
     db = ad.common.get_async_db(analytiq_client)
     pr = await db.prompt_revisions.find_one({"prompt_id": prompt_id}, sort=[("prompt_version", -1)])
     if not pr:
         raise ValueError(f"Prompt not found: {prompt_id}")
+    return pr
+
+
+def _build_flow_llm_messages(
+    instruction: str,
+    item_json: dict[str, Any],
+    ocr_text: str | None,
+) -> list[dict[str, Any]]:
+    """Assemble chat messages for a flow-scoped LLM run."""
+
+    parts = [
+        "You are analyzing a flow item.",
+        "",
+        "Instruction:",
+        instruction,
+        "",
+        "Flow item data:",
+        json.dumps(item_json, indent=2, default=str),
+    ]
+    if ocr_text:
+        parts.extend(["", "ocr_text:", ocr_text])
+    user_content = "\n".join(parts)
+    system_prompt = (
+        "You are a helpful assistant that extracts document information into JSON format. "
+        "Always respond with valid JSON only, no other text. "
+        "Format your entire response as a JSON object."
+    )
+    return [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content},
+    ]
+
+
+async def run_flow_llm_run(
+    analytiq_client,
+    org_id: str,
+    *,
+    prompt_id: str,
+    item_json: dict[str, Any],
+    ocr_pages: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Run a prompt against flow item JSON with optional OCR page text.
+
+    Does not persist to ``llm_runs`` or read document OCR from storage.
+    """
+
+    pr = await _resolve_latest_prompt_revision(analytiq_client, prompt_id)
     prompt_revid = str(pr["_id"])
+    instruction = await ad.common.get_prompt_content(analytiq_client, prompt_revid)
 
-    if schema_id:
-        sr = await db.schema_revisions.find_one({"schema_id": schema_id}, sort=[("schema_version", -1)])
-        if not sr:
-            raise ValueError(f"Schema not found: {schema_id}")
+    ocr_text = "\n".join(ocr_pages) if ocr_pages else None
+    messages = _build_flow_llm_messages(instruction, item_json, ocr_text)
 
-    results = await ad.llm.run_llm_for_prompt_revids(analytiq_client, doc_id, [prompt_revid], force=True)
-    if not results:
-        return {"document_id": doc_id, "prompt_id": prompt_id, "result": None}
-    r0 = results[0]
-    if isinstance(r0, Exception):
-        raise r0
-    return {"document_id": doc_id, "prompt_id": prompt_id, "result": r0}
+    llm_model = await ad.llm.get_llm_model(analytiq_client, prompt_revid)
+    if not ad.llm.is_chat_model(llm_model) and not ad.llm.is_supported_model(llm_model):
+        llm_model = "gpt-4o-mini"
+
+    llm_provider = ad.llm.get_llm_model_provider(llm_model)
+    if llm_provider is None:
+        llm_model = "gpt-4o-mini"
+        llm_provider = "openai"
+
+    api_key = await ad.llm.get_llm_key(analytiq_client, llm_provider)
+
+    num_pages = len(ocr_pages) if ocr_pages else 1
+    page_floor_spus = spu_ocr_for_page_count(num_pages)
+    await ad.payments.check_spu_limits(org_id, page_floor_spus)
+
+    response_format: dict[str, Any] | None = None
+    if litellm.supports_response_schema(model=llm_model):
+        response_format = await ad.common.get_prompt_response_format(analytiq_client, prompt_revid)
+
+    response = await _litellm_acompletion_with_retry(
+        analytiq_client,
+        model=llm_model,
+        messages=messages,
+        api_key=api_key,
+        response_format=response_format,
+    )
+
+    total_prompt_tokens = 0
+    total_completion_tokens = 0
+    total_cost = 0.0
+    if hasattr(response, "usage") and response.usage:
+        total_prompt_tokens = response.usage.prompt_tokens if hasattr(response.usage, "prompt_tokens") else 0
+        total_completion_tokens = (
+            response.usage.completion_tokens if hasattr(response.usage, "completion_tokens") else 0
+        )
+        total_cost = litellm.completion_cost(completion_response=response) if hasattr(response, "usage") else 0.0
+
+    total_tokens = total_prompt_tokens + total_completion_tokens
+    spus_to_charge = ad.payments.compute_spu_to_charge(total_cost, min_spu=page_floor_spus)
+    await ad.payments.record_spu_usage(
+        org_id,
+        spus_to_charge,
+        llm_provider=llm_provider,
+        llm_model=llm_model,
+        prompt_tokens=total_prompt_tokens,
+        completion_tokens=total_completion_tokens,
+        total_tokens=total_tokens,
+        actual_cost=total_cost,
+        operation="flow_llm",
+    )
+
+    resp_content = response.choices[0].message.content
+    if resp_content is None:
+        raise ValueError("LLM response has no content")
+
+    resp_content1 = process_llm_resp_content(resp_content, llm_provider)
+    try:
+        resp_dict = json.loads(resp_content1)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"LLM response was not valid JSON: {e}") from e
+
+    if response_format and response_format.get("type") == "json_schema":
+        schema = response_format["json_schema"]["schema"]
+        ordered_properties = list(schema.get("properties", {}).keys())
+        ordered_resp = OrderedDict()
+        for key in ordered_properties:
+            if key in resp_dict:
+                ordered_resp[key] = resp_dict[key]
+        for key in resp_dict:
+            if key not in ordered_resp:
+                ordered_resp[key] = resp_dict[key]
+        resp_dict = dict(ordered_resp)
+
+    return resp_dict
 
 
 async def set_tags(analytiq_client, org_id: str, doc_id: str, tags: list[str]) -> None:
