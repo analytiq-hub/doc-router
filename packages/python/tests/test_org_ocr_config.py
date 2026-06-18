@@ -179,7 +179,7 @@ async def test_ocr_settings_catalog_includes_mistral_flag(monkeypatch):
         mistral_on,
     )
     monkeypatch.setattr(
-        "analytiq_data.cloud.cloud_config.gcp_credentials_configured",
+        "analytiq_data.cloud.gcp_credentials_configured",
         gcp_on,
     )
     cat = await ocr_settings_catalog()
@@ -398,7 +398,7 @@ async def test_apply_rejects_mistral_vertex_when_gcp_not_configured(monkeypatch)
         return False
 
     monkeypatch.setattr(
-        "analytiq_data.cloud.cloud_config.gcp_credentials_configured",
+        "analytiq_data.cloud.gcp_credentials_configured",
         gcp_off,
     )
     with pytest.raises(ValueError, match="Mistral Vertex OCR is not available"):
@@ -411,7 +411,7 @@ async def test_apply_allows_mistral_vertex_when_gcp_configured(monkeypatch):
         return True
 
     monkeypatch.setattr(
-        "analytiq_data.cloud.cloud_config.gcp_credentials_configured",
+        "analytiq_data.cloud.gcp_credentials_configured",
         gcp_on,
     )
     out = await apply_ocr_config_update(None, {"mode": "mistral_vertex"})
@@ -455,7 +455,7 @@ async def test_ocr_settings_catalog_mistral_vertex_disabled_when_no_gcp(monkeypa
         mistral_off,
     )
     monkeypatch.setattr(
-        "analytiq_data.cloud.cloud_config.gcp_credentials_configured",
+        "analytiq_data.cloud.gcp_credentials_configured",
         gcp_off,
     )
     cat = await ocr_settings_catalog()

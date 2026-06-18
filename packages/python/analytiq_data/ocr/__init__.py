@@ -4,3 +4,4 @@
 from .ocr_config import *
 from .ocr_runners import *
 from .ocr import *
+from . import mistral_ocr_provider

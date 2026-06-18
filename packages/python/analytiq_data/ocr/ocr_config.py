@@ -318,7 +318,7 @@ async def apply_ocr_config_update(
         )
     if cfg.mode == "mistral_vertex":
         db = ad.common.get_async_db()
-        if not await ad.cloud.cloud_config.gcp_credentials_configured(db):
+        if not await ad.cloud.gcp_credentials_configured(db):
             raise ValueError(
                 "Mistral Vertex OCR is not available: configure GCP credentials in account settings"
             )
@@ -332,7 +332,7 @@ async def ocr_settings_catalog() -> dict[str, Any]:
         "textract_feature_types": sorted(TEXTRACT_FEATURES),
         "modes": ["textract", "mistral", "mistral_vertex", "llm", "pymupdf"],
         "mistral_enabled": await ad.ocr.mistral_ocr_provider.mistral_ocr_enabled_from_llm_providers(),
-        "mistral_vertex_enabled": await ad.cloud.cloud_config.gcp_credentials_configured(db),
+        "mistral_vertex_enabled": await ad.cloud.gcp_credentials_configured(db),
     }
 
 
