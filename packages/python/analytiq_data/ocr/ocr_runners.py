@@ -15,7 +15,7 @@ from analytiq_data.ocr.ocr_config import (
     OrgOcrConfig,
     max_reserved_spu_for_ocr_config,
     mistral_ocr_usd_cost,
-    spu_ocr_for_page_count,
+    ocr_spu_charge,
     textract_spu_and_usd_charge,
 )
 
@@ -125,7 +125,7 @@ async def run_document_ocr(
             raise
         n_pages = _mistral_page_count(payload)
         usd = mistral_ocr_usd_cost(n_pages)
-        spus = ad.payments.compute_spu_to_charge(usd, min_spu=spu_ocr_for_page_count(n_pages))
+        spus = ocr_spu_charge(n_pages, usd)
         if spus > 0:
             await ad.payments.record_spu_usage(
                 org_id=org_id,
@@ -154,7 +154,7 @@ async def run_document_ocr(
             raise
         n_pages = _mistral_page_count(payload)
         usd = mistral_ocr_usd_cost(n_pages)
-        spus = ad.payments.compute_spu_to_charge(usd, min_spu=spu_ocr_for_page_count(n_pages))
+        spus = ocr_spu_charge(n_pages, usd)
         if spus > 0:
             await ad.payments.record_spu_usage(
                 org_id=org_id,
@@ -186,7 +186,7 @@ async def run_document_ocr(
             raise
         n_pages = _llm_page_count(payload, pdf_bytes)
         usd = mistral_ocr_usd_cost(n_pages)
-        spus = ad.payments.compute_spu_to_charge(usd, min_spu=spu_ocr_for_page_count(n_pages))
+        spus = ocr_spu_charge(n_pages, usd)
         if spus > 0:
             await ad.payments.record_spu_usage(
                 org_id=org_id,

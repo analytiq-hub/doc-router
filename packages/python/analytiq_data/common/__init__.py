@@ -3,6 +3,7 @@ from .doc import *
 from .file import *
 from .forms import *
 from .id import *
+from .pdf_pages import *
 from .prompts import *
 from .schemas import *
 from .setup import *

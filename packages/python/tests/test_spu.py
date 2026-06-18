@@ -81,3 +81,28 @@ def test_compute_spu_to_charge_min_spu_override():
     with patch.object(spu_module, "get_price_per_credit", return_value=0.05):
         assert spu_module.compute_spu_to_charge(0.05, min_spu=3) == 3  # 2 would be computed, min 3 wins
         assert spu_module.compute_spu_to_charge(0.50, min_spu=5) == 20  # 20 > 5
+
+
+@pytest.mark.parametrize(
+    "n_pages,when_empty,expected",
+    [
+        (0, 0, 0),
+        (0, 1, 1),
+        (1, 0, 1),
+        (25, 0, 1),
+        (26, 0, 2),
+        (50, 1, 2),
+    ],
+)
+def test_spu_page_floor(n_pages, when_empty, expected):
+    assert spu_module.spu_page_floor(n_pages, when_empty=when_empty) == expected
+
+
+def test_spu_ocr_min_for_page_count():
+    assert spu_module.spu_ocr_min_for_page_count(0) == 0
+    assert spu_module.spu_ocr_min_for_page_count(26) == 2
+
+
+def test_spu_llm_min_for_page_count():
+    assert spu_module.spu_llm_min_for_page_count(0) == 1
+    assert spu_module.spu_llm_min_for_page_count(26) == 2

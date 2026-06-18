@@ -7,9 +7,9 @@ embedded text. See :mod:`analytiq_data.ocr.ocr_runners`.
 from __future__ import annotations
 
 import logging
-import math
 from typing import Any, Literal
 
+import analytiq_data as ad
 from bson import ObjectId
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -40,14 +40,29 @@ def textract_spu_cost(feature_types: list[str]) -> int:
 
 def spu_ocr_for_page_count(n_pages: int) -> int:
     """
-    Base Textract SPUs from page count: 1 SPU per 25 pages (rounded up).
+    Page-based SPU floor for OCR (alias of :func:`spu_ocr_min_for_page_count`).
 
-    Used alone for DetectDocumentText (no AnalyzeDocument features). For feature
-    pricing see :func:`textract_spu_base_charge`.
+    One SPU per :data:`~analytiq_data.payments.spu.SPU_PAGES_PER_UNIT` pages (rounded up).
+    Returns 0 when ``n_pages <= 0``. For Textract feature upsizing see
+    :func:`textract_spu_and_usd_charge`.
     """
+
+    return ad.payments.spu_ocr_min_for_page_count(n_pages)
+
+
+def ocr_spu_charge(n_pages: int, usd: float) -> int:
+    """
+    Billable SPUs for an OCR job from estimated USD and the OCR page floor.
+
+    ``SPUs = compute_spu_to_charge(usd, min_spu=spu_ocr_min_for_page_count(n_pages))``.
+    Returns 0 when ``n_pages <= 0``.
+    """
+
     if n_pages <= 0:
         return 0
-    return max(1, math.ceil(n_pages / 25))
+    return ad.payments.spu.compute_spu_to_charge(
+        usd, min_spu=ad.payments.spu_ocr_min_for_page_count(n_pages)
+    )
 
 
 # --- OCR USD estimates -------------------------------------------------------------------
@@ -115,11 +130,7 @@ def textract_spu_and_usd_charge(
     if n_pages <= 0:
         return (0, usd)
 
-    from analytiq_data.payments.spu import compute_spu_to_charge
-
-    page_floor = spu_ocr_for_page_count(n_pages)
-    spus = compute_spu_to_charge(usd, min_spu=page_floor)
-    return (spus, usd)
+    return (ocr_spu_charge(n_pages, usd), usd)
 
 
 class OrgOcrTextractSettings(BaseModel):
@@ -214,9 +225,7 @@ def max_reserved_spu_for_ocr_config(
     if cfg.mode == "pymupdf":
         return 0
     if pdf_bytes:
-        from analytiq_data.common.pdf_pages import pdf_page_count
-
-        n = pdf_page_count(pdf_bytes)
+        n = ad.common.pdf_page_count(pdf_bytes)
         if n is not None and n > 0:
             if cfg.mode == "textract":
                 spus, _ = textract_spu_and_usd_charge(
@@ -297,23 +306,19 @@ async def apply_ocr_config_update(
     ``llm_providers`` (not a standalone env var).
     Mistral Vertex mode requires GCP credentials in cloud_config.
     """
-    from analytiq_data.ocr.mistral_ocr_provider import mistral_ocr_enabled_from_llm_providers
-    from analytiq_data.cloud.cloud_config import gcp_credentials_configured
-
     base = OrgOcrConfig().model_dump()
     merged_in = _normalize_legacy_ocr_dict(dict(incoming))
     merged_stored = _deep_merge_defaults(_normalize_legacy_ocr_dict(stored or {}), merged_in)
     full = _deep_merge_defaults(base, merged_stored)
     cfg = OrgOcrConfig.model_validate(full)
-    if cfg.mode == "mistral" and not await mistral_ocr_enabled_from_llm_providers():
+    if cfg.mode == "mistral" and not await ad.ocr.mistral_ocr_provider.mistral_ocr_enabled_from_llm_providers():
         raise ValueError(
             "Mistral OCR is not available: enable the Mistral LLM provider and at least one model "
             "in account LLM settings"
         )
     if cfg.mode == "mistral_vertex":
-        import analytiq_data as ad
         db = ad.common.get_async_db()
-        if not await gcp_credentials_configured(db):
+        if not await ad.cloud.cloud_config.gcp_credentials_configured(db):
             raise ValueError(
                 "Mistral Vertex OCR is not available: configure GCP credentials in account settings"
             )
@@ -322,24 +327,18 @@ async def apply_ocr_config_update(
 
 async def ocr_settings_catalog() -> dict[str, Any]:
     """OCR UI / API discovery."""
-    from analytiq_data.ocr.mistral_ocr_provider import mistral_ocr_enabled_from_llm_providers
-    from analytiq_data.cloud.cloud_config import gcp_credentials_configured
-    import analytiq_data as ad
-
     db = ad.common.get_async_db()
     return {
         "textract_feature_types": sorted(TEXTRACT_FEATURES),
         "modes": ["textract", "mistral", "mistral_vertex", "llm", "pymupdf"],
-        "mistral_enabled": await mistral_ocr_enabled_from_llm_providers(),
-        "mistral_vertex_enabled": await gcp_credentials_configured(db),
+        "mistral_enabled": await ad.ocr.mistral_ocr_provider.mistral_ocr_enabled_from_llm_providers(),
+        "mistral_vertex_enabled": await ad.cloud.cloud_config.gcp_credentials_configured(db),
     }
 
 
 async def fetch_org_ocr_config(analytiq_client, org_id: str) -> OrgOcrConfig:
     """Load organization OCR config from MongoDB and merge with defaults."""
-    import analytiq_data as ad
-
-    db = ad.common.get_async_db()
+    db = ad.common.get_async_db(analytiq_client)
     try:
         oid = ObjectId(org_id)
     except Exception:

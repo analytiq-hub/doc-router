@@ -10,6 +10,9 @@ logger = logging.getLogger(__name__)
 # Formula: ceil(200% * actual_cost / price_per_credit); this caps the result.
 MAX_SPU_PER_LLM_CALL = 50
 
+# Page-scaled SPU floor: one SPU unit per this many document pages (rounded up).
+SPU_PAGES_PER_UNIT = 25
+
 check_payment_limits = None
 record_payment_usage = None
 get_price_per_credit = None  # Hook: () -> float, set by app.routes.payments
@@ -38,17 +41,32 @@ def compute_spu_to_charge(actual_cost: float, min_spu: int = 1, cost_multiplier:
     return min(max(min_spu, spus_from_cost), MAX_SPU_PER_LLM_CALL)
 
 
+def spu_page_floor(n_pages: int, *, when_empty: int) -> int:
+    """
+    Minimum SPUs from page count alone: ``ceil(n_pages / SPU_PAGES_PER_UNIT)``.
+
+    ``when_empty`` is returned when ``n_pages <= 0`` (OCR uses 0; LLM uses 1).
+    """
+
+    if n_pages <= 0:
+        return when_empty
+    return max(1, math.ceil(n_pages / SPU_PAGES_PER_UNIT))
+
+
+def spu_ocr_min_for_page_count(n_pages: int) -> int:
+    """Page-based SPU floor for OCR jobs (0 when there are no pages)."""
+
+    return spu_page_floor(n_pages, when_empty=0)
+
+
 def spu_llm_min_for_page_count(n_pages: int) -> int:
     """
     Minimum SPU floor for a document or flow LLM run, scaled by page count.
 
-    One SPU per 25 pages (rounded up), at least 1 when ``n_pages`` is positive.
     Used for ``check_spu_limits`` pre-check and as ``min_spu`` in ``compute_spu_to_charge``.
     """
 
-    if n_pages <= 0:
-        return 1
-    return max(1, math.ceil(n_pages / 25))
+    return spu_page_floor(n_pages, when_empty=1)
 
 
 async def get_spu_cost(llm_model: str) -> int:

@@ -12,6 +12,7 @@ from analytiq_data.ocr.ocr_config import (
     max_reserved_spu_for_ocr_config,
     merge_org_ocr_config,
     ocr_settings_catalog,
+    ocr_spu_charge,
     spu_ocr_for_page_count,
     textract_spu_and_usd_charge,
     textract_usd_cost,
@@ -96,6 +97,13 @@ def test_spu_ocr_for_page_count():
     assert spu_ocr_for_page_count(25) == 1
     assert spu_ocr_for_page_count(26) == 2
     assert spu_ocr_for_page_count(50) == 2
+
+
+def test_ocr_spu_charge_matches_textract_helper_for_detect():
+    n_pages = 10
+    usd = textract_usd_cost(n_pages, [])
+    assert ocr_spu_charge(n_pages, usd) == textract_spu_and_usd_charge(n_pages, [])[0]
+    assert ocr_spu_charge(0, usd) == 0
 
 
 def test_textract_usd_cost_detect_and_analyze():
