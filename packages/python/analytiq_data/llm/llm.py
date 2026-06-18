@@ -992,8 +992,9 @@ async def run_llm(
 
     # 3. Determine number of pages and page-based SPU floor for pre-check
     num_pages = doc.get("num_pages", 1)
-    from analytiq_data.ocr.ocr_config import spu_ocr_for_page_count
-    page_floor_spus = spu_ocr_for_page_count(num_pages)
+    from analytiq_data.payments.spu import spu_llm_min_for_page_count
+
+    page_floor_spus = spu_llm_min_for_page_count(num_pages)
 
     # 4. Pre-check: ensure org has at least the page-floor SPUs available
     await ad.payments.check_spu_limits(org_id, page_floor_spus)

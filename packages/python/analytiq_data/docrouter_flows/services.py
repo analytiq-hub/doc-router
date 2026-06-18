@@ -17,9 +17,8 @@ import litellm
 from bson import ObjectId
 
 import analytiq_data as ad
-from analytiq_data.llm.llm import _litellm_acompletion_with_retry
 from analytiq_data.llm.llm_output_utils import process_llm_resp_content
-from analytiq_data.ocr.ocr_config import TEXTRACT_FEATURES, spu_ocr_for_page_count
+from analytiq_data.ocr.ocr_config import TEXTRACT_FEATURES
 
 
 logger = logging.getLogger(__name__)
@@ -222,14 +221,14 @@ async def run_flow_llm_run(
     api_key = await ad.llm.get_llm_key(analytiq_client, llm_provider)
 
     num_pages = len(ocr_pages) if ocr_pages else 1
-    page_floor_spus = spu_ocr_for_page_count(num_pages)
-    await ad.payments.check_spu_limits(org_id, page_floor_spus)
+    llm_min_spus = ad.payments.spu_llm_min_for_page_count(num_pages)
+    await ad.payments.check_spu_limits(org_id, llm_min_spus)
 
     response_format: dict[str, Any] | None = None
     if litellm.supports_response_schema(model=llm_model):
         response_format = await ad.common.get_prompt_response_format(analytiq_client, prompt_revid)
 
-    response = await _litellm_acompletion_with_retry(
+    response = await ad.llm.agent_completion(
         analytiq_client,
         model=llm_model,
         messages=messages,
@@ -248,7 +247,7 @@ async def run_flow_llm_run(
         total_cost = litellm.completion_cost(completion_response=response) if hasattr(response, "usage") else 0.0
 
     total_tokens = total_prompt_tokens + total_completion_tokens
-    spus_to_charge = ad.payments.compute_spu_to_charge(total_cost, min_spu=page_floor_spus)
+    spus_to_charge = ad.payments.compute_spu_to_charge(total_cost, min_spu=llm_min_spus)
     await ad.payments.record_spu_usage(
         org_id,
         spus_to_charge,

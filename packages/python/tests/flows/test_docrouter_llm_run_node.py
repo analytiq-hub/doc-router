@@ -149,7 +149,7 @@ async def test_run_flow_llm_run_builds_messages_and_records_spu(monkeypatch) -> 
     )
 
     with patch(
-        "analytiq_data.docrouter_flows.services._litellm_acompletion_with_retry",
+        "analytiq_data.docrouter_flows.services.ad.llm.agent_completion",
         new=AsyncMock(return_value=_FakeResponse()),
     ) as mock_llm:
         result = await flow_services.run_flow_llm_run(

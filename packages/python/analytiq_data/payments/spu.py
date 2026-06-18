@@ -38,6 +38,19 @@ def compute_spu_to_charge(actual_cost: float, min_spu: int = 1, cost_multiplier:
     return min(max(min_spu, spus_from_cost), MAX_SPU_PER_LLM_CALL)
 
 
+def spu_llm_min_for_page_count(n_pages: int) -> int:
+    """
+    Minimum SPU floor for a document or flow LLM run, scaled by page count.
+
+    One SPU per 25 pages (rounded up), at least 1 when ``n_pages`` is positive.
+    Used for ``check_spu_limits`` pre-check and as ``min_spu`` in ``compute_spu_to_charge``.
+    """
+
+    if n_pages <= 0:
+        return 1
+    return max(1, math.ceil(n_pages / 25))
+
+
 async def get_spu_cost(llm_model: str) -> int:
     """Conservative pre-check floor: 1 SPU per agent step regardless of model."""
     return 1
