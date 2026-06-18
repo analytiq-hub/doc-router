@@ -811,6 +811,9 @@ async def _build_prompt_context(
         ordered_peer_docs = [doc]
 
     instruction = await ad.common.get_prompt_content(analytiq_client, prompt_revid)
+    kb_system_prompt = await ad.common.get_prompt_kb_system_prompt(analytiq_client, prompt_revid)
+    if kb_system_prompt:
+        instruction = kb_system_prompt + "\n\n" + instruction
 
     ocr_cache: Dict[str, str] = {}
     pdf_base64_cache: Dict[str, str] = {}

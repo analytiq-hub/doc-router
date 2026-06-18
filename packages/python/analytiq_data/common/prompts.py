@@ -108,23 +108,15 @@ async def get_default_prompt_content(analytiq_client) -> str:
 
 async def get_prompt_content(analytiq_client, prompt_id: str) -> str:
     """
-    Get a prompt content by its ID
-    
-    Args:
-        analytiq_client: AnalytiqClient
-            The analytiq client
-        prompt_id: str
-            Prompt ID
+    Get raw prompt revision content by its ID.
 
-    Returns:
-        str
-            Prompt content
+    Does not include knowledge-base system_prompt text; use
+    ``get_prompt_kb_system_prompt`` when callers need KB guidance.
     """
     # Special case for the default prompt
     if prompt_id == "default":
         return await get_default_prompt_content(analytiq_client)
 
-    # Get the prompt content
     db_name = analytiq_client.env
     db = analytiq_client.mongodb_async[db_name]
     collection = db["prompt_revisions"]
@@ -132,15 +124,34 @@ async def get_prompt_content(analytiq_client, prompt_id: str) -> str:
     elem = await collection.find_one({"_id": ObjectId(prompt_id)})
     if elem is None:
         raise ValueError(f"Prompt {prompt_id} not found")
-    content = elem["content"]
-    kb_id = elem.get("kb_id")
-    if kb_id:
-        kb = await db["knowledge_bases"].find_one({"_id": ObjectId(kb_id)})
-        if kb:
-            kb_system_prompt = kb.get("system_prompt", "").strip()
-            if kb_system_prompt:
-                content = kb_system_prompt + "\n\n" + content
-    return content
+    return elem["content"]
+
+
+async def get_kb_system_prompt(analytiq_client, kb_id: str) -> str:
+    """
+    Return a knowledge base ``system_prompt``, or empty string if missing or blank.
+    """
+    db_name = analytiq_client.env
+    db = analytiq_client.mongodb_async[db_name]
+    kb = await db["knowledge_bases"].find_one({"_id": ObjectId(kb_id)})
+    if kb is None:
+        return ""
+    return kb.get("system_prompt", "").strip()
+
+
+async def get_prompt_kb_system_prompt(analytiq_client, prompt_id: str) -> str:
+    """
+    Return the KB ``system_prompt`` linked to a prompt revision, or empty string.
+
+    Callers that want KB guidance in instructions should combine this with
+    ``get_prompt_content`` explicitly (e.g. prepend with a blank line separator).
+    """
+    if prompt_id == "default":
+        return ""
+    kb_id = await get_prompt_kb_id(analytiq_client, prompt_id)
+    if not kb_id:
+        return ""
+    return await get_kb_system_prompt(analytiq_client, kb_id)
 
 async def get_prompt_response_format(analytiq_client, prompt_id: str) -> dict:
     """

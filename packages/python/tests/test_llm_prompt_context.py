@@ -18,6 +18,14 @@ from analytiq_data.llm.llm import _build_prompt_context, _prompt_used_from_group
 from tests.conftest_utils import TEST_ORG_ID
 
 
+@pytest.fixture(autouse=True)
+def _no_kb_system_prompt(monkeypatch):
+    monkeypatch.setattr(
+        "analytiq_data.llm.llm.ad.common.get_prompt_kb_system_prompt",
+        AsyncMock(return_value=""),
+    )
+
+
 def _user_text_blocks(messages):
     """Flatten user message content to list of text strings (text blocks only)."""
     user = messages[1]
@@ -481,3 +489,39 @@ def test_prompt_used_from_grouped_user_blocks_extra_text_is_preserved():
     assert f"ocr_text:\n<{d1}_ocr_text>" in out
     assert "OCR-A" not in out
     assert "OCR-B" not in out
+
+
+@pytest.mark.asyncio
+async def test_build_prompt_context_prepends_kb_system_prompt(test_db, mock_auth, setup_test_models):
+    """KB system_prompt is prepended to instruction when linked to the prompt revision."""
+    analytiq_client = ad.common.get_analytiq_client()
+    doc = {"_id": ObjectId(), "metadata": {}, "user_file_name": "doc.pdf"}
+    group_cfg = {
+        "peer_match_keys": [],
+        "include": {"ocr_text": False, "pdf": False, "metadata_keys": []},
+    }
+    with (
+        patch("analytiq_data.llm.llm.ad.common.get_prompt_group_config", new_callable=AsyncMock, return_value=group_cfg),
+        patch(
+            "analytiq_data.llm.llm.ad.common.get_prompt_content",
+            new_callable=AsyncMock,
+            return_value="Extract fields.",
+        ),
+        patch(
+            "analytiq_data.llm.llm.ad.common.get_prompt_kb_system_prompt",
+            new_callable=AsyncMock,
+            return_value="You are an invoice expert.",
+        ),
+    ):
+        messages, _, _ = await _build_prompt_context(
+            analytiq_client,
+            doc,
+            "dummy_revid",
+            TEST_ORG_ID,
+            "SYSTEM",
+            llm_provider="openai",
+            llm_model="gpt-4o",
+            api_key="sk-test",
+        )
+    texts = _user_text_blocks(messages)
+    assert any("You are an invoice expert.\n\nExtract fields." in t for t in texts)
