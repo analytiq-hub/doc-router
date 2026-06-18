@@ -648,6 +648,61 @@ def trigger_forward_reachable_nodes(trigger_id: str, connections: "ad.flows.Conn
     return frozenset(_forward_reachable_from(trigger_id, connections))
 
 
+def merge_wired_input_indices(
+    connections: "ad.flows.Connections",
+    *,
+    allowed_nodes: AbstractSet[str] | None = None,
+) -> dict[str, frozenset[int]]:
+    """
+    For each destination node, input slot indices that have at least one incoming ``main`` edge.
+
+    Merge nodes with optional ports (e.g. ``docrouter.llm_run``) must wait for every wired slot
+    before executing, not only ``min_inputs`` slots — otherwise a fast branch can run the merge
+    before a slower parallel branch delivers data to a connected optional port.
+    """
+
+    wired: dict[str, set[int]] = {}
+    for src, typed in (connections or {}).items():
+        if allowed_nodes is not None and src not in allowed_nodes:
+            continue
+        for slot in (typed or {}).get("main") or []:
+            if not slot:
+                continue
+            for conn in slot:
+                dest = conn.dest_node_id
+                if allowed_nodes is not None and dest not in allowed_nodes:
+                    continue
+                wired.setdefault(dest, set()).add(int(conn.index))
+    return {node_id: frozenset(indices) for node_id, indices in wired.items()}
+
+
+def _merge_wired_slots_ready(
+    waiting: list[list["ad.flows.FlowItem"] | None],
+    required_indices: frozenset[int],
+) -> bool:
+    """True when every wired input slot has received at least one batch of items."""
+
+    if not required_indices:
+        return bool(waiting) and waiting[0] is not None
+    for idx in required_indices:
+        if idx >= len(waiting) or waiting[idx] is None:
+            return False
+    return True
+
+
+def _merge_required_input_indices(
+    node_id: str,
+    node_type: Any,
+    merge_wired_inputs: dict[str, frozenset[int]],
+) -> frozenset[int]:
+    """Input slots a merge node must wait for before executing (wired ports, else ``min_inputs``)."""
+
+    wired = merge_wired_inputs.get(node_id)
+    if wired:
+        return wired
+    return frozenset(range(max(int(node_type.min_inputs), 1)))
+
+
 def upstream_closure_for_target(
     trigger_id: str,
     target_id: str,
@@ -883,6 +938,7 @@ async def _execute_loop(
     """Inner BFS execution loop shared by `run_flow` and `asyncio.wait_for`."""
 
     partial = allowed_nodes is not None
+    merge_wired_inputs = merge_wired_input_indices(connections, allowed_nodes=allowed_nodes)
 
     while work or merge_waiting:
         try:
@@ -1115,7 +1171,10 @@ async def _execute_loop(
                             waiting_src.extend([None] * (conn.index - len(waiting_src) + 1))
                         waiting[conn.index] = items
                         waiting_src[conn.index] = [_source_ref(node["id"], previous_node_output=out_idx)]
-                        if all(x is not None for x in waiting[: max(dst_type.min_inputs, 1)]):
+                        required = _merge_required_input_indices(
+                            dst["id"], dst_type, merge_wired_inputs
+                        )
+                        if _merge_wired_slots_ready(waiting, required):
                             ready_inputs = [(x or []) for x in waiting]
                             ready_sources = [(x or []) for x in waiting_src]
                             work.append(

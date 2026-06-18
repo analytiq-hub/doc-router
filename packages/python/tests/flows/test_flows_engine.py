@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Minimal unit tests for the flow engine's revision validation rules."""
 
+import asyncio
 from typing import Any
 
 import pytest
@@ -190,6 +191,102 @@ class _BinaryAttachNode:
         return [out]
 
 
+class _SlowPassNode:
+    """Test-only node: delays before passing items through (parallel-branch timing tests)."""
+
+    key = "tests.slow_pass"
+    label = "Slow pass"
+    description = "Test-only: asyncio sleep then pass input items through."
+    category = "Test"
+    is_trigger = False
+    is_merge = False
+    min_inputs = 1
+    max_inputs = 1
+    outputs = 1
+    output_labels = ["output"]
+    icon_key = None
+    parameter_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {
+            "delay_ms": {"type": "integer", "default": 50},
+            "marker": {"type": "string"},
+        },
+        "required": ["marker"],
+        "additionalProperties": False,
+    }
+
+    def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        if not isinstance(params.get("marker"), str) or not params.get("marker"):
+            return ["parameters.marker must be a non-empty string"]
+        return []
+
+    async def execute(
+        self,
+        context: "ad.flows.ExecutionContext",
+        node: dict[str, Any],
+        inputs: list[list["ad.flows.FlowItem"]],
+    ) -> list[list["ad.flows.FlowItem"]]:
+        params = node.get("parameters") or {}
+        delay_ms = int(params.get("delay_ms") or 50)
+        marker = str(params["marker"])
+        await asyncio.sleep(delay_ms / 1000.0)
+        out: list[ad.flows.FlowItem] = []
+        for it in inputs[0]:
+            out.append(
+                ad.flows.FlowItem(
+                    json={**it.json, "branch_marker": marker},
+                    binary=it.binary,
+                    meta=it.meta,
+                    paired_item=it.paired_item,
+                )
+            )
+        return [out]
+
+
+class _OptionalMergeRecordNode:
+    """Test-only merge node (``min_inputs=1``, ``max_inputs=2``) that records both input slots."""
+
+    key = "tests.optional_merge_record"
+    label = "Optional merge record"
+    description = "Test-only: merge with optional second input port."
+    category = "Test"
+    is_trigger = False
+    is_merge = True
+    min_inputs = 1
+    max_inputs = 2
+    outputs = 1
+    output_labels = ["output"]
+    icon_key = None
+    parameter_schema: dict[str, Any] = {
+        "type": "object",
+        "properties": {},
+        "additionalProperties": False,
+    }
+
+    def validate_parameters(self, params: dict[str, Any]) -> list[str]:
+        return []
+
+    async def execute(
+        self,
+        context: "ad.flows.ExecutionContext",
+        node: dict[str, Any],
+        inputs: list[list["ad.flows.FlowItem"]],
+    ) -> list[list["ad.flows.FlowItem"]]:
+        slot1 = inputs[1] if len(inputs) > 1 else []
+        markers = [it.json.get("branch_marker") for it in slot1]
+        item = ad.flows.FlowItem(
+            json={
+                "slot0_count": len(inputs[0]),
+                "slot1_count": len(slot1),
+                "slot1_markers": markers,
+            },
+            binary={},
+            meta={},
+            paired_item=None,
+        )
+        return [[item]]
+
+
 @pytest.fixture(autouse=True)
 def _register_nodes() -> None:
     """Register built-ins and the test node for each test."""
@@ -200,6 +297,8 @@ def _register_nodes() -> None:
     ad.flows.register(_TagItemNode())
     ad.flows.register(_ListParamsEchoNode())
     ad.flows.register(_BinaryAttachNode())
+    ad.flows.register(_SlowPassNode())
+    ad.flows.register(_OptionalMergeRecordNode())
 
 
 def test_validate_revision_accepts_schedule_trigger_croniter_valid_cron(_register_nodes) -> None:
@@ -836,6 +935,90 @@ async def test_run_flow_merge_both_inputs_concat_in_slot_order() -> None:
     m1_source = ctx.run_data["m1"]["source"]
     assert m1_source[0][0]["previous_node_id"] == "g1"
     assert m1_source[1][0]["previous_node_id"] == "g2"
+
+
+@pytest.mark.asyncio
+async def test_merge_waits_for_all_wired_optional_ports() -> None:
+    """
+    Parallel branches into merge slots 0 and 1: the merge must not run until the slow branch
+    (slot 1) arrives — mirrors ``docrouter.llm_run`` main + optional OCR wiring.
+    """
+
+    nodes = [
+        _n("t1", "Start", "flows.trigger.manual", 0),
+        _n("m1", "Merge", "tests.optional_merge_record", 400, {}),
+        _n("s1", "Slow", "tests.slow_pass", 200, {"marker": "slow", "delay_ms": 50}),
+    ]
+    connections = {
+        "t1": {
+            "main": [
+                [
+                    ad.flows.NodeConnection(dest_node_id="m1", connection_type="main", index=0),
+                    ad.flows.NodeConnection(dest_node_id="s1", connection_type="main", index=0),
+                ],
+            ]
+        },
+        "s1": {
+            "main": [[ad.flows.NodeConnection(dest_node_id="m1", connection_type="main", index=1)]],
+        },
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(
+        context=ctx, revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": None}
+    )
+    assert res["status"] == "success"
+    out = ctx.run_data["m1"]["data"]["main"][0][0].json
+    assert out["slot0_count"] == 1
+    assert out["slot1_count"] == 1
+    assert out["slot1_markers"] == ["slow"]
+    m1_source = ctx.run_data["m1"]["source"]
+    assert m1_source[0][0]["previous_node_id"] == "t1"
+    assert m1_source[1][0]["previous_node_id"] == "s1"
+
+
+@pytest.mark.asyncio
+async def test_merge_optional_unwired_second_port_runs_after_first() -> None:
+    """When only input slot 0 is wired, merge runs as soon as slot 0 is ready."""
+
+    nodes = [
+        _n("t1", "Start", "flows.trigger.manual", 0),
+        _n("m1", "Merge", "tests.optional_merge_record", 200, {}),
+    ]
+    connections = {
+        "t1": {
+            "main": [[ad.flows.NodeConnection(dest_node_id="m1", connection_type="main", index=0)]],
+        },
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(
+        context=ctx, revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": None}
+    )
+    assert res["status"] == "success"
+    out = ctx.run_data["m1"]["data"]["main"][0][0].json
+    assert out["slot0_count"] == 1
+    assert out["slot1_count"] == 0
 
 
 @pytest.mark.asyncio
