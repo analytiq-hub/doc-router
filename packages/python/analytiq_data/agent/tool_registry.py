@@ -28,6 +28,7 @@ READ_ONLY_TOOLS: frozenset[str] = frozenset({
     "list_tags",
     "help_schemas",
     "help_prompts",
+    "list_llm_models",
 })
 
 # Read-write tools: require approval unless auto_approve or in auto_approved_tools.
@@ -339,6 +340,18 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "list_llm_models",
+            "description": "List enabled LLM models available for use in prompts for this organization. Call before create_prompt or update_prompt when selecting a model.",
+            "parameters": {
+                "type": "object",
+                "properties": {"_": {"type": "string", "description": "Unused; omit when calling."}},
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "update_prompt",
             "description": "Create a new version of an existing prompt.",
             "parameters": {
@@ -503,6 +516,7 @@ _TOOL_HANDLERS: dict[str, Callable] = {
     "delete_tag": agent_tools.delete_tag,
     "help_schemas": agent_tools.help_schemas,
     "help_prompts": agent_tools.help_prompts,
+    "list_llm_models": agent_tools.list_llm_models,
 }
 
 

@@ -23,6 +23,7 @@ from analytiq_data.agent.tools.extraction_tools import (
     update_extraction_field,
 )
 from analytiq_data.agent.tools.help_tools import help_schemas, help_prompts
+from analytiq_data.agent.tools.llm_tools import list_llm_models
 
 
 def _ctx(*, organization_id: str, analytiq_client, **extra) -> dict:
@@ -250,4 +251,19 @@ async def test_help_tools_returns_content(org_and_users, test_db):
 
     res_prompts = await help_prompts(context, {})
     assert "content" in res_prompts and res_prompts["content"]
+
+
+@pytest.mark.asyncio
+async def test_list_llm_models(org_and_users, setup_test_models, test_db):
+    context = _ctx(
+        organization_id=org_and_users["org_id"],
+        analytiq_client=ad.common.get_analytiq_client(),
+    )
+    result = await list_llm_models(context, {})
+    assert "models" in result
+    assert "gpt-4o-mini" in result["models"]
+    assert "gpt-4o" in result["models"]
+
+    missing_org = await list_llm_models({"analytiq_client": ad.common.get_analytiq_client()}, {})
+    assert "error" in missing_org
 

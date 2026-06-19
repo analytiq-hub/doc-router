@@ -21,6 +21,7 @@ def test_read_only_and_read_write_tools():
     assert READ_ONLY_TOOLS | READ_WRITE_TOOLS == all_names
     assert READ_ONLY_TOOLS & READ_WRITE_TOOLS == set()
     assert is_read_only_tool("help_schemas")
+    assert is_read_only_tool("list_llm_models")
     assert not is_read_only_tool("create_schema")
 
 
@@ -31,6 +32,7 @@ def test_tool_definitions_count():
     assert "create_schema" in names
     assert "get_ocr_text" in names
     assert "help_schemas" in names
+    assert "list_llm_models" in names
     assert "run_extraction" in names
 
 
@@ -59,6 +61,29 @@ async def test_help_prompts_returns_content():
     result_str = await execute_tool("help_prompts", context, "{}")
     result = json.loads(result_str)
     assert "content" in result
+
+
+@pytest.mark.asyncio
+async def test_list_llm_models_returns_models(org_and_users, setup_test_models, test_db):
+    import analytiq_data as ad
+
+    org_id = org_and_users["org_id"]
+    context = {
+        "organization_id": org_id,
+        "analytiq_client": ad.common.get_analytiq_client(),
+    }
+    result_str = await execute_tool("list_llm_models", context, "{}")
+    result = json.loads(result_str)
+    assert "models" in result
+    assert "gpt-4o-mini" in result["models"]
+    assert "gpt-4o" in result["models"]
+
+
+@pytest.mark.asyncio
+async def test_list_llm_models_no_org_context():
+    result_str = await execute_tool("list_llm_models", {}, "{}")
+    result = json.loads(result_str)
+    assert "error" in result
 
 
 @pytest.mark.asyncio

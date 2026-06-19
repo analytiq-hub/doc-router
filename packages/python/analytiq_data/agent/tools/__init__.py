@@ -32,6 +32,7 @@ from .tag_tools import (
     delete_tag,
 )
 from .help_tools import help_schemas, help_prompts
+from .llm_tools import list_llm_models
 
 __all__ = [
     "list_documents",
@@ -60,4 +61,5 @@ __all__ = [
     "delete_tag",
     "help_schemas",
     "help_prompts",
+    "list_llm_models",
 ]
