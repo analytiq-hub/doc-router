@@ -48,7 +48,7 @@ async def list_schemas_for_org(
 
     pipeline: list[dict[str, Any]] = [
         {"$match": {"schema_id": {"$in": schema_ids}}},
-        {"$sort": {"_id": -1}},
+        {"$sort": {"schema_version": -1, "_id": -1}},
         {"$group": {"_id": "$schema_id", "doc": {"$first": "$$ROOT"}}},
         {"$replaceRoot": {"newRoot": "$doc"}},
         {

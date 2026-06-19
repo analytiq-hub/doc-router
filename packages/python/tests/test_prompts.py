@@ -1,7 +1,7 @@
 import pytest
 from bson import ObjectId
 import os
-from datetime import datetime, UTC
+from datetime import datetime, UTC, timedelta
 import logging
 
 # Import shared test utilities
@@ -596,7 +596,111 @@ async def test_prompt_latest_version_listing(test_db, mock_auth, setup_test_mode
     )
     
     
-    logger.info(f"test_prompt_latest_version_listing() end") 
+    logger.info(f"test_prompt_latest_version_listing() end")
+
+
+@pytest.mark.asyncio
+async def test_prompt_latest_version_listing_when_id_order_differs(test_db, mock_auth, setup_test_models):
+    """List should use prompt_version, not _id, when picking the latest revision."""
+    prompt_id = ObjectId()
+    await test_db.prompts.insert_one({
+        "_id": prompt_id,
+        "name": "Migrated Prompt",
+        "organization_id": TEST_ORG_ID,
+        "prompt_version": 2,
+    })
+
+    older_oid = ObjectId.from_datetime(datetime.now(UTC) - timedelta(days=400))
+    newer_oid = ObjectId.from_datetime(datetime.now(UTC) - timedelta(days=1))
+    base_revision = {
+        "prompt_id": str(prompt_id),
+        "organization_id": TEST_ORG_ID,
+        "content": "content",
+        "model": "gpt-4o-mini",
+        "tag_ids": [],
+        "created_at": datetime.now(UTC),
+        "created_by": "test",
+    }
+    await test_db.prompt_revisions.insert_one({
+        **base_revision,
+        "_id": older_oid,
+        "prompt_version": 2,
+        "content": "version 2 content",
+    })
+    await test_db.prompt_revisions.insert_one({
+        **base_revision,
+        "_id": newer_oid,
+        "prompt_version": 1,
+        "content": "version 1 content",
+    })
+
+    list_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/prompts",
+        headers=get_auth_headers(),
+    )
+    assert list_response.status_code == 200
+    matching = [
+        p for p in list_response.json()["prompts"]
+        if p["prompt_id"] == str(prompt_id)
+    ]
+    assert len(matching) == 1
+    assert matching[0]["prompt_version"] == 2
+    assert matching[0]["prompt_revid"] == str(older_oid)
+
+    await test_db.prompt_revisions.delete_many({"prompt_id": str(prompt_id)})
+    await test_db.prompts.delete_one({"_id": prompt_id})
+
+
+@pytest.mark.asyncio
+async def test_prompt_latest_version_listing_without_revision_org_id(test_db, mock_auth, setup_test_models):
+    """Latest revision is returned even when only older revisions carry organization_id."""
+    prompt_id = ObjectId()
+    await test_db.prompts.insert_one({
+        "_id": prompt_id,
+        "name": "cv2",
+        "organization_id": TEST_ORG_ID,
+        "prompt_version": 2,
+    })
+
+    v1_oid = ObjectId.from_datetime(datetime.now(UTC) - timedelta(days=400))
+    v2_oid = ObjectId.from_datetime(datetime.now(UTC) - timedelta(days=1))
+    base_revision = {
+        "prompt_id": str(prompt_id),
+        "content": "content",
+        "model": "gpt-4o-mini",
+        "tag_ids": [],
+        "created_at": datetime.now(UTC),
+        "created_by": "test",
+    }
+    await test_db.prompt_revisions.insert_one({
+        **base_revision,
+        "_id": v1_oid,
+        "prompt_version": 1,
+        "content": "version 1 content",
+        "organization_id": TEST_ORG_ID,
+    })
+    await test_db.prompt_revisions.insert_one({
+        **base_revision,
+        "_id": v2_oid,
+        "prompt_version": 2,
+        "content": "version 2 content",
+    })
+
+    list_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/prompts",
+        headers=get_auth_headers(),
+    )
+    assert list_response.status_code == 200
+    matching = [
+        p for p in list_response.json()["prompts"]
+        if p["prompt_id"] == str(prompt_id)
+    ]
+    assert len(matching) == 1
+    assert matching[0]["prompt_version"] == 2
+    assert matching[0]["prompt_revid"] == str(v2_oid)
+
+    await test_db.prompt_revisions.delete_many({"prompt_id": str(prompt_id)})
+    await test_db.prompts.delete_one({"_id": prompt_id})
 
 @pytest.mark.asyncio
 async def test_prompt_name_only_update(test_db, mock_auth, setup_test_models):

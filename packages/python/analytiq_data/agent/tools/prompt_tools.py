@@ -159,10 +159,10 @@ async def list_prompts(context: dict, params: dict) -> dict[str, Any]:
     id_to_name = {str(p["_id"]): p["name"] for p in org_prompts}
     pipeline = [
         {"$match": {"prompt_id": {"$in": prompt_ids}}},
-        {"$sort": {"_id": -1}},
+        {"$sort": {"prompt_version": -1, "_id": -1}},
         {"$group": {"_id": "$prompt_id", "doc": {"$first": "$$ROOT"}}},
         {"$replaceRoot": {"newRoot": "$doc"}},
-        {"$sort": {"_id": -1}},
+        {"$sort": {"prompt_version": -1, "_id": -1}},
     ]
     if document_id:
         doc = await db.docs.find_one(

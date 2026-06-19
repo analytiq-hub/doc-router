@@ -2,6 +2,7 @@ import pytest
 from bson import ObjectId
 import os
 import logging
+from datetime import datetime, UTC, timedelta
 
 # Import shared test utilities
 from .conftest_utils import (
@@ -562,6 +563,66 @@ async def test_schema_latest_version_listing(test_db, mock_auth):
         pass  # mock_auth fixture handles cleanup
     
     logger.info(f"test_schema_latest_version_listing() end")
+
+
+@pytest.mark.asyncio
+async def test_schema_latest_version_listing_when_id_order_differs(test_db, mock_auth):
+    """List should use schema_version, not _id, when picking the latest revision."""
+    schema_id = ObjectId()
+    await test_db.schemas.insert_one({
+        "_id": schema_id,
+        "name": "Migrated Schema",
+        "organization_id": TEST_ORG_ID,
+        "schema_version": 2,
+    })
+
+    older_oid = ObjectId.from_datetime(datetime.now(UTC) - timedelta(days=400))
+    newer_oid = ObjectId.from_datetime(datetime.now(UTC) - timedelta(days=1))
+    base_revision = {
+        "schema_id": str(schema_id),
+        "organization_id": TEST_ORG_ID,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "migrated_schema",
+                "schema": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {"field1": {"type": "string"}},
+                    "required": ["field1"],
+                },
+                "strict": True,
+            },
+        },
+        "created_at": datetime.now(UTC),
+        "created_by": "test",
+    }
+    await test_db.schema_revisions.insert_one({
+        **base_revision,
+        "_id": older_oid,
+        "schema_version": 2,
+    })
+    await test_db.schema_revisions.insert_one({
+        **base_revision,
+        "_id": newer_oid,
+        "schema_version": 1,
+    })
+
+    list_response = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/schemas",
+        headers=get_auth_headers(),
+    )
+    assert list_response.status_code == 200
+    matching = [
+        s for s in list_response.json()["schemas"]
+        if s["schema_id"] == str(schema_id)
+    ]
+    assert len(matching) == 1
+    assert matching[0]["schema_version"] == 2
+    assert matching[0]["schema_revid"] == str(older_oid)
+
+    await test_db.schema_revisions.delete_many({"schema_id": str(schema_id)})
+    await test_db.schemas.delete_one({"_id": schema_id})
 
 @pytest.mark.asyncio
 async def test_schema_name_only_update(test_db, mock_auth):

@@ -56,11 +56,13 @@ async def list_prompts_for_org(
     pipeline: list[dict[str, Any]] = [
         {
             "$match": {
+                # Org scope comes from ``prompts`` above; do not require
+                # ``organization_id`` on revisions (migration removed it from
+                # many legacy rows, and newer versions may omit it inconsistently).
                 "prompt_id": {"$in": [str(p["_id"]) for p in org_prompts]},
-                "organization_id": organization_id,
             }
         },
-        {"$sort": {"_id": -1}},
+        {"$sort": {"prompt_version": -1, "_id": -1}},
         {"$group": {"_id": "$prompt_id", "doc": {"$first": "$$ROOT"}}},
         {"$replaceRoot": {"newRoot": "$doc"}},
         {
