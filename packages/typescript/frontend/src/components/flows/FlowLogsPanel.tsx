@@ -83,6 +83,8 @@ const FlowLogsPanel: React.FC<{
   flowId: string;
   focusExecutionId: string | null;
   onClearFocus: () => void;
+  /** Called after the execution is deleted from the server (e.g. refresh execution list). */
+  onExecutionDeleted?: (executionId: string) => void;
   onExecutionChange?: (e: FlowExecution | null) => void;
   onEditNode?: (nodeId: string) => void;
   expanded: boolean;
@@ -97,6 +99,7 @@ const FlowLogsPanel: React.FC<{
   flowId,
   focusExecutionId,
   onClearFocus,
+  onExecutionDeleted,
   onExecutionChange,
   onEditNode,
   expanded,
@@ -132,6 +135,7 @@ const FlowLogsPanel: React.FC<{
 
   const [err, setErr] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const downloadJson = (filename: string, data: unknown) => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -194,6 +198,27 @@ const FlowLogsPanel: React.FC<{
     setSelectedNodeId(null);
     setActiveTab('overview');
     setErr('');
+  };
+
+  const onDelete = async () => {
+    const id = execution?.execution_id ?? focusExecutionId;
+    if (!id) {
+      onClear();
+      return;
+    }
+    if (execution && isRunning(execution)) return;
+    if (!window.confirm('Delete this execution permanently?')) return;
+    try {
+      setDeleteLoading(true);
+      setErr('');
+      await orgApi.deleteExecution(flowId, id);
+      onExecutionDeleted?.(id);
+      onClear();
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'Failed to delete execution');
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const runData = execution?.run_data as Record<string, unknown> | undefined;
@@ -405,10 +430,15 @@ const FlowLogsPanel: React.FC<{
           {(execution || focusExecutionId) && (
             <button
               type="button"
-              title="Clear execution from panel"
-              onClick={onClear}
-              aria-label="Clear execution"
-              className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100"
+              title={
+                execution && isRunning(execution)
+                  ? 'Stop execution before deleting'
+                  : 'Delete execution'
+              }
+              onClick={() => void onDelete()}
+              disabled={deleteLoading || (execution != null && isRunning(execution))}
+              aria-label="Delete execution"
+              className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
             >
               <TrashIcon className="h-4 w-4" />
             </button>

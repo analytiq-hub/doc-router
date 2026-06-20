@@ -127,6 +127,7 @@ const FlowExecutionsView: React.FC<{
   const [detail, setDetail] = useState<FlowExecution | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [stopLoadingId, setStopLoadingId] = useState<string | null>(null);
+  const userClearedSelectionRef = useRef(false);
   const [viewNodes, setViewNodes] = useState<Node<FlowRfNodeData>[]>([]);
   const [viewEdges, setViewEdges] = useState<Edge[]>([]);
   const [configModalId, setConfigModalId] = useState<string | null>(null);
@@ -245,6 +246,27 @@ const FlowExecutionsView: React.FC<{
     [fallbackEdges, fallbackNodes, flowId, nodeTypesByKey, orgApi],
   );
 
+  const clearFocus = useCallback(() => {
+    userClearedSelectionRef.current = true;
+    setSelectedId(null);
+  }, []);
+
+  const onExecutionDeleted = useCallback(
+    (executionId: string) => {
+      setList((prev) => {
+        const next = prev.filter((e) => e.execution_id !== executionId);
+        setSelectedId((cur) => {
+          if (cur !== executionId) return cur;
+          userClearedSelectionRef.current = next.length === 0;
+          return next[0]?.execution_id ?? null;
+        });
+        return next;
+      });
+      setTotal((t) => Math.max(0, t - 1));
+      void loadList();
+    },
+    [loadList],
+  );
   const stopExecution = useCallback(
     async (executionId: string) => {
       try {
@@ -276,8 +298,16 @@ const FlowExecutionsView: React.FC<{
   }, [loadDetailAndGraph, selectedId]);
 
   useEffect(() => {
-    if (list.length === 0 || selectedId) return;
-    setSelectedId(list[0].execution_id);
+    if (list.length === 0) return;
+    if (selectedId && list.some((e) => e.execution_id === selectedId)) return;
+    if (selectedId && !list.some((e) => e.execution_id === selectedId)) {
+      userClearedSelectionRef.current = false;
+      setSelectedId(list[0].execution_id);
+      return;
+    }
+    if (!selectedId && !userClearedSelectionRef.current) {
+      setSelectedId(list[0].execution_id);
+    }
   }, [list, selectedId]);
 
   const onNodeDoubleClick: NodeMouseHandler = useCallback((_, n) => {
@@ -360,6 +390,7 @@ const FlowExecutionsView: React.FC<{
                     <button
                       type="button"
                       onClick={() => {
+                        userClearedSelectionRef.current = false;
                         setSelectedId(e.execution_id);
                         setConfigModalId(null);
                       }}
@@ -557,7 +588,8 @@ const FlowExecutionsView: React.FC<{
                   orgApi={orgApi}
                   flowId={flowId}
                   focusExecutionId={selectedId}
-                  onClearFocus={() => setSelectedId(null)}
+                  onClearFocus={clearFocus}
+                  onExecutionDeleted={onExecutionDeleted}
                   onEditNode={onEditFlowNode}
                   expanded={execLogsExpanded}
                   onToggleExpanded={toggleExecLogsExpanded}

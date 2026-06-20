@@ -1123,6 +1123,12 @@ export class DocRouterOrg {
     );
   }
 
+  async deleteExecution(flowId: string, executionId: string): Promise<{ ok: boolean }> {
+    return this.http.delete<{ ok: boolean }>(
+      `/v0/orgs/${this.organizationId}/flows/${flowId}/executions/${executionId}`,
+    );
+  }
+
   /**
    * Get the current HTTP client (for advanced usage)
    */

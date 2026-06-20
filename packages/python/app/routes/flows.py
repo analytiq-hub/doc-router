@@ -455,6 +455,99 @@ async def _clear_other_webhook_route_leaves_for_flow(db: Any, *, flow_id: str, k
             )
 
 
+async def _remove_flow_from_webhook_routes(db: Any, *, flow_id: str) -> None:
+    """Unset production/test mappings owned by ``flow_id`` and delete empty route documents."""
+    cursor = db.flow_webhook_routes.find(
+        {"$or": [{"production.flow_id": flow_id}, {"test.flow_id": flow_id}]}
+    )
+    async for doc in cursor:
+        leaf = doc.get("_id")
+        if not leaf:
+            continue
+        unset: dict[str, str] = {}
+        if isinstance(doc.get("production"), dict) and doc.get("production", {}).get("flow_id") == flow_id:
+            unset["production"] = ""
+        if isinstance(doc.get("test"), dict) and doc.get("test", {}).get("flow_id") == flow_id:
+            unset["test"] = ""
+        if unset:
+            await db.flow_webhook_routes.update_one(
+                {"_id": leaf},
+                {"$unset": unset, "$set": {"updated_at": _now()}},
+            )
+        leftover = await db.flow_webhook_routes.find_one({"_id": leaf})
+        if leftover and not isinstance(leftover.get("production"), dict) and not isinstance(leftover.get("test"), dict):
+            await db.flow_webhook_routes.delete_one({"_id": leaf})
+
+
+async def _delete_execution_blobs_and_doc(db: Any, aq_client: Any, *, exec_oid: ObjectId, exec_id: str) -> None:
+    await ad.mongodb.blob.delete_blobs_by_prefix_async(aq_client, bucket="flow_blobs", prefix=f"{exec_id}/")
+    await db.flow_executions.delete_one({"_id": exec_oid})
+
+
+_FLOW_EXECUTION_DELETE_CONCURRENCY = 8
+
+
+async def _delete_flow_executions(db: Any, aq_client: Any, *, flow_id: str, organization_id: str) -> int:
+    docs = await db.flow_executions.find(
+        {"flow_id": flow_id, "organization_id": organization_id},
+        {"_id": 1},
+    ).to_list(None)
+    if not docs:
+        return 0
+
+    sem = asyncio.Semaphore(_FLOW_EXECUTION_DELETE_CONCURRENCY)
+
+    async def _delete_one(doc: dict[str, Any]) -> None:
+        async with sem:
+            exec_id = str(doc["_id"])
+            await _delete_execution_blobs_and_doc(db, aq_client, exec_oid=doc["_id"], exec_id=exec_id)
+
+    await asyncio.gather(*(_delete_one(doc) for doc in docs))
+    return len(docs)
+
+
+async def _purge_flow_associated_data(
+    db: Any,
+    *,
+    organization_id: str,
+    flow_id: str,
+) -> None:
+    """Remove revisions, executions, blobs, triggers, and other rows tied to one flow."""
+    aq_client = ad.common.get_analytiq_client()
+
+    trigger_svc = ad.flows.get_flow_trigger_service()
+    if trigger_svc is not None:
+        await trigger_svc.deregister_flow(flow_id)
+    else:
+        await ad.flows.delete_trigger_registrations(db, flow_id=flow_id)
+
+    await ad.docrouter_flows.event_dispatch.delete_docrouter_flow_triggers(db, flow_id=flow_id)
+    await _remove_flow_from_webhook_routes(db, flow_id=flow_id)
+
+    n_exec = await _delete_flow_executions(db, aq_client, flow_id=flow_id, organization_id=organization_id)
+    if n_exec:
+        logger.info(f"Flow delete removed {n_exec} execution(s) for flow_id={flow_id}")
+
+    await db.flow_static_data.delete_many({"flow_id": flow_id})
+    await db.flow_trigger_leases.delete_many({"flow_id": flow_id})
+
+    rev_docs = await db.flow_revisions.find({"flow_id": flow_id}, {"_id": 1}).to_list(None)
+    rev_ids = [str(d["_id"]) for d in rev_docs]
+    try:
+        n_pins = await ad.mongodb.blob.delete_flow_pins_for_flow_async(
+            aq_client,
+            organization_id=organization_id,
+            flow_id=flow_id,
+            flow_revision_ids=rev_ids,
+        )
+        if n_pins:
+            logger.info(f"Flow delete removed {n_pins} flow_pins blob(s) for flow_id={flow_id}")
+    except Exception:
+        logger.warning(f"Flow delete: failed flow_pins sweep for flow_id={flow_id}", exc_info=True)
+
+    await db.flow_revisions.delete_many({"flow_id": flow_id})
+
+
 def _raise_if_run_data_entries_oversized(run_data: dict[str, Any]) -> None:
     for nid, entry in run_data.items():
         try:
@@ -941,33 +1034,15 @@ async def patch_flow_name(organization_id: str, flow_id: str, req: PatchFlowRequ
 
 @flows_router.delete("/v0/orgs/{organization_id}/flows/{flow_id}")
 async def delete_flow(organization_id: str, flow_id: str, current_user: User = Depends(get_org_user)):
-    """
-    Delete a flow header document and best-effort remove ``flow_pins`` blobs for this flow.
+    """Delete a flow and all associated revisions, executions, blobs, and trigger registrations."""
 
-    ``flow_revisions`` and ``flow_executions`` rows are unchanged (v1); pin JSON still lives there until
-    a separate revision cleanup exists.
-    """
-
+    _ = current_user
     db = await _get_db()
     hdr = await db.flows.find_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if not hdr:
         raise HTTPException(status_code=404, detail="Flow not found")
 
-    rev_docs = await db.flow_revisions.find({"flow_id": flow_id}, {"_id": 1}).to_list(None)
-    rev_ids = [str(d["_id"]) for d in rev_docs]
-    try:
-        n_del = await ad.mongodb.blob.delete_flow_pins_for_flow_async(
-            ad.common.get_analytiq_client(),
-            organization_id=organization_id,
-            flow_id=flow_id,
-            flow_revision_ids=rev_ids,
-        )
-        if n_del:
-            logger.info(f"Flow delete removed {n_del} flow_pins blob(s) for flow_id={flow_id}")
-    except Exception:
-        logger.warning(f"Flow delete: failed flow_pins sweep for flow_id={flow_id}", exc_info=True)
-
-    await ad.docrouter_flows.event_dispatch.delete_docrouter_flow_triggers(db, flow_id=flow_id)
+    await _purge_flow_associated_data(db, organization_id=organization_id, flow_id=flow_id)
 
     res = await db.flows.delete_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
     if res.deleted_count == 0:
@@ -1922,6 +1997,32 @@ async def stop_execution(organization_id: str, flow_id: str, exec_id: str, curre
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Execution not found")
+    return {"ok": True}
+
+
+@flows_router.delete("/v0/orgs/{organization_id}/flows/{flow_id}/executions/{exec_id}")
+async def delete_execution(organization_id: str, flow_id: str, exec_id: str, current_user: User = Depends(get_org_user)):
+    """Delete a finished execution and its flow_blobs storage."""
+    _ = current_user
+    try:
+        exec_oid = ObjectId(exec_id)
+    except InvalidId:
+        raise HTTPException(status_code=404, detail="Execution not found") from None
+
+    db = await _get_db()
+    doc = await db.flow_executions.find_one(
+        {"_id": exec_oid, "flow_id": flow_id, "organization_id": organization_id},
+        {"status": 1},
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    status = doc.get("status")
+    if status in ("queued", "running"):
+        raise HTTPException(status_code=409, detail="Stop the execution before deleting it")
+
+    aq_client = ad.common.get_analytiq_client()
+    await _delete_execution_blobs_and_doc(db, aq_client, exec_oid=exec_oid, exec_id=exec_id)
     return {"ok": True}
 
 

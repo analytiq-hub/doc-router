@@ -121,6 +121,7 @@ describe('SDK Client Unit Tests', () => {
       expect(typeof client.listExecutions).toBe('function');
       expect(typeof client.getExecution).toBe('function');
       expect(typeof client.stopExecution).toBe('function');
+      expect(typeof client.deleteExecution).toBe('function');
     });
 
     test('uploadDocuments posts JSON to documents endpoint', async () => {
