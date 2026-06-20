@@ -1,0 +1,53 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "docrouter.document_split",
+  "type_version": 1,
+  "label": "Document Split",
+  "description": "Splits input PDFs into per-page PDFs ({name}_idx_{page} keys). Non-PDF binaries unchanged. Downstream resolve_pdf_binary_ref sees the first page only.",
+  "category": "DocRouter",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 1,
+  "max_inputs": 1,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "output_port_types": [
+    "main"
+  ],
+  "icon_key": "split",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.docrouter_flows.nodes.document_split_node",
+    "class": "DocRouterDocumentSplitNode"
+  },
+  "palette_group": "docrouter",
+  "parameter_schema": {
+    "type": "object",
+    "title": "Document Split",
+    "properties": {
+      "start": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 0,
+        "description": "First page index (0-based, inclusive)."
+      },
+      "stop": {
+        "type": "integer",
+        "minimum": 0,
+        "default": 0,
+        "description": "Stop page index (0-based, exclusive). 0 = no stop limit (until end)."
+      },
+      "step": {
+        "type": "integer",
+        "minimum": 1,
+        "default": 1,
+        "description": "Step between page indices (must be >= 1)."
+      }
+    },
+    "additionalProperties": false
+  }
+}
+
