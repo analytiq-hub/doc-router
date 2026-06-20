@@ -62,9 +62,10 @@ export function canFetchFlowBinaryRef(
   pinCtx: FlowRevisionPinBlobContext | null | undefined,
 ): boolean {
   if (!storageId || !storageId.trim()) return false;
-  if (executionCtx && isFetchableExecutionBlobStorageId(storageId)) return true;
-  if (pinCtx && isFetchableRevisionPinBlobStorageId(storageId)) return true;
-  return false;
+  if (isFetchableRevisionPinBlobStorageId(storageId)) {
+    return Boolean(pinCtx || executionCtx);
+  }
+  return Boolean(executionCtx && storageId.startsWith('flow_blobs:'));
 }
 
 /** Fetches binary payload for an execution trace (`storage_id`: `flow_blobs:…`, `flow_pins:…`, or `files:…`). */
@@ -95,18 +96,24 @@ export async function fetchFlowRevisionPinBlob(
   return blobFromArrayBufferResponse(res);
 }
 
-/** Resolve a binary ref via execution trace when available, else revision pin scope. */
+/** Resolve a binary ref via revision pin scope for ``flow_pins``/``files``, else execution trace. */
 export async function fetchFlowBinaryRef(
   storageId: string,
   executionCtx: FlowExecutionBlobContext | null | undefined,
   pinCtx: FlowRevisionPinBlobContext | null | undefined,
   opts?: { action?: 'view' | 'download' },
 ): Promise<{ blob: Blob; downloadName: string | null }> {
-  if (executionCtx && isFetchableExecutionBlobStorageId(storageId)) {
-    return fetchFlowExecutionBlob(executionCtx, storageId, opts);
+  if (isFetchableRevisionPinBlobStorageId(storageId)) {
+    if (pinCtx) {
+      return fetchFlowRevisionPinBlob(pinCtx, storageId, opts);
+    }
+    if (executionCtx) {
+      return fetchFlowExecutionBlob(executionCtx, storageId, opts);
+    }
+    throw new Error('Cannot download this binary attachment.');
   }
-  if (pinCtx && isFetchableRevisionPinBlobStorageId(storageId)) {
-    return fetchFlowRevisionPinBlob(pinCtx, storageId, opts);
+  if (executionCtx && storageId.startsWith('flow_blobs:')) {
+    return fetchFlowExecutionBlob(executionCtx, storageId, opts);
   }
   throw new Error('Cannot download this binary attachment.');
 }

@@ -44,6 +44,18 @@ describe('canFetchFlowBinaryRef', () => {
     expect(canFetchFlowBinaryRef('flow_pins:pin/rev/n', null, pinCtx)).toBe(true);
   });
 
+  it('prefers pin context for flow_pins when both contexts exist', () => {
+    expect(canFetchFlowBinaryRef('flow_pins:pin/rev/n', executionCtx, pinCtx)).toBe(true);
+  });
+
+  it('uses execution context for flow_blobs even when pin context exists', () => {
+    expect(canFetchFlowBinaryRef('flow_blobs:exec/x', executionCtx, pinCtx)).toBe(true);
+  });
+
+  it('does not use execution-only path for flow_pins without pin or execution context', () => {
+    expect(canFetchFlowBinaryRef('flow_pins:pin/rev/n', null, null)).toBe(false);
+  });
+
   it('uses pin context for files when execution is absent', () => {
     expect(canFetchFlowBinaryRef('files:doc.pdf', null, pinCtx)).toBe(true);
   });
