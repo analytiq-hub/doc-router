@@ -365,7 +365,7 @@ async def test_execute_preserves_multiple_input_items() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_runs_items_in_parallel_up_to_eight() -> None:
+async def test_execute_runs_items_in_parallel_up_to_batch_size() -> None:
     active = 0
     max_active = 0
     lock = asyncio.Lock()
@@ -396,7 +396,7 @@ async def test_execute_runs_items_in_parallel_up_to_eight() -> None:
         node = DocRouterOcrNode()
         out = await node.execute(
             _ctx(),
-            {"id": "ocr1", "parameters": {"ocr_provider": "pymupdf"}},
+            {"id": "ocr1", "parameters": {"ocr_provider": "pymupdf"}, "batch_size": 8},
             [items],
         )
 

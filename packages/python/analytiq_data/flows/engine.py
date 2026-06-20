@@ -24,6 +24,7 @@ import analytiq_data as ad
 
 from .errors import node_error_envelope
 from .flow_settings import validate_flow_settings
+from .node_settings import validate_node_batch_size
 from .port_types import input_port_types_for, output_port_types_for
 from .trace import pop_node_trace
 from .triggers.cron_exprs import poll_times_to_specs
@@ -261,6 +262,9 @@ def validate_revision(
                 raise FlowValidationError(
                     f"Node {ad.flows.node_name(n)}: {e}"
                 ) from e
+
+        for msg in validate_node_batch_size(n):
+            raise FlowValidationError(f"Node {ad.flows.node_name(n)}: {msg}")
 
     for msg in validate_flow_settings(settings):
         raise FlowValidationError(msg)

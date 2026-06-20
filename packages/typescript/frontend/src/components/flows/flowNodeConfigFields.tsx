@@ -11,6 +11,12 @@ import {
   flowSwitchThumbClass,
   flowSwitchTrackClass,
 } from './flowUiClasses';
+import {
+  FLOW_NODE_BATCH_SIZE_DEFAULT,
+  FLOW_NODE_BATCH_SIZE_MAX,
+  FLOW_NODE_BATCH_SIZE_MIN,
+  resolveFlowNodeBatchSize,
+} from './flowNodeSettings';
 import { FlowNameValueListField, type NameValuePair } from './FlowNameValueListField';
 import { FLOW_VALUE_MIME, parseFlowValueDragPayload, payloadToExpression, type FlowValueDragPayload } from './IoViewer';
 import { FlowExpressionPreviewLine, type ExpressionPreviewContext } from './FlowExpressionPreviewLine';
@@ -73,6 +79,7 @@ export const FlowNodeSettingsFields: React.FC<{
 }> = ({ node, onChange, readOnly = false }) => {
   const isWebhookTrigger = node.type === 'flows.trigger.webhook';
   const multipleMethods = Boolean((node.parameters as Record<string, unknown> | undefined)?.multiple_methods);
+  const batchSize = resolveFlowNodeBatchSize(node);
 
   if (readOnly) {
     return (
@@ -88,6 +95,10 @@ export const FlowNodeSettingsFields: React.FC<{
         <div>
           <span className={flowLabelClass}>On error</span>
           <input readOnly className={flowInputClass} value={node.on_error ?? 'stop'} />
+        </div>
+        <div>
+          <span className={flowLabelClass}>Batch size</span>
+          <input readOnly className={flowInputClass} value={String(batchSize)} />
         </div>
         {isWebhookTrigger ? (
           <div>
@@ -134,6 +145,38 @@ export const FlowNodeSettingsFields: React.FC<{
           <option value="stop">stop</option>
           <option value="continue">continue</option>
         </select>
+      </div>
+      <div>
+        <label className={flowLabelClass} htmlFor="flow-node-batch-size">
+          Batch size
+        </label>
+        <input
+          id="flow-node-batch-size"
+          type="number"
+          className={flowInputClass}
+          min={FLOW_NODE_BATCH_SIZE_MIN}
+          max={FLOW_NODE_BATCH_SIZE_MAX}
+          step={1}
+          value={batchSize}
+          onChange={(e) => {
+            const parsed = Number.parseInt(e.target.value, 10);
+            if (!Number.isFinite(parsed)) {
+              onChange({ batch_size: undefined });
+              return;
+            }
+            const next = Math.min(
+              FLOW_NODE_BATCH_SIZE_MAX,
+              Math.max(FLOW_NODE_BATCH_SIZE_MIN, parsed),
+            );
+            onChange({
+              batch_size: next === FLOW_NODE_BATCH_SIZE_DEFAULT ? undefined : next,
+            });
+          }}
+        />
+        <p className="mt-1 text-[11px] text-gray-500">
+          Max input items in flight at once ({FLOW_NODE_BATCH_SIZE_MIN}–{FLOW_NODE_BATCH_SIZE_MAX},
+          default {FLOW_NODE_BATCH_SIZE_DEFAULT} = sequential).
+        </p>
       </div>
       {isWebhookTrigger ? (
         <div className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">
