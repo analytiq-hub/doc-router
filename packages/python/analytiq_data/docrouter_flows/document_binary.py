@@ -47,9 +47,10 @@ def resolve_pdf_binary_ref(binary: dict[str, ad.flows.BinaryRef] | None) -> ad.f
     Prefers ``binary["pdf"]`` when present (DocRouter document triggers). Otherwise
     returns the first ``application/pdf`` ref in stable property-name order.
 
-    After ``docrouter.document_split``, the original ``pdf`` key is replaced by
-    ``pdf_idx_0``, ``pdf_idx_1``, … — this helper returns ``pdf_idx_0`` only. Use
-    ``list_pdf_binary_refs`` when a node must see every page PDF on one item.
+    After ``docrouter.document_split``, each fan-out item has a single-page ``pdf`` (or
+    original property name). Use normal item iteration downstream; ``resolve_pdf_binary_ref``
+    works per item. Use ``list_pdf_binary_refs`` only when multiple PDF properties remain
+    on one item.
     """
 
     if not binary:

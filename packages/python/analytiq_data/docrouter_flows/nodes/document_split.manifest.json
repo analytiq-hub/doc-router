@@ -4,7 +4,7 @@
   "key": "docrouter.document_split",
   "type_version": 1,
   "label": "Document Split",
-  "description": "Splits input PDFs into per-page PDFs ({name}_idx_{page} keys). Non-PDF binaries unchanged. Downstream resolve_pdf_binary_ref sees the first page only.",
+  "description": "Splits each input PDF into one output item per page. Non-PDF binaries are copied to every fan-out item.",
   "category": "DocRouter",
   "is_trigger": false,
   "is_merge": false,

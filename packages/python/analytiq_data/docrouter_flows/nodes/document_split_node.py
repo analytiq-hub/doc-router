@@ -10,22 +10,18 @@ import analytiq_data as ad
 
 
 class DocRouterDocumentSplitNode:
-    """Split each PDF binary on the item into per-page PDFs.
+    """Split each PDF binary on the item into one output item per selected page.
 
-    Output replaces each input PDF property ``{name}`` with one property per selected
-    page: ``{name}_idx_{page}`` (0-based), e.g. ``pdf`` → ``pdf_idx_0``, ``pdf_idx_1``.
-    Non-PDF binaries are copied unchanged and keep their original keys/positions.
-
-    Downstream nodes that call ``resolve_pdf_binary_ref`` receive only the first page
-    PDF (lowest ``*_idx_*`` key in sorted order). To process every page, iterate
-    ``item.binary`` or fan out with a batch/loop node.
+    Each output item carries a single-page PDF under the same binary property name as
+    the source (e.g. input ``pdf`` → output ``pdf`` with one page). Non-PDF binaries
+    on the input item are copied onto every fan-out item for that input.
     """
 
     key = "docrouter.document_split"
     label = "Document Split"
     description = (
-        "Splits input PDFs into per-page PDFs ({name}_idx_{page} keys). "
-        "Non-PDF binaries unchanged. Downstream resolve_pdf_binary_ref sees the first page only."
+        "Splits each input PDF into one output item per page. "
+        "Non-PDF binaries are copied to every fan-out item."
     )
     category = "DocRouter"
     palette_group = "docrouter"
@@ -112,24 +108,34 @@ class DocRouterDocumentSplitNode:
         slice_stop = None if stop == 0 else stop
 
         out: list["ad.flows.FlowItem"] = []
+        output_item_index = 0
 
         for item_index, it in enumerate(inputs[0]):
-            binary: dict[str, ad.flows.BinaryRef] = {}
+            passthrough_binary: dict[str, ad.flows.BinaryRef] = {}
+            pdf_entries: list[tuple[str, ad.flows.BinaryRef]] = []
 
             for name, ref in (it.binary or {}).items():
-                if not isinstance(ref, ad.flows.BinaryRef) or ref.mime_type != "application/pdf":
-                    # Non-PDF binaries are passed through untouched.
-                    binary[name] = ref
-                    continue
+                if isinstance(ref, ad.flows.BinaryRef) and ref.mime_type == "application/pdf":
+                    pdf_entries.append((name, ref))
+                elif isinstance(ref, ad.flows.BinaryRef):
+                    passthrough_binary[name] = ref
 
-                # Fetch original PDF bytes.
+            fan_out: list["ad.flows.FlowItem"] = []
+
+            for pdf_name, ref in pdf_entries:
                 pdf_bytes = await ad.flows.get_binary_stream(ref, context.analytiq_client)
                 doc = fitz.open(stream=pdf_bytes, filetype="pdf")
                 try:
                     n_pages = doc.page_count
                     if n_pages <= 0:
-                        # Nothing to split; keep original binary.
-                        binary[name] = ref
+                        fan_out.append(
+                            ad.flows.FlowItem(
+                                json=dict(it.json),
+                                binary={**passthrough_binary, pdf_name: ref},
+                                meta=dict(it.meta or {}),
+                                paired_item=it.paired_item,
+                            )
+                        )
                         continue
 
                     indices = list(range(n_pages))[start:slice_stop:step]
@@ -152,30 +158,42 @@ class DocRouterDocumentSplitNode:
                             single_doc.close()
 
                         new_name = f"{stem}_idx_{page_idx}.pdf"
-                        prop_name = f"{name}_idx_{page_idx}"
-
-                        new_ref = await ad.flows.save_execution_binary_blob(
+                        page_ref = await ad.flows.save_execution_binary_blob(
                             context.analytiq_client,
                             execution_id=context.execution_id,
                             node_id=str(node["id"]),
-                            item_index=item_index,
-                            property_name=prop_name,
+                            item_index=output_item_index,
+                            property_name=pdf_name,
                             blob=page_bytes,
                             mime_type="application/pdf",
                             file_name=new_name,
                         )
-                        binary[prop_name] = new_ref
+                        fan_out.append(
+                            ad.flows.FlowItem(
+                                json=dict(it.json),
+                                binary={**passthrough_binary, pdf_name: page_ref},
+                                meta={
+                                    **dict(it.meta or {}),
+                                    "source_node_id": node["id"],
+                                    "item_index": output_item_index,
+                                },
+                                paired_item=it.paired_item,
+                            )
+                        )
+                        output_item_index += 1
                 finally:
                     doc.close()
 
-            out.append(
-                ad.flows.FlowItem(
-                    json=dict(it.json),
-                    binary=binary,
-                    meta=dict(it.meta or {}),
-                    paired_item=it.paired_item,
+            if fan_out:
+                out.extend(fan_out)
+            elif not pdf_entries:
+                out.append(
+                    ad.flows.FlowItem(
+                        json=dict(it.json),
+                        binary=dict(it.binary or {}),
+                        meta=dict(it.meta or {}),
+                        paired_item=it.paired_item,
+                    )
                 )
-            )
 
         return [out]
-

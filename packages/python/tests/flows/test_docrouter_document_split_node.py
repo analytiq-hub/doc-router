@@ -48,7 +48,7 @@ def test_validate_parameters_rejects_invalid_indices() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_splits_pdf_into_pages(monkeypatch) -> None:
+async def test_execute_emits_one_item_per_page(monkeypatch) -> None:
     pdf_bytes = _make_pdf(3)
     item = ad.flows.FlowItem(
         json={"foo": "bar"},
@@ -93,22 +93,17 @@ async def test_execute_splits_pdf_into_pages(monkeypatch) -> None:
         [[item]],
     )
 
-    assert len(out_batches) == 1
     out_items = out_batches[0]
-    assert len(out_items) == 1
-    out_item = out_items[0]
+    assert len(out_items) == 3
 
-    # Non-PDF binary is preserved.
-    assert "other" in out_item.binary
-    assert out_item.binary["other"].file_name == "raw.bin"
+    for idx, out_item in enumerate(out_items):
+        assert out_item.json == {"foo": "bar"}
+        assert out_item.binary["other"].file_name == "raw.bin"
+        assert "pdf_main" in out_item.binary
+        assert out_item.binary["pdf_main"].file_name == f"doc_idx_{idx}.pdf"
+        assert len(out_item.binary) == 2
 
-    # Three page PDFs inserted, with expected names and property keys.
-    page_keys = sorted(k for k in out_item.binary.keys() if k.startswith("pdf_main_idx_"))
-    assert page_keys == ["pdf_main_idx_0", "pdf_main_idx_1", "pdf_main_idx_2"]
-    page_names = [out_item.binary[k].file_name for k in page_keys]
-    assert page_names == ["doc_idx_0.pdf", "doc_idx_1.pdf", "doc_idx_2.pdf"]
-
-    # Blobs were saved with application/pdf mime type.
+    assert [b["item_index"] for b in saved_blobs] == [0, 1, 2]
     assert {b["mime_type"] for b in saved_blobs} == {"application/pdf"}
 
 
@@ -140,17 +135,14 @@ async def test_execute_respects_start_stop_step(monkeypatch) -> None:
         [[item]],
     )
 
-    out_item = out_batches[0][0]
-    page_keys = sorted(k for k in out_item.binary.keys() if k.startswith("pdf_idx_"))
-    # Indices 1 and 3 should be selected.
-    assert page_keys == ["pdf_idx_1", "pdf_idx_3"]
-    page_names = [out_item.binary[k].file_name for k in page_keys]
-    assert page_names == ["invoice_idx_1.pdf", "invoice_idx_3.pdf"]
+    out_items = out_batches[0]
+    assert len(out_items) == 2
+    assert out_items[0].binary["pdf"].file_name == "invoice_idx_1.pdf"
+    assert out_items[1].binary["pdf"].file_name == "invoice_idx_3.pdf"
 
 
 @pytest.mark.asyncio
 async def test_execute_stop_zero_splits_all_pages(monkeypatch) -> None:
-    """stop=0 means no stop limit — split through the last page."""
     pdf_bytes = _make_pdf(2)
     item = ad.flows.FlowItem(
         json={},
@@ -177,24 +169,17 @@ async def test_execute_stop_zero_splits_all_pages(monkeypatch) -> None:
         [[item]],
     )
 
-    out_item = out_batches[0][0]
-    assert "pdf" not in out_item.binary
-    page_keys = sorted(k for k in out_item.binary.keys() if k.startswith("pdf_idx_"))
-    assert page_keys == ["pdf_idx_0", "pdf_idx_1"]
-    assert [out_item.binary[k].file_name for k in page_keys] == [
-        "Sarah_Chen_Resume_idx_0.pdf",
-        "Sarah_Chen_Resume_idx_1.pdf",
-    ]
+    out_items = out_batches[0]
+    assert len(out_items) == 2
+    assert out_items[0].binary["pdf"].file_name == "Sarah_Chen_Resume_idx_0.pdf"
+    assert out_items[1].binary["pdf"].file_name == "Sarah_Chen_Resume_idx_1.pdf"
 
 
-def test_resolve_pdf_binary_ref_on_split_output() -> None:
-    from analytiq_data.docrouter_flows.document_binary import list_pdf_binary_refs, resolve_pdf_binary_ref
+def test_resolve_pdf_binary_ref_on_split_output_item() -> None:
+    from analytiq_data.docrouter_flows.document_binary import resolve_pdf_binary_ref
 
     binary = {
-        "pdf_idx_0": ad.flows.BinaryRef(mime_type="application/pdf", file_name="a_idx_0.pdf"),
-        "pdf_idx_1": ad.flows.BinaryRef(mime_type="application/pdf", file_name="a_idx_1.pdf"),
+        "pdf": ad.flows.BinaryRef(mime_type="application/pdf", file_name="a_idx_0.pdf"),
         "other": ad.flows.BinaryRef(mime_type="application/octet-stream", file_name="raw.bin"),
     }
-    assert resolve_pdf_binary_ref(binary) is binary["pdf_idx_0"]
-    assert list_pdf_binary_refs(binary) == [binary["pdf_idx_0"], binary["pdf_idx_1"]]
-
+    assert resolve_pdf_binary_ref(binary) is binary["pdf"]
