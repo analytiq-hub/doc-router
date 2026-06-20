@@ -171,7 +171,7 @@ async def test_run_flow_llm_run_builds_messages_and_records_spu(monkeypatch) -> 
 
 
 @pytest.mark.asyncio
-async def test_execute_runs_items_in_parallel_up_to_batch_size() -> None:
+async def test_execute_runs_items_with_batch_size() -> None:
     active = 0
     max_active = 0
     lock = asyncio.Lock()

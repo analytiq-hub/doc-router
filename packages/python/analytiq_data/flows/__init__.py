@@ -34,7 +34,7 @@ from .node_settings import (
     resolve_node_batch_size,
     validate_node_batch_size,
 )
-from .item_parallel import map_flow_items_bounded
+from .item_batch import map_flow_items_batch
 from .engine import *
 from .seed_validation import (
     RunDataSeedValidationError,

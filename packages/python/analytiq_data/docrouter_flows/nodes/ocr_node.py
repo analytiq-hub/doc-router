@@ -9,7 +9,7 @@ import analytiq_data as ad
 
 from .. import services as flow_services
 from ..document_binary import resolve_pdf_binary_ref
-from analytiq_data.flows.item_parallel import map_flow_items_bounded
+from analytiq_data.flows.item_batch import map_flow_items_batch
 from analytiq_data.flows.node_settings import resolve_node_batch_size
 
 
@@ -145,7 +145,7 @@ class DocRouterOcrNode:
                 paired_item=it.paired_item,
             )
 
-        item_results = await map_flow_items_bounded(
+        item_results = await map_flow_items_batch(
             len(input_items),
             _run_item,
             batch_size=resolve_node_batch_size(node),

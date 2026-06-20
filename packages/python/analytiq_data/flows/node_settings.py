@@ -10,7 +10,7 @@ FLOW_NODE_BATCH_SIZE_MAX = 32
 
 
 def resolve_node_batch_size(node: dict[str, Any] | None) -> int:
-    """Return bounded parallel item limit for nodes that batch-process input items."""
+    """Return batch size for nodes that process input items in batches."""
 
     node = node or {}
     raw = node.get("batch_size")
