@@ -982,9 +982,15 @@ export default function FlowDetailPageClient({
                     </div>
                   </Panel>
                   {logsExpanded ? (
-                    <PanelResizeHandle className="h-2 cursor-row-resize bg-[#e8eaed] hover:bg-[#d8dde4]" />
+                    <PanelResizeHandle
+                      disabled={Boolean(editorOpenConfigNodeId?.trim())}
+                      className="h-2 cursor-row-resize bg-[#e8eaed] hover:bg-[#d8dde4]"
+                    />
                   ) : (
-                    <PanelResizeHandle className="h-px bg-[#e8eaed]" />
+                    <PanelResizeHandle
+                      disabled={Boolean(editorOpenConfigNodeId?.trim())}
+                      className="h-px bg-[#e8eaed]"
+                    />
                   )}
                   <Panel defaultSize={LOGS_COLLAPSED_PCT} minSize={LOGS_COLLAPSED_PCT} className="min-h-0">
                     <div className="h-full min-h-0">
@@ -1000,6 +1006,7 @@ export default function FlowDetailPageClient({
                         graphNodes={rfNodes as Node<FlowRfNodeData>[]}
                         graphEdges={rfEdges}
                         graphPinData={revision?.pin_data ?? null}
+                        disableDetailSplitResize={Boolean(editorOpenConfigNodeId?.trim())}
                       />
                     </div>
                   </Panel>

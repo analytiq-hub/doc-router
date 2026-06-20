@@ -22,7 +22,7 @@ import {
 } from './flowWorkspaceMenu';
 import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
 import { FlowNodeTracePanel, hasNodeTraceContent, traceEventCount } from './flowNodeTracePanel';
-import { flowPanelColResizeHandleClass } from './flowUiClasses';
+import { flowPanelColResizeHandleClass, flowPanelColResizeHitAreaMargins } from './flowUiClasses';
 import {
   formatItemLineage,
   formatUpstreamSummary,
@@ -94,6 +94,8 @@ const FlowLogsPanel: React.FC<{
   graphEdges?: Edge[];
   /** When set (editor), downstream input previews use pinned upstream overrides with execution data. */
   graphPinData?: FlowPinData | null;
+  /** When true, disable the log-details column split (e.g. node config modal is open). */
+  disableDetailSplitResize?: boolean;
 }> = ({
   orgApi,
   flowId,
@@ -107,6 +109,7 @@ const FlowLogsPanel: React.FC<{
   graphNodes,
   graphEdges,
   graphPinData,
+  disableDetailSplitResize = false,
 }) => {
   const [execution, setExecution] = useState<FlowExecution | null>(null);
   const [activeTab, setActiveTab] = useState<LogsTab>('overview');
@@ -672,7 +675,11 @@ const FlowLogsPanel: React.FC<{
                             </ul>
                           </div>
                         </Panel>
-                        <PanelResizeHandle className={flowPanelColResizeHandleClass} />
+                        <PanelResizeHandle
+                          disabled={disableDetailSplitResize}
+                          className={flowPanelColResizeHandleClass}
+                          hitAreaMargins={flowPanelColResizeHitAreaMargins}
+                        />
                         <Panel defaultSize={100 - nodeSplitLeftPct} minSize={35} className="flex min-h-0 min-w-0 flex-col overflow-hidden">
                           <div className="min-h-0 min-w-0 flex-1 overflow-auto">
                             <div className="rounded-md border border-gray-200 bg-white">

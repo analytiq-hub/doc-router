@@ -328,6 +328,7 @@ const FlowExecutionsView: React.FC<{
 
   const runDataForModal = detail?.run_data as Record<string, unknown> | undefined;
   const listPageCount = Math.max(1, Math.ceil(total / listPagination.pageSize));
+  const configModalOpen = configModalId != null;
 
   return (
     <div
@@ -475,7 +476,10 @@ const FlowExecutionsView: React.FC<{
           </aside>
         </Panel>
 
-        <PanelResizeHandle className="w-2 shrink-0 cursor-col-resize bg-transparent hover:bg-[#e8eaed]" />
+        <PanelResizeHandle
+          disabled={configModalOpen}
+          className="w-2 shrink-0 cursor-col-resize bg-transparent hover:bg-[#e8eaed]"
+        />
 
         <Panel
           defaultSize={100 - EXECUTIONS_LIST_PANEL_DEFAULT_PCT}
@@ -578,9 +582,12 @@ const FlowExecutionsView: React.FC<{
               </div>
             </Panel>
             {execLogsExpanded ? (
-              <PanelResizeHandle className="h-2 cursor-row-resize shrink-0 bg-[#e8eaed] hover:bg-[#d8dde4]" />
+              <PanelResizeHandle
+                disabled={configModalOpen}
+                className="h-2 cursor-row-resize shrink-0 bg-[#e8eaed] hover:bg-[#d8dde4]"
+              />
             ) : (
-              <PanelResizeHandle className="h-px shrink-0 bg-[#e8eaed]" />
+              <PanelResizeHandle disabled={configModalOpen} className="h-px shrink-0 bg-[#e8eaed]" />
             )}
             <Panel defaultSize={EXEC_LOGS_COLLAPSED_PCT} minSize={EXEC_LOGS_COLLAPSED_PCT} className="min-h-0 min-w-0">
               <div className="h-full min-h-0 min-w-0">
@@ -595,6 +602,7 @@ const FlowExecutionsView: React.FC<{
                   onToggleExpanded={toggleExecLogsExpanded}
                   graphNodes={viewNodes}
                   graphEdges={viewEdges}
+                  disableDetailSplitResize={configModalOpen}
                 />
               </div>
             </Panel>

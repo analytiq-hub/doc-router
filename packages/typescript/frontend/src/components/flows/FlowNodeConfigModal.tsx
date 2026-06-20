@@ -45,6 +45,7 @@ import {
   flowInlineNameMeasureClass,
   flowInlineNameReadClass,
   flowPanelColResizeHandleClass,
+  flowPanelColResizeHitAreaMargins,
 } from './flowUiClasses';
 import type { ExpressionPreviewContext } from './FlowExpressionPreviewLine';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
@@ -62,7 +63,7 @@ const IoBlock: React.FC<{
   right?: React.ReactNode;
   children: React.ReactNode;
 }> = ({ title, right, children }) => (
-  <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-[#e8eaee] last:border-r-0">
+  <div className="flex min-h-0 min-w-0 flex-1 flex-col">
     <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
       <span className="text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">{title}</span>
       {right}
@@ -977,13 +978,19 @@ const FlowNodeConfigModal: React.FC<{
 
             <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden">
             <PanelGroup
+              key={isTrigger ? 'flow-node-config-panels-2' : 'flow-node-config-panels-3'}
               direction="horizontal"
               autoSaveId={isTrigger ? 'flow-node-config-panels-2' : 'flow-node-config-panels-3'}
               className="relative z-0 flex min-h-0 flex-1 overflow-hidden"
             >
               {!isTrigger && (
                 <>
-                  <Panel defaultSize={25} minSize={18} className="flex min-h-0 min-w-0 overflow-hidden">
+                  <Panel
+                    id="flow-node-config-panel-input"
+                    defaultSize={25}
+                    minSize={18}
+                    className="flex min-h-0 min-w-0 overflow-hidden"
+                  >
                     <IoBlock title="Input">
                       {inputPreview.message && <div className="mb-2 text-sm text-[#6b7280]">{inputPreview.message}</div>}
                       {!inputPreview.message && inputPreview.slots.length > 0 && (
@@ -1022,11 +1029,20 @@ const FlowNodeConfigModal: React.FC<{
                     </IoBlock>
                   </Panel>
 
-                  <PanelResizeHandle className={flowPanelColResizeHandleClass} />
+                  <PanelResizeHandle
+                    id="flow-node-config-handle-input-params"
+                    className={flowPanelColResizeHandleClass}
+                    hitAreaMargins={flowPanelColResizeHitAreaMargins}
+                  />
                 </>
               )}
 
-              <Panel defaultSize={isTrigger ? 67 : 42} minSize={28} className="flex min-h-0 min-w-0 overflow-hidden">
+              <Panel
+                id="flow-node-config-panel-params"
+                defaultSize={isTrigger ? 67 : 42}
+                minSize={28}
+                className="flex min-h-0 min-w-0 overflow-hidden"
+              >
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
                   <TabGroup selectedIndex={tab} onChange={setTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
                     <div className="shrink-0 border-b border-[#eceff2] bg-white px-1">
@@ -1138,10 +1154,19 @@ const FlowNodeConfigModal: React.FC<{
                 </div>
               </Panel>
 
-              <PanelResizeHandle className={flowPanelColResizeHandleClass} />
+              <PanelResizeHandle
+                id="flow-node-config-handle-params-output"
+                className={flowPanelColResizeHandleClass}
+                hitAreaMargins={flowPanelColResizeHitAreaMargins}
+              />
 
-              <Panel defaultSize={33} minSize={18} className="flex min-h-0 min-w-0 overflow-hidden">
-                <div className="flex min-h-0 min-w-0 flex-1 flex-col border-r border-[#e8eaee] last:border-r-0">
+              <Panel
+                id="flow-node-config-panel-output"
+                defaultSize={33}
+                minSize={18}
+                className="flex min-h-0 min-w-0 overflow-hidden"
+              >
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col">
                   <div className="flex shrink-0 items-center justify-between gap-2 border-b border-[#eceff2] bg-[#fafbfc] px-3 py-2">
                     {showTraceTab ? (
                       <div className="inline-flex rounded-md border border-gray-200 bg-white p-0.5 text-[11px]">
