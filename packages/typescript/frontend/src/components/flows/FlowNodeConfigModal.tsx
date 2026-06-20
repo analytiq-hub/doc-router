@@ -37,6 +37,7 @@ import { NodeRunErrorDetails } from './flowNodeRunErrorDetails';
 import { FlowNodeTracePanel, hasNodeTraceContent } from './flowNodeTracePanel';
 import { FlowInputUpstreamList } from './FlowInputUpstreamList';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
+import { flowNodeIconColorClass, isDocRouterNodeType } from './flowNodeBrand';
 import type { FlowExecutionBlobContext, FlowRevisionPinBlobContext } from './flowExecutionBlob';
 import { FLOW_VALUE_MIME, IoViewer, type IoDataMode } from './IoViewer';
 import {
@@ -856,12 +857,13 @@ const FlowNodeConfigModal: React.FC<{
   const upstreamNodeIcons = useMemo(() => {
     if (!nodeTypes?.length) return undefined;
     const byKey = new Map(nodeTypes.map((nt) => [nt.key, nt]));
-    const m = new Map<string, { iconKey?: string | null; isTrigger?: boolean }>();
+    const m = new Map<string, { iconKey?: string | null; isTrigger?: boolean; isDocRouter?: boolean }>();
     for (const n of allNodes ?? []) {
       const nt = byKey.get(n.type);
       m.set(n.id, {
         iconKey: nt?.icon_key ?? null,
         isTrigger: Boolean(nt?.is_trigger),
+        isDocRouter: isDocRouterNodeType(nt),
       });
     }
     return m;
@@ -1260,7 +1262,13 @@ const FlowNodeConfigModal: React.FC<{
                     <FlowNodeTypeIcon
                       iconKey={meta?.iconKey}
                       fallback={meta?.isTrigger ? 'trigger' : 'process'}
-                      className="h-5 w-5 shrink-0 text-gray-600"
+                      className={[
+                        'h-5 w-5 shrink-0',
+                        flowNodeIconColorClass({
+                          isDocRouter: Boolean(meta?.isDocRouter),
+                          isTrigger: Boolean(meta?.isTrigger),
+                        }),
+                      ].join(' ')}
                     />
                   </button>
                 );
@@ -1282,7 +1290,13 @@ const FlowNodeConfigModal: React.FC<{
                     <FlowNodeTypeIcon
                       iconKey={meta?.iconKey}
                       fallback={meta?.isTrigger ? 'trigger' : 'process'}
-                      className="h-5 w-5 shrink-0 text-gray-600"
+                      className={[
+                        'h-5 w-5 shrink-0',
+                        flowNodeIconColorClass({
+                          isDocRouter: Boolean(meta?.isDocRouter),
+                          isTrigger: Boolean(meta?.isTrigger),
+                        }),
+                      ].join(' ')}
                     />
                   </button>
                 );

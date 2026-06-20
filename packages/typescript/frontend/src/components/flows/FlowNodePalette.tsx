@@ -6,6 +6,7 @@ import {
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
+import { flowNodeIconColorClass, flowNodePaletteIconWellClass, isDocRouterNodeType } from './flowNodeBrand';
 import {
   FLOW_PALETTE_SECTION_ORDER,
   paletteSectionDescription,
@@ -61,6 +62,7 @@ function PaletteNodeList(props: {
       <ul className="list-none pb-2">
         {items.map((nt) => {
           const hasActions = nodeTypeHasPaletteActions(nt);
+          const isDocRouter = isDocRouterNodeType(nt);
           return (
             <li key={nt.key}>
               <div
@@ -85,16 +87,17 @@ function PaletteNodeList(props: {
                 <div
                   className={[
                     'mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border',
-                    nt.is_trigger ? 'border-[#f0d9d6] bg-[#fff7f6]' : 'border-[#e6eaef] bg-white',
+                    flowNodePaletteIconWellClass({ isDocRouter, isTrigger: Boolean(nt.is_trigger) }),
                   ].join(' ')}
                   aria-hidden
                 >
                   <FlowNodeTypeIcon
                     iconKey={nt.icon_key}
                     fallback={nt.is_trigger ? 'trigger' : 'process'}
-                    className={
-                      nt.is_trigger ? 'h-[22px] w-[22px] text-[#a8b0ba]' : 'h-5 w-5 text-[#94a3b8]'
-                    }
+                    className={[
+                      nt.is_trigger ? 'h-[22px] w-[22px]' : 'h-5 w-5',
+                      flowNodeIconColorClass({ isDocRouter, isTrigger: Boolean(nt.is_trigger) }),
+                    ].join(' ')}
                   />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -159,6 +162,7 @@ function PaletteActionRow(props: {
   onActionDoubleClick?: (placement: FlowPalettePlacement) => void;
 }) {
   const { nodeType, action, onActionDoubleClick } = props;
+  const isDocRouter = isDocRouterNodeType(nodeType);
   const placement: FlowPalettePlacement = {
     typeKey: nodeType.key,
     parameters: action.parameters,
@@ -180,13 +184,19 @@ function PaletteActionRow(props: {
         className={paletteNodeRowClass}
       >
         <div
-          className="mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-[#e6eaef] bg-white"
+          className={[
+            'mr-3 flex h-10 w-10 shrink-0 items-center justify-center rounded-full border',
+            flowNodePaletteIconWellClass({ isDocRouter, isTrigger: Boolean(nodeType.is_trigger) }),
+          ].join(' ')}
           aria-hidden
         >
           <FlowNodeTypeIcon
             iconKey={nodeType.icon_key}
             fallback={nodeType.is_trigger ? 'trigger' : 'process'}
-            className="h-5 w-5 text-[#94a3b8]"
+            className={[
+              'h-5 w-5',
+              flowNodeIconColorClass({ isDocRouter, isTrigger: Boolean(nodeType.is_trigger) }),
+            ].join(' ')}
           />
         </div>
         <div className="min-w-0 flex-1">

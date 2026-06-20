@@ -4,6 +4,7 @@ import React, { useMemo } from 'react';
 import { Disclosure, DisclosureButton, DisclosurePanel } from '@headlessui/react';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
+import { flowNodeIconColorClass } from './flowNodeBrand';
 import type { FlowExecutionBlobContext, FlowRevisionPinBlobContext } from './flowExecutionBlob';
 import { IoDataModeTabs, IoViewer, type IoDataMode } from './IoViewer';
 
@@ -14,7 +15,7 @@ export type UpstreamInputSlot = {
   itemsBinaries: Record<string, unknown>[];
 };
 
-export type UpstreamNodeIconMeta = { iconKey?: string | null; isTrigger?: boolean };
+export type UpstreamNodeIconMeta = { iconKey?: string | null; isTrigger?: boolean; isDocRouter?: boolean };
 
 function slotKey(s: UpstreamInputSlot): string {
   return `${s.fromNodeId}:${s.slot}`;
@@ -82,7 +83,10 @@ export const FlowInputUpstreamList: React.FC<{
                       <span
                         className={[
                           'flex h-4 w-4 shrink-0 items-center justify-center',
-                          upstreamNodeIcons.get(s.fromNodeId)?.isTrigger ? 'text-[#a8b0ba]' : 'text-[#94a3b8]',
+                          flowNodeIconColorClass({
+                            isDocRouter: Boolean(upstreamNodeIcons.get(s.fromNodeId)?.isDocRouter),
+                            isTrigger: Boolean(upstreamNodeIcons.get(s.fromNodeId)?.isTrigger),
+                          }),
                         ].join(' ')}
                         aria-hidden
                       >

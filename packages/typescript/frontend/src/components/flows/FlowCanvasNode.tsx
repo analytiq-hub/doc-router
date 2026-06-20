@@ -22,6 +22,7 @@ import type { FlowCanvasActions } from './flowCanvasActionsContext';
 import { useFlowCanvasActions, useFlowExecutionVisual } from './flowCanvasActionsContext';
 import { FlowCanvasAppendPlusButton } from './FlowCanvasAppendPlusButton';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
+import { flowNodeIconColorClass, isDocRouterNodeType } from './flowNodeBrand';
 import {
   flowWorkspaceDropdownItemMutedClass,
   flowWorkspaceDropdownItemSimpleClass,
@@ -453,7 +454,10 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
               <FlowNodeTypeIcon
                 iconKey={nt?.icon_key}
                 fallback="trigger"
-                className="h-10 w-10 text-[#a8b0ba]"
+                className={[
+                  'h-10 w-10',
+                  flowNodeIconColorClass({ isDocRouter: isDocRouterNodeType(nt), isTrigger: true }),
+                ].join(' ')}
               />
             </div>
             {/* Trigger bolt: outside-left, vertically centered (`right: 100%`, `margin: auto`). */}
@@ -514,7 +518,10 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
           <FlowNodeTypeIcon
             iconKey={nt?.icon_key}
             fallback="process"
-            className="h-9 w-9 text-[#94a3b8]"
+            className={[
+              'h-9 w-9',
+              flowNodeIconColorClass({ isDocRouter: isDocRouterNodeType(nt), isTrigger: false }),
+            ].join(' ')}
           />
           <OutputHandlesWithContinuation
             outputs={outputs}
