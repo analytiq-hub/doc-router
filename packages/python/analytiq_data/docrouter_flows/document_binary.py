@@ -42,11 +42,14 @@ def document_binary_refs(doc: dict[str, Any]) -> dict[str, ad.flows.BinaryRef]:
 
 def resolve_pdf_binary_ref(binary: dict[str, ad.flows.BinaryRef] | None) -> ad.flows.BinaryRef | None:
     """
-    Pick the input PDF ``BinaryRef`` for OCR and similar nodes.
+    Pick one input PDF ``BinaryRef`` for OCR and similar nodes.
 
-    Uses ``binary["pdf"]`` when present (DocRouter document triggers). Otherwise uses
-    the first binary property in stable property-name order; additional attachments are
-    ignored.
+    Prefers ``binary["pdf"]`` when present (DocRouter document triggers). Otherwise
+    returns the first ``application/pdf`` ref in stable property-name order.
+
+    After ``docrouter.document_split``, the original ``pdf`` key is replaced by
+    ``pdf_idx_0``, ``pdf_idx_1``, … — this helper returns ``pdf_idx_0`` only. Use
+    ``list_pdf_binary_refs`` when a node must see every page PDF on one item.
     """
 
     if not binary:
@@ -56,6 +59,19 @@ def resolve_pdf_binary_ref(binary: dict[str, ad.flows.BinaryRef] | None) -> ad.f
         return pdf_ref
     for name in sorted(binary.keys()):
         ref = binary[name]
-        if isinstance(ref, ad.flows.BinaryRef):
+        if isinstance(ref, ad.flows.BinaryRef) and ref.mime_type == "application/pdf":
             return ref
     return None
+
+
+def list_pdf_binary_refs(binary: dict[str, ad.flows.BinaryRef] | None) -> list[ad.flows.BinaryRef]:
+    """Return all ``application/pdf`` refs on an item, in stable property-name order."""
+
+    if not binary:
+        return []
+    return [
+        binary[name]
+        for name in sorted(binary.keys())
+        if isinstance(binary[name], ad.flows.BinaryRef)
+        and binary[name].mime_type == "application/pdf"
+    ]
