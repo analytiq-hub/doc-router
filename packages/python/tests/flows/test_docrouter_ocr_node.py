@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -361,3 +362,45 @@ async def test_execute_preserves_multiple_input_items() -> None:
     assert len(out[0]) == 2
     assert out[0][0].json["ocr_pages"] == ["pdf-0"]
     assert out[0][1].json["ocr_pages"] == ["pdf-1"]
+
+
+@pytest.mark.asyncio
+async def test_execute_runs_items_in_parallel_up_to_eight() -> None:
+    active = 0
+    max_active = 0
+    lock = asyncio.Lock()
+    items = [
+        ad.flows.FlowItem(
+            json={"document_id": f"doc{i}"},
+            binary={"pdf": ad.flows.BinaryRef(mime_type="application/pdf", data=f"pdf-{i}".encode())},
+            meta={},
+            paired_item=None,
+        )
+        for i in range(10)
+    ]
+
+    async def _slow_ocr(*_args, **_kwargs):
+        nonlocal active, max_active
+        async with lock:
+            active += 1
+            max_active = max(max_active, active)
+        await asyncio.sleep(0.02)
+        async with lock:
+            active -= 1
+        return ({"pages": []}, ["page"])
+
+    with patch(
+        "analytiq_data.docrouter_flows.nodes.ocr_node.flow_services.run_flow_ocr_on_pdf",
+        new=AsyncMock(side_effect=_slow_ocr),
+    ) as mock_ocr:
+        node = DocRouterOcrNode()
+        out = await node.execute(
+            _ctx(),
+            {"id": "ocr1", "parameters": {"ocr_provider": "pymupdf"}},
+            [items],
+        )
+
+    assert mock_ocr.await_count == 10
+    assert len(out[0]) == 10
+    assert max_active <= 8
+    assert max_active >= 2

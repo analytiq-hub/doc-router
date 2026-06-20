@@ -8,6 +8,7 @@ import analytiq_data as ad
 
 from .. import services as flow_services
 from ..document_binary import resolve_pdf_binary_ref
+from ..item_parallel import map_flow_items_bounded
 
 
 class DocRouterLlmRunNode:
@@ -59,8 +60,8 @@ class DocRouterLlmRunNode:
         main_items = inputs[0] if inputs else []
         ocr_items = inputs[1] if len(inputs) > 1 else []
 
-        out: list["ad.flows.FlowItem"] = []
-        for item_index, it in enumerate(main_items):
+        async def _run_item(item_index: int) -> "ad.flows.FlowItem":
+            it = main_items[item_index]
             ocr_pages: list[str] | None = None
             if item_index < len(ocr_items):
                 ocr_item = ocr_items[item_index]
@@ -85,12 +86,13 @@ class DocRouterLlmRunNode:
             if "item_index" not in meta:
                 meta["item_index"] = item_index
 
-            out.append(
-                ad.flows.FlowItem(
-                    json={"prompt_id": prompt_id, "llm_result": llm_result},
-                    binary=binary,
-                    meta=meta,
-                    paired_item=it.paired_item,
-                )
+            return ad.flows.FlowItem(
+                json={"prompt_id": prompt_id, "llm_result": llm_result},
+                binary=binary,
+                meta=meta,
+                paired_item=it.paired_item,
             )
+
+        item_results = await map_flow_items_bounded(len(main_items), _run_item)
+        out = [item for item in item_results if item is not None]
         return [out]

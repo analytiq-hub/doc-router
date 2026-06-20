@@ -9,6 +9,7 @@ import analytiq_data as ad
 
 from .. import services as flow_services
 from ..document_binary import resolve_pdf_binary_ref
+from ..item_parallel import map_flow_items_bounded
 
 
 class DocRouterOcrNode:
@@ -92,11 +93,13 @@ class DocRouterOcrNode:
                     [x for x in raw_features if isinstance(x, str)]
                 )
 
-        out: list["ad.flows.FlowItem"] = []
-        for item_index, it in enumerate(inputs[0]):
+        input_items = inputs[0]
+
+        async def _run_item(item_index: int) -> "ad.flows.FlowItem | None":
+            it = input_items[item_index]
             pdf_ref = resolve_pdf_binary_ref(it.binary)
             if pdf_ref is None:
-                continue
+                return None
 
             blob_item_index = item_index
             if isinstance(it.meta, dict) and isinstance(it.meta.get("item_index"), int):
@@ -134,12 +137,13 @@ class DocRouterOcrNode:
                 merged_json["textract_feature_types"] = textract_feature_types or []
             merged_json["ocr_pages"] = ocr_pages
 
-            out.append(
-                ad.flows.FlowItem(
-                    json=merged_json,
-                    binary=binary,
-                    meta={"source_node_id": node["id"], "item_index": blob_item_index},
-                    paired_item=it.paired_item,
-                )
+            return ad.flows.FlowItem(
+                json=merged_json,
+                binary=binary,
+                meta={"source_node_id": node["id"], "item_index": blob_item_index},
+                paired_item=it.paired_item,
             )
+
+        item_results = await map_flow_items_bounded(len(input_items), _run_item)
+        out = [item for item in item_results if item is not None]
         return [out]

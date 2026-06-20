@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
@@ -167,3 +168,39 @@ async def test_run_flow_llm_run_builds_messages_and_records_spu(monkeypatch) -> 
     assert '"foo": "bar"' in user_content
     assert "ocr_text:" in user_content
     assert "line 1\nline 2" in user_content
+
+
+@pytest.mark.asyncio
+async def test_execute_runs_items_in_parallel_up_to_eight() -> None:
+    active = 0
+    max_active = 0
+    lock = asyncio.Lock()
+    main_items = [
+        ad.flows.FlowItem(json={"i": i}, binary={}, meta={}, paired_item=None) for i in range(10)
+    ]
+
+    async def _slow_run(*_args, **_kwargs):
+        nonlocal active, max_active
+        async with lock:
+            active += 1
+            max_active = max(max_active, active)
+        await asyncio.sleep(0.02)
+        async with lock:
+            active -= 1
+        return {"ok": True}
+
+    with patch(
+        "analytiq_data.docrouter_flows.nodes.llm_node.flow_services.run_flow_llm_run",
+        new=AsyncMock(side_effect=_slow_run),
+    ) as mock_run:
+        node = DocRouterLlmRunNode()
+        out = await node.execute(
+            _ctx(),
+            {"id": "llm1", "parameters": {"prompt_id": "prompt1"}},
+            [main_items, []],
+        )
+
+    assert mock_run.await_count == 10
+    assert len(out[0]) == 10
+    assert max_active <= 8
+    assert max_active >= 2
