@@ -298,7 +298,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
                     "content": {"type": "string", "description": "Prompt text"},
                     "schema_id": {"type": "string", "description": "Optional schema ID to link"},
                     "schema_version": {"type": "integer", "description": "Optional schema version"},
-                    "model": {"type": "string", "description": "LLM model", "default": "gpt-4o-mini"},
+                    "model": {"type": "string", "description": "LLM model from list_llm_models; prefer newest flash/mini tier (e.g. gemini/gemini-3-flash-preview, gpt-4o-mini)", "default": "gpt-4o-mini"},
                     "tag_ids": {"type": "array", "items": {"type": "string"}, "description": "Optional tag IDs"},
                 },
                 "required": ["name", "content"],
@@ -341,7 +341,7 @@ TOOL_DEFINITIONS: list[dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "list_llm_models",
-            "description": "List enabled LLM models available for use in prompts for this organization. Call before create_prompt or update_prompt when selecting a model.",
+            "description": "List enabled LLM models for prompts. Prefer newest flash/mini/lite tier (e.g. gemini/gemini-3-flash-preview, gpt-4o-mini) over flagship pro/opus/gpt-5 models.",
             "parameters": {
                 "type": "object",
                 "properties": {"_": {"type": "string", "description": "Unused; omit when calling."}},

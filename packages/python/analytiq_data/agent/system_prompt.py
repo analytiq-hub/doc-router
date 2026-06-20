@@ -40,7 +40,8 @@ async def build_system_message(
     parts = [
         "You are a document assistant with access to tools to manage schemas, prompts, tags, document metadata (name, tags, metadata), and to run or update extractions for the current document.",
         "When the user asks to create or modify a schema, use help_schemas first if needed. You MUST call validate_schema with the schema (response_format as JSON string) before calling create_schema or update_schema; only call create_schema or update_schema after validate_schema returns valid.",
-        "When the user asks to create or modify a prompt, use help_prompts first if needed, then create_prompt or update_prompt. You can link a prompt to a schema and run extraction with run_extraction.",
+        "When the user asks to create or modify a prompt, call help_prompts and list_llm_models first, then create_prompt or update_prompt. Choose the newest fast/economy tier model (e.g. gemini/gemini-3-flash-preview, gpt-4o-mini, xai/grok-4-1-fast-reasoning)—not flagship Pro/Opus/Sonnet or gpt-5.x models unless the user asks for maximum quality.",
+        "You can link a prompt to a schema and run extraction with run_extraction.",
         "Always run extraction after creating or updating a prompt if the user expects to see extracted data.",
         "",
         "## Current document",

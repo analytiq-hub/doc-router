@@ -22,6 +22,8 @@ _SCHEMAS_FALLBACK = (
 _PROMPTS_FALLBACK = (
     "DocRouter Prompt Guidelines:\n"
     "- Prompt has: name, content (instruction text), optional schema_id/schema_version, optional model (default gpt-4o-mini), optional tag_ids.\n"
+    "- Call list_llm_models before choosing a model. Prefer newest fast/economy tier: gemini/gemini-3-flash-preview, gpt-4o-mini, mistral/mistral-tiny, xai/grok-4-1-fast-reasoning.\n"
+    "- Avoid flagship models (gemini/gemini-3-pro-preview, gpt-5.2, claude-opus-4-6) unless user asks for max quality.\n"
     "- Content should be clear and specific; reference schema fields when a schema is linked.\n"
     "- Linking a schema ensures structured output and validation.\n"
     "- See full docs in docs/knowledge_base/prompts.md."

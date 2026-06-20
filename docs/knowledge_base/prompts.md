@@ -111,7 +111,7 @@ DocRouter maintains schema versions automatically:
 
 ### Listing Available Models
 
-To see which LLM models are available for your organization, use the `list_llm_models` MCP tool:
+To see which LLM models are available for your organization, call the `list_llm_models` tool:
 
 ```
 list_llm_models()
@@ -119,12 +119,36 @@ list_llm_models()
 
 This returns an array of enabled model names that can be used when creating or updating prompts. Only models that are enabled in your organization's LLM provider settings will be returned.
 
-### Recommended Models for Document Processing
+### Model selection policy (for extraction prompts)
+
+When choosing a model for `create_prompt` or `update_prompt`:
+
+1. Call `list_llm_models()` first.
+2. Default to the **newest fast/economy tier** model available — not the flagship tier.
+3. **Prefer** model names containing: `flash`, `lite`, `mini`, `nano`, `tiny`, `fast`, `haiku`, `distill`.
+4. **Avoid** unless the user asks for maximum quality: `pro`, `opus`, `sonnet`, `gpt-5`, `reasoning`.
+5. Within the preferred tier, pick the **most recent generation** (higher version number / newer preview name).
+
+**Examples using DocRouter's configured models:**
+
+| Prefer ✅ | Avoid ❌ (unless user wants max quality) |
+|-----------|------------------------------------------|
+| `gemini/gemini-3-flash-preview` | `gemini/gemini-3-pro-preview` |
+| `gemini/gemini-2.5-flash` | `gemini/gemini-2.5-pro` |
+| `vertex_ai/gemini-3.1-flash-lite-preview` | `vertex_ai/gemini-3.1-pro-preview` |
+| `gpt-4o-mini` | `gpt-5.1`, `gpt-5.2` |
+| `azure/gpt-4.1-nano` | — |
+| `mistral/mistral-tiny` | — |
+| `xai/grok-4-1-fast-reasoning` | — |
+| `us.anthropic.claude-haiku-4-5-20251001-v1:0` | `claude-sonnet-4-6`, `claude-opus-4-6` |
+
+If multiple economy-tier models are available for the same provider, prefer the newest (e.g. `gemini/gemini-3-flash-preview` over `gemini/gemini-2.5-flash`).
+
+Only upgrade to a flagship model when the user explicitly asks for highest accuracy or the document is unusually complex.
 
 **For document extraction tasks:**
-- **`gemini/gemini-3-flash-preview`** or other Gemini models - Excellent for document processing with great speed and cost efficiency
-- **OpenAI models** (e.g., `gpt-4o-mini`, `gpt-4o`) - Reliable and well-suited for structured extraction
-- **Grok models** - Good choice for document analysis and extraction
+- **`gemini flash`** or other Gemini models - Excellent for document processing with great speed and cost efficiency
+- **OpenAI models** - Reliable and well-suited for structured extraction
 
 ### Default Model
 
@@ -220,10 +244,11 @@ Return empty strings for fields not found in the document.
 
 ### 3. Choose the Right Model for the Task
 
-Use `list_llm_models()` to see available models, then select based on your needs:
-- **Document processing**: Prefer Gemini models (e.g., `gemini/gemini-3-flash-preview`) or OpenAI/Grok models
-- **Complex reasoning**: Use higher-capability models when needed
-- **High volume**: Gemini Flash models offer excellent speed and cost efficiency
+Use `list_llm_models()` to see available models, then follow the [model selection policy](#model-selection-policy-for-extraction-prompts):
+
+- **Typical document extraction**: `gemini/gemini-3-flash-preview`, `gpt-4o-mini`, `xai/grok-4-1-fast-reasoning`, or `mistral/mistral-tiny`
+- **Complex reasoning** (only when needed): `claude-sonnet-4-6`, `gpt-5.2`, or `gemini/gemini-3-pro-preview`
+- **Do not default to flagship models** (`pro`, `opus`, `sonnet`, `gpt-5.x`) for routine extraction
 
 ### 4. Use Tags Strategically
 
@@ -268,7 +293,7 @@ Before creating or updating a prompt, check which LLM models are available for y
 list_llm_models()
 ```
 
-**Returns:** Object with `models` array containing enabled model names (e.g., `["gpt-4o-mini", "gemini/gemini-3-flash-preview", "gpt-4o", ...]`)
+**Returns:** Object with `models` array containing enabled model names (e.g., `["gpt-4o-mini", "gemini/gemini-3-flash-preview", "gpt-5.2", "xai/grok-4-1-fast-reasoning", ...]`)
 
 #### create_prompt
 
@@ -379,7 +404,7 @@ delete_prompt(promptId: "696c4a89fc1c7a2d00322b95")
 ```
 # 1. Check available LLM models
 list_llm_models()
-# Returns: { "models": ["gpt-4o-mini", "gemini/gemini-3-flash-preview", "gpt-4o"] }
+# Returns: { "models": ["gpt-4o-mini", "gemini/gemini-3-flash-preview", "gpt-5.2", "xai/grok-4-1-fast-reasoning"] }
 
 # 2. Create a new prompt
 create_prompt(
@@ -459,7 +484,7 @@ Return the data in strict adherence to the provided JSON schema. Use empty strin
 
 **Schema:** "Receipt Schema" (structured output with line items array)
 
-**Model:** Default (`gpt-4o-mini`) or higher-capability model for complex documents
+**Model:** `gpt-4o-mini` or `gemini/gemini-3-flash-preview` (upgrade to `gpt-5.2` only for complex documents)
 
 **Tags:** ["receipt", "expense"]
 
@@ -487,7 +512,7 @@ Summarize any unusual or non-standard clauses.
 
 **Schema:** "Contract Schema" (complex nested structure)
 
-**Model:** Higher-capability model (e.g., Claude Sonnet 4) recommended for complex reasoning
+**Model:** `claude-sonnet-4-6` or `gemini/gemini-3-pro-preview` for complex reasoning (not needed for routine extraction)
 
 **Tags:** ["contract", "legal"]
 
@@ -528,7 +553,7 @@ Format all data according to the provided schema. Use empty strings where inform
 
 **Schema:** "Resume Schema"
 
-**Model:** `gemini/gemini-2.0-flash` or default (`gpt-4o-mini`)
+**Model:** `gemini/gemini-3-flash-preview` or `gpt-4o-mini`
 
 **Tags:** ["resume", "hr", "candidate"]
 
@@ -576,7 +601,7 @@ Format all data according to the provided schema. Use empty strings where inform
 - **Solution:** Check that document tags match prompt tags exactly
 
 **Issue:** Slow extraction performance
-- **Solution:** Switch to a faster model like `gemini/gemini-2.0-flash`
+- **Solution:** Switch to a faster model like `gemini/gemini-3-flash-preview` or `gpt-4o-mini`
 
 **Issue:** Inconsistent results across documents
 - **Solution:** Add more specific instructions, provide format examples and counter-examples, or switch to a higher-capability models
