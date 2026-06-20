@@ -31,6 +31,7 @@ import { FlowOrgEntityPickerField } from './FlowOrgEntityPickerField';
 import { FlowOrgTagMultiPickerField } from './FlowOrgTagMultiPickerField';
 import { FlowEnumMultiCheckboxField } from './FlowEnumMultiCheckboxField';
 import { FlowCollectionFieldsField } from './FlowCollectionFieldsField';
+import { FlowCodeEditorField, type FlowCodeEditorLanguage } from './FlowCodeEditorField';
 import {
   FlowScheduleTriggerRulesField,
   type ScheduleRuleValue,
@@ -706,7 +707,28 @@ export const FlowNodeParameterFields: React.FC<{
       }
     }
 
-    if (isCode || monacoOneOf || (t === 'object' && uiHint !== 'object_fields' && uiHint !== 'collection_fields') || (t === 'array' && uiHint !== 'name_value_list')) {
+    if (isCode) {
+      const lang: FlowCodeEditorLanguage =
+        key === 'python_code' ? 'python' : key === 'ts_code' ? 'typescript' : key === 'js_code' ? 'javascript' : 'python';
+      const textValue = typeof v === 'string' ? v : '';
+      return (
+        <div key={key} className="min-h-0 flex-1">
+          <div className="mb-1 text-xs font-semibold text-gray-600">{propLabel}</div>
+          <FlowCodeEditorField
+            value={textValue}
+            language={lang}
+            label={propLabel}
+            height="400px"
+            readOnly={readOnly}
+            nodeId={node.id}
+            soleInboundParentNodeId={soleInboundParentNodeId}
+            onChange={(next) => setField(key, next)}
+          />
+        </div>
+      );
+    }
+
+    if (monacoOneOf || (t === 'object' && uiHint !== 'object_fields' && uiHint !== 'collection_fields') || (t === 'array' && uiHint !== 'name_value_list')) {
       const lang = key === 'python_code' ? 'python' : key === 'ts_code' ? 'typescript' : key === 'js_code' ? 'javascript' : 'json';
       const textValue =
         typeof v === 'string'
@@ -727,10 +749,6 @@ export const FlowNodeParameterFields: React.FC<{
             value={textValue}
             onChange={(val) => {
               if (readOnly) return;
-              if (isCode || uiHint === 'code') {
-                setField(key, val ?? '');
-                return;
-              }
               try {
                 const parsed = JSON.parse(val ?? 'null');
                 setField(key, parsed);
@@ -760,11 +778,9 @@ export const FlowNodeParameterFields: React.FC<{
                 if (!parsed) return;
                 const expr = payloadToExpression(parsed, node.id, 0, { soleInboundParentNodeId });
                 const insert =
-                  isCode || uiHint === 'code'
-                    ? expr.replace(/^=/, '')
-                    : parsed.kind === 'contextVar'
-                      ? expr
-                      : JSON.stringify(parsed.exampleValue ?? null, null, 2);
+                  parsed.kind === 'contextVar'
+                    ? expr
+                    : JSON.stringify(parsed.exampleValue ?? null, null, 2);
                 const pos = editor.getTargetAtClientPoint(ev.clientX, ev.clientY)?.position ?? editor.getPosition();
                 if (!pos) return;
                 const model = editor.getModel();
