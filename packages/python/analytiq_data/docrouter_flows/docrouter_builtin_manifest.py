@@ -14,7 +14,6 @@ DOCROUTER_MANIFEST_RELPATHS: tuple[str, ...] = (
     "nodes/manual_trigger.manifest.json",
     "nodes/ocr.manifest.json",
     "nodes/llm_run.manifest.json",
-    "nodes/set_tags.manifest.json",
 )
 
 DOCROUTER_NODE_KEYS: tuple[str, ...] = (
@@ -22,7 +21,6 @@ DOCROUTER_NODE_KEYS: tuple[str, ...] = (
     "docrouter.trigger.manual",
     "docrouter.ocr",
     "docrouter.llm_run",
-    "docrouter.set_tags",
 )
 
 

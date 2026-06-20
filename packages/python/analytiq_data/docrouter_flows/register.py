@@ -9,7 +9,6 @@ from .nodes import (
     DocRouterLlmRunNode,
     DocRouterManualTriggerNode,
     DocRouterOcrNode,
-    DocRouterSetTagsNode,
 )
 
 
@@ -20,4 +19,3 @@ def register_docrouter_nodes() -> None:
     ad.flows.register(DocRouterEventTriggerNode())
     ad.flows.register(DocRouterOcrNode())
     ad.flows.register(DocRouterLlmRunNode())
-    ad.flows.register(DocRouterSetTagsNode())

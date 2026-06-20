@@ -12,7 +12,6 @@ import {
   SparklesIcon,
   Square2StackIcon,
   Squares2X2Icon,
-  TagIcon,
 } from '@heroicons/react/24/solid';
 import { GmailIcon } from './icons/GmailIcon';
 import { GoogleDriveIcon } from './icons/GoogleDriveIcon';
@@ -31,7 +30,6 @@ export const FLOW_BUILTIN_ICON_KEYS = [
   'code',
   'ocr',
   'llm_run',
-  'set_tags',
   'google_drive',
   'gmail',
   'microsoft_onedrive',
@@ -79,8 +77,6 @@ export function FlowNodeTypeIcon({
         return <DocumentMagnifyingGlassIcon className={className} aria-hidden={ariaHidden} />;
       case 'llm_run':
         return <SparklesIcon className={className} aria-hidden={ariaHidden} />;
-      case 'set_tags':
-        return <TagIcon className={className} aria-hidden={ariaHidden} />;
       case 'google_drive':
         return <GoogleDriveIcon className={className} />;
       case 'gmail':
