@@ -9,6 +9,7 @@ import type { Form } from '@docrouter/sdk';
 import { useOCRBlocks } from '@/hooks/useOCRBlocks';
 import type { HighlightInfo } from '@/hooks/useOCRBlocks';
 import dynamic from 'next/dynamic';
+import { documentHasMatchingForms, loadDocumentMatchingForms } from '@/utils/documentForms';
 
 const FormioRenderer = dynamic(() => import('./FormioRenderer'), {
   ssr: false,
@@ -25,9 +26,10 @@ interface Props {
   id: string;
   pdfDocument?: PDFDocumentProxy | null;
   onHighlight: (highlight: HighlightInfo) => void;
+  onHasForms?: (hasForms: boolean) => void;
 }
 
-const PDFFormSidebarContent = ({ organizationId, id, pdfDocument, onHighlight }: Props) => {
+const PDFFormSidebarContent = ({ organizationId, id, pdfDocument, onHighlight, onHasForms }: Props) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const { loadOCRBlocks, findBlocksWithContext } = useOCRBlocks();
   
@@ -48,38 +50,25 @@ const PDFFormSidebarContent = ({ organizationId, id, pdfDocument, onHighlight }:
 
   const fetchData = useCallback(async () => {
     try {
-      // Get document metadata only (no file content) for tags and name (single request)
-      const documentResponse = await docRouterOrgApi.getDocument({
-        documentId: id,
-        fileType: 'original',
-        includeContent: false
-      });
-
-      setDocumentName(documentResponse.document_name ?? null);
-      const documentTags = documentResponse.tag_ids || [];
-      setDocumentTags(documentTags);
-
-      // Fetch forms that match the document's tags
-      if (documentTags.length > 0) {
-        setLoadingForms(true);
-        try {
-          const formsResponse = await docRouterOrgApi.listForms({
-            tag_ids: documentTags.join(','),
-            limit: 100
-          });
-          setAvailableForms(formsResponse.forms);
-        } catch (error) {
-          console.error('Error loading forms:', error);
-          toast.error(`Error loading forms: ${getApiErrorMsg(error)}`);
-        } finally {
-          setLoadingForms(false);
-        }
-      }
+      setLoadingForms(true);
+      const { tagIds, forms, totalCount, documentName } = await loadDocumentMatchingForms(
+        docRouterOrgApi,
+        id,
+      );
+      setDocumentName(documentName);
+      setDocumentTags(tagIds);
+      setAvailableForms(forms);
+      onHasForms?.(documentHasMatchingForms(totalCount, forms));
     } catch (error) {
       console.error('Error fetching data:', error);
       toast.error(`Error loading document data: ${getApiErrorMsg(error)}`);
+      setDocumentTags([]);
+      setAvailableForms([]);
+      onHasForms?.(false);
+    } finally {
+      setLoadingForms(false);
     }
-  }, [id, docRouterOrgApi]);
+  }, [id, docRouterOrgApi, onHasForms]);
 
   useEffect(() => {
     fetchData();
