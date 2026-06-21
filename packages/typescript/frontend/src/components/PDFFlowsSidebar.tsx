@@ -18,6 +18,11 @@ function formatTimestamp(iso: string): string {
   return new Date(d).toLocaleString();
 }
 
+function flowResultDownloadFilename(flowName: string, flowId: string): string {
+  const slug = flowName.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^\w.-]/g, '') || 'flow';
+  return `${slug}_${flowId}_result.json`;
+}
+
 const PDFFlowsSidebar = ({ organizationId, id, onHasResults }: Props) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [results, setResults] = useState<DocumentFlowResultItem[]>([]);
@@ -93,6 +98,8 @@ const PDFFlowsSidebar = ({ organizationId, id, onHasResults }: Props) => {
               dragSource={{ nodeId: `flow-result-${item.flow_id}`, source: 'nodeOutput' }}
               defaultMode="schema"
               hideHeader={false}
+              downloadFilename={flowResultDownloadFilename(item.flow_name, item.flow_id)}
+              downloadPayload={item.result}
             />
           </section>
         ))}

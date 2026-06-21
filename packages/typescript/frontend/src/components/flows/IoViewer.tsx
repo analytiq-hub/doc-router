@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Editor from '@monaco-editor/react';
-import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { FlowExecutionBlobContext, FlowRevisionPinBlobContext } from './flowExecutionBlob';
 import { canFetchFlowBinaryRef, fetchFlowBinaryRef } from './flowExecutionBlob';
 
@@ -838,6 +838,10 @@ export const IoViewer: React.FC<{
   soleInboundParentNodeId?: string | null;
   /** Schema/table hint, e.g. ``from Manual trigger · item 0``. */
   lineageCaption?: string | null;
+  /** When set, show a download button that saves JSON (uses `downloadPayload` or the displayed value). */
+  downloadFilename?: string | null;
+  /** Optional JSON payload for download; defaults to `value` / execution items. */
+  downloadPayload?: unknown;
 }> = ({
   title,
   value,
@@ -853,6 +857,8 @@ export const IoViewer: React.FC<{
   expressionConfigNodeId,
   soleInboundParentNodeId = null,
   lineageCaption = null,
+  downloadFilename = null,
+  downloadPayload,
 }) => {
   const [uncontrolledMode, setUncontrolledMode] = useState<IoDataMode>(defaultMode);
   const mode = controlledMode ?? uncontrolledMode;
@@ -927,6 +933,26 @@ export const IoViewer: React.FC<{
     return stringifyJson(value);
   }, [value, valueKind, executionItems]);
 
+  const downloadData = useMemo(() => {
+    if (downloadPayload !== undefined) return downloadPayload;
+    if (valueKind === 'executionItems') return executionItems;
+    return value;
+  }, [downloadPayload, value, valueKind, executionItems]);
+
+  const onDownloadJson = useCallback(() => {
+    const filename = downloadFilename?.trim();
+    if (!filename) return;
+    const blob = new Blob([JSON.stringify(downloadData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename.endsWith('.json') ? filename : `${filename}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }, [downloadData, downloadFilename]);
+
   const itemsCountLabel = useMemo(() => {
     if (valueKind === 'executionItems') {
       const n = executionItems.length;
@@ -974,6 +1000,17 @@ export const IoViewer: React.FC<{
             {title && <div className="truncate text-[11px] font-semibold text-gray-700">{title}</div>}
           </div>
           <div className="flex shrink-0 items-center gap-2">
+            {downloadFilename?.trim() ? (
+              <button
+                type="button"
+                className="rounded-md border border-gray-200 bg-white p-1 text-gray-700 transition hover:bg-gray-50"
+                aria-label="Download JSON"
+                title="Download JSON"
+                onClick={onDownloadJson}
+              >
+                <ArrowDownTrayIcon className="h-4 w-4" aria-hidden />
+              </button>
+            ) : null}
             <IoDataModeTabs mode={mode} onChange={setMode} showBinary={showBinaryTab} />
             {itemsCountLabel != null ? (
               <span className="whitespace-nowrap text-[11px] font-medium tabular-nums text-gray-500">{itemsCountLabel}</span>
