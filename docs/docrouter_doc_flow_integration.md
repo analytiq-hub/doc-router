@@ -553,6 +553,7 @@ The following order minimises dependency risk:
 7. **Document Flows section** (§2.8) — engine captures last-node output at execution
   completion when `report_result=true` on the trigger; upsert into `flow_results`
    keyed on `(document_id, flow_id)`; `report_result` stored on `flow_triggers` row at
-   activation time; `GET /v0/orgs/{org}/documents/{id}/flow-results` REST endpoint;
+   activation time; `GET /v0/orgs/{org}/flows?document_id={id}` and
+   `GET /v0/orgs/{org}/flows/result/{id}?flow_id=…` REST endpoints;
    Flows tab on document detail page (read-only result viewer).
 

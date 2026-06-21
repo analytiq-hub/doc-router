@@ -18,7 +18,6 @@ from bson import ObjectId
 
 # Local imports
 import analytiq_data as ad
-from analytiq_data.docrouter_flows.document_flow_sidebar import list_document_flow_sidebar_items
 from analytiq_data.common.doc import get_mime_type
 from app.auth import get_org_user
 from app.models import User
@@ -577,62 +576,6 @@ async def get_document(
         metadata=document.get("metadata", {}),
         content=base64.b64encode(file["blob"]).decode("utf-8"),
     )
-
-
-class DocumentFlowResultItem(BaseModel):
-    flow_id: str
-    flow_name: str
-    active: bool = False
-    event_type: str | None = None
-    execution_id: str = ""
-    result: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime | None = None
-    updated_at: datetime | None = None
-
-
-class ListDocumentFlowResultsResponse(BaseModel):
-    results: list[DocumentFlowResultItem] = Field(default_factory=list)
-
-
-@documents_router.get(
-    "/v0/orgs/{organization_id}/documents/{document_id}/flow-results",
-    response_model=ListDocumentFlowResultsResponse,
-)
-async def list_document_flow_results(
-    organization_id: str,
-    document_id: str,
-    current_user: User = Depends(get_org_user),
-):
-    """List flows whose document-event trigger matches this document, with optional captured results."""
-    _ = current_user
-    analytiq_client = ad.common.get_analytiq_client()
-    db = ad.common.get_async_db(analytiq_client)
-
-    try:
-        rows = await list_document_flow_sidebar_items(
-            db,
-            org_id=organization_id,
-            document_id=document_id,
-        )
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Document not found")
-
-    results: list[DocumentFlowResultItem] = []
-    for row in rows:
-        results.append(
-            DocumentFlowResultItem(
-                flow_id=str(row["flow_id"]),
-                flow_name=str(row["flow_name"]),
-                active=bool(row.get("active")),
-                event_type=row.get("event_type"),
-                execution_id=str(row.get("execution_id") or ""),
-                result=dict(row.get("result") or {}),
-                created_at=row.get("created_at"),
-                updated_at=row.get("updated_at"),
-            )
-        )
-
-    return ListDocumentFlowResultsResponse(results=results)
 
 
 @documents_router.get("/v0/orgs/{organization_id}/documents/{document_id}/file")

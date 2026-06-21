@@ -1,4 +1,4 @@
-"""Tests for DocRouter event-trigger ``report_result`` capture and document flow-results API."""
+"""Tests for DocRouter event-trigger ``report_result`` capture and document flow result APIs."""
 
 from __future__ import annotations
 
@@ -255,7 +255,7 @@ async def test_flow_result_upsert_overwrites_previous_run(test_db, mock_auth):
 
 
 @pytest.mark.asyncio
-async def test_list_document_flow_results_http(test_db, mock_auth):
+async def test_list_flows_for_document_http(test_db, mock_auth):
     flow_id, _ = await _create_and_activate_event_flow(test_db, report_result=True)
     document_id, _ = await _insert_document(test_db)
     aq_client = ad.common.get_analytiq_client()
@@ -269,17 +269,68 @@ async def test_list_document_flow_results_http(test_db, mock_auth):
     await _run_queued_flow(aq_client, exec_ids[0])
 
     r = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}/flow-results",
+        f"/v0/orgs/{TEST_ORG_ID}/flows",
+        params={"document_id": document_id},
         headers=get_auth_headers(),
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert len(body["results"]) == 1
-    item = body["results"][0]
+    assert body["total"] == 1
+    assert len(body["items"]) == 1
+    item = body["items"][0]
+    assert item["flow"]["flow_id"] == flow_id
+    assert item["flow"]["name"] == "doc event flow"
+    assert item["has_captured_result"] is True
+    assert item["event_type"] == "document.uploaded"
+
+
+@pytest.mark.asyncio
+async def test_get_flow_document_result_http(test_db, mock_auth):
+    flow_id, rev_id = await _create_and_activate_event_flow(test_db, report_result=True)
+    document_id, _ = await _insert_document(test_db)
+    aq_client = ad.common.get_analytiq_client()
+
+    exec_ids = await dispatch_docrouter_event(
+        aq_client,
+        organization_id=TEST_ORG_ID,
+        event_type="document.uploaded",
+        document_id=document_id,
+    )
+    await _run_queued_flow(aq_client, exec_ids[0])
+
+    r_by_flow = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/result/{document_id}",
+        params={"flow_id": flow_id},
+        headers=get_auth_headers(),
+    )
+    assert r_by_flow.status_code == 200, r_by_flow.text
+    item = r_by_flow.json()
     assert item["flow_id"] == flow_id
     assert item["flow_name"] == "doc event flow"
+    assert item["flow_revid"] == rev_id
     assert item["execution_id"] == exec_ids[0]
     assert item["result"]["flow_output"] is True
+
+    r_by_revid = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/result/{document_id}",
+        params={"flow_revid": rev_id},
+        headers=get_auth_headers(),
+    )
+    assert r_by_revid.status_code == 200, r_by_revid.text
+    assert r_by_revid.json()["flow_id"] == flow_id
+
+
+@pytest.mark.asyncio
+async def test_get_flow_document_result_not_found_without_capture(test_db, mock_auth):
+    flow_id, _ = await _create_and_activate_event_flow(test_db, report_result=True)
+    document_id, _ = await _insert_document(test_db)
+
+    r = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/result/{document_id}",
+        params={"flow_id": flow_id},
+        headers=get_auth_headers(),
+    )
+    assert r.status_code == 404, r.text
 
 
 @pytest.mark.asyncio
@@ -308,35 +359,36 @@ async def test_delete_document_removes_flow_results(test_db, mock_auth):
 
 
 @pytest.mark.asyncio
-async def test_list_document_flows_includes_matching_flow_without_result(test_db, mock_auth):
+async def test_list_flows_for_document_includes_matching_flow_without_result(test_db, mock_auth):
     flow_id, _ = await _create_and_activate_event_flow(test_db, report_result=True)
     document_id, _ = await _insert_document(test_db)
 
     r = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}/flow-results",
+        f"/v0/orgs/{TEST_ORG_ID}/flows",
+        params={"document_id": document_id},
         headers=get_auth_headers(),
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert len(body["results"]) == 1
-    item = body["results"][0]
-    assert item["flow_id"] == flow_id
-    assert item["execution_id"] == ""
-    assert item["result"] == {}
+    assert len(body["items"]) == 1
+    item = body["items"][0]
+    assert item["flow"]["flow_id"] == flow_id
+    assert item["has_captured_result"] is False
 
 
 @pytest.mark.asyncio
-async def test_list_document_flows_respects_trigger_tag_filter(test_db, mock_auth):
+async def test_list_flows_for_document_respects_trigger_tag_filter(test_db, mock_auth):
     tag_id = str(ObjectId())
     matching_flow_id, _ = await _create_and_activate_event_flow(test_db, tag_ids=[tag_id])
     other_flow_id, _ = await _create_and_activate_event_flow(test_db, tag_ids=[str(ObjectId())])
     document_id, _ = await _insert_document(test_db, tag_ids=[tag_id])
 
     r = client.get(
-        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}/flow-results",
+        f"/v0/orgs/{TEST_ORG_ID}/flows",
+        params={"document_id": document_id},
         headers=get_auth_headers(),
     )
     assert r.status_code == 200, r.text
-    flow_ids = {item["flow_id"] for item in r.json()["results"]}
+    flow_ids = {item["flow"]["flow_id"] for item in r.json()["items"]}
     assert matching_flow_id in flow_ids
     assert other_flow_id not in flow_ids

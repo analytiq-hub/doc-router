@@ -17,6 +17,10 @@ from datetime import timedelta
 from pydantic import BaseModel, Field, ConfigDict
 
 import analytiq_data as ad
+from analytiq_data.docrouter_flows.document_flow_sidebar import (
+    get_document_flow_result,
+    list_matching_flows_for_document,
+)
 
 from app.auth import get_org_user
 from app.models import User
@@ -612,6 +616,18 @@ class ListFlowsResponse(BaseModel):
     total: int
 
 
+class FlowDocumentResult(BaseModel):
+    flow_id: str
+    flow_name: str
+    flow_revid: str | None = None
+    document_id: str
+    execution_id: str = ""
+    event_type: str | None = None
+    result: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
 class PatchFlowRequest(BaseModel):
     name: str
 
@@ -947,13 +963,31 @@ async def list_flows(
     organization_id: str,
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
+    document_id: str | None = Query(
+        None,
+        description="When set, return flows whose document-event trigger matches this document's tags.",
+    ),
     include_unsaved: bool = Query(
         False,
         description="If true, include flow headers that have no saved revision (draft-only).",
     ),
     current_user: User = Depends(get_org_user),
 ):
+    _ = current_user
     db = await _get_db()
+    if document_id:
+        try:
+            items, total = await list_matching_flows_for_document(
+                db,
+                org_id=organization_id,
+                document_id=document_id,
+                limit=limit,
+                offset=offset,
+            )
+        except ValueError:
+            raise HTTPException(status_code=404, detail="Document not found")
+        return {"items": items, "total": total}
+
     base_stages: list[dict[str, Any]] = [
         {"$match": {"organization_id": organization_id}},
         {"$sort": {"updated_at": -1}},
@@ -995,6 +1029,44 @@ async def list_flows(
             }
         )
     return {"items": items, "total": total}
+
+
+@flows_router.get(
+    "/v0/orgs/{organization_id}/flows/result/{document_id}",
+    response_model=FlowDocumentResult,
+)
+async def get_flow_document_result(
+    organization_id: str,
+    document_id: str,
+    flow_id: str | None = Query(None, description="Stable flow id"),
+    flow_revid: str | None = Query(None, description="Flow revision id (resolves flow_id when omitted)"),
+    current_user: User = Depends(get_org_user),
+):
+    """Retrieve the captured flow result for a document (mirrors ``GET .../llm/result/{document_id}``)."""
+    _ = current_user
+    if not (flow_id or "").strip() and not (flow_revid or "").strip():
+        raise HTTPException(status_code=400, detail="flow_id or flow_revid is required")
+    db = await _get_db()
+    try:
+        row = await get_document_flow_result(
+            db,
+            org_id=organization_id,
+            document_id=document_id,
+            flow_id=(flow_id or "").strip() or None,
+            flow_revid=(flow_revid or "").strip() or None,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        if msg == "Document not found":
+            raise HTTPException(status_code=404, detail=msg)
+        if msg == "Flow not found":
+            raise HTTPException(status_code=404, detail=msg)
+        if msg in {"Flow revision not found", "Flow does not match document", "Flow result not found"}:
+            raise HTTPException(status_code=404, detail=msg)
+        if msg == "flow_id or flow_revid is required":
+            raise HTTPException(status_code=400, detail=msg)
+        raise HTTPException(status_code=400, detail=msg)
+    return FlowDocumentResult(**row)
 
 
 @flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}")

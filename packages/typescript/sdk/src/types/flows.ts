@@ -115,6 +115,22 @@ export interface FlowRevision extends FlowRevisionSummary {
 export interface FlowListItem {
   flow: FlowHeader;
   latest_revision: FlowRevisionSummary | null;
+  /** Present when listing flows with ``document_id`` filter. */
+  event_type?: string | null;
+  /** Present when listing flows with ``document_id`` filter. */
+  has_captured_result?: boolean;
+}
+
+export interface FlowDocumentResult {
+  flow_id: string;
+  flow_name: string;
+  flow_revid?: string | null;
+  document_id: string;
+  execution_id?: string;
+  event_type?: string | null;
+  result?: Record<string, unknown>;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface ListFlowsResponse {

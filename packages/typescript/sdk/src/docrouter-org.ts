@@ -11,7 +11,7 @@ import {
   RunLLMResponse,
   GetLLMResultResponse,
   BulkAnalyzeLLMResponse,
-  ListDocumentFlowResultsResponse,
+  FlowDocumentResult,
   ListTagsParams,
   ListTagsResponse,
   JsonValue,
@@ -300,13 +300,6 @@ export class DocRouterOrg {
   async deleteDocument(params: { documentId: string; }) {
     const { documentId } = params;
     return this.http.delete(`/v0/orgs/${this.organizationId}/documents/${documentId}`);
-  }
-
-  async listDocumentFlowResults(params: { documentId: string }): Promise<ListDocumentFlowResultsResponse> {
-    const { documentId } = params;
-    return this.http.get<ListDocumentFlowResultsResponse>(
-      `/v0/orgs/${this.organizationId}/documents/${documentId}/flow-results`,
-    );
   }
 
   // ---------------- OCR ----------------
@@ -1019,6 +1012,8 @@ export class DocRouterOrg {
   async listFlows(params?: {
     limit?: number;
     offset?: number;
+    /** When set, return flows whose document-event trigger matches this document's tags. */
+    documentId?: string;
     /** When true, include flows that have never had a saved revision (for name reservation, etc.). */
     includeUnsaved?: boolean;
   }): Promise<ListFlowsResponse> {
@@ -1026,9 +1021,27 @@ export class DocRouterOrg {
       params: {
         limit: params?.limit ?? 20,
         offset: params?.offset ?? 0,
+        ...(params?.documentId ? { document_id: params.documentId } : {}),
         ...(params?.includeUnsaved ? { include_unsaved: true } : {}),
       },
     });
+  }
+
+  async getFlowDocumentResult(params: {
+    documentId: string;
+    flowId?: string;
+    flowRevId?: string;
+  }): Promise<FlowDocumentResult> {
+    const { documentId, flowId, flowRevId } = params;
+    return this.http.get<FlowDocumentResult>(
+      `/v0/orgs/${this.organizationId}/flows/result/${documentId}`,
+      {
+        params: {
+          ...(flowId ? { flow_id: flowId } : {}),
+          ...(flowRevId ? { flow_revid: flowRevId } : {}),
+        },
+      },
+    );
   }
 
   async getFlow(flowId: string): Promise<FlowListItem> {

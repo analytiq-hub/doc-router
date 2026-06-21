@@ -665,21 +665,6 @@ export interface BulkAnalyzeLLMResponse {
   groups: BulkAnalyzePromptGroup[];
 }
 
-export interface DocumentFlowResultItem {
-  flow_id: string;
-  flow_name: string;
-  active?: boolean;
-  event_type?: string | null;
-  execution_id?: string;
-  result?: Record<string, JsonValue>;
-  created_at?: string | null;
-  updated_at?: string | null;
-}
-
-export interface ListDocumentFlowResultsResponse {
-  results: DocumentFlowResultItem[];
-}
-
 // User types
 export interface User {
   id: string;
