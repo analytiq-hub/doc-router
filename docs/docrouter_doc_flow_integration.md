@@ -20,15 +20,13 @@ but there is no automatic bridge between document lifecycle events and flow
 execution.  This plan adds:
 
 
-| Area         | What we add                                                                                                                                         |
-| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Triggers** | `docrouter.trigger` — single configurable trigger; fires on one of four events: `document.uploaded`, `document.error`, `llm.completed`, `llm.error` |
-| **Nodes**    | `docrouter.ocr` — outputs `json.ocr_pages` (array, one entry per page)                                                                              |
-| **Nodes**    | `docrouter.llm_run` — optional OCR input port (port 1, `docrouter.ocr` only); auto-injects `ocr_pages` into prompt when connected                   |
-| **Nodes**    | `docrouter.map_reduce` — maps each page to a group key (via LLM or keyword rule), reduces into one sub-document per discovered entity               |
-| **Nodes**    | `docrouter.save_result` — persists flow output as a named result on the originating document                                                        |
-| **Nodes**    | `docrouter.save_as_document` — promotes a flow blob to a new permanent document record                                                              |
-| **Blobs**    | Explicit dual-blob support: *document blobs* (`files:` bucket) and *flow blobs* (`flow_blobs:` bucket) both addressable in `BinaryRef.storage_id`   |
+| Area         | What we add                                                                                                                                                                                                                                  |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Triggers** | `docrouter.trigger` — single configurable trigger; fires on one of four events: `document.uploaded`, `document.error`, `llm.completed`, `llm.error`; `report_result` parameter auto-captures the last node output into the document Flows section |
+| **Nodes**    | `docrouter.ocr` — outputs `json.ocr_pages` (array, one entry per page)                                                                                                                                                                      |
+| **Nodes**    | `docrouter.llm_run` — optional OCR input port (port 1, `docrouter.ocr` only); auto-injects `ocr_pages` into prompt when connected                                                                                                           |
+| **Nodes**    | `docrouter.document_split` — fan-out: one output item per selected page of the input PDF                                                                                                                                                     |
+| **Blobs**    | Explicit dual-blob support: *document blobs* (`files:` bucket) and *flow blobs* (`flow_blobs:` bucket) both addressable in `BinaryRef.storage_id`                                                                                           |
 
 
 ---
@@ -41,12 +39,12 @@ A single configurable trigger node that fires when a document lifecycle event
 occurs.  The `event_type` parameter selects which of four events to listen for:
 
 
-| `event_type`        | Fires when                                                          |
-| ------------------- | ------------------------------------------------------------------- |
-| `document.uploaded` | A document is uploaded |
-| `document.error`    | A document enters an error state during processing                  |
-| `llm.completed`     | An LLM run finishes successfully for a document                     |
-| `llm.error`         | An LLM run fails for a document                                     |
+| `event_type`        | Fires when                                                         |
+| ------------------- | ------------------------------------------------------------------ |
+| `document.uploaded` | A document is uploaded                                             |
+| `document.error`    | A document enters an error state during processing                 |
+| `llm.completed`     | An LLM run finishes successfully for a document                    |
+| `llm.error`         | An LLM run fails for a document                                    |
 
 
 ### 2.2 Node key
@@ -58,11 +56,12 @@ docrouter.trigger
 ### 2.3 Parameter schema
 
 
-| Parameter    | Type                                                                     | Applicable events            | Description                                                                                        |
-| ------------ | ------------------------------------------------------------------------ | ---------------------------- | -------------------------------------------------------------------------------------------------- |
-| `event_type` | `"document.uploaded" | "document.error" | "llm.completed" | "llm.error"` | all                          | Required.                                                                                          |
-| `tag_ids`    | `array[string]`                                                          | all                          | Optional tag filter — fires if the document has **any** of these tags. Empty = match any document. |
-| `prompt_id`  | `string`                                                                 | `llm.completed`, `llm.error` | Optional prompt filter — fires only for this prompt. Empty = any prompt.                           |
+| Parameter       | Type                                                                     | Applicable events            | Description                                                                                                                                                                               |
+| --------------- | ------------------------------------------------------------------------ | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `event_type`    | `"document.uploaded" | "document.error" | "llm.completed" | "llm.error"` | all                          | Required.                                                                                                                                                                                 |
+| `tag_ids`       | `array[string]`                                                          | all                          | Optional tag filter — fires if the document has **any** of these tags. Empty = match any document.                                                                                        |
+| `prompt_id`     | `string`                                                                 | `llm.completed`, `llm.error` | Optional prompt filter — fires only for this prompt. Empty = any prompt.                                                                                                                  |
+| `report_result` | `boolean`                                                                | all                          | When `true` (default), the engine automatically captures the last node's output at execution completion and stores it in `flow_results` for display in the document Flows section (§2.8). |
 
 
 ### 2.4 Trigger output
@@ -110,10 +109,10 @@ In addition to the `FlowItem`, the trigger node writes the full event payload in
 the execution context under the key `trigger_data`.  `context.trigger_data` is a
 dict containing all JSON fields listed above for the relevant `event_type`, and it
 is available to every node throughout the execution without requiring explicit
-wiring through intermediate nodes.  Nodes such as `docrouter.save_result` read
-`context.trigger_data["document_id"]` directly from this context object rather than
-from the propagated `FlowItem`.  A flow whose graph contains no `docrouter.trigger`
-node will have `context.trigger_data` set to `None`.
+wiring through intermediate nodes.  Nodes can read `context.trigger_data["document_id"]`
+directly from this context object rather than from the propagated `FlowItem`.  A flow
+whose graph contains no `docrouter.trigger` node will have `context.trigger_data` set
+to `None`.
 
 ### 2.5 Backend integration points
 
@@ -154,7 +153,8 @@ event regardless of `include_retagged`.
     "trigger_type": "document.uploaded" | "document.error" | "llm.completed" | "llm.error",
     "flow_id": "…", "org_id": "…", "flow_revid": "…", "trigger_node_id": "…",
     "tag_ids": ["…"],
-    "prompt_id": "…"
+    "prompt_id": "…",
+    "report_result": true
   }
   ```
   A unique index on `(flow_id, trigger_node_id)` ensures repeated activation calls
@@ -192,14 +192,33 @@ impact of a deletion is display: the UI cannot resolve a name for a deleted enti
    `[deleted]` for any tag or prompt name that resolves to an empty string, covering
    runs that predate the name snapshot fields.
 
+### 2.8 Automatic result capture (`report_result`)
+
+When `report_result` is `true` (the default), the flow engine automatically
+captures the output of the last node in the graph after execution completes and
+writes it to the `flow_results` collection (§6.2), keyed on `(document_id, flow_id)`.
+No explicit save-result node is needed.
+
+The result is displayed in a **Flows** section on the document detail page.  One row
+is shown per flow that has a `docrouter.trigger` with `report_result` enabled:
+
+- Flow name (linked to the flow editor)
+- Execution timestamp (linked to the execution trace)
+- Last-node JSON output rendered with the same viewer used for LLM prompt results
+  (read-only; not editable)
+
+If a document has no `docrouter.trigger` with `report_result` enabled, the Flows
+section is not shown on the document page.  If the flow re-runs, only the latest
+result is retained — the previous `flow_results` record is overwritten.
+
 ---
 
 ## 3. OCR Node
 
 ### 3.1 Purpose
 
-Standalone OCR step for use in multi-node flows (e.g. before `docrouter.map_reduce`
-or when the flow author wants to inspect OCR output separately).
+Standalone OCR step for use in multi-node flows (e.g. before `docrouter.llm_run`
+when the flow author wants to inspect OCR output separately).
 
 ### 3.2 Node key
 
@@ -212,7 +231,7 @@ docrouter.ocr
 
 | Parameter      | Type                                                       | Required | Description         |
 | -------------- | ---------------------------------------------------------- | -------- | ------------------- |
-| `ocr_provider` | `"textract" \| "mistral" \| "pymupdf" \| "llm"` | yes      | OCR backend to use. |
+| `ocr_provider` | `"textract" \| "mistral" \| "pymupdf" \| "llm"`           | yes      | OCR backend to use. |
 
 
 ### 3.4 Input
@@ -251,8 +270,8 @@ binary:
   ocr_json: BinaryRef      # full structured OCR result stored as a flow blob (flow_blobs bucket)
 ```
 
-`ocr_pages[N]` is the plain-text of page N.  Downstream nodes (`docrouter.llm_run`,
-`docrouter.map_reduce`) read this array from the connected OCR input port.
+`ocr_pages[N]` is the plain-text of page N.  Downstream nodes (`docrouter.llm_run`)
+read this array from the connected OCR input port.
 
 The output port uses connection type `"docrouter.ocr"` — it can only be wired to
 `docrouter.ocr`-typed input ports on downstream nodes.
@@ -337,187 +356,9 @@ binary:
 
 ---
 
-## 5. Map/Reduce Node
+## 5. Dual Blob Support
 
-### 5.1 Purpose
-
-Given a large multi-entity document (e.g. a batch of patient records, each
-identified by name, date of birth, and medical record number), classify each page
-to extract a **group key**, then reassemble the pages that share the same key into
-a separate sub-document per entity.
-
-This is a map/reduce over pages:
-
-- **Map**: run a classifier on each page to extract a structured group key.
-- **Reduce**: group pages by key; reassemble each group into a sub-document PDF.
-
-Groups are discovered **dynamically** from the document content — they do not need
-to be declared in advance.
-
-### 5.2 Node key
-
-```
-docrouter.map_reduce
-```
-
-### 5.3 Concept
-
-```
-Input:  one FlowItem  (large multi-entity PDF)      OCR item (required)
-            │                                              │
-     ┌──────▼───────────────────────────────────────────▼─┐
-     │                    map_reduce                        │
-     │  map:    page → group key (via LLM or keyword rule)  │
-     │  reduce: group pages by key → sub-document per group │
-     └──────────────────────────┬──────────────────────────┘
-                                │ one item per discovered group
-              ┌─────────────────┼────────────────┐
-              ▼                 ▼                 ▼
-     { name: "J. Smith",  { name: "A. Jones",  { key: null,
-       dob: "1980-01-15",   dob: "1992-06-30",   page_indices: [7],
-       mrn: "12345" }        mrn: "67890" }       total_pages: 8 }
-     pages: [0,1,2]         pages: [3,4,5,6]     (unmatched)
-```
-
-### 5.4 Input ports
-
-
-| Port | Index | Required | Connection type   | Description                                |
-| ---- | ----- | -------- | ----------------- | ------------------------------------------ |
-| main | 0     | yes      | `main`            | Document item carrying `binary.pdf`.       |
-| ocr  | 1     | yes      | `docrouter.ocr`   | OCR output item carrying `json.ocr_pages`. |
-
-
-### 5.5 Parameter schema
-
-
-| Parameter              | Type                            | Description                                                                                                                                                                                                                                                                      |
-| ---------------------- | ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `classifier_type`      | `"llm_prompt" | "keyword_rule"` | How to extract the group key from each page.                                                                                                                                                                                                                                     |
-| `classifier_prompt_id` | `string`                        | *(LLM only)* Prompt ID. The prompt receives `ocr_pages[N]` for one page and must return a JSON object whose fields form the group key (e.g. `{"patient_name": "…", "dob": "…", "mrn": "…"}`). Pages where the prompt returns `null` or an empty object are grouped as unmatched. |
-| `key_fields`           | `array[string]`                 | *(LLM only)* Which fields of the prompt's return object to use as the group key (e.g. `["patient_name", "dob", "mrn"]`). Pages that agree on all key fields are merged into one group.                                                                                           |
-| `keyword_rules`        | `array[{key, keywords[]}]`      | *(Keyword only)* Each rule has a `key` string and a list of keywords. First rule whose keywords all appear in `ocr_pages[N]` wins; its `key` becomes the group key for that page.                                                                                                |
-
-
-### 5.6 Outputs
-
-- Single output port (`outputs: 1`).
-- Emits one `FlowItem` per discovered group, in the order the group key first
-appears in the document.  Pages that produced no key are collected into a final
-unmatched item (omitted if empty).
-- Each item:
-  ```
-  json:
-    group_key:    object | null      # extracted key fields, or null for unmatched
-    page_indices: [0, 1, 2, …]      # 0-based page numbers in this group
-    total_pages:  int                # total pages in the source document
-  binary:
-    pdf: BinaryRef                   # reassembled sub-document PDF (flow blob)
-  ```
-
-### 5.7 Backend implementation notes
-
-- The classifier runs once per page against `ocr_pages[N]` from the OCR input.
-- Group keys are compared by value equality across all `key_fields`; field order does not matter.
-- Use **PyMuPDF** (`fitz`) to extract page subsets and reassemble per group.
-- Reassembled PDFs are stored as flow blobs; use `docrouter.save_as_document` to
-  promote them to permanent document records.
-- The node returns a `list[FlowItem]` from a single output slot; the engine fans
-these out to downstream nodes as a standard multi-item batch.
-
-**Error handling:** if the LLM classifier returns malformed JSON or fails for a page,
-that page is treated as unmatched (added to the `group_key: null` group) rather than
-failing the entire node.  A keyword-rule classifier that matches no rule also produces
-an unmatched page.  If the classifier fails for *all* pages the node raises an error
-and the execution fails.
-
----
-
-## 6. Save Result Node
-
-### 6.1 Purpose
-
-Persist a flow's output as a named result attached to the originating document,
-making it visible in a new **Flows** section on the document page alongside the
-existing **Prompts** section.  The node reads `document_id` from
-`context.trigger_data` — the same mechanism used by the webhook response to
-identify the trigger without requiring data propagation through intermediate nodes
-— and writes to the `flow_results` collection (§8.2).
-
-### 6.2 Node key
-
-```
-docrouter.save_result
-```
-
-### 6.3 Parameter schema
-
-
-| Parameter     | Type     | Description                                                                                                   |
-| ------------- | -------- | ------------------------------------------------------------------------------------------------------------- |
-| `result_name` | `string` | Display name for this result (e.g. `"Invoice extraction"`). Shown as the row title in the document Flows tab. |
-
-The node always saves the current item's JSON record as the result.  To shape the
-data before saving, wire a code node upstream.
-
-
-### 6.4 Input convention
-
-The node reads `document_id` from `context.trigger_data["document_id"]`, which is
-set by the trigger node when the execution starts.  Both `docrouter.trigger` and
-`docrouter.trigger.manual` populate `trigger_data.document_id` — the manual trigger
-is the primary path for testing flows before activating automatic dispatch.  No
-wiring or propagation through intermediate nodes is required — `context.trigger_data`
-is available to every node throughout the execution.
-
-**Constraint:** a flow that contains a `docrouter.save_result` node must have either
-a `docrouter.trigger` or a `docrouter.trigger.manual` node as a graph ancestor of it
-(i.e. reachable by traversing edges upstream from `docrouter.save_result`).
-Enforced in two places:
-
-- **Flow editor:** rejects saving the flow with a clear error message.
-- **Backend:** `POST /flows/{id}` (save) returns `400` if the constraint is violated,
-  so API clients and the SDK cannot bypass it.
-
-### 6.5 Output
-
-Passes the input item through unchanged (passthrough node), so the result can be
-wired to further nodes if needed.
-
-```
-json:  (same as input)
-binary: (same as input)
-```
-
-Additionally upserts one `flow_results` document keyed on `(document_id, flow_id, node_id)` — replacing any prior result from this node (see §8.2):
-
-```json
-{
-  "org_id": "…",
-  "document_id": "…",
-  "flow_id": "…",
-  "node_id": "…",
-  "result_name": "…",
-  "execution_id": "…",
-  "result": { … },
-  "created_at": "…"
-}
-```
-
-### 6.6 Document page — Flows section
-
-The document detail page gains a **Flows** tab.  One row is shown per `(flow_id, node_id)` pair — the latest result only.  Each row shows:
-
-- `result_name` as the row title
-- flow name and node name as secondary context (looked up dynamically from the flow record; linked to the flow editor)
-- Execution timestamp (linked to the execution trace)
-- The `result` JSON rendered with the same viewer used for LLM prompt results
-
----
-
-## 7. Dual Blob Support
-
-### 7.1 Current state
+### 5.1 Current state
 
 `BinaryRef.storage_id` already encodes the bucket:
 
@@ -530,7 +371,7 @@ The document detail page gains a **Flows** tab.  One row is shown per `(flow_id,
 | *(none / `data` field)* | In-memory           | Small payloads during execution |
 
 
-### 7.2 Document blobs vs flow blobs
+### 5.2 Document blobs vs flow blobs
 
 We formalise the distinction:
 
@@ -541,30 +382,7 @@ We formalise the distinction:
 | **Flow blob**     | `flow_blobs` | Execution lifetime; GC'd when execution is purged | Flow execution     |
 
 
-### 7.3 New node: `docrouter.save_as_document`
-
-To bridge a flow blob back into the document store:
-
-```
-docrouter.save_as_document
-```
-
-
-| Parameter        | Type            | Description                                                     |
-| ---------------- | --------------- | --------------------------------------------------------------- |
-| `binary_key` | `string`        | Key in `item.binary` to promote (default `"pdf"`).                                              |
-| `tag_ids`    | `array[string]` | Tags to assign to the new document.                                                             |
-| `file_name`  | `string`        | Display name for the new document. If absent, falls back to the original document's file name. |
-
-
-The new document is created in the same org as the running execution (taken from
-the execution context).  It is not associated with the source document that
-triggered the flow; it is a fully independent record within the org.
-
-Output: one `FlowItem` with `json.document_id` pointing to the newly created
-document record.
-
-### 7.4 Blob resolution in the frontend
+### 5.3 Blob resolution in the frontend
 
 `flowExecutionBlob.ts` already resolves `storage_id` via
 `GET /v0/orgs/{org}/flows/{flow}/executions/{exec}/blob?storage_id=…`.
@@ -575,9 +393,9 @@ member of the org that owns the document.
 
 ---
 
-## 8. Collections
+## 6. Collections
 
-### 8.1 `flow_triggers` (new)
+### 6.1 `flow_triggers` (new)
 
 Unified indexed rows for all docrouter trigger types.  The `trigger_type`
 discriminator determines which fields are relevant for dispatch.
@@ -592,6 +410,7 @@ discriminator determines which fields are relevant for dispatch.
   "trigger_type": "document.uploaded" | "document.error" | "llm.completed" | "llm.error",
   "tag_ids": ["…"],          // optional tag filter — any-match (all types)
   "prompt_id": "…",         // optional prompt filter (llm.completed / llm.error only)
+  "report_result": true,    // mirrors the trigger node's report_result parameter
   "created_at": "…",
   "updated_at": "…"
 }
@@ -605,9 +424,10 @@ so stale trigger rows left over from a previous activation cannot fire against a
 Unique index: `(flow_id, trigger_node_id)` — enforces idempotent activation.
 Index: `(org_id, trigger_type)` — primary dispatch index.
 
-### 8.2 `flow_results` (new)
+### 6.2 `flow_results` (new)
 
-Stores results written by `docrouter.save_result` nodes.
+Stores results automatically captured by the engine when `report_result` is enabled
+on the originating trigger (see §2.8).
 
 ```json
 {
@@ -615,33 +435,31 @@ Stores results written by `docrouter.save_result` nodes.
   "org_id": "…",
   "document_id": "…",
   "flow_id": "…",
-  "node_id": "…",
-  "result_name": "…",
   "execution_id": "…",
   "result": { },
   "created_at": "…"
 }
 ```
 
-Unique index: `(document_id, flow_id, node_id)` — upsert target; enforces one result per node per document.
+Unique index: `(document_id, flow_id)` — upsert target; one result per flow per document (latest run wins).
 Index: `(org_id, document_id)` for fast lookup from the document page.
 Index: `(org_id, flow_id)` for listing results by flow.
 
-### 8.3 Deletion cascades
+### 6.3 Deletion cascades
 
 
-| Delete event               | What is removed                                                                                 |
-| -------------------------- | ----------------------------------------------------------------------------------------------- |
+| Delete event               | What is removed                                                                                  |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
 | **Flow execution deleted** | `flow_blobs` GridFS entries for that execution (includes `ocr_json` blobs from `docrouter.ocr`) |
-| **Document deleted**       | All `flow_results` records with that `document_id`                                              |
-| **Flow deleted**           | All `flow_triggers` rows for that `flow_id`; all `flow_results` records for that `flow_id`      |
+| **Document deleted**       | All `flow_results` records with that `document_id`                                               |
+| **Flow deleted**           | All `flow_triggers` rows for that `flow_id`; all `flow_results` records for that `flow_id`       |
 
 
 ---
 
-## 9. Implementation Sequence
+## 7. Implementation Sequence
 
-### 9.0 Migration / cleanup of existing nodes
+### 7.0 Migration / cleanup of existing nodes
 
 Before implementing the nodes in this plan, the following existing artifacts must be
 renamed or removed to avoid parallel implementations under different names:
@@ -649,17 +467,17 @@ renamed or removed to avoid parallel implementations under different names:
 | Existing name | Action | Target name (this plan) |
 | --- | --- | --- |
 | `docrouter.llm_extract` node (backend + frontend) | Rename | `docrouter.llm_run` |
-| `docrouter.create_document` in `docrouter_binary.md` | Reconcile or remove | `docrouter.save_as_document` |
-| `flow_trigger_registrations` collection (schedule/poll triggers) | Reconcile schema or rename | `flow_triggers` (§8.1) |
+| `docrouter.create_document` in `docrouter_binary.md` | Remove | *(no longer planned)* |
+| `flow_trigger_registrations` collection (schedule/poll triggers) | Reconcile schema or rename | `flow_triggers` (§6.1) |
 
 These renames should land as a single clean-up commit before any node work begins so
 that the codebase uses this plan's names throughout.
 
-### 9.1 Ordered steps
+### 7.1 Ordered steps
 
 The following order minimises dependency risk:
 
-1. ✅ **Dual blob resolution** (§7.4) — `get_execution_blob` extended to dispatch on
+1. ✅ **Dual blob resolution** (§5.3) — `get_execution_blob` extended to dispatch on
    `files:`, `flow_blobs:`, and `flow_pins:` prefixes; org-ownership check on `files:`
    keys; `_parse_binary_storage_id` / `_binary_blob_http_response` helpers extracted.
    Frontend `flowExecutionBlob.ts` comment updated; `isFetchableExecutionBlobStorageId`
@@ -728,16 +546,17 @@ The following order minimises dependency risk:
      (pin endpoint including `files:` prefix and cross-revision auth),
      `test_flow_execution_blob_http.py` (execution blob roundtrip and error cases).
 
-6. **LLM run node** (§4) — reimplement; optional OCR input port (port 1); automatic
-   `ocr_pages` injection when port is connected.
+6. ✅ **LLM run node** (§4) — reimplemented; optional OCR input port (port 1,
+   `docrouter.ocr` only); `ocr_pages` automatically injected into prompt context when
+   port is connected.
+   - `run_flow_llm_run` in `services.py`; SPU billing via `spu_llm_min_for_page_count`
+     (`when_empty=1`); `agent_completion` public wrapper used for LLM call.
+   - Merge node: wired input slots pre-computed by `merge_wired_input_indices` before
+     BFS; engine waits for all wired slots, not just `min_inputs`.
+   - Tests: `test_docrouter_llm_node.py`.
 
-7. **`docrouter.save_result` node + document page Flows section** (§6) —
-   `flow_results` collection, node backend + registration, REST endpoint
-   `GET /v0/orgs/{org}/documents/{id}/flow-results`, Flows tab on document page.
-
-8. **`docrouter.map_reduce` node** (§5) — most complex; depends on OCR being reliable and
-   PyMuPDF page extraction.  Ship after steps 1–7 are stable.
-
-9. **`docrouter.save_as_document` node** (§7.3) — convenience bridge; ship together with or
-   after map/reduce.
-
+7. **Document Flows section** (§2.8) — engine captures last-node output at execution
+   completion when `report_result=true` on the trigger; upsert into `flow_results`
+   keyed on `(document_id, flow_id)`; `report_result` stored on `flow_triggers` row at
+   activation time; `GET /v0/orgs/{org}/documents/{id}/flow-results` REST endpoint;
+   Flows tab on document detail page (read-only result viewer).
