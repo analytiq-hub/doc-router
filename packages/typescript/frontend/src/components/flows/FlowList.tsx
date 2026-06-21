@@ -3,9 +3,12 @@ import { Menu, MenuButton, MenuItem, MenuItems, MenuSeparator } from '@headlessu
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
+  BoltIcon,
+  BoltSlashIcon,
   EllipsisVerticalIcon,
   PencilSquareIcon,
   PlayIcon,
+  Square2StackIcon,
   TrashIcon,
 } from '@heroicons/react/24/outline';
 import { getApiErrorMsg } from '@/utils/api';
@@ -29,6 +32,7 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
+  const [cloningFlowId, setCloningFlowId] = useState<string | null>(null);
   const [pagination, setPagination] = useState({ page: 0, pageSize: 20 });
 
   const load = useCallback(async () => {
@@ -86,6 +90,32 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
       await load();
     } catch (err) {
       setMessage(getApiErrorMsg(err) || 'Failed to delete flow');
+    }
+  };
+
+  const handleClone = async (item: FlowListItem) => {
+    const flowRevid = item.latest_revision?.flow_revid?.trim();
+    if (!flowRevid) {
+      setMessage('Cannot clone: this flow has no saved revision');
+      return;
+    }
+    try {
+      setCloningFlowId(item.flow.flow_id);
+      setMessage('');
+      const revision = await api.getRevision(item.flow.flow_id, flowRevid);
+      const res = await api.createFlow({
+        name: `Copy of ${item.flow.name}`,
+        nodes: revision.nodes,
+        connections: revision.connections,
+        settings: revision.settings,
+        pin_data: revision.pin_data,
+      });
+      await load();
+      router.push(`/orgs/${organizationId}/flows/${res.flow.flow_id}`);
+    } catch (err) {
+      setMessage(getApiErrorMsg(err) || 'Failed to clone flow');
+    } finally {
+      setCloningFlowId(null);
     }
   };
 
@@ -196,7 +226,27 @@ const FlowList: React.FC<{ organizationId: string }> = ({ organizationId }) => {
                                 className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''}`}
                                 onClick={() => void handleToggleActive(item)}
                               >
-                                {item.flow.active ? 'Deactivate' : 'Activate'}
+                                {item.flow.active ? (
+                                  <>
+                                    <BoltSlashIcon className="h-4 w-4 shrink-0" aria-hidden /> Deactivate
+                                  </>
+                                ) : (
+                                  <>
+                                    <BoltIcon className="h-4 w-4 shrink-0" aria-hidden /> Activate
+                                  </>
+                                )}
+                              </button>
+                            )}
+                          </MenuItem>
+                          <MenuItem disabled={cloningFlowId === item.flow.flow_id}>
+                            {({ focus, disabled }) => (
+                              <button
+                                type="button"
+                                disabled={disabled}
+                                className={`${flowWorkspaceDropdownItemClass} w-full ${disabled ? 'cursor-not-allowed opacity-45' : ''} ${focus && !disabled ? 'bg-gray-100' : ''}`}
+                                onClick={() => void handleClone(item)}
+                              >
+                                <Square2StackIcon className="h-4 w-4 shrink-0" aria-hidden /> Clone
                               </button>
                             )}
                           </MenuItem>
