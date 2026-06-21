@@ -2,8 +2,13 @@
 
 import dynamic from 'next/dynamic';
 import { Box } from '@mui/material';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { useState, useEffect } from 'react';
+import {
+  Panel,
+  PanelGroup,
+  PanelResizeHandle,
+  type ImperativePanelGroupHandle,
+} from 'react-resizable-panels';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 const PDFSidebar = dynamic(() => import('@/components/PDFSidebar'), {
   ssr: false,
@@ -21,12 +26,21 @@ interface PDFViewerClientProps {
   id: string;
 }
 
+/** Percent widths for mounted panels (sidebar, pdf); must sum to 100. */
+function getDocViewerPanelLayout(L: boolean, P: boolean): number[] {
+  if (L && P) return [40, 60];
+  if (L && !P) return [100];
+  if (!L && P) return [100];
+  return [100];
+}
+
 export default function PDFViewerClient({ organizationId, id }: PDFViewerClientProps) {
   const [showLeftPanel, setShowLeftPanel] = useState(true);
   const [showPdfPanel, setShowPdfPanel] = useState(true);
   const [showChatPanel, setShowChatPanel] = useState(false);
   const [highlightInfo, setHighlightInfo] = useState<HighlightInfo | undefined>();
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
+  const panelGroupRef = useRef<ImperativePanelGroupHandle>(null);
 
   useEffect(() => {
     window.pdfViewerControls = {
@@ -61,26 +75,27 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
     setHighlightInfo(undefined);
   }, [id]);
 
-  // Only left + PDF (no agent panel); sizes must sum to 100% for mounted panels.
-  const panelDefaultSizes = (() => {
-    const L = showLeftPanel;
-    const P = showPdfPanel;
-    if (L && P) return [40, 60];
-    if (L && !P) return [100];
-    if (!L && P) return [100];
-    return [100];
-  })();
-  let pi = 0;
-  const leftPanelSize = showLeftPanel ? panelDefaultSizes[pi++] : undefined;
-  const mainPanelSize = showPdfPanel ? panelDefaultSizes[pi++] : undefined;
+  const panelLayout = getDocViewerPanelLayout(showLeftPanel, showPdfPanel);
+  let layoutIdx = 0;
+  const leftPanelSize = showLeftPanel ? panelLayout[layoutIdx++] : undefined;
+  const mainPanelSize = showPdfPanel ? panelLayout[layoutIdx++] : undefined;
+
+  useLayoutEffect(() => {
+    panelGroupRef.current?.setLayout(getDocViewerPanelLayout(showLeftPanel, showPdfPanel));
+  }, [showLeftPanel, showPdfPanel]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          <PanelGroup id={`doc-viewer-panels-${id}`} direction="horizontal" style={{ width: '100%', height: '100%' }}>
+          <PanelGroup
+            ref={panelGroupRef}
+            id={`doc-viewer-panels-${id}`}
+            direction="horizontal"
+            style={{ width: '100%', height: '100%' }}
+          >
             {showLeftPanel && (
               <>
-                <Panel defaultSize={leftPanelSize!}>
+                <Panel id="doc-sidebar" defaultSize={leftPanelSize!} minSize={15} order={1}>
                   <Box sx={{ height: '100%', overflow: 'auto' }}>
                     <PDFSidebar
                       organizationId={organizationId}
@@ -95,7 +110,7 @@ export default function PDFViewerClient({ organizationId, id }: PDFViewerClientP
             )}
 
             {showPdfPanel && (
-              <Panel defaultSize={mainPanelSize!}>
+              <Panel id="doc-pdf" defaultSize={mainPanelSize!} minSize={20} order={2}>
                 <Box sx={{ height: '100%', overflow: 'hidden', minWidth: 0 }}>
                   <PDFViewer
                     organizationId={organizationId}

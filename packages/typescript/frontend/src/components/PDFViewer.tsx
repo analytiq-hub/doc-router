@@ -43,7 +43,6 @@ import ArticleIcon from '@mui/icons-material/Article';
 import { saveAs } from 'file-saver';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { PanelGroup, Panel } from 'react-resizable-panels';
 import CheckIcon from '@mui/icons-material/Check';
 import SearchIcon from '@mui/icons-material/Search';
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore';
@@ -1490,8 +1489,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
         </Menu>
       </Toolbar>
       
-      <PanelGroup id={`pdf-viewer-panels-${id}`} direction="horizontal" style={{ flexGrow: 1 }}>
-          <Panel defaultSize={70}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minHeight: 0 }}>
             <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', minHeight: 0 }}>
               <div
                 ref={containerRef}
@@ -1683,9 +1681,9 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
                 </Paper>
               )}
             </Box>
-          </Panel>
+      </Box>
 
-          {ocrPanelKind && (
+      {ocrPanelKind && (
             <>
               <div
                 className="fixed inset-0 z-[70] bg-black bg-opacity-50"
@@ -1840,7 +1838,6 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
               </DraggablePanel>
             </>
           )}
-        </PanelGroup>
 
       <Dialog 
         open={showProperties} 

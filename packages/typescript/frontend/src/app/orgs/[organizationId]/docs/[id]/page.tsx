@@ -4,8 +4,13 @@ import { use } from 'react';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { Box } from '@mui/material';
-import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
-import { useState, useEffect } from 'react';
+import {
+  Panel,
+  PanelGroup,
+  PanelResizeHandle,
+  type ImperativePanelGroupHandle,
+} from 'react-resizable-panels';
+import { useState, useEffect, useLayoutEffect, useRef } from 'react';
 
 const AGENT_PANEL_BREAKPOINT = 640;
 const PDFSidebar = dynamic(() => import('@/components/PDFSidebar'), {
@@ -32,6 +37,18 @@ interface PageProps {
   }>;
 }
 
+/** Percent widths for mounted panels (sidebar, pdf, chat); must sum to 100. */
+function getDocPagePanelLayout(L: boolean, P: boolean, C: boolean): number[] {
+  if (L && P && C) return [25, 45, 30];
+  if (L && P && !C) return [30, 70];
+  if (L && !P && C) return [40, 60];
+  if (L && !P && !C) return [100];
+  if (!L && P && C) return [65, 35];
+  if (!L && P && !C) return [100];
+  if (!L && !P && C) return [100];
+  return [100];
+}
+
 const PDFViewerPage = ({ params }: PageProps) => {
   const { organizationId, id } = use(params);
   const searchParams = useSearchParams();
@@ -42,6 +59,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
   const [highlightInfo, setHighlightInfo] = useState<HighlightInfo | undefined>();
   const [pdfDocument, setPdfDocument] = useState<PDFDocumentProxy | null>(null);
   const [isSmallScreen, setIsSmallScreen] = useState(false);
+  const panelGroupRef = useRef<ImperativePanelGroupHandle>(null);
 
   useEffect(() => {
     const check = () => setIsSmallScreen(window.innerWidth <= AGENT_PANEL_BREAKPOINT);
@@ -89,25 +107,17 @@ const PDFViewerPage = ({ params }: PageProps) => {
     setHighlightInfo(undefined);
   }, [id]);
 
-  // Sizes must sum to 100% for the panels that are actually mounted (react-resizable-panels).
-  // getDefaultSizes() previously ignored showPdfPanel, e.g. left+chat without PDF → 25+30=55% or 25+45=70%.
-  const panelDefaultSizes = (() => {
-    const L = showLeftPanel;
-    const P = showPdfPanel;
-    const C = showChatPanel;
-    if (L && P && C) return [25, 45, 30];
-    if (L && P && !C) return [30, 70];
-    if (L && !P && C) return [40, 60];
-    if (L && !P && !C) return [100];
-    if (!L && P && C) return [65, 35];
-    if (!L && P && !C) return [100];
-    if (!L && !P && C) return [100];
-    return [100];
-  })();
-  let pi = 0;
-  const leftPanelSize = showLeftPanel ? panelDefaultSizes[pi++] : undefined;
-  const mainPanelSize = showPdfPanel ? panelDefaultSizes[pi++] : undefined;
-  const rightPanelSize = showChatPanel ? panelDefaultSizes[pi++] : undefined;
+  const panelLayout = getDocPagePanelLayout(showLeftPanel, showPdfPanel, showChatPanel);
+  let layoutIdx = 0;
+  const leftPanelSize = showLeftPanel ? panelLayout[layoutIdx++] : undefined;
+  const mainPanelSize = showPdfPanel ? panelLayout[layoutIdx++] : undefined;
+  const rightPanelSize = showChatPanel ? panelLayout[layoutIdx++] : undefined;
+
+  useLayoutEffect(() => {
+    panelGroupRef.current?.setLayout(
+      getDocPagePanelLayout(showLeftPanel, showPdfPanel, showChatPanel),
+    );
+  }, [showLeftPanel, showPdfPanel, showChatPanel]);
 
   if (!id) return <div>No PDF ID provided</div>;
   const pdfId = Array.isArray(id) ? id[0] : id;
@@ -115,10 +125,15 @@ const PDFViewerPage = ({ params }: PageProps) => {
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         <Box sx={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
-          <PanelGroup id={`doc-page-panels-${pdfId}`} direction="horizontal" style={{ width: '100%', height: '100%' }}>
+          <PanelGroup
+            ref={panelGroupRef}
+            id={`doc-page-panels-${pdfId}`}
+            direction="horizontal"
+            style={{ width: '100%', height: '100%' }}
+          >
             {showLeftPanel && (
               <>
-                <Panel defaultSize={leftPanelSize!} minSize={15} order={1}>
+                <Panel id="doc-sidebar" defaultSize={leftPanelSize!} minSize={15} order={1}>
                   <Box sx={{ height: '100%', overflow: 'auto' }}>
                     <PDFSidebar 
                       organizationId={organizationId} 
@@ -133,7 +148,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
             )}
 
             {showPdfPanel && (
-              <Panel defaultSize={mainPanelSize!} minSize={20} order={2}>
+              <Panel id="doc-pdf" defaultSize={mainPanelSize!} minSize={20} order={2}>
                 <Box sx={{ height: '100%', overflow: 'hidden', minWidth: 0 }}>
                   <PDFViewer 
                     organizationId={organizationId} 
@@ -149,7 +164,7 @@ const PDFViewerPage = ({ params }: PageProps) => {
             {showChatPanel && (
               <>
                 <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
-                <Panel defaultSize={rightPanelSize!} minSize={20} order={3}>
+                <Panel id="doc-chat" defaultSize={rightPanelSize!} minSize={20} order={3}>
                   <Box sx={{ height: '100%', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
                     <AgentTab organizationId={organizationId} documentId={pdfId} />
                   </Box>
