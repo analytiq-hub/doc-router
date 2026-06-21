@@ -177,7 +177,9 @@ async def get_extracted_llm_text(analytiq_client, document_id: str) -> str | Non
         for step in range(max_steps):
             try:
                 text = await ad.ocr.get_ocr_text(analytiq_client, document_id)
-                if isinstance(text, str) and text.strip():
+                if isinstance(text, str):
+                    # Return immediately whether text is empty or not — empty means OCR
+                    # finished on a blank/unreadable page, not that it hasn't run yet.
                     return text
                 last_err = None
             except Exception as e:
@@ -859,6 +861,8 @@ async def _build_prompt_context(
                         f"LLM run failed: missing OCR/text for document {doc_id_str} "
                         f"(doc {idx} of {len(ordered_peer_docs)}; include.ocr_text is true)"
                     )
+                if not text.strip():
+                    logger.info(f"Document {doc_id_str} has empty OCR text; proceeding with empty ocr_text block")
                 ocr_cache[doc_id_str] = text
             user_blocks.append({"type": "text", "text": f"ocr_text:\n{ocr_cache[doc_id_str]}"})
 
