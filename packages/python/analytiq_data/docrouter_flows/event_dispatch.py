@@ -29,6 +29,16 @@ def _configured_tag_ids(row: dict[str, Any]) -> list[str]:
     return [str(t).strip() for t in raw if isinstance(t, str) and str(t).strip()]
 
 
+def tag_filter_matches_document(configured_tag_ids: list[str], doc_tag_ids: set[str]) -> bool:
+    """True when a ``docrouter.trigger`` tag filter matches the document's tags."""
+
+    if configured_tag_ids:
+        if not doc_tag_ids:
+            return False
+        return any(tag_id in doc_tag_ids for tag_id in configured_tag_ids)
+    return True
+
+
 def _iso_datetime(value: Any) -> str:
     if isinstance(value, datetime):
         dt = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
@@ -166,10 +176,8 @@ def _evaluate_trigger_row(
     """Return whether a ``flow_triggers`` row matches the document event."""
 
     configured_tags = _configured_tag_ids(row)
-    if configured_tags:
-        doc_tag_ids = {str(t) for t in (doc.get("tag_ids") or [])}
-        if not any(tag_id in doc_tag_ids for tag_id in configured_tags):
-            return False
+    if not tag_filter_matches_document(configured_tags, {str(t) for t in (doc.get("tag_ids") or [])}):
+        return False
 
     if event_type in DOCROUTER_LLM_EVENT_TYPES:
         configured_prompt = row.get("prompt_id")

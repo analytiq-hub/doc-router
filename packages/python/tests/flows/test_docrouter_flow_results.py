@@ -93,7 +93,7 @@ def _register_docrouter_nodes():
     ad.flows.register_docrouter_nodes()
 
 
-async def _insert_document(test_db) -> tuple[str, str]:
+async def _insert_document(test_db, *, tag_ids: list[str] | None = None) -> tuple[str, str]:
     document_id = str(ObjectId())
     file_key = f"{document_id}.pdf"
     aq_client = ad.common.get_analytiq_client()
@@ -115,7 +115,7 @@ async def _insert_document(test_db) -> tuple[str, str]:
             "upload_date": datetime.now(UTC),
             "uploaded_by": "test@example.com",
             "state": ad.common.doc.DOCUMENT_STATE_UPLOADED,
-            "tag_ids": [],
+            "tag_ids": tag_ids if tag_ids is not None else [],
             "metadata": {"source": "test"},
         }
     )
@@ -126,6 +126,7 @@ async def _create_and_activate_event_flow(
     test_db,
     *,
     report_result: bool = True,
+    tag_ids: list[str] | None = None,
 ) -> tuple[str, str]:
     r0 = client.post(
         f"/v0/orgs/{TEST_ORG_ID}/flows",
@@ -135,7 +136,7 @@ async def _create_and_activate_event_flow(
     assert r0.status_code == 200, r0.text
     flow_id = r0.json()["flow"]["flow_id"]
     nodes = [
-        _event_trigger_node(report_result=report_result),
+        _event_trigger_node(report_result=report_result, tag_ids=tag_ids),
         _code_node(),
     ]
     connections = {
@@ -304,3 +305,38 @@ async def test_delete_document_removes_flow_results(test_db, mock_auth):
     )
     assert r.status_code == 200, r.text
     assert await db[FLOW_RESULTS_COLLECTION].count_documents({"document_id": document_id}) == 0
+
+
+@pytest.mark.asyncio
+async def test_list_document_flows_includes_matching_flow_without_result(test_db, mock_auth):
+    flow_id, _ = await _create_and_activate_event_flow(test_db, report_result=True)
+    document_id, _ = await _insert_document(test_db)
+
+    r = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}/flow-results",
+        headers=get_auth_headers(),
+    )
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert len(body["results"]) == 1
+    item = body["results"][0]
+    assert item["flow_id"] == flow_id
+    assert item["execution_id"] == ""
+    assert item["result"] == {}
+
+
+@pytest.mark.asyncio
+async def test_list_document_flows_respects_trigger_tag_filter(test_db, mock_auth):
+    tag_id = str(ObjectId())
+    matching_flow_id, _ = await _create_and_activate_event_flow(test_db, tag_ids=[tag_id])
+    other_flow_id, _ = await _create_and_activate_event_flow(test_db, tag_ids=[str(ObjectId())])
+    document_id, _ = await _insert_document(test_db, tag_ids=[tag_id])
+
+    r = client.get(
+        f"/v0/orgs/{TEST_ORG_ID}/documents/{document_id}/flow-results",
+        headers=get_auth_headers(),
+    )
+    assert r.status_code == 200, r.text
+    flow_ids = {item["flow_id"] for item in r.json()["results"]}
+    assert matching_flow_id in flow_ids
+    assert other_flow_id not in flow_ids

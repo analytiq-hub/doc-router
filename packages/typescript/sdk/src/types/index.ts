@@ -668,10 +668,12 @@ export interface BulkAnalyzeLLMResponse {
 export interface DocumentFlowResultItem {
   flow_id: string;
   flow_name: string;
-  execution_id: string;
-  result: Record<string, JsonValue>;
-  created_at: string;
-  updated_at: string;
+  active?: boolean;
+  event_type?: string | null;
+  execution_id?: string;
+  result?: Record<string, JsonValue>;
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 export interface ListDocumentFlowResultsResponse {

@@ -18,6 +18,7 @@ from bson import ObjectId
 
 # Local imports
 import analytiq_data as ad
+from analytiq_data.docrouter_flows.document_flow_sidebar import list_document_flow_sidebar_items
 from analytiq_data.common.doc import get_mime_type
 from app.auth import get_org_user
 from app.models import User
@@ -581,10 +582,12 @@ async def get_document(
 class DocumentFlowResultItem(BaseModel):
     flow_id: str
     flow_name: str
-    execution_id: str
+    active: bool = False
+    event_type: str | None = None
+    execution_id: str = ""
     result: dict[str, Any] = Field(default_factory=dict)
-    created_at: datetime
-    updated_at: datetime
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
 
 class ListDocumentFlowResultsResponse(BaseModel):
@@ -600,53 +603,32 @@ async def list_document_flow_results(
     document_id: str,
     current_user: User = Depends(get_org_user),
 ):
-    """List flow results captured for a document (DocRouter event triggers with report_result enabled)."""
+    """List flows whose document-event trigger matches this document, with optional captured results."""
+    _ = current_user
     analytiq_client = ad.common.get_analytiq_client()
     db = ad.common.get_async_db(analytiq_client)
 
-    document = await db.docs.find_one(
-        {"_id": ObjectId(document_id), "organization_id": organization_id},
-        {"_id": 1},
-    )
-    if not document:
+    try:
+        rows = await list_document_flow_sidebar_items(
+            db,
+            org_id=organization_id,
+            document_id=document_id,
+        )
+    except ValueError:
         raise HTTPException(status_code=404, detail="Document not found")
-
-    rows = await db[ad.docrouter_flows.FLOW_RESULTS_COLLECTION].find(
-        {"org_id": organization_id, "document_id": document_id}
-    ).sort("updated_at", -1).to_list(length=None)
-
-    flow_ids = [str(r.get("flow_id") or "") for r in rows if r.get("flow_id")]
-    flow_names: dict[str, str] = {}
-    if flow_ids:
-        oid_list = [ObjectId(fid) for fid in flow_ids if ad.common.is_valid_object_id(fid)]
-        if oid_list:
-            hdrs = await db.flows.find(
-                {"_id": {"$in": oid_list}, "organization_id": organization_id},
-                {"name": 1},
-            ).to_list(length=None)
-            flow_names = {str(h["_id"]): str(h.get("name") or "Flow") for h in hdrs}
 
     results: list[DocumentFlowResultItem] = []
     for row in rows:
-        flow_id = str(row.get("flow_id") or "")
-        if not flow_id:
-            continue
-        created = row.get("created_at")
-        updated = row.get("updated_at") or created
-        if not isinstance(created, datetime):
-            created = datetime.now(UTC)
-        if not isinstance(updated, datetime):
-            updated = created
-        raw_result = row.get("result")
-        result_dict = dict(raw_result) if isinstance(raw_result, dict) else {}
         results.append(
             DocumentFlowResultItem(
-                flow_id=flow_id,
-                flow_name=flow_names.get(flow_id, "Flow"),
+                flow_id=str(row["flow_id"]),
+                flow_name=str(row["flow_name"]),
+                active=bool(row.get("active")),
+                event_type=row.get("event_type"),
                 execution_id=str(row.get("execution_id") or ""),
-                result=result_dict,
-                created_at=created.replace(tzinfo=UTC) if created.tzinfo is None else created.astimezone(UTC),
-                updated_at=updated.replace(tzinfo=UTC) if updated.tzinfo is None else updated.astimezone(UTC),
+                result=dict(row.get("result") or {}),
+                created_at=row.get("created_at"),
+                updated_at=row.get("updated_at"),
             )
         )
 

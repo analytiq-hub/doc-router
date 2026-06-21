@@ -36,10 +36,10 @@ const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight }: Props) => 
   const [showFlowsTab, setShowFlowsTab] = useState(false);
   const [showFormsTab, setShowFormsTab] = useState(false);
 
-  const handleFlowsHasResults = useCallback((hasResults: boolean) => {
-    setShowFlowsTab(hasResults);
+  const handleFlowsHasFlows = useCallback((hasFlows: boolean) => {
+    setShowFlowsTab(hasFlows);
     setActiveMode((cur) => {
-      if (!hasResults && cur === 'flows') return 'extraction';
+      if (!hasFlows && cur === 'flows') return 'extraction';
       return cur;
     });
   }, []);
@@ -53,8 +53,9 @@ const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight }: Props) => 
   }, []);
 
   useEffect(() => {
+    setShowFlowsTab(false);
     setShowFormsTab(false);
-    setActiveMode((cur) => (cur === 'forms' ? 'extraction' : cur));
+    setActiveMode((cur) => (cur === 'flows' || cur === 'forms' ? 'extraction' : cur));
   }, [id]);
 
   const tabButtonClass = (mode: SidebarMode) =>
@@ -109,7 +110,7 @@ const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight }: Props) => 
         <PDFFlowsSidebar
           organizationId={organizationId}
           id={id}
-          onHasResults={handleFlowsHasResults}
+          onHasFlows={handleFlowsHasFlows}
         />
       </div>
 
