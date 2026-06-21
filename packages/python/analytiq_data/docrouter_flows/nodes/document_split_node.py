@@ -132,10 +132,15 @@ class DocRouterDocumentSplitNode:
                             ad.flows.FlowItem(
                                 json=dict(it.json),
                                 binary={**passthrough_binary, pdf_name: ref},
-                                meta=dict(it.meta or {}),
+                                meta={
+                                    **dict(it.meta or {}),
+                                    "source_node_id": node["id"],
+                                    "item_index": output_item_index,
+                                },
                                 paired_item=it.paired_item,
                             )
                         )
+                        output_item_index += 1
                         continue
 
                     indices = list(range(n_pages))[start:slice_stop:step]
