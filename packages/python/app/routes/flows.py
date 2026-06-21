@@ -522,6 +522,7 @@ async def _purge_flow_associated_data(
         await ad.flows.delete_trigger_registrations(db, flow_id=flow_id)
 
     await ad.docrouter_flows.event_dispatch.delete_docrouter_flow_triggers(db, flow_id=flow_id)
+    await ad.docrouter_flows.delete_flow_results_for_flow(db, flow_id=flow_id)
     await _remove_flow_from_webhook_routes(db, flow_id=flow_id)
 
     n_exec = await _delete_flow_executions(db, aq_client, flow_id=flow_id, organization_id=organization_id)

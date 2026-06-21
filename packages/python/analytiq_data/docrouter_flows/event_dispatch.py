@@ -135,6 +135,9 @@ async def sync_docrouter_flow_triggers(
         params = node.get("parameters") or {}
         event_type = params.get("event_type")
         prompt_id = params.get("prompt_id")
+        report_result = params.get("report_result")
+        if report_result is None:
+            report_result = True
         doc: dict[str, Any] = {
             "org_id": org_id,
             "flow_id": flow_id,
@@ -143,6 +146,7 @@ async def sync_docrouter_flow_triggers(
             "trigger_type": event_type,
             "tag_ids": list(params.get("tag_ids") or []),
             "prompt_id": prompt_id.strip() if isinstance(prompt_id, str) and prompt_id.strip() else "",
+            "report_result": bool(report_result),
             "updated_at": now,
         }
         await db[FLOW_TRIGGERS_COLLECTION].update_one(
@@ -244,6 +248,7 @@ async def enqueue_docrouter_event_flow_run(
     trigger_node_id: str,
     payload: dict[str, Any],
     item: ad.flows.FlowItem,
+    report_result: bool = True,
 ) -> str:
     exec_oid = ObjectId()
     exec_id = str(exec_oid)
@@ -259,6 +264,7 @@ async def enqueue_docrouter_event_flow_run(
         "type": DOCROUTER_EVENT_TRIGGER_KIND,
         "node_id": trigger_node_id,
         "items": serialized,
+        "report_result": bool(report_result),
         **payload,
     }
 
@@ -391,6 +397,7 @@ async def dispatch_docrouter_event(
             trigger_node_id=trigger_node_id,
             payload=payload,
             item=item,
+            report_result=bool(row.get("report_result", True)),
         )
         exec_ids.append(exec_id)
 

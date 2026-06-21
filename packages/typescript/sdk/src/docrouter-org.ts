@@ -11,6 +11,7 @@ import {
   RunLLMResponse,
   GetLLMResultResponse,
   BulkAnalyzeLLMResponse,
+  ListDocumentFlowResultsResponse,
   ListTagsParams,
   ListTagsResponse,
   JsonValue,
@@ -299,6 +300,13 @@ export class DocRouterOrg {
   async deleteDocument(params: { documentId: string; }) {
     const { documentId } = params;
     return this.http.delete(`/v0/orgs/${this.organizationId}/documents/${documentId}`);
+  }
+
+  async listDocumentFlowResults(params: { documentId: string }): Promise<ListDocumentFlowResultsResponse> {
+    const { documentId } = params;
+    return this.http.get<ListDocumentFlowResultsResponse>(
+      `/v0/orgs/${this.organizationId}/documents/${documentId}/flow-results`,
+    );
   }
 
   // ---------------- OCR ----------------

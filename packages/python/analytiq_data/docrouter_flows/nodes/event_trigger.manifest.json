@@ -60,6 +60,12 @@
             "equals": "llm.error"
           }
         ]
+      },
+      "report_result": {
+        "type": "boolean",
+        "title": "Report result to document",
+        "default": true,
+        "description": "When enabled, the last node's output is saved on the document Flows tab after each run."
       }
     },
     "required": [

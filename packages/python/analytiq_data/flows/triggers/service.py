@@ -151,6 +151,7 @@ async def ensure_flow_trigger_indexes(analytiq_client) -> None:
     )
 
     await ad.docrouter_flows.ensure_docrouter_flow_trigger_indexes(db)
+    await ad.docrouter_flows.ensure_flow_results_indexes(db)
 
 
 async def start_flow_trigger_service(analytiq_client, **kwargs: Any) -> FlowTriggerService:

@@ -191,6 +191,16 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
             {"_id": ObjectId(exec_id)},
             {"$set": {"status": status, "finished_at": datetime.now(UTC), "last_heartbeat_at": datetime.now(UTC)}},
         )
+        try:
+            await ad.docrouter_flows.maybe_capture_docrouter_flow_result(
+                db,
+                exec_doc=exec_doc,
+                revision=revision,
+                run_data=context.run_data,
+                status=status,
+            )
+        except Exception as e:
+            logger.warning(f"flow_run: failed to capture docrouter flow result for execution {exec_id}: {e}")
         await ad.queue.delete_msg(analytiq_client, "flow_run", msg_id)
     except asyncio.TimeoutError:
         await db.flow_executions.update_one(

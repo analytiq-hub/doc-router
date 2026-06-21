@@ -577,6 +577,82 @@ async def get_document(
         content=base64.b64encode(file["blob"]).decode("utf-8"),
     )
 
+
+class DocumentFlowResultItem(BaseModel):
+    flow_id: str
+    flow_name: str
+    execution_id: str
+    result: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+    updated_at: datetime
+
+
+class ListDocumentFlowResultsResponse(BaseModel):
+    results: list[DocumentFlowResultItem] = Field(default_factory=list)
+
+
+@documents_router.get(
+    "/v0/orgs/{organization_id}/documents/{document_id}/flow-results",
+    response_model=ListDocumentFlowResultsResponse,
+)
+async def list_document_flow_results(
+    organization_id: str,
+    document_id: str,
+    current_user: User = Depends(get_org_user),
+):
+    """List flow results captured for a document (DocRouter event triggers with report_result enabled)."""
+    analytiq_client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db(analytiq_client)
+
+    document = await db.docs.find_one(
+        {"_id": ObjectId(document_id), "organization_id": organization_id},
+        {"_id": 1},
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+
+    rows = await db[ad.docrouter_flows.FLOW_RESULTS_COLLECTION].find(
+        {"org_id": organization_id, "document_id": document_id}
+    ).sort("updated_at", -1).to_list(length=None)
+
+    flow_ids = [str(r.get("flow_id") or "") for r in rows if r.get("flow_id")]
+    flow_names: dict[str, str] = {}
+    if flow_ids:
+        oid_list = [ObjectId(fid) for fid in flow_ids if ad.common.is_valid_object_id(fid)]
+        if oid_list:
+            hdrs = await db.flows.find(
+                {"_id": {"$in": oid_list}, "organization_id": organization_id},
+                {"name": 1},
+            ).to_list(length=None)
+            flow_names = {str(h["_id"]): str(h.get("name") or "Flow") for h in hdrs}
+
+    results: list[DocumentFlowResultItem] = []
+    for row in rows:
+        flow_id = str(row.get("flow_id") or "")
+        if not flow_id:
+            continue
+        created = row.get("created_at")
+        updated = row.get("updated_at") or created
+        if not isinstance(created, datetime):
+            created = datetime.now(UTC)
+        if not isinstance(updated, datetime):
+            updated = created
+        raw_result = row.get("result")
+        result_dict = dict(raw_result) if isinstance(raw_result, dict) else {}
+        results.append(
+            DocumentFlowResultItem(
+                flow_id=flow_id,
+                flow_name=flow_names.get(flow_id, "Flow"),
+                execution_id=str(row.get("execution_id") or ""),
+                result=result_dict,
+                created_at=created.replace(tzinfo=UTC) if created.tzinfo is None else created.astimezone(UTC),
+                updated_at=updated.replace(tzinfo=UTC) if updated.tzinfo is None else updated.astimezone(UTC),
+            )
+        )
+
+    return ListDocumentFlowResultsResponse(results=results)
+
+
 @documents_router.get("/v0/orgs/{organization_id}/documents/{document_id}/file")
 async def get_document_file(
     organization_id: str,
@@ -647,6 +723,7 @@ async def delete_document(
     if pdf_file_name and pdf_file_name != document["mongo_file_name"]:
         await ad.common.delete_file_async(analytiq_client, file_name=pdf_file_name)
 
+    await ad.docrouter_flows.delete_flow_results_for_document(db, document_id=document_id)
     await ad.common.delete_doc(analytiq_client, document_id, organization_id)
     
     return {"message": "Document deleted successfully"}

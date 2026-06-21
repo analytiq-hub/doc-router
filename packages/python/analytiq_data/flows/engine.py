@@ -1323,6 +1323,36 @@ def pick_webhook_last_node_id(
     return _fallback_latest(fb)
 
 
+def extract_last_node_output_json(
+    run_data: dict[str, Any],
+    revision: dict[str, Any],
+    *,
+    start_trigger_node_id: str | None = None,
+) -> Any:
+    """
+    Return the first primary-output item's ``json`` from the graph sink node chosen
+    by ``pick_webhook_last_node_id`` (same heuristic as synchronous webhook ``last_node`` replies).
+    """
+
+    last_node_id = pick_webhook_last_node_id(
+        run_data, revision, start_trigger_node_id=start_trigger_node_id
+    )
+    if not isinstance(last_node_id, str):
+        return None
+    ent = run_data.get(last_node_id) or {}
+    try:
+        main = ent.get("data", {}).get("main")  # type: ignore[union-attr]
+        if isinstance(main, list) and main and isinstance(main[0], list) and main[0]:
+            it = main[0][0]
+            if isinstance(it, dict):
+                return it.get("json")
+            if hasattr(it, "json"):
+                return it.json
+    except Exception:
+        pass
+    return None
+
+
 async def run_flow(
     *,
     context: "ad.flows.ExecutionContext",

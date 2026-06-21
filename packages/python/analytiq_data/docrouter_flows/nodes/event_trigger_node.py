@@ -53,6 +53,15 @@ class DocRouterEventTriggerNode:
                     {"field": "event_type", "equals": "llm.error"},
                 ],
             },
+            "report_result": {
+                "type": "boolean",
+                "title": "Report result to document",
+                "default": True,
+                "description": (
+                    "When enabled, the last node's output is saved on the document "
+                    "Flows tab after each run."
+                ),
+            },
         },
         "required": ["event_type"],
         "additionalProperties": False,

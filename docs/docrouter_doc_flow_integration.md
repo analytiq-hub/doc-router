@@ -20,13 +20,13 @@ but there is no automatic bridge between document lifecycle events and flow
 execution.  This plan adds:
 
 
-| Area         | What we add                                                                                                                                                                                                                                  |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Area         | What we add                                                                                                                                                                                                                                       |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Triggers** | `docrouter.trigger` — single configurable trigger; fires on one of four events: `document.uploaded`, `document.error`, `llm.completed`, `llm.error`; `report_result` parameter auto-captures the last node output into the document Flows section |
-| **Nodes**    | `docrouter.ocr` — outputs `json.ocr_pages` (array, one entry per page)                                                                                                                                                                      |
-| **Nodes**    | `docrouter.llm_run` — optional OCR input port (port 1, `docrouter.ocr` only); auto-injects `ocr_pages` into prompt when connected                                                                                                           |
-| **Nodes**    | `docrouter.document_split` — fan-out: one output item per selected page of the input PDF                                                                                                                                                     |
-| **Blobs**    | Explicit dual-blob support: *document blobs* (`files:` bucket) and *flow blobs* (`flow_blobs:` bucket) both addressable in `BinaryRef.storage_id`                                                                                           |
+| **Nodes**    | `docrouter.ocr` — outputs `json.ocr_pages` (array, one entry per page)                                                                                                                                                                            |
+| **Nodes**    | `docrouter.llm_run` — optional OCR input port (port 1, `docrouter.ocr` only); auto-injects `ocr_pages` into prompt when connected                                                                                                                 |
+| **Nodes**    | `docrouter.document_split` — fan-out: one output item per selected page of the input PDF                                                                                                                                                          |
+| **Blobs**    | Explicit dual-blob support: *document blobs* (`files:` bucket) and *flow blobs* (`flow_blobs:` bucket) both addressable in `BinaryRef.storage_id`                                                                                                 |
 
 
 ---
@@ -39,12 +39,12 @@ A single configurable trigger node that fires when a document lifecycle event
 occurs.  The `event_type` parameter selects which of four events to listen for:
 
 
-| `event_type`        | Fires when                                                         |
-| ------------------- | ------------------------------------------------------------------ |
-| `document.uploaded` | A document is uploaded                                             |
-| `document.error`    | A document enters an error state during processing                 |
-| `llm.completed`     | An LLM run finishes successfully for a document                    |
-| `llm.error`         | An LLM run fails for a document                                    |
+| `event_type`        | Fires when                                         |
+| ------------------- | -------------------------------------------------- |
+| `document.uploaded` | A document is uploaded                             |
+| `document.error`    | A document enters an error state during processing |
+| `llm.completed`     | An LLM run finishes successfully for a document    |
+| `llm.error`         | An LLM run fails for a document                    |
 
 
 ### 2.2 Node key
@@ -56,12 +56,12 @@ docrouter.trigger
 ### 2.3 Parameter schema
 
 
-| Parameter       | Type                                                                     | Applicable events            | Description                                                                                                                                                                               |
-| --------------- | ------------------------------------------------------------------------ | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `event_type`    | `"document.uploaded" | "document.error" | "llm.completed" | "llm.error"` | all                          | Required.                                                                                                                                                                                 |
-| `tag_ids`       | `array[string]`                                                          | all                          | Optional tag filter — fires if the document has **any** of these tags. Empty = match any document.                                                                                        |
-| `prompt_id`     | `string`                                                                 | `llm.completed`, `llm.error` | Optional prompt filter — fires only for this prompt. Empty = any prompt.                                                                                                                  |
-| `report_result` | `boolean`                                                                | all                          | When `true` (default), the engine automatically captures the last node's output at execution completion and stores it in `flow_results` for display in the document Flows section (§2.8). |
+| Parameter       | Type                                                                                      | Applicable events            | Description                                                                                                                                                                               |
+| --------------- | ----------------------------------------------------------------------------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `event_type`    | `"document.uploaded" \| "document.error" \| "llm.completed" \| "llm.error"`              | all                          | Required.                                                                                                                                                                                 |
+| `tag_ids`       | `array[string]`                                                                           | all                          | Optional tag filter — fires if the document has **any** of these tags. Empty = match any document.                                                                                        |
+| `prompt_id`     | `string`                                                                                  | `llm.completed`, `llm.error` | Optional prompt filter — fires only for this prompt. Empty = any prompt.                                                                                                                  |
+| `report_result` | `boolean`                                                                                 | all                          | When `true` (default), the engine automatically captures the last node's output at execution completion and stores it in `flow_results` for display in the document Flows section (§2.8). |
 
 
 ### 2.4 Trigger output
@@ -119,12 +119,12 @@ to `None`.
 A single dispatcher function `_dispatch_docrouter_event(org_id, event_type, doc_id, **event_kwargs)` is called from each lifecycle hook:
 
 
-| Lifecycle hook                               | Event emitted       |
-| -------------------------------------------- | ------------------- |
-| Upload handler (`app/routes/documents.py`)   | `document.uploaded` |
-| Document error path (worker)                 | `document.error`    |
-| LLM completion path (`llm/llm.py`)           | `llm.completed`     |
-| LLM error path (worker + API route)          | `llm.error`         |
+| Lifecycle hook                             | Event emitted       |
+| ------------------------------------------ | ------------------- |
+| Upload handler (`app/routes/documents.py`) | `document.uploaded` |
+| Document error path (worker)               | `document.error`    |
+| LLM completion path (`llm/llm.py`)         | `llm.completed`     |
+| LLM error path (worker + API route)        | `llm.error`         |
 
 
 The dispatcher queries `flow_triggers` by `(org_id, trigger_type)`, evaluates
@@ -140,14 +140,13 @@ event regardless of `include_retagged`.
 ### 2.6 Activation / deactivation
 
 - **Save (`PUT /v0/orgs/{org}/flows/{id}`)** — validates `docrouter.trigger` node
-  parameters (e.g. `event_type` must be one of the four values) and returns `400`
-  on error.  Does **not** write or modify `flow_triggers` rows — trigger rows are
-  only written at activation time.  This ensures that saving a new revision while a
-  flow is already active never disrupts ongoing dispatch.
-
+parameters (e.g. `event_type` must be one of the four values) and returns `400`
+on error.  Does **not** write or modify `flow_triggers` rows — trigger rows are
+only written at activation time.  This ensures that saving a new revision while a
+flow is already active never disrupts ongoing dispatch.
 - **Activate (`POST /v0/orgs/{org}/flows/{id}/activate`)** — deletes any existing
-  `flow_triggers` rows for the flow, then upserts one row per `docrouter.trigger`
-  node found in the target revision:
+`flow_triggers` rows for the flow, then upserts one row per `docrouter.trigger`
+node found in the target revision:
   ```json
   {
     "trigger_type": "document.uploaded" | "document.error" | "llm.completed" | "llm.error",
@@ -159,12 +158,10 @@ event regardless of `include_retagged`.
   ```
   A unique index on `(flow_id, trigger_node_id)` ensures repeated activation calls
   are idempotent and cannot produce duplicate dispatch rows.
-
 - **Deactivate / delete** — removes all `flow_triggers` rows for that flow.
-
 - The dispatcher queries `flow_triggers` by `(org_id, trigger_type)`, then confirms
-  the matched flow is still active and that `flow.active_flow_revid == row.flow_revid`
-  before enqueuing — no full flow scan needed at event time.
+the matched flow is still active and that `flow.active_flow_revid == row.flow_revid`
+before enqueuing — no full flow scan needed at event time.
 
 ### 2.7 Deletion safety for `tag_id` and `prompt_id` references
 
@@ -185,11 +182,11 @@ user corrects the node.
 impact of a deletion is display: the UI cannot resolve a name for a deleted entity.
 
 1. **Snapshot names at dispatch time** ✅ implemented.  `build_docrouter_event_payload`
-   stores `tag_names` (parallel array to `tag_ids`, one name per tag on the document)
+  stores `tag_names` (parallel array to `tag_ids`, one name per tag on the document)
    and `prompt_name`.  All names are resolved at the moment the trigger fires so
    execution records are self-contained.
 2. **Graceful UI fallback** ✅ implemented.  The execution trace view displays
-   `[deleted]` for any tag or prompt name that resolves to an empty string, covering
+  `[deleted]` for any tag or prompt name that resolves to an empty string, covering
    runs that predate the name snapshot fields.
 
 ### 2.8 Automatic result capture (`report_result`)
@@ -205,7 +202,7 @@ is shown per flow that has a `docrouter.trigger` with `report_result` enabled:
 - Flow name (linked to the flow editor)
 - Execution timestamp (linked to the execution trace)
 - Last-node JSON output rendered with the same viewer used for LLM prompt results
-  (read-only; not editable)
+(read-only; not editable)
 
 If a document has no `docrouter.trigger` with `report_result` enabled, the Flows
 section is not shown on the document page.  If the flow re-runs, only the latest
@@ -229,34 +226,36 @@ docrouter.ocr
 ### 3.3 Parameter schema
 
 
-| Parameter      | Type                                                       | Required | Description         |
-| -------------- | ---------------------------------------------------------- | -------- | ------------------- |
-| `ocr_provider` | `"textract" \| "mistral" \| "pymupdf" \| "llm"`           | yes      | OCR backend to use. |
+| Parameter      | Type                                         | Required | Description         |
+| -------------- | -------------------------------------------- | -------- | ------------------- |
+| `ocr_provider` | `"textract" | "mistral" | "pymupdf" | "llm"` | yes      | OCR backend to use. |
 
 
 ### 3.4 Input
 
 - `binary.pdf` — preferred; when absent, the first binary property on the item (stable
-  property-name order) is used and any additional attachments are ignored. Input items with
-  no binary attachment are skipped (no output item).
+property-name order) is used and any additional attachments are ignored. Input items with
+no binary attachment are skipped (no output item).
 
 ### 3.5 Behavior
 
 1. Load the selected PDF binary into memory (`binary.pdf`, or the first binary property).
 2. Run the selected OCR provider against the PDF bytes (does **not** write to the
-   document OCR store — flow-scoped only).
+  document OCR store — flow-scoped only).
 3. Store `ocr_json` as a **flow blob** in GridFS `flow_blobs` keyed to this execution
-   (purged when the execution is deleted).
+  (purged when the execution is deleted).
 4. Pass `binary.pdf` from the input through to the output unchanged.
 5. Emit one output item per input item.
 
 **Implementation notes:**
 
-| Topic | Detail |
-| --- | --- |
-| Provider enum | ``OCR_PROVIDER_CHOICES`` in ``services.py`` is the single source; ``parameter_schema`` in ``ocr_node.py`` and ``ocr.manifest.json`` derive from / must match it. |
-| OCR job correlation | ``flow_ocr_document_id()`` in ``services.py`` tags provider logs with the item's ``document_id`` when present; falls back to ``execution_id`` for pinned/manual PDFs. |
-| No document store write | ``run_flow_ocr_on_pdf`` does not persist to the document OCR store — flow-scoped only. |
+
+| Topic                   | Detail                                                                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Provider enum           | `OCR_PROVIDER_CHOICES` in `services.py` is the single source; `parameter_schema` in `ocr_node.py` and `ocr.manifest.json` derive from / must match it.        |
+| OCR job correlation     | `flow_ocr_document_id()` in `services.py` tags provider logs with the item's `document_id` when present; falls back to `execution_id` for pinned/manual PDFs. |
+| No document store write | `run_flow_ocr_on_pdf` does not persist to the document OCR store — flow-scoped only.                                                                          |
+
 
 ### 3.6 Output
 
@@ -308,10 +307,10 @@ docrouter.llm_run
 ### 4.4 Input ports
 
 
-| Port | Index | Required | Connection type   | Description                                          |
-| ---- | ----- | -------- | ----------------- | ---------------------------------------------------- |
-| main | 0     | yes      | `main`            | Primary data item (trigger output or upstream node). |
-| ocr  | 1     | no       | `docrouter.ocr`   | OCR output item carrying `json.ocr_pages`.           |
+| Port | Index | Required | Connection type | Description                                          |
+| ---- | ----- | -------- | --------------- | ---------------------------------------------------- |
+| main | 0     | yes      | `main`          | Primary data item (trigger output or upstream node). |
+| ocr  | 1     | no       | `docrouter.ocr` | OCR output item carrying `json.ocr_pages`.           |
 
 
 The OCR port uses connection type `"docrouter.ocr"`, which only the output of
@@ -319,16 +318,16 @@ The OCR port uses connection type `"docrouter.ocr"`, which only the output of
 
 - **UI:** the drag layer rejects a drop when source and target port connection types differ.
 - **Workflow validation:** the engine checks all connection types at activation time;
-  a mismatch raises a configuration error before any execution begins.
+a mismatch raises a configuration error before any execution begins.
 
 ### 4.5 Behavior
 
 1. If the OCR input port (index 1) is connected: read `json.ocr_pages` from the
-   paired OCR item and join the page strings with `\n` to form the OCR text, then
+  paired OCR item and join the page strings with `\n` to form the OCR text, then
    inject it into the prompt context automatically.
    No explicit configuration required — presence of the connection is the signal.
 2. If the OCR port is not connected: call the LLM without OCR context (the prompt
-   must be self-contained or reference data available in the flow item's JSON).
+  must be self-contained or reference data available in the flow item's JSON).
 3. Load the prompt (and its JSON schema if configured) by `prompt_id`.
 4. Call the LLM with the assembled context.
 5. Parse and validate the response against the schema (if present).
@@ -352,7 +351,7 @@ binary:
 
 - `prompt_id` rendered as a searchable dropdown.
 - Node canvas shows two input handles: **main** (left, connection type `main`) and
-  **ocr** (bottom-left, connection type `docrouter.ocr` — shown with a distinct colour/icon).
+**ocr** (bottom-left, connection type `docrouter.ocr` — shown with a distinct colour/icon).
 
 ---
 
@@ -448,11 +447,11 @@ Index: `(org_id, flow_id)` for listing results by flow.
 ### 6.3 Deletion cascades
 
 
-| Delete event               | What is removed                                                                                  |
-| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| Delete event               | What is removed                                                                                 |
+| -------------------------- | ----------------------------------------------------------------------------------------------- |
 | **Flow execution deleted** | `flow_blobs` GridFS entries for that execution (includes `ocr_json` blobs from `docrouter.ocr`) |
-| **Document deleted**       | All `flow_results` records with that `document_id`                                               |
-| **Flow deleted**           | All `flow_triggers` rows for that `flow_id`; all `flow_results` records for that `flow_id`       |
+| **Document deleted**       | All `flow_results` records with that `document_id`                                              |
+| **Flow deleted**           | All `flow_triggers` rows for that `flow_id`; all `flow_results` records for that `flow_id`      |
 
 
 ---
@@ -464,11 +463,13 @@ Index: `(org_id, flow_id)` for listing results by flow.
 Before implementing the nodes in this plan, the following existing artifacts must be
 renamed or removed to avoid parallel implementations under different names:
 
-| Existing name | Action | Target name (this plan) |
-| --- | --- | --- |
-| `docrouter.llm_extract` node (backend + frontend) | Rename | `docrouter.llm_run` |
-| `docrouter.create_document` in `docrouter_binary.md` | Remove | *(no longer planned)* |
-| `flow_trigger_registrations` collection (schedule/poll triggers) | Reconcile schema or rename | `flow_triggers` (§6.1) |
+
+| Existing name                                                    | Action                     | Target name (this plan) |
+| ---------------------------------------------------------------- | -------------------------- | ----------------------- |
+| `docrouter.llm_extract` node (backend + frontend)                | Rename                     | `docrouter.llm_run`     |
+| `docrouter.create_document` in `docrouter_binary.md`             | Remove                     | *(no longer planned)*   |
+| `flow_trigger_registrations` collection (schedule/poll triggers) | Reconcile schema or rename | `flow_triggers` (§6.1)  |
+
 
 These renames should land as a single clean-up commit before any node work begins so
 that the codebase uses this plan's names throughout.
@@ -478,85 +479,80 @@ that the codebase uses this plan's names throughout.
 The following order minimises dependency risk:
 
 1. ✅ **Dual blob resolution** (§5.3) — `get_execution_blob` extended to dispatch on
-   `files:`, `flow_blobs:`, and `flow_pins:` prefixes; org-ownership check on `files:`
+  `files:`, `flow_blobs:`, and `flow_pins:` prefixes; org-ownership check on `files:`
    keys; `_parse_binary_storage_id` / `_binary_blob_http_response` helpers extracted.
    Frontend `flowExecutionBlob.ts` comment updated; `isFetchableExecutionBlobStorageId`
    guard added.  Tests: `test_flow_execution_blob_http.py`.
-
 2. ✅ **DocRouter event trigger** (§2) — `flow_triggers` collection with indexes;
-   `send_docrouter_event` / `send_docrouter_error_event` dispatcher; lifecycle hooks
+  `send_docrouter_event` / `send_docrouter_error_event` dispatcher; lifecycle hooks
    wired in `documents.py` (upload), `msg_handlers/ocr.py` (document error),
    `llm/llm.py` (llm.completed), `msg_handlers/llm.py` + `routes/llm.py` (llm.error);
    `DocRouterEventTriggerNode` registered; activate/deactivate/delete wired in
    `flows.py`; `validate_docrouter_trigger_params` called on save for early feedback
    without touching trigger rows.  Tests: `test_docrouter_event_trigger.py`.
-
 3. ✅ **Stale reference warnings for `tag_ids` / `prompt_id`** (§2.7):
-   - ✅ `tag_id` → `tag_ids` (array, any-match); `FlowOrgTagMultiPickerField` component
-     resolves each tag ID and renders a `deleted` chip for any that no longer exist.
-   - ✅ `FlowOrgEntityPickerField` resolves `prompt_id` and renders a `deleted` chip if
-     missing; wired via `x-ui-widget: org_prompt_picker` in the node manifest.
-   - ✅ `build_docrouter_event_payload` snapshots `tag_names` and `prompt_name` at
-     dispatch time so execution records are self-contained.
-   - ✅ Execution trace UI: renders `[deleted]` where tag/prompt name is empty.
-
+  - ✅ `tag_id` → `tag_ids` (array, any-match); `FlowOrgTagMultiPickerField` component
+   resolves each tag ID and renders a `deleted` chip for any that no longer exist.
+  - ✅ `FlowOrgEntityPickerField` resolves `prompt_id` and renders a `deleted` chip if
+  missing; wired via `x-ui-widget: org_prompt_picker` in the node manifest.
+  - ✅ `build_docrouter_event_payload` snapshots `tag_names` and `prompt_name` at
+  dispatch time so execution records are self-contained.
+  - ✅ Execution trace UI: renders `[deleted]` where tag/prompt name is empty.
 4. ✅ **Typed connection ports**:
-   - ✅ `port_types.py` — `ConnectionType = Literal["main", "docrouter.ocr"]`,
-     `normalize_connection_type`, `input_port_types_for`, `output_port_types_for`.
-   - ✅ `connections.py` — `NodeConnection.connection_type` widened to `ConnectionType`;
-     `coerce_json_connections_to_dataclasses` preserves `connection_type` from JSON
-     instead of hardcoding `"main"`.
-   - ✅ `engine.py` `validate_revision` — checks edge `connection_type` against both
-     the source output port type and the destination input port type; raises
-     `FlowValidationError` on mismatch.
-   - ✅ `lazy_builtin_node.py` / `builtin_loader.py` — load `input_port_types` and
-     `output_port_types` from node manifests; `ocr.manifest.json` declares
-     `output_port_types: ["docrouter.ocr"]`.
-   - ✅ SDK `flow-port-types.ts` — `inputPortType`, `outputPortType`,
-     `portTypesCompatible`, `edgeConnectionType`; `FlowNodeType` gains
-     `input_port_types` / `output_port_types`; `FlowNodeConnection.connection_type`
-     widened; `revisionToRF` stores `data.connectionType` on edges; `rfToConnections`
-     reads it back.
-   - ✅ `FlowCanvasNode.tsx` — OCR input handles rendered at `Position.Bottom`
-     (bottom-left) with a distinct violet style; output handles coloured by port type.
-   - ✅ `FlowEditor.tsx` — `isValidConnection` rejects drops when port types are
-     incompatible; `onConnect` stores `connectionType` in edge data; inline node
-     insertion checks compatibility on both sides.
-   - Tests: `test_flow_connection_types.py` (backend), `flow-rf.test.ts` (SDK roundtrip).
-
+  - ✅ `port_types.py` — `ConnectionType = Literal["main", "docrouter.ocr"]`,
+   `normalize_connection_type`, `input_port_types_for`, `output_port_types_for`.
+  - ✅ `connections.py` — `NodeConnection.connection_type` widened to `ConnectionType`;
+  `coerce_json_connections_to_dataclasses` preserves `connection_type` from JSON
+  instead of hardcoding `"main"`.
+  - ✅ `engine.py` `validate_revision` — checks edge `connection_type` against both
+  the source output port type and the destination input port type; raises
+  `FlowValidationError` on mismatch.
+  - ✅ `lazy_builtin_node.py` / `builtin_loader.py` — load `input_port_types` and
+  `output_port_types` from node manifests; `ocr.manifest.json` declares
+  `output_port_types: ["docrouter.ocr"]`.
+  - ✅ SDK `flow-port-types.ts` — `inputPortType`, `outputPortType`,
+  `portTypesCompatible`, `edgeConnectionType`; `FlowNodeType` gains
+  `input_port_types` / `output_port_types`; `FlowNodeConnection.connection_type`
+  widened; `revisionToRF` stores `data.connectionType` on edges; `rfToConnections`
+  reads it back.
+  - ✅ `FlowCanvasNode.tsx` — OCR input handles rendered at `Position.Bottom`
+  (bottom-left) with a distinct violet style; output handles coloured by port type.
+  - ✅ `FlowEditor.tsx` — `isValidConnection` rejects drops when port types are
+  incompatible; `onConnect` stores `connectionType` in edge data; inline node
+  insertion checks compatibility on both sides.
+  - Tests: `test_flow_connection_types.py` (backend), `flow-rf.test.ts` (SDK roundtrip).
 5. ✅ **OCR node** (§3) — reimplemented with `ocr_provider` parameter
-   (`"textract" | "mistral" | "pymupdf" | "llm"`).
-   - `resolve_pdf_binary_ref` helper (`document_binary.py`) locates the input PDF from
-     `binary["pdf"]`, the sole PDF-mime ref, or the single binary property.
-   - `run_flow_ocr_on_pdf` in `services.py` runs the selected provider on in-memory
-     bytes without writing to the document OCR store; `flow_ocr_document_id` tags
-     provider logs with the item's `document_id` (falls back to `execution_id`).
-   - `ocr_pages_plain_text_list` in `ocr.py` extracts per-page plain text for all four
-     OCR formats.
-   - `ocr_json` stored as a flow blob via `save_execution_binary_blob` (GridFS
-     `flow_blobs`, purged with the execution); falls back to inline `data` in unit tests
-     (no real client).
-   - `get_revision_pin_blob` endpoint extended to accept `files:` prefix in addition to
-     `flow_pins:`, with `_require_flow_pins_key_for_revision` / `_flow_pins_key_authorized_for_revision`
-     helpers that also accept cross-revision `pin_data` keys.
-   - Frontend: `FlowRevisionPinBlobContext` added to `flowExecutionBlob.ts`; `canFetchFlowBinaryRef` /
-     `fetchFlowBinaryRef` route download requests to execution or pin endpoint;
-     `IoViewer`, `IoBinaryPanel`, `FlowInputUpstreamList`, `FlowNodeConfigModal` wired.
-   - Tests: `test_docrouter_ocr_node.py` (node unit tests), `test_flow_pins_http.py`
-     (pin endpoint including `files:` prefix and cross-revision auth),
-     `test_flow_execution_blob_http.py` (execution blob roundtrip and error cases).
-
+  (`"textract" | "mistral" | "pymupdf" | "llm"`).
+  - `resolve_pdf_binary_ref` helper (`document_binary.py`) locates the input PDF from
+  `binary["pdf"]`, the sole PDF-mime ref, or the single binary property.
+  - `run_flow_ocr_on_pdf` in `services.py` runs the selected provider on in-memory
+  bytes without writing to the document OCR store; `flow_ocr_document_id` tags
+  provider logs with the item's `document_id` (falls back to `execution_id`).
+  - `ocr_pages_plain_text_list` in `ocr.py` extracts per-page plain text for all four
+  OCR formats.
+  - `ocr_json` stored as a flow blob via `save_execution_binary_blob` (GridFS
+  `flow_blobs`, purged with the execution); falls back to inline `data` in unit tests
+  (no real client).
+  - `get_revision_pin_blob` endpoint extended to accept `files:` prefix in addition to
+  `flow_pins:`, with `_require_flow_pins_key_for_revision` / `_flow_pins_key_authorized_for_revision`
+  helpers that also accept cross-revision `pin_data` keys.
+  - Frontend: `FlowRevisionPinBlobContext` added to `flowExecutionBlob.ts`; `canFetchFlowBinaryRef` /
+  `fetchFlowBinaryRef` route download requests to execution or pin endpoint;
+  `IoViewer`, `IoBinaryPanel`, `FlowInputUpstreamList`, `FlowNodeConfigModal` wired.
+  - Tests: `test_docrouter_ocr_node.py` (node unit tests), `test_flow_pins_http.py`
+  (pin endpoint including `files:` prefix and cross-revision auth),
+  `test_flow_execution_blob_http.py` (execution blob roundtrip and error cases).
 6. ✅ **LLM run node** (§4) — reimplemented; optional OCR input port (port 1,
-   `docrouter.ocr` only); `ocr_pages` automatically injected into prompt context when
+  `docrouter.ocr` only); `ocr_pages` automatically injected into prompt context when
    port is connected.
-   - `run_flow_llm_run` in `services.py`; SPU billing via `spu_llm_min_for_page_count`
-     (`when_empty=1`); `agent_completion` public wrapper used for LLM call.
-   - Merge node: wired input slots pre-computed by `merge_wired_input_indices` before
-     BFS; engine waits for all wired slots, not just `min_inputs`.
-   - Tests: `test_docrouter_llm_node.py`.
-
+  - `run_flow_llm_run` in `services.py`; SPU billing via `spu_llm_min_for_page_count`
+  (`when_empty=1`); `agent_completion` public wrapper used for LLM call.
+  - Merge node: wired input slots pre-computed by `merge_wired_input_indices` before
+  BFS; engine waits for all wired slots, not just `min_inputs`.
+  - Tests: `test_docrouter_llm_node.py`.
 7. **Document Flows section** (§2.8) — engine captures last-node output at execution
-   completion when `report_result=true` on the trigger; upsert into `flow_results`
+  completion when `report_result=true` on the trigger; upsert into `flow_results`
    keyed on `(document_id, flow_id)`; `report_result` stored on `flow_triggers` row at
    activation time; `GET /v0/orgs/{org}/documents/{id}/flow-results` REST endpoint;
    Flows tab on document detail page (read-only result viewer).
+
