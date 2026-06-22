@@ -8,48 +8,49 @@ This document describes how to deploy DocRouter on customer-owned infrastructure
 
 DocRouter is a multi-service application that runs on your servers but calls out to managed cloud APIs for document OCR, object storage, email, and LLM inference.
 
-**Diagram:** [on_prem_installation_architecture.excalidraw](on_prem_installation_architecture.excalidraw) — open in [Excalidraw](https://excalidraw.com) (File → Open) or the VS Code Excalidraw extension.
+**Diagram:** [on_prem_installation_architecture.excalidraw](https://github.com/analytiq-hub/doc-router/blob/main/docs/on_prem_installation_architecture.excalidraw) — open in [Excalidraw](https://excalidraw.com) (File → Open) or the VS Code Excalidraw extension.
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                     Customer infrastructure                         │
-│                                                                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐     │
-│  │ Next.js  │  │ FastAPI  │  │ Worker   │  │ MongoDB          │     │
-│  │ frontend │  │ backend  │  │ (queue)  │  │ (local or Atlas) │     │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────────────────┘     │
-│       │             │             │                                 │
-│       └─────────────┴─────────────┘                                 │
-│                     │                                               │
-└─────────────────────┼───────────────────────────────────────────────┘
-                      │
-        ┌─────────────┼─────────────┬──────────────────┐
-        ▼             ▼             ▼                  ▼
-   ┌─────────┐  ┌──────────┐  ┌──────────┐    ┌───────────────┐
-   │ AWS     │  │ AWS      │  │ AWS      │    │ LLM APIs      │
-   │ S3      │  │ Textract │  │ SES      │    │ OpenAI,       │
-   │         │  │          │  │          │    │ Mistral,      │
-   └─────────┘  └──────────┘  └──────────┘    │ Gemini,       │
-        │             │             │         │ Vertex AI,    │
-        │             │             │         │ Bedrock, …    │
-        └─────────────┴─────────────┘         └───────────────┘
+DocRouter — On-Prem Installation Architecture
+
+┌──────────── Customer infrastructure (Docker Compose / K8s) ─────────────┐
+│       ┌───────┐ ┌───────┐ ┌─────────────┐ ┌────────────────────┐        │
+│       │Next.js│ │FastAPI│ │   Workers   │ │      MongoDB       │        │
+│       │ :3000 │ │ :8000 │ │OCR/LLM/flows│ │Embedded/Atlas/DocDB│        │
+│       └───────┘ └───────┘ └─────────────┘ └────────────────────┘        │
+│                    ┌──────────────────────────────┐                     │
+│                    │nginx reverse proxy (optional)│                     │
+│                    │   TLS, /fastapi → backend    │                     │
+│                    └──────────────────────────────┘                     │
+└─────────┼───────────────────────────────────────────────────────────────┘
+          │
+          │ AWS APIs · OCR/LLM · flows
+          ▼
+┌───────────────────────── Customer AWS account ──────────────────────────┐
+│         S3 · Textract · SES (optional) · Bedrock (optional LLM)         │
+│          IAM: docrouter-app-user → assumes docrouter-app-role           │
+└─────────────────────────────────────────────────────────────────────────┘
+          ▼
+┌──────────────────── Third-party LLM APIs (optional) ────────────────────┐
+│         OpenAI · Anthropic · Google Vertex AI & Gemini · Azure          │
+│                       Mistral · xAI · OpenRouter                        │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Typical on-prem stack**
 
 
-| Component            | Where it runs                          | Notes                                             |
-| -------------------- | -------------------------------------- | ------------------------------------------------- |
-| Frontend (Next.js)   | Customer VM / container                | Port 3000                                         |
-| Backend (FastAPI)    | Customer VM / container                | Port 8000                                         |
-| Worker               | Customer VM / container                | Required for queue-based OCR and flows            |
-| MongoDB              | Customer VM, Atlas, or embedded Docker | All app state and encrypted credentials           |
-| AWS                  | Customer AWS account                   | S3, Textract, SES; optional Bedrock               |
-| GCP                  | Customer GCP project                   | Optional; Vertex AI Gemini and Mistral Vertex OCR |
-| Third-party LLM APIs | Vendor SaaS                            | OpenAI, Anthropic, Mistral, Gemini API, etc.      |
+| Component            | Where it runs                  | Notes                                              |
+| -------------------- | ------------------------------ | -------------------------------------------------- |
+| Frontend (Next.js)   | Docker Compose / K8s           | Port 3000                                          |
+| Backend (FastAPI)    | Docker Compose / K8s           | Port 8000                                          |
+| Workers              | Docker Compose / K8s           | OCR, LLMs, and flows (queue-based processing)      |
+| MongoDB              | Embedded, Atlas, or DocumentDB | App state, encrypted credentials, login passwords  |
+| AWS                  | Customer AWS account           | S3, Textract, SES (optional), Bedrock (optional)   |
+| Third-party LLM APIs | Vendor SaaS (optional)         | OpenAI, Anthropic, Vertex AI & Gemini, Azure, etc. |
 
 
-Credentials are stored encrypted in MongoDB (`cloud_config` for deployment-wide AWS/GCP/Azure; `llm_providers` for per-provider API keys). On first startup, values from `.env` are seeded into the database when admin bootstrap completes.
+Credentials are stored encrypted in MongoDB (`cloud_config` for deployment-wide AWS/GCP/Azure; `llm_providers` for per-provider API keys; user login passwords). On first startup, values from `.env` are seeded into the database when admin bootstrap completes.
 
 ---
 
@@ -97,7 +98,7 @@ Follow the IAM layout below so it matches what the application expects.
 
 ## Step 3 — IAM roles, users, and permissions
 
-The reference Terraform module (modules/docrouter]([https://github.com/analytiq-hub/analytiq-terraform/tree/main/modules/docrouter](https://github.com/analytiq-hub/analytiq-terraform/tree/main/modules/docrouter)) in [analytiq-terraform](https://github.com/analytiq-hub/analytiq-terraform)) creates a **user + role** pattern. DocRouter authenticates with the IAM **user** access keys, then **assumes an IAM role** for S3 and Textract. Bedrock is invoked with the **user** credentials directly (not the assumed role).
+The reference Terraform module [modules/docrouter]([https://github.com/analytiq-hub/analytiq-terraform/tree/main/modules/docrouter](https://github.com/analytiq-hub/analytiq-terraform/tree/main/modules/docrouter)) in [analytiq-terraform](https://github.com/analytiq-hub/analytiq-terraform)) creates a **user + role** pattern. DocRouter authenticates with the IAM **user** access keys, then **assumes an IAM role** for S3 and Textract. Bedrock is invoked with the **user** credentials directly (not the assumed role).
 
 ### Naming convention (required)
 
