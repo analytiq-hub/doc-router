@@ -1,6 +1,6 @@
 # On-Prem Installation Architecture
 
-This document describes how to deploy DocRouter on customer-owned infrastructure (VM, Docker, or Kubernetes) and which external cloud services it depends on. It focuses on AWS account setup, IAM roles and permissions, LLM provider configuration, and Vertex AI Gemini.
+This document describes how to deploy DocRouter on customer-owned infrastructure (Docker Compose or Kubernetes) and which external cloud services it depends on. It focuses on AWS account setup, IAM roles and permissions, LLM provider configuration, and Vertex AI Gemini.
 
 ---
 
@@ -65,12 +65,15 @@ Credentials are stored encrypted in MongoDB (`cloud_config` for deployment-wide 
 
 ## Step 2 — Provision AWS resources
 
-You can provision infrastructure manually (console) or with the reference Terraform in `../analytiq-terraform/applications/docrouter`, which wraps `../analytiq-terraform/modules/docrouter`.
+You can provision infrastructure manually (console) or with the reference Terraform in the [analytiq-terraform](https://github.com/analytiq-hub/analytiq-terraform) sandbox ([applications/docrouter](https://github.com/analytiq-hub/analytiq-terraform/tree/main/applications/docrouter)), which wraps [modules/docrouter](https://github.com/analytiq-hub/analytiq-terraform/tree/main/modules/docrouter).
 
 ### Option A — Terraform (recommended)
 
+Clone the sandbox and apply from the DocRouter application module:
+
 ```bash
-cd ../analytiq-terraform/applications/docrouter
+git clone https://github.com/analytiq-hub/analytiq-terraform.git
+cd analytiq-terraform/applications/docrouter
 terraform init
 terraform apply -var='prefix=docrouter' -var='bucket_name=your-company-docrouter-data'
 ```
@@ -94,7 +97,7 @@ Follow the IAM layout below so it matches what the application expects.
 
 ## Step 3 — IAM roles, users, and permissions
 
-The reference Terraform module (`analytiq-terraform/modules/docrouter`) creates a **user + role** pattern. DocRouter authenticates with the IAM **user** access keys, then **assumes an IAM role** for S3 and Textract. Bedrock is invoked with the **user** credentials directly (not the assumed role).
+The reference Terraform module (modules/docrouter]([https://github.com/analytiq-hub/analytiq-terraform/tree/main/modules/docrouter](https://github.com/analytiq-hub/analytiq-terraform/tree/main/modules/docrouter)) in [analytiq-terraform](https://github.com/analytiq-hub/analytiq-terraform)) creates a **user + role** pattern. DocRouter authenticates with the IAM **user** access keys, then **assumes an IAM role** for S3 and Textract. Bedrock is invoked with the **user** credentials directly (not the assumed role).
 
 ### Naming convention (required)
 
@@ -456,11 +459,11 @@ Use this ordered checklist for a typical on-prem deployment.
 
 ---
 
-## Related Terraform sources
+## Related Terraform sandbox
 
-The canonical IAM and S3 layout is defined in:
+The canonical IAM and S3 layout lives in the [analytiq-terraform](https://github.com/analytiq-hub/analytiq-terraform) GitHub sandbox:
 
-- `analytiq-terraform/applications/docrouter/main.tf` — application entrypoint
-- `analytiq-terraform/modules/docrouter/main.tf` — IAM user, role, policies, S3 bucket
+- [applications/docrouter/main.tf](https://github.com/analytiq-hub/analytiq-terraform/blob/main/applications/docrouter/main.tf) — application entrypoint
+- [modules/docrouter/main.tf](https://github.com/analytiq-hub/analytiq-terraform/blob/main/modules/docrouter/main.tf) — IAM user, role, policies, S3 bucket
 
-When in doubt, run `terraform apply` from the applications module and use the outputs in DocRouter `.env`.
+When in doubt, clone the sandbox, run `terraform apply` from `applications/docrouter`, and use the outputs in DocRouter `.env`.
