@@ -865,7 +865,7 @@ export default function FlowDetailPageClient({
   }, [api, flowId]);
 
   const onApplyFlowSettings = useCallback(
-    (next: { timezone?: string }) => {
+    (next: { timezone?: string; resume_on_restart?: boolean }) => {
       setRevision((cur) => {
         if (!cur) return cur;
         return {
@@ -1051,7 +1051,7 @@ export default function FlowDetailPageClient({
 
       <FlowSettingsModal
         open={flowSettingsOpen}
-        settings={(revision?.settings || {}) as { timezone?: string }}
+        settings={(revision?.settings || {}) as { timezone?: string; resume_on_restart?: boolean }}
         onClose={() => setFlowSettingsOpen(false)}
         onSave={onApplyFlowSettings}
       />

@@ -47,4 +47,8 @@ class ExecutionContext:
     active_trace_node_id: str | None = None
     #: Org setting ``organizations.flow_log_level`` (``ERROR`` | ``INFO`` | ``TRACE``).
     flow_log_level: str = "ERROR"
+    #: Node ids with confirmed persisted checkpoints (resume skips these).
+    completed_nodes: frozenset[str] = field(default_factory=frozenset)
+    #: Source execution id when this run resumes from a checkpoint.
+    resumed_from: str | None = None
 

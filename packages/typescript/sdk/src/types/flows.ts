@@ -145,7 +145,7 @@ export interface ListRevisionsResponse {
   total: number;
 }
 
-export type FlowExecutionStatus = 'queued' | 'running' | 'success' | 'error' | 'stopped';
+export type FlowExecutionStatus = 'queued' | 'running' | 'success' | 'error' | 'stopped' | 'interrupted';
 
 export interface FlowExecution {
   execution_id: string;
@@ -170,6 +170,12 @@ export interface FlowExecution {
   target_node_id?: string | null;
   /** Client-supplied seed snapshot at queue time (optional). */
   initial_run_data?: Record<string, unknown> | null;
+  /** Node ids with persisted checkpoints (resume skips these). */
+  completed_nodes?: string[];
+  /** Source execution when this run resumed from a checkpoint. */
+  resumed_from?: string | null;
+  /** Child execution id when this run was resumed. */
+  resumed_by?: string | null;
 }
 
 /** Per-node or execution-level failure envelope (`docs/docrouter_fulltrace.md`). */

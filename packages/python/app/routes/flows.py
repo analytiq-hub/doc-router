@@ -757,6 +757,9 @@ class FlowExecution(BaseModel):
     start_trigger_node_id: str | None = None
     target_node_id: str | None = None
     initial_run_data: dict[str, Any] | None = None
+    completed_nodes: list[str] = []
+    resumed_from: str | None = None
+    resumed_by: str | None = None
     #: Present on list responses when joined from ``flows`` (org-wide execution views).
     flow_name: str | None = None
 
@@ -822,6 +825,9 @@ def _execution_doc_to_list_item(d: dict[str, Any]) -> FlowExecution:
         trigger=d.get("trigger") or {},
         target_node_id=d.get("target_node_id"),
         initial_run_data=d.get("initial_run_data"),
+        completed_nodes=[str(x) for x in (d.get("completed_nodes") or []) if x],
+        resumed_from=str(d["resumed_from"]) if d.get("resumed_from") else None,
+        resumed_by=str(d["resumed_by"]) if d.get("resumed_by") else None,
         flow_name=str(fn) if fn is not None else None,
     )
 
@@ -1922,6 +1928,9 @@ async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, curr
         "target_node_id": req.target_node_id,
         "initial_run_data": seed_filtered or None,
         "dirty_node_ids": dirty_clean or None,
+        "completed_nodes": [],
+        "resumed_from": None,
+        "resumed_by": None,
     }
     if revision_snapshot is not None:
         exec_doc["revision_snapshot"] = revision_snapshot
@@ -2101,6 +2110,42 @@ async def stop_execution(organization_id: str, flow_id: str, exec_id: str, curre
     return {"ok": True}
 
 
+@flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/executions/{exec_id}/resume")
+async def resume_execution(
+    organization_id: str,
+    flow_id: str,
+    exec_id: str,
+    current_user: User = Depends(get_org_user),
+):
+    """Enqueue a new run that continues from persisted node checkpoints."""
+    _ = current_user
+    try:
+        exec_oid = ObjectId(exec_id)
+    except InvalidId:
+        raise HTTPException(status_code=404, detail="Execution not found") from None
+
+    db = await _get_db()
+    doc = await db.flow_executions.find_one(
+        {"_id": exec_oid, "flow_id": flow_id, "organization_id": organization_id},
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Execution not found")
+
+    status = doc.get("status")
+    if status not in ad.flows.TERMINAL_RESUME_SOURCE_STATUSES:
+        raise HTTPException(status_code=409, detail="Execution is not in a resumable terminal state")
+    if doc.get("resumed_by"):
+        raise HTTPException(status_code=409, detail="Execution was already resumed")
+    if not doc.get("completed_nodes"):
+        raise HTTPException(status_code=409, detail="Execution has no checkpoint nodes to resume from")
+
+    client = ad.common.get_analytiq_client()
+    new_id = await ad.flows.enqueue_resume_execution(client, db, doc)
+    if not new_id:
+        raise HTTPException(status_code=409, detail="Could not enqueue resume execution")
+    return {"execution_id": new_id, "resumed_from": exec_id}
+
+
 @flows_router.delete("/v0/orgs/{organization_id}/flows/{flow_id}/executions/{exec_id}")
 async def delete_execution(organization_id: str, flow_id: str, exec_id: str, current_user: User = Depends(get_org_user)):
     """Delete a finished execution and its flow_blobs storage."""
@@ -2239,6 +2284,9 @@ async def _inbound_webhook_common(
         "error": None,
         "trigger": trigger,
         "start_trigger_node_id": webhook_trigger_node_id,
+        "completed_nodes": [],
+        "resumed_from": None,
+        "resumed_by": None,
     }
     if revision_snapshot is not None:
         exec_doc["revision_snapshot"] = revision_snapshot

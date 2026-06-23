@@ -267,6 +267,17 @@ const FlowExecutionsView: React.FC<{
     },
     [loadList],
   );
+  const onExecutionResumed = useCallback(
+    async (sourceExecutionId: string, newExecutionId: string) => {
+      await loadList();
+      setSelectedId(newExecutionId);
+      userClearedSelectionRef.current = false;
+      await loadDetailAndGraph(newExecutionId);
+      void sourceExecutionId;
+    },
+    [loadDetailAndGraph, loadList],
+  );
+
   const stopExecution = useCallback(
     async (executionId: string) => {
       try {
@@ -412,7 +423,8 @@ const FlowExecutionsView: React.FC<{
                         {e.status === 'running' && 'Running'}
                         {e.status === 'queued' && 'Queued'}
                         {e.status === 'stopped' && 'Stopped'}
-                        {!['success', 'error', 'running', 'queued', 'stopped'].includes(e.status) && e.status}{' '}
+                        {e.status === 'interrupted' && 'Interrupted'}
+                        {!['success', 'error', 'running', 'queued', 'stopped', 'interrupted'].includes(e.status) && e.status}{' '}
                         <span className="font-normal text-gray-500">in {formatDuration(e)}</span>
                       </div>
                     </button>
@@ -597,6 +609,7 @@ const FlowExecutionsView: React.FC<{
                   focusExecutionId={selectedId}
                   onClearFocus={clearFocus}
                   onExecutionDeleted={onExecutionDeleted}
+                  onExecutionResumed={onExecutionResumed}
                   onEditNode={onEditFlowNode}
                   expanded={execLogsExpanded}
                   onToggleExpanded={toggleExecLogsExpanded}

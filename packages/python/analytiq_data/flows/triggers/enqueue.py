@@ -186,6 +186,9 @@ async def enqueue_scheduled_flow_run(
         "target_node_id": None,
         "initial_run_data": None,
         "dirty_node_ids": None,
+        "completed_nodes": [],
+        "resumed_from": None,
+        "resumed_by": None,
     }
 
     await db.flow_executions.insert_one(exec_doc)

@@ -1151,6 +1151,16 @@ export class DocRouterOrg {
     );
   }
 
+  async resumeExecution(
+    flowId: string,
+    executionId: string,
+  ): Promise<{ execution_id: string; resumed_from: string }> {
+    return this.http.post<{ execution_id: string; resumed_from: string }>(
+      `/v0/orgs/${this.organizationId}/flows/${flowId}/executions/${executionId}/resume`,
+      {},
+    );
+  }
+
   async deleteExecution(flowId: string, executionId: string): Promise<{ ok: boolean }> {
     return this.http.delete<{ ok: boolean }>(
       `/v0/orgs/${this.organizationId}/flows/${flowId}/executions/${executionId}`,

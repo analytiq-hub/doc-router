@@ -30,6 +30,10 @@ def validate_flow_settings(settings: dict[str, Any] | None) -> list[str]:
 
     settings = settings or {}
     errors: list[str] = []
+    if "resume_on_restart" in settings:
+        raw = settings.get("resume_on_restart")
+        if raw is not None and not isinstance(raw, bool):
+            errors.append("resume_on_restart must be a boolean")
     if "timezone" not in settings:
         return errors
     raw = settings.get("timezone")
@@ -49,6 +53,8 @@ def normalize_flow_settings(settings: dict[str, Any] | None) -> dict[str, Any]:
     """Return settings with known keys normalized for persistence."""
 
     settings = dict(settings or {})
+    if "resume_on_restart" in settings:
+        settings["resume_on_restart"] = bool(settings["resume_on_restart"])
     if "timezone" in settings and settings["timezone"] is not None:
         tz = str(settings["timezone"]).strip()
         settings["timezone"] = tz or FLOW_TIMEZONE_DEFAULT

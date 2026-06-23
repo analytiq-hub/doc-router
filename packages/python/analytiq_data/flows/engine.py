@@ -819,6 +819,24 @@ def _seed_entry_is_reusable(entry: Any, node_id: str, dirty: frozenset[str]) -> 
     return True
 
 
+def _checkpoint_entry_is_reusable(entry: Any, node_id: str, completed_nodes: frozenset[str]) -> bool:
+    if node_id not in completed_nodes:
+        return False
+    if not isinstance(entry, dict):
+        return False
+    if entry.get("status") not in ("success", "skipped"):
+        return False
+    if entry.get("error"):
+        return False
+    data = entry.get("data")
+    if not isinstance(data, dict):
+        return False
+    main = data.get("main")
+    if not isinstance(main, list):
+        return False
+    return True
+
+
 def _coerce_main_to_output_slots(main: list[Any], outputs_count: int) -> list[list["ad.flows.FlowItem"]]:
     out: list[list["ad.flows.FlowItem"]] = []
     for i in range(outputs_count):
@@ -889,6 +907,7 @@ async def persist_run_data(
     run_data: dict[str, Any],
     *,
     last_node_executed: str | None = None,
+    record_checkpoint: bool = False,
 ) -> None:
     """Persist full `run_data` for a flow execution (used for incremental progress)."""
 
@@ -905,9 +924,12 @@ async def persist_run_data(
     }
     if last_node_executed:
         patch["last_node_executed"] = last_node_executed
+    update: dict[str, Any] = {"$set": patch}
+    if record_checkpoint and last_node_executed:
+        update["$addToSet"] = {"completed_nodes": last_node_executed}
     await db.flow_executions.update_one(
         {"_id": ObjectId(context.execution_id)},
-        {"$set": patch},
+        update,
     )
 
 
@@ -1006,139 +1028,147 @@ async def _execute_loop(
             elif pin_data and node["id"] in pin_data:
                 pinned = ad.flows.coerce_pin_data_node_output(pin_data[node["id"]])
                 out_lists = [pinned] + [[] for _ in range(outputs_count - 1)]
-            elif partial and _seed_entry_is_reusable(context.run_data.get(node["id"]), node["id"], dirty_node_ids):
-                cached = context.run_data[node["id"]]
-                main_raw = cached["data"]["main"]
-                if not isinstance(main_raw, list):
-                    raise RuntimeError(f"Corrupt seed run_data for node {node_label}: data.main must be a list")
-                out_lists = _coerce_main_to_output_slots(main_raw, outputs_count)
             else:
-                try:
-                    if not wi.inputs:
-                        resolved_node = {
-                            **node,
-                            "parameters": ad.flows.resolve_parameters(
-                                node.get("parameters") or {},
-                                item=None,
-                                run_data=context.run_data,
-                                input_context=ad.flows.materialize_input_context([]),
-                                execution_refs=_execution_refs,
-                                revision_nodes=context.revision_nodes,
-                            ),
-                        }
-                        _validate_resolved_params(resolved_node)
-                        context.credentials.clear()
-                        out_lists = await node_type.execute(context, resolved_node, [])
-                        if len(out_lists) != outputs_count:
-                            raise RuntimeError(
-                                f"Node {node_label} returned {len(out_lists)} output slots, expected {outputs_count}"
-                            )
-                    elif all(len(slot) == 0 for slot in wi.inputs):
-                        out_lists = _empty_outputs(outputs_count)
-                        status = "skipped"
-                    elif node_type.is_merge or bool(getattr(node_type, "batch_execute_inputs", False)):
-                        # Batch nodes (`is_merge`, or types with batch_execute_inputs): resolve expressions
-                        # once per node execution. Provide ``_input`` (see ``materialize_input_context``) with all items
-                        # across input slots (see `materialize_input_context`).
-                        resolved_node = {
-                            **node,
-                            "parameters": ad.flows.resolve_parameters(
-                                node.get("parameters") or {},
-                                item=None,
-                                run_data=context.run_data,
-                                input_context=ad.flows.materialize_input_context(wi.inputs),
-                                execution_refs=_execution_refs,
-                                revision_nodes=context.revision_nodes,
-                            ),
-                        }
-                        _validate_resolved_params(resolved_node)
-                        context.credentials.clear()
-                        out_lists = await node_type.execute(context, resolved_node, wi.inputs)
-                        if len(out_lists) != outputs_count:
-                            raise RuntimeError(
-                                f"Node {node_label} returned {len(out_lists)} output slots, expected {outputs_count}"
-                            )
-                    else:
-                        # Per-item parameter resolution: evaluate params against each input item.
-                        combined: list[list["ad.flows.FlowItem"]] = [[] for _ in range(outputs_count)]
-                        stopped_mid_node = False
-                        for slot_idx, slot in enumerate(wi.inputs):
-                            if stopped_mid_node:
-                                break
-                            for item_idx, it in enumerate(slot):
-                                resolved_node = {
-                                    **node,
-                                    "parameters": ad.flows.resolve_parameters(
-                                        node.get("parameters") or {},
-                                        item=it,
-                                        run_data=context.run_data,
-                                        input_context=ad.flows.materialize_input_context(
-                                            wi.inputs, input_index=slot_idx, item_index=item_idx
-                                        ),
-                                        execution_refs=_execution_refs,
-                                        revision_nodes=context.revision_nodes,
-                                    ),
-                                }
-                                if slot_idx == 0 and item_idx == 0:
-                                    _validate_resolved_params(resolved_node)
-                                per_inputs = [[] for _ in range(len(wi.inputs))]
-                                per_inputs[slot_idx] = [it]
-                                context.credentials.clear()
-                                per_out = await node_type.execute(context, resolved_node, per_inputs)
-                                if len(per_out) != outputs_count:
-                                    raise RuntimeError(
-                                        f"Node {node_label} returned {len(per_out)} output slots, expected {outputs_count}"
-                                    )
-                                for oi in range(outputs_count):
-                                    for out_item in per_out[oi]:
-                                        combined[oi].append(
-                                            _with_output_paired_item(
-                                                out_item,
-                                                input_slot=slot_idx,
-                                                input_item_index=item_idx,
-                                            )
-                                        )
-                                try:
-                                    context.stop_requested = bool(await read_stop(context))
-                                except Exception:
-                                    pass
-                                if context.stop_requested:
-                                    stopped_mid_node = True
+                entry = context.run_data.get(node["id"])
+                if _checkpoint_entry_is_reusable(entry, node["id"], context.completed_nodes):
+                    cached = entry
+                    main_raw = cached["data"]["main"]
+                    if not isinstance(main_raw, list):
+                        raise RuntimeError(f"Corrupt checkpoint run_data for node {node_label}: data.main must be a list")
+                    out_lists = _coerce_main_to_output_slots(main_raw, outputs_count)
+                elif partial and _seed_entry_is_reusable(entry, node["id"], dirty_node_ids):
+                    cached = entry
+                    main_raw = cached["data"]["main"]
+                    if not isinstance(main_raw, list):
+                        raise RuntimeError(f"Corrupt seed run_data for node {node_label}: data.main must be a list")
+                    out_lists = _coerce_main_to_output_slots(main_raw, outputs_count)
+                else:
+                    try:
+                        if not wi.inputs:
+                            resolved_node = {
+                                **node,
+                                "parameters": ad.flows.resolve_parameters(
+                                    node.get("parameters") or {},
+                                    item=None,
+                                    run_data=context.run_data,
+                                    input_context=ad.flows.materialize_input_context([]),
+                                    execution_refs=_execution_refs,
+                                    revision_nodes=context.revision_nodes,
+                                ),
+                            }
+                            _validate_resolved_params(resolved_node)
+                            context.credentials.clear()
+                            out_lists = await node_type.execute(context, resolved_node, [])
+                            if len(out_lists) != outputs_count:
+                                raise RuntimeError(
+                                    f"Node {node_label} returned {len(out_lists)} output slots, expected {outputs_count}"
+                                )
+                        elif all(len(slot) == 0 for slot in wi.inputs):
+                            out_lists = _empty_outputs(outputs_count)
+                            status = "skipped"
+                        elif node_type.is_merge or bool(getattr(node_type, "batch_execute_inputs", False)):
+                            # Batch nodes (`is_merge`, or types with batch_execute_inputs): resolve expressions
+                            # once per node execution. Provide ``_input`` (see ``materialize_input_context``) with all items
+                            # across input slots (see `materialize_input_context`).
+                            resolved_node = {
+                                **node,
+                                "parameters": ad.flows.resolve_parameters(
+                                    node.get("parameters") or {},
+                                    item=None,
+                                    run_data=context.run_data,
+                                    input_context=ad.flows.materialize_input_context(wi.inputs),
+                                    execution_refs=_execution_refs,
+                                    revision_nodes=context.revision_nodes,
+                                ),
+                            }
+                            _validate_resolved_params(resolved_node)
+                            context.credentials.clear()
+                            out_lists = await node_type.execute(context, resolved_node, wi.inputs)
+                            if len(out_lists) != outputs_count:
+                                raise RuntimeError(
+                                    f"Node {node_label} returned {len(out_lists)} output slots, expected {outputs_count}"
+                                )
+                        else:
+                            # Per-item parameter resolution: evaluate params against each input item.
+                            combined: list[list["ad.flows.FlowItem"]] = [[] for _ in range(outputs_count)]
+                            stopped_mid_node = False
+                            for slot_idx, slot in enumerate(wi.inputs):
+                                if stopped_mid_node:
                                     break
-                        out_lists = combined
-                except Exception as e:
-                    on_error = node.get("on_error") or "stop"
-                    msg = str(e)
-                    include_stack = not isinstance(e, FlowValidationError)
-                    error_env = node_error_envelope(
-                        e,
-                        node_id=node["id"],
-                        node_name=node_label,
-                        include_stack=include_stack,
-                    )
-                    if on_error == "continue":
-                        out_lists = [
-                            [_error_item(node["id"], node_label, msg)]
-                        ] + _empty_outputs(outputs_count - 1)
-                        status = "error"
-                    else:
-                        context.run_data[node["id"]] = {
-                            "status": "error",
-                            "start_time": start_datetime.isoformat(),
-                            "execution_time_ms": int((time.time() - start) * 1000),
-                            "execution_index": execution_index,
-                            "data": {"main": []},
-                            "error": error_env,
-                            "source": run_source,
-                            "logs": (context.node_logs.pop(node["id"], None) if hasattr(context, "node_logs") else None),
-                            "trace": pop_node_trace(context, node["id"]),
-                        }
-                        await persist_run_data(
-                            context,
-                            context.run_data,
-                            last_node_executed=node["id"],
+                                for item_idx, it in enumerate(slot):
+                                    resolved_node = {
+                                        **node,
+                                        "parameters": ad.flows.resolve_parameters(
+                                            node.get("parameters") or {},
+                                            item=it,
+                                            run_data=context.run_data,
+                                            input_context=ad.flows.materialize_input_context(
+                                                wi.inputs, input_index=slot_idx, item_index=item_idx
+                                            ),
+                                            execution_refs=_execution_refs,
+                                            revision_nodes=context.revision_nodes,
+                                        ),
+                                    }
+                                    if slot_idx == 0 and item_idx == 0:
+                                        _validate_resolved_params(resolved_node)
+                                    per_inputs = [[] for _ in range(len(wi.inputs))]
+                                    per_inputs[slot_idx] = [it]
+                                    context.credentials.clear()
+                                    per_out = await node_type.execute(context, resolved_node, per_inputs)
+                                    if len(per_out) != outputs_count:
+                                        raise RuntimeError(
+                                            f"Node {node_label} returned {len(per_out)} output slots, expected {outputs_count}"
+                                        )
+                                    for oi in range(outputs_count):
+                                        for out_item in per_out[oi]:
+                                            combined[oi].append(
+                                                _with_output_paired_item(
+                                                    out_item,
+                                                    input_slot=slot_idx,
+                                                    input_item_index=item_idx,
+                                                )
+                                            )
+                                    try:
+                                        context.stop_requested = bool(await read_stop(context))
+                                    except Exception:
+                                        pass
+                                    if context.stop_requested:
+                                        stopped_mid_node = True
+                                        break
+                            out_lists = combined
+                    except Exception as e:
+                        on_error = node.get("on_error") or "stop"
+                        msg = str(e)
+                        include_stack = not isinstance(e, FlowValidationError)
+                        error_env = node_error_envelope(
+                            e,
+                            node_id=node["id"],
+                            node_name=node_label,
+                            include_stack=include_stack,
                         )
-                        raise
+                        if on_error == "continue":
+                            out_lists = [
+                                [_error_item(node["id"], node_label, msg)]
+                            ] + _empty_outputs(outputs_count - 1)
+                            status = "error"
+                        else:
+                            context.run_data[node["id"]] = {
+                                "status": "error",
+                                "start_time": start_datetime.isoformat(),
+                                "execution_time_ms": int((time.time() - start) * 1000),
+                                "execution_index": execution_index,
+                                "data": {"main": []},
+                                "error": error_env,
+                                "source": run_source,
+                                "logs": (context.node_logs.pop(node["id"], None) if hasattr(context, "node_logs") else None),
+                                "trace": pop_node_trace(context, node["id"]),
+                            }
+                            await persist_run_data(
+                                context,
+                                context.run_data,
+                                last_node_executed=node["id"],
+                            )
+                            raise
 
             out_lists = _stamp_outputs_producer_meta(out_lists, producer_node_id=node["id"])
 
@@ -1157,6 +1187,7 @@ async def _execute_loop(
                 context,
                 context.run_data,
                 last_node_executed=node["id"],
+                record_checkpoint=(status in ("success", "skipped")),
             )
 
             try:

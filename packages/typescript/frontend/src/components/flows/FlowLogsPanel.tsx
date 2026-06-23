@@ -28,6 +28,7 @@ import {
   formatUpstreamSummary,
   pairedItemFromRunEntry,
 } from './flowRunLineage';
+import { canResumeExecution } from './flowResume';
 
 function isRunning(e: FlowExecution) {
   return e.status === 'queued' || e.status === 'running';
@@ -85,6 +86,8 @@ const FlowLogsPanel: React.FC<{
   onClearFocus: () => void;
   /** Called after the execution is deleted from the server (e.g. refresh execution list). */
   onExecutionDeleted?: (executionId: string) => void;
+  /** Called after a resume enqueues a new execution (parent id, new child id). */
+  onExecutionResumed?: (sourceExecutionId: string, newExecutionId: string) => void;
   onExecutionChange?: (e: FlowExecution | null) => void;
   onEditNode?: (nodeId: string) => void;
   expanded: boolean;
@@ -102,6 +105,7 @@ const FlowLogsPanel: React.FC<{
   focusExecutionId,
   onClearFocus,
   onExecutionDeleted,
+  onExecutionResumed,
   onExecutionChange,
   onEditNode,
   expanded,
@@ -139,6 +143,7 @@ const FlowLogsPanel: React.FC<{
   const [err, setErr] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const [resumeLoading, setResumeLoading] = useState(false);
 
   const downloadJson = (filename: string, data: unknown) => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -221,6 +226,20 @@ const FlowLogsPanel: React.FC<{
       setErr(e instanceof Error ? e.message : 'Failed to delete execution');
     } finally {
       setDeleteLoading(false);
+    }
+  };
+
+  const onResume = async () => {
+    if (!execution || !canResumeExecution(execution)) return;
+    try {
+      setResumeLoading(true);
+      setErr('');
+      const res = await orgApi.resumeExecution(flowId, execution.execution_id);
+      onExecutionResumed?.(execution.execution_id, res.execution_id);
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : 'Failed to resume execution');
+    } finally {
+      setResumeLoading(false);
     }
   };
 
@@ -415,6 +434,20 @@ const FlowLogsPanel: React.FC<{
                   <EllipsisVerticalIcon className="h-5 w-5" aria-hidden />
                 </MenuButton>
                 <MenuItems anchor="bottom end" portal modal={false} className={flowWorkspaceMenuPanelClass}>
+                  {execution && canResumeExecution(execution) ? (
+                    <MenuItem>
+                      {({ focus }) => (
+                        <button
+                          type="button"
+                          disabled={resumeLoading}
+                          className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                          onClick={() => void onResume()}
+                        >
+                          {resumeLoading ? 'Resuming…' : 'Resume from checkpoint'}
+                        </button>
+                      )}
+                    </MenuItem>
+                  ) : null}
                   <MenuItem>
                     {({ focus }) => (
                       <button

@@ -21,6 +21,7 @@ const btnPrimary =
 
 export type FlowSettingsValue = {
   timezone?: string;
+  resume_on_restart?: boolean;
 };
 
 type FlowSettingsModalProps = {
@@ -39,6 +40,7 @@ const FlowSettingsModal: React.FC<FlowSettingsModalProps> = ({
   onSave,
 }) => {
   const [draftTimezone, setDraftTimezone] = useState(FLOW_TIMEZONE_DEFAULT);
+  const [draftResumeOnRestart, setDraftResumeOnRestart] = useState(false);
   const [query, setQuery] = useState('');
   const [listOpen, setListOpen] = useState(false);
 
@@ -47,6 +49,7 @@ const FlowSettingsModal: React.FC<FlowSettingsModalProps> = ({
   useEffect(() => {
     if (!open) return;
     setDraftTimezone(storedFlowTimezone(settings, browserDefault));
+    setDraftResumeOnRestart(Boolean(settings.resume_on_restart));
     setQuery('');
     setListOpen(false);
   }, [open, settings, browserDefault]);
@@ -56,7 +59,10 @@ const FlowSettingsModal: React.FC<FlowSettingsModalProps> = ({
   const selectedLabel = flowTimezoneLabel(draftTimezone, browserDefault);
 
   const applySave = () => {
-    onSave({ timezone: flowTimezoneForPersist(draftTimezone, browserDefault) });
+    onSave({
+      timezone: flowTimezoneForPersist(draftTimezone, browserDefault),
+      resume_on_restart: draftResumeOnRestart,
+    });
     onClose();
   };
 
@@ -143,6 +149,25 @@ const FlowSettingsModal: React.FC<FlowSettingsModalProps> = ({
                   )}
                 </ul>
               ) : null}
+            </div>
+
+            <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-3">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  checked={draftResumeOnRestart}
+                  disabled={readOnly}
+                  onChange={(e) => setDraftResumeOnRestart(e.target.checked)}
+                />
+                <span className="min-w-0">
+                  <span className="block text-sm font-medium text-gray-900">Resume on restart</span>
+                  <span className="mt-0.5 block text-sm text-gray-600">
+                    When a worker dies mid-run, automatically enqueue a new execution from the last
+                    completed node checkpoint. Cooperative stops are not auto-resumed.
+                  </span>
+                </span>
+              </label>
             </div>
           </div>
 

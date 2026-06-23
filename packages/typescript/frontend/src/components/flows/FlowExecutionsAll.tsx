@@ -33,6 +33,8 @@ function statusLabel(e: FlowExecution) {
       return 'Queued';
     case 'stopped':
       return 'Stopped';
+    case 'interrupted':
+      return 'Interrupted';
     default:
       return e.status;
   }

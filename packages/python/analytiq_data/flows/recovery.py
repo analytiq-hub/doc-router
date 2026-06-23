@@ -10,6 +10,7 @@ from typing import Any
 from bson import ObjectId
 
 import analytiq_data as ad
+from analytiq_data.flows.resume import maybe_auto_resume_after_recovery
 
 logger = logging.getLogger(__name__)
 
@@ -42,8 +43,8 @@ async def recover_stale_flow_executions(analytiq_client, *, env: str | None = No
     """
     Mark orphaned ``running`` executions terminal when ``last_heartbeat_at`` is stale.
 
-    If ``stop_requested`` is set, status becomes ``stopped``; otherwise ``error``.
-  Idempotent: only touches rows still in ``running`` with an expired heartbeat.
+    If ``stop_requested`` is set, status becomes ``stopped``; otherwise ``interrupted``.
+    Idempotent: only touches rows still in ``running`` with an expired heartbeat.
     """
     env_name = env or os.getenv("ENV", "dev")
     db = analytiq_client.mongodb_async[env_name]
@@ -73,13 +74,13 @@ async def recover_stale_flow_executions(analytiq_client, *, env: str | None = No
         exec_oid = doc["_id"]
         exec_id = str(exec_oid)
         stop_requested = bool(doc.get("stop_requested"))
-        status = "stopped" if stop_requested else "error"
+        status = "stopped" if stop_requested else "interrupted"
         patch: dict[str, Any] = {
             "status": status,
             "finished_at": now,
             "last_heartbeat_at": now,
         }
-        if not stop_requested:
+        if status == "interrupted":
             patch["error"] = _interrupted_error()
 
         res = await db.flow_executions.update_one(
@@ -95,31 +96,39 @@ async def recover_stale_flow_executions(analytiq_client, *, env: str | None = No
             f"(heartbeat older than {FLOW_EXECUTION_STALE_SECS}s)"
         )
 
-        if status != "stopped":
-            continue
-
-        revision_raw = doc.get("revision_snapshot")
-        revision: dict | None = dict(revision_raw) if isinstance(revision_raw, dict) else None
-        if revision is None:
-            flow_revid = doc.get("flow_revid")
-            if isinstance(flow_revid, str) and flow_revid.strip():
+        if status in ("stopped", "interrupted"):
+            revision_raw = doc.get("revision_snapshot")
+            revision: dict | None = dict(revision_raw) if isinstance(revision_raw, dict) else None
+            if revision is None:
+                flow_revid = doc.get("flow_revid")
+                if isinstance(flow_revid, str) and flow_revid.strip():
+                    try:
+                        revision = await db.flow_revisions.find_one(
+                            {"_id": ObjectId(flow_revid.strip()), "flow_id": doc.get("flow_id")}
+                        )
+                    except Exception:
+                        revision = None
+            if revision is not None:
                 try:
-                    revision = await db.flow_revisions.find_one(
-                        {"_id": ObjectId(flow_revid.strip()), "flow_id": doc.get("flow_id")}
+                    await ad.docrouter_flows.maybe_capture_docrouter_flow_result(
+                        db,
+                        exec_doc=doc,
+                        revision=revision,
+                        run_data=dict(doc.get("run_data") or {}),
+                        status=status,
                     )
-                except Exception:
-                    revision = None
-        if revision is None:
-            continue
-        try:
-            await ad.docrouter_flows.maybe_capture_docrouter_flow_result(
-                db,
-                exec_doc=doc,
-                revision=revision,
-                run_data=dict(doc.get("run_data") or {}),
-                status=status,
-            )
-        except Exception as e:
-            logger.warning(f"Stale recovery: docrouter flow result capture failed for {exec_id}: {e}")
+                except Exception as e:
+                    logger.warning(f"Stale recovery: docrouter flow result capture failed for {exec_id}: {e}")
+
+        if status == "interrupted":
+            try:
+                await maybe_auto_resume_after_recovery(
+                    analytiq_client,
+                    db,
+                    source_oid=exec_oid,
+                    status=status,
+                )
+            except Exception as e:
+                logger.warning(f"Stale recovery: auto-resume failed for {exec_id}: {e}")
 
     return recovered

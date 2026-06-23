@@ -53,7 +53,7 @@ async def test_recover_stale_flow_execution_stop_requested(test_db):
 
 
 @pytest.mark.asyncio
-async def test_recover_stale_flow_execution_without_stop_is_error(test_db):
+async def test_recover_stale_flow_execution_without_stop_is_interrupted(test_db):
     client = ad.common.get_analytiq_client()
     db = ad.common.get_async_db()
     exec_oid = ObjectId()
@@ -81,7 +81,7 @@ async def test_recover_stale_flow_execution_without_stop_is_error(test_db):
 
     doc = await db.flow_executions.find_one({"_id": exec_oid})
     assert doc is not None
-    assert doc["status"] == "error"
+    assert doc["status"] == "interrupted"
     assert doc["error"]["message"]
 
 

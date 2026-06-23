@@ -145,6 +145,11 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
 
     flow_log_level = await ad.flows.fetch_org_flow_log_level(db, org_id)
 
+    completed_raw = exec_doc.get("completed_nodes") or []
+    completed_nodes = frozenset(str(x) for x in completed_raw if x)
+    resumed_from_raw = exec_doc.get("resumed_from")
+    resumed_from = str(resumed_from_raw).strip() if resumed_from_raw else None
+
     context = ad.flows.ExecutionContext(
         organization_id=org_id,
         execution_id=exec_id,
@@ -158,6 +163,8 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
         logger=logger,
         revision_nodes=list(revision.get("nodes") or []),
         flow_log_level=flow_log_level,
+        completed_nodes=completed_nodes,
+        resumed_from=resumed_from,
     )
 
     try:
