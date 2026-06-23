@@ -914,16 +914,23 @@ async def persist_run_data(
 async def read_stop(context: "ad.flows.ExecutionContext") -> bool:
     """Return whether cooperative stop was requested for this execution."""
 
+    if context.stop_requested:
+        return True
+
     # Allow pure unit tests to execute flows without a Mongo-backed client.
-    if context.analytiq_client is None:
+    client = context.analytiq_client
+    if client is None or not hasattr(client, "mongodb_async"):
         return False
 
-    db = ad.common.get_async_db(context.analytiq_client)
-    doc = await db.flow_executions.find_one(
-        {"_id": ObjectId(context.execution_id)},
-        {"stop_requested": 1},
-    )
-    return bool((doc or {}).get("stop_requested"))
+    try:
+        db = ad.common.get_async_db(client)
+        doc = await db.flow_executions.find_one(
+            {"_id": ObjectId(context.execution_id)},
+            {"stop_requested": 1},
+        )
+        return bool((doc or {}).get("stop_requested"))
+    except Exception:
+        return False
 
 
 async def _execute_loop(
@@ -1054,7 +1061,10 @@ async def _execute_loop(
                     else:
                         # Per-item parameter resolution: evaluate params against each input item.
                         combined: list[list["ad.flows.FlowItem"]] = [[] for _ in range(outputs_count)]
+                        stopped_mid_node = False
                         for slot_idx, slot in enumerate(wi.inputs):
+                            if stopped_mid_node:
+                                break
                             for item_idx, it in enumerate(slot):
                                 resolved_node = {
                                     **node,
@@ -1088,6 +1098,13 @@ async def _execute_loop(
                                                 input_item_index=item_idx,
                                             )
                                         )
+                                try:
+                                    context.stop_requested = bool(await read_stop(context))
+                                except Exception:
+                                    pass
+                                if context.stop_requested:
+                                    stopped_mid_node = True
+                                    break
                         out_lists = combined
                 except Exception as e:
                     on_error = node.get("on_error") or "stop"
@@ -1141,6 +1158,13 @@ async def _execute_loop(
                 context.run_data,
                 last_node_executed=node["id"],
             )
+
+            try:
+                context.stop_requested = bool(await read_stop(context))
+            except Exception:
+                pass
+            if context.stop_requested:
+                return {"status": "stopped"}
 
             typed = (connections or {}).get(node["id"]) or {}
             main_slots = typed.get("main") or []

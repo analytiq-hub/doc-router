@@ -98,6 +98,7 @@ class DocRouterLlmRunNode:
             len(main_items),
             _run_item,
             batch_size=resolve_node_batch_size(node),
+            should_stop=lambda: ad.flows.read_stop(context),
         )
         out = [item for item in item_results if item is not None]
         return [out]

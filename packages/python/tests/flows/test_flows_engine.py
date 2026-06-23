@@ -1492,3 +1492,127 @@ def test_node_name_falls_back_to_id_when_name_empty() -> None:
     nid = "6580d50a-7149-4fd9-b8c3-d19807eccc94"
     assert ad.flows.node_name({"id": nid, "name": "", "type": "tests.passthrough"}) == nid
 
+
+@pytest.mark.asyncio
+async def test_run_flow_stops_after_current_per_item_step(monkeypatch) -> None:
+    """Cooperative stop should finish the current item, persist partial output, and not run downstream nodes."""
+
+    completed_p1_items = 0
+    original_pt_execute = _PassThroughNode.execute
+
+    async def counting_execute(
+        self,
+        context: "ad.flows.ExecutionContext",
+        node: dict[str, Any],
+        inputs: list[list["ad.flows.FlowItem"]],
+    ) -> list[list["ad.flows.FlowItem"]]:
+        nonlocal completed_p1_items
+        if node["id"] == "p1":
+            completed_p1_items += 1
+        return await original_pt_execute(self, context, node, inputs)
+
+    monkeypatch.setattr(_PassThroughNode, "execute", counting_execute)
+
+    async def fake_read_stop(_ctx: "ad.flows.ExecutionContext") -> bool:
+        return completed_p1_items >= 2
+
+    monkeypatch.setattr("analytiq_data.flows.engine.read_stop", fake_read_stop)
+
+    emit_code = "def run(items, context):\n    return [{'i': i} for i in range(5)]\n"
+    nodes = [
+        _manual_trig("t1", "Start"),
+        {
+            "id": "c1",
+            "name": "Code",
+            "type": "flows.code",
+            "position": [100, 0],
+            "parameters": {"python_code": emit_code, "timeout_seconds": 2},
+            "webhook_id": None,
+            "disabled": False,
+            "on_error": "stop",
+            "retry_on_fail": False,
+            "max_tries": 1,
+            "wait_between_tries_ms": 1000,
+            "notes": None,
+        },
+        _pass_next("p1", "Pass"),
+        _pass_next("b1", "After"),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="c1", connection_type="main", index=0)]]},
+        "c1": {"main": [[ad.flows.NodeConnection(dest_node_id="p1", connection_type="main", index=0)]]},
+        "p1": {"main": [[ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0)]]},
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(
+        context=ctx,
+        revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": None},
+    )
+    assert res["status"] == "stopped"
+    assert len(ctx.run_data["p1"]["data"]["main"][0]) == 2
+    assert "b1" not in ctx.run_data
+
+
+@pytest.mark.asyncio
+async def test_run_flow_stops_between_nodes_after_batch_node(monkeypatch) -> None:
+    """Post-node ``read_stop`` should stop after a batch node finishes, before downstream nodes run."""
+
+    async def fake_read_stop(ctx: "ad.flows.ExecutionContext") -> bool:
+        return "c1" in ctx.run_data
+
+    monkeypatch.setattr("analytiq_data.flows.engine.read_stop", fake_read_stop)
+
+    emit_code = "def run(items, context):\n    return [{'i': i} for i in range(3)]\n"
+    nodes = [
+        _manual_trig("t1", "Start"),
+        {
+            "id": "c1",
+            "name": "Code",
+            "type": "flows.code",
+            "position": [100, 0],
+            "parameters": {"python_code": emit_code, "timeout_seconds": 2},
+            "webhook_id": None,
+            "disabled": False,
+            "on_error": "stop",
+            "retry_on_fail": False,
+            "max_tries": 1,
+            "wait_between_tries_ms": 1000,
+            "notes": None,
+        },
+        _pass_next("b1", "After"),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="c1", connection_type="main", index=0)]]},
+        "c1": {"main": [[ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0)]]},
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(
+        context=ctx,
+        revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": None},
+    )
+    assert res["status"] == "stopped"
+    assert len(ctx.run_data["c1"]["data"]["main"][0]) == 3
+    assert "b1" not in ctx.run_data
+

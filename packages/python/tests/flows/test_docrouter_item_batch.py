@@ -27,6 +27,24 @@ async def test_map_flow_items_batch_preserves_order() -> None:
 
 
 @pytest.mark.asyncio
+async def test_map_flow_items_batch_stops_after_current_item() -> None:
+    completed = 0
+
+    async def fn(i: int) -> int:
+        nonlocal completed
+        await asyncio.sleep(0.01)
+        completed += 1
+        return i
+
+    async def should_stop() -> bool:
+        return completed >= 2
+
+    results = await map_flow_items_batch(5, fn, batch_size=1, should_stop=should_stop)
+    assert results[:2] == [0, 1]
+    assert results[2:] == [None, None, None]
+
+
+@pytest.mark.asyncio
 async def test_map_flow_items_batch_respects_batch_size() -> None:
     active = 0
     max_active = 0
