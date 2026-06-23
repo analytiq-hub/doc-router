@@ -84,6 +84,7 @@ function statusRunning(e: FlowExecution) {
 }
 
 function formatDuration(e: FlowExecution) {
+  if (!e.started_at) return '—';
   const end = e.finished_at ? new Date(e.finished_at).getTime() : Date.now();
   const start = new Date(e.started_at).getTime();
   if (!Number.isFinite(end) || !Number.isFinite(start)) return '—';

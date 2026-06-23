@@ -3,7 +3,6 @@ from __future__ import annotations
 """Checkpoint resume: enqueue a new execution seeded from a terminal source run."""
 
 import logging
-from datetime import UTC, datetime
 from typing import Any
 
 from bson import ObjectId
@@ -64,7 +63,6 @@ async def enqueue_resume_execution(
     source_id = str(source_oid)
     new_oid = ObjectId()
     new_id = str(new_oid)
-    now = datetime.now(UTC)
 
     run_data = dict(source_doc.get("run_data") or {})
     exec_doc: dict[str, Any] = {
@@ -74,7 +72,7 @@ async def enqueue_resume_execution(
         "organization_id": source_doc["organization_id"],
         "mode": source_doc.get("mode") or "manual",
         "status": "queued",
-        "started_at": now,
+        "started_at": None,
         "finished_at": None,
         "last_heartbeat_at": None,
         "stop_requested": False,

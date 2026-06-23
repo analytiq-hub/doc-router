@@ -170,7 +170,7 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
     try:
         claim = await db.flow_executions.update_one(
             {"_id": ObjectId(exec_id), "status": "queued"},
-            {"$set": {"status": "running", "last_heartbeat_at": datetime.now(UTC)}},
+            {"$set": {"status": "running", "started_at": datetime.now(UTC), "last_heartbeat_at": datetime.now(UTC)}},
         )
         if claim.matched_count == 0:
             # Already claimed or completed by another worker; drop the message.

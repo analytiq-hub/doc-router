@@ -175,6 +175,7 @@ async def test_enqueue_resume_execution(test_db) -> None:
     child = await db.flow_executions.find_one({"_id": ObjectId(new_id)})
     assert child is not None
     assert child["status"] == "queued"
+    assert child.get("started_at") is None
     assert child["resumed_from"] == source_id
     assert child["completed_nodes"] == ["t1"]
 

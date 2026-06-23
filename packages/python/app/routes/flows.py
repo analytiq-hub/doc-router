@@ -746,7 +746,7 @@ class FlowExecution(BaseModel):
     organization_id: str
     mode: str
     status: str
-    started_at: datetime
+    started_at: datetime | None = None
     finished_at: datetime | None = None
     last_heartbeat_at: datetime | None = None
     stop_requested: bool = False
@@ -805,9 +805,11 @@ def _execution_doc_to_list_item(d: dict[str, Any]) -> FlowExecution:
         organization_id=d["organization_id"],
         mode=d["mode"],
         status=d["status"],
-        started_at=d["started_at"].replace(tzinfo=UTC).isoformat()
-        if isinstance(d["started_at"], datetime)
-        else d["started_at"],
+        started_at=(
+            d["started_at"].replace(tzinfo=UTC).isoformat()
+            if isinstance(d.get("started_at"), datetime)
+            else None
+        ),
         finished_at=(
             d["finished_at"].replace(tzinfo=UTC).isoformat()
             if isinstance(d.get("finished_at"), datetime)
@@ -2016,7 +2018,7 @@ async def get_execution(organization_id: str, flow_id: str, exec_id: str, curren
         organization_id=d["organization_id"],
         mode=d["mode"],
         status=d["status"],
-        started_at=d["started_at"].replace(tzinfo=UTC),
+        started_at=d["started_at"].replace(tzinfo=UTC) if isinstance(d.get("started_at"), datetime) else None,
         finished_at=d["finished_at"].replace(tzinfo=UTC) if isinstance(d.get("finished_at"), datetime) else d.get("finished_at"),
         last_heartbeat_at=d["last_heartbeat_at"].replace(tzinfo=UTC)
         if isinstance(d.get("last_heartbeat_at"), datetime)

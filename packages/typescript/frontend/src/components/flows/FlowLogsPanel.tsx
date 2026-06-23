@@ -65,6 +65,7 @@ function formatExecutionMs(ms: number | undefined): string {
 }
 
 function formatRunWallDuration(ex: FlowExecution): string {
+  if (!ex.started_at) return '—';
   const end = ex.finished_at ? new Date(ex.finished_at).getTime() : Date.now();
   const start = new Date(ex.started_at).getTime();
   if (!Number.isFinite(end) || !Number.isFinite(start)) return '—';

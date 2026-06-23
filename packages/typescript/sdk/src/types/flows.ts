@@ -154,7 +154,7 @@ export interface FlowExecution {
   organization_id: string;
   mode: string;
   status: FlowExecutionStatus;
-  started_at: string;
+  started_at: string | null;
   finished_at: string | null;
   last_heartbeat_at: string | null;
   stop_requested: boolean;
