@@ -89,7 +89,7 @@ export default function OrganizationSwitcher() {
                   >
                     <span className="truncate mr-2">{organization.name}</span>
                     <span className={`
-                      text-xs px-2 py-1 rounded-full whitespace-nowrap
+                      text-xs px-2 py-1 rounded-md whitespace-nowrap
                       ${typeLabels[organization.type].bg} 
                       ${typeLabels[organization.type].text}
                     `}>
