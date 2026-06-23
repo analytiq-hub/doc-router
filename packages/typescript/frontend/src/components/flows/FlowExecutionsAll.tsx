@@ -148,7 +148,7 @@ const FlowExecutionsAll: React.FC<{ organizationId: string }> = ({ organizationI
                       {statusLabel(e)} <span className="text-gray-500">· {formatDuration(e)}</span>
                     </span>
                   </td>
-                  <td className={td}>{formatLocalDate(e.started_at)}</td>
+                  <td className={td}>{e.started_at ? formatLocalDate(e.started_at) : '—'}</td>
                   <td className={td}>{formatDuration(e)}</td>
                   <td className={`${td} text-right`} onClick={(ev) => ev.stopPropagation()}>
                     {running && (

@@ -423,7 +423,7 @@ const FlowLogsPanel: React.FC<{
           <span className="text-sm font-semibold text-gray-800">Logs</span>
           {execution && (
             <span className="truncate text-xs text-gray-500">
-              {formatLocalDate(execution.started_at)} · {execution.status}
+              {execution.started_at ? formatLocalDate(execution.started_at) : '—'} · {execution.status}
             </span>
           )}
         </button>

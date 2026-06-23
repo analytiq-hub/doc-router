@@ -412,7 +412,7 @@ const FlowExecutionsView: React.FC<{
                       {sel && (
                         <span className="absolute left-0 top-0 h-full w-1 rounded-r bg-emerald-500" aria-hidden />
                       )}
-                      <div className="pl-0.5 text-xs font-medium text-gray-500">{formatLocalDate(e.started_at)}</div>
+                      <div className="pl-0.5 text-xs font-medium text-gray-500">{e.started_at ? formatLocalDate(e.started_at) : '—'}</div>
                       <div
                         className="block min-w-0 pl-0.5 text-sm font-semibold leading-snug text-gray-900 overflow-hidden text-ellipsis whitespace-nowrap text-left"
                         title={
@@ -558,7 +558,7 @@ const FlowExecutionsView: React.FC<{
                     >
                       <div className="flex items-center justify-between gap-2">
                         <p className="m-0 min-w-0 leading-snug break-words">
-                          <span className="font-medium text-gray-800">{formatLocalDate(detail.started_at)}</span> · {detail.status}
+                          <span className="font-medium text-gray-800">{detail.started_at ? formatLocalDate(detail.started_at) : '—'}</span> · {detail.status}
                           {detail.finished_at && <span> · {formatDuration(detail)}</span>} ·{' '}
                           <span className="font-mono text-[11px] text-gray-700">ID {detail.execution_id}</span>
                         </p>
