@@ -47,7 +47,7 @@ from app.routes.agent import agent_router
 from app.routes.flows import flows_router
 from app.routes.flows_credentials import flow_credentials_router
 import analytiq_data as ad
-from worker.worker import start_workers
+from worker.worker import recover_on_worker_startup, start_workers
 
 # Set up the environment variables. This reads the .env file.
 ad.common.setup()
@@ -109,7 +109,9 @@ async def lifespan(app):
     if os.getenv("FLOW_SCHEDULER_ENABLED", "1") == "1":
         await ad.flows.start_flow_trigger_service(analytiq_client)
 
-    # Start background workers
+    # Recover stale queue messages and orphaned flow runs, then start background workers.
+    await recover_on_worker_startup(analytiq_client)
+
     n_docrouter_workers = int(os.getenv("N_DOCROUTER_WORKERS", "1"))
     worker_tasks = start_workers(n_docrouter_workers)
 

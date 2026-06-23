@@ -370,7 +370,9 @@ async def worker_flow_cleanup(worker_id: str) -> None:
     logger.info(f"Starting flow cleanup worker {worker_id} (retention={retention_days}d)")
 
     last_heartbeat = datetime.now(UTC)
+    last_stale_check = datetime.now(UTC)
     CHECK_INTERVAL_SECS = 3600  # Run once per hour
+    STALE_CHECK_INTERVAL_SECS = 60
 
     while True:
         try:
@@ -379,6 +381,15 @@ async def worker_flow_cleanup(worker_id: str) -> None:
             if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
                 logger.info(f"Flow cleanup worker {worker_id} heartbeat")
                 last_heartbeat = now
+
+            if (now - last_stale_check).total_seconds() >= STALE_CHECK_INTERVAL_SECS:
+                try:
+                    finalized = await ad.flows.recover_stale_flow_executions(analytiq_client)
+                    if finalized:
+                        logger.info(f"Flow cleanup: finalized {finalized} stale execution(s)")
+                except Exception as e:
+                    logger.error(f"Flow cleanup stale execution recovery failed: {e}")
+                last_stale_check = now
 
             cutoff = now - timedelta(days=retention_days)
             db = analytiq_client.mongodb_async[ENV]
@@ -435,6 +446,16 @@ async def recover_all_queues(analytiq_client) -> None:
             logger.error(f"Error recovering queue {queue_name} at startup: {e}")
 
 
+async def recover_on_worker_startup(analytiq_client) -> None:
+    """Recover stale queue messages and orphaned flow executions after a restart."""
+    await recover_all_queues(analytiq_client)
+    try:
+        finalized = await ad.flows.recover_stale_flow_executions(analytiq_client)
+        logger.info(f"Startup recovery: stale flow executions finalized={finalized}")
+    except Exception as e:
+        logger.error(f"Error recovering stale flow executions at startup: {e}")
+
+
 def start_workers(n_docrouter_workers: int) -> list[asyncio.Task]:
     """
     Start all worker coroutines as asyncio Tasks within the running event loop.
@@ -462,7 +483,7 @@ async def main():
     # Run startup recovery once with a dedicated client before starting workers
     ENV = os.getenv("ENV", "dev")
     recovery_client = ad.common.get_analytiq_client(env=ENV, name="startup_recovery")
-    await recover_all_queues(recovery_client)
+    await recover_on_worker_startup(recovery_client)
 
     tasks = start_workers(n_docrouter_workers)
     await asyncio.gather(*tasks)
