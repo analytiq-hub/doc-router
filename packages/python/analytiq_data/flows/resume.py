@@ -23,7 +23,7 @@ def revision_resume_on_restart(revision: dict[str, Any] | None) -> bool:
     return bool(settings.get("resume_on_restart"))
 
 
-async def _resolve_revision(db, source_doc: dict[str, Any]) -> dict[str, Any] | None:
+async def resolve_revision(db, source_doc: dict[str, Any]) -> dict[str, Any] | None:
     revision_raw = source_doc.get("revision_snapshot")
     if isinstance(revision_raw, dict):
         return dict(revision_raw)
@@ -123,6 +123,49 @@ async def enqueue_resume_execution(
     return new_id
 
 
+async def reset_running_execution_for_scratch_retry(
+    db,
+    exec_oid: ObjectId,
+    *,
+    heartbeat_guard: dict[str, Any] | None = None,
+) -> bool:
+    """Return a scratch-retryable ``running`` execution to ``queued`` (same row, cleared state)."""
+    filt: dict[str, Any] = {"_id": exec_oid, "status": "running"}
+    if heartbeat_guard is not None:
+        filt.update(heartbeat_guard)
+
+    res = await db.flow_executions.update_one(
+        filt,
+        {
+            "$set": {
+                "status": "queued",
+                "started_at": None,
+                "last_heartbeat_at": None,
+                "run_data": {},
+                "completed_nodes": [],
+                "stop_requested": False,
+            },
+            "$unset": {"finished_at": "", "error": ""},
+        },
+    )
+    return res.modified_count > 0
+
+
+async def send_flow_run_for_execution(analytiq_client, exec_doc: dict[str, Any]) -> None:
+    exec_id = str(exec_doc["_id"])
+    await ad.queue.send_msg(
+        analytiq_client,
+        "flow_run",
+        msg={
+            "flow_id": exec_doc["flow_id"],
+            "flow_revid": exec_doc.get("flow_revid") or "",
+            "execution_id": exec_id,
+            "organization_id": exec_doc["organization_id"],
+            "trigger": dict(exec_doc.get("trigger") or {}),
+        },
+    )
+
+
 async def maybe_auto_resume_after_recovery(
     analytiq_client,
     db,
@@ -138,7 +181,7 @@ async def maybe_auto_resume_after_recovery(
     if not source_doc:
         return None
 
-    revision = await _resolve_revision(db, source_doc)
+    revision = await resolve_revision(db, source_doc)
     if not revision_resume_on_restart(revision):
         return None
 

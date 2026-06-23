@@ -450,10 +450,10 @@ async def recover_on_worker_startup(analytiq_client) -> None:
     """Recover stale queue messages and orphaned flow executions after a restart."""
     await recover_all_queues(analytiq_client)
     try:
-        finalized = await ad.flows.recover_stale_flow_executions(analytiq_client)
-        logger.info(f"Startup recovery: stale flow executions finalized={finalized}")
+        recovered = await ad.flows.recover_orphaned_running_flow_executions_at_startup(analytiq_client)
+        logger.info(f"Startup recovery: orphaned running flow executions recovered={recovered}")
     except Exception as e:
-        logger.error(f"Error recovering stale flow executions at startup: {e}")
+        logger.error(f"Error recovering orphaned running flow executions at startup: {e}")
 
 
 def start_workers(n_docrouter_workers: int) -> list[asyncio.Task]:

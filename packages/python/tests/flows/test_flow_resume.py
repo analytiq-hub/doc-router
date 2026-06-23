@@ -120,6 +120,7 @@ async def _insert_stale_running_execution(
     exec_oid: ObjectId | None = None,
     stop_requested: bool = False,
     revision_settings: dict[str, Any] | None = None,
+    completed_nodes: list[str] | None = None,
 ) -> ObjectId:
     exec_oid = exec_oid or ObjectId()
     stale_hb = datetime.now(UTC) - timedelta(minutes=5)
@@ -129,6 +130,7 @@ async def _insert_stale_running_execution(
         "settings": revision_settings if revision_settings is not None else {"resume_on_restart": True},
         "pin_data": None,
     }
+    nodes = completed_nodes if completed_nodes is not None else ["t1"]
     await db.flow_executions.insert_one(
         {
             "_id": exec_oid,
@@ -141,8 +143,8 @@ async def _insert_stale_running_execution(
             "finished_at": None,
             "last_heartbeat_at": stale_hb,
             "stop_requested": stop_requested,
-            "run_data": {"t1": {"status": "success", "data": {"main": [[]]}}},
-            "completed_nodes": ["t1"],
+            "run_data": {"t1": {"status": "success", "data": {"main": [[]]}}} if nodes else {},
+            "completed_nodes": nodes,
             "revision_snapshot": revision_snapshot,
             "trigger": {},
         }
@@ -376,6 +378,40 @@ async def test_stopped_execution_does_not_auto_resume(test_db, monkeypatch) -> N
     assert source.get("resumed_by") is None
     assert await _child_execution_count(db) == 0
     assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_stale_scratch_retry_when_resume_enabled_and_no_checkpoints(test_db, monkeypatch) -> None:
+    client_obj = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db()
+    exec_oid = ObjectId()
+
+    await _insert_stale_running_execution(
+        db,
+        exec_oid=exec_oid,
+        revision_settings={"resume_on_restart": True},
+        completed_nodes=[],
+    )
+
+    sent: list[dict] = []
+
+    async def _capture_send(_client, queue_name, msg=None, **_kwargs):
+        sent.append({"queue": queue_name, "msg": msg})
+
+    monkeypatch.setattr(ad.queue, "send_msg", _capture_send)
+
+    recovered = await ad.flows.recover_stale_flow_executions(client_obj)
+    assert recovered == 1
+
+    source = await db.flow_executions.find_one({"_id": exec_oid})
+    assert source is not None
+    assert source["status"] == "queued"
+    assert source.get("finished_at") is None
+    assert source["run_data"] == {}
+    assert source.get("resumed_by") is None
+    assert len(sent) == 1
+    assert sent[0]["queue"] == "flow_run"
+    assert sent[0]["msg"]["execution_id"] == str(exec_oid)
 
 
 def _std_manual_node() -> dict:
