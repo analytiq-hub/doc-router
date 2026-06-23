@@ -20,6 +20,7 @@ import analytiq_data as ad
 from analytiq_data.docrouter_flows.document_flow_sidebar import (
     get_document_flow_result,
     list_matching_flows_for_document,
+    rerun_flow_for_document,
 )
 
 from app.auth import get_org_user
@@ -620,6 +621,7 @@ class FlowDocumentResult(BaseModel):
     flow_id: str
     flow_name: str
     flow_revid: str | None = None
+    flow_version: int | None = None
     document_id: str
     execution_id: str = ""
     event_type: str | None = None
@@ -1067,6 +1069,32 @@ async def get_flow_document_result(
             raise HTTPException(status_code=400, detail=msg)
         raise HTTPException(status_code=400, detail=msg)
     return FlowDocumentResult(**row)
+
+
+@flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/run/{document_id}")
+async def rerun_flow_for_document_route(
+    organization_id: str,
+    flow_id: str,
+    document_id: str,
+    current_user: User = Depends(get_org_user),
+):
+    """Re-run an active document-event flow for a document (mirrors prompt reload on the Extraction tab)."""
+    _ = current_user
+    try:
+        execution_id = await rerun_flow_for_document(
+            ad.common.get_analytiq_client(),
+            org_id=organization_id,
+            document_id=document_id,
+            flow_id=flow_id,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        if msg in {"Document not found", "Flow not found", "Flow revision not found", "Trigger node not found", "Flow result not found"}:
+            raise HTTPException(status_code=404, detail=msg) from exc
+        if msg in {"Flow is not active", "Flow has no active revision", "Flow does not match document"}:
+            raise HTTPException(status_code=400, detail=msg) from exc
+        raise HTTPException(status_code=400, detail=msg) from exc
+    return {"execution_id": execution_id}
 
 
 @flows_router.get("/v0/orgs/{organization_id}/flows/{flow_id}")

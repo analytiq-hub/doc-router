@@ -7,7 +7,16 @@ from typing import Any
 
 from bson import ObjectId
 
-from .event_dispatch import DOCROUTER_TRIGGER_TYPE, tag_filter_matches_document
+import analytiq_data as ad
+
+from .event_dispatch import (
+    DOCROUTER_TRIGGER_TYPE,
+    build_docrouter_event_flow_item,
+    build_docrouter_event_payload,
+    enqueue_docrouter_event_flow_run,
+    tag_filter_matches_document,
+)
+from .event_types import DOCROUTER_LLM_EVENT_TYPES
 from .flow_results import FLOW_RESULTS_COLLECTION
 
 
@@ -217,6 +226,7 @@ async def get_document_flow_result(
 
     execution_id = str(result_row.get("execution_id") or "")
     result_flow_revid: str | None = None
+    flow_version: int | None = None
     if execution_id and ObjectId.is_valid(execution_id):
         exec_doc = await db.flow_executions.find_one(
             {"_id": ObjectId(execution_id), "flow_id": resolved_flow_id},
@@ -224,6 +234,13 @@ async def get_document_flow_result(
         )
         if exec_doc and exec_doc.get("flow_revid"):
             result_flow_revid = str(exec_doc["flow_revid"])
+    if result_flow_revid and ObjectId.is_valid(result_flow_revid):
+        rev_doc = await db.flow_revisions.find_one(
+            {"_id": ObjectId(result_flow_revid), "flow_id": resolved_flow_id},
+            {"flow_version": 1},
+        )
+        if rev_doc is not None:
+            flow_version = int(rev_doc.get("flow_version") or 0)
 
     raw_result = result_row.get("result")
     result_dict = dict(raw_result) if isinstance(raw_result, dict) else {}
@@ -240,6 +257,7 @@ async def get_document_flow_result(
         "flow_id": resolved_flow_id,
         "flow_name": str(hdr.get("name") or "Flow"),
         "flow_revid": result_flow_revid,
+        "flow_version": flow_version,
         "document_id": document_id,
         "execution_id": execution_id,
         "event_type": event_type,
@@ -247,3 +265,131 @@ async def get_document_flow_result(
         "created_at": created_at,
         "updated_at": updated_at,
     }
+
+
+async def _latest_llm_context_for_flow_rerun(
+    db,
+    *,
+    org_id: str,
+    document_id: str,
+    prompt_id: str | None,
+) -> tuple[str | None, str | None, str | None, Any]:
+    """Best-effort LLM fields for re-dispatching ``llm.completed`` / ``llm.error`` flows."""
+
+    pid = (prompt_id or "").strip()
+    if not pid:
+        return None, None, None, None
+    run = await db.llm_runs.find_one(
+        {"document_id": document_id, "prompt_id": pid},
+        sort=[("_id", -1)],
+    )
+    if not run:
+        return pid, None, None, None
+    prompt_revid = str(run.get("prompt_revid") or "") or None
+    llm_run_id = str(run.get("_id") or "") or None
+    trigger_llm_result = run.get("result")
+    return pid, prompt_revid, llm_run_id, trigger_llm_result
+
+
+async def rerun_flow_for_document(
+    analytiq_client,
+    *,
+    org_id: str,
+    document_id: str,
+    flow_id: str,
+) -> str:
+    """
+    Re-enqueue a document-event flow for ``document_id`` using the active revision.
+
+    Returns the new ``execution_id``.
+    """
+
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    doc = await ad.common.doc.get_doc(analytiq_client, document_id)
+    if not doc:
+        raise ValueError("Document not found")
+    if doc.get("organization_id") != org_id:
+        raise ValueError("Document not found")
+
+    hdr = await _load_flow_header(db, org_id=org_id, flow_id=flow_id)
+    if not hdr:
+        raise ValueError("Flow not found")
+    if not hdr.get("active"):
+        raise ValueError("Flow is not active")
+
+    flow_revid = str(hdr.get("active_flow_revid") or "")
+    if not flow_revid or not ObjectId.is_valid(flow_revid):
+        raise ValueError("Flow has no active revision")
+
+    revision = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
+    if not revision:
+        raise ValueError("Flow revision not found")
+
+    doc_tag_ids = await _load_document_tag_ids(db, org_id=org_id, document_id=document_id)
+    event_type = _event_type_from_revision(revision, doc_tag_ids)
+    if event_type is None:
+        raise ValueError("Flow does not match document")
+
+    trigger_node_id: str | None = None
+    report_result = True
+    prompt_id: str | None = None
+    for node in revision.get("nodes") or []:
+        if node.get("disabled"):
+            continue
+        if (node.get("type") or "") != DOCROUTER_TRIGGER_TYPE:
+            continue
+        params = node.get("parameters") or {}
+        configured_tags = _normalized_tag_ids(params.get("tag_ids"))
+        if not tag_filter_matches_document(configured_tags, doc_tag_ids):
+            continue
+        node_event = params.get("event_type")
+        if node_event != event_type:
+            continue
+        trigger_node_id = str(node.get("id") or "")
+        report_result = bool(params.get("report_result", True))
+        raw_prompt = params.get("prompt_id")
+        prompt_id = raw_prompt.strip() if isinstance(raw_prompt, str) and raw_prompt.strip() else None
+        break
+
+    if not trigger_node_id:
+        raise ValueError("Trigger node not found")
+
+    prompt_revid: str | None = None
+    llm_run_id: str | None = None
+    trigger_llm_result: Any = None
+    error_message: str | None = None
+    error_code: str | None = None
+    if event_type in DOCROUTER_LLM_EVENT_TYPES:
+        pid, prompt_revid, llm_run_id, trigger_llm_result = await _latest_llm_context_for_flow_rerun(
+            db,
+            org_id=org_id,
+            document_id=document_id,
+            prompt_id=prompt_id,
+        )
+        prompt_id = pid
+        if event_type == "llm.error" and isinstance(trigger_llm_result, dict):
+            error_message = str(trigger_llm_result.get("error_message") or trigger_llm_result.get("message") or "")
+            error_code = str(trigger_llm_result.get("error_code") or "") or None
+
+    payload = await build_docrouter_event_payload(
+        analytiq_client,
+        event_type=event_type,
+        doc=doc,
+        prompt_id=prompt_id,
+        prompt_revid=prompt_revid,
+        llm_run_id=llm_run_id,
+        trigger_llm_result=trigger_llm_result,
+        error_message=error_message,
+        error_code=error_code,
+    )
+    item = build_docrouter_event_flow_item(payload, doc, source_node_id=trigger_node_id)
+    return await enqueue_docrouter_event_flow_run(
+        analytiq_client,
+        organization_id=org_id,
+        flow_id=flow_id,
+        flow_revid=flow_revid,
+        trigger_node_id=trigger_node_id,
+        payload=payload,
+        item=item,
+        report_result=report_result,
+    )

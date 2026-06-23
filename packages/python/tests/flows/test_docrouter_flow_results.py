@@ -308,6 +308,7 @@ async def test_get_flow_document_result_http(test_db, mock_auth):
     assert item["flow_id"] == flow_id
     assert item["flow_name"] == "doc event flow"
     assert item["flow_revid"] == rev_id
+    assert item["flow_version"] == 1
     assert item["execution_id"] == exec_ids[0]
     assert item["result"]["flow_output"] is True
 

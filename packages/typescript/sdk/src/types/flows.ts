@@ -125,6 +125,8 @@ export interface FlowDocumentResult {
   flow_id: string;
   flow_name: string;
   flow_revid?: string | null;
+  /** Revision version that produced the captured result (from the execution's flow_revid). */
+  flow_version?: number | null;
   document_id: string;
   execution_id?: string;
   event_type?: string | null;

@@ -1044,6 +1044,13 @@ export class DocRouterOrg {
     );
   }
 
+  async rerunFlowForDocument(flowId: string, documentId: string): Promise<{ execution_id: string }> {
+    return this.http.post<{ execution_id: string }>(
+      `/v0/orgs/${this.organizationId}/flows/${flowId}/run/${documentId}`,
+      {},
+    );
+  }
+
   async getFlow(flowId: string): Promise<FlowListItem> {
     return this.http.get<FlowListItem>(`/v0/orgs/${this.organizationId}/flows/${flowId}`);
   }
