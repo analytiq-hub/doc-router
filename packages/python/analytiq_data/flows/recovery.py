@@ -29,7 +29,7 @@ def _get_int_env(name: str, default: int) -> int:
 
 
 # Running executions heartbeat every 5s; treat as dead after this gap with no heartbeat.
-FLOW_EXECUTION_STALE_SECS = _get_int_env("FLOW_EXECUTION_STALE_SECS", 60)
+FLOW_EXECUTION_STALE_SECS = _get_int_env("FLOW_EXECUTION_STALE_SECS", 300)
 
 
 def _stale_running_cutoff(now: datetime) -> datetime:
