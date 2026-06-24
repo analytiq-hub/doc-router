@@ -8,6 +8,7 @@ metadata:
 data:
   ENV: {{ .Values.config.environment | quote }}
   NEXTAUTH_URL: {{ .Values.config.nextauthUrl | quote }}
+  PUBLIC_API_URL: {{ required "config.publicApiUrl is required" .Values.config.publicApiUrl | quote }}
   FASTAPI_ROOT_PATH: {{ .Values.config.fastapiRootPath | quote }}
   FASTAPI_BACKEND_URL: {{ printf "http://backend.%s.svc.cluster.local:8000" .Release.Namespace | quote }}
   N_DOCROUTER_WORKERS: {{ .Values.config.nDocrouterWorkers | quote }}

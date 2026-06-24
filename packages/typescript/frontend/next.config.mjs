@@ -7,6 +7,9 @@ import TerserPlugin from 'terser-webpack-plugin';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig = {
+  env: {
+    NEXT_PUBLIC_FASTAPI_FRONTEND_URL: process.env.PUBLIC_API_URL || '/fastapi',
+  },
   output: 'standalone',
   allowedDevOrigins: ['127.0.0.1'],
   transpilePackages: ['@tsed/react-formio', '@tsed/tailwind-formio', '@docrouter/sdk'],

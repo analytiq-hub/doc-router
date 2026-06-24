@@ -21,3 +21,4 @@ replicaCount:
 config:
   environment: dev
   nextauthUrl: "http://localhost"
+  publicApiUrl: "http://localhost/fastapi"

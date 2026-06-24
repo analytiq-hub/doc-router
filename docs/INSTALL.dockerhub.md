@@ -155,7 +155,7 @@ If you want to build the images yourself:
 make dockerhub-build
 
 # Build with custom backend URL
-make dockerhub-build NEXT_PUBLIC_FASTAPI_FRONTEND_URL=http://backend:8000
+make dockerhub-build PUBLIC_API_URL=https://<mydomain>/fastapi
 
 # Build and push both images to DockerHub
 make dockerhub-build-push

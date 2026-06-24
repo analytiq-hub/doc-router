@@ -43,6 +43,7 @@ echo "Building frontend image..."
 docker build -t analytiq-hub/doc-router-frontend:"$IMAGE_TAG" \
   --target runner \
   --build-arg NODE_ENV=production \
+  --build-arg PUBLIC_API_URL="http://localhost/fastapi" \
   -f deploy/shared/docker/Dockerfile .
 
 echo "Building backend image..."
@@ -103,6 +104,7 @@ helm upgrade --install "$RELEASE" "$CHART_DIR" \
   --values "$VALUES_KIND" \
   --set image.frontend.tag="$IMAGE_TAG" \
   --set image.backend.tag="$IMAGE_TAG" \
+  --set config.publicApiUrl="http://localhost/fastapi" \
   --atomic \
   --timeout 5m \
   --wait

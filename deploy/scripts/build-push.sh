@@ -63,6 +63,7 @@ echo "Building frontend image..."
 docker build \
   --target runner \
   --build-arg NODE_ENV=production \
+  --build-arg PUBLIC_API_URL="https://$APP_HOST${FASTAPI_ROOT_PATH:-/fastapi}" \
   -t "$FRONTEND_IMAGE_REPO:$IMAGE_TAG" \
   -t "$FRONTEND_IMAGE_REPO:latest" \
   -f deploy/shared/docker/Dockerfile .

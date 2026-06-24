@@ -36,12 +36,7 @@ _SCOPE_FIELD_PLACEHOLDER = re.compile(
 
 _ENV_SECRET = os.getenv("NEXTAUTH_SECRET")
 _ALGORITHM = "HS256"
-_FLOW_OAUTH_PUBLIC_ORIGIN = (
-    os.getenv("FLOW_OAUTH_PUBLIC_ORIGIN")
-    or os.getenv("PUBLIC_API_URL")
-    or os.getenv("DOCROUTER_API_PUBLIC_ORIGIN")
-    or "http://127.0.0.1:8000"
-)
+_PUBLIC_API_URL = os.getenv("PUBLIC_API_URL", "http://127.0.0.1:8000")
 _NEXTAUTH_URL = os.getenv("NEXTAUTH_URL", "http://localhost:3000")
 
 # Entra ID loopback redirect URIs must use localhost, not 127.0.0.1 (AADSTS50011).
@@ -55,9 +50,9 @@ def _is_entra_host(url: str) -> bool:
 
 
 def _prefer_localhost_loopback_for_oauth_origin() -> str:
-    """``FLOW_OAUTH_PUBLIC_ORIGIN`` with 127.0.0.1 mapped to localhost when required."""
+    """``PUBLIC_API_URL`` with 127.0.0.1 mapped to localhost when required."""
 
-    base = _FLOW_OAUTH_PUBLIC_ORIGIN.rstrip("/")
+    base = _PUBLIC_API_URL.rstrip("/")
     parsed = urlparse(base)
     if parsed.hostname == "127.0.0.1":
         port_suffix = f":{parsed.port}" if parsed.port else ""
@@ -121,7 +116,7 @@ def flow_oauth_redirect_uri(*, prefer_localhost_loopback: bool = False) -> str:
     base = (
         _prefer_localhost_loopback_for_oauth_origin()
         if prefer_localhost_loopback
-        else _FLOW_OAUTH_PUBLIC_ORIGIN.rstrip("/")
+        else _PUBLIC_API_URL.rstrip("/")
     )
     return f"{base}/v0/callback/flow-oauth"
 

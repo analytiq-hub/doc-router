@@ -7,8 +7,8 @@ BACKEND_IMAGE = $(REGISTRY)/doc-router-backend
 IMAGE_TAG ?= latest
 export IMAGE_TAG
 DOCKERFILE = deploy/shared/docker/Dockerfile
-# Build args for frontend (NEXT_PUBLIC_ vars are baked into Next.js build at build time)
-NEXT_PUBLIC_FASTAPI_FRONTEND_URL ?= http://localhost:8000
+# Build args for frontend (PUBLIC_API_URL is baked into Next.js build at build time)
+PUBLIC_API_URL ?= http://localhost:8000
 NODE_ENV ?= production
 
 help:
@@ -297,11 +297,11 @@ clean:
 # DockerHub targets
 dockerhub-build-frontend:
 	@echo "Building frontend image: $(FRONTEND_IMAGE):$(IMAGE_TAG)"
-	@echo "Using NEXT_PUBLIC_FASTAPI_FRONTEND_URL=$(NEXT_PUBLIC_FASTAPI_FRONTEND_URL)"
-	@echo "Note: This value is baked into the Next.js build. Override with: make dockerhub-build-frontend NEXT_PUBLIC_FASTAPI_FRONTEND_URL=your-url"
+	@echo "Using PUBLIC_API_URL=$(PUBLIC_API_URL)"
+	@echo "Note: This value is baked into the Next.js build. Override with: make dockerhub-build-frontend PUBLIC_API_URL=your-url"
 	docker build -t $(FRONTEND_IMAGE):$(IMAGE_TAG) \
 		--target frontend \
-		--build-arg NEXT_PUBLIC_FASTAPI_FRONTEND_URL=$(NEXT_PUBLIC_FASTAPI_FRONTEND_URL) \
+		--build-arg PUBLIC_API_URL=$(PUBLIC_API_URL) \
 		--build-arg NODE_ENV=$(NODE_ENV) \
 		-f $(DOCKERFILE) .
 

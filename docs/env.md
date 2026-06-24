@@ -86,13 +86,14 @@ The DocRouter project uses a single `.env` file at the project root that is shar
 
 ## Frontend Configuration
 
-### `NEXT_PUBLIC_FASTAPI_FRONTEND_URL`
-- **Purpose**: URL for the FastAPI backend as seen by the frontend
-- **Default**: `"http://localhost:8000"`
+### `PUBLIC_API_URL`
+- **Purpose**: Public URL for the FastAPI backend as seen by browsers and OAuth providers
+- **Default**: `"http://localhost:8000"` (host dev); `/fastapi` for same-origin Docker frontend builds
 - **Usage**:
   - API client configuration (`packages/typescript/frontend/src/utils/api.ts`)
   - Developer settings page (`packages/typescript/frontend/src/app/settings/user/developer/page.tsx`)
-  - Formio provider configuration (`packages/typescript/frontend/src/components/FormioProvider.tsx`)
+  - Flow OAuth redirect URIs (`packages/python/analytiq_data/flows/credential_runtime.py`)
+- **Note**: Mapped to `NEXT_PUBLIC_FASTAPI_FRONTEND_URL` at Next.js build time via `next.config.mjs`. Must be a full absolute URL in backend/worker runtime (e.g. `https://<domain>/fastapi` in production).
 
 ## AWS Configuration
 
@@ -292,13 +293,13 @@ The following variables need to be configured differently when running in Docker
   - **With external MongoDB**: `mongodb://YOUR_HOST_IP:27017` (replace YOUR_HOST_IP with actual host IP)
   - Uses Docker service names (`mongodb`) instead of `localhost`
 
-### `NEXT_PUBLIC_FASTAPI_FRONTEND_URL`
+### `PUBLIC_API_URL`
 - **Host-side Development**: 
   - Default: `http://localhost:8000`
   - Frontend connects to backend on localhost
 - **Docker Setup**:
-  - Default: `http://localhost:8000` (but may need to be `http://backend:8000` for internal container communication)
-  - Frontend container connects to backend container
+  - Frontend build: `/fastapi` (same-origin relative path via nginx) or `https://<domain>/fastapi`
+  - Backend/worker runtime: full absolute URL, e.g. `https://<domain>/fastapi` (required for OAuth redirect URIs)
 
 ### `FASTAPI_ROOT_PATH`
 - **Host-side Development**: 
@@ -340,7 +341,7 @@ Docker containers can access host services using:
 ```bash
 ENV=dev
 MONGODB_URI=mongodb://localhost:27017
-NEXT_PUBLIC_FASTAPI_FRONTEND_URL=http://localhost:8000
+PUBLIC_API_URL=http://localhost:8000
 FASTAPI_ROOT_PATH=/
 NEXTAUTH_URL=http://localhost:3000
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
@@ -350,7 +351,7 @@ CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ```bash
 ENV=dev
 MONGODB_URI=mongodb://admin:admin@mongodb:27017?authSource=admin
-NEXT_PUBLIC_FASTAPI_FRONTEND_URL=http://localhost:8000
+PUBLIC_API_URL=http://localhost:8000
 FASTAPI_ROOT_PATH=/fastapi
 NEXTAUTH_URL=http://localhost:3000
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://host.docker.internal:3000
@@ -360,7 +361,7 @@ CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://host.docker.inte
 ```bash
 ENV=dev
 MONGODB_URI=mongodb://YOUR_HOST_IP:27017
-NEXT_PUBLIC_FASTAPI_FRONTEND_URL=http://localhost:8000
+PUBLIC_API_URL=http://localhost:8000
 FASTAPI_ROOT_PATH=/fastapi
 NEXTAUTH_URL=http://localhost:3000
 CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000,http://host.docker.internal:3000
@@ -400,7 +401,7 @@ AUTH_GOOGLE_ID=your-google-client-id
 AUTH_GOOGLE_SECRET=your-google-client-secret
 
 # Frontend
-NEXT_PUBLIC_FASTAPI_FRONTEND_URL=http://localhost:8000
+PUBLIC_API_URL=http://localhost:8000
 
 # AWS Configuration
 AWS_ACCESS_KEY_ID=your-aws-access-key

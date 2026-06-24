@@ -39,7 +39,7 @@ def test_flow_oauth_redirect_uri_keeps_127_for_non_microsoft(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "analytiq_data.flows.credential_runtime._FLOW_OAUTH_PUBLIC_ORIGIN",
+        "analytiq_data.flows.credential_runtime._PUBLIC_API_URL",
         "http://127.0.0.1:8000",
     )
     assert (
@@ -52,7 +52,7 @@ def test_flow_oauth_redirect_uri_microsoft_maps_127_to_localhost(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "analytiq_data.flows.credential_runtime._FLOW_OAUTH_PUBLIC_ORIGIN",
+        "analytiq_data.flows.credential_runtime._PUBLIC_API_URL",
         "http://127.0.0.1:8000",
     )
     fields = {
@@ -112,7 +112,7 @@ def test_build_oauth_authorization_url_microsoft_uses_localhost_redirect(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "analytiq_data.flows.credential_runtime._FLOW_OAUTH_PUBLIC_ORIGIN",
+        "analytiq_data.flows.credential_runtime._PUBLIC_API_URL",
         "http://127.0.0.1:8000",
     )
     fields = {

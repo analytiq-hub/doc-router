@@ -88,8 +88,9 @@ STRIPE_PUBLISHABLE_KEY=pk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
 ```
 
-`NEXTAUTH_URL` and `NEXT_PUBLIC_FASTAPI_FRONTEND_URL` are derived automatically from `APP_HOST`
-and do not need to be set in the overlay file.
+`NEXTAUTH_URL` is derived automatically from `APP_HOST` and does not need to be set in the
+overlay file. `PUBLIC_API_URL` is set explicitly by `k8s-deploy.sh` and `build-push.sh` as
+`https://$APP_HOST/fastapi` (using `FASTAPI_ROOT_PATH` when configured).
 
 ### Deploying (fresh install or rolling update)
 
