@@ -8,7 +8,7 @@ services:
       args:
         # Build-time environment
         - NODE_ENV=production
-        - NEXT_PUBLIC_FASTAPI_FRONTEND_URL=${NEXT_PUBLIC_FASTAPI_FRONTEND_URL:-/fastapi}
+        - PUBLIC_API_URL=${PUBLIC_API_URL:-/fastapi}
     environment:
       # Runtime environment
       - ENV=${ENV:-dev}
@@ -67,6 +67,7 @@ services:
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
       - FASTAPI_SECRET=${FASTAPI_SECRET:-${NEXTAUTH_SECRET}} # Obsolete, will be removed
       - FASTAPI_ROOT_PATH=${FASTAPI_ROOT_PATH:-/fastapi}
+      - PUBLIC_API_URL=${PUBLIC_API_URL:-http://localhost:8000}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
@@ -115,6 +116,7 @@ services:
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-default_secret_for_development}
       - FASTAPI_SECRET=${FASTAPI_SECRET:-${NEXTAUTH_SECRET}} # Obsolete, will be removed
       - FASTAPI_ROOT_PATH=${FASTAPI_ROOT_PATH:-/fastapi}
+      - PUBLIC_API_URL=${PUBLIC_API_URL:-http://localhost:8000}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-admin}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}

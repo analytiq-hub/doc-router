@@ -14,11 +14,11 @@ RUN cd packages/typescript/frontend && npm install
 
 # Build-time arguments
 ARG NODE_ENV=production
-ARG NEXT_PUBLIC_FASTAPI_FRONTEND_URL=/fastapi
+ARG PUBLIC_API_URL=/fastapi
 
 # Set build-time environment variables
 ENV NODE_ENV=${NODE_ENV}
-ENV NEXT_PUBLIC_FASTAPI_FRONTEND_URL=${NEXT_PUBLIC_FASTAPI_FRONTEND_URL}
+ENV PUBLIC_API_URL=${PUBLIC_API_URL}
 
 RUN echo "NODE_ENV=${NODE_ENV}"
 # Now copy the rest of the frontend files
