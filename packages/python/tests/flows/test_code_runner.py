@@ -66,6 +66,20 @@ def test_minimal_env_forwards_flow_code_allowlists(monkeypatch: pytest.MonkeyPat
     assert "SECRET_TOKEN" not in env
 
 
+def test_security_config_empty_stdlib_allow_uses_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FLOW_CODE_STDLIB_ALLOW", "")
+    config = SecurityConfig.from_env()
+    assert "json" in config.stdlib_allow
+    assert "re" in config.stdlib_allow
+
+
+def test_security_config_empty_builtins_deny_uses_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FLOW_CODE_BUILTINS_DENY", "")
+    config = SecurityConfig.from_env()
+    assert "eval" in config.builtins_deny
+    assert "exec" in config.builtins_deny
+
+
 @pytest.mark.asyncio
 async def test_run_python_code_external_allow_fitz(monkeypatch: pytest.MonkeyPatch) -> None:
     pytest.importorskip("fitz")

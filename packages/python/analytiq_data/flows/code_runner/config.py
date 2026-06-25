@@ -31,7 +31,7 @@ def _parse_csv(value: str | None) -> list[str]:
 
 
 def _parse_allowlist(value: str | None, default: str) -> set[str]:
-    raw = value if value is not None else default
+    raw = default if value is None or not value.strip() else value
     parts = _parse_csv(raw)
     if not parts:
         return set()
@@ -55,7 +55,10 @@ class SecurityConfig:
     @classmethod
     def from_env(cls) -> SecurityConfig:
         deny_raw = os.environ.get("FLOW_CODE_BUILTINS_DENY")
-        deny = set(_parse_csv(deny_raw)) if deny_raw is not None else set(BUILTINS_DENY_DEFAULT)
+        if deny_raw is None or not deny_raw.strip():
+            deny = set(BUILTINS_DENY_DEFAULT)
+        else:
+            deny = set(_parse_csv(deny_raw))
         return cls(
             stdlib_allow=_parse_allowlist(
                 os.environ.get("FLOW_CODE_STDLIB_ALLOW"), DEFAULT_STDLIB_ALLOW
@@ -99,6 +102,6 @@ def flow_code_env_for_child() -> dict[str, str]:
     env["FLOW_CODE_SITE_PACKAGES"] = sysconfig.get_path("purelib")
     for key in FLOW_CODE_ENV_VARS:
         value = os.environ.get(key)
-        if value is not None:
+        if value is not None and value.strip():
             env[key] = value
     return env
