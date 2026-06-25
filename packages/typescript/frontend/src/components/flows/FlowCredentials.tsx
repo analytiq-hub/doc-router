@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Menu, MenuButton, MenuItem, MenuItems, MenuSeparator } from '@headlessui/react';
 import {
-  BeakerIcon,
+  BoltIcon,
   EllipsisVerticalIcon,
   MagnifyingGlassIcon,
   PencilSquareIcon,
@@ -383,7 +383,7 @@ const FlowCredentials: React.FC<{
                             onClick={() => void runTest(row)}
                             className="rounded-md p-1.5 text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
                           >
-                            <BeakerIcon className="h-5 w-5" aria-hidden />
+                            <BoltIcon className="h-5 w-5" aria-hidden />
                           </button>
                         ) : null}
                         <button
@@ -413,7 +413,7 @@ const FlowCredentials: React.FC<{
                                     className={`${flowWorkspaceDropdownItemClass} w-full ${focus ? 'bg-gray-100' : ''} disabled:cursor-not-allowed disabled:opacity-50`}
                                     onClick={() => void runTest(row)}
                                   >
-                                    <BeakerIcon className="h-4 w-4 shrink-0" aria-hidden /> Test
+                                    <BoltIcon className="h-4 w-4 shrink-0" aria-hidden /> Test
                                   </button>
                                 )}
                               </MenuItem>

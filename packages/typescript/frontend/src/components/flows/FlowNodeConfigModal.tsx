@@ -17,7 +17,7 @@ import {
   TabPanel,
   TabPanels,
 } from '@headlessui/react';
-import { BeakerIcon, ChevronRightIcon, EllipsisVerticalIcon, MapPinIcon as MapPinOutlineIcon } from '@heroicons/react/24/outline';
+import { BoltIcon, ChevronRightIcon, EllipsisVerticalIcon, MapPinIcon as MapPinOutlineIcon, PlayIcon } from '@heroicons/react/24/outline';
 import { MapPinIcon as MapPinSolidIcon, PencilSquareIcon, XMarkIcon } from '@heroicons/react/24/solid';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import Editor from '@monaco-editor/react';
@@ -107,7 +107,7 @@ const ScheduleTriggerTestHeader: React.FC<{
             aria-hidden
           />
         ) : (
-          <BeakerIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          <BoltIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
         )}
         {busy ? 'Running…' : 'Test trigger'}
       </button>
@@ -1080,7 +1080,7 @@ const FlowNodeConfigModal: React.FC<{
                                   aria-hidden
                                 />
                               ) : (
-                                <BeakerIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                                <PlayIcon className="h-3.5 w-3.5 shrink-0" aria-hidden />
                               )}
                               {executeStepBusy ? 'Running…' : 'Execute step'}
                             </button>

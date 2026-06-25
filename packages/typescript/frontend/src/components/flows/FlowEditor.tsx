@@ -25,12 +25,12 @@ import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
 import {
   ArrowUturnLeftIcon,
   ArrowsPointingOutIcon,
-  BeakerIcon,
   ChevronDownIcon,
   ChevronLeftIcon,
   MagnifyingGlassIcon,
   MagnifyingGlassMinusIcon,
   MagnifyingGlassPlusIcon,
+  PlayIcon,
   PlusIcon,
   Square2StackIcon,
 } from '@heroicons/react/24/outline';
@@ -72,7 +72,7 @@ import { edgesWithRunDataItemCounts } from './flowNodeIoPreview';
 import { inputHandleCount, inputPortType, outputPortType, portTypesCompatible, edgeConnectionType } from './flowRf';
 import type { FlowConnectionType, FlowRfNodeData } from './flowRf';
 import { triggerReachabilityFromGraph } from './flowTriggerReachability';
-import { flowRunButtonCanvasClass } from './flowUiClasses';
+import { flowRunButtonCanvasClass, FLOW_EXECUTE_FLOW_LABEL } from './flowUiClasses';
 import { flowWorkspaceDropdownItemSimpleClass, flowWorkspaceMenuPanelClass } from './flowWorkspaceMenu';
 
 export type FlowExecuteWorkflowTriggerOption = { id: string; label: string };
@@ -1075,7 +1075,7 @@ const FlowEditor: React.FC<{
                     <div className="inline-flex shrink-0 overflow-hidden rounded-md shadow-md ring-1 ring-black/10">
                       <button
                         type="button"
-                        aria-label={`Execute workflow (${footerExecuteSubLabel})`}
+                        aria-label={`${FLOW_EXECUTE_FLOW_LABEL} (${footerExecuteSubLabel})`}
                         disabled={!preferredFooterTriggerId}
                         onClick={() => {
                           if (!preferredFooterTriggerId) return;
@@ -1083,9 +1083,9 @@ const FlowEditor: React.FC<{
                         }}
                         className={`${flowRunButtonCanvasClass} gap-3 rounded-none px-5 py-2.5 text-left`}
                       >
-                        <BeakerIcon className="h-4 w-4 shrink-0" aria-hidden />
+                        <PlayIcon className="h-4 w-4 shrink-0" aria-hidden />
                         <span className="flex flex-col items-start leading-tight">
-                          <span className="whitespace-nowrap">Execute workflow</span>
+                          <span className="whitespace-nowrap">{FLOW_EXECUTE_FLOW_LABEL}</span>
                           <span className="text-[11px] font-semibold opacity-95">{footerExecuteSubLabel}</span>
                         </span>
                       </button>
@@ -1124,8 +1124,8 @@ const FlowEditor: React.FC<{
                       onClick={onExecute}
                       className={flowRunButtonCanvasClass}
                     >
-                      <BeakerIcon className="h-4 w-4" aria-hidden />
-                      Execute workflow
+                      <PlayIcon className="h-4 w-4" aria-hidden />
+                      {FLOW_EXECUTE_FLOW_LABEL}
                     </button>
                   ) : undefined
                 }

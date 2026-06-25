@@ -56,7 +56,7 @@ export const FlowScheduleTriggerRulesField: React.FC<{
     <div className="space-y-3">
       <div className="rounded-md border border-blue-100 bg-blue-50/80 px-3 py-2.5 text-sm text-gray-700">
         This flow runs on the schedule below once you <strong>activate</strong> it. To test without waiting,
-        use <strong>Execute workflow</strong> on the canvas.
+        use <strong>Execute flow</strong> on the canvas.
       </div>
 
       <div className={flowLabelClass}>{label}</div>

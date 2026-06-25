@@ -3,7 +3,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Switch } from '@headlessui/react';
 import {
-  BeakerIcon,
+  BoltIcon,
   CheckCircleIcon,
   EyeIcon,
   EyeSlashIcon,
@@ -435,7 +435,7 @@ const FlowCredentialEditModal: React.FC<FlowCredentialEditModalProps> = (props) 
               onClick={() => void runTest()}
               title="Test connection"
             >
-              <BeakerIcon className="mr-1.5 inline h-4 w-4" aria-hidden />
+              <BoltIcon className="mr-1.5 inline h-4 w-4" aria-hidden />
               {testLoading ? 'Testing…' : 'Test'}
             </button>
           ) : null}

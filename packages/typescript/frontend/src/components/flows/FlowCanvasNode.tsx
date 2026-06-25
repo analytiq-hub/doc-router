@@ -13,7 +13,7 @@ import {
   StopCircleIcon,
   TrashIcon,
 } from '@heroicons/react/24/solid';
-import { BeakerIcon, NoSymbolIcon } from '@heroicons/react/24/outline';
+import { NoSymbolIcon } from '@heroicons/react/24/outline';
 import { inputHandleCount, inputPortTypes, outputPortTypes } from './flowRf';
 import type { FlowConnectionType } from './flowRf';
 import type { FlowRfNodeDataWithRun, NodeRunStatusBadge } from './flowNodeRunStatus';
@@ -29,7 +29,7 @@ import {
   flowWorkspaceMenuPanelClass,
   flowWorkspaceMenuTriggerCompactClass,
 } from './flowWorkspaceMenu';
-import { flowRunButtonTriggerHoverClass } from './flowUiClasses';
+import { flowRunButtonTriggerHoverClass, FLOW_EXECUTE_FLOW_LABEL } from './flowUiClasses';
 
 const handleClass =
   '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-emerald-500 hover:!bg-emerald-50';
@@ -45,8 +45,8 @@ function handleClassForPortType(portType: FlowConnectionType): string {
 const FLOW_TRIGGER_NODE_BODY_PX = 96;
 const TRIGGER_EXECUTE_BTN_H_PX = FLOW_TRIGGER_NODE_BODY_PX / 3;
 
-/** Test id slug for hover “Execute workflow” (mirrors typical workflow-editor naming). */
-function flowExecuteWorkflowTestSlug(displayLabel: string, fallbackId: string): string {
+/** Test id slug for hover “Execute flow” control. */
+function flowExecuteFlowButtonTestSlug(displayLabel: string, fallbackId: string): string {
   const t = displayLabel.trim();
   if (!t) return fallbackId.slice(0, 64);
   return t.slice(0, 120).replace(/[^\w\s-]/g, '');
@@ -410,8 +410,8 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
               <button
                 type="button"
                 aria-live="polite"
-                aria-label={`Execute workflow from ${displayLabel}`}
-                data-test-id={`execute-workflow-button-${flowExecuteWorkflowTestSlug(displayLabel, id)}`}
+                aria-label={`${FLOW_EXECUTE_FLOW_LABEL} from ${displayLabel}`}
+                data-test-id={`execute-flow-button-${flowExecuteFlowButtonTestSlug(displayLabel, id)}`}
                 className={flowRunButtonTriggerHoverClass}
                 style={{
                   height: TRIGGER_EXECUTE_BTN_H_PX,
@@ -425,8 +425,8 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
                   void actions?.onHoverExecuteWorkflowFromTrigger?.(id);
                 }}
               >
-                <BeakerIcon className="h-2.5 w-2.5 shrink-0 opacity-95" aria-hidden strokeWidth={2} />
-                <span>Execute workflow</span>
+                <PlayIcon className="h-2.5 w-2.5 shrink-0 opacity-95" aria-hidden />
+                <span>{FLOW_EXECUTE_FLOW_LABEL}</span>
               </button>
             </>
           ) : null}

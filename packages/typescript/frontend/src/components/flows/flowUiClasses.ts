@@ -60,7 +60,10 @@ export const flowPanelColResizeHandleClass =
 const flowRunButtonColorClass =
   'bg-primary-600 text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60';
 
-/** Canvas footer “Execute workflow” and split trigger picker. */
+/** User-visible label for full-flow run actions (canvas footer, trigger hover). */
+export const FLOW_EXECUTE_FLOW_LABEL = 'Execute flow';
+
+/** Canvas footer execute control and split trigger picker. */
 export const flowRunButtonCanvasClass = `inline-flex shrink-0 items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold shadow-md transition active:scale-[0.99] ${flowRunButtonColorClass}`;
 
 /** Node modal test / execute-step and trigger test controls. */
