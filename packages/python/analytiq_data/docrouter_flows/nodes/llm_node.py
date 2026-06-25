@@ -22,6 +22,8 @@ class DocRouterLlmRunNode:
     palette_group = "docrouter"
     is_trigger = False
     is_merge = True
+    batch_execute_inputs: bool = True
+    supports_batch_size: bool = True
     min_inputs = 1
     max_inputs = 2
     outputs = 1

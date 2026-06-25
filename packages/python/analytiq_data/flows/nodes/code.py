@@ -16,8 +16,9 @@ class FlowsCodeNode:
         def run(items: list[dict], context: dict) -> list[dict]:
             ...
 
-    The engine calls ``execute()`` once with all upstream items (``batch_execute_inputs``).
     Mode controls whether ``run`` is invoked once for all items or once per item inside the child.
+
+    The engine calls ``execute()`` once with all upstream items (``batch_execute_inputs``).
     """
 
     key = "flows.code"

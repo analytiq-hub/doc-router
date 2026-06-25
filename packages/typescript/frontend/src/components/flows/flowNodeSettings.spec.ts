@@ -3,6 +3,7 @@ import {
   FLOW_NODE_BATCH_SIZE_DEFAULT,
   FLOW_NODE_BATCH_SIZE_MAX,
   FLOW_NODE_BATCH_SIZE_MIN,
+  nodeTypeSupportsBatchSize,
   resolveFlowNodeBatchSize,
 } from './flowNodeSettings';
 
@@ -19,5 +20,15 @@ describe('resolveFlowNodeBatchSize', () => {
 
   it('accepts legacy item_concurrency', () => {
     expect(resolveFlowNodeBatchSize({ item_concurrency: 3 })).toBe(3);
+  });
+});
+
+describe('nodeTypeSupportsBatchSize', () => {
+  it('is true only when supports_batch_size is set on the node type', () => {
+    expect(nodeTypeSupportsBatchSize({ supports_batch_size: true })).toBe(true);
+    expect(nodeTypeSupportsBatchSize({ supports_batch_size: false })).toBe(false);
+    expect(nodeTypeSupportsBatchSize({ batch_execute_inputs: true })).toBe(false);
+    expect(nodeTypeSupportsBatchSize({})).toBe(false);
+    expect(nodeTypeSupportsBatchSize(null)).toBe(false);
   });
 });

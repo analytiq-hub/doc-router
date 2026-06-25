@@ -76,6 +76,23 @@ def test_list_palette_entries_includes_docrouter_event_trigger() -> None:
     assert "docrouter.trigger" in keys
 
 
+def test_batch_execute_inputs_enabled_for_code_ocr_and_llm() -> None:
+    by_key = {e["key"]: bool(e.get("batch_execute_inputs")) for e in ad.flows.list_palette_entries()}
+    assert by_key["flows.code"] is True
+    assert by_key["docrouter.ocr"] is True
+    assert by_key["docrouter.llm_run"] is True
+
+
+def test_supports_batch_size_enabled_only_for_ocr_and_llm() -> None:
+    by_key = {e["key"]: bool(e.get("supports_batch_size")) for e in ad.flows.list_palette_entries()}
+    assert by_key["docrouter.ocr"] is True
+    assert by_key["docrouter.llm_run"] is True
+    for key, enabled in by_key.items():
+        if key in ("docrouter.ocr", "docrouter.llm_run"):
+            continue
+        assert enabled is False, key
+
+
 def test_get_registers_lazy_without_executor() -> None:
     sys.modules.pop("analytiq_data.flows.nodes.microsoft_onedrive.node", None)
     sys.modules.pop("analytiq_data.flows.nodes.microsoft_onedrive.operations", None)

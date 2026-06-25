@@ -139,6 +139,8 @@ def palette_entry_dict(manifest: dict[str, Any]) -> dict[str, Any]:
         "credential_slots": slots if isinstance(slots, list) else [],
         "experimental": bool(manifest.get("experimental", False)),
         "polling": bool(manifest.get("polling", False)),
+        "batch_execute_inputs": bool(manifest.get("batch_execute_inputs", False)),
+        "supports_batch_size": bool(manifest.get("supports_batch_size", False)),
     }
 
 

@@ -34,6 +34,10 @@ export interface FlowNodeType {
   experimental?: boolean;
   /** Poll trigger: platform calls poll() on schedule ticks. */
   polling?: boolean;
+  /** When true, the engine passes all input items in one ``execute()`` call. */
+  batch_execute_inputs?: boolean;
+  /** When true, the node settings UI exposes per-node ``batch_size`` parallelism. */
+  supports_batch_size?: boolean;
 }
 
 export interface ListNodeTypesResponse {

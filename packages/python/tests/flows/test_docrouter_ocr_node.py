@@ -27,6 +27,12 @@ def _ctx(*, analytiq_client: object | None = None) -> ad.flows.ExecutionContext:
     )
 
 
+def test_node_enables_batch_execute_inputs() -> None:
+    node = DocRouterOcrNode()
+    assert node.batch_execute_inputs is True
+    assert node.supports_batch_size is True
+
+
 def test_validate_parameters_requires_ocr_provider() -> None:
     node = DocRouterOcrNode()
     assert node.validate_parameters({}) == ["parameters.ocr_provider is required"]

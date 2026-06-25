@@ -1148,7 +1148,12 @@ const FlowNodeConfigModal: React.FC<{
                         </div>
                       </TabPanel>
                       <TabPanel>
-                        <FlowNodeSettingsFields readOnly={readOnly} node={node} onChange={onChange} />
+                        <FlowNodeSettingsFields
+                          readOnly={readOnly}
+                          node={node}
+                          nodeType={nodeType}
+                          onChange={onChange}
+                        />
                       </TabPanel>
                     </TabPanels>
                   </TabGroup>

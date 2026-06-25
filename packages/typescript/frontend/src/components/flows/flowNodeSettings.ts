@@ -5,6 +5,16 @@ export const FLOW_NODE_BATCH_SIZE_MIN = 1;
 
 export const FLOW_NODE_BATCH_SIZE_MAX = 32;
 
+type FlowNodeBatchSizeType = {
+  supports_batch_size?: boolean;
+};
+
+export function nodeTypeSupportsBatchSize(
+  nodeType: FlowNodeBatchSizeType | null | undefined,
+): boolean {
+  return Boolean(nodeType?.supports_batch_size);
+}
+
 export function resolveFlowNodeBatchSize(
   node: { batch_size?: unknown; item_concurrency?: unknown } | null | undefined,
 ): number {

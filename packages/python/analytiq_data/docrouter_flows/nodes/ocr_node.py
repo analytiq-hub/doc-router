@@ -23,6 +23,8 @@ class DocRouterOcrNode:
     palette_group = "docrouter"
     is_trigger = False
     is_merge = False
+    batch_execute_inputs: bool = True
+    supports_batch_size: bool = True
     min_inputs = 1
     max_inputs = 1
     outputs = 1

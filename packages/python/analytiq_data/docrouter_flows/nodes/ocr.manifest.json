@@ -8,6 +8,8 @@
   "category": "DocRouter",
   "is_trigger": false,
   "is_merge": false,
+  "batch_execute_inputs": true,
+  "supports_batch_size": true,
   "min_inputs": 1,
   "max_inputs": 1,
   "outputs": 1,

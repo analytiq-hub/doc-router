@@ -53,6 +53,8 @@ def manifest_body_for_node(
         body["experimental"] = True
     if hasattr(nt, "batch_execute_inputs"):
         body["batch_execute_inputs"] = bool(nt.batch_execute_inputs)
+    if hasattr(nt, "supports_batch_size"):
+        body["supports_batch_size"] = bool(nt.supports_batch_size)
     slots = getattr(nt, "credential_slots", None)
     if isinstance(slots, list) and slots:
         body["credential_slots"] = slots
