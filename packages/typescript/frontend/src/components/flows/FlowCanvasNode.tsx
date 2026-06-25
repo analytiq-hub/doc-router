@@ -32,7 +32,7 @@ import {
 import { flowRunButtonTriggerHoverClass, FLOW_EXECUTE_FLOW_LABEL } from './flowUiClasses';
 
 const handleClass =
-  '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-emerald-500 hover:!bg-emerald-50';
+  '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-primary-500 hover:!bg-primary-50';
 
 const ocrHandleClass =
   '!w-2.5 !h-2.5 !border-2 !border-violet-400 !bg-violet-50 hover:!border-violet-600 hover:!bg-violet-100';

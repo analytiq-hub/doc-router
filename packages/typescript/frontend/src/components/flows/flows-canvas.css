@@ -39,6 +39,6 @@
 }
 
 .docrouter-flow-canvas .react-flow__handle:hover {
-  border-color: #22c55e;
-  background: #f0fdf4;
+  border-color: hsla(208, 100%, 51%, 1);
+  background: hsla(208, 100%, 91%, 1);
 }

@@ -410,7 +410,7 @@ const FlowExecutionsView: React.FC<{
                       className="relative flex min-w-0 flex-1 flex-col gap-0.5 py-2.5 pl-3 pr-2"
                     >
                       {sel && (
-                        <span className="absolute left-0 top-0 h-full w-1 rounded-r bg-emerald-500" aria-hidden />
+                        <span className="absolute left-0 top-0 h-full w-1 rounded-r bg-primary-600" aria-hidden />
                       )}
                       <div className="pl-0.5 text-xs font-medium text-gray-500">{e.started_at ? formatLocalDate(e.started_at) : '—'}</div>
                       <div
