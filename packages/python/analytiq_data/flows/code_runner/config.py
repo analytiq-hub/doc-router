@@ -1,9 +1,20 @@
 from __future__ import annotations
 
 import os
+import sysconfig
 from dataclasses import dataclass
 
 from .security import BUILTINS_DENY_DEFAULT
+
+FLOW_CODE_ENV_VARS = (
+    "FLOW_CODE_STDLIB_ALLOW",
+    "FLOW_CODE_EXTERNAL_ALLOW",
+    "FLOW_CODE_BUILTINS_DENY",
+    "FLOW_CODE_BLOCK_ENV_ACCESS",
+    "FLOW_CODE_ENABLED",
+    "FLOW_CODE_MAX_PAYLOAD_BYTES",
+    "FLOW_CODE_BINARY_READ_MAX_BYTES",
+)
 
 DEFAULT_STDLIB_ALLOW = (
     "json,re,math,datetime,collections,itertools,functools,hashlib,base64,uuid,typing"
@@ -78,3 +89,16 @@ class SecurityConfig:
                 str(self.block_env_access),
             ]
         )
+
+
+def flow_code_env_for_child() -> dict[str, str]:
+    """Subset of parent env passed to the isolated child (no secrets)."""
+    env: dict[str, str] = {}
+    if "PATH" in os.environ:
+        env["PATH"] = os.environ["PATH"]
+    env["FLOW_CODE_SITE_PACKAGES"] = sysconfig.get_path("purelib")
+    for key in FLOW_CODE_ENV_VARS:
+        value = os.environ.get(key)
+        if value is not None:
+            env[key] = value
+    return env

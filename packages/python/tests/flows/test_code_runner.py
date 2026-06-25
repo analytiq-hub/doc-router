@@ -4,6 +4,7 @@ import pytest
 
 import analytiq_data as ad
 from analytiq_data.flows.code_runner.analyzer import SecurityValidationError, TaskAnalyzer
+from analytiq_data.flows.code_runner.bootstrap import minimal_env
 from analytiq_data.flows.code_runner.config import SecurityConfig
 from analytiq_data.flows.code_runner.validation import CodeValidationError, validate_code_output
 
@@ -54,3 +55,31 @@ def run(items, context):
     assert len(out) == 1
     assert out[0]["json"]["doubled"] == 24
     assert out[0]["paired_item"] == 1
+
+
+def test_minimal_env_forwards_flow_code_allowlists(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("FLOW_CODE_EXTERNAL_ALLOW", "fitz")
+    monkeypatch.setenv("SECRET_TOKEN", "must-not-leak")
+    env = minimal_env()
+    assert env.get("FLOW_CODE_EXTERNAL_ALLOW") == "fitz"
+    assert env.get("FLOW_CODE_SITE_PACKAGES")
+    assert "SECRET_TOKEN" not in env
+
+
+@pytest.mark.asyncio
+async def test_run_python_code_external_allow_fitz(monkeypatch: pytest.MonkeyPatch) -> None:
+    pytest.importorskip("fitz")
+    monkeypatch.setenv("FLOW_CODE_EXTERNAL_ALLOW", "fitz")
+    code = """
+import fitz
+
+def run(items, context):
+    return [{"json": {"fitz_version": fitz.version[0]}}]
+"""
+    out, _logs = await ad.flows.run_python_code(
+        code=code,
+        items=[{"json": {}, "binary": {}, "meta": {}}],
+        context={},
+        timeout_seconds=5,
+    )
+    assert out[0]["json"]["fitz_version"]
