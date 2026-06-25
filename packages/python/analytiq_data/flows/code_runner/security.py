@@ -1,0 +1,125 @@
+from __future__ import annotations
+
+BUILTINS_DENY_DEFAULT: frozenset[str] = frozenset(
+    {
+        "eval",
+        "exec",
+        "compile",
+        "open",
+        "input",
+        "breakpoint",
+        "getattr",
+        "object",
+        "type",
+        "vars",
+        "setattr",
+        "delattr",
+        "hasattr",
+        "dir",
+        "memoryview",
+        "__build_class__",
+        "globals",
+        "locals",
+        "license",
+        "help",
+        "credits",
+        "copyright",
+    }
+)
+
+BLOCKED_NAMES: frozenset[str] = frozenset(
+    {
+        "__builtins__",
+        "__loader__",
+        "__spec__",
+        "__globals__",
+        "__code__",
+        "__closure__",
+        "__func__",
+        "__self__",
+        "__class__",
+        "__bases__",
+        "__mro__",
+        "__subclasses__",
+        "__import__",
+        "__dict__",
+        "__weakref__",
+        "__annotations__",
+        "__module__",
+        "__qualname__",
+        "__wrapped__",
+        "__traceback__",
+        "__context__",
+        "__cause__",
+        "__frame__",
+        "__tb__",
+    }
+)
+
+BLOCKED_ATTRIBUTES: frozenset[str] = frozenset(
+    {
+        "__class__",
+        "__globals__",
+        "__subclasses__",
+        "__bases__",
+        "__mro__",
+        "__code__",
+        "__closure__",
+        "__func__",
+        "__self__",
+        "__dict__",
+        "__weakref__",
+        "__annotations__",
+        "__module__",
+        "__qualname__",
+        "__wrapped__",
+        "__traceback__",
+        "__context__",
+        "__cause__",
+        "__frame__",
+        "__tb__",
+        "__builtins__",
+        "__loader__",
+        "__spec__",
+        "__import__",
+    }
+)
+
+RUNNER_MODULE_PREFIXES: tuple[str, ...] = (
+    "analytiq_data.flows.code_runner",
+    "_",
+)
+
+RUNNER_MODULES_KEEP: frozenset[str] = frozenset(
+    {
+        "sys",
+        "builtins",
+        "importlib",
+        "importlib.machinery",
+        "importlib._bootstrap",
+        "importlib._bootstrap_external",
+        "importlib.util",
+        "encodings",
+        "codecs",
+        "abc",
+        "json",
+        "traceback",
+        "types",
+        "linecache",
+        "posix",
+        "posixpath",
+        "errno",
+        "os",
+        "io",
+        "warnings",
+        "weakref",
+        "collections",
+        "collections.abc",
+        "functools",
+        "operator",
+        "itertools",
+        "keyword",
+        "ast",
+        "inspect",
+    }
+)
