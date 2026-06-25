@@ -74,7 +74,7 @@ export interface FlowNode {
   parameters: Record<string, unknown>;
   disabled?: boolean;
   on_error?: 'stop' | 'continue';
-  /** Max input items processed concurrently per node (default 1, range 1–32). */
+  /** Max input items processed concurrently per node (default 1, range 1–256). */
   batch_size?: number;
   notes?: string | null;
   webhook_id?: string | null;

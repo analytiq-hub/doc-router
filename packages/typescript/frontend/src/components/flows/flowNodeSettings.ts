@@ -5,7 +5,7 @@ export const FLOW_NODE_BATCH_SIZE_DEFAULT = 1;
 
 export const FLOW_NODE_BATCH_SIZE_MIN = 1;
 
-export const FLOW_NODE_BATCH_SIZE_MAX = 32;
+export const FLOW_NODE_BATCH_SIZE_MAX = 256;
 
 export function nodeTypeSupportsBatchSize(
   nodeType: FlowNodeType | null | undefined,

@@ -6,7 +6,7 @@ from typing import Any
 
 FLOW_NODE_BATCH_SIZE_DEFAULT = 1
 FLOW_NODE_BATCH_SIZE_MIN = 1
-FLOW_NODE_BATCH_SIZE_MAX = 32
+FLOW_NODE_BATCH_SIZE_MAX = 256
 
 
 def resolve_node_batch_size(node: dict[str, Any] | None) -> int:
