@@ -3,6 +3,7 @@ import Editor from '@monaco-editor/react';
 import { ArrowDownTrayIcon, ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import type { FlowExecutionBlobContext, FlowRevisionPinBlobContext } from './flowExecutionBlob';
 import { canFetchFlowBinaryRef, fetchFlowBinaryRef } from './flowExecutionBlob';
+import { flowRunButtonCompactClass } from './flowUiClasses';
 
 export type JsonPath = Array<string | number>;
 
@@ -650,7 +651,7 @@ const IoBinaryPanel: React.FC<{
                     type="button"
                     disabled={!canFetch || busy}
                     onClick={() => void openPreview(cardKey, r.ref, displayName)}
-                    className="rounded-md bg-rose-500 px-3 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:bg-rose-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    className={flowRunButtonCompactClass}
                   >
                     {busy ? '…' : 'View'}
                   </button>
