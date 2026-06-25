@@ -32,11 +32,9 @@ def _configured_tag_ids(row: dict[str, Any]) -> list[str]:
 def tag_filter_matches_document(configured_tag_ids: list[str], doc_tag_ids: set[str]) -> bool:
     """True when a ``docrouter.trigger`` tag filter matches the document's tags."""
 
-    if configured_tag_ids:
-        if not doc_tag_ids:
-            return False
-        return any(tag_id in doc_tag_ids for tag_id in configured_tag_ids)
-    return True
+    if not configured_tag_ids or not doc_tag_ids:
+        return False
+    return any(tag_id in doc_tag_ids for tag_id in configured_tag_ids)
 
 
 def _iso_datetime(value: Any) -> str:

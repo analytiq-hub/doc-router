@@ -40,7 +40,7 @@ class DocRouterEventTriggerNode:
                 "type": "array",
                 "items": {"type": "string"},
                 "title": "Tag filter",
-                "description": "Optional tags — fires when the document has any of these tags.",
+                "description": "Tags — fires when the document has any of these tags.",
                 "x-ui-widget": "org_tag_picker",
             },
             "prompt_id": {

@@ -149,7 +149,10 @@ async def _create_and_activate_event_flow(
     tag_ids: list[str] | None = None,
     prompt_id: str = "",
     with_code_downstream: bool = True,
-) -> tuple[str, str]:
+    auto_tag: bool = True,
+) -> tuple[str, str, list[str]]:
+    if tag_ids is None:
+        tag_ids = [await _insert_org_tag(test_db, f"trigger-{ObjectId()}")] if auto_tag else []
     r0 = client.post(
         f"/v0/orgs/{TEST_ORG_ID}/flows",
         json={"name": "doc event flow"},
@@ -190,7 +193,7 @@ async def _create_and_activate_event_flow(
         headers=get_auth_headers(),
     )
     assert r2.status_code == 200, r2.text
-    return flow_id, rev_id
+    return flow_id, rev_id, tag_ids
 
 
 def test_evaluate_trigger_row_tag_filter() -> None:
@@ -214,9 +217,22 @@ def test_evaluate_trigger_row_tag_filter_any_match() -> None:
     )
 
 
+def test_evaluate_trigger_row_empty_tags_never_match() -> None:
+    row = {"tag_ids": []}
+    doc = {"tag_ids": ["tag-a"]}
+    assert _evaluate_trigger_row(
+        row, event_type="document.uploaded", doc=doc, prompt_id=None
+    ) is False
+
+    doc2 = {"tag_ids": []}
+    assert _evaluate_trigger_row(
+        row, event_type="document.uploaded", doc=doc2, prompt_id=None
+    ) is False
+
+
 def test_evaluate_trigger_row_prompt_filter() -> None:
-    row = {"tag_ids": [], "prompt_id": "prompt-a"}
-    doc = {"tag_ids": []}
+    row = {"tag_ids": ["tag-a"], "prompt_id": "prompt-a"}
+    doc = {"tag_ids": ["tag-a"]}
     assert _evaluate_trigger_row(
         row, event_type="llm.completed", doc=doc, prompt_id="prompt-b"
     ) is False
@@ -232,7 +248,7 @@ def test_evaluate_trigger_row_prompt_filter() -> None:
 
 @pytest.mark.asyncio
 async def test_activate_registers_flow_triggers_row(test_db, mock_auth):
-    flow_id, rev_id = await _create_and_activate_event_flow(test_db)
+    flow_id, rev_id, _ = await _create_and_activate_event_flow(test_db)
     db = ad.common.get_async_db()
     row = await db.flow_triggers.find_one({"flow_id": flow_id, "trigger_node_id": TRIGGER_NODE_ID})
     assert row is not None
@@ -243,7 +259,7 @@ async def test_activate_registers_flow_triggers_row(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_deactivate_removes_flow_triggers_row(test_db, mock_auth):
-    flow_id, _ = await _create_and_activate_event_flow(test_db)
+    flow_id, _, _ = await _create_and_activate_event_flow(test_db)
     r = client.post(
         f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}/deactivate",
         json={},
@@ -256,8 +272,8 @@ async def test_deactivate_removes_flow_triggers_row(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_dispatch_document_uploaded_enqueues_flow_run(test_db, mock_auth):
-    flow_id, _ = await _create_and_activate_event_flow(test_db)
-    document_id, _ = await _insert_document(test_db)
+    flow_id, _, flow_tags = await _create_and_activate_event_flow(test_db)
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
     aq_client = ad.common.get_analytiq_client()
 
     exec_ids = await dispatch_docrouter_event(
@@ -298,8 +314,10 @@ async def test_dispatch_skips_when_tag_filter_mismatch(test_db, mock_auth):
 @pytest.mark.asyncio
 async def test_dispatch_llm_completed_prompt_id_filter(test_db, mock_auth):
     prompt_id = await _insert_org_prompt(test_db, "Invoice Extract")
-    await _create_and_activate_event_flow(test_db, event_type="llm.completed", prompt_id=prompt_id)
-    document_id, _ = await _insert_document(test_db)
+    _, _, flow_tags = await _create_and_activate_event_flow(
+        test_db, event_type="llm.completed", prompt_id=prompt_id
+    )
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
     aq_client = ad.common.get_analytiq_client()
 
     assert (
@@ -367,8 +385,10 @@ async def test_dispatch_includes_tag_names(test_db, mock_auth):
 @pytest.mark.asyncio
 async def test_dispatch_llm_error_prompt_id_filter(test_db, mock_auth):
     prompt_id = await _insert_org_prompt(test_db, "Error Prompt")
-    await _create_and_activate_event_flow(test_db, event_type="llm.error", prompt_id=prompt_id)
-    document_id, _ = await _insert_document(test_db)
+    _, _, flow_tags = await _create_and_activate_event_flow(
+        test_db, event_type="llm.error", prompt_id=prompt_id
+    )
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
     aq_client = ad.common.get_analytiq_client()
 
     assert (
@@ -408,8 +428,8 @@ async def test_dispatch_llm_error_prompt_id_filter(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_event_trigger_node_replays_trigger_items(test_db, mock_auth):
-    await _create_and_activate_event_flow(test_db, with_code_downstream=False)
-    document_id, _ = await _insert_document(test_db)
+    _, _, flow_tags = await _create_and_activate_event_flow(test_db, with_code_downstream=False)
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
     aq_client = ad.common.get_analytiq_client()
     exec_ids = await dispatch_docrouter_event(
         aq_client,
@@ -437,7 +457,7 @@ async def test_event_trigger_node_replays_trigger_items(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_save_active_flow_updates_flow_triggers(test_db, mock_auth):
-    flow_id, rev_id_r1 = await _create_and_activate_event_flow(test_db, tag_ids=[])
+    flow_id, rev_id_r1, _ = await _create_and_activate_event_flow(test_db, tag_ids=[], auto_tag=False)
     db = ad.common.get_async_db()
     row_before = await db.flow_triggers.find_one({"flow_id": flow_id, "trigger_node_id": TRIGGER_NODE_ID})
     assert row_before is not None
@@ -519,10 +539,26 @@ async def test_dispatch_multi_tag_filter_any_match(test_db, mock_auth):
 
 
 @pytest.mark.asyncio
+async def test_dispatch_skips_when_no_trigger_tags(test_db, mock_auth):
+    await _create_and_activate_event_flow(test_db, tag_ids=[], auto_tag=False)
+    document_id, _ = await _insert_document(test_db, tag_ids=["some-tag"])
+    aq_client = ad.common.get_analytiq_client()
+    exec_ids = await dispatch_docrouter_event(
+        aq_client,
+        organization_id=TEST_ORG_ID,
+        event_type="document.uploaded",
+        document_id=document_id,
+    )
+    assert exec_ids == []
+
+
+@pytest.mark.asyncio
 async def test_notify_llm_completed_docrouter_event_dispatches(test_db, mock_auth):
     prompt_id = await _insert_org_prompt(test_db, "Notify Prompt")
-    await _create_and_activate_event_flow(test_db, event_type="llm.completed", prompt_id=prompt_id)
-    document_id, _ = await _insert_document(test_db)
+    _, _, flow_tags = await _create_and_activate_event_flow(
+        test_db, event_type="llm.completed", prompt_id=prompt_id
+    )
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
     aq_client = ad.common.get_analytiq_client()
     prompt_revid = str(ObjectId())
 

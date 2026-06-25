@@ -122,12 +122,30 @@ async def _insert_document(test_db, *, tag_ids: list[str] | None = None) -> tupl
     return document_id, file_key
 
 
+async def _insert_org_tag(test_db, name: str) -> str:
+    tag_id = ObjectId()
+    await test_db.tags.insert_one(
+        {
+            "_id": tag_id,
+            "name": name,
+            "color": "#3B82F6",
+            "organization_id": TEST_ORG_ID,
+            "created_at": datetime.now(UTC),
+            "updated_at": datetime.now(UTC),
+        }
+    )
+    return str(tag_id)
+
+
 async def _create_and_activate_event_flow(
     test_db,
     *,
     report_result: bool = True,
     tag_ids: list[str] | None = None,
-) -> tuple[str, str]:
+    auto_tag: bool = True,
+) -> tuple[str, str, list[str]]:
+    if tag_ids is None:
+        tag_ids = [await _insert_org_tag(test_db, f"trigger-{ObjectId()}")] if auto_tag else []
     r0 = client.post(
         f"/v0/orgs/{TEST_ORG_ID}/flows",
         json={"name": "doc event flow"},
@@ -164,7 +182,7 @@ async def _create_and_activate_event_flow(
         headers=get_auth_headers(),
     )
     assert r2.status_code == 200, r2.text
-    return flow_id, rev_id
+    return flow_id, rev_id, tag_ids
 
 
 async def _run_queued_flow(aq_client, exec_id: str) -> None:
@@ -177,7 +195,7 @@ async def _run_queued_flow(aq_client, exec_id: str) -> None:
 
 @pytest.mark.asyncio
 async def test_activate_stores_report_result_on_flow_triggers_row(test_db, mock_auth):
-    flow_id, _ = await _create_and_activate_event_flow(test_db, report_result=False)
+    flow_id, _, _ = await _create_and_activate_event_flow(test_db, report_result=False)
     db = ad.common.get_async_db()
     row = await db.flow_triggers.find_one({"flow_id": flow_id, "trigger_node_id": TRIGGER_NODE_ID})
     assert row is not None
@@ -186,8 +204,8 @@ async def test_activate_stores_report_result_on_flow_triggers_row(test_db, mock_
 
 @pytest.mark.asyncio
 async def test_flow_run_captures_last_node_result_when_report_result_enabled(test_db, mock_auth):
-    flow_id, _ = await _create_and_activate_event_flow(test_db, report_result=True)
-    document_id, _ = await _insert_document(test_db)
+    flow_id, _, flow_tags = await _create_and_activate_event_flow(test_db, report_result=True)
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
     aq_client = ad.common.get_analytiq_client()
 
     exec_ids = await dispatch_docrouter_event(
@@ -209,8 +227,8 @@ async def test_flow_run_captures_last_node_result_when_report_result_enabled(tes
 
 @pytest.mark.asyncio
 async def test_flow_run_skips_capture_when_report_result_disabled(test_db, mock_auth):
-    flow_id, _ = await _create_and_activate_event_flow(test_db, report_result=False)
-    document_id, _ = await _insert_document(test_db)
+    flow_id, _, flow_tags = await _create_and_activate_event_flow(test_db, report_result=False)
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
     aq_client = ad.common.get_analytiq_client()
 
     exec_ids = await dispatch_docrouter_event(
@@ -228,8 +246,8 @@ async def test_flow_run_skips_capture_when_report_result_disabled(test_db, mock_
 
 @pytest.mark.asyncio
 async def test_flow_result_upsert_overwrites_previous_run(test_db, mock_auth):
-    flow_id, _ = await _create_and_activate_event_flow(test_db, report_result=True)
-    document_id, _ = await _insert_document(test_db)
+    flow_id, _, flow_tags = await _create_and_activate_event_flow(test_db, report_result=True)
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
     aq_client = ad.common.get_analytiq_client()
 
     exec_ids_1 = await dispatch_docrouter_event(
@@ -256,8 +274,8 @@ async def test_flow_result_upsert_overwrites_previous_run(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_list_flows_for_document_http(test_db, mock_auth):
-    flow_id, _ = await _create_and_activate_event_flow(test_db, report_result=True)
-    document_id, _ = await _insert_document(test_db)
+    flow_id, _, flow_tags = await _create_and_activate_event_flow(test_db, report_result=True)
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
     aq_client = ad.common.get_analytiq_client()
 
     exec_ids = await dispatch_docrouter_event(
@@ -286,8 +304,8 @@ async def test_list_flows_for_document_http(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_get_flow_document_result_http(test_db, mock_auth):
-    flow_id, rev_id = await _create_and_activate_event_flow(test_db, report_result=True)
-    document_id, _ = await _insert_document(test_db)
+    flow_id, rev_id, flow_tags = await _create_and_activate_event_flow(test_db, report_result=True)
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
     aq_client = ad.common.get_analytiq_client()
 
     exec_ids = await dispatch_docrouter_event(
@@ -323,8 +341,8 @@ async def test_get_flow_document_result_http(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_get_flow_document_result_not_found_without_capture(test_db, mock_auth):
-    flow_id, _ = await _create_and_activate_event_flow(test_db, report_result=True)
-    document_id, _ = await _insert_document(test_db)
+    flow_id, _, flow_tags = await _create_and_activate_event_flow(test_db, report_result=True)
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
 
     r = client.get(
         f"/v0/orgs/{TEST_ORG_ID}/flows/result/{document_id}",
@@ -336,8 +354,8 @@ async def test_get_flow_document_result_not_found_without_capture(test_db, mock_
 
 @pytest.mark.asyncio
 async def test_delete_document_removes_flow_results(test_db, mock_auth):
-    flow_id, _ = await _create_and_activate_event_flow(test_db, report_result=True)
-    document_id, _ = await _insert_document(test_db)
+    flow_id, _, flow_tags = await _create_and_activate_event_flow(test_db, report_result=True)
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
     aq_client = ad.common.get_analytiq_client()
 
     exec_ids = await dispatch_docrouter_event(
@@ -361,8 +379,8 @@ async def test_delete_document_removes_flow_results(test_db, mock_auth):
 
 @pytest.mark.asyncio
 async def test_list_flows_for_document_includes_matching_flow_without_result(test_db, mock_auth):
-    flow_id, _ = await _create_and_activate_event_flow(test_db, report_result=True)
-    document_id, _ = await _insert_document(test_db)
+    flow_id, _, flow_tags = await _create_and_activate_event_flow(test_db, report_result=True)
+    document_id, _ = await _insert_document(test_db, tag_ids=flow_tags)
 
     r = client.get(
         f"/v0/orgs/{TEST_ORG_ID}/flows",
@@ -380,8 +398,8 @@ async def test_list_flows_for_document_includes_matching_flow_without_result(tes
 @pytest.mark.asyncio
 async def test_list_flows_for_document_respects_trigger_tag_filter(test_db, mock_auth):
     tag_id = str(ObjectId())
-    matching_flow_id, _ = await _create_and_activate_event_flow(test_db, tag_ids=[tag_id])
-    other_flow_id, _ = await _create_and_activate_event_flow(test_db, tag_ids=[str(ObjectId())])
+    matching_flow_id, _, _ = await _create_and_activate_event_flow(test_db, tag_ids=[tag_id])
+    other_flow_id, _, _ = await _create_and_activate_event_flow(test_db, tag_ids=[str(ObjectId())])
     document_id, _ = await _insert_document(test_db, tag_ids=[tag_id])
 
     r = client.get(
