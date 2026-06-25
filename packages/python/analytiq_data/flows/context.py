@@ -11,7 +11,7 @@ the context.
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-ExecutionMode = Literal["manual", "trigger", "webhook", "schedule", "error"]
+ExecutionMode = Literal["manual", "event", "trigger", "webhook", "schedule", "error"]
 
 
 @dataclass

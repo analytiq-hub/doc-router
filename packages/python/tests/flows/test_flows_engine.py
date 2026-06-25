@@ -1190,6 +1190,56 @@ async def test_run_flow_pin_data_coerces_raw_dict_items_to_flowitems() -> None:
 
 
 @pytest.mark.asyncio
+async def test_run_flow_event_mode_ignores_pin_data() -> None:
+    """Production/event runs must execute nodes even when the revision has pin_data."""
+
+    nodes = [
+        _n("t1", "Start", "flows.trigger.manual", 0),
+        _n("p1", "Pinned", "tests.passthrough", 200),
+        _n("g1", "Tag", "tests.tag", 400, {"tag": "ok"}),
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="p1", connection_type="main", index=0)]]},
+        "p1": {"main": [[ad.flows.NodeConnection(dest_node_id="g1", connection_type="main", index=0)]]},
+    }
+    pin_data = {
+        "p1": [
+            {"json": {"hello": "pinned"}, "binary": {}, "meta": {}, "paired_item": None},
+        ]
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="event",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(
+        context=ctx,
+        revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": pin_data},
+    )
+    assert res["status"] == "success"
+
+    passthrough_out = ctx.run_data["p1"]["data"]["main"][0]
+    assert passthrough_out[0].json == {}
+    assert "hello" not in passthrough_out[0].json
+
+    tagged = ctx.run_data["g1"]["data"]["main"][0]
+    assert tagged[0].json["path_tag"] == "ok"
+
+
+def test_pin_data_enabled_for_mode_manual_only() -> None:
+    assert ad.flows.pin_data_enabled_for_mode("manual") is True
+    for mode in ("event", "webhook", "trigger", "schedule", "error"):
+        assert ad.flows.pin_data_enabled_for_mode(mode) is False
+
+
+@pytest.mark.asyncio
 async def test_run_flow_pin_data_accepts_sdk_main_lane_shape() -> None:
     """API / frontend store pins as `{ "main": [[ {json,...}, ... ]] }`; engine lane-0 must match list shape."""
 

@@ -130,13 +130,16 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
             logger.warning("flow_run: pin forward scope failed (%r); applying all revision pins", e)
             allowed_pins = None
 
-    pin_touched = ad.flows.apply_revision_pins_to_run_data(
-        run_data, revision, allowed_node_ids=allowed_pins
-    )
-    if pin_touched:
-        ad.flows.invalidate_run_data_downstream_of_pins(
-            run_data, revision_conns, pin_touched, limit_nodes=allowed_pins
+    exec_mode = str(exec_doc.get("mode") or "manual")
+    pin_touched: set[str] = set()
+    if ad.flows.pin_data_enabled_for_mode(exec_mode):
+        pin_touched = ad.flows.apply_revision_pins_to_run_data(
+            run_data, revision, allowed_node_ids=allowed_pins
         )
+        if pin_touched:
+            ad.flows.invalidate_run_data_downstream_of_pins(
+                run_data, revision_conns, pin_touched, limit_nodes=allowed_pins
+            )
 
     if allowed_pins is not None:
         ad.flows.prune_run_data_outside_closure(run_data, allowed_pins)

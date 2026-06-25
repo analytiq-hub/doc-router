@@ -472,6 +472,12 @@ def _bson_serialize_run_data(run_data: dict[str, Any]) -> dict[str, Any]:
     return {k: _bson_serialize_value(v) for k, v in run_data.items()}
 
 
+def pin_data_enabled_for_mode(mode: str) -> bool:
+    """Pinned outputs are editor/test aids only (n8n parity); production runs ignore ``pin_data``."""
+
+    return mode == "manual"
+
+
 def apply_revision_pins_to_run_data(
     run_data: dict[str, Any],
     revision: dict[str, Any],
@@ -480,6 +486,8 @@ def apply_revision_pins_to_run_data(
 ) -> set[str]:
     """
     Inject or replace ``run_data[node_id]`` with a pinned output snapshot **before** the engine loop.
+
+    Call only for ``manual`` executions (see ``pin_data_enabled_for_mode``).
 
     Execute-step merges prior ``initial_run_data`` into ``run_data``; without this, seeded merge
     (or branch) snapshots can contradict ``revision.pin_data``. Pinned lane-0 output wins for nodes
@@ -1427,9 +1435,13 @@ async def run_flow(
         revision.get("connections")
     )
     settings: dict[str, Any] = revision.get("settings") or {}
-    pin_data: dict[str, Any] | None = revision.get("pin_data")
+    revision_pin_data: dict[str, Any] | None = revision.get("pin_data")
 
-    validate_revision(nodes, connections, settings, pin_data)
+    validate_revision(nodes, connections, settings, revision_pin_data)
+
+    pin_data: dict[str, Any] | None = (
+        revision_pin_data if pin_data_enabled_for_mode(context.mode) else None
+    )
 
     context.revision_nodes = nodes
 
