@@ -17,60 +17,33 @@ interface AgentTabProps {
   documentId: string;
 }
 
-/** Chat is only enabled when document state is llm_completed. */
-function isChatDisabled(state: string | null): boolean {
-  return state !== 'llm_completed';
-}
-
 export default function AgentTab({ organizationId, documentId }: AgentTabProps) {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
-  const [documentState, setDocumentState] = useState<string | null>(null);
+  const [documentLoaded, setDocumentLoaded] = useState(false);
   const [documentNotFound, setDocumentNotFound] = useState(false);
 
   useEffect(() => {
+    setDocumentLoaded(false);
     setDocumentNotFound(false);
-    const fetchState = async () => {
+    const fetchDocument = async () => {
       try {
         try {
-          const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf', includeContent: false });
-          setDocumentState(doc.state);
+          await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf', includeContent: false });
+          setDocumentLoaded(true);
           return;
         } catch {
           // Non-PDF documents may not have pdf; try original
         }
-        const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original', includeContent: false });
-        setDocumentState(doc.state);
-      } catch (error) {
-        // 404 or other error: document may not exist or not be accessible — stop polling
+        await docRouterOrgApi.getDocument({ documentId, fileType: 'original', includeContent: false });
+        setDocumentLoaded(true);
+      } catch {
         setDocumentNotFound(true);
-        setDocumentState(null);
       }
     };
-    fetchState();
+    fetchDocument();
   }, [documentId, docRouterOrgApi]);
 
-  useEffect(() => {
-    if (documentNotFound || !isChatDisabled(documentState)) return;
-    const poll = setInterval(async () => {
-      try {
-        try {
-          const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'pdf', includeContent: false });
-          setDocumentState(doc.state);
-          return;
-        } catch {
-          /* try original */
-        }
-        const doc = await docRouterOrgApi.getDocument({ documentId, fileType: 'original', includeContent: false });
-        setDocumentState(doc.state);
-      } catch (error) {
-        // 404 or other error: stop polling to avoid repeated failed requests
-        setDocumentNotFound(true);
-      }
-    }, 2000);
-    return () => clearInterval(poll);
-  }, [documentState, documentNotFound, documentId, docRouterOrgApi]);
-
-  const chatDisabled = isChatDisabled(documentState);
+  const chatDisabled = documentNotFound || !documentLoaded;
 
   const {
     state,
@@ -200,13 +173,6 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
           Document not found. Chat is not available.
         </div>
       )}
-      {chatDisabled && documentState !== null && !documentNotFound && (
-        <div className="px-3 pt-2 pb-1 text-sm text-amber-700 bg-amber-50 border-b border-amber-200">
-          {documentState === 'ocr_failed' || documentState === 'llm_failed'
-            ? 'Document processing did not complete. Chat is not available.'
-            : 'Document is being processed. Chat will be available once processing is complete.'}
-        </div>
-      )}
       {dictationError && (
         <div className="px-3 pt-1 text-xs text-amber-600">{dictationError}</div>
       )}
@@ -225,7 +191,7 @@ export default function AgentTab({ organizationId, documentId }: AgentTabProps) 
                 handleSend();
               }
             }}
-            placeholder={chatDisabled ? 'Waiting for document processing…' : 'Message the agent…'}
+            placeholder={chatDisabled ? 'Loading document…' : 'Message the agent…'}
             rows={3}
             className="w-full min-h-[4rem] max-h-[12rem] py-2.5 px-3 text-sm resize-y border-0 focus:outline-none focus:ring-0 overflow-y-auto bg-transparent"
             style={{ scrollbarGutter: 'stable' }}

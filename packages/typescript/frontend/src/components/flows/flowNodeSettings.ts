@@ -1,3 +1,5 @@
+import type { FlowNodeType } from '@docrouter/sdk';
+
 /** Default batch size for nodes that process input items (1 = sequential). */
 export const FLOW_NODE_BATCH_SIZE_DEFAULT = 1;
 
@@ -5,12 +7,8 @@ export const FLOW_NODE_BATCH_SIZE_MIN = 1;
 
 export const FLOW_NODE_BATCH_SIZE_MAX = 32;
 
-type FlowNodeBatchSizeType = {
-  supports_batch_size?: boolean;
-};
-
 export function nodeTypeSupportsBatchSize(
-  nodeType: FlowNodeBatchSizeType | null | undefined,
+  nodeType: FlowNodeType | null | undefined,
 ): boolean {
   return Boolean(nodeType?.supports_batch_size);
 }
