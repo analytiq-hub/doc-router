@@ -55,3 +55,16 @@ export const flowPanelColResizeHitAreaMargins = { fine: 2, coarse: 12 } as const
 /** Draggable divider between horizontal panels in the node config modal (n8n-style grab target). */
 export const flowPanelColResizeHandleClass =
   'relative z-40 flex w-2 shrink-0 cursor-col-resize items-stretch bg-transparent pointer-events-auto before:pointer-events-none before:absolute before:inset-y-0 before:left-1/2 before:h-full before:w-px before:-translate-x-1/2 before:bg-[#e8eaee] hover:before:bg-[#c8ced6] active:before:bg-[#b8c0cc]';
+
+/** Shared run/test CTA colors — DocRouter primary (not n8n coral). */
+const flowRunButtonColorClass =
+  'bg-primary-600 text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60';
+
+/** Canvas footer “Execute workflow” and split trigger picker. */
+export const flowRunButtonCanvasClass = `inline-flex shrink-0 items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold shadow-md transition active:scale-[0.99] ${flowRunButtonColorClass}`;
+
+/** Node modal test / execute-step and trigger test controls. */
+export const flowRunButtonCompactClass = `inline-flex shrink-0 items-center gap-1.5 rounded-md border border-primary-700/25 px-2.5 py-1.5 text-[11px] font-semibold shadow-sm transition ${flowRunButtonColorClass}`;
+
+/** Trigger hover run chip on the canvas. */
+export const flowRunButtonTriggerHoverClass = `pointer-events-none absolute right-[calc(100%+2.25rem)] top-1/2 z-[6100] flex shrink-0 -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-md px-2 py-0 text-left text-[10px] font-semibold leading-none opacity-0 shadow-md transition-opacity duration-150 hover:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100 ${flowRunButtonColorClass}`;

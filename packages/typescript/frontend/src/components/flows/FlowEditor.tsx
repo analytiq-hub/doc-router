@@ -72,12 +72,10 @@ import { edgesWithRunDataItemCounts } from './flowNodeIoPreview';
 import { inputHandleCount, inputPortType, outputPortType, portTypesCompatible, edgeConnectionType } from './flowRf';
 import type { FlowConnectionType, FlowRfNodeData } from './flowRf';
 import { triggerReachabilityFromGraph } from './flowTriggerReachability';
+import { flowRunButtonCanvasClass } from './flowUiClasses';
 import { flowWorkspaceDropdownItemSimpleClass, flowWorkspaceMenuPanelClass } from './flowWorkspaceMenu';
 
 export type FlowExecuteWorkflowTriggerOption = { id: string; label: string };
-
-const EXECUTE_BUTTON_BG = '#ff6d5a';
-const EXECUTE_BUTTON_BG_HOVER = '#e85d4d';
 
 const FLOW_EDGE_MARKER = { type: MarkerType.ArrowClosed } as const;
 
@@ -1083,15 +1081,7 @@ const FlowEditor: React.FC<{
                           if (!preferredFooterTriggerId) return;
                           void onExecuteFromWorkflowTrigger(preferredFooterTriggerId);
                         }}
-                        className="inline-flex shrink-0 items-center gap-3 rounded-none px-5 py-2.5 text-left text-sm font-semibold text-white transition hover:opacity-95 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
-                        style={{ backgroundColor: EXECUTE_BUTTON_BG }}
-                        onMouseEnter={(e) => {
-                          if ((e.currentTarget as HTMLButtonElement).disabled) return;
-                          (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG_HOVER;
-                        }}
-                        onMouseLeave={(e) => {
-                          (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG;
-                        }}
+                        className={`${flowRunButtonCanvasClass} gap-3 rounded-none px-5 py-2.5 text-left`}
                       >
                         <BeakerIcon className="h-4 w-4 shrink-0" aria-hidden />
                         <span className="flex flex-col items-start leading-tight">
@@ -1103,14 +1093,7 @@ const FlowEditor: React.FC<{
                         <MenuButton
                           type="button"
                           aria-label="Choose which trigger starts the workflow"
-                          className="inline-flex h-full min-h-full min-w-[2.75rem] items-center justify-center border-l border-white/30 px-3 text-white transition hover:opacity-95 active:scale-[0.99]"
-                          style={{ backgroundColor: EXECUTE_BUTTON_BG }}
-                          onMouseEnter={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG_HOVER;
-                          }}
-                          onMouseLeave={(e) => {
-                            (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG;
-                          }}
+                          className="inline-flex h-full min-h-full min-w-[2.75rem] items-center justify-center border-l border-white/30 bg-primary-600 px-3 text-white transition hover:bg-primary-700 active:scale-[0.99]"
                         >
                           <ChevronDownIcon className="h-4 w-4" aria-hidden />
                         </MenuButton>
@@ -1139,14 +1122,7 @@ const FlowEditor: React.FC<{
                     <button
                       type="button"
                       onClick={onExecute}
-                      className="inline-flex shrink-0 items-center gap-2 rounded-md px-5 py-2.5 text-sm font-semibold text-white shadow-md transition hover:opacity-95 active:scale-[0.99]"
-                      style={{ backgroundColor: EXECUTE_BUTTON_BG }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG_HOVER;
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLButtonElement).style.backgroundColor = EXECUTE_BUTTON_BG;
-                      }}
+                      className={flowRunButtonCanvasClass}
                     >
                       <BeakerIcon className="h-4 w-4" aria-hidden />
                       Execute workflow

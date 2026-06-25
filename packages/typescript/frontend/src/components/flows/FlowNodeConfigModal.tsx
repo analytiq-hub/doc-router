@@ -46,6 +46,7 @@ import {
   flowInlineNameReadClass,
   flowPanelColResizeHandleClass,
   flowPanelColResizeHitAreaMargins,
+  flowRunButtonCompactClass,
 } from './flowUiClasses';
 import type { ExpressionPreviewContext } from './FlowExpressionPreviewLine';
 import { useInlineNameWidthPx } from './useInlineNameWidthPx';
@@ -98,7 +99,7 @@ const ScheduleTriggerTestHeader: React.FC<{
         type="button"
         disabled={readOnly || busy || !onTest}
         onClick={() => void onTest?.(node.id)}
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-red-200 bg-[#ff6d5a] px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+        className={flowRunButtonCompactClass}
       >
         {busy ? (
           <span
@@ -216,7 +217,7 @@ const WebhookUrlHeader: React.FC<{
                 'inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-semibold shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60',
                 listeningHere
                   ? 'border-green-700 bg-green-600 text-white'
-                  : 'border-red-200 bg-[#ff6d5a] text-white hover:opacity-95',
+                  : 'border-primary-700/25 bg-primary-600 text-white hover:bg-primary-700',
               ].join(' ')}
               onClick={() => {
                 if (listeningHere) {
@@ -1064,7 +1065,7 @@ const FlowNodeConfigModal: React.FC<{
                               disabled={executeStepBusy || executeStepDisconnected}
                               onClick={() => void onExecuteStep()}
                               aria-busy={executeStepBusy}
-                              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-red-200 bg-[#ff6d5a] px-2.5 py-1.5 text-[11px] font-semibold text-white shadow-sm transition hover:opacity-95 disabled:cursor-not-allowed disabled:opacity-60"
+                              className={flowRunButtonCompactClass}
                               title={
                                 executeStepDisconnected
                                   ? 'Connect this node from at least one trigger with graph edges'

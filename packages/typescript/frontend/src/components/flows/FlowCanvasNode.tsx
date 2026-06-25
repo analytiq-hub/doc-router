@@ -29,6 +29,7 @@ import {
   flowWorkspaceMenuPanelClass,
   flowWorkspaceMenuTriggerCompactClass,
 } from './flowWorkspaceMenu';
+import { flowRunButtonTriggerHoverClass } from './flowUiClasses';
 
 const handleClass =
   '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-emerald-500 hover:!bg-emerald-50';
@@ -39,9 +40,6 @@ const ocrHandleClass =
 function handleClassForPortType(portType: FlowConnectionType): string {
   return portType === 'docrouter.ocr' ? ocrHandleClass : handleClass;
 }
-
-const TRIGGER_EXECUTE_BUTTON_BG = '#ff6d5a';
-const TRIGGER_EXECUTE_BUTTON_BG_HOVER = '#e85d4d';
 
 /** Trigger node body height (`h-[96px]` below); hover run button is exactly ⅓. */
 const FLOW_TRIGGER_NODE_BODY_PX = 96;
@@ -414,21 +412,14 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
                 aria-live="polite"
                 aria-label={`Execute workflow from ${displayLabel}`}
                 data-test-id={`execute-workflow-button-${flowExecuteWorkflowTestSlug(displayLabel, id)}`}
-                className="pointer-events-none absolute right-[calc(100%+2.25rem)] top-1/2 z-[6100] flex shrink-0 -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-md px-2 py-0 text-left text-[10px] font-semibold leading-none text-white opacity-0 shadow-md transition-opacity duration-150 hover:opacity-100 group-hover:pointer-events-auto group-hover:opacity-100 [@media(hover:none)]:pointer-events-auto [@media(hover:none)]:opacity-100"
+                className={flowRunButtonTriggerHoverClass}
                 style={{
-                  backgroundColor: TRIGGER_EXECUTE_BUTTON_BG,
                   height: TRIGGER_EXECUTE_BTN_H_PX,
                   minHeight: TRIGGER_EXECUTE_BTN_H_PX,
                   maxHeight: TRIGGER_EXECUTE_BTN_H_PX,
                 }}
-                onMouseEnter={(e) => {
-                  showToolbarForPointer();
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = TRIGGER_EXECUTE_BUTTON_BG_HOVER;
-                }}
-                onMouseLeave={(e) => {
-                  hideToolbarForPointerSoon();
-                  (e.currentTarget as HTMLButtonElement).style.backgroundColor = TRIGGER_EXECUTE_BUTTON_BG;
-                }}
+                onMouseEnter={showToolbarForPointer}
+                onMouseLeave={hideToolbarForPointerSoon}
                 onClick={(e) => {
                   e.stopPropagation();
                   void actions?.onHoverExecuteWorkflowFromTrigger?.(id);
@@ -461,7 +452,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
               />
             </div>
             {/* Trigger bolt: outside-left, vertically centered (`right: 100%`, `margin: auto`). */}
-            <div className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 p-1 text-[#ff6d5a]">
+            <div className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 p-1 text-primary-600">
               <BoltIcon className="h-5 w-5" aria-hidden />
             </div>
             <OutputHandlesWithContinuation
