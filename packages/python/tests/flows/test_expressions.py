@@ -437,7 +437,7 @@ def test_materialize_node_data_unwraps_json_wrapped_items() -> None:
         },
     }
     m = ad.flows.expressions.materialize_node_data(rd)
-    assert m["c1"]["main"][0][0]["url"] == "https://mit.edu"
+    assert m["c1"]["main"][0][0]["json"]["url"] == "https://mit.edu"
 
 
 def test_preview_parameter_expression_resolves_json() -> None:

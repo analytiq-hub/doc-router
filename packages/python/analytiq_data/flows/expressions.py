@@ -458,6 +458,33 @@ def resolve_parameters(
     return params
 
 
+def _flow_item_to_materialized_dict(it: Any) -> dict[str, Any]:
+    """JSON-safe item dict for expressions / code sandbox (metadata only for binary)."""
+    if isinstance(it, ad.flows.FlowItem):
+        flow_item = it
+    elif isinstance(it, dict):
+        flow_item = ad.flows.coerce_flow_item(it)
+    else:
+        return {"json": {}}
+
+    binary_out: dict[str, dict[str, Any]] = {}
+    for name, ref in (flow_item.binary or {}).items():
+        binary_out[name] = {
+            "mime_type": ref.mime_type,
+            "file_name": ref.file_name,
+            "storage_id": ref.storage_id,
+            "file_size": ref.file_size,
+        }
+    row: dict[str, Any] = {
+        "json": dict(flow_item.json),
+        "binary": binary_out,
+        "meta": dict(flow_item.meta or {}),
+    }
+    if flow_item.paired_item is not None:
+        row["paired_item"] = flow_item.paired_item
+    return row
+
+
 def materialize_node_data(run_data: dict[str, Any]) -> dict[str, Any]:
     """
     Convert engine `run_data` (which may contain `FlowItem` objects) into a JSON-only
@@ -468,8 +495,8 @@ def materialize_node_data(run_data: dict[str, Any]) -> dict[str, Any]:
       "<node_id>": {
         "status": "success|skipped|error|...",
         "main": [
-          [ { ...item_json... }, ... ],   # output slot 0
-          [ ... ],                        # output slot 1
+          [ { "json", "binary", "meta", "paired_item"? }, ... ],   # output slot 0
+          [ ... ],                                                 # output slot 1
         ]
       }
     }
@@ -494,16 +521,16 @@ def materialize_node_data(run_data: dict[str, Any]) -> dict[str, Any]:
                 continue
             items_json: list[dict[str, Any]] = []
             for it in slot:
-                if isinstance(it, ad.flows.FlowItem):
-                    items_json.append(it.json)
+                if isinstance(it, ad.flows.FlowItem) or (
+                    isinstance(it, dict) and ("json" in it or "binary" in it or "meta" in it)
+                ):
+                    items_json.append(_flow_item_to_materialized_dict(it))
                 elif isinstance(it, dict):
                     ji = it.get("json")
                     if isinstance(ji, dict):
-                        # Serialized `FlowItem` from API/browser seed (`{"json": {...}}`).
-                        items_json.append(ji)
+                        items_json.append(_flow_item_to_materialized_dict(it))
                     else:
-                        # Plain snapshot dict (already item-shaped).
-                        items_json.append(it)
+                        items_json.append({"json": it, "binary": {}, "meta": {}})
             slots_json.append(items_json)
 
         row: dict[str, Any] = {"status": status, "main": slots_json}

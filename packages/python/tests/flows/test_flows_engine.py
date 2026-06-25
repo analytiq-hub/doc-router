@@ -619,7 +619,7 @@ async def test_run_flow_executes_code_node() -> None:
             "type": "flows.code",
             "position": [200, 0],
             "parameters": {
-                "python_code": "def run(items, context):\n    out=[]\n    td = context.get('trigger') or {}\n    for it in items:\n        it=dict(it)\n        it['x']=td.get('x',0)+1\n        out.append(it)\n    return out\n",
+                "python_code": "def run(items, context):\n    out=[]\n    td = context.get('trigger') or {}\n    for it in items:\n        row = dict(it['json'])\n        row['x']=td.get('x',0)+1\n        out.append(row)\n    return out\n",
                 "timeout_seconds": 2,
             },
             "webhook_id": None,
@@ -1399,7 +1399,7 @@ async def test_flows_code_context_includes_nodes_materialized_run_data() -> None
             {
                 "python_code": (
                     "def run(items, context):\n"
-                    "    a = context['nodes']['p1']['main'][0][0]['a']\n"
+                    "    a = context['nodes']['p1']['main'][0][0]['json']['a']\n"
                     "    return [{'y': a + 1}]\n"
                 ),
                 "timeout_seconds": 2,

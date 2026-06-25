@@ -14,7 +14,8 @@ def test_code_node_parameter_schema_ui_hints() -> None:
     assert props["python_code"].get("x-ui-group") == "Code"
     assert props["python_code"].get("default") == "def run(items, context):\n  return items\n"
     assert props["timeout_seconds"].get("x-ui-group") == "Options"
-    assert props["timeout_seconds"].get("maximum") == 30
+    assert props["timeout_seconds"].get("maximum") == 120
+    assert props["mode"].get("x-ui-widget") == "select"
 
 
 def test_branch_node_parameter_schema_ui_hints() -> None:

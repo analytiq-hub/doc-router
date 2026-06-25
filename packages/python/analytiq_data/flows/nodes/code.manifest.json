@@ -2,7 +2,7 @@
   "schema": "urn:docrouter:flow-node-manifest:v1",
   "manifest_version": 1,
   "key": "flows.code",
-  "type_version": 1,
+  "type_version": 2,
   "label": "Code (Python)",
   "description": "Runs a small Python snippet to transform items.",
   "category": "Generic",
@@ -25,6 +25,17 @@
   "parameter_schema": {
     "type": "object",
     "properties": {
+      "mode": {
+        "type": "string",
+        "enum": [
+          "all_items",
+          "per_item"
+        ],
+        "default": "all_items",
+        "description": "Run once for all input items, or once per item.",
+        "x-ui-widget": "select",
+        "x-ui-group": "Options"
+      },
       "python_code": {
         "type": "string",
         "minLength": 1,
@@ -37,8 +48,8 @@
         "type": "number",
         "default": 2,
         "minimum": 0.0001,
-        "maximum": 30,
-        "description": "Subprocess wall-clock limit in seconds (default 2, max 30).",
+        "maximum": 120,
+        "description": "Subprocess wall-clock limit in seconds (default 2, max 120).",
         "x-ui-group": "Options",
         "x-ui-placeholder": "e.g. 2"
       }

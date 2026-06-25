@@ -52,7 +52,7 @@ def _code_node(*, python_code: str | None = None) -> dict:
         "def run(items, context):\n"
         "  out = []\n"
         "  for it in items:\n"
-        "    j = dict(it)\n"
+        "    j = dict(it.get('json') or {})\n"
         "    j['flow_output'] = True\n"
         "    out.append(j)\n"
         "  return out\n"
