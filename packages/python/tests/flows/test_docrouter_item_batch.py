@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 
 import pytest
 
@@ -63,6 +64,41 @@ async def test_map_flow_items_batch_respects_batch_size() -> None:
     await map_flow_items_batch(12, fn, batch_size=8)
     assert max_active <= 8
     assert max_active >= 2
+
+
+@pytest.mark.asyncio
+async def test_map_flow_items_batch_logs_parallel_processing(caplog: pytest.LogCaptureFixture) -> None:
+    async def fn(i: int) -> int:
+        return i
+
+    with caplog.at_level(logging.INFO):
+        await map_flow_items_batch(
+            5,
+            fn,
+            batch_size=3,
+            execution_id="exec-1",
+            node_id="node-1",
+            node_type="docrouter.llm_run",
+        )
+
+    assert any(
+        "Processing 5 items in parallel with batch_size=3" in r.message
+        and "execution_id=exec-1" in r.message
+        and "node_type=docrouter.llm_run" in r.message
+        and "node_id=node-1" in r.message
+        for r in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_map_flow_items_batch_skips_parallel_log_when_sequential(caplog: pytest.LogCaptureFixture) -> None:
+    async def fn(i: int) -> int:
+        return i
+
+    with caplog.at_level(logging.INFO):
+        await map_flow_items_batch(5, fn, batch_size=1)
+
+    assert not any("in parallel" in r.message for r in caplog.records)
 
 
 def test_resolve_node_batch_size_defaults_and_clamps() -> None:
