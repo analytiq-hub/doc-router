@@ -16,3 +16,12 @@ data:
   AWS_S3_BUCKET_NAME: {{ .Values.config.appBucketName | quote }}
   AWS_REGION: {{ .Values.config.region | quote }}
   CORS_ORIGINS_EXTRA: {{ .Values.config.corsOriginsExtra | quote }}
+{{- if .Values.config.flowCodeStdlibAllow }}
+  FLOW_CODE_STDLIB_ALLOW: {{ .Values.config.flowCodeStdlibAllow | quote }}
+{{- end }}
+{{- if .Values.config.flowCodeBuiltinsDeny }}
+  FLOW_CODE_BUILTINS_DENY: {{ .Values.config.flowCodeBuiltinsDeny | quote }}
+{{- end }}
+{{- if .Values.config.flowCodeBlockEnvAccess }}
+  FLOW_CODE_BLOCK_ENV_ACCESS: {{ .Values.config.flowCodeBlockEnvAccess | quote }}
+{{- end }}
