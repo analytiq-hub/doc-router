@@ -72,7 +72,7 @@ import { edgesWithRunDataItemCounts } from './flowNodeIoPreview';
 import { inputHandleCount, inputPortType, outputPortType, portTypesCompatible, edgeConnectionType } from './flowRf';
 import type { FlowConnectionType, FlowRfNodeData } from './flowRf';
 import { triggerReachabilityFromGraph } from './flowTriggerReachability';
-import { flowRunButtonCanvasClass, FLOW_EXECUTE_FLOW_LABEL } from './flowUiClasses';
+import { flowRunButtonCanvasClass, FLOW_EXECUTE_FLOW_LABEL, FLOW_NODE_PALETTE_WIDTH_PX } from './flowUiClasses';
 import { flowWorkspaceDropdownItemSimpleClass, flowWorkspaceMenuPanelClass } from './flowWorkspaceMenu';
 
 export type FlowExecuteWorkflowTriggerOption = { id: string; label: string };
@@ -1227,7 +1227,8 @@ const FlowEditor: React.FC<{
             aria-hidden
           />
           <aside
-            className="fixed right-0 top-0 z-[160] flex h-full w-[min(100vw,385px)] min-w-0 flex-col border-l border-[#dfe3e9] bg-[#fafbfc] shadow-xl"
+            className="fixed right-0 top-0 z-[160] flex h-full min-w-0 flex-col border-l border-[#dfe3e9] bg-[#fafbfc] shadow-xl"
+            style={{ width: `min(100vw, ${FLOW_NODE_PALETTE_WIDTH_PX}px)` }}
             role="dialog"
             aria-modal
             aria-labelledby="flow-node-palette-title"

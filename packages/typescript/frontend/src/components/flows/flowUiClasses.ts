@@ -56,7 +56,8 @@ export const flowPanelColResizeHitAreaMargins = { fine: 2, coarse: 12 } as const
 export const flowPanelColResizeHandleClass =
   'relative z-40 flex w-2 shrink-0 cursor-col-resize items-stretch bg-transparent pointer-events-auto before:pointer-events-none before:absolute before:inset-y-0 before:left-1/2 before:h-full before:w-px before:-translate-x-1/2 before:bg-[#e8eaee] hover:before:bg-[#c8ced6] active:before:bg-[#b8c0cc]';
 
-/** Shared run/test CTA colors — DocRouter primary (not n8n coral). */
+/** Right-side node palette slide-over width (px). */
+export const FLOW_NODE_PALETTE_WIDTH_PX = 400;
 const flowRunButtonColorClass =
   'bg-primary-600 text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60';
 

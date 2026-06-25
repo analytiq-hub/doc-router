@@ -216,13 +216,12 @@ function nodeBorderClass(): string {
 /** Process nodes: uniform ~12px corners. */
 const processShape = 'rounded-xl';
 
-/** Trigger: more rounded on the left (~36px left, ~12px right). */
+/** Trigger: rounded left (~36px), ~12px right — classic workflow trigger silhouette. */
 const triggerShape = 'rounded-l-[36px] rounded-r-xl';
 
 /**
  * Selection contour: uniform white margin, then a thick light-gray outer contour that follows
- * the same border-radius as the node (incl. trigger D-shape). Implemented as stacked box-shadows
- * (spread-only, no blur).
+ * the node border-radius (incl. trigger pill). Stacked box-shadows, spread-only, no blur.
  */
 function nodeSelectionContour(selected: boolean): string {
   if (!selected) return '';
@@ -451,7 +450,6 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
                 ].join(' ')}
               />
             </div>
-            {/* Trigger bolt: outside-left, vertically centered (`right: 100%`, `margin: auto`). */}
             <div className="pointer-events-none absolute right-full top-1/2 -translate-y-1/2 p-1 text-primary-600">
               <BoltIcon className="h-5 w-5" aria-hidden />
             </div>
