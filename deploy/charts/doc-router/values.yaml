@@ -40,5 +40,6 @@ config:
   appBucketName: ""                     # AWS S3 bucket for document storage
   region: ""                            # AWS region
   corsOriginsExtra: ""                  # comma-separated extra CORS origins, e.g. https://make.powerautomate.com
+  flowCodeExternalAllow: ""             # optional; flows.code third-party module allowlist, e.g. fitz
   flowCodeBuiltinsDeny: ""              # optional; flows.code builtins deny list override
   flowCodeBlockEnvAccess: ""            # optional; flows.code child env isolation (default true)

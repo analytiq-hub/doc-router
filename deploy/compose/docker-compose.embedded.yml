@@ -81,6 +81,7 @@ services:
       - N_DOCROUTER_WORKERS=0
       - N_UVICORN_WORKERS=${N_UVICORN_WORKERS:-1}
       - CORS_ORIGINS_EXTRA=${CORS_ORIGINS_EXTRA}
+      - FLOW_CODE_EXTERNAL_ALLOW=${FLOW_CODE_EXTERNAL_ALLOW}
       - FLOW_CODE_BUILTINS_DENY=${FLOW_CODE_BUILTINS_DENY}
       - FLOW_CODE_BLOCK_ENV_ACCESS=${FLOW_CODE_BLOCK_ENV_ACCESS}
     command: sh -c "cd /app/packages/python && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${N_UVICORN_WORKERS:-1}"
@@ -126,6 +127,7 @@ services:
       - SES_FROM_EMAIL=${SES_FROM_EMAIL}
       - N_DOCROUTER_WORKERS=${N_DOCROUTER_WORKERS:-1}
       - CORS_ORIGINS_EXTRA=${CORS_ORIGINS_EXTRA}
+      - FLOW_CODE_EXTERNAL_ALLOW=${FLOW_CODE_EXTERNAL_ALLOW}
       - FLOW_CODE_BUILTINS_DENY=${FLOW_CODE_BUILTINS_DENY}
       - FLOW_CODE_BLOCK_ENV_ACCESS=${FLOW_CODE_BLOCK_ENV_ACCESS}
     command: sh -c "cd /app/packages/python && exec python3 worker/worker.py"
