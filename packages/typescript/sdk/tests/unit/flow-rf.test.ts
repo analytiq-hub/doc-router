@@ -50,7 +50,7 @@ const codeLikeNodeType: FlowNodeType = {
         type: 'string',
         default: 'def run(items, context):\n  return items\n',
       },
-      timeout_seconds: { type: 'number', default: 2 },
+      timeout_seconds: { type: 'number', default: 30 },
     },
     required: ['python_code'],
     additionalProperties: false,
@@ -239,6 +239,6 @@ describe('flow-rf', () => {
     const out = rfToRevision(nodes, edges, rev, 'With code');
     const codeNode = out.nodes.find((n) => n.id === 'C');
     expect(codeNode?.parameters.python_code).toBe('def run(items, context):\n  return items\n');
-    expect(codeNode?.parameters.timeout_seconds).toBe(2);
+    expect(codeNode?.parameters.timeout_seconds).toBe(30);
   });
 });

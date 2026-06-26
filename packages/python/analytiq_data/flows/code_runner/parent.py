@@ -112,7 +112,7 @@ async def run_python_code(
     items: list[dict[str, Any]],
     context: dict[str, Any],
     mode: str = "all_items",
-    timeout_seconds: float = 2.0,
+    timeout_seconds: float = 30.0,
     continue_on_fail: bool = False,
     analytiq_client: Any = None,
     node_id: str = "",

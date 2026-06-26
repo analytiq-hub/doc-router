@@ -56,12 +56,12 @@ class FlowsCodeNode:
             },
             "timeout_seconds": {
                 "type": "number",
-                "default": 2,
+                "default": 30,
                 "minimum": 0.0001,
                 "maximum": 120,
-                "description": "Subprocess wall-clock limit in seconds (default 2, max 120).",
+                "description": "Subprocess wall-clock limit in seconds (default 30, max 120).",
                 "x-ui-group": "Options",
-                "x-ui-placeholder": "e.g. 2",
+                "x-ui-placeholder": "e.g. 30",
             },
         },
         "required": ["python_code"],
@@ -94,7 +94,7 @@ class FlowsCodeNode:
         params = node.get("parameters") or {}
         code = params["python_code"]
         mode = params.get("mode") or "all_items"
-        timeout_seconds = float(params.get("timeout_seconds") or 2.0)
+        timeout_seconds = float(params.get("timeout_seconds") or 30.0)
         continue_on_fail = (node.get("on_error") or "stop") == "continue"
 
         in_items = inputs[0]

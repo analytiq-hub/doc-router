@@ -46,12 +46,12 @@
       },
       "timeout_seconds": {
         "type": "number",
-        "default": 2,
+        "default": 30,
         "minimum": 0.0001,
         "maximum": 120,
-        "description": "Subprocess wall-clock limit in seconds (default 2, max 120).",
+        "description": "Subprocess wall-clock limit in seconds (default 30, max 120).",
         "x-ui-group": "Options",
-        "x-ui-placeholder": "e.g. 2"
+        "x-ui-placeholder": "e.g. 30"
       }
     },
     "required": [
