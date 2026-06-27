@@ -771,7 +771,15 @@ export default function FlowDetailPageClient({
   }, [api, flowId, organizationId, webhookTestListeningLeaf, webhookTestStopInternal]);
 
   const onExecuteFlowStep = useCallback(
-    async ({ targetNodeId, seedRunData }: { targetNodeId: string; seedRunData: Record<string, unknown> }) => {
+    async ({
+      targetNodeId,
+      seedRunData,
+      toolTestRequest,
+    }: {
+      targetNodeId: string;
+      seedRunData: Record<string, unknown>;
+      toolTestRequest?: { tool_name: string; arguments: Record<string, unknown> };
+    }) => {
       const revision_snapshot = buildRevisionSnapshotForRun();
       if (!revision_snapshot) return;
       try {
@@ -783,6 +791,7 @@ export default function FlowDetailPageClient({
           target_node_id: targetNodeId,
           run_data: seedRunData,
           revision_snapshot,
+          tool_test_request: toolTestRequest,
         });
         const execId = out.execution_id?.trim();
         if (!execId) return;

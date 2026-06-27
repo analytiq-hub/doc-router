@@ -290,8 +290,16 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
   const isPinned = Boolean(data.pinned);
 
   const showToolbar = Boolean(actions);
+  const isToolProvider = Boolean(nt?.tool_provider);
   /** Omit on read-only executions canvas (undefined ⇒ allow). Editor sets explicit true/false. */
   const triggerReachOk = data.reachableFromTriggers !== false;
+  const executeStepTitle = isTrigger
+    ? 'Triggers run with the full workflow'
+    : isToolProvider
+      ? 'Test tool with arguments (Path B)'
+      : !triggerReachOk
+        ? 'Connect this node from a trigger with graph edges to run this step'
+        : 'Execute step (partial run through this node)';
 
   const labelBlock = (
     <div className="pointer-events-none absolute left-1/2 top-full z-0 mt-4 min-w-[120px] max-w-[260px] -translate-x-1/2 px-1 text-center">
@@ -326,23 +334,15 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
               onMouseEnter={showToolbarForPointer}
               onMouseLeave={hideToolbarForPointerSoon}
             >
-              <span
-                title={
-                  isTrigger
-                    ? 'Triggers run with the full workflow'
-                    : !triggerReachOk
-                      ? 'Connect this node from a trigger with graph edges to run this step'
-                      : 'Execute step (partial run through this node)'
-                }
-              >
+              <span title={executeStepTitle}>
                 <button
                   type="button"
-                  aria-label={isTrigger ? 'Execute step unavailable for triggers' : 'Execute step'}
+                  aria-label={isTrigger ? 'Execute step unavailable for triggers' : isToolProvider ? 'Test tool' : 'Execute step'}
                   disabled={
                     isTrigger ||
                     !actions.onExecuteNodeStep ||
                     Boolean(actions.executeStepBusy) ||
-                    !triggerReachOk
+                    (!isToolProvider && !triggerReachOk)
                   }
                   onClick={() => void actions.onExecuteNodeStep?.(id)}
                   className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-600 enabled:hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"

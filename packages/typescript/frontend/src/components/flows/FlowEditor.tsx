@@ -53,6 +53,7 @@ import {
   type FlowPalettePlacement,
 } from './flowPaletteActions';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
+import ToolTestArgsModal from './ToolTestArgsModal';
 import {
   paletteSectionDescription,
   paletteSectionForNodeType,
@@ -290,7 +291,11 @@ const FlowEditor: React.FC<{
   openConfigNodeId?: string | null;
   onOpenConfigNodeIdChange?: (next: string | null) => void;
   /** Execute step (partial run): parent supplies API call with saved revision id. */
-  onExecuteStep?: (args: { targetNodeId: string; seedRunData: Record<string, unknown> }) => void | Promise<void>;
+  onExecuteStep?: (args: {
+    targetNodeId: string;
+    seedRunData: Record<string, unknown>;
+    toolTestRequest?: { tool_name: string; arguments: Record<string, unknown> };
+  }) => void | Promise<void>;
   /** Org API for flow credential pickers in the node modal. */
   flowOrgApi?: DocRouterOrgApi | null;
 }> = ({
@@ -328,6 +333,7 @@ const FlowEditor: React.FC<{
   const [paletteDrilledNodeTypeKey, setPaletteDrilledNodeTypeKey] = useState<string | null>(null);
   const [paletteSearching, setPaletteSearching] = useState(false);
   const [configModalNodeId, setConfigModalNodeId] = useState<string | null>(null);
+  const [toolTestModalNodeId, setToolTestModalNodeId] = useState<string | null>(null);
   const [executeStepBusy, setExecuteStepBusy] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const nodeTypesByKey = useMemo(() => Object.fromEntries(nodeTypes.map((nt) => [nt.key, nt])), [nodeTypes]);
@@ -958,13 +964,17 @@ const FlowEditor: React.FC<{
   }, [configModalNodeId, nodeTypesByKey, nodes]);
 
   const runExecuteStepForNode = useCallback(
-    async (targetNodeId: string) => {
+    async (
+      targetNodeId: string,
+      toolTestRequest?: { tool_name: string; arguments: Record<string, unknown> },
+    ) => {
       if (!onExecuteStep) return;
       setExecuteStepBusy(true);
       try {
         await onExecuteStep({
           targetNodeId,
           seedRunData: { ...(runData ?? {}) },
+          toolTestRequest,
         });
       } finally {
         setExecuteStepBusy(false);
@@ -973,10 +983,40 @@ const FlowEditor: React.FC<{
     [onExecuteStep, runData],
   );
 
+  const isToolProviderNode = useCallback(
+    (nodeId: string): boolean => {
+      const n = nodes.find((x) => x.id === nodeId);
+      if (!n) return false;
+      const nt = n.data.nodeType ?? nodeTypesByKey[n.data.flowNode.type];
+      return Boolean(nt?.tool_provider);
+    },
+    [nodeTypesByKey, nodes],
+  );
+
+  const requestExecuteStep = useCallback(
+    (targetNodeId: string) => {
+      if (isToolProviderNode(targetNodeId)) {
+        setToolTestModalNodeId(targetNodeId);
+        return;
+      }
+      void runExecuteStepForNode(targetNodeId);
+    },
+    [isToolProviderNode, runExecuteStepForNode],
+  );
+
   const onExecuteStepClick = useCallback(async () => {
     if (!configModalNodeId) return;
-    await runExecuteStepForNode(configModalNodeId);
-  }, [configModalNodeId, runExecuteStepForNode]);
+    requestExecuteStep(configModalNodeId);
+  }, [configModalNodeId, requestExecuteStep]);
+
+  const toolTestModalRf = useMemo(() => {
+    const n = nodes.find((x) => x.id === toolTestModalNodeId);
+    if (!n) return { node: null as FlowNode | null, nodeType: null as FlowNodeType | null };
+    return {
+      node: n.data.flowNode,
+      nodeType: nodeTypesByKey[n.data.flowNode.type] ?? n.data.nodeType ?? null,
+    };
+  }, [nodes, nodeTypesByKey, toolTestModalNodeId]);
 
   const hoverExecuteWorkflowFromTrigger = useMemo(() => {
     const multi = executeWorkflowTriggers.length > 1;
@@ -993,7 +1033,7 @@ const FlowEditor: React.FC<{
 
   const canvasActions = useMemo(
     () => ({
-      onExecuteNodeStep: onExecuteStep ? runExecuteStepForNode : undefined,
+      onExecuteNodeStep: onExecuteStep ? requestExecuteStep : undefined,
       executeStepBusy,
       onToggleNodeDisabled: (nodeId: string) => {
         onNodesChange(
@@ -1052,7 +1092,7 @@ const FlowEditor: React.FC<{
       onEdgesChange,
       onExecuteStep,
       onNodesChange,
-      runExecuteStepForNode,
+      requestExecuteStep,
     ],
   );
 
@@ -1253,6 +1293,22 @@ const FlowEditor: React.FC<{
         flowRevisionPinBlobContext={flowRevisionPinBlobContext}
         flowId={flowId}
         flowRevidForPins={flowRevidForPins}
+      />
+
+      <ToolTestArgsModal
+        open={Boolean(toolTestModalNodeId && toolTestModalRf.node)}
+        flowNode={toolTestModalRf.node}
+        nodeType={toolTestModalRf.nodeType}
+        edges={edges}
+        pinData={pinData}
+        runData={runData}
+        busy={executeStepBusy}
+        onClose={() => setToolTestModalNodeId(null)}
+        onConfirm={async (payload) => {
+          const nodeId = toolTestModalNodeId;
+          if (!nodeId) return;
+          await runExecuteStepForNode(nodeId, payload);
+        }}
       />
 
       {nodePaletteOpen && (

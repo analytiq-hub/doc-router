@@ -3,6 +3,8 @@ from __future__ import annotations
 """Tool Executor node — dispatch a wired tool with explicit arguments."""
 
 import json
+import time
+from datetime import UTC, datetime
 from typing import Any
 
 import analytiq_data as ad
@@ -10,6 +12,50 @@ import analytiq_data as ad
 from analytiq_data.flows.agent_loop.dispatch import execute_tool_call
 from analytiq_data.flows.agent_loop.types import NormalizedToolCall
 from analytiq_data.flows.tool_wiring import WiredToolRegistry
+
+
+async def _record_tool_provider_run_data(
+    context: "ad.flows.ExecutionContext",
+    *,
+    tool_node_id: str,
+    output_json: dict[str, Any],
+    success: bool,
+    start_datetime: datetime,
+    elapsed_ms: int,
+) -> None:
+    """Mirror tool dispatch output onto the wired tool_provider node (Path A/B debugging)."""
+
+    from analytiq_data.flows.engine import persist_run_data
+    from analytiq_data.flows.trace import pop_node_trace
+
+    context.execution_index += 1
+    item = ad.flows.FlowItem(
+        json=output_json,
+        binary={},
+        meta={"dispatched": True},
+        paired_item=0,
+    )
+    context.run_data[tool_node_id] = {
+        "status": "success" if success else "error",
+        "start_time": start_datetime.isoformat(),
+        "execution_time_ms": elapsed_ms,
+        "execution_index": context.execution_index,
+        "data": {"main": [[item]]},
+        "error": None if success else {
+            "message": str(output_json.get("error") or "Tool dispatch failed"),
+            "node_id": tool_node_id,
+            "node_name": None,
+            "stack": None,
+        },
+        "source": [],
+        "logs": (context.node_logs.pop(tool_node_id, None) if hasattr(context, "node_logs") else None),
+        "trace": pop_node_trace(context, tool_node_id),
+    }
+    await persist_run_data(
+        context,
+        context.run_data,
+        last_node_executed=tool_node_id,
+    )
 
 
 class FlowsToolExecutorNode:
@@ -113,6 +159,10 @@ class FlowsToolExecutorNode:
         out: list["ad.flows.FlowItem"] = []
         upstream_snapshot = ad.flows.materialize_node_data(context.run_data)
         for idx, item in enumerate(in_items):
+            dispatch_start = datetime.now(UTC)
+            t0 = time.time()
+            wired = None
+            args: dict[str, Any] = {}
             try:
                 wired = registry.resolve(tool_name)
                 args = self._resolve_arguments(params, item)
@@ -130,13 +180,26 @@ class FlowsToolExecutorNode:
                     tool_result = json.loads(raw)
                 except json.JSONDecodeError:
                     tool_result = {"_raw": raw}
+                if not isinstance(tool_result, dict):
+                    tool_result = {"_raw": tool_result}
                 success = True
             except Exception as e:
                 if not continue_on_fail:
                     raise
                 tool_result = {"error": str(e)}
-                args = {}
+                args = dict(params.get("arguments") or {}) if isinstance(params.get("arguments"), dict) else {}
                 success = False
+
+            elapsed_ms = int((time.time() - t0) * 1000)
+            if wired is not None:
+                await _record_tool_provider_run_data(
+                    context,
+                    tool_node_id=wired.node_id,
+                    output_json=tool_result,
+                    success=success,
+                    start_datetime=dispatch_start,
+                    elapsed_ms=elapsed_ms,
+                )
 
             out.append(
                 ad.flows.FlowItem(

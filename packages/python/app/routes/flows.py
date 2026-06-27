@@ -703,6 +703,13 @@ class FlowRevisionSnapshotRequest(BaseModel):
     pin_data: dict[str, Any] | None = None
 
 
+class ToolTestRequest(BaseModel):
+    """Path B: execute-step on a tool_provider with synthetic Tool Executor rewire."""
+
+    tool_name: str = Field(..., min_length=1)
+    arguments: dict[str, Any] = Field(default_factory=dict)
+
+
 class RunFlowRequest(BaseModel):
     flow_revid: str | None = Field(None, description="Revision lineage id for the execution; optional when revision_snapshot is supplied.")
     document_id: str | None = Field(None, description="Optional document id recorded on the manual trigger payload for this run.")
@@ -725,6 +732,10 @@ class RunFlowRequest(BaseModel):
     revision_snapshot: FlowRevisionSnapshotRequest | None = Field(
         None,
         description="Immutable editor graph for an immediate run; overrides the stored revision when set.",
+    )
+    tool_test_request: ToolTestRequest | None = Field(
+        None,
+        description="Path B tool test: rewire graph with synthetic manual trigger + Tool Executor for this run.",
     )
 
 
@@ -1980,6 +1991,30 @@ async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, curr
     if req.run_data and not req.target_node_id:
         raise HTTPException(status_code=400, detail="target_node_id is required when run_data is supplied")
 
+    if req.tool_test_request is not None:
+        if not req.target_node_id:
+            raise HTTPException(status_code=400, detail="target_node_id is required with tool_test_request")
+        target_node = next((n for n in known_nodes if n.get("id") == req.target_node_id), None)
+        if not target_node:
+            raise HTTPException(status_code=400, detail="target_node_id is not a node on the selected revision")
+        try:
+            target_type = ad.flows.get(str(target_node.get("type") or ""))
+        except KeyError as e:
+            raise HTTPException(status_code=400, detail=f"Unknown node type on target: {target_node.get('type')}") from e
+        if not getattr(target_type, "tool_provider", False):
+            raise HTTPException(status_code=400, detail="tool_test_request requires a tool_provider target_node_id")
+        snap_nodes = (revision_snapshot or rev or {}).get("nodes") or known_nodes
+        snap_conns = (revision_snapshot or rev or {}).get("connections") or {}
+        try:
+            ad.flows.prepare_tool_test_run(
+                revision={"nodes": snap_nodes, "connections": snap_conns, "settings": {}, "pin_data": None},
+                tool_node_id=req.target_node_id,
+                tool_name=req.tool_test_request.tool_name.strip(),
+                arguments=dict(req.tool_test_request.arguments or {}),
+            )
+        except ad.flows.FlowValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     try:
         seed_filtered = ad.flows.validate_and_filter_run_data_seed(
             known_node_ids=known_node_ids,
@@ -2019,6 +2054,11 @@ async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, curr
         "resumed_from": None,
         "resumed_by": None,
     }
+    if req.tool_test_request is not None:
+        exec_doc["tool_test_request"] = {
+            "tool_name": req.tool_test_request.tool_name.strip(),
+            "arguments": dict(req.tool_test_request.arguments or {}),
+        }
     if revision_snapshot is not None:
         exec_doc["revision_snapshot"] = revision_snapshot
     res_ins = await db.flow_executions.insert_one(exec_doc)

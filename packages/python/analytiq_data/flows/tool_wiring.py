@@ -304,6 +304,49 @@ def example_arguments_from_schema(schema: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+TOOL_TEST_MANUAL_ID = "__tool_test_manual__"
+TOOL_TEST_EXECUTOR_ID = "__tool_test_executor__"
+
+
+def tool_arguments_schema_for_node(node: dict[str, Any]) -> dict[str, Any]:
+    """JSON Schema for Path B test-arguments modal defaults."""
+
+    node_type = ad.flows.get(node["type"])
+    return _build_wired_tool(node, node_type).parameters_schema
+
+
+def prepare_tool_test_run(
+    *,
+    revision: dict[str, Any],
+    tool_node_id: str,
+    tool_name: str,
+    arguments: dict[str, Any],
+) -> tuple[dict[str, Any], str, str]:
+    """
+    Rewire an in-memory revision for Path B execute-step on a tool_provider node.
+
+    Returns ``(revision, start_trigger_node_id, run_target_node_id)`` where
+    ``run_target_node_id`` is the synthetic Tool Executor (main-path target).
+    The client ``target_node_id`` on the execution doc stays the real tool node id for UI focus.
+    """
+
+    nodes = list(revision.get("nodes") or [])
+    connections = ad.flows.coerce_json_connections_to_dataclasses(revision.get("connections"))
+    new_nodes, new_connections, executor_id = rewire_graph_for_tool_test(
+        nodes=nodes,
+        connections=connections,
+        tool_node_id=tool_node_id,
+        tool_name=tool_name,
+        arguments=arguments,
+    )
+    revision_out = {
+        **revision,
+        "nodes": new_nodes,
+        "connections": new_connections,
+    }
+    return revision_out, TOOL_TEST_MANUAL_ID, executor_id
+
+
 def rewire_graph_for_tool_test(
     *,
     nodes: list[dict[str, Any]],
@@ -338,8 +381,8 @@ def rewire_graph_for_tool_test(
             f"Tool node {ad.flows.node_name(tool_node)} is not wired to a tool consumer"
         )
 
-    manual_id = "__tool_test_manual__"
-    executor_id = "__tool_test_executor__"
+    manual_id = TOOL_TEST_MANUAL_ID
+    executor_id = TOOL_TEST_EXECUTOR_ID
     manual_node = {
         "id": manual_id,
         "name": "Tool test (manual)",

@@ -1114,6 +1114,7 @@ export class DocRouterOrg {
       run_data: params?.run_data ?? null,
       dirty_node_ids: params?.dirty_node_ids ?? null,
       revision_snapshot: params?.revision_snapshot ?? null,
+      tool_test_request: params?.tool_test_request ?? null,
     });
   }
 

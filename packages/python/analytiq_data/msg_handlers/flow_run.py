@@ -105,8 +105,39 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
     st_raw = exec_doc.get("start_trigger_node_id")
     start_kw = str(st_raw).strip() if isinstance(st_raw, str) and str(st_raw).strip() else None
 
+    tool_test_raw = exec_doc.get("tool_test_request")
+    ui_target_node_id = exec_doc.get("target_node_id")
+    run_target_node_id = ui_target_node_id
+    if isinstance(tool_test_raw, dict) and ui_target_node_id:
+        tool_name = str(tool_test_raw.get("tool_name") or "").strip()
+        tool_args = tool_test_raw.get("arguments")
+        if not isinstance(tool_args, dict):
+            tool_args = {}
+        try:
+            revision, start_kw, run_target_node_id = ad.flows.prepare_tool_test_run(
+                revision=revision,
+                tool_node_id=str(ui_target_node_id),
+                tool_name=tool_name,
+                arguments=tool_args,
+            )
+            revision_conns = ad.flows.coerce_json_connections_to_dataclasses(revision.get("connections"))
+            nodes_list = revision.get("nodes") or []
+        except ad.flows.FlowValidationError as e:
+            await db.flow_executions.update_one(
+                {"_id": ObjectId(exec_id)},
+                {
+                    "$set": {
+                        "status": "error",
+                        "finished_at": datetime.now(UTC),
+                        "error": ad.flows.execution_error_envelope(e),
+                    }
+                },
+            )
+            await ad.queue.delete_msg(analytiq_client, "flow_run", msg_id)
+            return
+
     allowed_pins: frozenset[str] | None = None
-    tgt_any = exec_doc.get("target_node_id")
+    tgt_any = run_target_node_id
     if tgt_any:
         try:
             trig = ad.flows.resolve_execution_start_trigger(
@@ -181,7 +212,7 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
             return
         heartbeat_task = asyncio.create_task(_heartbeat_loop(db, exec_id))
         try:
-            tgt = exec_doc.get("target_node_id")
+            tgt = run_target_node_id
             target_node_id = str(tgt) if tgt else None
             result = await ad.flows.run_flow(
                 context=context,

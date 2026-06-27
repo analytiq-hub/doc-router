@@ -268,6 +268,14 @@ export interface RunFlowParams {
   dirty_node_ids?: string[];
   /** When set, this graph is executed; `flow_revid` is lineage only (expressions / UI), not the source of truth for the run. */
   revision_snapshot?: RevisionSnapshotPayload;
+  /** Path B: execute-step on a tool_provider with synthetic Tool Executor rewire. */
+  tool_test_request?: FlowToolTestRequest;
+}
+
+/** Arguments for Path B tool execute-step (`rewire_graph_for_tool_test`). */
+export interface FlowToolTestRequest {
+  tool_name: string;
+  arguments: Record<string, unknown>;
 }
 
 /** POST body for editor Chat Trigger test (`…/flows/{id}/chat/test`). */
