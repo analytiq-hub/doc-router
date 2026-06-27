@@ -34,11 +34,13 @@ def main() -> None:
         )
         return
 
+    kind = task.get("kind") or "flow_code"
     code = task.get("code")
     items = task.get("items")
     context = task.get("context")
     mode = task.get("mode") or "all_items"
     continue_on_fail = bool(task.get("continue_on_fail"))
+    params = task.get("params")
 
     if not isinstance(code, str):
         write_frame(
@@ -46,6 +48,53 @@ def main() -> None:
             {"type": "task_result", "ok": False, "error": {"message": "code must be a string"}},
         )
         return
+    if kind == "tool_code":
+        if not isinstance(params, dict):
+            write_frame(
+                sys.stdout,
+                {"type": "task_result", "ok": False, "error": {"message": "params must be a dict"}},
+            )
+            return
+        if not isinstance(context, dict):
+            write_frame(
+                sys.stdout,
+                {"type": "task_result", "ok": False, "error": {"message": "context must be a dict"}},
+            )
+            return
+        try:
+            from .executor import execute_tool_task
+
+            result, logs = execute_tool_task(
+                code=code,
+                params=params,
+                context=context,
+                config=config,
+                max_payload_bytes=config.max_payload_bytes,
+            )
+            write_frame(
+                sys.stdout,
+                {"type": "task_result", "ok": True, "tool_result": result, "logs": logs},
+            )
+        except ExecutionFailure as e:
+            write_frame(
+                sys.stdout,
+                {
+                    "type": "task_result",
+                    "ok": False,
+                    "error": {"message": e.message, "stack": e.stack or traceback.format_exc()},
+                },
+            )
+        except Exception as e:
+            write_frame(
+                sys.stdout,
+                {
+                    "type": "task_result",
+                    "ok": False,
+                    "error": {"message": str(e), "stack": traceback.format_exc()},
+                },
+            )
+        return
+
     if not isinstance(items, list):
         write_frame(
             sys.stdout,

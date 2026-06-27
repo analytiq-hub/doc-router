@@ -631,7 +631,12 @@ class FlowDocumentResult(BaseModel):
 
 
 class PatchFlowRequest(BaseModel):
-    name: str
+    name: str | None = None
+    folder_id: str | None = None
+    sort_order: int | None = None
+    callable_as_tool: bool | None = None
+    tool_description: str | None = None
+    tool_schema: dict[str, Any] | None = None
 
 
 class SaveFlowRequest(BaseModel):
@@ -862,6 +867,68 @@ async def list_node_types(organization_id: str, current_user: User = Depends(get
             continue
         items.append(entry)
     return {"items": items, "total": len(items)}
+
+
+class CreateFlowFolderRequest(BaseModel):
+    name: str
+    parent_folder_id: str | None = None
+    sort_order: int = 0
+
+
+class PatchFlowFolderRequest(BaseModel):
+    name: str | None = None
+    parent_folder_id: str | None = None
+    sort_order: int | None = None
+
+
+@flows_router.get("/v0/orgs/{organization_id}/flows/folders")
+async def list_flow_folders(organization_id: str, current_user: User = Depends(get_org_user)):
+    _ = current_user
+    db = await _get_db()
+    from analytiq_data.flows.folders import list_folder_tree
+
+    items = await list_folder_tree(db, organization_id)
+    return {"items": items}
+
+
+@flows_router.post("/v0/orgs/{organization_id}/flows/folders")
+async def create_flow_folder(
+    organization_id: str,
+    req: CreateFlowFolderRequest,
+    current_user: User = Depends(get_org_user),
+):
+    db = await _get_db()
+    from analytiq_data.flows.folders import FlowFolderError, create_folder
+
+    try:
+        folder_id = await create_folder(
+            db,
+            organization_id=organization_id,
+            name=req.name,
+            parent_folder_id=req.parent_folder_id,
+            sort_order=req.sort_order,
+            user_id=current_user.user_id,
+        )
+    except FlowFolderError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"folder_id": folder_id}
+
+
+@flows_router.delete("/v0/orgs/{organization_id}/flows/folders/{folder_id}")
+async def delete_flow_folder(
+    organization_id: str,
+    folder_id: str,
+    current_user: User = Depends(get_org_user),
+):
+    _ = current_user
+    db = await _get_db()
+    from analytiq_data.flows.folders import FlowFolderError, delete_folder
+
+    try:
+        await delete_folder(db, organization_id=organization_id, folder_id=folder_id)
+    except FlowFolderError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {"ok": True}
 
 
 @flows_router.post(
@@ -1130,11 +1197,29 @@ async def get_flow(organization_id: str, flow_id: str, current_user: User = Depe
 
 
 @flows_router.patch("/v0/orgs/{organization_id}/flows/{flow_id}")
-async def patch_flow_name(organization_id: str, flow_id: str, req: PatchFlowRequest, current_user: User = Depends(get_org_user)):
+async def patch_flow_metadata(
+    organization_id: str, flow_id: str, req: PatchFlowRequest, current_user: User = Depends(get_org_user)
+):
     db = await _get_db()
+    updates: dict[str, Any] = {"updated_at": _now(), "updated_by": current_user.user_id}
+    if req.name is not None:
+        updates["name"] = req.name
+    if req.folder_id is not None:
+        updates["folder_id"] = req.folder_id if req.folder_id not in ("", "root") else None
+    if req.sort_order is not None:
+        updates["sort_order"] = req.sort_order
+    if req.callable_as_tool is not None:
+        updates["callable_as_tool"] = req.callable_as_tool
+    if req.tool_description is not None:
+        updates["tool_description"] = req.tool_description
+    if req.tool_schema is not None:
+        updates["tool_schema"] = req.tool_schema
+    _audit_keys = frozenset({"updated_at", "updated_by"})
+    if not any(k not in _audit_keys for k in updates):
+        raise HTTPException(status_code=400, detail="No fields to update")
     res = await db.flows.update_one(
         {"_id": ObjectId(flow_id), "organization_id": organization_id},
-        {"$set": {"name": req.name, "updated_at": _now(), "updated_by": current_user.user_id}},
+        {"$set": updates},
     )
     if res.matched_count == 0:
         raise HTTPException(status_code=404, detail="Flow not found")

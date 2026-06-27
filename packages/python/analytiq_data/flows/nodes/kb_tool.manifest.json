@@ -1,0 +1,68 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "flows.kb_tool",
+  "type_version": 1,
+  "label": "Knowledge Base Tool",
+  "description": "Exposes knowledge-base search as a named LLM tool.",
+  "category": "AI",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 0,
+  "max_inputs": 0,
+  "outputs": 1,
+  "output_labels": [
+    "tool"
+  ],
+  "icon_key": "knowledge_base",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.kb_tool",
+    "class": "FlowsKbToolNode"
+  },
+  "palette_group": "ai",
+  "experimental": true,
+  "tool_provider": true,
+  "output_port_types": [
+    "flows.tool"
+  ],
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "knowledge_base_id": {
+        "type": "string",
+        "description": "Knowledge base to search.",
+        "x-ui-widget": "knowledge_base_picker",
+        "x-ui-group": "Knowledge base"
+      },
+      "tool_name": {
+        "type": "string",
+        "description": "LLM function name.",
+        "x-ui-group": "Tool"
+      },
+      "tool_description": {
+        "type": "string",
+        "description": "Description shown to the model.",
+        "x-ui-widget": "textarea",
+        "x-ui-group": "Tool"
+      },
+      "default_top_k": {
+        "type": "integer",
+        "default": 5,
+        "minimum": 1,
+        "maximum": 20,
+        "x-ui-group": "Options"
+      },
+      "default_coalesce_neighbors": {
+        "type": "integer",
+        "x-ui-group": "Options"
+      }
+    },
+    "required": [
+      "knowledge_base_id",
+      "tool_name",
+      "tool_description"
+    ],
+    "additionalProperties": false
+  }
+}

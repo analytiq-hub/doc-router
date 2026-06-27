@@ -194,3 +194,85 @@ async def run_python_code(
     else:
         raise CodeExecutionError("Runner returned invalid logs")
     return out_items, logs_out
+
+
+async def run_python_tool(
+    *,
+    code: str,
+    params: dict[str, Any],
+    context: dict[str, Any],
+    timeout_seconds: float = 30.0,
+    analytiq_client: Any = None,
+    node_id: str = "",
+    execution_id: str = "",
+) -> tuple[dict[str, Any], list[str]]:
+    """Execute tool provider code: ``def run(params, context) -> dict``."""
+
+    config = SecurityConfig.from_env()
+    if not config.enabled:
+        raise CodeExecutionError("Python code execution is disabled (FLOW_CODE_ENABLED=false)")
+
+    try:
+        TaskAnalyzer().validate(code, config)
+    except SecurityValidationError as e:
+        raise CodeExecutionError(str(e)) from e
+
+    task_message = {
+        "type": "task",
+        "kind": "tool_code",
+        "code": code,
+        "params": params,
+        "context": context,
+    }
+    encoded = json.dumps(task_message, ensure_ascii=False).encode("utf-8")
+    if len(encoded) > config.max_payload_bytes:
+        raise CodeExecutionError("Task payload exceeds FLOW_CODE_MAX_PAYLOAD_BYTES")
+
+    proc = await asyncio.create_subprocess_exec(
+        sys.executable,
+        "-I",
+        "-S",
+        "-c",
+        CHILD_BOOTSTRAP,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        env=minimal_env(),
+    )
+
+    rpc_handler = ParentRpcHandler(
+        analytiq_client=analytiq_client,
+        execution_id=execution_id,
+        node_id=node_id,
+        config=config,
+    )
+
+    try:
+        result_msg = await _run_protocol_loop(
+            proc,
+            task_message=task_message,
+            config=config,
+            rpc_handler=rpc_handler,
+            timeout_seconds=timeout_seconds,
+        )
+    except ProtocolError as e:
+        proc.kill()
+        await proc.wait()
+        raise CodeExecutionError(f"Protocol error: {e}") from e
+    except CodeExecutionError:
+        if proc.returncode is None:
+            proc.kill()
+            await proc.wait()
+        raise
+
+    tool_result = result_msg.get("tool_result")
+    if not isinstance(tool_result, dict):
+        raise CodeExecutionError("Runner returned invalid tool_result")
+    logs = result_msg.get("logs")
+    if logs is None:
+        logs_out: list[str] = []
+    elif isinstance(logs, list) and all(isinstance(x, str) for x in logs):
+        logs_out = logs
+    else:
+        raise CodeExecutionError("Runner returned invalid logs")
+    return tool_result, logs_out

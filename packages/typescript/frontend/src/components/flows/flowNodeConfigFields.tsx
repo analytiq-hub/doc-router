@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Switch } from '@headlessui/react';
 import Editor from '@monaco-editor/react';
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
@@ -70,6 +70,115 @@ function schemaDescription(subschema: Record<string, unknown>): string | undefin
 
 function FlowParamFieldHint({ text }: { text: string }) {
   return <p className={flowParamHintClass}>{text}</p>;
+}
+
+function FlowLlmModelPickerField({
+  label,
+  description,
+  value,
+  readOnly,
+  organizationId,
+  onChange,
+}: {
+  label: string;
+  description?: string;
+  value: string;
+  readOnly: boolean;
+  organizationId: string;
+  onChange: (model: string) => void;
+}) {
+  const [models, setModels] = useState<string[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/v0/orgs/${organizationId}/llm/models?chat_only=true`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { chat_models?: string[] };
+        if (!cancelled) setModels(Array.isArray(data.chat_models) ? data.chat_models : []);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId]);
+
+  return (
+    <div>
+      <span className={flowLabelClass}>{label}</span>
+      {description ? <p className="mb-1 text-xs text-gray-500">{description}</p> : null}
+      <select
+        className={flowSelectClass}
+        disabled={readOnly}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">Select model…</option>
+        {models.map((m) => (
+          <option key={m} value={m}>
+            {m}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function FlowKnowledgeBasePickerField({
+  label,
+  description,
+  value,
+  readOnly,
+  organizationId,
+  onChange,
+}: {
+  label: string;
+  description?: string;
+  value: string;
+  readOnly: boolean;
+  organizationId: string;
+  onChange: (kbId: string) => void;
+}) {
+  const [items, setItems] = useState<Array<{ kb_id: string; name: string }>>([]);
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/v0/orgs/${organizationId}/knowledge-bases?limit=200`);
+        if (!res.ok) return;
+        const data = (await res.json()) as { items?: Array<{ kb_id: string; name: string; status?: string }> };
+        const rows = (data.items ?? []).filter((kb) => kb.status === 'active');
+        if (!cancelled) setItems(rows.map((kb) => ({ kb_id: kb.kb_id, name: kb.name })));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [organizationId]);
+
+  return (
+    <div>
+      <span className={flowLabelClass}>{label}</span>
+      {description ? <p className="mb-1 text-xs text-gray-500">{description}</p> : null}
+      <select
+        className={flowSelectClass}
+        disabled={readOnly}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
+        <option value="">Select knowledge base…</option>
+        {items.map((kb) => (
+          <option key={kb.kb_id} value={kb.kb_id}>
+            {kb.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 }
 
 
@@ -367,6 +476,54 @@ export const FlowNodeParameterFields: React.FC<{
             readOnly={readOnly}
             flowOrgApi={flowOrgApi}
             onChange={(id) => setField(key, id)}
+          />
+        </div>
+      );
+    }
+
+    if (uiHint === 'llm_model_picker') {
+      return (
+        <div key={key} className="mb-3">
+          <FlowLlmModelPickerField
+            label={propLabel}
+            description={schemaDescription(subschema)}
+            value={typeof v === 'string' ? v : ''}
+            readOnly={readOnly}
+            organizationId={flowOrgApi?.organizationId ?? ''}
+            onChange={(id) => setField(key, id)}
+          />
+        </div>
+      );
+    }
+
+    if (uiHint === 'knowledge_base_picker') {
+      return (
+        <div key={key} className="mb-3">
+          <FlowKnowledgeBasePickerField
+            label={propLabel}
+            description={schemaDescription(subschema)}
+            value={typeof v === 'string' ? v : ''}
+            readOnly={readOnly}
+            organizationId={flowOrgApi?.organizationId ?? ''}
+            onChange={(id) => setField(key, id)}
+          />
+        </div>
+      );
+    }
+
+    if (uiHint === 'tool_name_input') {
+      return (
+        <div key={key} className="mb-3">
+          <span className={flowLabelClass}>{propLabel}</span>
+          {schemaDescription(subschema) ? (
+            <p className="mb-1 text-xs text-gray-500">{schemaDescription(subschema)}</p>
+          ) : null}
+          <input
+            className={flowInputClass}
+            readOnly={readOnly}
+            value={typeof v === 'string' ? v : ''}
+            placeholder="Must match a wired tool's tool_name"
+            onChange={(e) => setField(key, e.target.value)}
           />
         </div>
       );

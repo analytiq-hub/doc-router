@@ -8,6 +8,10 @@ from typing import Any
 MAX_STACK_CHARS = 32_000
 
 
+class FlowValidationError(ValueError):
+    """Raised when a flow revision fails validation (schema, graph, or registry rules)."""
+
+
 def _truncate(text: str | None, limit: int) -> str | None:
     if text is None:
         return None

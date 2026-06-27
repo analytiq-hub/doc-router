@@ -35,6 +35,8 @@ class LazyBuiltinNode:
         self.polling = bool(manifest.get("polling", False))
         self.experimental = bool(manifest.get("experimental", False))
         self.type_version = int(manifest.get("type_version", 1))
+        self.tool_provider = bool(manifest.get("tool_provider", False))
+        self.tool_consumer = bool(manifest.get("tool_consumer", False))
         if "batch_execute_inputs" in manifest:
             self.batch_execute_inputs = bool(manifest["batch_execute_inputs"])
 

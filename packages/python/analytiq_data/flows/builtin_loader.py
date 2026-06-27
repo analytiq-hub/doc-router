@@ -141,6 +141,9 @@ def palette_entry_dict(manifest: dict[str, Any]) -> dict[str, Any]:
         "polling": bool(manifest.get("polling", False)),
         "batch_execute_inputs": bool(manifest.get("batch_execute_inputs", False)),
         "supports_batch_size": bool(manifest.get("supports_batch_size", False)),
+        "tool_provider": bool(manifest.get("tool_provider", False)),
+        "tool_consumer": bool(manifest.get("tool_consumer", False)),
+        "is_merge": bool(manifest.get("is_merge", False)),
     }
 
 

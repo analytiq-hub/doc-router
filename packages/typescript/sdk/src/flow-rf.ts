@@ -37,6 +37,8 @@ export type FlowRfEdge = {
 
 const OUT_HANDLE_PREFIX = 'out-';
 const IN_HANDLE_PREFIX = 'in-';
+export const TOOL_IN_HANDLE = 'in-tool';
+export const TOOL_OUT_HANDLE = 'out-tool';
 
 export function revisionToRF(
   revision: FlowRevision,
@@ -58,14 +60,16 @@ export function revisionToRF(
       if (!slot) continue;
       for (const c of slot) {
         const edgeId = `${srcId}:${outIdx}->${c.dest_node_id}:${c.index}:${c.connection_type}`;
+        const isTool = c.connection_type === 'flows.tool';
         edges.push({
           id: edgeId,
           source: srcId,
           target: c.dest_node_id,
           sourceHandle: `${OUT_HANDLE_PREFIX}${outIdx}`,
-          targetHandle: `${IN_HANDLE_PREFIX}${c.index}`,
+          targetHandle: isTool ? TOOL_IN_HANDLE : `${IN_HANDLE_PREFIX}${c.index}`,
           type: 'default',
           data: { connectionType: c.connection_type },
+          ...(isTool ? { style: { stroke: '#f59e0b', strokeWidth: 1.5, strokeDasharray: '6 4' } } : {}),
         });
       }
     }
@@ -92,14 +96,25 @@ export function rfToConnections(edges: FlowRfEdge[]): FlowConnections {
     return main[outIdx] as FlowNodeConnection[];
   };
 
+  const toolIndexByTarget: Record<string, number> = {};
+
   for (const e of edges) {
     const outIdx = parseHandleIndex(e.sourceHandle, OUT_HANDLE_PREFIX);
-    const inIdx = parseHandleIndex(e.targetHandle, IN_HANDLE_PREFIX);
-    if (outIdx == null || inIdx == null) continue;
+    if (outIdx == null) continue;
+    const ct = edgeConnectionType(e);
+    let inIdx: number;
+    if (e.targetHandle === TOOL_IN_HANDLE || ct === 'flows.tool') {
+      inIdx = toolIndexByTarget[e.target] ?? 0;
+      toolIndexByTarget[e.target] = inIdx + 1;
+    } else {
+      const parsed = parseHandleIndex(e.targetHandle, IN_HANDLE_PREFIX);
+      if (parsed == null) continue;
+      inIdx = parsed;
+    }
     const slot = ensureSlot(e.source, outIdx);
     slot.push({
       dest_node_id: e.target,
-      connection_type: edgeConnectionType(e),
+      connection_type: ct,
       index: inIdx,
     });
   }

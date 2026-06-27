@@ -1,0 +1,29 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "flows.trigger.tool",
+  "type_version": 1,
+  "label": "Tool entry",
+  "description": "Starts a callable sub-flow; emits one item whose json is the tool arguments object.",
+  "category": "Generic",
+  "is_trigger": true,
+  "is_merge": false,
+  "min_inputs": 0,
+  "max_inputs": 0,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "tool_trigger",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.trigger_tool",
+    "class": "FlowsToolTriggerNode"
+  },
+  "palette_group": "trigger",
+  "parameter_schema": {
+    "type": "object",
+    "properties": {},
+    "additionalProperties": false
+  }
+}

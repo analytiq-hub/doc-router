@@ -132,3 +132,54 @@ def execute_task(
             f"Code execution failed:\n{traceback.format_exc()}",
             stack=traceback.format_exc(),
         ) from e
+
+
+def execute_tool_task(
+    *,
+    code: str,
+    params: dict[str, Any],
+    context: dict[str, Any],
+    config: SecurityConfig,
+    max_payload_bytes: int,
+) -> tuple[dict[str, Any], list[str]]:
+    """Execute tool code: ``def run(params, context) -> dict``."""
+
+    logs: list[str] = []
+    clear_environment_if_blocked(config)
+    rpc_client = ChildRpcClient(max_payload_bytes=max_payload_bytes)
+    read_binary, store_binary = make_child_rpc_functions(rpc_client)
+    print_fn = make_print_fn(logs, max_calls=MAX_PRINT_CALLS)
+
+    ns: dict[str, Any] = {
+        "__builtins__": build_filtered_builtins(config),
+        "read_binary": read_binary,
+        "store_binary": store_binary,
+        "print": print_fn,
+        "log": print_fn,
+    }
+
+    sanitize_sys_modules(config)
+
+    try:
+        exec(code, ns, ns)
+    except Exception as e:
+        raise ExecutionFailure(
+            f"Code compile/exec failed:\n{traceback.format_exc()}",
+            stack=traceback.format_exc(),
+        ) from e
+
+    run_fn = ns.get("run")
+    if not callable(run_fn):
+        raise ExecutionFailure("Code must define a callable `run(params, context)`")
+
+    try:
+        raw = run_fn(params, context)
+    except Exception as e:
+        raise ExecutionFailure(
+            f"Tool code execution failed:\n{traceback.format_exc()}",
+            stack=traceback.format_exc(),
+        ) from e
+
+    if not isinstance(raw, dict):
+        raise ExecutionFailure(f"run() must return a dict, got {type(raw).__name__}")
+    return raw, logs

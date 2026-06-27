@@ -6,9 +6,12 @@ from typing import Any, Literal
 
 MAIN_CONNECTION_TYPE = "main"
 DOCROUTER_OCR_CONNECTION_TYPE = "docrouter.ocr"
+FLOWS_TOOL_CONNECTION_TYPE = "flows.tool"
 
-ConnectionType = Literal["main", "docrouter.ocr"]
-CONNECTION_TYPES: frozenset[str] = frozenset({MAIN_CONNECTION_TYPE, DOCROUTER_OCR_CONNECTION_TYPE})
+ConnectionType = Literal["main", "docrouter.ocr", "flows.tool"]
+CONNECTION_TYPES: frozenset[str] = frozenset(
+    {MAIN_CONNECTION_TYPE, DOCROUTER_OCR_CONNECTION_TYPE, FLOWS_TOOL_CONNECTION_TYPE}
+)
 
 
 def normalize_connection_type(raw: Any) -> str:

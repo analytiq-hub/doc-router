@@ -24,13 +24,9 @@ import {
 } from './flowPaletteActions';
 
 function emptyBuckets(): Record<FlowPaletteSectionId, FlowNodeType[]> {
-  return {
-    docrouter: [],
-    app: [],
-    flow: [],
-    core: [],
-    trigger: [],
-  };
+  return Object.fromEntries(
+    FLOW_PALETTE_SECTION_ORDER.map((id) => [id, [] as FlowNodeType[]]),
+  ) as Record<FlowPaletteSectionId, FlowNodeType[]>;
 }
 
 function nodeMatchesPaletteQuery(nt: FlowNodeType, ql: string): boolean {

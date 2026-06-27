@@ -1,0 +1,59 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "flows.flow_tool",
+  "type_version": 1,
+  "label": "Flow Tool",
+  "description": "Invokes another flow's active revision as a single tool call.",
+  "category": "AI",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 0,
+  "max_inputs": 0,
+  "outputs": 1,
+  "output_labels": [
+    "tool"
+  ],
+  "icon_key": "flow_tool",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.flow_tool",
+    "class": "FlowsFlowToolNode"
+  },
+  "palette_group": "ai",
+  "experimental": true,
+  "tool_provider": true,
+  "output_port_types": [
+    "flows.tool"
+  ],
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "tool_name": {
+        "type": "string",
+        "x-ui-group": "Tool"
+      },
+      "tool_description": {
+        "type": "string",
+        "x-ui-widget": "textarea",
+        "x-ui-group": "Tool"
+      },
+      "target_flow_id": {
+        "type": "string",
+        "x-ui-widget": "flow_picker",
+        "x-ui-group": "Flow"
+      },
+      "parameters_schema": {
+        "type": "object",
+        "x-ui-widget": "json",
+        "x-ui-group": "Tool"
+      }
+    },
+    "required": [
+      "tool_name",
+      "tool_description",
+      "target_flow_id"
+    ],
+    "additionalProperties": false
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "flows.tool_executor",
+  "type_version": 1,
+  "label": "Tool Executor",
+  "description": "Dispatch a wired tool with explicit arguments — for testing or automation without an LLM.",
+  "category": "AI",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 1,
+  "max_inputs": 1,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "tool_executor",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.tool_executor",
+    "class": "FlowsToolExecutorNode"
+  },
+  "palette_group": "ai",
+  "experimental": true,
+  "tool_consumer": true,
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "tool_name": {
+        "type": "string",
+        "description": "Which wired tool to call (must match a wired tool's tool_name parameter).",
+        "x-ui-widget": "tool_name_input",
+        "x-ui-group": "Tool"
+      },
+      "arguments_source": {
+        "type": "string",
+        "enum": [
+          "fixed",
+          "from_input",
+          "input_field"
+        ],
+        "default": "fixed",
+        "x-ui-widget": "select",
+        "x-ui-group": "Arguments"
+      },
+      "arguments": {
+        "type": "object",
+        "default": {},
+        "description": "Fixed arguments object when arguments_source is fixed.",
+        "x-ui-widget": "json",
+        "x-ui-group": "Arguments"
+      },
+      "arguments_field": {
+        "type": "string",
+        "default": "tool_arguments",
+        "x-ui-group": "Arguments"
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "per_item",
+          "all_items"
+        ],
+        "default": "per_item",
+        "x-ui-widget": "select",
+        "x-ui-group": "Options"
+      }
+    },
+    "required": [
+      "tool_name"
+    ],
+    "additionalProperties": false
+  }
+}

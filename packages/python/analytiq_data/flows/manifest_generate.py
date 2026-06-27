@@ -55,6 +55,16 @@ def manifest_body_for_node(
         body["batch_execute_inputs"] = bool(nt.batch_execute_inputs)
     if hasattr(nt, "supports_batch_size"):
         body["supports_batch_size"] = bool(nt.supports_batch_size)
+    if getattr(nt, "tool_provider", False):
+        body["tool_provider"] = True
+    if getattr(nt, "tool_consumer", False):
+        body["tool_consumer"] = True
+    ipt = getattr(nt, "input_port_types", None)
+    if isinstance(ipt, list) and ipt:
+        body["input_port_types"] = list(ipt)
+    opt = getattr(nt, "output_port_types", None)
+    if isinstance(opt, list) and opt:
+        body["output_port_types"] = list(opt)
     slots = getattr(nt, "credential_slots", None)
     if isinstance(slots, list) and slots:
         body["credential_slots"] = slots

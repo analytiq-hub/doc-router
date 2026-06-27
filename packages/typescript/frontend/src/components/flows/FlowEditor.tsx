@@ -69,7 +69,7 @@ import {
 } from './flowCanvasActionsContext';
 import { FLOW_CANVAS_GRID_PX, snapToFlowGrid } from './canvasGrid';
 import { edgesWithRunDataItemCounts } from './flowNodeIoPreview';
-import { inputHandleCount, inputPortType, outputPortType, portTypesCompatible, edgeConnectionType } from './flowRf';
+import { inputHandleCount, inputPortType, outputPortType, portTypesCompatible, edgeConnectionType, TOOL_IN_HANDLE } from './flowRf';
 import type { FlowConnectionType, FlowRfNodeData } from './flowRf';
 import { triggerReachabilityFromGraph } from './flowTriggerReachability';
 import { flowRunButtonCanvasClass, FLOW_EXECUTE_FLOW_LABEL, FLOW_NODE_PALETTE_WIDTH_PX } from './flowUiClasses';
@@ -487,8 +487,7 @@ const FlowEditor: React.FC<{
   const onConnect = useCallback(
     (params: Connection) => {
       const outIdx = parseHandleIndex(params.sourceHandle, 'out-');
-      const inIdx = parseHandleIndex(params.targetHandle, 'in-');
-      if (outIdx == null || inIdx == null) return;
+      if (outIdx == null) return;
 
       const src = nodes.find((n) => n.id === params.source);
       const dst = nodes.find((n) => n.id === params.target);
@@ -496,11 +495,24 @@ const FlowEditor: React.FC<{
       const dstType = dst ? nodeTypesByKey[dst.data.flowNode.type] : undefined;
 
       if (outIdx < 0 || (srcType && outIdx >= (srcType.outputs ?? 0))) return;
-      const maxIn = inputHandleCount(dstType);
-      if (inIdx < 0 || inIdx >= maxIn) return;
 
       const connectionType = outputPortType(srcType, outIdx);
-      if (!portTypesCompatible(connectionType, inputPortType(dstType, inIdx))) return;
+      const isToolEdge = connectionType === 'flows.tool' || params.targetHandle === TOOL_IN_HANDLE;
+
+      let inIdx: number;
+      if (isToolEdge) {
+        if (!dstType?.tool_consumer || !srcType?.tool_provider) return;
+        inIdx = edges.filter((e) => e.target === params.target && e.targetHandle === TOOL_IN_HANDLE).length;
+      } else {
+        const parsedIn = parseHandleIndex(params.targetHandle, 'in-');
+        if (parsedIn == null) return;
+        inIdx = parsedIn;
+        const maxIn = inputHandleCount(dstType);
+        if (inIdx < 0 || inIdx >= maxIn) return;
+        if (!portTypesCompatible(connectionType, inputPortType(dstType, inIdx))) return;
+      }
+
+      const resolvedType: FlowConnectionType = isToolEdge ? 'flows.tool' : connectionType;
 
       const duplicate = edges.some(
         (e) =>
@@ -515,10 +527,13 @@ const FlowEditor: React.FC<{
         addEdge(
           {
             ...params,
+            targetHandle: isToolEdge ? TOOL_IN_HANDLE : params.targetHandle,
             type: FLOW_RF_LABELED_EDGE_TYPE,
-            style: { stroke: '#a8b0bd', strokeWidth: 1.5 },
+            style: isToolEdge
+              ? { stroke: '#f59e0b', strokeWidth: 1.5, strokeDasharray: '6 4' }
+              : { stroke: '#a8b0bd', strokeWidth: 1.5 },
             markerEnd: FLOW_EDGE_MARKER,
-            data: { connectionType },
+            data: { connectionType: resolvedType },
           },
           edges,
         ),
@@ -530,8 +545,7 @@ const FlowEditor: React.FC<{
   const isValidConnection = useCallback(
     (connection: Connection) => {
       const outIdx = parseHandleIndex(connection.sourceHandle, 'out-');
-      const inIdx = parseHandleIndex(connection.targetHandle, 'in-');
-      if (outIdx == null || inIdx == null) return false;
+      if (outIdx == null) return false;
 
       const src = nodes.find((n) => n.id === connection.source);
       const dst = nodes.find((n) => n.id === connection.target);
@@ -539,9 +553,17 @@ const FlowEditor: React.FC<{
       const dstType = dst ? nodeTypesByKey[dst.data.flowNode.type] : undefined;
 
       if (outIdx < 0 || (srcType && outIdx >= (srcType.outputs ?? 0))) return false;
+
+      const connectionType = outputPortType(srcType, outIdx);
+      if (connectionType === 'flows.tool' || connection.targetHandle === TOOL_IN_HANDLE) {
+        return Boolean(srcType?.tool_provider && dstType?.tool_consumer);
+      }
+
+      const inIdx = parseHandleIndex(connection.targetHandle, 'in-');
+      if (inIdx == null) return false;
       if (inIdx < 0 || inIdx >= inputHandleCount(dstType)) return false;
 
-      return portTypesCompatible(outputPortType(srcType, outIdx), inputPortType(dstType, inIdx));
+      return portTypesCompatible(connectionType, inputPortType(dstType, inIdx));
     },
     [nodeTypesByKey, nodes],
   );

@@ -31,6 +31,26 @@ class FlowItem:
     meta: dict[str, Any]
     paired_item: int | list[int] | None = None
 
+    def to_context_dict(self) -> dict[str, Any]:
+        """json + binary ref metadata (storage_id, mime, filename); no raw bytes."""
+
+        binary_meta: dict[str, Any] = {}
+        for key, ref in (self.binary or {}).items():
+            if isinstance(ref, BinaryRef):
+                binary_meta[key] = {
+                    "mime_type": ref.mime_type,
+                    "file_name": ref.file_name,
+                    "storage_id": ref.storage_id,
+                    "file_size": ref.file_size,
+                }
+            elif isinstance(ref, dict):
+                binary_meta[key] = {
+                    k: ref.get(k)
+                    for k in ("mime_type", "file_name", "storage_id", "file_size")
+                    if ref.get(k) is not None
+                }
+        return {"json": dict(self.json or {}), "binary": binary_meta, "meta": dict(self.meta or {})}
+
 
 async def get_binary_stream(ref: BinaryRef, analytiq_client: Any) -> bytes:
     """

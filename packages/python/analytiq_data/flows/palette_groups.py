@@ -9,6 +9,7 @@ PALETTE_GROUP_KEYS: Final[tuple[str, ...]] = (
     "docrouter",
     "app",
     "flow",
+    "ai",
     "core",
     "trigger",
 )

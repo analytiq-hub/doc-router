@@ -1,0 +1,87 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "flows.tool_code",
+  "type_version": 1,
+  "label": "Tool Code",
+  "description": "Exposes sandboxed Python as a named LLM tool.",
+  "category": "AI",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 0,
+  "max_inputs": 0,
+  "outputs": 1,
+  "output_labels": [
+    "tool"
+  ],
+  "icon_key": "code",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.tool_code",
+    "class": "FlowsToolCodeNode"
+  },
+  "palette_group": "ai",
+  "experimental": true,
+  "tool_provider": true,
+  "output_port_types": [
+    "flows.tool"
+  ],
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "tool_name": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Function name for the LLM (lowercase, underscores).",
+        "x-ui-group": "Tool"
+      },
+      "tool_description": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Description shown to the model.",
+        "x-ui-widget": "textarea",
+        "x-ui-group": "Tool"
+      },
+      "parameters_schema": {
+        "type": "object",
+        "description": "JSON Schema for tool arguments.",
+        "x-ui-widget": "json",
+        "x-ui-group": "Tool",
+        "default": {
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Search query"
+            }
+          },
+          "required": [
+            "query"
+          ]
+        }
+      },
+      "python_code": {
+        "type": "string",
+        "minLength": 1,
+        "default": "def run(params, context):\n  return {\"echo\": params}\n",
+        "description": "Must define def run(params: dict, context: dict) -> dict.",
+        "x-ui-widget": "code",
+        "x-ui-group": "Code"
+      },
+      "timeout_seconds": {
+        "type": "number",
+        "default": 30,
+        "minimum": 0.0001,
+        "maximum": 120,
+        "x-ui-group": "Options"
+      }
+    },
+    "required": [
+      "tool_name",
+      "tool_description",
+      "parameters_schema",
+      "python_code"
+    ],
+    "additionalProperties": false
+  }
+}

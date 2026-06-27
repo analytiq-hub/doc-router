@@ -1,0 +1,68 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "flows.trigger.chat",
+  "type_version": 1,
+  "label": "Chat Trigger",
+  "description": "Receives user messages over HTTP and starts a flow run.",
+  "category": "Generic",
+  "is_trigger": true,
+  "is_merge": false,
+  "min_inputs": 0,
+  "max_inputs": 0,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "chat_trigger",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.trigger_chat",
+    "class": "FlowsChatTriggerNode"
+  },
+  "palette_group": "trigger",
+  "experimental": true,
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "response_mode": {
+        "type": "string",
+        "enum": [
+          "streaming",
+          "last_node"
+        ],
+        "default": "streaming",
+        "x-ui-widget": "select"
+      },
+      "authentication": {
+        "type": "string",
+        "enum": [
+          "none",
+          "org_member",
+          "api_key"
+        ],
+        "default": "org_member",
+        "x-ui-widget": "select"
+      },
+      "title": {
+        "type": "string"
+      },
+      "subtitle": {
+        "type": "string"
+      },
+      "input_placeholder": {
+        "type": "string",
+        "default": "Type your message…"
+      },
+      "initial_messages": {
+        "type": "string",
+        "x-ui-widget": "textarea"
+      },
+      "allow_file_uploads": {
+        "type": "boolean",
+        "default": false
+      }
+    },
+    "additionalProperties": false
+  }
+}

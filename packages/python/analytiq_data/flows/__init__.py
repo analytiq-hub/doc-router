@@ -12,7 +12,7 @@ from .execution import *
 from .node_registry import *
 from .expressions import *
 from .node_name import *
-from .errors import execution_error_envelope, node_error_envelope
+from .errors import FlowValidationError, execution_error_envelope, node_error_envelope
 from .trace import append_trace, pop_node_trace, trace_http, trace_http_on_debug, trace_http_on_success
 from .org_log_level import (
     DEFAULT_FLOW_LOG_LEVEL,
@@ -36,6 +36,15 @@ from .node_settings import (
 )
 from .item_batch import map_flow_items_batch
 from .engine import *
+from .tool_wiring import (
+    UnknownToolError,
+    WiredTool,
+    WiredToolRegistry,
+    example_arguments_from_schema,
+    rewire_graph_for_tool_test,
+    tool_consumer_wiring,
+    validate_tool_graph,
+)
 from .recovery import *
 from .resume import *
 from .seed_validation import (

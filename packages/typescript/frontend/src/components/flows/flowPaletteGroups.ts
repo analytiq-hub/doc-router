@@ -1,11 +1,12 @@
 import type { FlowNodeType } from '@docrouter/sdk';
 
-export type FlowPaletteSectionId = 'docrouter' | 'app' | 'flow' | 'core' | 'trigger';
+export type FlowPaletteSectionId = 'docrouter' | 'app' | 'flow' | 'ai' | 'core' | 'trigger';
 
 export const FLOW_PALETTE_SECTION_ORDER: FlowPaletteSectionId[] = [
   'docrouter',
   'app',
   'flow',
+  'ai',
   'core',
   'trigger',
 ];
@@ -14,6 +15,7 @@ const FLOW_PALETTE_LABELS: Record<FlowPaletteSectionId, string> = {
   docrouter: 'DocRouter',
   app: 'App',
   flow: 'Flow',
+  ai: 'AI',
   core: 'Core',
   trigger: 'Trigger',
 };
@@ -23,6 +25,7 @@ const FLOW_PALETTE_DESCRIPTIONS: Record<FlowPaletteSectionId, string> = {
   docrouter: 'OCR, extraction, tags, and other document steps for this product.',
   app: 'Calls into external apps and services (saved integrations and credentials).',
   flow: 'Branch, merge, and other ways to route or combine items on the graph.',
+  ai: 'Agent, tools, and LLM orchestration nodes.',
   core: 'HTTP requests, code, webhooks, and other general building blocks.',
   trigger: 'Start a run manually, from HTTP, or from a document context.',
 };
@@ -34,6 +37,7 @@ function isPaletteSection(id: string): id is FlowPaletteSectionId {
     id === 'docrouter' ||
     id === 'app' ||
     id === 'flow' ||
+    id === 'ai' ||
     id === 'core' ||
     id === 'trigger'
   );

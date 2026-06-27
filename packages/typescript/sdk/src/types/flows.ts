@@ -8,7 +8,7 @@ export interface FlowCredentialSlot {
   docrouter_binding?: string;
 }
 
-export type FlowConnectionType = 'main' | 'docrouter.ocr';
+export type FlowConnectionType = 'main' | 'docrouter.ocr' | 'flows.tool';
 
 export interface FlowNodeType {
   key: string;
@@ -38,6 +38,11 @@ export interface FlowNodeType {
   batch_execute_inputs?: boolean;
   /** When true, the node settings UI exposes per-node ``batch_size`` parallelism. */
   supports_batch_size?: boolean;
+  /** Emits flows.tool connections; skipped on the main DAG. */
+  tool_provider?: boolean;
+  /** Accepts flows.tool wires (agent, tool executor). */
+  tool_consumer?: boolean;
+  is_merge?: boolean;
 }
 
 export interface ListNodeTypesResponse {
@@ -52,6 +57,11 @@ export interface FlowHeader {
   active: boolean;
   active_flow_revid: string | null;
   flow_version: number;
+  folder_id?: string | null;
+  sort_order?: number;
+  callable_as_tool?: boolean;
+  tool_description?: string | null;
+  tool_schema?: Record<string, unknown> | null;
   created_at: string;
   created_by: string;
   updated_at: string;

@@ -9,9 +9,18 @@ the context.
 """
 
 from dataclasses import dataclass, field
-from typing import Any, Literal
+from typing import Any, Awaitable, Callable, Literal
 
-ExecutionMode = Literal["manual", "event", "trigger", "webhook", "schedule", "error"]
+ExecutionMode = Literal[
+    "manual",
+    "event",
+    "trigger",
+    "webhook",
+    "schedule",
+    "error",
+    "sub_flow_tool",
+    "chat",
+]
 
 
 @dataclass
@@ -51,4 +60,17 @@ class ExecutionContext:
     completed_nodes: frozenset[str] = field(default_factory=frozenset)
     #: Source execution id when this run resumes from a checkpoint.
     resumed_from: str | None = None
+    #: Precomputed tool wiring for tool_consumer nodes (node_id -> WiredTool list).
+    tool_consumer_wiring: dict[str, list[Any]] | None = None
+    #: Upstream main-path JSON snapshot for tool sandbox context (capped at runtime).
+    upstream_json_snapshot: dict[str, Any] = field(default_factory=dict)
+    #: Trigger item snapshot for tool context.
+    trigger_snapshot: dict[str, Any] = field(default_factory=dict)
+    #: Nested flow_tool stack for recursion/cycle detection.
+    flow_id_stack: list[str] = field(default_factory=list)
+    #: Sub-flow return payload set by flows.respond_to_tool.
+    sub_flow_tool_result: Any | None = None
+    #: Chat streaming: when true, agent may stream LLM tokens via stream_sink.
+    is_streaming: bool = False
+    stream_sink: Callable[[dict[str, Any]], Awaitable[None]] | None = None
 

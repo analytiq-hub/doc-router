@@ -37,8 +37,13 @@ const handleClass =
 const ocrHandleClass =
   '!w-2.5 !h-2.5 !border-2 !border-violet-400 !bg-violet-50 hover:!border-violet-600 hover:!bg-violet-100';
 
+const toolHandleClass =
+  '!w-2.5 !h-2.5 !border-2 !border-amber-500 !bg-amber-50 hover:!border-amber-600 hover:!bg-amber-100';
+
 function handleClassForPortType(portType: FlowConnectionType): string {
-  return portType === 'docrouter.ocr' ? ocrHandleClass : handleClass;
+  if (portType === 'docrouter.ocr') return ocrHandleClass;
+  if (portType === 'flows.tool') return toolHandleClass;
+  return handleClass;
 }
 
 /** Trigger node body height (`h-[96px]` below); hover run button is exactly ⅓. */
@@ -70,6 +75,7 @@ function OutputHandleWithContinuation({
   actions: FlowCanvasActions | null;
 }) {
   const canAppend = Boolean(actions?.onBeginAppendFromOutput);
+  const isToolOut = portType === 'flows.tool';
   const hasOutgoingEdge = useStore(
     useCallback(
       (s) => s.edges.some((e) => e.source === nodeId && String(e.sourceHandle ?? 'out-0') === handleId),
@@ -82,9 +88,13 @@ function OutputHandleWithContinuation({
       <Handle
         id={handleId}
         type="source"
-        position={Position.Right}
+        position={isToolOut ? Position.Top : Position.Right}
         className={handleClassForPortType(portType)}
-        style={{ top: `${topPct}%` }}
+        style={
+          isToolOut
+            ? { left: '50%', top: '-6px', transform: 'translateX(-50%)' }
+            : { top: `${topPct}%` }
+        }
       />
       {canAppend ? (
         <div
@@ -504,6 +514,15 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
               />
             );
           })}
+          {nt?.tool_consumer ? (
+            <Handle
+              id="in-tool"
+              type="target"
+              position={Position.Bottom}
+              className={toolHandleClass}
+              style={{ left: '50%', bottom: '-6px', top: 'auto', transform: 'translateX(-50%)' }}
+            />
+          ) : null}
           <FlowNodeTypeIcon
             iconKey={nt?.icon_key}
             fallback="process"

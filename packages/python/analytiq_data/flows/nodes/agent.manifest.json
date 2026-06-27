@@ -1,0 +1,110 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "flows.agent",
+  "type_version": 1,
+  "label": "AI Agent",
+  "description": "Orchestrates an LLM tool-calling loop with wired tools.",
+  "category": "AI",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 1,
+  "max_inputs": 1,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "agent",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.agent",
+    "class": "FlowsAgentNode"
+  },
+  "palette_group": "ai",
+  "experimental": true,
+  "tool_consumer": true,
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "prompt_source": {
+        "type": "string",
+        "enum": [
+          "from_input",
+          "fixed",
+          "chat_trigger"
+        ],
+        "default": "from_input",
+        "x-ui-widget": "select",
+        "x-ui-group": "Prompt"
+      },
+      "prompt_text": {
+        "type": "string",
+        "x-ui-widget": "textarea",
+        "x-ui-group": "Prompt"
+      },
+      "prompt_field": {
+        "type": "string",
+        "default": "query",
+        "x-ui-group": "Prompt"
+      },
+      "system_message": {
+        "type": "string",
+        "default": "You are an AI agent in a DocRouter flow. Use the provided tools when they help answer the user request. Reply concisely when no tools are needed.",
+        "x-ui-widget": "textarea",
+        "x-ui-group": "Prompt"
+      },
+      "model": {
+        "type": "string",
+        "description": "LiteLLM model id.",
+        "x-ui-widget": "llm_model_picker",
+        "x-ui-group": "Model"
+      },
+      "temperature": {
+        "type": "number",
+        "default": 0.2,
+        "minimum": 0,
+        "maximum": 2,
+        "x-ui-group": "Model"
+      },
+      "max_tool_rounds": {
+        "type": "integer",
+        "default": 10,
+        "minimum": 1,
+        "maximum": 20,
+        "x-ui-group": "Options"
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "per_item",
+          "all_items"
+        ],
+        "default": "per_item",
+        "x-ui-widget": "select",
+        "x-ui-group": "Options"
+      },
+      "response_field": {
+        "type": "string",
+        "default": "agent_output",
+        "x-ui-group": "Output"
+      },
+      "include_tool_trace": {
+        "type": "boolean",
+        "default": true,
+        "x-ui-group": "Output"
+      },
+      "enable_streaming": {
+        "type": "string",
+        "enum": [
+          "auto",
+          "true",
+          "false"
+        ],
+        "default": "auto",
+        "x-ui-widget": "select",
+        "x-ui-group": "Output"
+      }
+    },
+    "additionalProperties": false
+  }
+}

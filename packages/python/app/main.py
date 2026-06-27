@@ -45,6 +45,7 @@ from app.routes.webhooks import webhooks_router
 from app.routes.knowledge_bases import knowledge_bases_router
 from app.routes.agent import agent_router
 from app.routes.flows import flows_router
+from app.routes.flow_chat import chat_router
 from app.routes.flows_credentials import flow_credentials_router
 import analytiq_data as ad
 from worker.worker import recover_on_worker_startup, start_workers
@@ -178,6 +179,7 @@ app.include_router(webhooks_router)
 app.include_router(knowledge_bases_router)
 app.include_router(agent_router)
 app.include_router(flows_router)
+app.include_router(chat_router)
 app.include_router(flow_credentials_router)
 
 # DocRouter product nodes at API startup; flow builtins register per revision (Phase D).

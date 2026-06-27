@@ -22,22 +22,16 @@ from jsonschema import Draft7Validator
 
 import analytiq_data as ad
 
-from .errors import node_error_envelope
+from .errors import FlowValidationError, node_error_envelope
 from .flow_settings import validate_flow_settings
 from .node_settings import validate_node_batch_size
-from .port_types import input_port_types_for, output_port_types_for
+from .port_types import FLOWS_TOOL_CONNECTION_TYPE, input_port_types_for, output_port_types_for
 from .trace import pop_node_trace
 from .triggers.cron_exprs import poll_times_to_specs
 from .triggers.poll_defaults import resolve_poll_times
 
 
 logger = logging.getLogger(__name__)
-
-
-class FlowValidationError(ValueError):
-    """Raised when a flow revision fails validation (schema, graph, or registry rules)."""
-
-    pass
 
 
 def canonical_graph_hash(
@@ -65,7 +59,7 @@ def _toposort(nodes: list[dict[str, Any]], connections: "ad.flows.Connections") 
             if not slot:
                 continue
             for conn in slot:
-                if conn.dest_node_id in node_ids:
+                if conn.dest_node_id in node_ids and conn.connection_type != FLOWS_TOOL_CONNECTION_TYPE:
                     adj[src].append(conn.dest_node_id)
                     indeg[conn.dest_node_id] += 1
 
@@ -147,8 +141,18 @@ def validate_revision(
                     reachable.add(conn.dest_node_id)
                     frontier.append(conn.dest_node_id)
     for n in nodes:
+        try:
+            nt = ad.flows.get(n["type"])
+        except KeyError:
+            raise FlowValidationError(f"Unknown node type: {n['type']}") from None
+        if getattr(nt, "tool_provider", False):
+            continue
         if n["id"] not in reachable:
             raise FlowValidationError(f"Node {ad.flows.node_name(n)} is not reachable from any trigger")
+
+    from analytiq_data.flows.tool_wiring import validate_tool_graph
+
+    validate_tool_graph(nodes, connections or {})
 
     # Connection validation.
     for src, typed in (connections or {}).items():
@@ -167,6 +171,36 @@ def validate_revision(
             if not slot:
                 continue
             for conn in slot:
+                if conn.connection_type == FLOWS_TOOL_CONNECTION_TYPE:
+                    if conn.dest_node_id not in nodes_by_id:
+                        raise FlowValidationError(
+                            f"Connection destination node id does not exist: {conn.dest_node_id}"
+                        )
+                    dst_node = nodes_by_id[conn.dest_node_id]
+                    try:
+                        dst_type = ad.flows.get(dst_node["type"])
+                        src_type_tool = ad.flows.get(nodes_by_id[src]["type"])
+                    except KeyError:
+                        raise FlowValidationError(f"Unknown node type on tool connection") from None
+                    if not getattr(src_type_tool, "tool_provider", False):
+                        raise FlowValidationError(
+                            f"Node {ad.flows.node_name(nodes_by_id[src])} cannot emit flows.tool connections"
+                        )
+                    if not getattr(dst_type, "tool_consumer", False):
+                        raise FlowValidationError(
+                            f"Node {ad.flows.node_name(dst_node)} does not accept flows.tool connections"
+                        )
+                    if conn.index < 0:
+                        raise FlowValidationError("Tool connection index must be >= 0")
+                    src_out_types = output_port_types_for(src_type_tool)
+                    expected_type = src_out_types[out_idx] if out_idx < len(src_out_types) else "main"
+                    if expected_type != FLOWS_TOOL_CONNECTION_TYPE:
+                        raise FlowValidationError(
+                            f"Tool connection from {ad.flows.node_name(nodes_by_id[src])} "
+                            f"output {out_idx} must use connection_type {FLOWS_TOOL_CONNECTION_TYPE!r}"
+                        )
+                    continue
+
                 if conn.dest_node_id not in nodes_by_id:
                     raise FlowValidationError(
                         f"Connection destination node id does not exist: {conn.dest_node_id}"
@@ -1012,6 +1046,8 @@ async def _execute_loop(
         wi = work.popleft()
         node = nodes_by_id[wi.node_id]
         node_type = ad.flows.get(node["type"])
+        if getattr(node_type, "tool_provider", False):
+            continue
         node_label = ad.flows.node_name(node)
         outputs_count = node_type.outputs
         _execution_refs = {
@@ -1444,6 +1480,11 @@ async def run_flow(
     )
 
     context.revision_nodes = nodes
+
+    from analytiq_data.flows.tool_wiring import tool_consumer_wiring
+
+    # Rebuild wiring for runtime dispatch (parameters validated at save time in validate_tool_graph).
+    context.tool_consumer_wiring = tool_consumer_wiring(nodes, connections)
 
     nodes_by_id = {n["id"]: n for n in nodes}
     chosen_trigger_id = resolve_execution_start_trigger(
