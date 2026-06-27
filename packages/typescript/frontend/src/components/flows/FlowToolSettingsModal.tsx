@@ -69,8 +69,8 @@ const FlowToolSettingsModal: React.FC<FlowToolSettingsModalProps> = ({
 
           <div className="space-y-4 px-4 py-4">
             <p className="text-sm text-gray-600">
-              Callable flows can be invoked from a Flow Tool node in another workflow. They must include a Tool entry
-              trigger and a Respond to tool node on the main path.
+              Callable flows can be invoked from a Flow Tool node in another workflow. They must include a Sub-flow
+              entry trigger; the last executed node&apos;s output is returned to the caller.
             </p>
 
             <div className="flex items-center justify-between gap-3 rounded-md border border-gray-200 bg-gray-50/80 px-3 py-2">

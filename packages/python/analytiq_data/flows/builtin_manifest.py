@@ -25,7 +25,6 @@ BUILTIN_MANIFEST_RELPATHS: tuple[str, ...] = (
     "nodes/flow_tool.manifest.json",
     "nodes/execute_flow.manifest.json",
     "nodes/trigger_tool.manifest.json",
-    "nodes/respond_to_tool.manifest.json",
     "nodes/trigger_chat.manifest.json",
     "nodes/google_drive/node.manifest.json",
     "nodes/google_drive/trigger.manifest.json",

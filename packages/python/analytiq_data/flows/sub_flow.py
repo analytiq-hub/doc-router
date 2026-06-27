@@ -120,8 +120,6 @@ async def run_nested_subflow(
         analytiq_client=client,
         flow_id_stack=stack + [parent_ctx.flow_id],
     )
-    sub_ctx.sub_flow_tool_result = None
-
     try:
         await asyncio.wait_for(
             ad.flows.run_flow(
@@ -144,11 +142,9 @@ async def run_nested_subflow(
 def resolve_subflow_return_json(
     run: SubFlowRunResult,
 ) -> Any:
-    """Tool / scalar return: explicit respond node wins, else last executed node (webhook heuristic)."""
+    """Tool / scalar return from the last executed node (webhook heuristic)."""
 
     sub_ctx = run.context
-    if sub_ctx.sub_flow_tool_result is not None:
-        return sub_ctx.sub_flow_tool_result
     value = extract_last_node_output_json(
         sub_ctx.run_data,
         run.revision,
@@ -165,21 +161,6 @@ def resolve_subflow_return_items(
     """Main-path return: items from last executed node's primary output branch."""
 
     sub_ctx = run.context
-    if sub_ctx.sub_flow_tool_result is not None:
-        val = sub_ctx.sub_flow_tool_result
-        if isinstance(val, dict):
-            payload = val
-        else:
-            payload = {"result": val}
-        return [
-            ad.flows.FlowItem(
-                json=payload,
-                binary={},
-                meta={"source": "sub_flow"},
-                paired_item=None,
-            )
-        ]
-
     last_node_id = pick_webhook_last_node_id(
         sub_ctx.run_data,
         run.revision,

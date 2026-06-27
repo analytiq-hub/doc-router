@@ -33,30 +33,22 @@ def _std_node(id_: str, ntype: str, x: int = 0, parameters: dict | None = None) 
     }
 
 
-def _callable_subflow_revision(*, with_respond: bool = True) -> tuple[list[dict], dict]:
+def _callable_subflow_revision() -> tuple[list[dict], dict]:
     nodes = [
         _std_node("tt", "flows.trigger.tool", 0),
+        _std_node(
+            "code",
+            "flows.code",
+            200,
+            {
+                "mode": "all_items",
+                "python_code": "def run(items, context):\n  return items\n",
+            },
+        ),
     ]
-    if with_respond:
-        nodes.append(_std_node("resp", "flows.respond_to_tool", 200, {"result_source": "from_input"}))
-        connections = {
-            "tt": {"main": [[{"dest_node_id": "resp", "connection_type": "main", "index": 0}]]},
-        }
-    else:
-        nodes.append(
-            _std_node(
-                "code",
-                "flows.code",
-                200,
-                {
-                    "mode": "all_items",
-                    "python_code": "def run(items, context):\n  return items\n",
-                },
-            )
-        )
-        connections = {
-            "tt": {"main": [[{"dest_node_id": "code", "connection_type": "main", "index": 0}]]},
-        }
+    connections = {
+        "tt": {"main": [[{"dest_node_id": "code", "connection_type": "main", "index": 0}]]},
+    }
     return nodes, connections
 
 
@@ -65,12 +57,11 @@ async def _seed_callable_flow(
     *,
     active: bool = True,
     callable_as_tool: bool = True,
-    with_respond: bool = True,
 ) -> tuple[str, str]:
     flow_id = ObjectId()
     rev_id = ObjectId()
     now = datetime.now(UTC)
-    nodes, connections = _callable_subflow_revision(with_respond=with_respond)
+    nodes, connections = _callable_subflow_revision()
 
     await db.flows.insert_one(
         {
@@ -159,24 +150,6 @@ async def test_flow_tool_dispatch_runs_callable_subflow(test_db, parent_ctx: ad.
 
     payload = json.loads(raw)
     assert payload.get("value") == "passed-through"
-
-
-@pytest.mark.asyncio
-async def test_flow_tool_last_node_return_without_respond(test_db, parent_ctx: ad.flows.ExecutionContext) -> None:
-    target_flow_id, _ = await _seed_callable_flow(test_db, with_respond=False)
-    wired = _wired_flow_tool(target_flow_id=target_flow_id)
-    tc = NormalizedToolCall(id="1", name="run_subflow", arguments={"value": "from-last-node"})
-
-    raw = await execute_tool_call(
-        tc,
-        wired,
-        parent_ctx,
-        consumer_node_id="agent-1",
-        parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
-    )
-
-    payload = json.loads(raw)
-    assert payload.get("value") == "from-last-node"
 
 
 @pytest.mark.asyncio

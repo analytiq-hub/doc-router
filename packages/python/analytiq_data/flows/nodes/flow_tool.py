@@ -35,6 +35,7 @@ class FlowsFlowToolNode:
             "target_flow_id": {
                 "type": "string",
                 "x-ui-widget": "flow_picker",
+                "x-ui-flow-picker-mode": "callable",
                 "x-ui-group": "Flow",
             },
             "parameters_schema": {

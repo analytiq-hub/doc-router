@@ -26,35 +26,12 @@ def _tool_trigger() -> dict:
     }
 
 
-def _respond_node() -> dict:
-    return {
-        "id": "rt1",
-        "name": "Respond",
-        "type": "flows.respond_to_tool",
-        "position": [200, 0],
-        "parameters": {"tool_result": "={{ $json }}"},
-        "webhook_id": None,
-        "disabled": False,
-        "on_error": "stop",
-        "retry_on_fail": False,
-        "max_tries": 1,
-        "wait_between_tries_ms": 1000,
-        "notes": None,
-    }
-
-
 def test_validate_callable_flow_revision_ok() -> None:
-    nodes = [_tool_trigger(), _respond_node()]
-    connections = {"tt1": {"main": [[{"dest_node_id": "rt1", "connection_type": "main", "index": 0}]]}}
-    validate_callable_flow_revision(nodes, connections)
-
-
-def test_validate_callable_flow_revision_ok_without_respond() -> None:
     validate_callable_flow_revision([_tool_trigger()], {})
 
 
 def test_validate_callable_flow_revision_two_triggers() -> None:
-    nodes = [_tool_trigger(), {**_tool_trigger(), "id": "tt2", "name": "Tool entry 2"}, _respond_node()]
+    nodes = [_tool_trigger(), {**_tool_trigger(), "id": "tt2", "name": "Tool entry 2"}]
     with pytest.raises(FlowValidationError, match="exactly one"):
         validate_callable_flow_revision(nodes, {})
 

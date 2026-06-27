@@ -11,7 +11,10 @@ from analytiq_data.flows.sub_flow import SubFlowError, run_nested_subflow, resol
 class FlowsExecuteFlowNode:
     key = "flows.execute_flow"
     label = "Execute Flow"
-    description = "Runs another flow's active revision and returns the last executed node's output."
+    description = (
+        "Runs another flow's active revision and returns the last executed node's output "
+        "(like n8n Execute Workflow)."
+    )
     category = "Generic"
     palette_group = "flow"
     is_trigger = False
@@ -22,6 +25,7 @@ class FlowsExecuteFlowNode:
     output_labels = ["output"]
     icon_key = "execute_flow"
     type_version = 1
+    experimental = True
     parameter_schema: dict[str, Any] = {
         "type": "object",
         "properties": {
@@ -29,11 +33,13 @@ class FlowsExecuteFlowNode:
                 "type": "string",
                 "x-ui-widget": "flow_picker",
                 "x-ui-flow-picker-mode": "subflow",
+                "x-ui-group": "Flow",
             },
             "mode": {
                 "type": "string",
                 "enum": ["each", "once"],
                 "default": "each",
+                "x-ui-group": "Flow",
             },
         },
         "required": ["target_flow_id"],
