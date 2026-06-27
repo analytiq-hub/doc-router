@@ -55,10 +55,13 @@ class FlowsChatTriggerNode:
         node: dict[str, Any],
         inputs: list[list["ad.flows.FlowItem"]],
     ) -> list[list["ad.flows.FlowItem"]]:
+        params = node.get("parameters") or {}
+        chat_input = resolve_chat_input(
+            context.trigger_data or {},
+            params,
+            execution_mode=str(context.mode or "manual"),
+        )
         td = context.trigger_data or {}
-        chat_input = td.get("chatInput")
-        if not isinstance(chat_input, str):
-            chat_input = ""
         session_id = td.get("session_id") or td.get("sessionId")
         item = ad.flows.FlowItem(
             json={"chatInput": chat_input, "action": "sendMessage"},
@@ -71,3 +74,23 @@ class FlowsChatTriggerNode:
             paired_item=None,
         )
         return [[item]]
+
+
+def resolve_chat_input(
+    trigger_data: dict[str, Any],
+    node_params: dict[str, Any],
+    *,
+    execution_mode: str,
+) -> str:
+    """Resolve chatInput from trigger payload, with manual-run editor fallback."""
+
+    raw = trigger_data.get("chatInput")
+    if isinstance(raw, str) and raw.strip():
+        return raw.strip()
+    if execution_mode == "manual":
+        initial = node_params.get("initial_messages")
+        if isinstance(initial, str) and initial.strip():
+            return initial.strip()
+    if isinstance(raw, str):
+        return raw
+    return ""
