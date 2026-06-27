@@ -12,6 +12,7 @@ export {
   revisionToRF,
   rfToConnections,
   rfToRevision,
+  TOOL_IN_HANDLE,
 } from '@docrouter/sdk';
 export {
   edgeConnectionType,

@@ -38,7 +38,7 @@ const ocrHandleClass =
   '!w-2.5 !h-2.5 !border-2 !border-violet-400 !bg-violet-50 hover:!border-violet-600 hover:!bg-violet-100';
 
 const toolHandleClass =
-  '!w-2.5 !h-2.5 !border-2 !border-amber-500 !bg-amber-50 hover:!border-amber-600 hover:!bg-amber-100';
+  '!w-3 !h-3 !border-2 !border-amber-500 !bg-amber-50 hover:!border-amber-600 hover:!bg-amber-100';
 
 function handleClassForPortType(portType: FlowConnectionType): string {
   if (portType === 'docrouter.ocr') return ocrHandleClass;

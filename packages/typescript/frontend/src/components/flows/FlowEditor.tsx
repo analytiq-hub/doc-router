@@ -223,6 +223,14 @@ function parseHandleIndex(handle: string | null | undefined, prefix: string): nu
   return Number.isFinite(idx) ? idx : null;
 }
 
+function flowNodeTypeFor(
+  rfNode: Node<FlowRfNodeData> | undefined,
+  nodeTypesByKey: Record<string, FlowNodeType>,
+): FlowNodeType | undefined {
+  if (!rfNode) return undefined;
+  return rfNode.data.nodeType ?? nodeTypesByKey[rfNode.data.flowNode.type];
+}
+
 function toCanvasEdges(edges: Edge[]): Edge[] {
   return edges.map((e) => ({
     ...e,
@@ -491,18 +499,19 @@ const FlowEditor: React.FC<{
 
       const src = nodes.find((n) => n.id === params.source);
       const dst = nodes.find((n) => n.id === params.target);
-      const srcType = src ? nodeTypesByKey[src.data.flowNode.type] : undefined;
-      const dstType = dst ? nodeTypesByKey[dst.data.flowNode.type] : undefined;
+      const srcType = flowNodeTypeFor(src, nodeTypesByKey);
+      const dstType = flowNodeTypeFor(dst, nodeTypesByKey);
 
       if (outIdx < 0 || (srcType && outIdx >= (srcType.outputs ?? 0))) return;
 
       const connectionType = outputPortType(srcType, outIdx);
-      const isToolEdge = connectionType === 'flows.tool' || params.targetHandle === TOOL_IN_HANDLE;
 
       let inIdx: number;
-      if (isToolEdge) {
+      if (params.targetHandle === TOOL_IN_HANDLE) {
         if (!dstType?.tool_consumer || !srcType?.tool_provider) return;
         inIdx = edges.filter((e) => e.target === params.target && e.targetHandle === TOOL_IN_HANDLE).length;
+      } else if (srcType?.tool_provider) {
+        return;
       } else {
         const parsedIn = parseHandleIndex(params.targetHandle, 'in-');
         if (parsedIn == null) return;
@@ -512,6 +521,7 @@ const FlowEditor: React.FC<{
         if (!portTypesCompatible(connectionType, inputPortType(dstType, inIdx))) return;
       }
 
+      const isToolEdge = params.targetHandle === TOOL_IN_HANDLE;
       const resolvedType: FlowConnectionType = isToolEdge ? 'flows.tool' : connectionType;
 
       const duplicate = edges.some(
@@ -549,14 +559,19 @@ const FlowEditor: React.FC<{
 
       const src = nodes.find((n) => n.id === connection.source);
       const dst = nodes.find((n) => n.id === connection.target);
-      const srcType = src ? nodeTypesByKey[src.data.flowNode.type] : undefined;
-      const dstType = dst ? nodeTypesByKey[dst.data.flowNode.type] : undefined;
+      const srcType = flowNodeTypeFor(src, nodeTypesByKey);
+      const dstType = flowNodeTypeFor(dst, nodeTypesByKey);
 
       if (outIdx < 0 || (srcType && outIdx >= (srcType.outputs ?? 0))) return false;
 
       const connectionType = outputPortType(srcType, outIdx);
-      if (connectionType === 'flows.tool' || connection.targetHandle === TOOL_IN_HANDLE) {
+
+      if (connection.targetHandle === TOOL_IN_HANDLE) {
         return Boolean(srcType?.tool_provider && dstType?.tool_consumer);
+      }
+
+      if (srcType?.tool_provider) {
+        return false;
       }
 
       const inIdx = parseHandleIndex(connection.targetHandle, 'in-');
@@ -1078,6 +1093,7 @@ const FlowEditor: React.FC<{
               onConnect={onConnect}
               isValidConnection={isValidConnection}
               onNodeDoubleClick={onNodeDoubleClick}
+              connectionRadius={28}
               snapToGrid
               snapGrid={[FLOW_CANVAS_GRID_PX, FLOW_CANVAS_GRID_PX]}
               proOptions={FLOW_EDITOR_RF_PRO_OPTIONS}

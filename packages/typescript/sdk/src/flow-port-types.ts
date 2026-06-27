@@ -23,7 +23,8 @@ export function inputPortTypes(nt: FlowNodeType | null | undefined): FlowConnect
 
 export function outputPortTypes(nt: FlowNodeType | null | undefined): FlowConnectionType[] {
   const outputs = Math.max(0, nt?.outputs ?? 0);
-  return portTypesList(nt?.output_port_types, outputs);
+  const defaultType: FlowConnectionType = nt?.tool_provider ? 'flows.tool' : 'main';
+  return portTypesList(nt?.output_port_types, outputs, defaultType);
 }
 
 export function inputPortType(
@@ -37,7 +38,9 @@ export function outputPortType(
   nt: FlowNodeType | null | undefined,
   index: number,
 ): FlowConnectionType {
-  return outputPortTypes(nt)[index] ?? 'main';
+  const t = outputPortTypes(nt)[index] ?? (nt?.tool_provider ? 'flows.tool' : 'main');
+  if (nt?.tool_provider && t === 'main') return 'flows.tool';
+  return t;
 }
 
 export function portTypesCompatible(
