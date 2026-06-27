@@ -1,0 +1,49 @@
+{
+  "schema": "urn:docrouter:flow-node-manifest:v1",
+  "manifest_version": 1,
+  "key": "flows.execute_flow",
+  "type_version": 1,
+  "label": "Execute Flow",
+  "description": "Runs another flow's active revision and returns the last executed node's output (like n8n Execute Workflow).",
+  "category": "Generic",
+  "is_trigger": false,
+  "is_merge": false,
+  "min_inputs": 1,
+  "max_inputs": 1,
+  "outputs": 1,
+  "output_labels": [
+    "output"
+  ],
+  "icon_key": "execute_flow",
+  "executor": {
+    "kind": "python_class",
+    "import": "analytiq_data.flows.nodes.execute_flow",
+    "class": "FlowsExecuteFlowNode"
+  },
+  "palette_group": "flow",
+  "experimental": true,
+  "parameter_schema": {
+    "type": "object",
+    "properties": {
+      "target_flow_id": {
+        "type": "string",
+        "x-ui-widget": "flow_picker",
+        "x-ui-flow-picker-mode": "subflow",
+        "x-ui-group": "Flow"
+      },
+      "mode": {
+        "type": "string",
+        "enum": [
+          "each",
+          "once"
+        ],
+        "default": "each",
+        "x-ui-group": "Flow"
+      }
+    },
+    "required": [
+      "target_flow_id"
+    ],
+    "additionalProperties": false
+  }
+}
