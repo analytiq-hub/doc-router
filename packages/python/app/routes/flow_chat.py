@@ -46,6 +46,12 @@ def _last_node_from_run_data(run_data: dict[str, Any]) -> str | None:
     return best_id
 
 
+def _stored_run_data(run_data: dict[str, Any]) -> dict[str, Any]:
+    from analytiq_data.flows.engine import _bson_serialize_run_data
+
+    return _bson_serialize_run_data(run_data)
+
+
 def _execution_error_from_run_data(run_data: dict[str, Any]) -> dict[str, Any] | None:
     for raw in run_data.values():
         if not isinstance(raw, dict) or raw.get("status") != "error":
@@ -191,7 +197,7 @@ def _streaming_response(
                         "$set": {
                             "status": status,
                             "finished_at": _now(),
-                            "run_data": ctx.run_data,
+                            "run_data": _stored_run_data(ctx.run_data),
                             "last_node_executed": _last_node_from_run_data(ctx.run_data),
                             "error": _execution_error_from_run_data(ctx.run_data),
                         }
@@ -258,7 +264,7 @@ async def _buffered_response(
                 "$set": {
                     "status": status,
                     "finished_at": _now(),
-                    "run_data": ctx.run_data,
+                    "run_data": _stored_run_data(ctx.run_data),
                     "error": ad.flows.execution_error_envelope(e),
                 }
             },
@@ -282,7 +288,7 @@ async def _buffered_response(
             "$set": {
                 "status": status,
                 "finished_at": _now(),
-                "run_data": ctx.run_data,
+                "run_data": _stored_run_data(ctx.run_data),
                 "last_node_executed": _last_node_from_run_data(ctx.run_data),
                 "error": _execution_error_from_run_data(ctx.run_data),
             }

@@ -1143,6 +1143,8 @@ const FlowNodeConfigModal: React.FC<{
                               expressionPreview={expressionPreview}
                               soleInboundParentNodeId={soleInboundParentNodeId}
                               flowOrgApi={flowOrgApi}
+                              edges={edges}
+                              allNodes={allNodes}
                             />
                           )}
                         </div>

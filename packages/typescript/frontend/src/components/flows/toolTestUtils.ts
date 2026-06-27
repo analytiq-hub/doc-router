@@ -87,7 +87,23 @@ export function findToolConsumerId(toolNodeId: string, edges: readonly Edge[]): 
   return null;
 }
 
-/** Optional pin payload to seed test arguments from a wired consumer's pinned main input. */
+/** Tool names from tool_provider nodes wired into this tool_consumer (flows.tool edges). */
+export function wiredToolNamesForConsumer(
+  consumerNodeId: string,
+  edges: readonly { source: string; target: string; targetHandle?: string | null; data?: { connectionType?: string } }[],
+  flowNodes: readonly FlowNode[],
+): string[] {
+  const names = new Set<string>();
+  for (const e of edges) {
+    if (e.target !== consumerNodeId || !isToolEdge(e)) continue;
+    const src = flowNodes.find((n) => n.id === e.source);
+    if (!src) continue;
+    const name = toolNameFromNode(src);
+    if (name) names.add(name);
+  }
+  return [...names].sort();
+}
+
 export function pinArgumentsForToolTest(
   consumerNodeId: string | null,
   pinData: FlowPinData | null | undefined,

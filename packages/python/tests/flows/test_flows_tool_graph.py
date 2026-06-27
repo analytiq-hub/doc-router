@@ -6,7 +6,8 @@ import pytest
 
 import analytiq_data as ad
 from analytiq_data.flows.connections import NodeConnection
-from analytiq_data.flows.engine import FlowValidationError, validate_revision
+from analytiq_data.flows.errors import FlowValidationError
+from analytiq_data.flows.engine import validate_revision
 
 
 def _node(node_id: str, node_type: str, name: str | None = None, **extra: object) -> dict:
@@ -91,6 +92,39 @@ def test_validate_rejects_invalid_tool_name_on_unwired_provider() -> None:
     connections = {"t1": {"main": [[]]}}
     with pytest.raises(FlowValidationError, match="invalid tool_name"):
         validate_revision(nodes, connections, {}, None)
+
+
+def test_tool_edges_reads_main_from_non_dict_adjacency() -> None:
+    from analytiq_data.flows.tool_wiring import _tool_edges
+
+    class _Adj:
+        def __init__(self, main: list) -> None:
+            self.main = main
+
+    conn = NodeConnection(dest_node_id="exec", connection_type="flows.tool", index=0)
+    connections = {"tool": _Adj([[conn]])}
+    edges = _tool_edges(connections)
+    assert len(edges) == 1
+    assert edges[0][0] == "tool"
+
+
+def test_validate_rejects_invalid_tool_name_before_wiring_check() -> None:
+    """tool_name format is validated on every tool_provider node, not only when wired."""
+    nodes = [
+        _node("t1", "flows.trigger.manual"),
+        _node(
+            "tool",
+            "flows.tool_code",
+            parameters={
+                "tool_name": "Bad Name",
+                "tool_description": "x",
+                "parameters_schema": {"type": "object", "properties": {}},
+                "python_code": "def run(p,c): return p\n",
+            },
+        ),
+    ]
+    with pytest.raises(FlowValidationError, match="invalid tool_name"):
+        validate_revision(nodes, {}, {}, None)
 
 
 def test_rewire_graph_for_tool_test_with_dict_connections() -> None:

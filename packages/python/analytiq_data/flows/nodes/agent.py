@@ -197,8 +197,9 @@ class FlowsAgentNode:
 
         if mode == "all_items":
             user_message = build_all_items_user_message([it.json for it in in_items])
-            # all_items: one run over every item's json; binary is not included in the prompt.
-            # Use the first item only for paired_item / binary passthrough on the output.
+            # all_items: one LLM run over every item's json; binary is not included in the prompt.
+            # Use the first item only for paired_item / binary passthrough on the output row
+            # (synthetic empty item when there are no inputs — intentional).
             item = in_items[0] if in_items else ad.flows.FlowItem(json={}, binary={}, meta={})
             out.append(await _run_one(item, user_message=user_message))
         else:

@@ -39,6 +39,7 @@ import { FlowOrgTagMultiPickerField } from './FlowOrgTagMultiPickerField';
 import { FlowEnumMultiCheckboxField } from './FlowEnumMultiCheckboxField';
 import { FlowCollectionFieldsField } from './FlowCollectionFieldsField';
 import { FlowCodeEditorField, type FlowCodeEditorLanguage } from './FlowCodeEditorField';
+import { wiredToolNamesForConsumer } from './toolTestUtils';
 import {
   FlowScheduleTriggerRulesField,
   type ScheduleRuleValue,
@@ -323,6 +324,10 @@ export const FlowNodeParameterFields: React.FC<{
   soleInboundParentNodeId?: string | null;
   /** Org API for credential pickers (e.g. ``credential_authentication`` widget). */
   flowOrgApi?: DocRouterOrgApi | null;
+  /** Canvas edges — used by tool_name picker on tool_consumer nodes. */
+  edges?: readonly { source: string; target: string; targetHandle?: string | null; data?: { connectionType?: string } }[];
+  /** All flow nodes — used to resolve wired tool names for tool_executor / agent. */
+  allNodes?: readonly FlowNode[];
 }> = ({
   node,
   nodeType,
@@ -331,6 +336,8 @@ export const FlowNodeParameterFields: React.FC<{
   expressionPreview = null,
   soleInboundParentNodeId = null,
   flowOrgApi = null,
+  edges = [],
+  allNodes = [],
 }) => {
   const [fieldRegexErrors, setFieldRegexErrors] = useState<Record<string, string>>({});
   const rootSchema = nodeType?.parameter_schema;
@@ -509,7 +516,36 @@ export const FlowNodeParameterFields: React.FC<{
       );
     }
 
-    if (uiHint === 'tool_name_input') {
+    if (uiHint === 'tool_name_input' || uiHint === 'wired_tool_picker') {
+      const wiredNames = nodeType?.tool_consumer
+        ? wiredToolNamesForConsumer(node.id, edges, allNodes.length ? allNodes : [node])
+        : [];
+      const current = typeof v === 'string' ? v : '';
+      if (wiredNames.length > 0) {
+        return (
+          <div key={key} className="mb-3">
+            <label className={flowLabelClass} htmlFor={`param-tool-name-${key}`}>
+              {propLabel}
+            </label>
+            {schemaDescription(subschema) ? (
+              <p className="mb-1 text-xs text-gray-500">{schemaDescription(subschema)}</p>
+            ) : null}
+            <select
+              id={`param-tool-name-${key}`}
+              className={flowSelectClass}
+              disabled={readOnly}
+              value={wiredNames.includes(current) ? current : wiredNames[0] ?? ''}
+              onChange={(e) => setField(key, e.target.value)}
+            >
+              {wiredNames.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          </div>
+        );
+      }
       return (
         <div key={key} className="mb-3">
           <span className={flowLabelClass}>{propLabel}</span>
@@ -519,8 +555,8 @@ export const FlowNodeParameterFields: React.FC<{
           <input
             className={flowInputClass}
             readOnly={readOnly}
-            value={typeof v === 'string' ? v : ''}
-            placeholder="Must match a wired tool's tool_name"
+            value={current}
+            placeholder="Wire a tool node, or type tool_name to match"
             onChange={(e) => setField(key, e.target.value)}
           />
         </div>

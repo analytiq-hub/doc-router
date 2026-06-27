@@ -95,23 +95,12 @@ def default_kb_tool_name(kb_display_name: str, *, used: set[str]) -> str:
     return f"{base}_{n}"
 
 
-def _main_slots(typed: Any) -> list[Any]:
-    """Return the ``main`` slot list from a connection adjacency entry (dict or TypedDict)."""
-
-    if typed is None:
-        return []
-    if isinstance(typed, dict):
-        return typed.get("main") or []
-    main = getattr(typed, "main", None)
-    return main if isinstance(main, list) else []
-
-
 def _tool_edges(connections: "ad.flows.Connections") -> list[tuple[str, Any]]:
     """Return (source_node_id, NodeConnection) for every flows.tool edge."""
 
     edges: list[tuple[str, Any]] = []
     for src, typed in (connections or {}).items():
-        for slot in _main_slots(typed):
+        for slot in ad.flows.main_connection_slots(typed):
             if not slot:
                 continue
             for conn in slot:
@@ -421,7 +410,7 @@ def rewire_graph_for_tool_test(
     # Rewire tool edge to synthetic executor instead of original consumer.
     rewired = False
     for src, typed in list(new_connections.items()):
-        main_slots = list(_main_slots(typed))
+        main_slots = list(ad.flows.main_connection_slots(typed))
         new_slots = []
         for slot in main_slots:
             if not slot:

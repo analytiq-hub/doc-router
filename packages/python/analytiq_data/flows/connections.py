@@ -29,6 +29,17 @@ class NodeConnections(TypedDict, total=False):
 Connections = dict[str, NodeConnections]
 
 
+def main_connection_slots(typed: Any) -> list[Any]:
+    """Return the ``main`` output slot list from a per-source connections entry (dict or mapping-like)."""
+
+    if typed is None:
+        return []
+    if isinstance(typed, dict):
+        return typed.get("main") or []
+    main = getattr(typed, "main", None)
+    return main if isinstance(main, list) else []
+
+
 def coerce_json_connections_to_dataclasses(raw: dict[str, Any] | None) -> "Connections":
     """
     Coerce a JSON / Mongo-stored connection map to `NodeConnection` instances.
@@ -40,7 +51,7 @@ def coerce_json_connections_to_dataclasses(raw: dict[str, Any] | None) -> "Conne
     out: Connections = {}
     for src, typed in (raw or {}).items():
         out[src] = {}
-        main_slots = (typed or {}).get("main") or []
+        main_slots = main_connection_slots(typed)
         slots: list[list[NodeConnection] | None] = []
         for slot in main_slots:
             if slot is None:

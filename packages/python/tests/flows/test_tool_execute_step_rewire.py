@@ -6,7 +6,7 @@ import pytest
 
 import analytiq_data as ad
 from analytiq_data.flows.connections import NodeConnection
-from analytiq_data.flows.engine import FlowValidationError
+from analytiq_data.flows.errors import FlowValidationError
 from analytiq_data.flows.tool_wiring import (
     TOOL_TEST_EXECUTOR_ID,
     TOOL_TEST_MANUAL_ID,
