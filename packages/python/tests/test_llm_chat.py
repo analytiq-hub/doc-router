@@ -648,6 +648,37 @@ async def test_list_org_llm_models(org_and_users, setup_test_models, test_db):
 
 
 @pytest.mark.asyncio
+async def test_list_org_llm_models_exclude_embeddings(org_and_users, setup_test_models, test_db):
+    """Flow LLM pickers request all enabled models except embeddings."""
+    org_id = org_and_users["org_id"]
+    admin = org_and_users["admin"]
+
+    import analytiq_data as ad
+
+    await test_db.llm_providers.update_one(
+        {"name": "OpenAI"},
+        {
+            "$set": {
+                "litellm_models_enabled": ["gpt-4o-mini", "text-embedding-3-small"],
+                "litellm_models_chat_agent": ["gpt-4o-mini"],
+            }
+        },
+    )
+
+    with patch.object(ad.llm, "is_embedding_model", side_effect=lambda m: m == "text-embedding-3-small"):
+        resp = client.get(
+            f"/v0/orgs/{org_id}/llm/models",
+            params={"exclude_embeddings": True},
+            headers=get_token_headers(admin["token"]),
+        )
+
+    assert resp.status_code == 200, resp.text
+    models = resp.json()["models"]
+    assert "gpt-4o-mini" in models
+    assert "text-embedding-3-small" not in models
+
+
+@pytest.mark.asyncio
 async def test_list_org_llm_models_no_enabled_providers(org_and_users, test_db):
     """Test listing LLM models when no providers are enabled"""
     org_id = org_and_users["org_id"]

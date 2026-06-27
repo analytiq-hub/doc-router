@@ -599,7 +599,14 @@ async def test_embedding_model(
 @llm_router.get("/v0/orgs/{organization_id}/llm/models", response_model=ListOrgLLMModelsResponse)
 async def list_org_llm_models(
     organization_id: str,
-    chat_only: bool = Query(False, description="If true, return only chat models (exclude embedding models). Use for chat agent."),
+    chat_only: bool = Query(
+        False,
+        description="If true, return chat-agent models only (litellm_models_chat_agent, fallback enabled), filtered to chat mode.",
+    ),
+    exclude_embeddings: bool = Query(
+        False,
+        description="If true, return all enabled models except embedding models (for flow LLM pickers).",
+    ),
     current_user: User = Depends(get_org_user)
 ):
     """List enabled LLM model names for the organization"""
@@ -611,16 +618,17 @@ async def list_org_llm_models(
     # Get all enabled providers
     providers = await cursor.to_list(length=None)
 
-    # Collect model names: when chat_only (agent dropdown), use chat-agent list; else all enabled
     model_names = []
     for provider in providers:
-        if chat_only:
-            models = provider.get("litellm_models_chat_agent", provider.get("litellm_models_enabled", []))
-        else:
+        if exclude_embeddings or not chat_only:
             models = provider.get("litellm_models_enabled", [])
+        else:
+            models = provider.get("litellm_models_chat_agent") or provider.get("litellm_models_enabled", [])
         model_names.extend(models)
 
-    if chat_only:
+    if exclude_embeddings:
+        model_names = [m for m in model_names if not ad.llm.is_embedding_model(m)]
+    elif chat_only:
         model_names = [m for m in model_names if ad.llm.is_chat_model(m)]
 
     return ListOrgLLMModelsResponse(models=model_names)

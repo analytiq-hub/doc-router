@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Switch } from '@headlessui/react';
 import Editor from '@monaco-editor/react';
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
-import type { DocRouterOrgApi } from '@/utils/api';
+import { apiClient, type DocRouterOrgApi } from '@/utils/api';
 import {
   flowInputClass,
   flowLabelClass,
@@ -89,13 +89,15 @@ function FlowLlmModelPickerField({
 }) {
   const [models, setModels] = useState<string[]>([]);
   useEffect(() => {
+    if (!organizationId) return;
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`/v0/orgs/${organizationId}/llm/models?chat_only=true`);
-        if (!res.ok) return;
-        const data = (await res.json()) as { chat_models?: string[] };
-        if (!cancelled) setModels(Array.isArray(data.chat_models) ? data.chat_models : []);
+        const res = await apiClient.get<{ models: string[] }>(
+          `/v0/orgs/${organizationId}/llm/models`,
+          { params: { exclude_embeddings: true } },
+        );
+        if (!cancelled) setModels(Array.isArray(res.data.models) ? res.data.models : []);
       } catch {
         /* ignore */
       }
