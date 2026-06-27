@@ -2,22 +2,18 @@
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import time
 from typing import Any
 
-from bson import ObjectId
-
 import analytiq_data as ad
 
 from analytiq_data.flows.agent_loop.constants import (
-    FLOW_SUBFLOW_MAX_DEPTH,
-    FLOW_SUBFLOW_TIMEOUT_SECONDS,
     LLM_TOOL_RESULT_MAX_CHARS,
     TOOL_CONTEXT_NODES_MAX_BYTES,
 )
+from analytiq_data.flows.sub_flow import SubFlowError, resolve_subflow_return_json, run_nested_subflow
 from analytiq_data.flows.agent_loop.types import NormalizedToolCall
 from analytiq_data.flows.tool_wiring import WiredTool
 
@@ -170,91 +166,23 @@ async def _dispatch_flow_tool(
     if not target_flow_id:
         return json.dumps({"error": "target_flow_id is not configured"})
 
-    stack = list(ctx.flow_id_stack or [])
-    if target_flow_id in stack:
-        return json.dumps({"error": "Sub-flow cycle detected"})
-    if len(stack) >= FLOW_SUBFLOW_MAX_DEPTH:
-        return json.dumps({"error": "Sub-flow depth limit exceeded"})
-
-    client = ctx.analytiq_client
-    if client is None or not hasattr(client, "mongodb_async"):
-        return json.dumps({"error": "Sub-flow execution requires database client"})
-
-    db = ad.common.get_async_db(client)
     try:
-        flow_oid = ObjectId(target_flow_id)
-    except Exception:
-        return json.dumps({"error": "Invalid target flow id"})
-
-    flow_doc = await db.flows.find_one(
-        {"_id": flow_oid, "organization_id": ctx.organization_id},
-    )
-    if not flow_doc:
-        return json.dumps({"error": "Target flow not found"})
-    if not flow_doc.get("callable_as_tool"):
-        return json.dumps({"error": "Target flow is not callable as a tool"})
-    if not flow_doc.get("active") or not flow_doc.get("active_flow_revid"):
-        return json.dumps({"error": "Target flow is not active"})
-
-    rev_id = str(flow_doc["active_flow_revid"])
-    try:
-        revision_doc = await db.flow_revisions.find_one(
-            {"_id": ObjectId(rev_id), "flow_id": target_flow_id},
+        run = await run_nested_subflow(
+            parent_ctx=ctx,
+            target_flow_id=target_flow_id,
+            trigger_data={"tool_arguments": arguments},
+            require_callable_as_tool=True,
+            mode="sub_flow_tool",
         )
-    except Exception:
-        revision_doc = None
-    if not revision_doc:
-        return json.dumps({"error": "Target flow revision not found"})
-
-    revision = {
-        "nodes": revision_doc.get("nodes") or [],
-        "connections": revision_doc.get("connections") or {},
-        "settings": revision_doc.get("settings") or {},
-        "pin_data": revision_doc.get("pin_data"),
-    }
-
-    tool_trigger_id: str | None = None
-    for n in revision["nodes"]:
-        if isinstance(n, dict) and n.get("type") == "flows.trigger.tool":
-            tool_trigger_id = str(n.get("id") or "")
-            break
-    if not tool_trigger_id:
-        return json.dumps({"error": "Callable flow missing Tool entry trigger"})
-
-    sub_exec_id = str(ObjectId())
-    sub_ctx = ad.flows.ExecutionContext(
-        organization_id=ctx.organization_id,
-        execution_id=sub_exec_id,
-        flow_id=target_flow_id,
-        flow_revid=rev_id,
-        mode="sub_flow_tool",
-        trigger_data={"tool_arguments": arguments},
-        run_data={},
-        analytiq_client=client,
-        flow_id_stack=stack + [ctx.flow_id],
-    )
-    sub_ctx.sub_flow_tool_result = None
-
-    try:
-        await asyncio.wait_for(
-            ad.flows.run_flow(
-                context=sub_ctx,
-                revision=revision,
-                start_trigger_node_id=tool_trigger_id,
-            ),
-            timeout=FLOW_SUBFLOW_TIMEOUT_SECONDS,
-        )
-    except asyncio.TimeoutError:
-        return json.dumps({"error": "Sub-flow execution timed out"})
+        value = resolve_subflow_return_json(run)
+    except SubFlowError as e:
+        return json.dumps({"error": str(e)})
     except Exception as e:
         return json.dumps({"error": str(e)})
 
-    if sub_ctx.sub_flow_tool_result is None:
-        return json.dumps({"error": "Callable flow did not reach Respond to tool"})
-
-    if isinstance(sub_ctx.sub_flow_tool_result, str):
-        return sub_ctx.sub_flow_tool_result
-    return json.dumps(sub_ctx.sub_flow_tool_result, ensure_ascii=False, default=str)
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, default=str)
 
 
 async def execute_tool_call(

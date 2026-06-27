@@ -73,6 +73,136 @@ function FlowParamFieldHint({ text }: { text: string }) {
   return <p className={flowParamHintClass}>{text}</p>;
 }
 
+function FlowFlowPickerField({
+  label,
+  description,
+  value,
+  readOnly,
+  flowOrgApi,
+  currentFlowId,
+  pickerMode = 'callable',
+  onChange,
+}: {
+  label: string;
+  description?: string;
+  value: string;
+  readOnly: boolean;
+  flowOrgApi: DocRouterOrgApi | null | undefined;
+  currentFlowId?: string | null;
+  /** ``callable`` = Flow Tool targets; ``subflow`` = active flows for Execute Flow. */
+  pickerMode?: 'callable' | 'subflow';
+  onChange: (flowId: string) => void;
+}) {
+  const [items, setItems] = useState<Array<{ flow_id: string; name: string; active: boolean }>>([]);
+  const [query, setQuery] = useState('');
+  const [listOpen, setListOpen] = useState(false);
+
+  useEffect(() => {
+    if (!flowOrgApi) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const collected: Array<{ flow_id: string; name: string; active: boolean }> = [];
+        let offset = 0;
+        const limit = 200;
+        for (;;) {
+          const res = await flowOrgApi.listFlows({
+            limit,
+            offset,
+            ...(pickerMode === 'callable' ? { callableAsTool: true } : { activeOnly: true }),
+          });
+          for (const row of res.items) {
+            const fid = row.flow?.flow_id ?? '';
+            if (!fid || fid === currentFlowId) continue;
+            collected.push({
+              flow_id: fid,
+              name: row.flow?.name?.trim() || fid,
+              active: Boolean(row.flow?.active),
+            });
+          }
+          offset += res.items.length;
+          if (res.items.length === 0 || offset >= res.total) break;
+        }
+        collected.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+        if (!cancelled) setItems(collected);
+      } catch {
+        if (!cancelled) setItems([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [currentFlowId, flowOrgApi, pickerMode]);
+
+  const selected = items.find((x) => x.flow_id === value);
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((x) => x.name.toLowerCase().includes(q) || x.flow_id.toLowerCase().includes(q));
+  }, [items, query]);
+
+  return (
+    <div className="relative">
+      <span className={flowLabelClass}>{label}</span>
+      {description ? <p className="mb-1 text-xs text-gray-500">{description}</p> : null}
+      <input
+        className={flowInputClass}
+        value={listOpen ? query : selected ? `${selected.name}${selected.active ? '' : ' (inactive)'}` : value}
+        readOnly={readOnly}
+        placeholder={pickerMode === 'subflow' ? 'Search active flows…' : 'Search callable flows…'}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setListOpen(true);
+        }}
+        onFocus={() => {
+          if (readOnly) return;
+          setQuery('');
+          setListOpen(true);
+        }}
+        onBlur={() => {
+          window.setTimeout(() => setListOpen(false), 150);
+        }}
+        autoComplete="off"
+        role="combobox"
+        aria-expanded={listOpen}
+      />
+      {listOpen && !readOnly ? (
+        <ul
+          className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg"
+          role="listbox"
+        >
+          {filtered.length === 0 ? (
+            <li className="px-3 py-2 text-gray-500">No callable flows found</li>
+          ) : (
+            filtered.map((flow) => (
+              <li key={flow.flow_id}>
+                <button
+                  type="button"
+                  className={`block w-full px-3 py-2 text-left hover:bg-gray-100 ${
+                    flow.flow_id === value ? 'bg-blue-50 font-medium text-blue-900' : 'text-gray-900'
+                  }`}
+                  role="option"
+                  aria-selected={flow.flow_id === value}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => {
+                    onChange(flow.flow_id);
+                    setQuery('');
+                    setListOpen(false);
+                  }}
+                >
+                  {flow.name}
+                  {!flow.active ? <span className="ml-1 text-xs text-amber-700">(inactive)</span> : null}
+                </button>
+              </li>
+            ))
+          )}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+
 function FlowLlmModelPickerField({
   label,
   description,
@@ -328,6 +458,8 @@ export const FlowNodeParameterFields: React.FC<{
   edges?: readonly { source: string; target: string; targetHandle?: string | null; data?: { connectionType?: string } }[];
   /** All flow nodes — used to resolve wired tool names for tool_executor / agent. */
   allNodes?: readonly FlowNode[];
+  /** Current flow id — excludes self from flow_picker targets. */
+  currentFlowId?: string | null;
 }> = ({
   node,
   nodeType,
@@ -338,6 +470,7 @@ export const FlowNodeParameterFields: React.FC<{
   flowOrgApi = null,
   edges = [],
   allNodes = [],
+  currentFlowId = null,
 }) => {
   const [fieldRegexErrors, setFieldRegexErrors] = useState<Record<string, string>>({});
   const rootSchema = nodeType?.parameter_schema;
@@ -510,6 +643,26 @@ export const FlowNodeParameterFields: React.FC<{
             value={typeof v === 'string' ? v : ''}
             readOnly={readOnly}
             flowOrgApi={flowOrgApi}
+            onChange={(id) => setField(key, id)}
+          />
+        </div>
+      );
+    }
+
+    if (uiHint === 'flow_picker') {
+      const pickerModeRaw = subschema['x-ui-flow-picker-mode'];
+      const pickerMode =
+        pickerModeRaw === 'subflow' || pickerModeRaw === 'callable' ? pickerModeRaw : 'callable';
+      return (
+        <div key={key} className="mb-3">
+          <FlowFlowPickerField
+            label={propLabel}
+            description={schemaDescription(subschema)}
+            value={typeof v === 'string' ? v : ''}
+            readOnly={readOnly}
+            flowOrgApi={flowOrgApi}
+            currentFlowId={currentFlowId}
+            pickerMode={pickerMode}
             onChange={(id) => setField(key, id)}
           />
         </div>

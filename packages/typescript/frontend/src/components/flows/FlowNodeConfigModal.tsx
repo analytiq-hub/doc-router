@@ -1145,6 +1145,7 @@ const FlowNodeConfigModal: React.FC<{
                               flowOrgApi={flowOrgApi}
                               edges={edges}
                               allNodes={allNodes}
+                              currentFlowId={flowId}
                             />
                           )}
                         </div>

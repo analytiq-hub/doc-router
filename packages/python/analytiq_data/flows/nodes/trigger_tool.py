@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-"""Tool entry trigger for callable sub-flows (`flows.trigger.tool`)."""
+"""Sub-flow entry trigger for flows invoked by another flow or Flow Tool (`flows.trigger.tool`)."""
 
 from typing import Any
 
@@ -9,8 +9,11 @@ import analytiq_data as ad
 
 class FlowsToolTriggerNode:
     key = "flows.trigger.tool"
-    label = "Tool entry"
-    description = "Starts a callable sub-flow; emits one item whose json is the tool arguments object."
+    label = "Sub-flow entry"
+    description = (
+        "Starts when another flow runs this flow (Execute Flow or Flow Tool); "
+        "emits one item from tool arguments or sub-flow input."
+    )
     category = "Generic"
     palette_group = "trigger"
     is_trigger = True
@@ -36,9 +39,14 @@ class FlowsToolTriggerNode:
         node: dict[str, Any],
         inputs: list[list["ad.flows.FlowItem"]],
     ) -> list[list["ad.flows.FlowItem"]]:
-        args = context.trigger_data.get("tool_arguments")
-        if not isinstance(args, dict):
-            args = {}
+        trigger = context.trigger_data or {}
+        if "subflow_input" in trigger:
+            payload = trigger["subflow_input"]
+            args = dict(payload) if isinstance(payload, dict) else {"value": payload}
+        else:
+            args = trigger.get("tool_arguments")
+            if not isinstance(args, dict):
+                args = {}
         item = ad.flows.FlowItem(
             json=dict(args),
             binary={},

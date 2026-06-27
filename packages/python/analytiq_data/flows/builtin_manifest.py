@@ -23,6 +23,7 @@ BUILTIN_MANIFEST_RELPATHS: tuple[str, ...] = (
     "nodes/agent.manifest.json",
     "nodes/kb_tool.manifest.json",
     "nodes/flow_tool.manifest.json",
+    "nodes/execute_flow.manifest.json",
     "nodes/trigger_tool.manifest.json",
     "nodes/respond_to_tool.manifest.json",
     "nodes/trigger_chat.manifest.json",

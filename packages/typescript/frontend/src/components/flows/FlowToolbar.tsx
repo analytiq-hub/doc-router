@@ -62,6 +62,7 @@ const FlowToolbar: React.FC<{
   onDeactivate: () => void;
   onDownloadFlowJson: () => void;
   onOpenSettings: () => void;
+  onOpenToolSettings?: () => void;
   /** When set, shows a Chat test button (flows with Chat Trigger). */
   onOpenChatTest?: () => void;
 }> = ({
@@ -79,6 +80,7 @@ const FlowToolbar: React.FC<{
   onDeactivate,
   onDownloadFlowJson,
   onOpenSettings,
+  onOpenToolSettings,
   onOpenChatTest,
 }) => {
   const [nameHover, setNameHover] = useState(false);
@@ -176,6 +178,19 @@ const FlowToolbar: React.FC<{
                 </button>
               )}
             </MenuItem>
+            {onOpenToolSettings ? (
+              <MenuItem>
+                {({ focus }) => (
+                  <button
+                    type="button"
+                    className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                    onClick={() => onOpenToolSettings()}
+                  >
+                    Tool flow settings
+                  </button>
+                )}
+              </MenuItem>
+            ) : null}
             <MenuItem>
               {({ focus }) => (
                 <button

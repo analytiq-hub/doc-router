@@ -18,6 +18,7 @@ ExecutionMode = Literal[
     "webhook",
     "schedule",
     "error",
+    "sub_flow",
     "sub_flow_tool",
     "chat",
 ]

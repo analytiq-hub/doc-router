@@ -1025,6 +1025,10 @@ export class DocRouterOrg {
     documentId?: string;
     /** When true, include flows that have never had a saved revision (for name reservation, etc.). */
     includeUnsaved?: boolean;
+    /** When set, filter by callable-as-tool metadata. */
+    callableAsTool?: boolean;
+    /** When true, return only active flows. */
+    activeOnly?: boolean;
   }): Promise<ListFlowsResponse> {
     return this.http.get<ListFlowsResponse>(`/v0/orgs/${this.organizationId}/flows`, {
       params: {
@@ -1032,6 +1036,8 @@ export class DocRouterOrg {
         offset: params?.offset ?? 0,
         ...(params?.documentId ? { document_id: params.documentId } : {}),
         ...(params?.includeUnsaved ? { include_unsaved: true } : {}),
+        ...(params?.callableAsTool !== undefined ? { callable_as_tool: params.callableAsTool } : {}),
+        ...(params?.activeOnly ? { active_only: true } : {}),
       },
     });
   }
@@ -1064,7 +1070,15 @@ export class DocRouterOrg {
     return this.http.get<FlowListItem>(`/v0/orgs/${this.organizationId}/flows/${flowId}`);
   }
 
-  async patchFlow(flowId: string, params: { name: string }): Promise<FlowListItem> {
+  async patchFlow(
+    flowId: string,
+    params: {
+      name?: string;
+      callable_as_tool?: boolean;
+      tool_description?: string | null;
+      tool_schema?: Record<string, unknown> | null;
+    },
+  ): Promise<FlowListItem> {
     return this.http.patch<FlowListItem>(`/v0/orgs/${this.organizationId}/flows/${flowId}`, params);
   }
 

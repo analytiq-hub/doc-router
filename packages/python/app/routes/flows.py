@@ -577,10 +577,33 @@ class FlowHeader(BaseModel):
     active: bool
     active_flow_revid: Optional[str] = None
     flow_version: int
+    callable_as_tool: bool = False
+    tool_description: str | None = None
+    tool_schema: dict[str, Any] | None = None
     created_at: datetime
     created_by: str
     updated_at: datetime
     updated_by: str
+
+
+def _flow_header_dict(h: dict[str, Any], *, flow_id: str) -> dict[str, Any]:
+    created_at = h["created_at"]
+    updated_at = h["updated_at"]
+    return {
+        "flow_id": flow_id,
+        "organization_id": h["organization_id"],
+        "name": h["name"],
+        "active": bool(h.get("active")),
+        "active_flow_revid": h.get("active_flow_revid"),
+        "flow_version": int(h.get("flow_version") or 0),
+        "callable_as_tool": bool(h.get("callable_as_tool")),
+        "tool_description": h.get("tool_description"),
+        "tool_schema": h.get("tool_schema"),
+        "created_at": created_at.replace(tzinfo=UTC) if isinstance(created_at, datetime) else created_at,
+        "created_by": h["created_by"],
+        "updated_at": updated_at.replace(tzinfo=UTC) if isinstance(updated_at, datetime) else updated_at,
+        "updated_by": h["updated_by"],
+    }
 
 
 class FlowRevision(BaseModel):
@@ -991,6 +1014,14 @@ async def list_flows(
         None,
         description="When set, return flows whose document-event trigger matches this document's tags.",
     ),
+    callable_as_tool: bool | None = Query(
+        None,
+        description="When set, filter flows by callable_as_tool metadata.",
+    ),
+    active_only: bool = Query(
+        False,
+        description="When true, return only active flows (useful for flow pickers).",
+    ),
     include_unsaved: bool = Query(
         False,
         description="If true, include flow headers that have no saved revision (draft-only).",
@@ -1012,8 +1043,14 @@ async def list_flows(
             raise HTTPException(status_code=404, detail="Document not found")
         return {"items": items, "total": total}
 
+    match: dict[str, Any] = {"organization_id": organization_id}
+    if callable_as_tool is not None:
+        match["callable_as_tool"] = callable_as_tool
+    if active_only:
+        match["active"] = True
+
     base_stages: list[dict[str, Any]] = [
-        {"$match": {"organization_id": organization_id}},
+        {"$match": match},
         {"$sort": {"updated_at": -1}},
         _LOOKUP_LATEST_REVISION,
     ]
@@ -1027,23 +1064,17 @@ async def list_flows(
     for h in rows:
         fid = str(h["_id"])
         latest = h["_latest"][0] if h.get("_latest") else None
+        header = _flow_header_dict(h, flow_id=fid)
         items.append(
             {
                 "flow": {
-                    "flow_id": fid,
-                    "organization_id": h["organization_id"],
-                    "name": h["name"],
-                    "active": bool(h.get("active")),
-                    "active_flow_revid": h.get("active_flow_revid"),
-                    "flow_version": int(h.get("flow_version") or 0),
-                    "created_at": h["created_at"].replace(tzinfo=UTC).isoformat()
-                    if isinstance(h["created_at"], datetime)
-                    else h["created_at"],
-                    "created_by": h["created_by"],
-                    "updated_at": h["updated_at"].replace(tzinfo=UTC).isoformat()
-                    if isinstance(h["updated_at"], datetime)
-                    else h["updated_at"],
-                    "updated_by": h["updated_by"],
+                    **header,
+                    "created_at": header["created_at"].replace(tzinfo=UTC).isoformat()
+                    if isinstance(header["created_at"], datetime)
+                    else header["created_at"],
+                    "updated_at": header["updated_at"].replace(tzinfo=UTC).isoformat()
+                    if isinstance(header["updated_at"], datetime)
+                    else header["updated_at"],
                 },
                 "latest_revision": None if not latest else {
                     "flow_revid": str(latest["_id"]),
@@ -1127,18 +1158,7 @@ async def get_flow(organization_id: str, flow_id: str, current_user: User = Depe
         raise HTTPException(status_code=404, detail="Flow not found")
     latest = await db.flow_revisions.find_one({"flow_id": flow_id}, sort=[("flow_version", -1)])
     return {
-        "flow": {
-            "flow_id": flow_id,
-            "organization_id": h["organization_id"],
-            "name": h["name"],
-            "active": bool(h.get("active")),
-            "active_flow_revid": h.get("active_flow_revid"),
-            "flow_version": int(h.get("flow_version") or 0),
-            "created_at": h["created_at"].replace(tzinfo=UTC),
-            "created_by": h["created_by"],
-            "updated_at": h["updated_at"].replace(tzinfo=UTC),
-            "updated_by": h["updated_by"],
-        },
+        "flow": _flow_header_dict(h, flow_id=flow_id),
         "latest_revision": None if not latest else {"flow_revid": str(latest["_id"]), "flow_version": latest["flow_version"], "graph_hash": latest.get("graph_hash")},
     }
 
@@ -1160,6 +1180,20 @@ async def patch_flow_metadata(
     _audit_keys = frozenset({"updated_at", "updated_by"})
     if not any(k not in _audit_keys for k in updates):
         raise HTTPException(status_code=400, detail="No fields to update")
+
+    if req.callable_as_tool:
+        from analytiq_data.flows.callable_flow import validate_callable_flow_revision
+
+        latest = await db.flow_revisions.find_one({"flow_id": flow_id}, sort=[("flow_version", -1)])
+        if latest:
+            try:
+                validate_callable_flow_revision(
+                    latest.get("nodes") or [],
+                    latest.get("connections") or {},
+                )
+            except ad.flows.FlowValidationError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+
     res = await db.flows.update_one(
         {"_id": ObjectId(flow_id), "organization_id": organization_id},
         {"$set": updates},
@@ -1568,6 +1602,14 @@ async def activate_flow(organization_id: str, flow_id: str, req: ActivateFlowReq
         )
     except ad.flows.FlowValidationError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+    if h.get("callable_as_tool"):
+        from analytiq_data.flows.callable_flow import validate_callable_flow_revision
+
+        try:
+            validate_callable_flow_revision(nodes_list, r.get("connections") or {})
+        except ad.flows.FlowValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     try:
         await ad.flows.run_poll_activation_tests(

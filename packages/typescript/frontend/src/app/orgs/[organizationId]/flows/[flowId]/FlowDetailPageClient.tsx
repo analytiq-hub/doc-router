@@ -15,6 +15,7 @@ import type {
 } from '@docrouter/sdk';
 import FlowToolbar from '@/components/flows/FlowToolbar';
 import FlowSettingsModal from '@/components/flows/FlowSettingsModal';
+import FlowToolSettingsModal from '@/components/flows/FlowToolSettingsModal';
 import FlowEditor from '@/components/flows/FlowEditor';
 import FlowCanvasViewTabs, { FlowWorkspaceTabStraddle, type FlowCanvasView } from '@/components/flows/FlowCanvasViewTabs';
 import { FLOW_WORKSPACE_HEADER_HEIGHT_CLASS, FLOW_WORKSPACE_TITLE_READ_CLASS } from '@/components/flows/flowUiClasses';
@@ -147,6 +148,10 @@ export default function FlowDetailPageClient({
   const [logsFocusExecutionId, setLogsFocusExecutionId] = useState<string | null>(null);
   const [editorOpenConfigNodeId, setEditorOpenConfigNodeId] = useState<string | null>(null);
   const [flowSettingsOpen, setFlowSettingsOpen] = useState(false);
+  const [flowToolSettingsOpen, setFlowToolSettingsOpen] = useState(false);
+  const [flowToolSettingsBusy, setFlowToolSettingsBusy] = useState(false);
+  const [callableAsTool, setCallableAsTool] = useState(false);
+  const [toolDescription, setToolDescription] = useState('');
   const [chatPanelOpen, setChatPanelOpen] = useState(false);
   /** When set, `/webhook-test/{leaf}` is wired to this editor session (until Stop or TTL on server). */
   const [webhookTestListeningLeaf, setWebhookTestListeningLeaf] = useState<string | null>(null);
@@ -351,6 +356,8 @@ export default function FlowDetailPageClient({
         setFlowName(flowItem.flow.name);
         setFlowActive(Boolean(flowItem.flow.active));
         setActiveFlowRevid(flowItem.flow.active_flow_revid ?? null);
+        setCallableAsTool(Boolean(flowItem.flow.callable_as_tool));
+        setToolDescription(flowItem.flow.tool_description ?? '');
         setLatestFlowRevid(flowItem.latest_revision?.flow_revid ?? '');
         setNodeTypes(nts.items);
 
@@ -905,6 +912,28 @@ export default function FlowDetailPageClient({
     [],
   );
 
+  const onApplyFlowToolSettings = useCallback(
+    async (next: { callable_as_tool: boolean; tool_description: string }) => {
+      if (isDraftRoute) return;
+      try {
+        setFlowToolSettingsBusy(true);
+        setMessage('');
+        const res = await api.patchFlow(flowId, {
+          callable_as_tool: next.callable_as_tool,
+          tool_description: next.tool_description || null,
+        });
+        setCallableAsTool(Boolean(res.flow.callable_as_tool));
+        setToolDescription(res.flow.tool_description ?? '');
+        setFlowToolSettingsOpen(false);
+      } catch (err) {
+        setMessage(getApiErrorMsg(err) || 'Failed to update tool flow settings');
+      } finally {
+        setFlowToolSettingsBusy(false);
+      }
+    },
+    [api, flowId, isDraftRoute],
+  );
+
   return (
     <div className="p-4">
       <div className="mx-auto w-full max-w-[1920px]">
@@ -941,6 +970,7 @@ export default function FlowDetailPageClient({
                   onDeactivate={onDeactivate}
                   onDownloadFlowJson={() => void onDownloadFlowJson()}
                   onOpenSettings={() => setFlowSettingsOpen(true)}
+                  onOpenToolSettings={isDraftRoute ? undefined : () => setFlowToolSettingsOpen(true)}
                   onOpenChatTest={
                     !isDraftRoute && chatTriggerNode ? () => setChatPanelOpen(true) : undefined
                   }
@@ -1082,6 +1112,14 @@ export default function FlowDetailPageClient({
         settings={(revision?.settings || {}) as { timezone?: string; resume_on_restart?: boolean }}
         onClose={() => setFlowSettingsOpen(false)}
         onSave={onApplyFlowSettings}
+      />
+
+      <FlowToolSettingsModal
+        open={flowToolSettingsOpen}
+        flow={{ callable_as_tool: callableAsTool, tool_description: toolDescription }}
+        busy={flowToolSettingsBusy}
+        onClose={() => setFlowToolSettingsOpen(false)}
+        onSave={onApplyFlowToolSettings}
       />
 
       {chatPanelOpen && chatTriggerNode && !isDraftRoute ? (
