@@ -566,6 +566,13 @@ export interface ListOrgLLMModelsResponse {
   models: string[];
 }
 
+export interface ListOrgLLMModelsParams {
+  /** Chat-agent subset (litellm_models_chat_agent, fallback enabled), filtered to chat mode. */
+  chatOnly?: boolean;
+  /** All enabled models except embedding models (flow LLM pickers). */
+  excludeEmbeddings?: boolean;
+}
+
 export interface LLMProvider {
   name: string;
   display_name: string;

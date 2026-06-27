@@ -88,6 +88,7 @@ import {
   CreateChatThreadResponse,
   // LLM Models
   ListOrgLLMModelsResponse,
+  ListOrgLLMModelsParams,
   // Webhooks
   WebhookEndpoint,
   CreateWebhookParams,
@@ -755,8 +756,13 @@ export class DocRouterOrg {
 
   // ---------------- LLM Models (Org) ----------------
 
-  async listLLMModels(): Promise<ListOrgLLMModelsResponse> {
-    return this.http.get<ListOrgLLMModelsResponse>(`/v0/orgs/${this.organizationId}/llm/models`);
+  async listLLMModels(params?: ListOrgLLMModelsParams): Promise<ListOrgLLMModelsResponse> {
+    return this.http.get<ListOrgLLMModelsResponse>(`/v0/orgs/${this.organizationId}/llm/models`, {
+      params: {
+        chat_only: params?.chatOnly,
+        exclude_embeddings: params?.excludeEmbeddings,
+      },
+    });
   }
 
   async runLLMChatStream(

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Switch } from '@headlessui/react';
 import Editor from '@monaco-editor/react';
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
-import { apiClient, type DocRouterOrgApi } from '@/utils/api';
+import type { DocRouterOrgApi } from '@/utils/api';
 import {
   flowInputClass,
   flowLabelClass,
@@ -77,27 +77,24 @@ function FlowLlmModelPickerField({
   description,
   value,
   readOnly,
-  organizationId,
+  flowOrgApi,
   onChange,
 }: {
   label: string;
   description?: string;
   value: string;
   readOnly: boolean;
-  organizationId: string;
+  flowOrgApi: DocRouterOrgApi | null | undefined;
   onChange: (model: string) => void;
 }) {
   const [models, setModels] = useState<string[]>([]);
   useEffect(() => {
-    if (!organizationId) return;
+    if (!flowOrgApi) return;
     let cancelled = false;
     void (async () => {
       try {
-        const res = await apiClient.get<{ models: string[] }>(
-          `/v0/orgs/${organizationId}/llm/models`,
-          { params: { exclude_embeddings: true } },
-        );
-        if (!cancelled) setModels(Array.isArray(res.data.models) ? res.data.models : []);
+        const res = await flowOrgApi.listLLMModels({ excludeEmbeddings: true });
+        if (!cancelled) setModels(Array.isArray(res.models) ? res.models : []);
       } catch {
         /* ignore */
       }
@@ -105,7 +102,7 @@ function FlowLlmModelPickerField({
     return () => {
       cancelled = true;
     };
-  }, [organizationId]);
+  }, [flowOrgApi]);
 
   return (
     <div>
@@ -133,25 +130,24 @@ function FlowKnowledgeBasePickerField({
   description,
   value,
   readOnly,
-  organizationId,
+  flowOrgApi,
   onChange,
 }: {
   label: string;
   description?: string;
   value: string;
   readOnly: boolean;
-  organizationId: string;
+  flowOrgApi: DocRouterOrgApi | null | undefined;
   onChange: (kbId: string) => void;
 }) {
   const [items, setItems] = useState<Array<{ kb_id: string; name: string }>>([]);
   useEffect(() => {
+    if (!flowOrgApi) return;
     let cancelled = false;
     void (async () => {
       try {
-        const res = await fetch(`/v0/orgs/${organizationId}/knowledge-bases?limit=200`);
-        if (!res.ok) return;
-        const data = (await res.json()) as { items?: Array<{ kb_id: string; name: string; status?: string }> };
-        const rows = (data.items ?? []).filter((kb) => kb.status === 'active');
+        const res = await flowOrgApi.listKnowledgeBases({ limit: 200 });
+        const rows = (res.knowledge_bases ?? []).filter((kb) => kb.status === 'active');
         if (!cancelled) setItems(rows.map((kb) => ({ kb_id: kb.kb_id, name: kb.name })));
       } catch {
         /* ignore */
@@ -160,7 +156,7 @@ function FlowKnowledgeBasePickerField({
     return () => {
       cancelled = true;
     };
-  }, [organizationId]);
+  }, [flowOrgApi]);
 
   return (
     <div>
@@ -491,7 +487,7 @@ export const FlowNodeParameterFields: React.FC<{
             description={schemaDescription(subschema)}
             value={typeof v === 'string' ? v : ''}
             readOnly={readOnly}
-            organizationId={flowOrgApi?.organizationId ?? ''}
+            flowOrgApi={flowOrgApi}
             onChange={(id) => setField(key, id)}
           />
         </div>
@@ -506,7 +502,7 @@ export const FlowNodeParameterFields: React.FC<{
             description={schemaDescription(subschema)}
             value={typeof v === 'string' ? v : ''}
             readOnly={readOnly}
-            organizationId={flowOrgApi?.organizationId ?? ''}
+            flowOrgApi={flowOrgApi}
             onChange={(id) => setField(key, id)}
           />
         </div>
