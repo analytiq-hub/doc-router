@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Edge } from 'reactflow';
 import type { FlowPinData } from '@docrouter/sdk';
 import {
+  agentToolCallsFromItems,
   buildNodeInputPreview,
   buildNodeOutputPreview,
   collectUpstreamClosure,
@@ -154,5 +155,28 @@ describe('runDataMergedWithPins', () => {
     const rd = { a: { status: 'queued' } };
     expect(runDataMergedWithPins(rd, null)).toEqual(rd);
     expect(runDataMergedWithPins(rd, undefined)).toEqual(rd);
+  });
+});
+
+describe('agentToolCallsFromItems', () => {
+  it('extracts agent_tool_calls from output json items', () => {
+    const calls = agentToolCallsFromItems([
+      {
+        agent_output: 'hi',
+        agent_tool_calls: [
+          {
+            round: 1,
+            tool: 'weather',
+            arguments: { city: 'Boston' },
+            result_preview: '{"temperature":"11 deg F"}',
+            duration_ms: 42,
+            success: true,
+          },
+        ],
+      },
+    ]);
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.tool).toBe('weather');
+    expect(calls[0]?.arguments).toEqual({ city: 'Boston' });
   });
 });

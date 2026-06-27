@@ -111,6 +111,9 @@ import {
   CreateFlowParams,
   SaveRevisionParams,
   RunFlowParams,
+  FlowChatTestRequest,
+  FlowChatStreamEvent,
+  FlowChatBufferedResponse,
   PreviewFlowExpressionParams,
   PreviewFlowExpressionResponse,
   FlowCredentialKindSummary,
@@ -1111,6 +1114,40 @@ export class DocRouterOrg {
       run_data: params?.run_data ?? null,
       dirty_node_ids: params?.dirty_node_ids ?? null,
       revision_snapshot: params?.revision_snapshot ?? null,
+    });
+  }
+
+  /**
+   * Run Chat Trigger against the editor snapshot (no activation required).
+   * Returns buffered JSON when trigger `response_mode` is `last_node`; otherwise streams NDJSON.
+   */
+  async runFlowChatTest(
+    flowId: string,
+    request: FlowChatTestRequest,
+    onStreamEvent?: (event: FlowChatStreamEvent) => void,
+    onError?: (error: Error) => void,
+    abortSignal?: AbortSignal,
+  ): Promise<FlowChatBufferedResponse | void> {
+    const url = `/v0/orgs/${this.organizationId}/flows/${flowId}/chat/test`;
+    if (onStreamEvent) {
+      return this.http.streamNdjson<FlowChatStreamEvent>(
+        url,
+        {
+          chatInput: request.chatInput,
+          sessionId: request.sessionId ?? null,
+          flow_revid: request.flow_revid ?? null,
+          revision_snapshot: request.revision_snapshot,
+        },
+        onStreamEvent,
+        onError,
+        abortSignal,
+      );
+    }
+    return this.http.post<FlowChatBufferedResponse>(url, {
+      chatInput: request.chatInput,
+      sessionId: request.sessionId ?? null,
+      flow_revid: request.flow_revid ?? null,
+      revision_snapshot: request.revision_snapshot,
     });
   }
 

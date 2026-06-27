@@ -285,6 +285,94 @@ export class HttpClient {
     }
   }
 
+  // For NDJSON streaming (flow chat)
+  async streamNdjson<TChunk = Record<string, unknown>>(
+    url: string,
+    data: unknown,
+    onChunk: (chunk: TChunk) => void,
+    onError?: (error: Error) => void,
+    abortSignal?: AbortSignal
+  ): Promise<void> {
+    try {
+      const token = await this.getToken();
+      if (!token) {
+        throw new Error('No token available for streaming request');
+      }
+
+      const response = await fetch(`${this.config.baseURL}${url}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/x-ndjson',
+          'Cache-Control': 'no-cache',
+        },
+        body: JSON.stringify(data),
+        signal: abortSignal,
+      });
+
+      if (!response.ok) {
+        let msg = `HTTP error! status: ${response.status}`;
+        try {
+          const errBody = await response.text();
+          if (errBody) {
+            const parsed = JSON.parse(errBody) as { detail?: unknown };
+            if (typeof parsed.detail === 'string') msg = parsed.detail;
+          }
+        } catch {
+          // ignore parse errors
+        }
+        throw new Error(msg);
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is not available for streaming');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            const trimmed = line.trim();
+            if (!trimmed) continue;
+            try {
+              onChunk(JSON.parse(trimmed) as TChunk);
+            } catch (parseError) {
+              console.warn('Failed to parse NDJSON chunk:', parseError);
+            }
+          }
+        }
+
+        const tail = buffer.trim();
+        if (tail) {
+          try {
+            onChunk(JSON.parse(tail) as TChunk);
+          } catch (parseError) {
+            console.warn('Failed to parse trailing NDJSON chunk:', parseError);
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    } catch (error) {
+      if (onError) {
+        onError(error instanceof Error ? error : new Error('Streaming request failed'));
+      } else {
+        throw error;
+      }
+    }
+  }
+
   // Update token
   updateToken(token: string): void {
     this.config.token = token;

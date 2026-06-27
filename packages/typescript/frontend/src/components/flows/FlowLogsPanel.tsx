@@ -10,7 +10,7 @@ import { formatLocalDate } from '@/utils/date';
 import { ChevronDownIcon, ChevronUpIcon, TrashIcon } from '@heroicons/react/24/outline';
 import type { FlowRfNodeData } from './flowRf';
 import type { FlowExecutionBlobContext } from './flowExecutionBlob';
-import { buildNodeInputPreview, buildNodeOutputPreview } from './flowNodeIoPreview';
+import { buildNodeInputPreview, buildNodeOutputPreview, agentToolCallsFromItems } from './flowNodeIoPreview';
 import { IoViewer } from './IoViewer';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
@@ -288,6 +288,9 @@ const FlowLogsPanel: React.FC<{
             ? (execution.error as Record<string, unknown>)
             : null,
         traceEvents: rec?.trace,
+        agentToolCalls: agentToolCallsFromItems(
+          buildNodeOutputPreview(nodeId, runData, graphPinData ?? undefined).itemsJson,
+        ),
       })
     ) {
       setIoTab('trace');
@@ -364,6 +367,11 @@ const FlowLogsPanel: React.FC<{
     return null;
   }, [execution, selectedNodeId]);
 
+  const selectedAgentToolCalls = useMemo(
+    () => agentToolCallsFromItems(selectedOutputPreview?.itemsJson ?? []),
+    [selectedOutputPreview?.itemsJson],
+  );
+
   const showTraceTab = useMemo(
     () =>
       hasNodeTraceContent({
@@ -371,8 +379,9 @@ const FlowLogsPanel: React.FC<{
         executionError: selectedExecutionError,
         codeLogs: selectedOutputPreview?.logs,
         traceEvents: selectedRunEntry?.trace,
+        agentToolCalls: selectedAgentToolCalls,
       }),
-    [selectedRunEntry, selectedExecutionError, selectedOutputPreview?.logs],
+    [selectedRunEntry, selectedExecutionError, selectedOutputPreview?.logs, selectedAgentToolCalls],
   );
 
   const detailIoTabs = useMemo((): Array<'input' | 'output' | 'trace'> => {
@@ -545,6 +554,8 @@ const FlowLogsPanel: React.FC<{
                             const codeLogs = Array.isArray(rawLogs)
                               ? (rawLogs.filter((x) => typeof x === 'string') as string[])
                               : [];
+                            const nodeOutput = buildNodeOutputPreview(nodeId, runData, graphPinData ?? undefined);
+                            const nodeToolCalls = agentToolCallsFromItems(nodeOutput.itemsJson);
                             const openTraceOnSelect = hasNodeTraceContent({
                               nodeError: rec.error,
                               executionError:
@@ -555,6 +566,7 @@ const FlowLogsPanel: React.FC<{
                                   : null,
                               codeLogs,
                               traceEvents: rec.trace,
+                              agentToolCalls: nodeToolCalls,
                             });
                             return (
                               <li key={nodeId}>
@@ -856,6 +868,7 @@ const FlowLogsPanel: React.FC<{
                                         executionError={selectedExecutionError}
                                         codeLogs={selectedOutputPreview?.logs}
                                         traceEvents={selectedRunEntry?.trace}
+                                        agentToolCalls={selectedAgentToolCalls}
                                       />
                                     </div>
                                   </div>

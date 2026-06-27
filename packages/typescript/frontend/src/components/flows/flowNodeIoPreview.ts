@@ -361,3 +361,42 @@ export function buildNodeOutputPreview(
   const msg = rec.status && rec.status !== 'success' ? `Status: ${rec.status}` : null;
   return { itemsJson, itemsBinaries, logs, message: msg };
 }
+
+export type AgentToolCallTrace = {
+  round: number;
+  tool: string;
+  arguments?: Record<string, unknown>;
+  result_preview?: string;
+  duration_ms?: number;
+  success?: boolean;
+  error?: string;
+};
+
+/** Collect `agent_tool_calls` arrays from agent node output items. */
+export function agentToolCallsFromItems(itemsJson: unknown[]): AgentToolCallTrace[] {
+  const out: AgentToolCallTrace[] = [];
+  for (const item of itemsJson) {
+    if (!item || typeof item !== 'object') continue;
+    const calls = (item as Record<string, unknown>).agent_tool_calls;
+    if (!Array.isArray(calls)) continue;
+    for (const raw of calls) {
+      if (!raw || typeof raw !== 'object') continue;
+      const rec = raw as Record<string, unknown>;
+      const tool = rec.tool;
+      if (typeof tool !== 'string' || !tool.trim()) continue;
+      out.push({
+        round: typeof rec.round === 'number' ? rec.round : 0,
+        tool,
+        arguments:
+          rec.arguments && typeof rec.arguments === 'object'
+            ? (rec.arguments as Record<string, unknown>)
+            : undefined,
+        result_preview: typeof rec.result_preview === 'string' ? rec.result_preview : undefined,
+        duration_ms: typeof rec.duration_ms === 'number' ? rec.duration_ms : undefined,
+        success: typeof rec.success === 'boolean' ? rec.success : undefined,
+        error: typeof rec.error === 'string' ? rec.error : undefined,
+      });
+    }
+  }
+  return out;
+}

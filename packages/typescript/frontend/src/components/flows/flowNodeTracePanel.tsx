@@ -29,9 +29,15 @@ export function hasNodeTraceContent(args: {
   executionError?: Record<string, unknown> | null;
   codeLogs?: string[];
   traceEvents?: unknown;
+  agentToolCalls?: Array<{ tool: string }>;
 }): boolean {
   const logs = args.codeLogs ?? [];
-  if (hasNodeErrorMessage(args.nodeError) || logs.length > 0 || traceEventCount(args.traceEvents) > 0) {
+  if (
+    hasNodeErrorMessage(args.nodeError) ||
+    logs.length > 0 ||
+    traceEventCount(args.traceEvents) > 0 ||
+    (args.agentToolCalls?.length ?? 0) > 0
+  ) {
     return true;
   }
   const execErr = args.executionError;
@@ -83,13 +89,22 @@ export function filterTraceEvents(events: FlowTraceEvent[], filter: TraceEventFi
   return events.filter((ev) => matchesTraceFilter(ev, filter));
 }
 
-/** Node-level trace tab: error envelope, code logs, and structured ``trace[]`` events. */
+/** Node-level trace tab: error envelope, code logs, agent tool calls, and structured ``trace[]`` events. */
 export const FlowNodeTracePanel: React.FC<{
   nodeError: unknown;
   executionError?: Record<string, unknown> | null;
   codeLogs?: string[];
   traceEvents?: unknown;
-}> = ({ nodeError, executionError, codeLogs, traceEvents }) => {
+  agentToolCalls?: Array<{
+    round: number;
+    tool: string;
+    arguments?: Record<string, unknown>;
+    result_preview?: string;
+    duration_ms?: number;
+    success?: boolean;
+    error?: string;
+  }>;
+}> = ({ nodeError, executionError, codeLogs, traceEvents, agentToolCalls }) => {
   const [eventFilter, setEventFilter] = useState<TraceEventFilter>('all');
   const events = asTraceEvents(traceEvents);
   const filteredEvents = useMemo(
@@ -101,6 +116,7 @@ export const FlowNodeTracePanel: React.FC<{
     setEventFilter('all');
   }, [traceEvents]);
   const logs = codeLogs ?? [];
+  const toolCalls = agentToolCalls ?? [];
   const showExecutionError =
     executionError &&
     typeof executionError.message === 'string' &&
@@ -109,7 +125,7 @@ export const FlowNodeTracePanel: React.FC<{
       typeof nodeError !== 'object' ||
       (nodeError as Record<string, unknown>).message !== executionError.message);
 
-  if (!nodeError && !showExecutionError && logs.length === 0 && events.length === 0) {
+  if (!nodeError && !showExecutionError && logs.length === 0 && events.length === 0 && toolCalls.length === 0) {
     return <div className="text-sm text-gray-600">No trace data for this node yet.</div>;
   }
 
@@ -130,6 +146,46 @@ export const FlowNodeTracePanel: React.FC<{
           <pre className="max-h-48 overflow-auto rounded-md border border-[#eceff2] bg-[#fafbfc] p-2 font-mono text-[11px] leading-snug text-gray-900">
             {logs.join('\n')}
           </pre>
+        </div>
+      ) : null}
+      {toolCalls.length > 0 ? (
+        <div>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[#9ca3af]">
+            Agent tool calls
+          </div>
+          <ul className="divide-y divide-[#eceff2] rounded-md border border-[#e8eaed] bg-white text-xs">
+            {toolCalls.map((tc, i) => (
+              <li key={`${tc.tool}-${tc.round}-${i}`} className="px-2 py-2">
+                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+                  <span className="font-medium text-gray-900">{tc.tool}</span>
+                  <span className="text-[10px] text-gray-500">round {tc.round}</span>
+                  {typeof tc.duration_ms === 'number' ? (
+                    <span className="text-[10px] text-gray-500">{tc.duration_ms}ms</span>
+                  ) : null}
+                  {tc.success === false ? (
+                    <span className="rounded bg-red-100 px-1 py-0.5 text-[10px] font-semibold text-red-800">
+                      failed
+                    </span>
+                  ) : tc.success === true ? (
+                    <span className="rounded bg-emerald-100 px-1 py-0.5 text-[10px] font-semibold text-emerald-800">
+                      ok
+                    </span>
+                  ) : null}
+                </div>
+                {tc.arguments ? (
+                  <pre className="mt-1 max-h-24 overflow-auto rounded bg-[#fafbfc] p-1.5 font-mono text-[10px] text-gray-800">
+                    {JSON.stringify(tc.arguments, null, 2)}
+                  </pre>
+                ) : null}
+                {tc.result_preview ? (
+                  <pre className="mt-1 max-h-24 overflow-auto rounded bg-[#fafbfc] p-1.5 font-mono text-[10px] text-gray-800">
+                    {tc.result_preview}
+                  </pre>
+                ) : null}
+                {tc.error ? <div className="mt-1 text-red-700">{tc.error}</div> : null}
+              </li>
+            ))}
+          </ul>
         </div>
       ) : null}
       {events.length > 0 ? (

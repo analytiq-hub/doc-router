@@ -62,6 +62,8 @@ const FlowToolbar: React.FC<{
   onDeactivate: () => void;
   onDownloadFlowJson: () => void;
   onOpenSettings: () => void;
+  /** When set, shows a Chat test button (flows with Chat Trigger). */
+  onOpenChatTest?: () => void;
 }> = ({
   name,
   onNameChange,
@@ -77,6 +79,7 @@ const FlowToolbar: React.FC<{
   onDeactivate,
   onDownloadFlowJson,
   onOpenSettings,
+  onOpenChatTest,
 }) => {
   const [nameHover, setNameHover] = useState(false);
   const [nameFocus, setNameFocus] = useState(false);
@@ -127,6 +130,11 @@ const FlowToolbar: React.FC<{
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {onOpenChatTest ? (
+          <button type="button" className={flowToolbarBtnClass} onClick={onOpenChatTest}>
+            Test chat
+          </button>
+        ) : null}
         <button
           type="button"
           className={flowToolbarBtnClass}

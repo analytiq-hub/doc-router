@@ -19,6 +19,7 @@ import FlowEditor from '@/components/flows/FlowEditor';
 import FlowCanvasViewTabs, { FlowWorkspaceTabStraddle, type FlowCanvasView } from '@/components/flows/FlowCanvasViewTabs';
 import { FLOW_WORKSPACE_HEADER_HEIGHT_CLASS, FLOW_WORKSPACE_TITLE_READ_CLASS } from '@/components/flows/flowUiClasses';
 import FlowLogsPanel from '@/components/flows/FlowLogsPanel';
+import FlowEditorChatPanel from '@/components/flows/FlowEditorChatPanel';
 import { snapRfNodesPositions } from '@/components/flows/canvasGrid';
 import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNodeData } from '@/components/flows/flowRf';
 import {
@@ -146,6 +147,7 @@ export default function FlowDetailPageClient({
   const [logsFocusExecutionId, setLogsFocusExecutionId] = useState<string | null>(null);
   const [editorOpenConfigNodeId, setEditorOpenConfigNodeId] = useState<string | null>(null);
   const [flowSettingsOpen, setFlowSettingsOpen] = useState(false);
+  const [chatPanelOpen, setChatPanelOpen] = useState(false);
   /** When set, `/webhook-test/{leaf}` is wired to this editor session (until Stop or TTL on server). */
   const [webhookTestListeningLeaf, setWebhookTestListeningLeaf] = useState<string | null>(null);
   const [webhookTestListenBusy, setWebhookTestListenBusy] = useState(false);
@@ -268,6 +270,13 @@ export default function FlowDetailPageClient({
     });
     return triggers.map((fn) => ({ id: fn.id, label: (fn.name || '').trim() || fn.type }));
   }, [rfNodes, nodeTypesByKey]);
+
+  const chatTriggerNode = useMemo((): FlowNode | null => {
+    const flowNodes = (rfNodes as Node<FlowRfNodeData>[]).map((x) => x.data.flowNode);
+    const chatTriggers = flowNodes.filter((fn) => fn.type === 'flows.trigger.chat');
+    if (chatTriggers.length !== 1) return null;
+    return chatTriggers[0] ?? null;
+  }, [rfNodes]);
 
   const [lastRunTriggerId, setLastRunTriggerId] = useState<string | null>(null);
   const lastRunTriggerLabel = useMemo(() => {
@@ -923,6 +932,9 @@ export default function FlowDetailPageClient({
                   onDeactivate={onDeactivate}
                   onDownloadFlowJson={() => void onDownloadFlowJson()}
                   onOpenSettings={() => setFlowSettingsOpen(true)}
+                  onOpenChatTest={
+                    !isDraftRoute && chatTriggerNode ? () => setChatPanelOpen(true) : undefined
+                  }
                 />
                 <FlowWorkspaceTabStraddle>
                   <FlowCanvasViewTabs
@@ -1062,6 +1074,21 @@ export default function FlowDetailPageClient({
         onClose={() => setFlowSettingsOpen(false)}
         onSave={onApplyFlowSettings}
       />
+
+      {chatPanelOpen && chatTriggerNode && !isDraftRoute ? (
+        <FlowEditorChatPanel
+          organizationId={organizationId}
+          flowId={flowId}
+          flowRevid={(revision?.flow_revid ?? latestFlowRevid ?? '').trim() || null}
+          chatTriggerNode={chatTriggerNode}
+          buildRevisionSnapshot={buildRevisionSnapshotForRun}
+          onClose={() => setChatPanelOpen(false)}
+          onExecutionId={(executionId) => {
+            setLogsFocusExecutionId(executionId);
+            setLogsExpanded(true);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

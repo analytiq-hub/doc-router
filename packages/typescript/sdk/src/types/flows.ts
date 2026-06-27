@@ -270,6 +270,32 @@ export interface RunFlowParams {
   revision_snapshot?: RevisionSnapshotPayload;
 }
 
+/** POST body for editor Chat Trigger test (`…/flows/{id}/chat/test`). */
+export interface FlowChatTestRequest {
+  chatInput: string;
+  sessionId?: string | null;
+  flow_revid?: string | null;
+  revision_snapshot: RevisionSnapshotPayload;
+}
+
+/** Buffered Chat Trigger response (`response_mode: last_node`). */
+export interface FlowChatBufferedResponse {
+  text: string;
+  session_id: string;
+  execution_id: string;
+}
+
+/** NDJSON stream events from Chat Trigger + agent (`response_mode: streaming`). */
+export type FlowChatStreamEvent =
+  | { type: 'meta'; execution_id: string; session_id?: string }
+  | { type: 'begin'; round: number }
+  | { type: 'content'; round: number; chunk: string }
+  | { type: 'thinking'; round: number; chunk: string }
+  | { type: 'tool_call'; round: number; tool: string; arguments?: Record<string, unknown> }
+  | { type: 'tool_result'; round: number; tool: string; preview?: string; success?: boolean }
+  | { type: 'end'; text: string; rounds_used?: number; execution_id?: string; session_id?: string }
+  | { type: 'error'; message: string };
+
 export interface PreviewFlowExpressionParams {
   expression: string;
   run_data?: Record<string, unknown>;
