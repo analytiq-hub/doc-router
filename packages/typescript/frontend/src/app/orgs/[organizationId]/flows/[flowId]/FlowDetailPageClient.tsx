@@ -39,7 +39,9 @@ import FlowExecutionsView from '@/components/flows/FlowExecutionsView';
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelGroupHandle } from 'react-resizable-panels';
 
 const LOGS_COLLAPSED_PCT = 8;
-const LOGS_MIN_EXPANDED_PCT = LOGS_COLLAPSED_PCT;
+/** Minimum panel height when expanded — must exceed collapsed strip or body content is clipped. */
+const LOGS_MIN_EXPANDED_PCT = 28;
+const LOGS_DEFAULT_EXPANDED_PCT = 50;
 const LOGS_MAX_EXPANDED_PCT = 90;
 const LOGS_STORAGE_KEY = 'docrouter.flow.logsPanel.expandedPct';
 
@@ -169,10 +171,10 @@ export default function FlowDetailPageClient({
   const pinPersistChain = useRef(Promise.resolve());
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [logsExpandedPct, setLogsExpandedPct] = useState<number>(() => {
-    if (typeof window === 'undefined') return 50;
+    if (typeof window === 'undefined') return LOGS_DEFAULT_EXPANDED_PCT;
     const raw = window.localStorage.getItem(LOGS_STORAGE_KEY);
     const n = raw ? Number(raw) : NaN;
-    if (!Number.isFinite(n)) return 50;
+    if (!Number.isFinite(n)) return LOGS_DEFAULT_EXPANDED_PCT;
     return Math.min(LOGS_MAX_EXPANDED_PCT, Math.max(LOGS_MIN_EXPANDED_PCT, n));
   });
 
@@ -213,10 +215,11 @@ export default function FlowDetailPageClient({
         api.setLayout([100 - LOGS_COLLAPSED_PCT, LOGS_COLLAPSED_PCT]);
         return;
       }
-      const pct = Math.min(
-        LOGS_MAX_EXPANDED_PCT,
-        Math.max(LOGS_MIN_EXPANDED_PCT, nextExpandedPct ?? logsExpandedPct),
-      );
+      let pct = nextExpandedPct ?? logsExpandedPct;
+      if (pct <= LOGS_COLLAPSED_PCT + 1) {
+        pct = LOGS_DEFAULT_EXPANDED_PCT;
+      }
+      pct = Math.min(LOGS_MAX_EXPANDED_PCT, Math.max(LOGS_MIN_EXPANDED_PCT, pct));
       api.setLayout([100 - pct, pct]);
     },
     [logsExpandedPct],
@@ -238,6 +241,10 @@ export default function FlowDetailPageClient({
       queueMicrotask(() => applyLogsLayout(true));
     }
   }, [applyLogsLayout, logsFocusExecutionId]);
+
+  useEffect(() => {
+    queueMicrotask(() => applyLogsLayout(logsExpanded));
+  }, [applyLogsLayout, logsExpanded]);
 
   const graphFingerprint = useMemo(() => {
     if (!revision) return null;
