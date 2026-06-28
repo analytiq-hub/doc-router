@@ -168,20 +168,26 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
 
     const load = async () => {
       try {
-        // Fetch metadata and binary in parallel; skip binary if still processing.
         const meta = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf', includeContent: false });
         if (cancelled) return;
         const state = meta.state ?? null;
         const name = meta.document_name ?? null;
         setDocumentState(state);
         const stillProcessing = ['ocr_processing', 'llm_processing'].includes(state ?? '');
-        if (!stillProcessing) {
+        try {
+          // PDF is created at upload; show it while OCR/LLM runs instead of an endless spinner.
           const buffer = await docRouterOrgApi.getDocumentFile({ documentId: id, fileType: 'pdf' });
           if (cancelled) return;
           const blob = new Blob([buffer], { type: 'application/pdf' });
           setUrlFromBlob(blob, name, state);
           setFileName(name ?? '');
           setFileSize(blob.size);
+        } catch (fileErr) {
+          if (!stillProcessing) {
+            throw fileErr;
+          }
+        }
+        if (!cancelled) {
           setLoading(false);
         }
       } catch (e) {
