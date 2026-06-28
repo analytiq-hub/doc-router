@@ -82,6 +82,11 @@ class FlowsAgentNode:
                 "x-ui-group": "Model",
             },
             "temperature": {
+                "title": "Temperature",
+                "description": (
+                    "Sampling randomness for the model. Lower values (e.g. 0.2) are more focused and "
+                    "deterministic; higher values are more varied. Range 0–2."
+                ),
                 "type": "number",
                 "default": 0.2,
                 "minimum": 0,
@@ -89,6 +94,11 @@ class FlowsAgentNode:
                 "x-ui-group": "Model",
             },
             "max_tool_rounds": {
+                "title": "Max tool rounds",
+                "description": (
+                    "Maximum number of LLM ↔ tool-call iterations before the agent stops. Caps runaway "
+                    "loops when the model keeps invoking tools. Range 1–20."
+                ),
                 "type": "integer",
                 "default": 10,
                 "minimum": 1,
@@ -96,27 +106,49 @@ class FlowsAgentNode:
                 "x-ui-group": "Options",
             },
             "mode": {
+                "title": "Mode",
+                "description": (
+                    "Per item runs one agent call for each inbound row. All items combines every row's "
+                    "JSON into a single prompt and produces one output row."
+                ),
                 "type": "string",
                 "enum": ["per_item", "all_items"],
                 "default": "per_item",
                 "x-ui-widget": "select",
+                "x-ui-enum-names": ["Per item", "All items"],
                 "x-ui-group": "Options",
             },
             "response_field": {
+                "title": "Response field",
+                "description": (
+                    "JSON key on each output item where the agent's final text reply is written "
+                    "(default: agent_output)."
+                ),
                 "type": "string",
                 "default": "agent_output",
                 "x-ui-group": "Output",
             },
             "include_tool_trace": {
+                "title": "Include tool trace",
+                "description": (
+                    "When enabled, adds agent_tool_calls to the output with each tool name, arguments, "
+                    "result preview, duration, and success flag."
+                ),
                 "type": "boolean",
                 "default": True,
                 "x-ui-group": "Output",
             },
             "enable_streaming": {
+                "title": "Enable streaming",
+                "description": (
+                    "Auto follows the execution context (e.g. streams in chat). Force on always streams "
+                    "when the model supports it; force off waits for the full reply before continuing."
+                ),
                 "type": "string",
                 "enum": ["auto", "true", "false"],
                 "default": "auto",
                 "x-ui-widget": "select",
+                "x-ui-enum-names": ["Auto", "On", "Off"],
                 "x-ui-group": "Output",
             },
         },
