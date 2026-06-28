@@ -77,7 +77,7 @@ const FlowEditorChatPanel: React.FC<{
   const [sessionId, setSessionId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const pendingToolsRef = useRef<ChatMessage['toolCalls']>([]);
+  const pendingToolsRef = useRef<NonNullable<ChatMessage['toolCalls']>>([]);
   const streamFinishedRef = useRef(false);
 
   useEffect(() => {
