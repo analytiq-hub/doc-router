@@ -15,7 +15,11 @@ export type UpstreamInputSlot = {
   itemsBinaries: Record<string, unknown>[];
 };
 
-export type UpstreamNodeIconMeta = { iconKey?: string | null; isTrigger?: boolean; isDocRouter?: boolean };
+export type UpstreamNodeIconMeta = {
+  iconKey?: string | null;
+  isTrigger?: boolean;
+  isDocRouter?: boolean;
+};
 
 function slotKey(s: UpstreamInputSlot): string {
   return `${s.fromNodeId}:${s.slot}`;

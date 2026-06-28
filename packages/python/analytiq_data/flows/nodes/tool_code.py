@@ -25,7 +25,7 @@ class FlowsToolCodeNode:
     outputs = 1
     output_labels = ["tool"]
     output_port_types = ["flows.tool"]
-    icon_key = "code"
+    icon_key = "tool_code"
     type_version = 1
     experimental = True
     parameter_schema: dict[str, Any] = {

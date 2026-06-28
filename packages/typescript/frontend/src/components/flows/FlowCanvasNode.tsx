@@ -483,7 +483,10 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
                 fallback="trigger"
                 className={[
                   'h-10 w-10',
-                  flowNodeIconColorClass({ isDocRouter: isDocRouterNodeType(nt), isTrigger: true }),
+                  flowNodeIconColorClass({
+                    isDocRouter: isDocRouterNodeType(nt),
+                    isTrigger: true,
+                  }),
                 ].join(' ')}
               />
             </div>
@@ -559,7 +562,10 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
             fallback="process"
             className={[
               'h-9 w-9',
-              flowNodeIconColorClass({ isDocRouter: isDocRouterNodeType(nt), isTrigger: false }),
+              flowNodeIconColorClass({
+                isDocRouter: isDocRouterNodeType(nt),
+                isTrigger: false,
+              }),
             ].join(' ')}
           />
           <OutputHandlesWithContinuation

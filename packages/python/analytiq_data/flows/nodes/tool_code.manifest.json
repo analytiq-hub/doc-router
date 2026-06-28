@@ -14,7 +14,7 @@
   "output_labels": [
     "tool"
   ],
-  "icon_key": "code",
+  "icon_key": "tool_code",
   "executor": {
     "kind": "python_class",
     "import": "analytiq_data.flows.nodes.tool_code",

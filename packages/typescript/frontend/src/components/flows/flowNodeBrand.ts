@@ -3,6 +3,8 @@ import type { FlowNodeType } from '@docrouter/sdk';
 type FlowNodeBrandInput = Pick<FlowNodeType, 'key'> & {
   palette_group?: string | null;
   category?: string | null;
+  tool_provider?: boolean;
+  tool_consumer?: boolean;
 };
 
 /** True when the node belongs to the DocRouter product (OCR, LLM, document triggers, …). */
@@ -14,6 +16,17 @@ export function isDocRouterNodeType(nt: FlowNodeBrandInput | null | undefined): 
   if (paletteGroup === 'docrouter') return true;
   const category = nt.category?.trim().toLowerCase();
   if (category === 'docrouter') return true;
+  return false;
+}
+
+/** Agent graph nodes (palette grouping, tool wiring, chat entry). */
+export function isAiNodeType(nt: FlowNodeBrandInput | null | undefined): boolean {
+  if (!nt?.key) return false;
+  const paletteGroup = nt.palette_group?.trim().toLowerCase();
+  if (paletteGroup === 'ai') return true;
+  if (nt.tool_provider || nt.tool_consumer) return true;
+  const key = nt.key;
+  if (key === 'flows.trigger.chat' || key === 'flows.trigger.tool') return true;
   return false;
 }
 

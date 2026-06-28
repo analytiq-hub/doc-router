@@ -3,16 +3,25 @@
 import React from 'react';
 import {
   ArrowsRightLeftIcon,
+  ArrowPathRoundedSquareIcon,
+  ArrowUturnLeftIcon,
+  BoltIcon,
+  BookOpenIcon,
+  ChatBubbleLeftRightIcon,
   ClockIcon,
   CodeBracketSquareIcon,
+  CommandLineIcon,
   CursorArrowRaysIcon,
   DocumentMagnifyingGlassIcon,
   DocumentTextIcon,
   GlobeAltIcon,
+  QueueListIcon,
+  RectangleStackIcon,
   SparklesIcon,
   Square2StackIcon,
   Squares2X2Icon,
 } from '@heroicons/react/24/solid';
+import { AnalytiqHubIcon } from './icons/AnalytiqHubIcon';
 import { GmailIcon } from './icons/GmailIcon';
 import { GoogleDriveIcon } from './icons/GoogleDriveIcon';
 import { MicrosoftOneDriveIcon } from './icons/MicrosoftOneDriveIcon';
@@ -25,6 +34,7 @@ export const FLOW_BUILTIN_ICON_KEYS = [
   'document_event_trigger',
   'http_request',
   'webhook',
+  'webhook_trigger',
   'branch',
   'merge',
   'code',
@@ -35,6 +45,15 @@ export const FLOW_BUILTIN_ICON_KEYS = [
   'microsoft_onedrive',
   'microsoft_outlook',
   'schedule_trigger',
+  'chat_trigger',
+  'agent',
+  'tool_code',
+  'flow_tool',
+  'execute_flow',
+  'knowledge_base',
+  'tool_executor',
+  'tool_trigger',
+  'respond_to_webhook',
 ] as const;
 
 export type FlowBuiltinIconKey = (typeof FLOW_BUILTIN_ICON_KEYS)[number];
@@ -66,6 +85,7 @@ export function FlowNodeTypeIcon({
         return <DocumentTextIcon className={className} aria-hidden={ariaHidden} />;
       case 'http_request':
       case 'webhook':
+      case 'webhook_trigger':
         return <GlobeAltIcon className={className} aria-hidden={ariaHidden} />;
       case 'branch':
         return <ArrowsRightLeftIcon className={className} aria-hidden={ariaHidden} />;
@@ -73,10 +93,28 @@ export function FlowNodeTypeIcon({
         return <Square2StackIcon className={className} aria-hidden={ariaHidden} />;
       case 'code':
         return <CodeBracketSquareIcon className={className} aria-hidden={ariaHidden} />;
+      case 'tool_code':
+        return <CommandLineIcon className={className} aria-hidden={ariaHidden} />;
       case 'ocr':
         return <DocumentMagnifyingGlassIcon className={className} aria-hidden={ariaHidden} />;
       case 'llm_run':
         return <SparklesIcon className={className} aria-hidden={ariaHidden} />;
+      case 'agent':
+        return <AnalytiqHubIcon className={className} />;
+      case 'chat_trigger':
+        return <ChatBubbleLeftRightIcon className={className} aria-hidden={ariaHidden} />;
+      case 'flow_tool':
+        return <RectangleStackIcon className={className} aria-hidden={ariaHidden} />;
+      case 'execute_flow':
+        return <ArrowPathRoundedSquareIcon className={className} aria-hidden={ariaHidden} />;
+      case 'knowledge_base':
+        return <BookOpenIcon className={className} aria-hidden={ariaHidden} />;
+      case 'tool_executor':
+        return <BoltIcon className={className} aria-hidden={ariaHidden} />;
+      case 'tool_trigger':
+        return <QueueListIcon className={className} aria-hidden={ariaHidden} />;
+      case 'respond_to_webhook':
+        return <ArrowUturnLeftIcon className={className} aria-hidden={ariaHidden} />;
       case 'google_drive':
         return <GoogleDriveIcon className={className} />;
       case 'gmail':

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   flowNodeIconColorClass,
   flowNodePaletteIconWellClass,
+  isAiNodeType,
   isDocRouterNodeType,
 } from './flowNodeBrand';
 
@@ -28,6 +29,13 @@ describe('flowNodeBrand', () => {
         category: 'DocRouter',
       }),
     ).toBe(true);
+  });
+
+  it('detects AI / agent graph nodes', () => {
+    expect(isAiNodeType({ key: 'flows.agent', palette_group: 'ai' })).toBe(true);
+    expect(isAiNodeType({ key: 'flows.tool.code', palette_group: 'ai', tool_provider: true })).toBe(true);
+    expect(isAiNodeType({ key: 'flows.trigger.chat', palette_group: 'trigger' })).toBe(true);
+    expect(isAiNodeType({ key: 'flows.code', palette_group: 'core' })).toBe(false);
   });
 
   it('uses primary color for docrouter icons', () => {

@@ -859,7 +859,10 @@ const FlowNodeConfigModal: React.FC<{
   const upstreamNodeIcons = useMemo(() => {
     if (!nodeTypes?.length) return undefined;
     const byKey = new Map(nodeTypes.map((nt) => [nt.key, nt]));
-    const m = new Map<string, { iconKey?: string | null; isTrigger?: boolean; isDocRouter?: boolean }>();
+    const m = new Map<
+      string,
+      { iconKey?: string | null; isTrigger?: boolean; isDocRouter?: boolean }
+    >();
     for (const n of allNodes ?? []) {
       const nt = byKey.get(n.type);
       m.set(n.id, {

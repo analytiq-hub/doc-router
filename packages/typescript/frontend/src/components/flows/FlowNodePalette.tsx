@@ -6,7 +6,11 @@ import {
   MagnifyingGlassIcon,
 } from '@heroicons/react/24/outline';
 import { FlowNodeTypeIcon } from './FlowNodeTypeIcon';
-import { flowNodeIconColorClass, flowNodePaletteIconWellClass, isDocRouterNodeType } from './flowNodeBrand';
+import {
+  flowNodeIconColorClass,
+  flowNodePaletteIconWellClass,
+  isDocRouterNodeType,
+} from './flowNodeBrand';
 import {
   FLOW_PALETTE_SECTION_ORDER,
   paletteSectionDescription,
