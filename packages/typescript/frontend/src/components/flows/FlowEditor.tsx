@@ -7,9 +7,7 @@ import ReactFlow, {
   Controls,
   Panel,
   addEdge,
-  getNodesBounds,
   getViewportForBounds,
-  MarkerType,
   useNodesInitialized,
   useReactFlow,
   useStore,
@@ -80,10 +78,21 @@ import { flowRunButtonCanvasClass, FLOW_EXECUTE_FLOW_LABEL, FLOW_NODE_PALETTE_WI
 import { flowWorkspaceDropdownItemSimpleClass, flowWorkspaceMenuPanelClass } from './flowWorkspaceMenu';
 import { isFlowEditorEditableTarget, isFlowEditorUndoKey } from './flowGraphUndo';
 import { useFlowGraphUndo } from './useFlowGraphUndo';
+import {
+  computeFlowCanvasLayout,
+  flowCanvasLayoutNodes,
+  flowCanvasLayoutTarget,
+} from './flowCanvasLayout';
+import TidyUpIcon from './icons/TidyUpIcon';
+import {
+  FLOW_CANVAS_FIT_MAX_ZOOM,
+  FLOW_CANVAS_FIT_MIN_ZOOM,
+  FLOW_CANVAS_FIT_PADDING,
+  FLOW_EDGE_MARKER,
+  getFlowCanvasNodesBounds,
+} from './flowCanvasConstants';
 
 export type FlowExecuteWorkflowTriggerOption = { id: string; label: string };
-
-const FLOW_EDGE_MARKER = { type: MarkerType.ArrowClosed } as const;
 
 const FLOW_EDITOR_RF_PRO_OPTIONS = { hideAttribution: true } as const;
 const FLOW_EDITOR_DEFAULT_EDGE_OPTIONS = {
@@ -95,9 +104,13 @@ const FLOW_EDITOR_DEFAULT_EDGE_OPTIONS = {
 function CanvasZoomControls({
   addFooterPadding,
   runButton,
+  onTidyUp,
+  tidyUpDisabled,
 }: {
   addFooterPadding: boolean;
   runButton?: React.ReactNode;
+  onTidyUp?: () => void;
+  tidyUpDisabled?: boolean;
 }) {
   const { setViewport, getNodes, zoomIn, zoomOut, zoomTo } = useReactFlow();
   const nodesInitialized = useNodesInitialized();
@@ -105,16 +118,32 @@ function CanvasZoomControls({
   const height = useStore((s) => s.height);
   const didInitialFitRef = useRef(false);
 
+  const fitCanvasViewport = useCallback(
+    async (nodesToFit: ReturnType<typeof getNodes>) => {
+      if (!nodesToFit.length || width === 0 || height === 0) return;
+
+      const footerHeightPx = addFooterPadding ? 120 : 90;
+      const viewportHeight = Math.max(1, height - footerHeightPx);
+      const bounds = getFlowCanvasNodesBounds(nodesToFit);
+      if (bounds.width <= 0 || bounds.height <= 0) return;
+
+      const next = getViewportForBounds(
+        bounds,
+        width,
+        viewportHeight,
+        FLOW_CANVAS_FIT_MIN_ZOOM,
+        FLOW_CANVAS_FIT_MAX_ZOOM,
+        FLOW_CANVAS_FIT_PADDING,
+      );
+      await setViewport(next, { duration: 200 });
+    },
+    [addFooterPadding, height, setViewport, width],
+  );
+
   const onZoomToFit = useCallback(async () => {
     const nodes = getNodes().filter((n) => !n.hidden);
-    if (!nodes.length || width === 0 || height === 0) return;
-
-    // Reserve space: zoom panel bottom-left + optional execute bottom-center (~one row tall).
-    const footerHeightPx = addFooterPadding ? 120 : 90;
-    const bounds = getNodesBounds(nodes);
-    const next = getViewportForBounds(bounds, width, Math.max(1, height - footerHeightPx), 0.15, 1, 0.2);
-    await setViewport(next, { duration: 200 });
-  }, [addFooterPadding, getNodes, height, setViewport, width]);
+    await fitCanvasViewport(nodes);
+  }, [fitCanvasViewport, getNodes]);
 
   useEffect(() => {
     if (!nodesInitialized) return;
@@ -122,6 +151,21 @@ function CanvasZoomControls({
     didInitialFitRef.current = true;
     void onZoomToFit();
   }, [nodesInitialized, onZoomToFit]);
+
+  const onZoomToFitSelection = useCallback(async () => {
+    const selected = getNodes().filter((n) => n.selected && !n.hidden);
+    const nodesToFit = selected.length > 1 ? selected : getNodes().filter((n) => !n.hidden);
+    await fitCanvasViewport(nodesToFit);
+  }, [fitCanvasViewport, getNodes]);
+
+  const handleTidyUp = useCallback(() => {
+    if (tidyUpDisabled || !onTidyUp) return;
+    onTidyUp();
+    // Wait for layout positions to commit and handles to re-measure before fitting.
+    window.setTimeout(() => {
+      void onZoomToFitSelection();
+    }, 120);
+  }, [onTidyUp, onZoomToFitSelection, tidyUpDisabled]);
 
   return (
     <>
@@ -163,6 +207,19 @@ function CanvasZoomControls({
           >
             <ArrowUturnLeftIcon className="h-5 w-5" />
           </button>
+          {onTidyUp ? (
+            <button
+              type="button"
+              onClick={handleTidyUp}
+              disabled={tidyUpDisabled}
+              title="Tidy up"
+              aria-label="Tidy up"
+              data-test-id="tidy-up-button"
+              className="rounded-md p-1.5 text-gray-700 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <TidyUpIcon className="h-4 w-4" />
+            </button>
+          ) : null}
         </div>
       </Panel>
       {runButton ? (
@@ -401,6 +458,39 @@ const FlowEditor: React.FC<{
     endDragUndoSession();
   }, [endDragUndoSession]);
 
+  const onTidyUpCanvas = useCallback(() => {
+    if (nodes.length === 0) return;
+    const target = flowCanvasLayoutTarget(nodes);
+    const scopeNodes = flowCanvasLayoutNodes(nodes, target);
+    const { nodes: positions } = computeFlowCanvasLayout({
+      nodes: scopeNodes,
+      edges,
+      nodeTypesByKey,
+      target,
+    });
+    if (positions.length === 0) return;
+
+    pushUndoSnapshot();
+    const posById = new Map(positions.map((p) => [p.id, p]));
+    onNodesChange(
+      nodes.map((n) => {
+        const next = posById.get(n.id);
+        if (!next) return n;
+        return {
+          ...n,
+          position: { x: next.x, y: next.y },
+          data: {
+            ...n.data,
+            flowNode: {
+              ...n.data.flowNode,
+              position: [next.x, next.y],
+            },
+          },
+        };
+      }),
+    );
+  }, [edges, nodeTypesByKey, nodes, onNodesChange, pushUndoSnapshot]);
+
   const flowBlobDownloadContext = useMemo((): FlowExecutionBlobContext | null => {
     const eid = executionForIo?.execution_id?.trim();
     const oid = flowOrgApi?.organizationId?.trim();
@@ -489,14 +579,21 @@ const FlowEditor: React.FC<{
         closePalette();
         return;
       }
-      if (!isFlowEditorUndoKey(e)) return;
+      if (isFlowEditorUndoKey(e)) {
+        if (isFlowEditorEditableTarget(e.target)) return;
+        e.preventDefault();
+        undoGraphChange();
+        return;
+      }
+      const isTidyUp = e.shiftKey && e.altKey && e.key.toLowerCase() === 't';
+      if (!isTidyUp) return;
       if (isFlowEditorEditableTarget(e.target)) return;
       e.preventDefault();
-      undoGraphChange();
+      onTidyUpCanvas();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [nodePaletteOpen, closePalette, undoGraphChange]);
+  }, [nodePaletteOpen, closePalette, undoGraphChange, onTidyUpCanvas]);
 
   useEffect(() => {
     return () => {
@@ -1187,6 +1284,8 @@ const FlowEditor: React.FC<{
               <Controls className="!shadow-md" position="bottom-left" showZoom={false} showFitView={false} showInteractive={false} />
               <CanvasZoomControls
                 addFooterPadding={Boolean(onExecute || executeWorkflowTriggers.length > 1)}
+                onTidyUp={onTidyUpCanvas}
+                tidyUpDisabled={nodes.length === 0}
                 runButton={
                   executeWorkflowTriggers.length > 1 && onExecuteFromWorkflowTrigger ? (
                     <div className="inline-flex shrink-0 overflow-hidden rounded-md shadow-md ring-1 ring-black/10">

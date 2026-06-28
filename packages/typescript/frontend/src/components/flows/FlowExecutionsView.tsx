@@ -5,7 +5,6 @@ import ReactFlow, {
   Background,
   BackgroundVariant,
   Controls,
-  MarkerType,
   Panel as RFPanel,
   useReactFlow,
   type Edge,
@@ -29,9 +28,8 @@ import FlowLogsPanel from './FlowLogsPanel';
 import type { FlowExecutionBlobContext } from './flowExecutionBlob';
 import FlowNodeConfigModal from './FlowNodeConfigModal';
 import { applyExecutionStatusToNodes } from './flowNodeRunStatus';
+import { FLOW_CANVAS_FIT_MAX_ZOOM, FLOW_CANVAS_FIT_PADDING, FLOW_EDGE_MARKER } from './flowCanvasConstants';
 import { Panel, PanelGroup, PanelResizeHandle, type ImperativePanelGroupHandle } from 'react-resizable-panels';
-
-const FLOW_EDGE_MARKER = { type: MarkerType.ArrowClosed } as const;
 
 /** SSR + initial client paint: must equal server HTML so hydrated nodes match panels. Persisted ratio is reapplied after mount via `PanelGroup#setLayout`. */
 const EXECUTIONS_LIST_PANEL_DEFAULT_PCT = 30;
@@ -43,7 +41,10 @@ const RF_EXEC_VIEW_DEFAULT_EDGE_OPTIONS = {
 } as const;
 
 const RF_EXEC_VIEW_PRO_OPTIONS = { hideAttribution: true } as const;
-const RF_EXEC_VIEW_FIT_OPTIONS = { padding: 0.2, maxZoom: 1 } as const;
+const RF_EXEC_VIEW_FIT_OPTIONS = {
+  padding: FLOW_CANVAS_FIT_PADDING,
+  maxZoom: FLOW_CANVAS_FIT_MAX_ZOOM,
+} as const;
 
 const EXECUTIONS_LIST_SPLIT_STORAGE_KEY = 'docrouter.flow.executionsView.listLeftPct';
 

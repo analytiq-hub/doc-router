@@ -47,6 +47,15 @@ function handleClassForPortType(portType: FlowConnectionType): string {
   return handleClass;
 }
 
+function isBottomInputPort(portType: FlowConnectionType): boolean {
+  return portType === 'docrouter.ocr';
+}
+
+/** Vertical position for a left-edge input handle (excludes bottom-mounted ports). */
+function leftInputTopPct(leftIndex: number, leftCount: number): number {
+  return (100 * (leftIndex + 1)) / (leftCount + 1);
+}
+
 /** Trigger node body height (`h-[96px]` below); hover run button is exactly ⅓. */
 const FLOW_TRIGGER_NODE_BODY_PX = 96;
 const TRIGGER_EXECUTE_BTN_H_PX = FLOW_TRIGGER_NODE_BODY_PX / 3;
@@ -279,6 +288,11 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
   const outputs = Math.max(0, nt?.outputs ?? 1);
   const inputTypes = useMemo(() => inputPortTypes(nt), [nt]);
   const outputTypes = useMemo(() => outputPortTypes(nt), [nt]);
+  const leftInputHandleIndices = useMemo(
+    () =>
+      inputTypes.flatMap((portType, index) => (isBottomInputPort(portType) ? [] : [index])),
+    [inputTypes],
+  );
 
   const typeLabel = nt?.label ?? node.type;
   const displayLabel = node.name?.trim() ? node.name : typeLabel;
@@ -528,20 +542,22 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
           {isPinned && <PinnedBadge />}
           {Array.from({ length: Math.max(inputs, 0) }).map((_, i) => {
             const portType = inputTypes[i] ?? 'main';
-            const isOcrPort = portType === 'docrouter.ocr';
+            const isBottomPort = isBottomInputPort(portType);
+            const leftIndex = leftInputHandleIndices.indexOf(i);
+            const leftCount = leftInputHandleIndices.length;
             return (
               <Handle
                 key={`in-${i}`}
                 id={`in-${i}`}
                 type="target"
-                position={isOcrPort ? Position.Bottom : Position.Left}
+                position={isBottomPort ? Position.Bottom : Position.Left}
                 className={handleClassForPortType(portType)}
                 isConnectableStart={false}
                 isConnectableEnd
                 style={
-                  isOcrPort
+                  isBottomPort
                     ? { left: '14%', bottom: '-6px', top: 'auto', transform: 'none' }
-                    : { top: `${(100 * (i + 1)) / (inputs + 1)}%` }
+                    : { top: `${leftInputTopPct(leftIndex, leftCount)}%` }
                 }
               />
             );
@@ -561,7 +577,7 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
             iconKey={nt?.icon_key}
             fallback="process"
             className={[
-              'h-9 w-9',
+              'h-10 w-10',
               flowNodeIconColorClass({
                 isDocRouter: isDocRouterNodeType(nt),
                 isTrigger: false,

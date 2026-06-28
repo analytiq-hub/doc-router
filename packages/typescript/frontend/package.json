@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@auth/mongodb-adapter": "^3.5.3",
+    "@dagrejs/dagre": "^3.0.0",
     "@docrouter/sdk": "file:../sdk",
     "@emotion/react": "^11.13.3",
     "@emotion/styled": "^11.13.0",
