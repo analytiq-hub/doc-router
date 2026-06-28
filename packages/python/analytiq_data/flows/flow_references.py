@@ -59,17 +59,30 @@ async def find_flows_referencing_target(
         pass
 
     headers = await db.flows.find(hdr_filter, {"_id": 1, "name": 1}).to_list(None)
+    if not headers:
+        return []
+
+    parent_flow_ids = [str(hdr["_id"]) for hdr in headers]
+    hdr_by_id = {str(hdr["_id"]): hdr for hdr in headers}
+
+    pipeline = [
+        {"$match": {"flow_id": {"$in": parent_flow_ids}}},
+        {"$sort": {"flow_id": 1, "flow_version": -1}},
+        {
+            "$group": {
+                "_id": "$flow_id",
+                "nodes": {"$first": "$nodes"},
+            }
+        },
+    ]
+    latest_revisions = await db.flow_revisions.aggregate(pipeline).to_list(None)
+
     refs: list[FlowTargetReference] = []
-    for hdr in headers:
-        parent_flow_id = str(hdr["_id"])
-        latest = await db.flow_revisions.find_one(
-            {"flow_id": parent_flow_id},
-            sort=[("flow_version", -1)],
-            projection={"nodes": 1},
-        )
-        if not latest:
+    for rev in latest_revisions:
+        hdr = hdr_by_id.get(str(rev["_id"]))
+        if hdr is None:
             continue
-        nodes = latest.get("nodes")
+        nodes = rev.get("nodes")
         if not isinstance(nodes, list):
             continue
         for node in nodes:

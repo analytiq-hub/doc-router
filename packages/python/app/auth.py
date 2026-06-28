@@ -165,6 +165,7 @@ async def get_current_user(
 
     raise HTTPException(status_code=401, detail="Invalid authentication credentials: invalid token")
 
+
 # Add this helper function to check admin status
 async def get_admin_user(
     credentials: HTTPAuthorizationCredentials = Security(security),

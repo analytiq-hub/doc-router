@@ -34,15 +34,6 @@ class FlowsChatTriggerNode:
                 "x-ui-widget": "select",
                 "x-ui-enum-names": ["Streaming", "Last node"],
             },
-            "authentication": {
-                "title": "Authentication",
-                "description": "Who may POST chat messages. Org member requires a signed-in DocRouter user; API key and public modes are reserved for a future embed widget.",
-                "type": "string",
-                "enum": ["none", "org_member", "api_key"],
-                "default": "org_member",
-                "x-ui-widget": "select",
-                "x-ui-enum-names": ["None", "Org member", "API key"],
-            },
             "title": {
                 "title": "Title",
                 "description": "Heading shown in the chat panel and future embed UI. Defaults to the flow name when empty.",

@@ -8,7 +8,7 @@ import uuid
 from typing import Any
 
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -162,6 +162,7 @@ async def _run_chat_flow(
 
 def _streaming_response(
     *,
+    request: Request,
     db,
     exec_id: str,
     session_id: str,
@@ -186,6 +187,10 @@ def _streaming_response(
                 start_trigger_node_id=str(chat_node["id"]),
             )
             status = str(result.get("status") or "success")
+        except asyncio.CancelledError:
+            status = "stopped"
+            ctx.stop_requested = True
+            raise
         except Exception as e:
             await queue.put({"type": "error", "message": str(e)})
             status = "error"
@@ -207,21 +212,35 @@ def _streaming_response(
                 logger.exception(f"flow chat: failed to finalize execution {exec_id}")
             await queue.put(None)
 
-    asyncio.create_task(run_flow_task())
+    task = asyncio.create_task(run_flow_task())
 
     async def stream_body():
-        yield ndjson_line(
-            {
-                "type": "meta",
-                "execution_id": exec_id,
-                "session_id": session_id,
-            }
-        )
-        while True:
-            event = await queue.get()
-            if event is None:
-                break
-            yield ndjson_line(event)
+        try:
+            yield ndjson_line(
+                {
+                    "type": "meta",
+                    "execution_id": exec_id,
+                    "session_id": session_id,
+                }
+            )
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=0.5)
+                except asyncio.TimeoutError:
+                    continue
+                if event is None:
+                    break
+                yield ndjson_line(event)
+        finally:
+            ctx.stop_requested = True
+            if not task.done():
+                task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
 
     return StreamingResponse(
         stream_body(),
@@ -305,6 +324,7 @@ async def post_flow_chat_test(
     organization_id: str,
     flow_id: str,
     body: ChatTestRequest,
+    request: Request,
     current_user: User = Depends(get_org_user),
 ):
     """Run Chat Trigger against an editor snapshot (activation not required)."""
@@ -336,6 +356,7 @@ async def post_flow_chat_test(
 
     if response_mode == "streaming":
         return _streaming_response(
+            request=request,
             db=db,
             exec_id=exec_id,
             session_id=session_id,
@@ -359,6 +380,7 @@ async def post_flow_chat(
     organization_id: str,
     flow_id: str,
     body: ChatMessageRequest,
+    request: Request,
     current_user: User = Depends(get_org_user),
 ):
     _ = current_user
@@ -385,6 +407,7 @@ async def post_flow_chat(
         "settings": revision_doc.get("settings") or {},
         "pin_data": revision_doc.get("pin_data"),
     }
+    chat_node = _find_chat_trigger(revision)
     session_id = (body.sessionId or "").strip() or str(uuid.uuid4())
 
     exec_id, ctx, chat_node, response_mode = await _run_chat_flow(
@@ -399,6 +422,7 @@ async def post_flow_chat(
 
     if response_mode == "streaming":
         return _streaming_response(
+            request=request,
             db=db,
             exec_id=exec_id,
             session_id=session_id,
