@@ -78,6 +78,8 @@ import { useOrgFlowNameMap } from './useOrgFlowNameMap';
 import { flowNodeTypeFor, isValidFlowConnection } from './flowConnectionValidation';
 import { flowRunButtonCanvasClass, FLOW_EXECUTE_FLOW_LABEL, FLOW_NODE_PALETTE_WIDTH_PX } from './flowUiClasses';
 import { flowWorkspaceDropdownItemSimpleClass, flowWorkspaceMenuPanelClass } from './flowWorkspaceMenu';
+import { isFlowEditorEditableTarget, isFlowEditorUndoKey } from './flowGraphUndo';
+import { useFlowGraphUndo } from './useFlowGraphUndo';
 
 export type FlowExecuteWorkflowTriggerOption = { id: string; label: string };
 
@@ -378,9 +380,26 @@ const FlowEditor: React.FC<{
   const pendingOutputAppendRef = useRef<OutputAppendPayload | null>(null);
   const nodesRef = useRef(nodes);
   nodesRef.current = nodes;
+  const {
+    pushUndoSnapshot,
+    pushUndoBeforePatch,
+    beginDragUndoSession,
+    endDragUndoSession,
+    prepareNodeChanges,
+    prepareEdgeChanges,
+    undo: undoGraphChange,
+  } = useFlowGraphUndo(flowId, nodes, edges, onNodesChange, onEdgesChange);
   const renameAnchorRef = useRef<Map<string, string>>(new Map());
   const renameDebounceRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const runData = executionForIo?.run_data as Record<string, unknown> | undefined;
+
+  const onDragSessionStart = useCallback(() => {
+    beginDragUndoSession();
+  }, [beginDragUndoSession]);
+
+  const onDragSessionStop = useCallback(() => {
+    endDragUndoSession();
+  }, [endDragUndoSession]);
 
   const flowBlobDownloadContext = useMemo((): FlowExecutionBlobContext | null => {
     const eid = executionForIo?.execution_id?.trim();
@@ -465,13 +484,19 @@ const FlowEditor: React.FC<{
   }, []);
 
   useEffect(() => {
-    if (!nodePaletteOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closePalette();
+      if (e.key === 'Escape' && nodePaletteOpen) {
+        closePalette();
+        return;
+      }
+      if (!isFlowEditorUndoKey(e)) return;
+      if (isFlowEditorEditableTarget(e.target)) return;
+      e.preventDefault();
+      undoGraphChange();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [nodePaletteOpen, closePalette]);
+  }, [nodePaletteOpen, closePalette, undoGraphChange]);
 
   useEffect(() => {
     return () => {
@@ -536,6 +561,7 @@ const FlowEditor: React.FC<{
       );
       if (duplicate) return;
 
+      pushUndoSnapshot();
       onEdgesChange(
         addEdge(
           {
@@ -552,7 +578,7 @@ const FlowEditor: React.FC<{
         ),
       );
     },
-    [edges, nodeTypesByKey, nodes, onEdgesChange],
+    [edges, nodeTypesByKey, nodes, onEdgesChange, pushUndoSnapshot],
   );
 
   const isValidConnection = useCallback(
@@ -571,6 +597,7 @@ const FlowEditor: React.FC<{
   const onPatchNodeById = useCallback(
     (id: string, patch: Partial<FlowNode>) => {
       if (!id) return;
+      pushUndoBeforePatch();
       const prevRf = nodes.find((n) => n.id === id);
       if (patch.name !== undefined && prevRf && !renameAnchorRef.current.has(id)) {
         renameAnchorRef.current.set(id, flowCanvasDisplayName(prevRf.data.flowNode));
@@ -602,11 +629,12 @@ const FlowEditor: React.FC<{
         );
       }
     },
-    [flushRenameRewrite, nodeTypesByKey, nodes, onNodesChange],
+    [flushRenameRewrite, nodeTypesByKey, nodes, onNodesChange, pushUndoBeforePatch],
   );
 
   const handleRfNodesChange = useCallback(
     (changes: NodeChange[]) => {
+      prepareNodeChanges(changes);
       const removedIds = changes
         .filter((c): c is NodeChange & { type: 'remove'; id: string } => c.type === 'remove')
         .map((c) => c.id);
@@ -631,7 +659,7 @@ const FlowEditor: React.FC<{
       }
       onNodesChange(next);
     },
-    [nodes, onNodesChange],
+    [nodes, onNodesChange, prepareNodeChanges],
   );
 
   const insertNodeOnSplitEdge = useCallback(
@@ -719,12 +747,13 @@ const FlowEditor: React.FC<{
         ...edgeBase,
       };
 
+      pushUndoSnapshot();
       onNodesChange([...nodes.map((n) => ({ ...n, selected: false })), newNode]);
       onEdgesChange([...rest, e1, e2]);
       setConfigModalNodeId(newId);
       return true;
     },
-    [edges, nodeTypesByKey, nodes, onEdgesChange, onNodesChange],
+    [edges, nodeTypesByKey, nodes, onEdgesChange, onNodesChange, pushUndoSnapshot],
   );
 
   const appendNodeAfterOutput = useCallback(
@@ -784,12 +813,13 @@ const FlowEditor: React.FC<{
         ...edgeBase,
       };
 
+      pushUndoSnapshot();
       onNodesChange([...nodes.map((n) => ({ ...n, selected: false })), newNode]);
       onEdgesChange([...edges, e1]);
       setConfigModalNodeId(newId);
       return true;
     },
-    [edges, nodeTypesByKey, nodes, onEdgesChange, onNodesChange],
+    [edges, nodeTypesByKey, nodes, onEdgesChange, onNodesChange, pushUndoSnapshot],
   );
 
   const addNodeFromPalettePlacement = useCallback(
@@ -849,11 +879,20 @@ const FlowEditor: React.FC<{
         selected: true,
         data: { flowNode, nodeType: nt },
       };
+      pushUndoSnapshot();
       onNodesChange([...nodes.map((n) => ({ ...n, selected: false })), newNode]);
       setConfigModalNodeId(id);
       closePalette();
     },
-    [appendNodeAfterOutput, closePalette, insertNodeOnSplitEdge, nodeTypesByKey, nodes, onNodesChange],
+    [
+      appendNodeAfterOutput,
+      closePalette,
+      insertNodeOnSplitEdge,
+      nodeTypesByKey,
+      nodes,
+      onNodesChange,
+      pushUndoSnapshot,
+    ],
   );
 
   /** Palette is over a full-screen backdrop while open; drops must be handled there, not only on the pane below. */
@@ -917,11 +956,20 @@ const FlowEditor: React.FC<{
         selected: true,
         data: { flowNode, nodeType: nt },
       };
+      pushUndoSnapshot();
       onNodesChange([...nodes.map((n) => ({ ...n, selected: false })), newNode]);
       setConfigModalNodeId(id);
       closePalette();
     },
-    [appendNodeAfterOutput, closePalette, insertNodeOnSplitEdge, nodeTypesByKey, nodes, onNodesChange],
+    [
+      appendNodeAfterOutput,
+      closePalette,
+      insertNodeOnSplitEdge,
+      nodeTypesByKey,
+      nodes,
+      onNodesChange,
+      pushUndoSnapshot,
+    ],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -1008,6 +1056,7 @@ const FlowEditor: React.FC<{
       onExecuteNodeStep: onExecuteStep ? requestExecuteStep : undefined,
       executeStepBusy,
       onToggleNodeDisabled: (nodeId: string) => {
+        pushUndoSnapshot();
         onNodesChange(
           nodes.map((n) => {
             if (n.id !== nodeId) return n;
@@ -1033,6 +1082,7 @@ const FlowEditor: React.FC<{
         const remaining = nodes.filter((n) => n.id !== nodeId);
         const nextNodes =
           removedDisplay.length > 0 ? rewriteRfNodesDisplayRefsRemove(remaining, removedDisplay) : remaining;
+        pushUndoSnapshot();
         onNodesChange(nextNodes);
         onEdgesChange(edges.filter((e) => e.source !== nodeId && e.target !== nodeId));
       },
@@ -1050,6 +1100,7 @@ const FlowEditor: React.FC<{
         window.open(flowEditorPath(orgId, targetId), '_blank', 'noopener,noreferrer');
       },
       onDeleteEdge: (edgeId: string) => {
+        pushUndoSnapshot();
         onEdgesChange(edges.filter((e) => e.id !== edgeId));
       },
       onBeginInsertOnEdge: (payload: EdgeInsertPayload) => {
@@ -1074,6 +1125,7 @@ const FlowEditor: React.FC<{
       onEdgesChange,
       onExecuteStep,
       onNodesChange,
+      pushUndoSnapshot,
       requestExecuteStep,
     ],
   );
@@ -1110,10 +1162,15 @@ const FlowEditor: React.FC<{
               edgeTypes={rfCanvasEdgeTypes}
               onNodesChange={handleRfNodesChange}
               onEdgesChange={(changes: EdgeChange[]) => {
+                prepareEdgeChanges(changes);
                 onEdgesChange(applyEdgeChanges(changes, edges));
               }}
               onConnect={onConnect}
               isValidConnection={isValidConnection}
+              onNodeDragStart={onDragSessionStart}
+              onNodeDragStop={onDragSessionStop}
+              onSelectionDragStart={onDragSessionStart}
+              onSelectionDragStop={onDragSessionStop}
               onNodeDoubleClick={onNodeDoubleClick}
               connectionRadius={28}
               snapToGrid
