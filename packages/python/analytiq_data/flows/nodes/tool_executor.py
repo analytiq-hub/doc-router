@@ -14,50 +14,6 @@ from analytiq_data.flows.agent_loop.types import NormalizedToolCall
 from analytiq_data.flows.tool_wiring import WiredToolRegistry
 
 
-async def _record_tool_provider_run_data(
-    context: "ad.flows.ExecutionContext",
-    *,
-    tool_node_id: str,
-    output_json: dict[str, Any],
-    success: bool,
-    start_datetime: datetime,
-    elapsed_ms: int,
-) -> None:
-    """Mirror tool dispatch output onto the wired tool_provider node (Path A/B debugging)."""
-
-    from analytiq_data.flows.engine import persist_run_data
-    from analytiq_data.flows.trace import pop_node_trace
-
-    context.execution_index += 1
-    item = ad.flows.FlowItem(
-        json=output_json,
-        binary={},
-        meta={"dispatched": True},
-        paired_item=0,
-    )
-    context.run_data[tool_node_id] = {
-        "status": "success" if success else "error",
-        "start_time": start_datetime.isoformat(),
-        "execution_time_ms": elapsed_ms,
-        "execution_index": context.execution_index,
-        "data": {"main": [[item]]},
-        "error": None if success else {
-            "message": str(output_json.get("error") or "Tool dispatch failed"),
-            "node_id": tool_node_id,
-            "node_name": None,
-            "stack": None,
-        },
-        "source": [],
-        "logs": (context.node_logs.pop(tool_node_id, None) if hasattr(context, "node_logs") else None),
-        "trace": pop_node_trace(context, tool_node_id),
-    }
-    await persist_run_data(
-        context,
-        context.run_data,
-        last_node_executed=tool_node_id,
-    )
-
-
 class FlowsToolExecutorNode:
     key = "flows.tool_executor"
     label = "Tool Executor"
@@ -136,6 +92,50 @@ class FlowsToolExecutorNode:
         args = params.get("arguments")
         return dict(args) if isinstance(args, dict) else {}
 
+    async def _record_run_data(
+        self,
+        context: "ad.flows.ExecutionContext",
+        *,
+        tool_node_id: str,
+        output_json: dict[str, Any],
+        success: bool,
+        start_datetime: datetime,
+        elapsed_ms: int,
+    ) -> None:
+        """Mirror tool dispatch output onto the wired tool_provider node (Path A/B debugging)."""
+
+        from analytiq_data.flows.engine import persist_run_data
+        from analytiq_data.flows.trace import pop_node_trace
+
+        context.execution_index += 1
+        item = ad.flows.FlowItem(
+            json=output_json,
+            binary={},
+            meta={"dispatched": True},
+            paired_item=0,
+        )
+        context.run_data[tool_node_id] = {
+            "status": "success" if success else "error",
+            "start_time": start_datetime.isoformat(),
+            "execution_time_ms": elapsed_ms,
+            "execution_index": context.execution_index,
+            "data": {"main": [[item]]},
+            "error": None if success else {
+                "message": str(output_json.get("error") or "Tool dispatch failed"),
+                "node_id": tool_node_id,
+                "node_name": None,
+                "stack": None,
+            },
+            "source": [],
+            "logs": (context.node_logs.pop(tool_node_id, None) if hasattr(context, "node_logs") else None),
+            "trace": pop_node_trace(context, tool_node_id),
+        }
+        await persist_run_data(
+            context,
+            context.run_data,
+            last_node_executed=tool_node_id,
+        )
+
     async def execute(
         self,
         context: "ad.flows.ExecutionContext",
@@ -191,7 +191,7 @@ class FlowsToolExecutorNode:
 
             elapsed_ms = int((time.time() - t0) * 1000)
             if wired is not None:
-                await _record_tool_provider_run_data(
+                await self._record_run_data(
                     context,
                     tool_node_id=wired.node_id,
                     output_json=tool_result,
