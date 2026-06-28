@@ -38,23 +38,37 @@ class FlowsChatTriggerNode:
                 "title": "Title",
                 "description": "Heading shown in the chat panel and future embed UI. Defaults to the flow name when empty.",
                 "type": "string",
+                "x-ui-group": "Chat UI",
             },
             "subtitle": {
                 "title": "Subtitle",
                 "description": "Optional secondary line under the title in the chat UI.",
                 "type": "string",
+                "x-ui-group": "Chat UI",
+            },
+            "initial_messages": {
+                "title": "Initial messages",
+                "description": "Newline-separated greeting lines shown before the first user turn in Test chat.",
+                "type": "string",
+                "x-ui-widget": "textarea",
+                "x-ui-group": "Chat UI",
             },
             "input_placeholder": {
                 "title": "Input placeholder",
                 "description": "Placeholder text in the message input field.",
                 "type": "string",
                 "default": "Type your message…",
+                "x-ui-group": "Chat UI",
             },
-            "initial_messages": {
-                "title": "Initial messages",
-                "description": "Newline-separated greeting lines shown before the first user turn in Test chat. Also used as fallback chatInput when running the trigger via manual execute.",
+            "manual_chat_input": {
+                "title": "Manual run prompt",
+                "description": (
+                    "Default chatInput when executing the flow manually (Execute flow) with no chatInput. "
+                    "Not used by Test chat or the chat HTTP API."
+                ),
                 "type": "string",
                 "x-ui-widget": "textarea",
+                "x-ui-group": "Manual run",
             },
             "allow_file_uploads": {
                 "title": "Allow file uploads",
@@ -108,9 +122,9 @@ def resolve_chat_input(
     if isinstance(raw, str) and raw.strip():
         return raw.strip()
     if execution_mode == "manual":
-        initial = node_params.get("initial_messages")
-        if isinstance(initial, str) and initial.strip():
-            return initial.strip()
+        manual = node_params.get("manual_chat_input")
+        if isinstance(manual, str) and manual.strip():
+            return manual.strip()
     if isinstance(raw, str):
         return raw
     return ""

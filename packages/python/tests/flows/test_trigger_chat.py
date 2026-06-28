@@ -21,33 +21,54 @@ from analytiq_data.flows.nodes.trigger_chat import FlowsChatTriggerNode, resolve
         ),
         (
             {"type": "manual"},
-            {"initial_messages": "What is the temperature in Boston?"},
+            {"manual_chat_input": "What is the temperature in Boston?"},
             "manual",
             "What is the temperature in Boston?",
         ),
         (
             {"chatInput": ""},
-            {"initial_messages": "fallback question"},
+            {"manual_chat_input": "fallback question"},
             "manual",
             "fallback question",
         ),
         (
             {"chatInput": ""},
-            {"initial_messages": "ignored greeting"},
+            {
+                "initial_messages": "Welcome!\nHow can I help?",
+                "manual_chat_input": "ignored when greeting only",
+            },
             "chat",
             "",
         ),
         (
             {"chatInput": "from api"},
-            {"initial_messages": "ignored"},
+            {"manual_chat_input": "ignored"},
             "manual",
             "from api",
         ),
         (
             {"type": "manual"},
-            {"initial_messages": "  \n  "},
+            {"manual_chat_input": "  \n  "},
             "manual",
             "",
+        ),
+        (
+            {"type": "manual"},
+            {
+                "initial_messages": "Line one\nLine two",
+                "manual_chat_input": "",
+            },
+            "manual",
+            "",
+        ),
+        (
+            {"type": "manual"},
+            {
+                "initial_messages": "Greeting only",
+                "manual_chat_input": "Run this on execute",
+            },
+            "manual",
+            "Run this on execute",
         ),
     ],
 )
@@ -61,7 +82,7 @@ def test_resolve_chat_input(
 
 
 @pytest.mark.asyncio
-async def test_execute_manual_run_uses_initial_messages() -> None:
+async def test_execute_manual_run_uses_manual_chat_input() -> None:
     node = FlowsChatTriggerNode()
     ctx = ad.flows.ExecutionContext(
         organization_id="org1",
@@ -76,7 +97,8 @@ async def test_execute_manual_run_uses_initial_messages() -> None:
     chat_node = {
         "id": "chat-1",
         "parameters": {
-            "initial_messages": "What is the temperature in Boston and in Seattle?",
+            "initial_messages": "Hello!\nAsk me anything.",
+            "manual_chat_input": "What is the temperature in Boston and in Seattle?",
         },
     }
 
