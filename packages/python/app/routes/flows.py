@@ -1213,6 +1213,12 @@ async def delete_flow(organization_id: str, flow_id: str, current_user: User = D
     if not hdr:
         raise HTTPException(status_code=404, detail="Flow not found")
 
+    from analytiq_data.flows.flow_references import find_flows_referencing_target, format_flow_delete_blocked_message
+
+    refs = await find_flows_referencing_target(db, organization_id=organization_id, target_flow_id=flow_id)
+    if refs:
+        raise HTTPException(status_code=409, detail=format_flow_delete_blocked_message(refs))
+
     await _purge_flow_associated_data(db, organization_id=organization_id, flow_id=flow_id)
 
     res = await db.flows.delete_one({"_id": ObjectId(flow_id), "organization_id": organization_id})
