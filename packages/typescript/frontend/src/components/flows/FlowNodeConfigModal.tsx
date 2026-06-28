@@ -28,8 +28,12 @@ import { FlowNodeParameterFields, FlowNodeSettingsFields } from './flowNodeConfi
 import { FlowNodeCredentialSlots } from './flowNodeCredentialSlots';
 import { parameterSchemaUsesCredentialAuthenticationWidget } from './flowSchemaParameterUtils';
 import {
+  agentIncludeToolTrace,
+  agentToolCallsFromItems,
   buildNodeInputPreview,
   buildNodeOutputPreview,
+  filterAgentNodeLogs,
+  filterAgentOutputItemsJson,
   runDataMergedWithPins,
   soleInboundParentFromEdges,
 } from './flowNodeIoPreview';
@@ -602,6 +606,25 @@ const FlowNodeConfigModal: React.FC<{
     [nodeId, runData, typedPinData],
   );
 
+  const agentToolTraceEnabled = agentIncludeToolTrace(node);
+
+  const outputDisplayPreview = useMemo(() => {
+    if (agentToolTraceEnabled) return outputExecPreview;
+    return {
+      ...outputExecPreview,
+      itemsJson: filterAgentOutputItemsJson(outputExecPreview.itemsJson, false),
+      logs: filterAgentNodeLogs(outputExecPreview.logs, false),
+    };
+  }, [agentToolTraceEnabled, outputExecPreview]);
+
+  const outputAgentToolCalls = useMemo(
+    () =>
+      agentToolTraceEnabled
+        ? agentToolCallsFromItems(outputExecPreview.itemsJson)
+        : [],
+    [agentToolTraceEnabled, outputExecPreview.itemsJson],
+  );
+
   // Mirror n8n behavior: surface code-node stdout (print/log) lines to browser console during manual preview.
   const lastConsoleLogsKeyRef = React.useRef<string>('');
   useEffect(() => {
@@ -648,10 +671,11 @@ const FlowNodeConfigModal: React.FC<{
       hasNodeTraceContent({
         nodeError: outputRunError,
         executionError,
-        codeLogs: outputExecPreview.logs,
+        codeLogs: outputDisplayPreview.logs,
         traceEvents: nodeRunTraceEvents,
+        agentToolCalls: outputAgentToolCalls,
       }),
-    [outputRunError, executionError, outputExecPreview.logs, nodeRunTraceEvents],
+    [outputRunError, executionError, outputDisplayPreview.logs, nodeRunTraceEvents, outputAgentToolCalls],
   );
 
   useEffect(() => {
@@ -1244,8 +1268,9 @@ const FlowNodeConfigModal: React.FC<{
                       <FlowNodeTracePanel
                         nodeError={outputRunError}
                         executionError={executionError}
-                        codeLogs={outputExecPreview.logs}
+                        codeLogs={outputDisplayPreview.logs}
                         traceEvents={nodeRunTraceEvents}
+                        agentToolCalls={outputAgentToolCalls}
                       />
                     ) : (
                       <>
@@ -1255,13 +1280,13 @@ const FlowNodeConfigModal: React.FC<{
                         {!hasPin && !runData && (
                           <div className="mb-2 text-sm text-[#6b7280]">Run the workflow to see output data for this node.</div>
                         )}
-                        {!hasPin && runData != null && outputExecPreview.message && (
-                          <div className="mb-2 text-sm text-amber-800">{outputExecPreview.message}</div>
+                        {!hasPin && runData != null && outputDisplayPreview.message && (
+                          <div className="mb-2 text-sm text-amber-800">{outputDisplayPreview.message}</div>
                         )}
                         <NodeRunErrorDetails error={outputRunError} />
                         <IoViewer
                           title={node.name || typeLabel}
-                          value={outputExecPreview.itemsJson}
+                          value={outputDisplayPreview.itemsJson}
                           valueKind="executionItems"
                           executionItemsBinaries={outputExecPreview.itemsBinaries}
                           flowBlobDownloadContext={flowBlobDownloadContext ?? null}

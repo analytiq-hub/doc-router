@@ -372,6 +372,58 @@ export type AgentToolCallTrace = {
   error?: string;
 };
 
+type AgentNodeParams = { type?: string; parameters?: Record<string, unknown> | null };
+
+/** Whether an AI Agent node should expose tool-call trace in output / logs UI. */
+export function agentIncludeToolTrace(node: AgentNodeParams | null | undefined): boolean {
+  if (!node || node.type !== 'flows.agent') return true;
+  const raw = node.parameters?.include_tool_trace;
+  if (raw === false || raw === 'false') return false;
+  return true;
+}
+
+type ChatGraphEdge = {
+  source: string;
+  target: string;
+  data?: { connectionType?: string };
+};
+
+/** Main-path AI Agent directly downstream of a Chat Trigger (if any). */
+export function agentNodeDownstreamOfChatTrigger(
+  chatTriggerId: string,
+  nodes: Array<{ id: string; type: string; parameters?: Record<string, unknown> | null }>,
+  edges: readonly ChatGraphEdge[],
+): AgentNodeParams | null {
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  for (const edge of edges) {
+    if (edge.source !== chatTriggerId) continue;
+    const ct = edge.data?.connectionType;
+    if (ct && ct !== 'main') continue;
+    const target = byId.get(edge.target);
+    if (target?.type === 'flows.agent') return target;
+  }
+  return null;
+}
+
+const AGENT_ROUND_LOG_RE = /^agent_round=\d+ tool=/;
+
+/** Strip `agent_tool_calls` from output items when trace is disabled on the agent node. */
+export function filterAgentOutputItemsJson(itemsJson: unknown[], includeToolTrace: boolean): unknown[] {
+  if (includeToolTrace) return itemsJson;
+  return itemsJson.map((item) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return item;
+    const rec = { ...(item as Record<string, unknown>) };
+    delete rec.agent_tool_calls;
+    return rec;
+  });
+}
+
+/** Hide per-round agent tool log lines when trace is disabled on the agent node. */
+export function filterAgentNodeLogs(logs: string[], includeToolTrace: boolean): string[] {
+  if (includeToolTrace) return logs;
+  return logs.filter((line) => !AGENT_ROUND_LOG_RE.test(line));
+}
+
 /** Collect `agent_tool_calls` arrays from agent node output items. */
 export function agentToolCallsFromItems(itemsJson: unknown[]): AgentToolCallTrace[] {
   const out: AgentToolCallTrace[] = [];

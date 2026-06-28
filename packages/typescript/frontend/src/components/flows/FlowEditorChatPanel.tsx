@@ -44,6 +44,8 @@ const FlowEditorChatPanel: React.FC<{
   buildRevisionSnapshot: () => RevisionSnapshotPayload | null;
   onClose: () => void;
   onExecutionId?: (executionId: string) => void;
+  /** When false, hide streamed tool-call details in the chat transcript. */
+  showToolTrace?: boolean;
 }> = ({
   organizationId,
   flowId,
@@ -52,6 +54,7 @@ const FlowEditorChatPanel: React.FC<{
   buildRevisionSnapshot,
   onClose,
   onExecutionId,
+  showToolTrace = true,
 }) => {
   const api = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const params = chatTriggerNode.parameters ?? {};
@@ -143,6 +146,7 @@ const FlowEditorChatPanel: React.FC<{
               return;
             }
             if (event.type === 'tool_call') {
+              if (!showToolTrace) return;
               pendingToolsRef.current.push({
                 tool: event.tool,
                 arguments: event.arguments,
@@ -150,6 +154,7 @@ const FlowEditorChatPanel: React.FC<{
               return;
             }
             if (event.type === 'tool_result') {
+              if (!showToolTrace) return;
               const match = [...pendingToolsRef.current]
                 .reverse()
                 .find((t) => t.tool === event.tool && !t.preview);
@@ -163,7 +168,9 @@ const FlowEditorChatPanel: React.FC<{
               if (event.session_id) setSessionId(event.session_id);
               if (event.execution_id) onExecutionId?.(event.execution_id);
               const toolCalls =
-                pendingToolsRef.current.length > 0 ? [...pendingToolsRef.current] : undefined;
+                showToolTrace && pendingToolsRef.current.length > 0
+                  ? [...pendingToolsRef.current]
+                  : undefined;
               setMessages((prev) => {
                 const out = [...prev];
                 const last = out[out.length - 1];
@@ -237,6 +244,7 @@ const FlowEditorChatPanel: React.FC<{
     isStreamingMode,
     onExecutionId,
     sessionId,
+    showToolTrace,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -301,7 +309,7 @@ const FlowEditorChatPanel: React.FC<{
                   ) : (
                     msg.content
                   )}
-                  {msg.toolCalls && msg.toolCalls.length > 0 ? (
+                  {showToolTrace && msg.toolCalls && msg.toolCalls.length > 0 ? (
                     <ul className="mt-2 space-y-1 border-t border-[#e5e7eb] pt-2 text-xs text-[#5d656e]">
                       {msg.toolCalls.map((tc, i) => (
                         <li key={`${tc.tool}-${i}`}>

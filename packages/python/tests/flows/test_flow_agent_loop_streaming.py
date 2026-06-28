@@ -192,6 +192,72 @@ async def test_stream_tool_round_events(ctx: ad.flows.ExecutionContext) -> None:
 
 
 @pytest.mark.asyncio
+async def test_stream_omits_tool_events_when_trace_disabled(ctx: ad.flows.ExecutionContext) -> None:
+    events: list[dict[str, Any]] = []
+
+    async def sink(event: dict[str, Any]) -> None:
+        events.append(event)
+
+    ctx.stream_sink = sink
+    loop = FlowAgentLoop(
+        analytiq_client=ctx.analytiq_client,
+        organization_id="org1",
+        execution_context=ctx,
+        tool_registry=WiredToolRegistry([_wired_tool_code()]),
+        consumer_node_id="agent-1",
+        parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+        upstream_nodes_snapshot={},
+    )
+
+    round_idx = 0
+
+    async def stream_side_effect(*_args: Any, **_kwargs: Any):
+        nonlocal round_idx
+        round_idx += 1
+        if round_idx == 1:
+            yield (
+                "message",
+                _FakeMessage(
+                    content=None,
+                    tool_calls=[
+                        _FakeToolCall(id="tc1", function=_FakeFn(name="weather", arguments='{"city":"Seattle"}'))
+                    ],
+                ),
+            )
+            yield ("usage", {"total_tokens": 20})
+        else:
+            yield ("content", "It is sunny.")
+            yield ("message", _FakeMessage(content="It is sunny."))
+            yield ("usage", {"total_tokens": 30})
+
+    with patch("analytiq_data.flows.agent_loop.loop.ad.llm.get_llm_model_provider", return_value="openai"), patch(
+        "analytiq_data.flows.agent_loop.loop.ad.llm.get_llm_key", new_callable=AsyncMock, return_value="key"
+    ), patch(
+        "analytiq_data.flows.agent_loop.loop.ad.llm.agent_completion_stream",
+        side_effect=stream_side_effect,
+    ), patch(
+        "analytiq_data.flows.agent_loop.billing.check_spu_limits",
+        new_callable=AsyncMock,
+    ), patch(
+        "analytiq_data.flows.agent_loop.billing.record_spu_from_usage",
+        new_callable=AsyncMock,
+    ):
+        result = await loop.run(
+            FlowAgentConfig(
+                model="gpt-4o-mini",
+                system_message="sys",
+                user_message="weather?",
+                enable_streaming=True,
+                include_tool_trace=False,
+            )
+        )
+
+    assert result.text == "It is sunny."
+    assert not any(e.get("type") == "tool_call" for e in events)
+    assert not any(e.get("type") == "tool_result" for e in events)
+
+
+@pytest.mark.asyncio
 async def test_stream_error_emitted_on_llm_failure(ctx: ad.flows.ExecutionContext) -> None:
     events: list[dict[str, Any]] = []
 

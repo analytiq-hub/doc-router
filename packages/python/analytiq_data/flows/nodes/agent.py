@@ -217,6 +217,7 @@ class FlowsAgentNode:
                 max_tool_rounds=max_rounds,
                 temperature=temperature,
                 enable_streaming=enable_streaming,
+                include_tool_trace=include_trace,
             )
             result = await loop.run(config)
             if result.error and not continue_on_fail:

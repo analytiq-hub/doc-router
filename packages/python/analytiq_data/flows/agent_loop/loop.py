@@ -176,10 +176,11 @@ class FlowAgentLoop:
             pending = [_tool_call_to_dict(tc) for tc in tool_calls]
 
             for tc in pending:
-                await emit_stream_event(
-                    sink,
-                    {"type": "tool_call", "round": round_num, "tool": tc.name, "arguments": tc.arguments},
-                )
+                if config.include_tool_trace:
+                    await emit_stream_event(
+                        sink,
+                        {"type": "tool_call", "round": round_num, "tool": tc.name, "arguments": tc.arguments},
+                    )
                 started = time.time()
                 try:
                     wired = self.registry.resolve(tc.name)
@@ -221,20 +222,21 @@ class FlowAgentLoop:
                         "content": result_str,
                     }
                 )
-                await emit_stream_event(
-                    sink,
-                    {
-                        "type": "tool_result",
-                        "round": round_num,
-                        "tool": tc.name,
-                        "preview": _preview(result_str),
-                        "success": success,
-                    },
-                )
-                logs = self.ctx.node_logs.setdefault(self.consumer_node_id, [])
-                logs.append(
-                    f"agent_round={round_num} tool={tc.name} success={success} duration_ms={duration_ms}"
-                )
+                if config.include_tool_trace:
+                    await emit_stream_event(
+                        sink,
+                        {
+                            "type": "tool_result",
+                            "round": round_num,
+                            "tool": tc.name,
+                            "preview": _preview(result_str),
+                            "success": success,
+                        },
+                    )
+                    logs = self.ctx.node_logs.setdefault(self.consumer_node_id, [])
+                    logs.append(
+                        f"agent_round={round_num} tool={tc.name} success={success} duration_ms={duration_ms}"
+                    )
 
         await emit_stream_event(
             sink,

@@ -3,6 +3,10 @@ import type { Edge } from 'reactflow';
 import type { FlowPinData } from '@docrouter/sdk';
 import {
   agentToolCallsFromItems,
+  agentIncludeToolTrace,
+  agentNodeDownstreamOfChatTrigger,
+  filterAgentNodeLogs,
+  filterAgentOutputItemsJson,
   buildNodeInputPreview,
   buildNodeOutputPreview,
   collectUpstreamClosure,
@@ -155,6 +159,52 @@ describe('runDataMergedWithPins', () => {
     const rd = { a: { status: 'queued' } };
     expect(runDataMergedWithPins(rd, null)).toEqual(rd);
     expect(runDataMergedWithPins(rd, undefined)).toEqual(rd);
+  });
+});
+
+describe('agentNodeDownstreamOfChatTrigger', () => {
+  it('finds the main-path agent after the chat trigger', () => {
+    const agent = agentNodeDownstreamOfChatTrigger(
+      'chat',
+      [
+        { id: 'chat', type: 'flows.trigger.chat' },
+        { id: 'agent', type: 'flows.agent', parameters: { include_tool_trace: false } },
+      ],
+      [{ source: 'chat', target: 'agent', data: { connectionType: 'main' } }],
+    );
+    expect(agent?.id).toBe('agent');
+    expect(agentIncludeToolTrace(agent)).toBe(false);
+  });
+});
+
+describe('agentIncludeToolTrace', () => {
+  it('returns false when include_tool_trace is false on flows.agent', () => {
+    expect(
+      agentIncludeToolTrace({
+        type: 'flows.agent',
+        parameters: { include_tool_trace: false },
+      }),
+    ).toBe(false);
+  });
+});
+
+describe('filterAgentOutputItemsJson', () => {
+  it('strips agent_tool_calls when trace is disabled', () => {
+    const out = filterAgentOutputItemsJson(
+      [{ agent_output: 'hi', agent_tool_calls: [{ tool: 'weather' }] }],
+      false,
+    );
+    expect(out[0]).toEqual({ agent_output: 'hi' });
+  });
+});
+
+describe('filterAgentNodeLogs', () => {
+  it('removes agent_round tool log lines when trace is disabled', () => {
+    const out = filterAgentNodeLogs(
+      ['agent_round=1 tool=weather success=true duration_ms=10', 'other line'],
+      false,
+    );
+    expect(out).toEqual(['other line']);
   });
 });
 

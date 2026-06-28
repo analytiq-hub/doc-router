@@ -10,7 +10,7 @@ import { formatLocalDate } from '@/utils/date';
 import { ChevronDownIcon, ChevronUpIcon, TrashIcon } from '@heroicons/react/24/outline';
 import type { FlowRfNodeData } from './flowRf';
 import type { FlowExecutionBlobContext } from './flowExecutionBlob';
-import { buildNodeInputPreview, buildNodeOutputPreview, agentToolCallsFromItems } from './flowNodeIoPreview';
+import { buildNodeInputPreview, buildNodeOutputPreview, agentIncludeToolTrace, agentToolCallsFromItems, filterAgentNodeLogs, filterAgentOutputItemsJson } from './flowNodeIoPreview';
 import { IoViewer } from './IoViewer';
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels';
 import { Menu, MenuButton, MenuItem, MenuItems } from '@headlessui/react';
@@ -74,6 +74,25 @@ function formatRunWallDuration(ex: FlowExecution): string {
   return `${Math.floor(s / 60)}m ${s % 60}s`;
 }
 
+function flowNodeById(nodes: Node<FlowRfNodeData>[] | undefined, nodeId: string) {
+  return nodes?.find((n) => n.id === nodeId)?.data?.flowNode ?? null;
+}
+
+function nodeOutputDisplayPreview(
+  nodeId: string,
+  runData: Record<string, unknown> | null | undefined,
+  graphPinData: FlowPinData | null | undefined,
+  nodes: Node<FlowRfNodeData>[] | undefined,
+) {
+  const raw = buildNodeOutputPreview(nodeId, runData, graphPinData ?? undefined);
+  const includeToolTrace = agentIncludeToolTrace(flowNodeById(nodes, nodeId));
+  if (includeToolTrace) return raw;
+  return {
+    ...raw,
+    itemsJson: filterAgentOutputItemsJson(raw.itemsJson, false),
+    logs: filterAgentNodeLogs(raw.logs, false),
+  };
+}
 function nodeLabel(nodes: Node<FlowRfNodeData>[] | undefined, nodeId: string): string {
   const n = nodes?.find((x) => x.id === nodeId);
   const name = n?.data?.flowNode?.name;
@@ -288,9 +307,11 @@ const FlowLogsPanel: React.FC<{
             ? (execution.error as Record<string, unknown>)
             : null,
         traceEvents: rec?.trace,
-        agentToolCalls: agentToolCallsFromItems(
-          buildNodeOutputPreview(nodeId, runData, graphPinData ?? undefined).itemsJson,
-        ),
+        agentToolCalls: agentIncludeToolTrace(flowNodeById(nodes, nodeId))
+          ? agentToolCallsFromItems(
+              nodeOutputDisplayPreview(nodeId, runData, graphPinData, nodes).itemsJson,
+            )
+          : [],
       })
     ) {
       setIoTab('trace');
@@ -352,8 +373,8 @@ const FlowLogsPanel: React.FC<{
 
   const selectedOutputPreview = useMemo(() => {
     if (!selectedNodeId) return null;
-    return buildNodeOutputPreview(selectedNodeId, runData, graphPinData ?? undefined);
-  }, [graphPinData, runData, selectedNodeId]);
+    return nodeOutputDisplayPreview(selectedNodeId, runData, graphPinData, nodes);
+  }, [graphPinData, nodes, runData, selectedNodeId]);
 
   const selectedExecutionError = useMemo((): Record<string, unknown> | null => {
     if (
@@ -368,8 +389,11 @@ const FlowLogsPanel: React.FC<{
   }, [execution, selectedNodeId]);
 
   const selectedAgentToolCalls = useMemo(
-    () => agentToolCallsFromItems(selectedOutputPreview?.itemsJson ?? []),
-    [selectedOutputPreview?.itemsJson],
+    () =>
+      agentIncludeToolTrace(selectedNode?.data?.flowNode)
+        ? agentToolCallsFromItems(selectedOutputPreview?.itemsJson ?? [])
+        : [],
+    [selectedNode?.data?.flowNode, selectedOutputPreview?.itemsJson],
   );
 
   const showTraceTab = useMemo(
@@ -550,12 +574,11 @@ const FlowLogsPanel: React.FC<{
                             const started = rec.start_time ? formatLocalDate(rec.start_time) : '—';
                             const upstream = formatUpstreamSummary(rec.source, nodes);
                             const traceCount = traceEventCount(rec.trace);
-                            const rawLogs = (rec as { logs?: unknown }).logs;
-                            const codeLogs = Array.isArray(rawLogs)
-                              ? (rawLogs.filter((x) => typeof x === 'string') as string[])
+                            const nodeOutput = nodeOutputDisplayPreview(nodeId, runData, graphPinData, nodes);
+                            const nodeToolCalls = agentIncludeToolTrace(flowNodeById(nodes, nodeId))
+                              ? agentToolCallsFromItems(nodeOutput.itemsJson)
                               : [];
-                            const nodeOutput = buildNodeOutputPreview(nodeId, runData, graphPinData ?? undefined);
-                            const nodeToolCalls = agentToolCallsFromItems(nodeOutput.itemsJson);
+                            const codeLogs = nodeOutput.logs;
                             const openTraceOnSelect = hasNodeTraceContent({
                               nodeError: rec.error,
                               executionError:

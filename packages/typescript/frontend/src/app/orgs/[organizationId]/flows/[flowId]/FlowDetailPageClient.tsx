@@ -21,6 +21,7 @@ import FlowCanvasViewTabs, { FlowWorkspaceTabStraddle, type FlowCanvasView } fro
 import { FLOW_WORKSPACE_HEADER_HEIGHT_CLASS, FLOW_WORKSPACE_TITLE_READ_CLASS } from '@/components/flows/flowUiClasses';
 import FlowLogsPanel from '@/components/flows/FlowLogsPanel';
 import FlowEditorChatPanel from '@/components/flows/FlowEditorChatPanel';
+import { agentIncludeToolTrace, agentNodeDownstreamOfChatTrigger } from '@/components/flows/flowNodeIoPreview';
 import { snapRfNodesPositions } from '@/components/flows/canvasGrid';
 import { revisionContentFingerprint, revisionToRF, rfToRevision, type FlowRfNodeData } from '@/components/flows/flowRf';
 import {
@@ -282,6 +283,13 @@ export default function FlowDetailPageClient({
     if (chatTriggers.length !== 1) return null;
     return chatTriggers[0] ?? null;
   }, [rfNodes]);
+
+  const chatShowToolTrace = useMemo(() => {
+    if (!chatTriggerNode) return true;
+    const flowNodes = (rfNodes as Node<FlowRfNodeData>[]).map((x) => x.data.flowNode);
+    const agent = agentNodeDownstreamOfChatTrigger(chatTriggerNode.id, flowNodes, rfEdges);
+    return agentIncludeToolTrace(agent);
+  }, [chatTriggerNode, rfEdges, rfNodes]);
 
   const [lastRunTriggerId, setLastRunTriggerId] = useState<string | null>(null);
   const lastRunTriggerLabel = useMemo(() => {
@@ -1134,6 +1142,7 @@ export default function FlowDetailPageClient({
             setLogsFocusExecutionId(executionId);
             setLogsExpanded(true);
           }}
+          showToolTrace={chatShowToolTrace}
         />
       ) : null}
     </div>

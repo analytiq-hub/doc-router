@@ -159,7 +159,36 @@ async def test_agent_node_passes_wired_registry(ctx: ad.flows.ExecutionContext) 
     assert registry_cls.call_args.args[0][0].name == "lookup"
 
 
-def test_agent_parameter_schema_prompt_visibility() -> None:
+@pytest.mark.asyncio
+async def test_agent_node_omits_tool_trace_when_disabled(ctx: ad.flows.ExecutionContext) -> None:
+    fake_result = FlowAgentResult(
+        text="Answer text",
+        tool_calls=[
+            ToolCallRecord(
+                round=1,
+                tool="lookup",
+                arguments={"q": "x"},
+                result_preview='{"echo": "x"}',
+                duration_ms=12,
+                success=True,
+            )
+        ],
+        rounds_used=2,
+    )
+
+    with patch(
+        "analytiq_data.flows.nodes.agent.FlowAgentLoop.run",
+        new_callable=AsyncMock,
+        return_value=fake_result,
+    ):
+        out = await FlowsAgentNode().execute(
+            ctx,
+            _agent_node(include_tool_trace=False),
+            [[ad.flows.FlowItem(json={"query": "What is X?"}, binary={}, meta={})]],
+        )
+
+    payload = out[0][0].json
+    assert "agent_tool_calls" not in payload
     props = FlowsAgentNode().parameter_schema["properties"]
     assert props["prompt_text"]["x-ui-show-when"] == {"field": "prompt_source", "equals": "fixed"}
     assert props["prompt_field"]["x-ui-show-when"] == {"field": "prompt_source", "equals": "from_input"}

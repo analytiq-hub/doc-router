@@ -14,6 +14,7 @@ class FlowAgentConfig:
     max_tool_rounds: int = 10
     temperature: float = 0.2
     enable_streaming: bool = False
+    include_tool_trace: bool = True
 
 
 @dataclass
