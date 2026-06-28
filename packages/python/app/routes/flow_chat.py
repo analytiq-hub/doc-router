@@ -274,6 +274,23 @@ async def _buffered_response(
         )
         status = str(result.get("status") or "success")
     except asyncio.TimeoutError:
+        status = "error"
+        await db.flow_executions.update_one(
+            {"_id": ObjectId(exec_id)},
+            {
+                "$set": {
+                    "status": status,
+                    "finished_at": _now(),
+                    "run_data": _stored_run_data(ctx.run_data),
+                    "error": {
+                        "message": "Chat flow execution timed out",
+                        "node_id": None,
+                        "node_name": None,
+                        "stack": None,
+                    },
+                }
+            },
+        )
         raise HTTPException(status_code=504, detail="Chat flow execution timed out") from None
     except Exception as e:
         status = "error"

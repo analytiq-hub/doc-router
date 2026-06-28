@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from bson import ObjectId
@@ -99,6 +101,37 @@ async def test_chat_test_buffered_returns_text(test_db, mock_auth) -> None:
     assert exec_doc is not None
     assert exec_doc["status"] == "success"
     assert exec_doc["mode"] == "chat"
+
+
+@pytest.mark.asyncio
+async def test_buffered_chat_timeout_finalizes_execution(test_db, mock_auth) -> None:
+    r_flow = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows",
+        json={"name": "Chat timeout flow"},
+        headers=get_auth_headers(),
+    )
+    flow_id = r_flow.json()["flow"]["flow_id"]
+
+    with patch("app.routes.flow_chat.asyncio.wait_for", new_callable=AsyncMock, side_effect=asyncio.TimeoutError):
+        r = client.post(
+            f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}/chat/test",
+            json={
+                "chatInput": "Slow reply",
+                "revision_snapshot": _chat_snapshot(response_mode="last_node"),
+            },
+            headers=get_auth_headers(),
+        )
+
+    assert r.status_code == 504, r.text
+    body = r.json()
+    assert "timed out" in body["detail"].lower()
+
+    db = ad.common.get_async_db()
+    exec_docs = await db.flow_executions.find({"flow_id": flow_id}).to_list(None)
+    assert len(exec_docs) == 1
+    assert exec_docs[0]["status"] == "error"
+    assert exec_docs[0]["finished_at"] is not None
+    assert exec_docs[0]["error"]["message"] == "Chat flow execution timed out"
 
 
 @pytest.mark.asyncio

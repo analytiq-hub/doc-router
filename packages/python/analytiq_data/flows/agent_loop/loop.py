@@ -15,7 +15,7 @@ from analytiq_data.flows.agent_loop.constants import (
     FLOW_AGENT_STREAM_ROUND_SECONDS,
     TOOL_RESULT_PREVIEW_CHARS,
 )
-from analytiq_data.flows.agent_loop.dispatch import execute_tool_call
+from analytiq_data.flows.agent_loop.dispatch import classify_tool_result, execute_tool_call
 from analytiq_data.flows.agent_loop.stream import emit_stream_event
 from analytiq_data.flows.agent_loop.types import (
     FlowAgentConfig,
@@ -192,8 +192,7 @@ class FlowAgentLoop:
                         parent_item=self.parent_item,
                         upstream_nodes_snapshot=self.upstream_nodes_snapshot,
                     )
-                    success = True
-                    err_msg = None
+                    success, err_msg = classify_tool_result(result_str)
                 except UnknownToolError as e:
                     result_str = json.dumps({"error": str(e)})
                     success = False

@@ -156,3 +156,56 @@ async def test_unknown_tool_continues_loop(ctx: ad.flows.ExecutionContext) -> No
     assert result.text == "Done"
     assert len(result.tool_calls) == 1
     assert result.tool_calls[0].success is False
+
+
+@pytest.mark.asyncio
+async def test_dispatch_error_json_marks_tool_call_failed(ctx: ad.flows.ExecutionContext) -> None:
+    registry = WiredToolRegistry([_wired_tool_code()])
+    item = ad.flows.FlowItem(json={}, binary={}, meta={})
+    loop = FlowAgentLoop(
+        analytiq_client=ctx.analytiq_client,
+        organization_id="org1",
+        execution_context=ctx,
+        tool_registry=registry,
+        consumer_node_id="agent-1",
+        parent_item=item,
+        upstream_nodes_snapshot={},
+    )
+
+    first = _FakeResponse(
+        choices=[
+            _FakeChoice(
+                message=_FakeMessage(
+                    content=None,
+                    tool_calls=[_FakeToolCall(id="tc1", function=_FakeFn(name="echo", arguments="{}"))],
+                )
+            )
+        ]
+    )
+    second = _FakeResponse(choices=[_FakeChoice(message=_FakeMessage(content="Done"))])
+
+    with patch("analytiq_data.flows.agent_loop.loop.ad.llm.get_llm_model_provider", return_value="openai"), patch(
+        "analytiq_data.flows.agent_loop.loop.ad.llm.get_llm_key", new_callable=AsyncMock, return_value="key"
+    ), patch(
+        "analytiq_data.flows.agent_loop.loop.ad.llm.agent_completion",
+        new_callable=AsyncMock,
+        side_effect=[first, second],
+    ), patch(
+        "analytiq_data.flows.agent_loop.loop.execute_tool_call",
+        new_callable=AsyncMock,
+        return_value='{"error": "Knowledge base not found"}',
+    ), patch(
+        "analytiq_data.flows.agent_loop.billing.check_spu_limits",
+        new_callable=AsyncMock,
+    ), patch(
+        "analytiq_data.flows.agent_loop.billing.record_spu",
+        new_callable=AsyncMock,
+    ):
+        result = await loop.run(
+            FlowAgentConfig(model="gpt-4o-mini", system_message="sys", user_message="hi")
+        )
+
+    assert result.text == "Done"
+    assert len(result.tool_calls) == 1
+    assert result.tool_calls[0].success is False
+    assert result.tool_calls[0].error == "Knowledge base not found"

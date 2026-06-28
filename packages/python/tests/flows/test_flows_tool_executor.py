@@ -173,3 +173,25 @@ async def test_tool_executor_continue_on_fail(ctx: ad.flows.ExecutionContext) ->
 
     assert out[0][0].json["success"] is False
     assert "error" in out[0][0].json["tool_result"]
+
+
+@pytest.mark.asyncio
+async def test_tool_executor_dispatch_error_json_is_failure(ctx: ad.flows.ExecutionContext) -> None:
+    nodes, connections = _tool_graph()
+    exec_node = next(n for n in nodes if n["id"] == "exec")
+    ctx.tool_consumer_wiring = tool_consumer_wiring(nodes, connections)
+
+    with patch(
+        "analytiq_data.flows.nodes.tool_executor.execute_tool_call",
+        new_callable=AsyncMock,
+        return_value='{"error": "Knowledge base not found"}',
+    ):
+        out = await FlowsToolExecutorNode().execute(
+            ctx,
+            exec_node,
+            [[ad.flows.FlowItem(json={}, binary={}, meta={})]],
+        )
+
+    assert out[0][0].json["success"] is False
+    assert out[0][0].json["tool_result"] == {"error": "Knowledge base not found"}
+    assert ctx.run_data["tool"]["status"] == "error"

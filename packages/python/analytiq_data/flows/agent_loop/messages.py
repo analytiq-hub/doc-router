@@ -27,7 +27,13 @@ def build_user_message(
         if not isinstance(value, str) or not value.strip():
             raise FlowValidationError("chatInput is required from Chat Trigger")
         return value
-    return str(item_json.get(prompt_field, ""))
+    value = item_json.get(prompt_field, "")
+    if isinstance(value, str) and value.strip():
+        return value
+    chat = item_json.get("chatInput")
+    if isinstance(chat, str) and chat.strip():
+        return chat.strip()
+    return str(value) if value is not None else ""
 
 
 def build_all_items_user_message(items_json: list[dict]) -> str:

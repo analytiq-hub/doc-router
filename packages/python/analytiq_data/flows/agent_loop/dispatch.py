@@ -26,6 +26,28 @@ def _truncate_for_llm(text: str) -> str:
     return text[: LLM_TOOL_RESULT_MAX_CHARS - 1] + "…"
 
 
+def classify_tool_result(raw: str) -> tuple[bool, str | None]:
+    """Return ``(success, error_message)`` for a tool result string.
+
+    Dispatch helpers signal configuration/runtime failures as a JSON object with a
+    lone ``error`` key. Tool code may return arbitrary JSON (including an ``error``
+    field alongside other keys).
+    """
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError:
+        return True, None
+    if not isinstance(parsed, dict):
+        return True, None
+    err = parsed.get("error")
+    if not isinstance(err, str) or not err.strip():
+        return True, None
+    if set(parsed.keys()) - {"error"}:
+        return True, None
+    return False, err.strip()
+
+
 def _cap_nodes_snapshot(nodes: dict[str, Any]) -> dict[str, Any]:
     encoded = json.dumps(nodes, default=str).encode("utf-8")
     if len(encoded) <= TOOL_CONTEXT_NODES_MAX_BYTES:

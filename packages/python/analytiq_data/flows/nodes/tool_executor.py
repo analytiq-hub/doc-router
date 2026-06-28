@@ -9,7 +9,7 @@ from typing import Any
 
 import analytiq_data as ad
 
-from analytiq_data.flows.agent_loop.dispatch import execute_tool_call
+from analytiq_data.flows.agent_loop.dispatch import classify_tool_result, execute_tool_call
 from analytiq_data.flows.agent_loop.types import NormalizedToolCall
 from analytiq_data.flows.tool_wiring import WiredToolRegistry
 
@@ -181,7 +181,7 @@ class FlowsToolExecutorNode:
                     tool_result = {"_raw": raw}
                 if not isinstance(tool_result, dict):
                     tool_result = {"_raw": tool_result}
-                success = True
+                success, _ = classify_tool_result(raw)
             except Exception as e:
                 if not continue_on_fail:
                     raise
