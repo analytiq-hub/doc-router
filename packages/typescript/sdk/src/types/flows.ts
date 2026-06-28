@@ -57,8 +57,6 @@ export interface FlowHeader {
   active: boolean;
   active_flow_revid: string | null;
   flow_version: number;
-  folder_id?: string | null;
-  sort_order?: number;
   callable_as_tool?: boolean;
   tool_description?: string | null;
   tool_schema?: Record<string, unknown> | null;
