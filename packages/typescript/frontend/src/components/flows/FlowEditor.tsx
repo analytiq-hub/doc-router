@@ -73,6 +73,8 @@ import { edgesWithRunDataItemCounts } from './flowNodeIoPreview';
 import { inputHandleCount, inputPortType, outputPortType, portTypesCompatible, edgeConnectionType, TOOL_IN_HANDLE } from './flowRf';
 import type { FlowConnectionType, FlowRfNodeData } from './flowRf';
 import { triggerReachabilityFromGraph } from './flowTriggerReachability';
+import { flowEditorPath, targetFlowIdFromFlowNode, targetFlowSubtitle } from './flowTargetFlow';
+import { useOrgFlowNameMap } from './useOrgFlowNameMap';
 import { flowRunButtonCanvasClass, FLOW_EXECUTE_FLOW_LABEL, FLOW_NODE_PALETTE_WIDTH_PX } from './flowUiClasses';
 import { flowWorkspaceDropdownItemSimpleClass, flowWorkspaceMenuPanelClass } from './flowWorkspaceMenu';
 
@@ -328,6 +330,7 @@ const FlowEditor: React.FC<{
   flowOrgApi = null,
 }) => {
   const { rfCanvasNodeTypes, rfCanvasEdgeTypes } = useStableFlowRfCanvasRegistration();
+  const flowNameById = useOrgFlowNameMap(flowOrgApi);
   const [nodePaletteOpen, setNodePaletteOpen] = useState(false);
   const [paletteDrilledSection, setPaletteDrilledSection] = useState<FlowPaletteSectionId | null>(null);
   const [paletteDrilledNodeTypeKey, setPaletteDrilledNodeTypeKey] = useState<string | null>(null);
@@ -413,15 +416,21 @@ const FlowEditor: React.FC<{
 
   const nodesWithPinnedFlag = useMemo(() => {
     // Keep node identity stable; only enrich the `data` payload for rendering.
-    return nodes.map((n) => ({
-      ...n,
-      data: {
-        ...n.data,
-        pinned: Boolean(pinData?.[n.id]),
-        reachableFromTriggers: nodesReachFromTriggers.has(n.id),
-      },
-    }));
-  }, [nodes, nodesReachFromTriggers, pinData]);
+    return nodes.map((n) => {
+      const targetFlowId = targetFlowIdFromFlowNode(n.data.flowNode);
+      return {
+        ...n,
+        data: {
+          ...n.data,
+          pinned: Boolean(pinData?.[n.id]),
+          reachableFromTriggers: nodesReachFromTriggers.has(n.id),
+          targetFlowSubtitle: targetFlowId
+            ? targetFlowSubtitle(targetFlowId, flowNameById)
+            : undefined,
+        },
+      };
+    });
+  }, [flowNameById, nodes, nodesReachFromTriggers, pinData]);
 
   useEffect(() => {
     if (configModalNodeId && !nodes.some((n) => n.id === configModalNodeId)) {
@@ -1068,6 +1077,15 @@ const FlowEditor: React.FC<{
         onNodesChange(nodes.map((n) => ({ ...n, selected: n.id === nodeId })));
         setConfigModalNodeId(nodeId);
       },
+      onOpenTargetFlow: (nodeId: string) => {
+        const orgId = flowOrgApi?.organizationId?.trim();
+        if (!orgId) return;
+        const rfNode = nodes.find((n) => n.id === nodeId);
+        if (!rfNode) return;
+        const targetId = targetFlowIdFromFlowNode(rfNode.data.flowNode);
+        if (!targetId) return;
+        window.open(flowEditorPath(orgId, targetId), '_blank', 'noopener,noreferrer');
+      },
       onDeleteEdge: (edgeId: string) => {
         onEdgesChange(edges.filter((e) => e.id !== edgeId));
       },
@@ -1086,6 +1104,7 @@ const FlowEditor: React.FC<{
     [
       edges,
       executeStepBusy,
+      flowOrgApi,
       hoverExecuteWorkflowFromTrigger,
       nodeTypesByKey,
       nodes,

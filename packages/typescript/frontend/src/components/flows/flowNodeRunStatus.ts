@@ -30,6 +30,8 @@ export type FlowRfNodeDataWithRun = FlowRfNodeData & {
   pinned?: boolean;
   /** Editor: false when no directed path exists from any trigger to this node. Omitted elsewhere. */
   reachableFromTriggers?: boolean;
+  /** Subtitle for Flow Tool / Execute Flow when `target_flow_id` is set. */
+  targetFlowSubtitle?: string;
 };
 
 export function applyExecutionStatusToNodes(

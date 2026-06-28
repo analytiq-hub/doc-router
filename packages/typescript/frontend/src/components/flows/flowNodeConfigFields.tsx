@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Switch } from '@headlessui/react';
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 import Editor from '@monaco-editor/react';
 import type { FlowNode, FlowNodeType } from '@docrouter/sdk';
 import type { DocRouterOrgApi } from '@/utils/api';
@@ -46,6 +47,7 @@ import {
   FlowScheduleTriggerRulesField,
   type ScheduleRuleValue,
 } from './FlowScheduleTriggerRulesField';
+import { flowEditorPath } from './flowTargetFlow';
 function isExpressionValue(value: unknown): boolean {
   return typeof value === 'string' && value.startsWith('=');
 }
@@ -137,11 +139,15 @@ function FlowFlowPickerField({
     return items.filter((x) => x.name.toLowerCase().includes(q) || x.flow_id.toLowerCase().includes(q));
   }, [items, query]);
 
+  const organizationId = flowOrgApi?.organizationId?.trim() ?? '';
+  const openHref = value.trim() && organizationId ? flowEditorPath(organizationId, value.trim()) : null;
+
   return (
     <div className="relative">
       <FlowParamLabel label={label} description={description} />
-      <input
-        className={flowInputClass}
+      <div className="flex items-stretch gap-1">
+        <input
+          className={`${flowInputClass} min-w-0 flex-1`}
         value={listOpen ? query : selected ? `${selected.name}${selected.active ? '' : ' (inactive)'}` : value}
         readOnly={readOnly}
         placeholder={pickerMode === 'subflow' ? 'Search active flows…' : 'Search callable flows…'}
@@ -161,6 +167,20 @@ function FlowFlowPickerField({
         role="combobox"
         aria-expanded={listOpen}
       />
+        {openHref ? (
+          <a
+            href={openHref}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex shrink-0 items-center justify-center rounded-md border border-gray-300 bg-white px-2 text-gray-500 shadow-sm hover:bg-gray-50 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400/20"
+            title="Open flow in new tab"
+            aria-label="Open selected flow in new tab"
+            data-testid="flow-picker-open-link"
+          >
+            <ArrowTopRightOnSquareIcon className="h-4 w-4" aria-hidden />
+          </a>
+        ) : null}
+      </div>
       {listOpen && !readOnly ? (
         <ul
           className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-md border border-gray-200 bg-white py-1 text-sm shadow-lg"

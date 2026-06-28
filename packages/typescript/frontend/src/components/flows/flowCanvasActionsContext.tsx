@@ -28,6 +28,8 @@ export type FlowCanvasActions = {
   onToggleNodeDisabled: (nodeId: string) => void;
   onDeleteNode: (nodeId: string) => void;
   onOpenNodeSettings: (nodeId: string) => void;
+  /** Open the linked target flow for Flow Tool / Execute Flow nodes (new tab). */
+  onOpenTargetFlow?: (nodeId: string) => void;
   onDeleteEdge: (edgeId: string) => void;
   /** Start add-node flow to split this edge (opens palette; chosen type is wired inline). */
   onBeginInsertOnEdge?: (payload: EdgeInsertPayload) => void;

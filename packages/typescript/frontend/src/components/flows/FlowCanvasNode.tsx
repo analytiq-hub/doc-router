@@ -30,6 +30,7 @@ import {
   flowWorkspaceMenuTriggerCompactClass,
 } from './flowWorkspaceMenu';
 import { flowRunButtonTriggerHoverClass, FLOW_EXECUTE_FLOW_LABEL } from './flowUiClasses';
+import { targetFlowIdFromFlowNode } from './flowTargetFlow';
 
 const handleClass =
   '!w-2.5 !h-2.5 -translate-y-1/2 !border-2 !border-[#d0d5dd] !bg-white hover:!border-primary-500 hover:!bg-primary-50';
@@ -289,6 +290,9 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
 
   const isPinned = Boolean(data.pinned);
 
+  const targetFlowId = useMemo(() => targetFlowIdFromFlowNode(node), [node]);
+  const canOpenTargetFlow = Boolean(targetFlowId && actions?.onOpenTargetFlow);
+
   const showToolbar = Boolean(actions);
   const isToolProvider = Boolean(nt?.tool_provider);
   /** Omit on read-only executions canvas (undefined ⇒ allow). Editor sets explicit true/false. */
@@ -306,6 +310,14 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
       <div className="line-clamp-2 text-sm font-semibold leading-tight text-[#1a1d21]" title={displayLabel}>
         {displayLabel}
       </div>
+      {data.targetFlowSubtitle ? (
+        <div
+          className="mt-0.5 line-clamp-2 text-xs font-normal leading-tight text-gray-500"
+          title={data.targetFlowSubtitle}
+        >
+          {data.targetFlowSubtitle}
+        </div>
+      ) : null}
     </div>
   );
 
@@ -387,6 +399,19 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
                     </button>
                   )}
                 </MenuItem>
+                {canOpenTargetFlow ? (
+                  <MenuItem>
+                    {({ focus }) => (
+                      <button
+                        type="button"
+                        className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
+                        onClick={() => actions.onOpenTargetFlow?.(id)}
+                      >
+                        Open target flow
+                      </button>
+                    )}
+                  </MenuItem>
+                ) : null}
                 <MenuItem disabled>
                   <span className={`${flowWorkspaceDropdownItemMutedClass} block w-full cursor-not-allowed opacity-70`}>Duplicate (soon)</span>
                 </MenuItem>
