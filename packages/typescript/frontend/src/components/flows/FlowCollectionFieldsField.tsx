@@ -3,6 +3,7 @@
 import React from 'react';
 import { TrashIcon } from '@heroicons/react/24/outline';
 import { flowSelectClass } from './flowUiClasses';
+import { FlowParamLabel } from './FlowParamLabel';
 import { defaultFromSubschema, mergeCollectionFieldDefaults } from './flowSchemaParameterUtils';
 
 function propertyTitle(subschema: Record<string, unknown>, key: string): string {
@@ -15,6 +16,7 @@ function propertyTitle(subschema: Record<string, unknown>, key: string): string 
  */
 export const FlowCollectionFieldsField: React.FC<{
   label: string;
+  description?: string;
   addLabel: string;
   subschema: Record<string, unknown>;
   value: unknown;
@@ -31,7 +33,7 @@ export const FlowCollectionFieldsField: React.FC<{
     },
   ) => React.ReactNode;
   idPrefix: string;
-}> = ({ label, addLabel, subschema, value, readOnly, onChange, renderProperty, idPrefix }) => {
+}> = ({ label, description, addLabel, subschema, value, readOnly, onChange, renderProperty, idPrefix }) => {
   const nestedProps = (subschema.properties ?? {}) as Record<string, Record<string, unknown>>;
   const propertyOrder = Object.keys(nestedProps);
   const obj = mergeCollectionFieldDefaults(subschema, value);
@@ -53,9 +55,12 @@ export const FlowCollectionFieldsField: React.FC<{
 
   return (
     <div className="space-y-2">
-      <div className="border-b border-gray-200 pb-1 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-        {label}
-      </div>
+      <FlowParamLabel
+        label={label}
+        description={description}
+        wrapperClassName="border-b border-gray-200 pb-1"
+        className="text-[11px] font-semibold uppercase tracking-wide text-gray-500"
+      />
 
       {activeKeys.map((key) => {
         const propSchema = nestedProps[key];

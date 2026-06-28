@@ -4,7 +4,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import type { Prompt, Tag } from '@docrouter/sdk';
 import type { DocRouterOrgApi } from '@/utils/api';
-import { flowInputClass, flowLabelClass } from './flowUiClasses';
+import { flowInputClass } from './flowUiClasses';
+import { FlowParamLabel } from './FlowParamLabel';
 
 const SEARCH_DEBOUNCE_MS = 250;
 const PAGE_SIZE = 50;
@@ -196,7 +197,7 @@ export const FlowOrgEntityPickerField: React.FC<{
   if (readOnly) {
     return (
       <div className="mb-3">
-        <span className={flowLabelClass}>{label}</span>
+        <FlowParamLabel label={label} description={description} />
         <div className={`${flowInputClass} flex items-center`}>
           <SelectedEntityValue
             id={selectedId}
@@ -211,10 +212,7 @@ export const FlowOrgEntityPickerField: React.FC<{
 
   return (
     <div className="mb-3">
-      <label className={flowLabelClass} htmlFor={`org-entity-${kind}-search`}>
-        {label}
-      </label>
-      {description ? <p className="mb-1.5 text-[11px] leading-snug text-gray-500">{description}</p> : null}
+      <FlowParamLabel label={label} htmlFor={`org-entity-${kind}-search`} description={description} />
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <span className="text-sm text-gray-800">
           <SelectedEntityValue

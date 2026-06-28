@@ -1,7 +1,6 @@
 import React from 'react';
-import { flowLabelClass } from './flowUiClasses';
+import { FlowParamLabel } from './FlowParamLabel';
 
-const flowParamHintClass = 'mb-1.5 text-[11px] leading-snug text-gray-500';
 const checkboxClass =
   'h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-60';
 
@@ -29,8 +28,7 @@ export const FlowEnumMultiCheckboxField: React.FC<{
 
   return (
     <div>
-      <span className={flowLabelClass}>{label}</span>
-      {description ? <p className={flowParamHintClass}>{description}</p> : null}
+      <FlowParamLabel label={label} description={description} />
       <div className="flex flex-wrap gap-3">
         {options.map((option, idx) => (
           <label key={option} className="inline-flex items-center gap-2 text-sm text-gray-700">
