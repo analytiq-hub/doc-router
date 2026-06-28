@@ -157,3 +157,9 @@ async def test_agent_node_passes_wired_registry(ctx: ad.flows.ExecutionContext) 
 
     registry_cls.assert_called_once()
     assert registry_cls.call_args.args[0][0].name == "lookup"
+
+
+def test_agent_parameter_schema_prompt_visibility() -> None:
+    props = FlowsAgentNode().parameter_schema["properties"]
+    assert props["prompt_text"]["x-ui-show-when"] == {"field": "prompt_source", "equals": "fixed"}
+    assert props["prompt_field"]["x-ui-show-when"] == {"field": "prompt_source", "equals": "from_input"}

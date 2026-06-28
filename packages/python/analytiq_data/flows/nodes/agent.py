@@ -31,31 +31,53 @@ class FlowsAgentNode:
         "type": "object",
         "properties": {
             "prompt_source": {
+                "title": "Prompt source",
+                "description": (
+                    "Where the user message comes from. From input reads a field on each inbound item; "
+                    "Fixed uses Prompt text; Chat trigger uses chatInput from a Chat Trigger upstream."
+                ),
                 "type": "string",
                 "enum": ["from_input", "fixed", "chat_trigger"],
                 "default": "from_input",
                 "x-ui-widget": "select",
+                "x-ui-enum-names": ["From input", "Fixed", "Chat trigger"],
                 "x-ui-group": "Prompt",
             },
             "prompt_text": {
+                "title": "Prompt text",
+                "description": (
+                    "User message sent to the model when Prompt source is Fixed. Supports = expressions."
+                ),
                 "type": "string",
                 "x-ui-widget": "textarea",
+                "x-ui-show-when": {"field": "prompt_source", "equals": "fixed"},
                 "x-ui-group": "Prompt",
             },
             "prompt_field": {
+                "title": "Prompt field",
+                "description": (
+                    "JSON key on the inbound item to use as the user message when Prompt source is From input "
+                    "(default: query)."
+                ),
                 "type": "string",
                 "default": "query",
+                "x-ui-show-when": {"field": "prompt_source", "equals": "from_input"},
                 "x-ui-group": "Prompt",
             },
             "system_message": {
+                "title": "System message",
+                "description": (
+                    "System-role instructions for every agent run (persona, tool-use rules, tone). "
+                    "Not the end-user question — that comes from Prompt source."
+                ),
                 "type": "string",
                 "default": DEFAULT_SYSTEM_MESSAGE,
                 "x-ui-widget": "textarea",
                 "x-ui-group": "Prompt",
             },
             "model": {
-                "type": "string",
-                "description": "LiteLLM model id.",
+                "title": "Model",
+                "description": "LiteLLM model id enabled for your organization.",
                 "x-ui-widget": "llm_model_picker",
                 "x-ui-group": "Model",
             },

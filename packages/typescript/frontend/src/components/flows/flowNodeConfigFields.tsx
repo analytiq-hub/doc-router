@@ -992,8 +992,7 @@ export const FlowNodeParameterFields: React.FC<{
     }
 
     if (t === 'string' && uiHint === 'textarea') {
-      const placeholder =
-        rawPlaceholder || (typeof subschema.description === 'string' ? subschema.description : '') || undefined;
+      const placeholder = rawPlaceholder || undefined;
       const tv = typeof v === 'string' ? v : (v as string) ?? '';
       const hint = schemaDescription(subschema);
       return (
