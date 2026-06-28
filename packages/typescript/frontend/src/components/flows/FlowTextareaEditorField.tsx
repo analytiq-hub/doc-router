@@ -6,7 +6,7 @@ import { ArrowsPointingOutIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { flowInputClass } from './flowUiClasses';
 
 const expandButtonClass =
-  'absolute bottom-px right-px z-10 cursor-pointer rounded-tl border border-b-0 border-r-0 border-gray-300 bg-white p-1 text-gray-500 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400/30';
+  'z-10 col-start-1 row-start-1 cursor-pointer self-end justify-self-end rounded-tl border border-b-0 border-r-0 border-gray-300 bg-white p-1 text-gray-500 hover:text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-400/30';
 
 type FlowTextareaEditorFieldProps = {
   value: string;
@@ -27,7 +27,7 @@ export function FlowTextareaEditorField({
   onChange,
 }: FlowTextareaEditorFieldProps) {
   const [modalOpen, setModalOpen] = useState(false);
-  const textareaClass = `${flowInputClass} ${minHeightClass} resize-y font-mono text-[11px]`;
+  const textareaClass = `${flowInputClass} ${minHeightClass} block resize-y font-mono text-[11px]`;
 
   const renderTextarea = (rows?: number, className?: string) => (
     <textarea
@@ -45,7 +45,7 @@ export function FlowTextareaEditorField({
 
   return (
     <>
-      <div className="relative">
+      <div className="grid w-full [&>*]:col-start-1 [&>*]:row-start-1">
         {!modalOpen ? (
           renderTextarea()
         ) : (
