@@ -46,23 +46,16 @@ def build_tool_context(
     *,
     consumer_node_id: str,
     parent_item: "ad.flows.FlowItem",
-    upstream_nodes_snapshot: dict[str, Any] | None = None,
-    trigger_snapshot: dict[str, Any] | None = None,
+    upstream_nodes_snapshot: dict[str, Any],
 ) -> dict[str, Any]:
-    nodes = upstream_nodes_snapshot
-    if nodes is None:
-        nodes = ctx.upstream_json_snapshot or ad.flows.materialize_node_data(ctx.run_data)
-    trigger = trigger_snapshot
-    if trigger is None:
-        trigger = dict(ctx.trigger_snapshot or ctx.trigger_data or {})
     return {
         "organization_id": ctx.organization_id,
         "flow_id": ctx.flow_id,
         "execution_id": ctx.execution_id,
         "consumer_node_id": consumer_node_id,
         "item": parent_item.to_context_dict(),
-        "trigger": dict(trigger),
-        "nodes": _cap_nodes_snapshot(nodes),
+        "trigger": dict(ctx.trigger_data or {}),
+        "nodes": _cap_nodes_snapshot(upstream_nodes_snapshot),
     }
 
 
@@ -73,8 +66,7 @@ async def _dispatch_tool_code(
     *,
     consumer_node_id: str,
     parent_item: "ad.flows.FlowItem",
-    upstream_nodes_snapshot: dict[str, Any] | None = None,
-    trigger_snapshot: dict[str, Any] | None = None,
+    upstream_nodes_snapshot: dict[str, Any],
 ) -> str:
     params = wired.node.get("parameters") or {}
     code = str(params.get("python_code") or "")
@@ -84,7 +76,6 @@ async def _dispatch_tool_code(
         consumer_node_id=consumer_node_id,
         parent_item=parent_item,
         upstream_nodes_snapshot=upstream_nodes_snapshot,
-        trigger_snapshot=trigger_snapshot,
     )
     result, logs = await ad.flows.run_python_tool(
         code=code,
@@ -192,8 +183,7 @@ async def execute_tool_call(
     *,
     consumer_node_id: str,
     parent_item: "ad.flows.FlowItem",
-    upstream_nodes_snapshot: dict[str, Any] | None = None,
-    trigger_snapshot: dict[str, Any] | None = None,
+    upstream_nodes_snapshot: dict[str, Any],
 ) -> str:
     """Run one tool call and return a string for the LLM tool message."""
 
@@ -208,7 +198,6 @@ async def execute_tool_call(
             consumer_node_id=consumer_node_id,
             parent_item=parent_item,
             upstream_nodes_snapshot=upstream_nodes_snapshot,
-            trigger_snapshot=trigger_snapshot,
         )
     elif wired.node_type == "flows.kb_tool":
         raw = await _dispatch_kb_tool(wired, tc.arguments, ctx)

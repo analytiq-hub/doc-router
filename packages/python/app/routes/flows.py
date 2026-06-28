@@ -1168,6 +1168,15 @@ async def patch_flow_metadata(
     organization_id: str, flow_id: str, req: PatchFlowRequest, current_user: User = Depends(get_org_user)
 ):
     db = await _get_db()
+    has_field_updates = (
+        req.name is not None
+        or req.callable_as_tool is not None
+        or req.tool_description is not None
+        or req.tool_schema is not None
+    )
+    if not has_field_updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
     updates: dict[str, Any] = {"updated_at": _now(), "updated_by": current_user.user_id}
     if req.name is not None:
         updates["name"] = req.name
@@ -1177,9 +1186,6 @@ async def patch_flow_metadata(
         updates["tool_description"] = req.tool_description
     if req.tool_schema is not None:
         updates["tool_schema"] = req.tool_schema
-    _audit_keys = frozenset({"updated_at", "updated_by"})
-    if not any(k not in _audit_keys for k in updates):
-        raise HTTPException(status_code=400, detail="No fields to update")
 
     if req.callable_as_tool:
         from analytiq_data.flows.callable_flow import validate_callable_flow_revision
@@ -1187,10 +1193,7 @@ async def patch_flow_metadata(
         latest = await db.flow_revisions.find_one({"flow_id": flow_id}, sort=[("flow_version", -1)])
         if latest:
             try:
-                validate_callable_flow_revision(
-                    latest.get("nodes") or [],
-                    latest.get("connections") or {},
-                )
+                validate_callable_flow_revision(latest.get("nodes") or [])
             except ad.flows.FlowValidationError as e:
                 raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -1613,7 +1616,7 @@ async def activate_flow(organization_id: str, flow_id: str, req: ActivateFlowReq
         from analytiq_data.flows.callable_flow import validate_callable_flow_revision
 
         try:
-            validate_callable_flow_revision(nodes_list, r.get("connections") or {})
+            validate_callable_flow_revision(nodes_list)
         except ad.flows.FlowValidationError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 

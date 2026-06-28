@@ -84,7 +84,6 @@ class FlowAgentLoop:
         consumer_node_id: str,
         parent_item: "ad.flows.FlowItem",
         upstream_nodes_snapshot: dict[str, Any],
-        trigger_snapshot: dict[str, Any],
     ) -> None:
         self.analytiq_client = analytiq_client
         self.organization_id = organization_id
@@ -93,7 +92,6 @@ class FlowAgentLoop:
         self.consumer_node_id = consumer_node_id
         self.parent_item = parent_item
         self.upstream_nodes_snapshot = upstream_nodes_snapshot
-        self.trigger_snapshot = trigger_snapshot
 
     async def run(self, config: FlowAgentConfig) -> FlowAgentResult:
         messages: list[dict[str, Any]] = [
@@ -137,13 +135,16 @@ class FlowAgentLoop:
                         round_num,
                     )
                 else:
-                    response = await ad.llm.agent_completion(
-                        self.analytiq_client,
-                        config.model,
-                        messages,
-                        api_key,
-                        tools=tools or None,
-                        tool_choice="auto" if tools else None,
+                    response = await asyncio.wait_for(
+                        ad.llm.agent_completion(
+                            self.analytiq_client,
+                            config.model,
+                            messages,
+                            api_key,
+                            tools=tools or None,
+                            tool_choice="auto" if tools else None,
+                        ),
+                        timeout=FLOW_AGENT_STREAM_ROUND_SECONDS,
                     )
                     await billing.record_spu(response, self.organization_id, config.model)
                     message = response.choices[0].message
@@ -189,7 +190,6 @@ class FlowAgentLoop:
                         consumer_node_id=self.consumer_node_id,
                         parent_item=self.parent_item,
                         upstream_nodes_snapshot=self.upstream_nodes_snapshot,
-                        trigger_snapshot=self.trigger_snapshot,
                     )
                     success = True
                     err_msg = None

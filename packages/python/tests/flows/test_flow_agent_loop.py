@@ -85,7 +85,6 @@ async def test_no_tools_single_reply(ctx: ad.flows.ExecutionContext) -> None:
         consumer_node_id="agent-1",
         parent_item=item,
         upstream_nodes_snapshot={},
-        trigger_snapshot={},
     )
     fake = _FakeResponse(choices=[_FakeChoice(message=_FakeMessage(content="Hello"))])
 
@@ -123,7 +122,6 @@ async def test_unknown_tool_continues_loop(ctx: ad.flows.ExecutionContext) -> No
         consumer_node_id="agent-1",
         parent_item=item,
         upstream_nodes_snapshot={},
-        trigger_snapshot={},
     )
 
     first = _FakeResponse(

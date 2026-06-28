@@ -54,6 +54,7 @@ async def test_tool_code_dispatch_echoes_params(ctx: ad.flows.ExecutionContext) 
         ctx,
         consumer_node_id="agent-1",
         parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+        upstream_nodes_snapshot={},
     )
 
     assert json.loads(raw) == {"echo": "hello"}
@@ -72,6 +73,7 @@ async def test_tool_code_dispatch_missing_run_raises(ctx: ad.flows.ExecutionCont
             ctx,
             consumer_node_id="agent-1",
             parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+            upstream_nodes_snapshot={},
         )
 
 
@@ -93,4 +95,5 @@ async def test_tool_code_dispatch_timeout(ctx: ad.flows.ExecutionContext) -> Non
             ctx,
             consumer_node_id="agent-1",
             parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+            upstream_nodes_snapshot={},
         )

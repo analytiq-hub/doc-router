@@ -74,6 +74,7 @@ async def test_kb_dispatch_returns_formatted_results(ctx: ad.flows.ExecutionCont
             ctx,
             consumer_node_id="agent-1",
             parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+            upstream_nodes_snapshot={},
         )
 
     assert raw == "formatted hits"
@@ -90,6 +91,7 @@ async def test_kb_dispatch_missing_query(ctx: ad.flows.ExecutionContext) -> None
         ctx,
         consumer_node_id="agent-1",
         parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+        upstream_nodes_snapshot={},
     )
 
     assert json.loads(raw) == {"error": "query is required"}
@@ -111,6 +113,7 @@ async def test_kb_dispatch_inactive_kb(ctx: ad.flows.ExecutionContext) -> None:
             ctx,
             consumer_node_id="agent-1",
             parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+            upstream_nodes_snapshot={},
         )
 
     assert json.loads(raw) == {"error": "Knowledge base is not active"}
@@ -135,6 +138,7 @@ async def test_kb_dispatch_empty_results(ctx: ad.flows.ExecutionContext) -> None
             ctx,
             consumer_node_id="agent-1",
             parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+            upstream_nodes_snapshot={},
         )
 
     assert raw == "No results found."
@@ -151,6 +155,7 @@ async def test_kb_dispatch_not_configured(ctx: ad.flows.ExecutionContext) -> Non
         ctx,
         consumer_node_id="agent-1",
         parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+        upstream_nodes_snapshot={},
     )
 
     assert json.loads(raw) == {"error": "Knowledge base not configured"}

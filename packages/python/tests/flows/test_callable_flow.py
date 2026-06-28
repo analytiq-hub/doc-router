@@ -27,13 +27,13 @@ def _tool_trigger() -> dict:
 
 
 def test_validate_callable_flow_revision_ok() -> None:
-    validate_callable_flow_revision([_tool_trigger()], {})
+    validate_callable_flow_revision([_tool_trigger()])
 
 
 def test_validate_callable_flow_revision_two_triggers() -> None:
     nodes = [_tool_trigger(), {**_tool_trigger(), "id": "tt2", "name": "Tool entry 2"}]
     with pytest.raises(FlowValidationError, match="exactly one"):
-        validate_callable_flow_revision(nodes, {})
+        validate_callable_flow_revision(nodes)
 
 
 @pytest.mark.asyncio

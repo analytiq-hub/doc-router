@@ -7,13 +7,8 @@ from typing import Any
 import analytiq_data as ad
 
 
-def validate_callable_flow_revision(
-    nodes: list[dict[str, Any]],
-    connections: dict[str, Any] | ad.flows.Connections,
-) -> None:
+def validate_callable_flow_revision(nodes: list[dict[str, Any]]) -> None:
     """Require exactly one Sub-flow entry trigger (return value comes from last executed node)."""
-
-    del connections  # structural check only; n8n-style sub-flows do not require a respond node
 
     tool_triggers = [n for n in nodes if isinstance(n, dict) and n.get("type") == "flows.trigger.tool"]
     if len(tool_triggers) != 1:

@@ -90,6 +90,8 @@ async def find_flows_referencing_target(
                 continue
             if _node_references_target(node, target):
                 refs.append(_reference_from_node(hdr, node))
+                # One entry per parent flow is enough for delete blocking; extra referencing
+                # nodes in the same revision are omitted (message cites one node per flow).
                 break
     refs.sort(key=lambda r: r.flow_name.lower())
     return refs

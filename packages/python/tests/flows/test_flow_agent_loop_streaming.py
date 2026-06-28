@@ -93,7 +93,6 @@ async def test_stream_emits_content_chunks_and_end(ctx: ad.flows.ExecutionContex
         consumer_node_id="agent-1",
         parent_item=item,
         upstream_nodes_snapshot={},
-        trigger_snapshot={},
     )
 
     with patch("analytiq_data.flows.agent_loop.loop.ad.llm.get_llm_model_provider", return_value="openai"), patch(
@@ -143,7 +142,6 @@ async def test_stream_tool_round_events(ctx: ad.flows.ExecutionContext) -> None:
         consumer_node_id="agent-1",
         parent_item=item,
         upstream_nodes_snapshot={},
-        trigger_snapshot={},
     )
 
     round_idx = 0
@@ -209,7 +207,6 @@ async def test_stream_error_emitted_on_llm_failure(ctx: ad.flows.ExecutionContex
         consumer_node_id="agent-1",
         parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
         upstream_nodes_snapshot={},
-        trigger_snapshot={},
     )
 
     async def broken_stream(*_args: Any, **_kwargs: Any):
@@ -249,7 +246,6 @@ async def test_non_streaming_uses_batch_completion(ctx: ad.flows.ExecutionContex
         consumer_node_id="agent-1",
         parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
         upstream_nodes_snapshot={},
-        trigger_snapshot={},
     )
 
     fake_response = MagicMock()

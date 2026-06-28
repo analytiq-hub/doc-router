@@ -174,7 +174,6 @@ class FlowsToolExecutorNode:
                     consumer_node_id=str(node["id"]),
                     parent_item=item,
                     upstream_nodes_snapshot=upstream_snapshot,
-                    trigger_snapshot=dict(item.json or {}),
                 )
                 try:
                     tool_result = json.loads(raw)

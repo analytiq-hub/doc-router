@@ -682,7 +682,7 @@ export const FlowNodeParameterFields: React.FC<{
       );
     }
 
-    if (uiHint === 'tool_name_input' || uiHint === 'wired_tool_picker') {
+    if (uiHint === 'tool_name_input') {
       const wiredNames = nodeType?.tool_consumer
         ? wiredToolNamesForConsumer(node.id, edges, allNodes.length ? allNodes : [node])
         : [];

@@ -63,10 +63,6 @@ class ExecutionContext:
     resumed_from: str | None = None
     #: Precomputed tool wiring for tool_consumer nodes (node_id -> WiredTool list).
     tool_consumer_wiring: dict[str, list[Any]] | None = None
-    #: Upstream main-path JSON snapshot for tool sandbox context (capped at runtime).
-    upstream_json_snapshot: dict[str, Any] = field(default_factory=dict)
-    #: Trigger item snapshot for tool context.
-    trigger_snapshot: dict[str, Any] = field(default_factory=dict)
     #: Nested flow_tool stack for recursion/cycle detection.
     flow_id_stack: list[str] = field(default_factory=list)
     #: Chat streaming: when true, agent may stream LLM tokens via stream_sink.

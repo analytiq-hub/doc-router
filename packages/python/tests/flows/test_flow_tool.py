@@ -146,6 +146,7 @@ async def test_flow_tool_dispatch_runs_callable_subflow(test_db, parent_ctx: ad.
         parent_ctx,
         consumer_node_id="agent-1",
         parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+        upstream_nodes_snapshot={},
     )
 
     payload = json.loads(raw)
@@ -165,6 +166,7 @@ async def test_flow_tool_rejects_cycle(test_db, parent_ctx: ad.flows.ExecutionCo
         parent_ctx,
         consumer_node_id="agent-1",
         parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+        upstream_nodes_snapshot={},
     )
 
     assert json.loads(raw) == {"error": "Sub-flow cycle detected"}
@@ -182,6 +184,7 @@ async def test_flow_tool_rejects_inactive_target(test_db, parent_ctx: ad.flows.E
         parent_ctx,
         consumer_node_id="agent-1",
         parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+        upstream_nodes_snapshot={},
     )
 
     assert json.loads(raw) == {"error": "Target flow is not active"}
@@ -199,6 +202,7 @@ async def test_flow_tool_rejects_non_callable_target(test_db, parent_ctx: ad.flo
         parent_ctx,
         consumer_node_id="agent-1",
         parent_item=ad.flows.FlowItem(json={}, binary={}, meta={}),
+        upstream_nodes_snapshot={},
     )
 
     assert json.loads(raw) == {"error": "Target flow is not callable as a tool"}
