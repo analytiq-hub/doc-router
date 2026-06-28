@@ -18,9 +18,10 @@ import { FLOW_EDGE_MARKER } from './flowCanvasConstants';
 
 function resolveMarkerEnd(markerEnd: EdgeProps['markerEnd']): string {
   if (typeof markerEnd === 'string') {
-    return markerEnd && markerEnd !== 'none' ? markerEnd : getMarkerEnd(FLOW_EDGE_MARKER);
+    return markerEnd && markerEnd !== 'none' ? markerEnd : getMarkerEnd(FLOW_EDGE_MARKER.type);
   }
-  return getMarkerEnd((markerEnd as EdgeMarker | undefined) ?? FLOW_EDGE_MARKER);
+  const marker = (markerEnd as EdgeMarker | undefined) ?? FLOW_EDGE_MARKER;
+  return getMarkerEnd(marker.type);
 }
 
 /** Delay closing edge controls so the pointer can leave the SVG hit path and reach the HTML toolbar. */
