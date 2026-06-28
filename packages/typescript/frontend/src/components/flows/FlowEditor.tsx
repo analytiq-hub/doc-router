@@ -75,6 +75,7 @@ import type { FlowConnectionType, FlowRfNodeData } from './flowRf';
 import { triggerReachabilityFromGraph } from './flowTriggerReachability';
 import { flowEditorPath, targetFlowIdFromFlowNode, targetFlowSubtitle } from './flowTargetFlow';
 import { useOrgFlowNameMap } from './useOrgFlowNameMap';
+import { flowNodeTypeFor, isValidFlowConnection } from './flowConnectionValidation';
 import { flowRunButtonCanvasClass, FLOW_EXECUTE_FLOW_LABEL, FLOW_NODE_PALETTE_WIDTH_PX } from './flowUiClasses';
 import { flowWorkspaceDropdownItemSimpleClass, flowWorkspaceMenuPanelClass } from './flowWorkspaceMenu';
 
@@ -224,14 +225,6 @@ function parseHandleIndex(handle: string | null | undefined, prefix: string): nu
   if (!handle.startsWith(prefix)) return null;
   const idx = Number(handle.slice(prefix.length));
   return Number.isFinite(idx) ? idx : null;
-}
-
-function flowNodeTypeFor(
-  rfNode: Node<FlowRfNodeData> | undefined,
-  nodeTypesByKey: Record<string, FlowNodeType>,
-): FlowNodeType | undefined {
-  if (!rfNode) return undefined;
-  return rfNode.data.nodeType ?? nodeTypesByKey[rfNode.data.flowNode.type];
 }
 
 function toCanvasEdges(edges: Edge[]): Edge[] {
@@ -509,6 +502,8 @@ const FlowEditor: React.FC<{
 
   const onConnect = useCallback(
     (params: Connection) => {
+      if (!isValidFlowConnection(params, nodes, nodeTypesByKey)) return;
+
       const outIdx = parseHandleIndex(params.sourceHandle, 'out-');
       if (outIdx == null) return;
 
@@ -516,24 +511,17 @@ const FlowEditor: React.FC<{
       const dst = nodes.find((n) => n.id === params.target);
       const srcType = flowNodeTypeFor(src, nodeTypesByKey);
       const dstType = flowNodeTypeFor(dst, nodeTypesByKey);
-
-      if (outIdx < 0 || (srcType && outIdx >= (srcType.outputs ?? 0))) return;
+      if (!srcType || !dstType) return;
 
       const connectionType = outputPortType(srcType, outIdx);
 
       let inIdx: number;
       if (params.targetHandle === TOOL_IN_HANDLE) {
-        if (!dstType?.tool_consumer || !srcType?.tool_provider) return;
         inIdx = edges.filter((e) => e.target === params.target && e.targetHandle === TOOL_IN_HANDLE).length;
-      } else if (srcType?.tool_provider) {
-        return;
       } else {
         const parsedIn = parseHandleIndex(params.targetHandle, 'in-');
         if (parsedIn == null) return;
         inIdx = parsedIn;
-        const maxIn = inputHandleCount(dstType);
-        if (inIdx < 0 || inIdx >= maxIn) return;
-        if (!portTypesCompatible(connectionType, inputPortType(dstType, inIdx))) return;
       }
 
       const isToolEdge = params.targetHandle === TOOL_IN_HANDLE;
@@ -568,33 +556,7 @@ const FlowEditor: React.FC<{
   );
 
   const isValidConnection = useCallback(
-    (connection: Connection) => {
-      const outIdx = parseHandleIndex(connection.sourceHandle, 'out-');
-      if (outIdx == null) return false;
-
-      const src = nodes.find((n) => n.id === connection.source);
-      const dst = nodes.find((n) => n.id === connection.target);
-      const srcType = flowNodeTypeFor(src, nodeTypesByKey);
-      const dstType = flowNodeTypeFor(dst, nodeTypesByKey);
-
-      if (outIdx < 0 || (srcType && outIdx >= (srcType.outputs ?? 0))) return false;
-
-      const connectionType = outputPortType(srcType, outIdx);
-
-      if (connection.targetHandle === TOOL_IN_HANDLE) {
-        return Boolean(srcType?.tool_provider && dstType?.tool_consumer);
-      }
-
-      if (srcType?.tool_provider) {
-        return false;
-      }
-
-      const inIdx = parseHandleIndex(connection.targetHandle, 'in-');
-      if (inIdx == null) return false;
-      if (inIdx < 0 || inIdx >= inputHandleCount(dstType)) return false;
-
-      return portTypesCompatible(connectionType, inputPortType(dstType, inIdx));
-    },
+    (connection: Connection) => isValidFlowConnection(connection, nodes, nodeTypesByKey),
     [nodeTypesByKey, nodes],
   );
 
@@ -779,6 +741,7 @@ const FlowEditor: React.FC<{
       const outIdx = parseHandleIndex(sh, 'out-');
       if (outIdx == null || outIdx < 0) return false;
       const srcType = srcNode.data.nodeType ?? nodeTypesByKey[srcNode.data.flowNode.type];
+      if (srcType?.tool_provider) return false;
       if (srcType && outIdx >= (srcType.outputs ?? 0)) return false;
 
       const dx = FLOW_CANVAS_GRID_PX * 8;

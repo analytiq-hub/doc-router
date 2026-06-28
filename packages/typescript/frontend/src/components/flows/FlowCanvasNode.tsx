@@ -75,8 +75,8 @@ function OutputHandleWithContinuation({
   portType: FlowConnectionType;
   actions: FlowCanvasActions | null;
 }) {
-  const canAppend = Boolean(actions?.onBeginAppendFromOutput);
   const isToolOut = portType === 'flows.tool';
+  const canAppend = Boolean(actions?.onBeginAppendFromOutput) && !isToolOut;
   const hasOutgoingEdge = useStore(
     useCallback(
       (s) => s.edges.some((e) => e.source === nodeId && String(e.sourceHandle ?? 'out-0') === handleId),
@@ -91,6 +91,8 @@ function OutputHandleWithContinuation({
         type="source"
         position={isToolOut ? Position.Top : Position.Right}
         className={handleClassForPortType(portType)}
+        isConnectableStart
+        isConnectableEnd={false}
         style={
           isToolOut
             ? { left: '50%', top: '-6px', transform: 'translateX(-50%)' }
@@ -531,6 +533,8 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
                 type="target"
                 position={isOcrPort ? Position.Bottom : Position.Left}
                 className={handleClassForPortType(portType)}
+                isConnectableStart={false}
+                isConnectableEnd
                 style={
                   isOcrPort
                     ? { left: '14%', bottom: '-6px', top: 'auto', transform: 'none' }
@@ -545,6 +549,8 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
               type="target"
               position={Position.Bottom}
               className={toolHandleClass}
+              isConnectableStart={false}
+              isConnectableEnd
               style={{ left: '50%', bottom: '-6px', top: 'auto', transform: 'translateX(-50%)' }}
             />
           ) : null}
