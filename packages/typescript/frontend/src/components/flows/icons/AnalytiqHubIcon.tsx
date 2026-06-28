@@ -18,7 +18,6 @@ export function AnalytiqHubIcon({ className }: { className?: string }): React.Re
         maskPosition: 'center',
         WebkitMaskSize: 'contain',
         maskSize: 'contain',
-        WebkitMaskMode: 'alpha',
         maskMode: 'alpha',
       }}
     />

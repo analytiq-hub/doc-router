@@ -1,4 +1,5 @@
 import dagre from '@dagrejs/dagre';
+import type { Edge as DagreGraphEdge, Graph as DagreGraph } from '@dagrejs/graphlib';
 import type { Edge, Node } from 'reactflow';
 import type { FlowNodeType } from '@docrouter/sdk';
 import { TOOL_IN_HANDLE, edgeConnectionType } from './flowRf';
@@ -14,6 +15,8 @@ export type FlowCanvasLayoutResult = {
 };
 
 type BoundingBox = { x: number; y: number; width: number; height: number };
+
+type DagreLayoutNode = { x: number; y: number; width: number; height: number };
 
 type LayoutNode = Node<FlowRfNodeData>;
 
@@ -72,7 +75,7 @@ function boundingBoxFromNode(node: LayoutNode): BoundingBox {
   return { x: node.position.x, y: node.position.y, width, height };
 }
 
-function boundingBoxFromDagreNode(node: dagre.Node): BoundingBox {
+function boundingBoxFromDagreNode(node: DagreLayoutNode): BoundingBox {
   return {
     x: node.x - node.width / 2,
     y: node.y - node.height / 2,
@@ -81,8 +84,10 @@ function boundingBoxFromDagreNode(node: dagre.Node): BoundingBox {
   };
 }
 
-function boundingBoxFromGraph(graph: dagre.graphlib.Graph): BoundingBox {
-  return compositeBoundingBox(graph.nodes().map((id) => boundingBoxFromDagreNode(graph.node(id))));
+function boundingBoxFromGraph(graph: DagreGraph): BoundingBox {
+  return compositeBoundingBox(
+    graph.nodes().map((id: string) => boundingBoxFromDagreNode(graph.node(id) as DagreLayoutNode)),
+  );
 }
 
 function intersects(container: BoundingBox, target: BoundingBox, padding = 0): boolean {
@@ -112,15 +117,19 @@ function createDagreGraph(layoutNodes: LayoutNode[], layoutEdges: Edge[]) {
     graph.setNode(node.id, { width, height, x: node.position.x, y: node.position.y });
   });
 
+  const positionById = Object.fromEntries(layoutNodes.map((n) => [n.id, n.position]));
+
   layoutEdges
     .filter((e) => nodeIdSet.has(e.source) && nodeIdSet.has(e.target))
-    .sort((a, b) => sortByPosition({ x: a.targetX ?? 0, y: a.targetY ?? 0 }, { x: b.targetX ?? 0, y: b.targetY ?? 0 }))
+    .sort((a, b) =>
+      sortByPosition(positionById[a.target] ?? { x: 0, y: 0 }, positionById[b.target] ?? { x: 0, y: 0 }),
+    )
     .forEach((e) => graph.setEdge(e.source, e.target));
 
   return graph;
 }
 
-function createDagreSubGraph(nodeIds: string[], parent: dagre.graphlib.Graph) {
+function createDagreSubGraph(nodeIds: string[], parent: DagreGraph) {
   const subGraph = new dagre.graphlib.Graph();
   subGraph.setGraph({
     rankdir: 'LR',
@@ -133,13 +142,13 @@ function createDagreSubGraph(nodeIds: string[], parent: dagre.graphlib.Graph) {
 
   parent
     .nodes()
-    .filter((id) => nodeIdSet.has(id))
-    .forEach((id) => subGraph.setNode(id, parent.node(id)));
+    .filter((id: string) => nodeIdSet.has(id))
+    .forEach((id: string) => subGraph.setNode(id, parent.node(id)));
 
   parent
     .edges()
-    .filter((e) => nodeIdSet.has(e.v) && nodeIdSet.has(e.w))
-    .forEach((e) => subGraph.setEdge(e.v, e.w, parent.edge(e)));
+    .filter((e: DagreGraphEdge) => nodeIdSet.has(e.v) && nodeIdSet.has(e.w))
+    .forEach((e: DagreGraphEdge) => subGraph.setEdge(e.v, e.w, parent.edge(e)));
 
   return subGraph;
 }
@@ -167,7 +176,7 @@ function createDagreVerticalGraph(subgraphBoxes: Array<{ id: string; box: Boundi
   return subGraph;
 }
 
-function createToolSubGraph(nodeIds: string[], parent: dagre.graphlib.Graph) {
+function createToolSubGraph(nodeIds: string[], parent: DagreGraph) {
   const subGraph = new dagre.graphlib.Graph();
   subGraph.setGraph({
     rankdir: 'TB',
