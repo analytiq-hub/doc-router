@@ -1087,7 +1087,43 @@ export const FlowNodeParameterFields: React.FC<{
       );
     }
 
-    if (monacoOneOf || (t === 'object' && uiHint !== 'object_fields' && uiHint !== 'collection_fields') || (t === 'array' && uiHint !== 'name_value_list')) {
+    if ((t === 'object' || t === 'array') && uiHint === 'json') {
+      const textValue =
+        typeof v === 'string'
+          ? v
+          : v == null
+            ? safeJsonStringify(t === 'array' ? [] : {}, t === 'array' ? '[]' : '{}')
+            : safeJsonStringify(v, t === 'array' ? '[]' : '{}');
+      const hint = schemaDescription(subschema);
+      return (
+        <div key={key} className="mb-3 w-full min-w-0">
+          <FlowParamLabel label={propLabel} description={hint} wrapperClassName="mb-1" />
+          <FlowCodeEditorField
+            value={textValue}
+            language="json"
+            label={propLabel}
+            height="120px"
+            readOnly={readOnly}
+            treatAsCode={false}
+            nodeId={node.id}
+            soleInboundParentNodeId={soleInboundParentNodeId}
+            onChange={(next) => {
+              try {
+                setField(key, JSON.parse(next));
+              } catch {
+                // ignore until valid JSON
+              }
+            }}
+          />
+        </div>
+      );
+    }
+
+    if (
+      monacoOneOf ||
+      (t === 'object' && uiHint !== 'object_fields' && uiHint !== 'collection_fields' && uiHint !== 'json') ||
+      (t === 'array' && uiHint !== 'name_value_list' && uiHint !== 'json')
+    ) {
       const lang = key === 'python_code' ? 'python' : key === 'ts_code' ? 'typescript' : key === 'js_code' ? 'javascript' : 'json';
       const textValue =
         typeof v === 'string'

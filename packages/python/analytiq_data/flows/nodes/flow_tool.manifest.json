@@ -30,24 +30,36 @@
     "type": "object",
     "properties": {
       "tool_name": {
+        "title": "Tool name",
+        "description": "Function name exposed to the LLM (lowercase letters, digits, underscores; must start with a letter).",
         "type": "string",
         "x-ui-group": "Tool"
       },
       "tool_description": {
+        "title": "Tool description",
+        "description": "Natural-language description the model uses to decide when to call this tool.",
         "type": "string",
         "x-ui-widget": "textarea",
         "x-ui-group": "Tool"
       },
       "target_flow_id": {
+        "title": "Target flow",
+        "description": "Callable flow to run when the agent invokes this tool. Only flows marked callable with an active revision appear in the picker.",
         "type": "string",
         "x-ui-widget": "flow_picker",
         "x-ui-flow-picker-mode": "callable",
         "x-ui-group": "Flow"
       },
       "parameters_schema": {
+        "title": "Parameters schema",
+        "description": "JSON Schema for arguments the model may pass. Defines the tool's input shape and becomes the subflow payload when the tool runs.",
         "type": "object",
         "x-ui-widget": "json",
-        "x-ui-group": "Tool"
+        "x-ui-group": "Tool",
+        "default": {
+          "type": "object",
+          "properties": {}
+        }
       }
     },
     "required": [

@@ -202,3 +202,15 @@ async def test_flow_tool_rejects_non_callable_target(test_db, parent_ctx: ad.flo
     )
 
     assert json.loads(raw) == {"error": "Target flow is not callable as a tool"}
+
+
+def test_flow_tool_parameter_schema_ui_metadata() -> None:
+    from analytiq_data.flows.nodes.flow_tool import FlowsFlowToolNode
+
+    props = FlowsFlowToolNode().parameter_schema["properties"]
+    assert props["tool_name"]["title"] == "Tool name"
+    assert props["tool_description"]["title"] == "Tool description"
+    assert props["target_flow_id"]["title"] == "Target flow"
+    assert props["parameters_schema"]["title"] == "Parameters schema"
+    assert props["parameters_schema"]["x-ui-widget"] == "json"
+    assert props["parameters_schema"]["default"] == {"type": "object", "properties": {}}
