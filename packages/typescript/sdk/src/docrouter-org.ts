@@ -289,11 +289,12 @@ export class DocRouterOrg {
     documentId: string;
     fileType?: string;
     signal?: AbortSignal;
+    timeout?: number;
   }): Promise<ArrayBuffer> {
-    const { documentId, fileType = 'pdf', signal } = params;
+    const { documentId, fileType = 'pdf', signal, timeout } = params;
     return this.http.getBinary(
       `/v0/orgs/${this.organizationId}/documents/${documentId}/file?file_type=${fileType}`,
-      { signal },
+      { signal, timeout },
     );
   }
 
