@@ -1,6 +1,12 @@
 import boto3
 import botocore
 import aioboto3
+import aiobotocore.session
+from aiobotocore.credentials import (
+    AioAssumeRoleCredentialFetcher,
+    AioCredentials,
+    AioDeferredRefreshableCredentials,
+)
 from botocore.config import Config
 from botocore.credentials import AssumeRoleCredentialFetcher, DeferredRefreshableCredentials
 from botocore.exceptions import ClientError
@@ -141,37 +147,42 @@ def get_assume_role_arn(user_arn: str) -> str:
     return f"arn:aws:iam::{account_id}:role/{account_name}-{user_name_base}-role"
 
 class AsyncAWSClient:
+    """
+    Async AWS client for S3, Textract, SES, etc.
+
+    Two credential tracks:
+    - Track A (config keys): ``aws_access_key_id`` / ``aws_secret_access_key`` from cloud
+      config — static, used by Bedrock via litellm. Never rotated by assume-role refresh.
+    - Track B (assumed role): ``AioDeferredRefreshableCredentials`` on a stable
+      ``aioboto3.Session`` — used by ``client()`` for service API calls.
+    """
+
     def __init__(self, analytiq_client, region_name: str = "us-east-1"):
         self.env = analytiq_client.env
         self.region_name = region_name
         self.analytiq_client = analytiq_client
         self._session_lock = asyncio.Lock()
-        
+
     async def init(self):
-        # Get the AWS keys
         aws_keys = await get_aws_config(self.analytiq_client)
+        # Track A: static config keys (Bedrock / litellm)
         self.aws_access_key_id = aws_keys["aws_access_key_id"]
         self.aws_secret_access_key = aws_keys["aws_secret_access_key"]
-        
+
         if not self.aws_access_key_id or not self.aws_secret_access_key:
             raise Exception(f"AWS credentials not configured. Cannot create async AWS client.")
-        
-        # Create the user session (sync for initial setup)
-        self.user_session = boto3.Session(
-            region_name=self.region_name,
-            aws_access_key_id=self.aws_access_key_id,
-            aws_secret_access_key=self.aws_secret_access_key
-        )
 
-        # Store credential fetcher for refresh capability
-        self.credential_fetcher = None
-        self.botocore_session = None
+        # Track B: async assume-role session for service clients
         self.assume_role_arn = None
+        self._source_credentials = None
+        self._source_aio_session = None
+        self.assumed_role_credentials = None
+        self._aio_session = None
         self.session = None
         self.s3_bucket_name = None
 
         try:
-            await asyncio.to_thread(self._setup_assumed_role_session_sync)
+            await self._setup_assumed_role_session()
             self.s3_bucket_name = await get_s3_bucket_name(self.analytiq_client)
 
         except Exception as e:
@@ -184,48 +195,74 @@ class AsyncAWSClient:
             )
             self.s3_bucket_name = await get_s3_bucket_name(self.analytiq_client)
 
-    def _setup_assumed_role_session_sync(self) -> None:
-        """Sync STS + deferred assume-role credentials (must run off the event loop)."""
-        user_identity = self.user_session.client("sts").get_caller_identity()
-        self.assume_role_arn = get_assume_role_arn(user_identity["Arn"])
-        self.credential_fetcher = AssumeRoleCredentialFetcher(
-            client_creator=self.user_session.client,
-            source_credentials=self.user_session.get_credentials(),
+    async def _resolve_assume_role_arn(self) -> str:
+        """One-shot sync STS lookup for role ARN (off event loop)."""
+
+        def _sync() -> str:
+            session = boto3.Session(
+                region_name=self.region_name,
+                aws_access_key_id=self.aws_access_key_id,
+                aws_secret_access_key=self.aws_secret_access_key,
+            )
+            identity = session.client("sts").get_caller_identity()
+            return get_assume_role_arn(identity["Arn"])
+
+        return await asyncio.to_thread(_sync)
+
+    async def _setup_assumed_role_session(self) -> None:
+        """Build stable aioboto3 session with async assume-role credentials."""
+        self.assume_role_arn = await self._resolve_assume_role_arn()
+
+        self._source_credentials = AioCredentials(
+            self.aws_access_key_id,
+            self.aws_secret_access_key,
+        )
+        self._source_aio_session = aiobotocore.session.AioSession()
+        region_name = self.region_name
+        source_aio_session = self._source_aio_session
+
+        def _sts_client_creator(service_name, **kwargs):
+            kwargs.setdefault("region_name", region_name)
+            return source_aio_session.create_client(service_name, **kwargs)
+
+        fetcher = AioAssumeRoleCredentialFetcher(
+            client_creator=_sts_client_creator,
+            source_credentials=self._source_credentials,
             role_arn=self.assume_role_arn,
         )
-        self.botocore_session = botocore.session.Session()
-        self.botocore_session._credentials = DeferredRefreshableCredentials(
+        self.assumed_role_credentials = AioDeferredRefreshableCredentials(
             method="assume-role",
-            refresh_using=self.credential_fetcher.fetch_credentials,
+            refresh_using=fetcher.fetch_credentials,
         )
-        # One aioboto3.Session bound to botocore for the process lifetime — credential
-        # rotation updates botocore only; avoids aiohttp transport churn under concurrency.
-        self.botocore_session.get_credentials().get_frozen_credentials()
-        self.session = aioboto3.Session(botocore_session=self.botocore_session)
 
-    def _refresh_credentials_sync(self, *, force: bool = False) -> None:
-        """Refresh assumed-role credentials in botocore (aioboto3 session unchanged)."""
-        if not self.botocore_session:
-            return
-        credentials = self.botocore_session.get_credentials()
+        self._aio_session = aiobotocore.session.AioSession()
+        self._aio_session._credentials = self.assumed_role_credentials
+
+        await self.assumed_role_credentials.get_frozen_credentials()
+
+        self.session = aioboto3.Session(
+            botocore_session=self._aio_session,
+            region_name=self.region_name,
+        )
+
+    async def _refresh_assumed_role_credentials(self, *, force: bool = False) -> None:
+        """Refresh Track B assumed-role tokens in place (aioboto3 session unchanged)."""
+        credentials = self.assumed_role_credentials
         if credentials is None:
             return
         if force:
-            with credentials._refresh_lock:
-                credentials._protected_refresh(is_mandatory=True)
+            async with credentials._refresh_lock:
+                await credentials._protected_refresh(is_mandatory=True)
         else:
-            credentials.get_frozen_credentials()
-        logger.debug("Refreshed async AWS credentials from botocore session")
-
-    async def _refresh_credentials_off_loop(self, *, force: bool = False) -> None:
-        await asyncio.to_thread(self._refresh_credentials_sync, force=force)
+            await credentials.get_frozen_credentials()
+        logger.debug("Refreshed async AWS assumed-role credentials")
 
     async def refresh_credentials(self) -> None:
-        """Refresh assumed-role credentials before opening AWS clients (if configured)."""
-        if not self.botocore_session:
+        """Refresh Track B credentials before opening AWS service clients."""
+        if self.assumed_role_credentials is None:
             return
         async with self._session_lock:
-            await self._refresh_credentials_off_loop()
+            await self._refresh_assumed_role_credentials()
 
     _REFRESHABLE_AUTH_ERROR_CODES = frozenset({
         "ExpiredToken",
@@ -262,12 +299,12 @@ class AsyncAWSClient:
             client = await cm.__aenter__()
             return cm, client
         except Exception as e:
-            if self.botocore_session and self.is_refreshable_auth_error(e):
+            if self.assumed_role_credentials and self.is_refreshable_auth_error(e):
                 logger.warning(
                     "AWS credentials expired during client open, refreshing and retrying"
                 )
                 async with self._session_lock:
-                    await self._refresh_credentials_off_loop(force=True)
+                    await self._refresh_assumed_role_credentials(force=True)
                     session = self.session
                 cm = session.client(service_name, config=config)
                 client = await cm.__aenter__()
