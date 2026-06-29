@@ -241,18 +241,22 @@ async def test_textract_timeout_raises_timeout_error(monkeypatch):
 
     monkeypatch.setattr(ad.aws, "get_aws_client_async", AsyncMock(return_value=aws_client))
 
-    # Mock loop.time() to jump past timeout immediately
+    # run_textract calls loop.time() several times before polling; advance time on sleep
+    # so the poll loop sees elapsed > OCR_TIMEOUT_SECS after the first IN_PROGRESS.
     class FakeLoop:
         def __init__(self):
-            self._first = True
+            self._t = 0.0
 
         def time(self):
-            if self._first:
-                self._first = False
-                return 0.0
-            return textract_mod.OCR_TIMEOUT_SECS + 1.0
+            return self._t
 
-    monkeypatch.setattr(asyncio, "get_running_loop", lambda: FakeLoop())
+    fake_loop = FakeLoop()
+
+    async def _fake_sleep(_secs):
+        fake_loop._t = textract_mod.OCR_TIMEOUT_SECS + 1.0
+
+    monkeypatch.setattr(asyncio, "get_running_loop", lambda: fake_loop)
+    monkeypatch.setattr(asyncio, "sleep", _fake_sleep)
 
     with pytest.raises(asyncio.TimeoutError):
         await textract_mod.run_textract(MagicMock(), b"blob")
