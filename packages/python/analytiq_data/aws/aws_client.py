@@ -214,15 +214,24 @@ class AsyncAWSClient:
         self.assume_role_arn = await self._resolve_assume_role_arn()
 
         self._source_credentials = AioCredentials(
+            access_key=self.aws_access_key_id,
+            secret_key=self.aws_secret_access_key,
+        )
+        self._source_aio_session = aiobotocore.session.AioSession()
+        self._source_aio_session.set_config_variable("region", self.region_name)
+        self._source_aio_session.set_credentials(
             self.aws_access_key_id,
             self.aws_secret_access_key,
         )
-        self._source_aio_session = aiobotocore.session.AioSession()
         region_name = self.region_name
         source_aio_session = self._source_aio_session
 
         def _sts_client_creator(service_name, **kwargs):
+            # AioAssumeRoleCredentialFetcher passes source keys into client_creator;
+            # setdefaults are defense-in-depth if called without them.
             kwargs.setdefault("region_name", region_name)
+            kwargs.setdefault("aws_access_key_id", self.aws_access_key_id)
+            kwargs.setdefault("aws_secret_access_key", self.aws_secret_access_key)
             return source_aio_session.create_client(service_name, **kwargs)
 
         fetcher = AioAssumeRoleCredentialFetcher(
@@ -236,17 +245,30 @@ class AsyncAWSClient:
         )
 
         self._aio_session = aiobotocore.session.AioSession()
-        self._aio_session._credentials = self.assumed_role_credentials
+        self._aio_session.set_config_variable("region", self.region_name)
+        self._bind_assumed_role_to_aio_session()
 
         await self.assumed_role_credentials.get_frozen_credentials()
 
-        self.session = aioboto3.Session(
-            botocore_session=self._aio_session,
-            region_name=self.region_name,
-        )
+        # botocore_session= binds the AioSession; region is configured on _aio_session above.
+        self.session = aioboto3.Session(botocore_session=self._aio_session)
+
+    def _bind_assumed_role_to_aio_session(self) -> None:
+        """Attach assumed-role credentials to the service AioSession.
+
+        AioSession.set_credentials() only accepts static AioCredentials, not
+        refreshable providers. aiobotocore's AssumeRoleProvider uses the same
+        private ``_credentials`` slot for AioDeferredRefreshableCredentials.
+        """
+        self._aio_session._credentials = self.assumed_role_credentials
 
     async def _refresh_assumed_role_credentials(self, *, force: bool = False) -> None:
-        """Refresh Track B assumed-role tokens in place (aioboto3 session unchanged)."""
+        """Refresh Track B assumed-role tokens in place (aioboto3 session unchanged).
+
+        Locking: ``_session_lock`` serializes refresh vs client open; ``credentials._refresh_lock``
+        (asyncio.Lock) serializes concurrent STS refreshes. Different locks, same order
+        (_session_lock outermost in callers) — no deadlock.
+        """
         credentials = self.assumed_role_credentials
         if credentials is None:
             return
