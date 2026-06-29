@@ -212,156 +212,201 @@ async def run_textract(analytiq_client,
     # Create a random s3 key
     s3_key = f"textract/tmp/{datetime.now().strftime('%Y-%m-%d')}/{uuid.uuid4()}"
 
+    normalized_queries = None
+    if query_list is not None and len(query_list) > 0:
+        normalized_queries = [{"Text": str(q)} for q in query_list]
+
+    loop = asyncio.get_running_loop()
+    run_started_at = loop.time()
+
+    if org_id and document_id:
+        log_prefix = f"{org_id}/{document_id}"
+    elif document_id:
+        log_prefix = document_id
+    else:
+        log_prefix = ""
+
     async with _textract_concurrency(priority):
         aws_client = await ad.aws.get_aws_client_async(analytiq_client)
         s3_bucket_name = aws_client.s3_bucket_name
         try:
-            # Keep S3 and Textract clients open for upload, polling, and cleanup (minutes).
-            async with (
-                aws_client.client("s3") as s3_client,
-                aws_client.client("textract") as textract_client,
-            ):
-                await s3_client.put_object(Bucket=s3_bucket_name, Key=s3_key, Body=blob)
+            for attempt in range(2):
                 try:
-                    if query_list is not None and len(query_list) > 0:
-                        query_list = [{"Text": str(q)} for q in query_list]
-                        response = await _call_textract_with_retry(
-                            textract_client.start_document_analysis,
-                            DocumentLocation={
-                                "S3Object": {
-                                    "Bucket": s3_bucket_name,
-                                    "Name": s3_key,
-                                }
-                            },
-                            FeatureTypes=feature_types + ["QUERIES"],
-                            QueriesConfig={"Queries": query_list},
-                        )
-                        get_completion_func = textract_client.get_document_analysis
-                    elif len(feature_types) > 0:
-                        response = await _call_textract_with_retry(
-                            textract_client.start_document_analysis,
-                            DocumentLocation={
-                                "S3Object": {
-                                    "Bucket": s3_bucket_name,
-                                    "Name": s3_key,
-                                }
-                            },
-                            FeatureTypes=feature_types,
-                        )
-                        get_completion_func = textract_client.get_document_analysis
-                    else:
-                        response = await _call_textract_with_retry(
-                            textract_client.start_document_text_detection,
-                            DocumentLocation={
-                                "S3Object": {
-                                    "Bucket": s3_bucket_name,
-                                    "Name": s3_key,
-                                }
-                            },
-                        )
-                        get_completion_func = textract_client.get_document_text_detection
-
-                    job_id = response["JobId"]
-
-                    if org_id and document_id:
-                        log_prefix = f"{org_id}/{document_id}"
-                    elif document_id:
-                        log_prefix = document_id
-                    else:
-                        log_prefix = ""
-
-                    idx = 0
-                    loop = asyncio.get_running_loop()
-                    start_time = loop.time()
-                    while True:
-                        elapsed = loop.time() - start_time
-                        if elapsed > OCR_TIMEOUT_SECS:
-                            raise asyncio.TimeoutError(
-                                f"Textract job {job_id} timed out after {OCR_TIMEOUT_SECS}s"
-                            )
-
-                        status_response = await _call_textract_with_retry(
-                            get_completion_func, JobId=job_id
-                        )
-                        status = status_response["JobStatus"]
-                        prefix_part = f"{log_prefix}: " if log_prefix else ""
+                    # Pull fresh STS tokens from DeferredRefreshableCredentials before opening clients.
+                    await aws_client.refresh_credentials()
+                    prefix_part = f"{log_prefix}: " if log_prefix else ""
+                    # Open S3 first; defer Textract until after upload (one fewer TLS handshake pre-upload).
+                    async with aws_client.client("s3") as s3_client:
+                        upload_started_at = loop.time()
                         logger.info(
-                            f"{analytiq_client.name}: {prefix_part}step {idx}: {status}"
+                            f"{analytiq_client.name}: {prefix_part}uploading to S3 "
+                            f"(blob_bytes={len(blob)}, s3://{s3_bucket_name}/{s3_key})"
                         )
-                        idx += 1
+                        await s3_client.put_object(
+                            Bucket=s3_bucket_name, Key=s3_key, Body=blob
+                        )
+                        upload_secs = loop.time() - upload_started_at
+                        logger.info(
+                            f"{analytiq_client.name}: {prefix_part}uploaded to S3 "
+                            f"(s3://{s3_bucket_name}/{s3_key}, upload_secs={upload_secs:.2f})"
+                        )
+                        try:
+                            async with aws_client.client("textract") as textract_client:
+                                if normalized_queries is not None:
+                                    operation = "start_document_analysis"
+                                elif len(feature_types) > 0:
+                                    operation = "start_document_analysis"
+                                else:
+                                    operation = "start_document_text_detection"
 
-                        if status in ["SUCCEEDED", "FAILED"]:
-                            break
-
-                        sleep_time = min(2 ** min(idx // 5, 3), 10)
-                        await asyncio.sleep(sleep_time)
-
-                    idx = 0
-                    if status == "SUCCEEDED":
-                        blocks = []
-                        document_metadata: Optional[dict] = None
-                        analyze_document_model_version: Optional[str] = None
-                        detect_document_text_model_version: Optional[str] = None
-                        first_result_page = True
-
-                        next_token = None
-                        while True:
-                            if next_token:
-                                response = await _call_textract_with_retry(
-                                    get_completion_func, JobId=job_id, NextToken=next_token
-                                )
-                            else:
-                                response = await _call_textract_with_retry(
-                                    get_completion_func, JobId=job_id
+                                prep_secs = loop.time() - run_started_at
+                                logger.info(
+                                    f"{analytiq_client.name}: {prefix_part}invoking Textract "
+                                    f"{operation} (blob_bytes={len(blob)}, "
+                                    f"s3://{s3_bucket_name}/{s3_key}, priority={priority}, "
+                                    f"prep_secs={prep_secs:.2f})"
                                 )
 
-                            if first_result_page:
-                                document_metadata = response.get("DocumentMetadata")
-                                analyze_document_model_version = response.get(
-                                    "AnalyzeDocumentModelVersion"
+                                if normalized_queries is not None:
+                                    response = await _call_textract_with_retry(
+                                        textract_client.start_document_analysis,
+                                        DocumentLocation={
+                                            "S3Object": {
+                                                "Bucket": s3_bucket_name,
+                                                "Name": s3_key,
+                                            }
+                                        },
+                                        FeatureTypes=feature_types + ["QUERIES"],
+                                        QueriesConfig={"Queries": normalized_queries},
+                                    )
+                                    get_completion_func = textract_client.get_document_analysis
+                                elif len(feature_types) > 0:
+                                    response = await _call_textract_with_retry(
+                                        textract_client.start_document_analysis,
+                                        DocumentLocation={
+                                            "S3Object": {
+                                                "Bucket": s3_bucket_name,
+                                                "Name": s3_key,
+                                            }
+                                        },
+                                        FeatureTypes=feature_types,
+                                    )
+                                    get_completion_func = textract_client.get_document_analysis
+                                else:
+                                    response = await _call_textract_with_retry(
+                                        textract_client.start_document_text_detection,
+                                        DocumentLocation={
+                                            "S3Object": {
+                                                "Bucket": s3_bucket_name,
+                                                "Name": s3_key,
+                                            }
+                                        },
+                                    )
+                                    get_completion_func = textract_client.get_document_text_detection
+
+                                job_id = response["JobId"]
+
+                                idx = 0
+                                start_time = loop.time()
+                                while True:
+                                    elapsed = loop.time() - start_time
+                                    if elapsed > OCR_TIMEOUT_SECS:
+                                        raise asyncio.TimeoutError(
+                                            f"Textract job {job_id} timed out after {OCR_TIMEOUT_SECS}s"
+                                        )
+
+                                    status_response = await _call_textract_with_retry(
+                                        get_completion_func, JobId=job_id
+                                    )
+                                    status = status_response["JobStatus"]
+                                    logger.info(
+                                        f"{analytiq_client.name}: {prefix_part}step {idx}: {status}"
+                                    )
+                                    idx += 1
+
+                                    if status in ["SUCCEEDED", "FAILED"]:
+                                        break
+
+                                    sleep_time = min(2 ** min(idx // 5, 3), 10)
+                                    await asyncio.sleep(sleep_time)
+
+                                idx = 0
+                                if status == "SUCCEEDED":
+                                    blocks = []
+                                    document_metadata: Optional[dict] = None
+                                    analyze_document_model_version: Optional[str] = None
+                                    detect_document_text_model_version: Optional[str] = None
+                                    first_result_page = True
+
+                                    next_token = None
+                                    while True:
+                                        if next_token:
+                                            response = await _call_textract_with_retry(
+                                                get_completion_func,
+                                                JobId=job_id,
+                                                NextToken=next_token,
+                                            )
+                                        else:
+                                            response = await _call_textract_with_retry(
+                                                get_completion_func, JobId=job_id
+                                            )
+
+                                        if first_result_page:
+                                            document_metadata = response.get("DocumentMetadata")
+                                            analyze_document_model_version = response.get(
+                                                "AnalyzeDocumentModelVersion"
+                                            )
+                                            detect_document_text_model_version = response.get(
+                                                "DetectDocumentTextModelVersion"
+                                            )
+                                            first_result_page = False
+
+                                        blocks.extend(response["Blocks"])
+                                        next_token = response.get("NextToken", None)
+
+                                        logger.info(
+                                            f"{analytiq_client.name}: {prefix_part}step {idx}: "
+                                            f"blocks len: {len(blocks)} next_token: {next_token}"
+                                        )
+                                        idx += 1
+                                        if not next_token:
+                                            break
+
+                                    if not document_metadata:
+                                        page_blocks = [
+                                            b for b in blocks if b.get("BlockType") == "PAGE"
+                                        ]
+                                        document_metadata = {
+                                            "Pages": len(page_blocks) if page_blocks else 1,
+                                        }
+
+                                    return {
+                                        "Blocks": blocks,
+                                        "DocumentMetadata": document_metadata,
+                                        "AnalyzeDocumentModelVersion": analyze_document_model_version,
+                                        "DetectDocumentTextModelVersion": detect_document_text_model_version,
+                                    }
+
+                                raise Exception(
+                                    f"Textract document analysis failed: {status} "
+                                    f"for s3://{s3_bucket_name}/{s3_key}"
                                 )
-                                detect_document_text_model_version = response.get(
-                                    "DetectDocumentTextModelVersion"
+                        finally:
+                            try:
+                                await s3_client.delete_object(
+                                    Bucket=s3_bucket_name, Key=s3_key
                                 )
-                                first_result_page = False
-
-                            blocks.extend(response["Blocks"])
-                            next_token = response.get("NextToken", None)
-
-                            prefix_part = f"{log_prefix}: " if log_prefix else ""
-                            logger.info(
-                                f"{analytiq_client.name}: {prefix_part}step {idx}: "
-                                f"blocks len: {len(blocks)} next_token: {next_token}"
-                            )
-                            idx += 1
-                            if not next_token:
-                                break
-
-                        if not document_metadata:
-                            page_blocks = [b for b in blocks if b.get("BlockType") == "PAGE"]
-                            document_metadata = {
-                                "Pages": len(page_blocks) if page_blocks else 1,
-                            }
-
-                        return {
-                            "Blocks": blocks,
-                            "DocumentMetadata": document_metadata,
-                            "AnalyzeDocumentModelVersion": analyze_document_model_version,
-                            "DetectDocumentTextModelVersion": detect_document_text_model_version,
-                        }
-
-                    raise Exception(
-                        f"Textract document analysis failed: {status} "
-                        f"for s3://{s3_bucket_name}/{s3_key}"
-                    )
-                finally:
-                    try:
-                        await s3_client.delete_object(Bucket=s3_bucket_name, Key=s3_key)
-                    except Exception as cleanup_error:
+                            except Exception as cleanup_error:
+                                logger.warning(
+                                    f"Failed to cleanup S3 object {s3_key}: {cleanup_error}"
+                                )
+                except Exception as e:
+                    if attempt == 0 and aws_client.is_refreshable_auth_error(e):
                         logger.warning(
-                            f"Failed to cleanup S3 object {s3_key}: {cleanup_error}"
+                            "AWS credentials expired during textract, refreshing and retrying"
                         )
-
+                        continue
+                    raise
         except Exception as e:
             logger.error(f"Error running textract: {e}")
             raise

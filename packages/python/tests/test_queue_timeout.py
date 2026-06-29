@@ -9,6 +9,7 @@ import analytiq_data as ad
 from analytiq_data.queue import queue as queue_mod
 from analytiq_data.llm import llm as llm_mod
 from analytiq_data.aws import textract as textract_mod
+from analytiq_data.aws.aws_client import AsyncAWSClient
 
 
 def create_mock_message(
@@ -205,6 +206,9 @@ async def test_run_llm_for_prompts_partial_failures(monkeypatch):
 async def test_textract_timeout_raises_timeout_error(monkeypatch):
     """run_textract raises asyncio.TimeoutError when elapsed time exceeds OCR_TIMEOUT_SECS."""
     aws_client = MagicMock()
+    aws_client.s3_bucket_name = "bucket"
+    aws_client.refresh_credentials = AsyncMock()
+    aws_client.is_refreshable_auth_error = AsyncAWSClient.is_refreshable_auth_error
 
     class FakeCtx:
         def __init__(self, inner):

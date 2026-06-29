@@ -5,6 +5,7 @@ Run OCR for a document PDF blob using organization OCR settings.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -70,7 +71,9 @@ async def run_document_ocr(
     For ``llm``, the return value is ``{ provider, model, pages: [{ index, markdown }] }`` JSON.
     For ``pymupdf``, the return value is ``{ ocr_engine: \"pymupdf\", pages: [...] }`` (0 SPU).
     """
-    reserved = max_reserved_spu_for_ocr_config(cfg, pdf_bytes=pdf_bytes)
+    reserved = await asyncio.to_thread(
+        max_reserved_spu_for_ocr_config, cfg, pdf_bytes=pdf_bytes
+    )
     if reserved > 0:
         await ad.payments.check_spu_limits(org_id, reserved)
 

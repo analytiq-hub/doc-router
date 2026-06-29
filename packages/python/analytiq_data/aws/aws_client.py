@@ -3,6 +3,7 @@ import botocore
 import aioboto3
 from botocore.config import Config
 from botocore.credentials import AssumeRoleCredentialFetcher, DeferredRefreshableCredentials
+from botocore.exceptions import ClientError
 import logging
 import os
 import asyncio
@@ -176,30 +177,7 @@ class AsyncAWSClient:
         self.s3_bucket_name = None
 
         try:
-            # Get the user's identity
-            user_identity = self.user_session.client("sts").get_caller_identity()
-
-            # Get the assume role ARN
-            self.assume_role_arn = get_assume_role_arn(user_identity["Arn"])
-
-            # Create role assumption credentials using the same approach as sync client
-            self.credential_fetcher = AssumeRoleCredentialFetcher(
-                client_creator=self.user_session.client,
-                source_credentials=self.user_session.get_credentials(),
-                role_arn=self.assume_role_arn,
-            )
-            
-            # Create a botocore session with deferred credentials like the sync client
-            self.botocore_session = botocore.session.Session()
-            self.botocore_session._credentials = DeferredRefreshableCredentials(
-                method='assume-role',
-                refresh_using=self.credential_fetcher.fetch_credentials
-            )
-            
-            # Update session with fresh credentials
-            self._refresh_session()
-            
-            # Get S3 bucket name
+            await asyncio.to_thread(self._setup_assumed_role_session_sync)
             self.s3_bucket_name = await get_s3_bucket_name(self.analytiq_client)
 
         except Exception as e:
@@ -208,46 +186,85 @@ class AsyncAWSClient:
             # Fall back to basic credentials if role assumption fails
             self.s3_bucket_name = await get_s3_bucket_name(self.analytiq_client)
 
+    def _setup_assumed_role_session_sync(self) -> None:
+        """Sync STS + deferred assume-role credentials (must run off the event loop)."""
+        user_identity = self.user_session.client("sts").get_caller_identity()
+        self.assume_role_arn = get_assume_role_arn(user_identity["Arn"])
+        self.credential_fetcher = AssumeRoleCredentialFetcher(
+            client_creator=self.user_session.client,
+            source_credentials=self.user_session.get_credentials(),
+            role_arn=self.assume_role_arn,
+        )
+        self.botocore_session = botocore.session.Session()
+        self.botocore_session._credentials = DeferredRefreshableCredentials(
+            method="assume-role",
+            refresh_using=self.credential_fetcher.fetch_credentials,
+        )
+        self._refresh_session()
+
     def _refresh_session(self):
-        """Refresh the session with current credentials"""
+        """Refresh the aioboto3 session with current credentials (sync; use off-loop helper)."""
         if self.botocore_session and self.botocore_session._credentials:
-            # Get fresh credentials
             credentials = self.botocore_session.get_credentials()
-            
-            # Create new async session with fresh credentials
             self.session = aioboto3.Session(
                 aws_access_key_id=credentials.access_key,
                 aws_secret_access_key=credentials.secret_key,
                 aws_session_token=credentials.token,
-                region_name=self.region_name
+                region_name=self.region_name,
             )
             logger.debug("Refreshed async AWS session with new credentials")
+
+    async def _refresh_session_off_loop(self) -> None:
+        await asyncio.to_thread(self._refresh_session)
 
     async def refresh_credentials(self) -> None:
         """Refresh the aioboto3 session from assumed-role credentials (if configured)."""
         if not self.botocore_session:
             return
         async with self._session_lock:
-            self._refresh_session()
+            await self._refresh_session_off_loop()
 
-    @staticmethod
-    def _is_signature_error(exc: BaseException) -> bool:
+    _REFRESHABLE_AUTH_ERROR_CODES = frozenset({
+        "ExpiredToken",
+        "ExpiredTokenException",
+        "InvalidToken",
+        "TokenRefreshRequired",
+        "InvalidSignatureException",
+        "RequestExpired",
+    })
+
+    @classmethod
+    def is_refreshable_auth_error(cls, exc: BaseException) -> bool:
+        """True when refreshing assumed-role credentials and retrying may succeed."""
+        if isinstance(exc, ClientError):
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in cls._REFRESHABLE_AUTH_ERROR_CODES:
+                return True
         msg = str(exc)
-        return "InvalidSignatureException" in msg or "Signature expired" in msg
+        return any(
+            marker in msg
+            for marker in (
+                "ExpiredToken",
+                "InvalidSignatureException",
+                "Signature expired",
+                "security token included in the request is expired",
+                "TokenRefreshRequired",
+            )
+        )
 
     async def _open_client(self, session, service_name: str, config: Config):
-        """Open a service client; refresh credentials once if ``__aenter__`` fails on signature."""
+        """Open a service client; refresh credentials once if ``__aenter__`` fails on auth."""
         cm = session.client(service_name, config=config)
         try:
             client = await cm.__aenter__()
             return cm, client
         except Exception as e:
-            if self.botocore_session and self._is_signature_error(e):
+            if self.botocore_session and self.is_refreshable_auth_error(e):
                 logger.warning(
-                    "AWS signature expired during client open, refreshing credentials and retrying"
+                    "AWS credentials expired during client open, refreshing and retrying"
                 )
                 async with self._session_lock:
-                    self._refresh_session()
+                    await self._refresh_session_off_loop()
                     session = self.session
                 cm = session.client(service_name, config=config)
                 client = await cm.__aenter__()
