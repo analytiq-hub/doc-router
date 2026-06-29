@@ -25,7 +25,6 @@ async def test_textract_retries_provisioned_throughput_exceeded(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-    # Speed up: avoid real sleeps from polling/backoff (and stamina wait)
     async def _no_sleep(_t):
         return None
 
@@ -53,9 +52,9 @@ async def test_textract_retries_provisioned_throughput_exceeded(monkeypatch):
 
     textract_client.get_document_text_detection = AsyncMock(
         side_effect=[
-            throughput_exc,  # first poll attempt throttled
-            {"JobStatus": "SUCCEEDED"},  # poll succeeds
-            {  # results page
+            throughput_exc,
+            {"JobStatus": "SUCCEEDED"},
+            {
                 "JobStatus": "SUCCEEDED",
                 "Blocks": [],
                 "DocumentMetadata": {"Pages": 1},
@@ -75,7 +74,99 @@ async def test_textract_retries_provisioned_throughput_exceeded(monkeypatch):
     assert isinstance(out, dict)
     assert out["Blocks"] == []
     assert out["DocumentMetadata"]["Pages"] == 1
-
-    # Ensure retry happened (i.e., we attempted the call again after the exception)
     assert textract_client.get_document_text_detection.await_count >= 2
 
+
+@pytest.mark.asyncio
+async def test_textract_concurrency_serializes_when_limit_one(monkeypatch):
+    monkeypatch.setattr(textract_mod, "TEXTRACT_MAX_CONCURRENT", 1)
+    monkeypatch.setattr(textract_mod, "_textract_in_flight", 0)
+    monkeypatch.setattr(textract_mod, "_textract_high_waiting", 0)
+    monkeypatch.setattr(textract_mod, "_textract_gate", None)
+
+    active = 0
+    max_active = 0
+    lock = asyncio.Lock()
+    first_holding = asyncio.Event()
+    release = asyncio.Event()
+
+    async def gated() -> None:
+        nonlocal active, max_active
+        async with textract_mod._textract_concurrency("high"):
+            async with lock:
+                active += 1
+                max_active = max(max_active, active)
+            first_holding.set()
+            await release.wait()
+            async with lock:
+                active -= 1
+
+    first = asyncio.create_task(gated())
+    await first_holding.wait()
+    second = asyncio.create_task(gated())
+    await asyncio.sleep(0)
+    async with lock:
+        assert active == 1
+        assert max_active == 1
+
+    release.set()
+    await asyncio.gather(first, second)
+    assert max_active == 1
+
+
+async def _wait_until(predicate, *, timeout: float = 1.0) -> None:
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + timeout
+    while not predicate():
+        if loop.time() >= deadline:
+            raise TimeoutError(f"condition not met within {timeout}s")
+        await asyncio.sleep(0)
+
+
+@pytest.mark.asyncio
+async def test_textract_low_priority_yields_while_high_priority_waiting(monkeypatch):
+    monkeypatch.setattr(textract_mod, "TEXTRACT_MAX_CONCURRENT", 1)
+    monkeypatch.setattr(textract_mod, "_textract_in_flight", 0)
+    monkeypatch.setattr(textract_mod, "_textract_high_waiting", 0)
+    monkeypatch.setattr(textract_mod, "_textract_gate", None)
+
+    holder_entered = asyncio.Event()
+    low_started = asyncio.Event()
+    release_holder = asyncio.Event()
+    high_acquired = asyncio.Event()
+    release_high = asyncio.Event()
+
+    async def hold_slot():
+        async with textract_mod._textract_concurrency("high"):
+            holder_entered.set()
+            await release_holder.wait()
+
+    async def waiting_high():
+        async with textract_mod._textract_concurrency("high"):
+            high_acquired.set()
+            await release_high.wait()
+
+    async def low_priority():
+        await holder_entered.wait()
+        async with textract_mod._textract_concurrency("low"):
+            low_started.set()
+
+    holder = asyncio.create_task(hold_slot())
+    await holder_entered.wait()
+
+    high_task = asyncio.create_task(waiting_high())
+    await _wait_until(lambda: textract_mod._textract_high_waiting > 0)
+
+    low_task = asyncio.create_task(low_priority())
+    await asyncio.sleep(0)
+    assert not low_started.is_set()
+
+    release_holder.set()
+    await holder
+    await high_acquired.wait()
+    assert not low_started.is_set()
+
+    release_high.set()
+    await high_task
+    await low_task
+    assert low_started.is_set()

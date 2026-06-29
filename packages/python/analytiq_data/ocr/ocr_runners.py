@@ -60,6 +60,7 @@ async def run_document_ocr(
     org_id: str,
     document_id: str,
     cfg: OrgOcrConfig,
+    textract_priority: textract_mod.TextractPriority = "high",
 ) -> dict[str, Any]:
     """
     Run OCR and return a payload suitable for :func:`analytiq_data.ocr.ocr.save_ocr_json`.
@@ -81,6 +82,7 @@ async def run_document_ocr(
                 feature_types=list(cfg.textract.feature_types),
                 document_id=document_id,
                 org_id=org_id,
+                priority=textract_priority,
             )
         except Exception as e:
             logger.error(

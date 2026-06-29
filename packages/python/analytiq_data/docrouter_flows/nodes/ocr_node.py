@@ -110,13 +110,18 @@ class DocRouterOcrNode:
 
             pdf_bytes = await ad.flows.get_binary_stream(pdf_ref, context.analytiq_client)
 
+            ocr_kwargs: dict[str, Any] = {
+                "ocr_provider": ocr_provider,
+                "execution_id": context.execution_id,
+                "textract_feature_types": textract_feature_types,
+            }
+            if ocr_provider == "textract":
+                ocr_kwargs["textract_priority"] = "high" if item_index == 0 else "low"
             ocr_json, ocr_pages = await flow_services.run_flow_ocr_on_pdf(
                 context.analytiq_client,
                 context.organization_id,
                 pdf_bytes,
-                ocr_provider=ocr_provider,
-                execution_id=context.execution_id,
-                textract_feature_types=textract_feature_types,
+                **ocr_kwargs,
             )
 
             ocr_json_bytes = json.dumps(ocr_json, default=str).encode("utf-8")

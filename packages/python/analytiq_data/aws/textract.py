@@ -1,11 +1,11 @@
-import aioboto3
 import asyncio
+from contextlib import asynccontextmanager
 from datetime import datetime
 import uuid
 import logging
 import os
 import analytiq_data as ad
-from typing import List, Optional, Union
+from typing import AsyncIterator, List, Literal, Optional, Union
 
 import stamina
 from botocore.exceptions import ClientError
@@ -13,6 +13,8 @@ from botocore.exceptions import ClientError
 from textractor.entities.document import Document
 
 logger = logging.getLogger(__name__)
+
+TextractPriority = Literal["high", "low"]
 
 
 def _get_int_env(name: str, default: int) -> int:
@@ -23,6 +25,60 @@ def _get_int_env(name: str, default: int) -> int:
 
 
 OCR_TIMEOUT_SECS = _get_int_env("OCR_TIMEOUT_SECS", 600)  # 10 min
+# Per worker pod: max in-flight Textract jobs. Set to 0 to disable.
+# Priority: document OCR queue workers are ``high``; flow OCR uses ``high`` for the
+# first batch item only and ``low`` for the rest (best effort).
+TEXTRACT_MAX_CONCURRENT = _get_int_env("TEXTRACT_MAX_CONCURRENT", 32)
+
+_textract_in_flight = 0
+_textract_high_waiting = 0
+_textract_gate: asyncio.Condition | None = None
+
+
+def _get_textract_gate() -> asyncio.Condition:
+    global _textract_gate
+    if _textract_gate is None:
+        _textract_gate = asyncio.Condition()
+    return _textract_gate
+
+
+@asynccontextmanager
+async def _textract_concurrency(priority: TextractPriority = "high") -> AsyncIterator[None]:
+    """Acquire a Textract slot; low priority yields while high-priority callers wait.
+
+    Priority is best-effort (not strict FIFO): a low caller may occasionally acquire
+    between two high callers. The slot covers the full job (S3 upload through polling).
+    """
+    global _textract_in_flight, _textract_high_waiting
+    if TEXTRACT_MAX_CONCURRENT <= 0:
+        yield
+        return
+
+    gate = _get_textract_gate()
+    async with gate:
+        if priority == "high":
+            _textract_high_waiting += 1
+            try:
+                while _textract_in_flight >= TEXTRACT_MAX_CONCURRENT:
+                    await gate.wait()
+                _textract_in_flight += 1
+            finally:
+                _textract_high_waiting -= 1
+                gate.notify_all()
+        else:
+            while (
+                _textract_in_flight >= TEXTRACT_MAX_CONCURRENT
+                or _textract_high_waiting > 0
+            ):
+                await gate.wait()
+            _textract_in_flight += 1
+
+    try:
+        yield
+    finally:
+        async with gate:
+            _textract_in_flight -= 1
+            gate.notify_all()
 
 
 def _aws_error_code(exc: BaseException) -> str | None:
@@ -131,9 +187,15 @@ async def run_textract(analytiq_client,
                        feature_types: list = [],
                        query_list: Optional[list] = None,
                        document_id: Optional[str] = None,
-                       org_id: Optional[str] = None) -> dict:
+                       org_id: Optional[str] = None,
+                       *,
+                       priority: TextractPriority = "high") -> dict:
     """
     Run textract on a blob and return merged API-shaped results.
+
+    Concurrency is limited per pod by ``TEXTRACT_MAX_CONCURRENT``. Use ``priority="high"``
+    for document OCR workers and the first item in a flow OCR batch; ``priority="low"`` for
+    remaining flow batch items (best effort). One cached ``AsyncAWSClient`` per pod.
 
     Args:
         analytiq_client: Analytiq client
@@ -147,159 +209,162 @@ async def run_textract(analytiq_client,
         ``DetectDocumentTextModelVersion`` for text-detection-only jobs). Use :func:`ocr_result_blocks`
         if you only need the block list (also accepts legacy stored lists).
     """
-    # Get the async AWS client
-    aws_client = await ad.aws.get_aws_client_async(analytiq_client)
-    s3_bucket_name = aws_client.s3_bucket_name
-
     # Create a random s3 key
     s3_key = f"textract/tmp/{datetime.now().strftime('%Y-%m-%d')}/{uuid.uuid4()}"
 
-    try:
-        # Upload to S3 using async client
-        async with aws_client.client('s3') as s3_client:
-            await s3_client.put_object(Bucket=s3_bucket_name, Key=s3_key, Body=blob)
-
-        # Start Textract job using async client
-        async with aws_client.client('textract') as textract_client:
-            if query_list is not None and len(query_list) > 0:
-                query_list = [{'Text': '{}'.format(q)} for q in query_list]
-                response = await _call_textract_with_retry(
-                    textract_client.start_document_analysis,
-                    DocumentLocation={
-                        'S3Object': {
-                            'Bucket': s3_bucket_name,
-                            'Name': s3_key
-                        }
-                    },
-                    FeatureTypes=feature_types + ["QUERIES"],
-                    QueriesConfig = {'Queries': query_list}
-                )
-                get_completion_func = textract_client.get_document_analysis
-            elif len(feature_types) > 0:
-                response = await _call_textract_with_retry(
-                    textract_client.start_document_analysis,
-                    DocumentLocation={
-                        'S3Object': {
-                            'Bucket': s3_bucket_name,
-                            'Name': s3_key
-                        }
-                    },
-                    FeatureTypes=feature_types,
-                )
-                get_completion_func = textract_client.get_document_analysis
-            else:
-                response = await _call_textract_with_retry(
-                    textract_client.start_document_text_detection,
-                    DocumentLocation={
-                        'S3Object': {
-                            'Bucket': s3_bucket_name,
-                            'Name': s3_key
-                        }
-                    }
-                )
-                get_completion_func = textract_client.get_document_text_detection
-
-            job_id = response['JobId']
-
-            # Log prefix: org_id/document_id when both present, else document_id, else empty
-            if org_id and document_id:
-                log_prefix = f"{org_id}/{document_id}"
-            elif document_id:
-                log_prefix = document_id
-            else:
-                log_prefix = ""
-
-            # Check completion status with async polling and exponential backoff
-            idx = 0
-            # Use event loop time for robust elapsed timing even if system clock changes
-            loop = asyncio.get_event_loop()
-            start_time = loop.time()
-            while True:
-                elapsed = loop.time() - start_time
-                if elapsed > OCR_TIMEOUT_SECS:
-                    raise asyncio.TimeoutError(
-                        f"Textract job {job_id} timed out after {OCR_TIMEOUT_SECS}s"
-                    )
-
-                status_response = await _call_textract_with_retry(
-                    get_completion_func, JobId=job_id
-                )
-                status = status_response['JobStatus']
-                prefix_part = f"{log_prefix}: " if log_prefix else ""
-                logger.info(f"{analytiq_client.name}: {prefix_part}step {idx}: {status}")
-                idx += 1
-
-                if status in ["SUCCEEDED", "FAILED"]:
-                    break
-
-                # Use exponential backoff for polling - start with 1s, max 10s
-                sleep_time = min(2 ** min(idx // 5, 3), 10)
-                await asyncio.sleep(sleep_time)
-
-            idx = 0
-            if status == "SUCCEEDED":
-                blocks = []
-                document_metadata: Optional[dict] = None
-                analyze_document_model_version: Optional[str] = None
-                detect_document_text_model_version: Optional[str] = None
-                first_result_page = True
-
-                next_token = None
-                while True:
-                    # Get results with pagination
-                    if next_token:
+    async with _textract_concurrency(priority):
+        aws_client = await ad.aws.get_aws_client_async(analytiq_client)
+        s3_bucket_name = aws_client.s3_bucket_name
+        try:
+            # Keep S3 and Textract clients open for upload, polling, and cleanup (minutes).
+            async with (
+                aws_client.client("s3") as s3_client,
+                aws_client.client("textract") as textract_client,
+            ):
+                await s3_client.put_object(Bucket=s3_bucket_name, Key=s3_key, Body=blob)
+                try:
+                    if query_list is not None and len(query_list) > 0:
+                        query_list = [{"Text": str(q)} for q in query_list]
                         response = await _call_textract_with_retry(
-                            get_completion_func, JobId=job_id, NextToken=next_token
+                            textract_client.start_document_analysis,
+                            DocumentLocation={
+                                "S3Object": {
+                                    "Bucket": s3_bucket_name,
+                                    "Name": s3_key,
+                                }
+                            },
+                            FeatureTypes=feature_types + ["QUERIES"],
+                            QueriesConfig={"Queries": query_list},
                         )
+                        get_completion_func = textract_client.get_document_analysis
+                    elif len(feature_types) > 0:
+                        response = await _call_textract_with_retry(
+                            textract_client.start_document_analysis,
+                            DocumentLocation={
+                                "S3Object": {
+                                    "Bucket": s3_bucket_name,
+                                    "Name": s3_key,
+                                }
+                            },
+                            FeatureTypes=feature_types,
+                        )
+                        get_completion_func = textract_client.get_document_analysis
                     else:
                         response = await _call_textract_with_retry(
+                            textract_client.start_document_text_detection,
+                            DocumentLocation={
+                                "S3Object": {
+                                    "Bucket": s3_bucket_name,
+                                    "Name": s3_key,
+                                }
+                            },
+                        )
+                        get_completion_func = textract_client.get_document_text_detection
+
+                    job_id = response["JobId"]
+
+                    if org_id and document_id:
+                        log_prefix = f"{org_id}/{document_id}"
+                    elif document_id:
+                        log_prefix = document_id
+                    else:
+                        log_prefix = ""
+
+                    idx = 0
+                    loop = asyncio.get_running_loop()
+                    start_time = loop.time()
+                    while True:
+                        elapsed = loop.time() - start_time
+                        if elapsed > OCR_TIMEOUT_SECS:
+                            raise asyncio.TimeoutError(
+                                f"Textract job {job_id} timed out after {OCR_TIMEOUT_SECS}s"
+                            )
+
+                        status_response = await _call_textract_with_retry(
                             get_completion_func, JobId=job_id
                         )
-
-                    if first_result_page:
-                        document_metadata = response.get("DocumentMetadata")
-                        analyze_document_model_version = response.get("AnalyzeDocumentModelVersion")
-                        detect_document_text_model_version = response.get(
-                            "DetectDocumentTextModelVersion"
+                        status = status_response["JobStatus"]
+                        prefix_part = f"{log_prefix}: " if log_prefix else ""
+                        logger.info(
+                            f"{analytiq_client.name}: {prefix_part}step {idx}: {status}"
                         )
-                        first_result_page = False
+                        idx += 1
 
-                    blocks.extend(response['Blocks'])
+                        if status in ["SUCCEEDED", "FAILED"]:
+                            break
 
-                    # Check for more results
-                    next_token = response.get('NextToken', None)
-                    
-                    prefix_part = f"{log_prefix}: " if log_prefix else ""
-                    logger.info(f"{analytiq_client.name}: {prefix_part}step {idx}: blocks len: {len(blocks)} next_token: {next_token}")
-                    idx += 1
-                    if not next_token:
-                        break
+                        sleep_time = min(2 ** min(idx // 5, 3), 10)
+                        await asyncio.sleep(sleep_time)
 
-                if not document_metadata:
-                    page_blocks = [b for b in blocks if b.get("BlockType") == "PAGE"]
-                    document_metadata = {
-                        "Pages": len(page_blocks) if page_blocks else 1,
-                    }
+                    idx = 0
+                    if status == "SUCCEEDED":
+                        blocks = []
+                        document_metadata: Optional[dict] = None
+                        analyze_document_model_version: Optional[str] = None
+                        detect_document_text_model_version: Optional[str] = None
+                        first_result_page = True
 
-                return {
-                    "Blocks": blocks,
-                    "DocumentMetadata": document_metadata,
-                    "AnalyzeDocumentModelVersion": analyze_document_model_version,
-                    "DetectDocumentTextModelVersion": detect_document_text_model_version,
-                }
-            else:
-                raise Exception(f"Textract document analysis failed: {status} for s3://{s3_bucket_name}/{s3_key}")
-                
-    except Exception as e:
-        logger.error(f"Error running textract: {e}")
-        raise e
-    finally:
-        # Delete the s3 object using async client
-        try:
-            async with aws_client.client('s3') as s3_client:
-                await s3_client.delete_object(Bucket=s3_bucket_name, Key=s3_key)
-        except Exception as cleanup_error:
-            logger.warning(f"Failed to cleanup S3 object {s3_key}: {cleanup_error}")    
+                        next_token = None
+                        while True:
+                            if next_token:
+                                response = await _call_textract_with_retry(
+                                    get_completion_func, JobId=job_id, NextToken=next_token
+                                )
+                            else:
+                                response = await _call_textract_with_retry(
+                                    get_completion_func, JobId=job_id
+                                )
+
+                            if first_result_page:
+                                document_metadata = response.get("DocumentMetadata")
+                                analyze_document_model_version = response.get(
+                                    "AnalyzeDocumentModelVersion"
+                                )
+                                detect_document_text_model_version = response.get(
+                                    "DetectDocumentTextModelVersion"
+                                )
+                                first_result_page = False
+
+                            blocks.extend(response["Blocks"])
+                            next_token = response.get("NextToken", None)
+
+                            prefix_part = f"{log_prefix}: " if log_prefix else ""
+                            logger.info(
+                                f"{analytiq_client.name}: {prefix_part}step {idx}: "
+                                f"blocks len: {len(blocks)} next_token: {next_token}"
+                            )
+                            idx += 1
+                            if not next_token:
+                                break
+
+                        if not document_metadata:
+                            page_blocks = [b for b in blocks if b.get("BlockType") == "PAGE"]
+                            document_metadata = {
+                                "Pages": len(page_blocks) if page_blocks else 1,
+                            }
+
+                        return {
+                            "Blocks": blocks,
+                            "DocumentMetadata": document_metadata,
+                            "AnalyzeDocumentModelVersion": analyze_document_model_version,
+                            "DetectDocumentTextModelVersion": detect_document_text_model_version,
+                        }
+
+                    raise Exception(
+                        f"Textract document analysis failed: {status} "
+                        f"for s3://{s3_bucket_name}/{s3_key}"
+                    )
+                finally:
+                    try:
+                        await s3_client.delete_object(Bucket=s3_bucket_name, Key=s3_key)
+                    except Exception as cleanup_error:
+                        logger.warning(
+                            f"Failed to cleanup S3 object {s3_key}: {cleanup_error}"
+                        )
+
+        except Exception as e:
+            logger.error(f"Error running textract: {e}")
+            raise
 
 def get_page_text_map(block_map: dict) -> dict:
     """

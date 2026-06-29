@@ -17,6 +17,7 @@ import litellm
 from bson import ObjectId
 
 import analytiq_data as ad
+from analytiq_data.aws.textract import TextractPriority
 from analytiq_data.llm.llm_output_utils import process_llm_resp_content
 from analytiq_data.ocr.ocr_config import TEXTRACT_FEATURES
 
@@ -111,6 +112,7 @@ async def run_flow_ocr_on_pdf(
     ocr_provider: str,
     execution_id: str,
     textract_feature_types: list[str] | None = None,
+    textract_priority: TextractPriority = "low",
 ) -> tuple[dict[str, Any], list[str]]:
     """
     Run OCR on in-memory PDF bytes for a flow execution.
@@ -143,6 +145,7 @@ async def run_flow_ocr_on_pdf(
         org_id=org_id,
         document_id=exec_id,
         cfg=cfg,
+        textract_priority=textract_priority,
     )
     pages = ad.ocr.ocr_pages_plain_text_list(payload)
     return payload, pages

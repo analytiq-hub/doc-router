@@ -248,7 +248,7 @@ async def test_textract_timeout_raises_timeout_error(monkeypatch):
                 return 0.0
             return textract_mod.OCR_TIMEOUT_SECS + 1.0
 
-    monkeypatch.setattr(asyncio, "get_event_loop", lambda: FakeLoop())
+    monkeypatch.setattr(asyncio, "get_running_loop", lambda: FakeLoop())
 
     with pytest.raises(asyncio.TimeoutError):
         await textract_mod.run_textract(MagicMock(), b"blob")

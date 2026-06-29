@@ -12,6 +12,12 @@ import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
+# One initialized AsyncAWSClient per (env, region) per process — avoids aioboto3/aiohttp
+# session churn when many flow OCR items run Textract in parallel.
+# Init locks are retained for the process lifetime (few distinct env/region keys).
+_async_aws_clients: dict[tuple[str, str], "AsyncAWSClient"] = {}
+_async_aws_client_init_locks: dict[tuple[str, str], asyncio.Lock] = {}
+
 async def get_s3_bucket_name(analytiq_client) -> str:
     """
     Get the S3 bucket name from database configuration or environment variable with fallback to default.
@@ -138,6 +144,7 @@ class AsyncAWSClient:
         self.env = analytiq_client.env
         self.region_name = region_name
         self.analytiq_client = analytiq_client
+        self._session_lock = asyncio.Lock()
         
     async def init(self):
         # Get the AWS keys
@@ -216,39 +223,60 @@ class AsyncAWSClient:
             )
             logger.debug("Refreshed async AWS session with new credentials")
 
+    async def refresh_credentials(self) -> None:
+        """Refresh the aioboto3 session from assumed-role credentials (if configured)."""
+        if not self.botocore_session:
+            return
+        async with self._session_lock:
+            self._refresh_session()
+
+    @staticmethod
+    def _is_signature_error(exc: BaseException) -> bool:
+        msg = str(exc)
+        return "InvalidSignatureException" in msg or "Signature expired" in msg
+
+    async def _open_client(self, session, service_name: str, config: Config):
+        """Open a service client; refresh credentials once if ``__aenter__`` fails on signature."""
+        cm = session.client(service_name, config=config)
+        try:
+            client = await cm.__aenter__()
+            return cm, client
+        except Exception as e:
+            if self.botocore_session and self._is_signature_error(e):
+                logger.warning(
+                    "AWS signature expired during client open, refreshing credentials and retrying"
+                )
+                async with self._session_lock:
+                    self._refresh_session()
+                    session = self.session
+                cm = session.client(service_name, config=config)
+                client = await cm.__aenter__()
+                return cm, client
+            raise
+
     @asynccontextmanager
     async def client(self, service_name: str):
-        """Create an async client with automatic credential refresh"""
-        # Configure timeouts
+        """Create an async client (single yield; signature retry only on client open)."""
         config = Config(
-            connect_timeout=10,      # 10s to establish connection
-            read_timeout=120,        # 2 minutes to read response (enough for API calls, not infinite)
-            retries={'max_attempts': 2}
+            connect_timeout=10,
+            read_timeout=120,
+            retries={"max_attempts": 2},
         )
 
+        async with self._session_lock:
+            session = self.session
+        cm, aws_client = await self._open_client(session, service_name, config)
         try:
-            # Refresh session to ensure we have current credentials
-            if self.botocore_session:
-                self._refresh_session()
-
-            async with self.session.client(service_name, config=config) as client:
-                yield client
-        except Exception as e:
-            # If we get a signature error, try refreshing credentials once
-            if "InvalidSignatureException" in str(e) or "Signature expired" in str(e):
-                logger.warning(f"AWS signature expired, refreshing credentials and retrying")
-                if self.botocore_session:
-                    self._refresh_session()
-                    async with self.session.client(service_name, config=config) as client:
-                        yield client
-                else:
-                    raise e
-            else:
-                raise e
+            yield aws_client
+        except BaseException as e:
+            await cm.__aexit__(type(e), e, e.__traceback__)
+            raise
+        else:
+            await cm.__aexit__(None, None, None)
 
 async def get_aws_client_async(analytiq_client, region_name: str = "us-east-1") -> AsyncAWSClient:
     """
-    Get the AsyncAWSClient.
+    Get a shared AsyncAWSClient for this process (keyed by env and region).
 
     Args:
         analytiq_client: The AnalytiqClient.
@@ -257,6 +285,19 @@ async def get_aws_client_async(analytiq_client, region_name: str = "us-east-1") 
     Returns:
         The AsyncAWSClient.
     """
-    aws_client = AsyncAWSClient(analytiq_client, region_name)
-    await aws_client.init()
-    return aws_client
+    key = (analytiq_client.env, region_name)
+    cached = _async_aws_clients.get(key)
+    if cached is not None:
+        return cached
+
+    if key not in _async_aws_client_init_locks:
+        _async_aws_client_init_locks[key] = asyncio.Lock()
+
+    async with _async_aws_client_init_locks[key]:
+        cached = _async_aws_clients.get(key)
+        if cached is not None:
+            return cached
+        aws_client = AsyncAWSClient(analytiq_client, region_name)
+        await aws_client.init()
+        _async_aws_clients[key] = aws_client
+        return aws_client
