@@ -2,11 +2,68 @@ from __future__ import annotations
 
 """DocRouter flow node that splits PDF binaries into per-page PDFs."""
 
+import asyncio
+from dataclasses import dataclass
 from typing import Any
 
 import fitz  # PyMuPDF
 
 import analytiq_data as ad
+
+
+@dataclass(frozen=True)
+class _SplitPageOutput:
+    page_idx: int
+    page_bytes: bytes
+    file_name: str
+
+
+def _split_pdf_pages_sync(
+    pdf_bytes: bytes,
+    *,
+    start: int,
+    slice_stop: int | None,
+    step: int,
+    base_file_name: str,
+) -> tuple[list[_SplitPageOutput], bool]:
+    """
+    Split a PDF into single-page blobs (CPU-bound; run via ``asyncio.to_thread``).
+
+    Returns ``(pages, is_empty_pdf)``. When ``is_empty_pdf`` is true, ``pages`` is
+    empty and the caller should passthrough the original binary ref unchanged.
+    """
+
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    try:
+        n_pages = doc.page_count
+        if n_pages <= 0:
+            return [], True
+
+        indices = list(range(n_pages))[start:slice_stop:step]
+        if not indices:
+            return [], False
+
+        lower = base_file_name.lower()
+        stem = base_file_name[: -len(".pdf")] if lower.endswith(".pdf") else base_file_name
+
+        out: list[_SplitPageOutput] = []
+        for page_idx in indices:
+            single_doc = fitz.open()
+            try:
+                single_doc.insert_pdf(doc, from_page=page_idx, to_page=page_idx)
+                page_bytes = single_doc.tobytes()
+            finally:
+                single_doc.close()
+            out.append(
+                _SplitPageOutput(
+                    page_idx=page_idx,
+                    page_bytes=page_bytes,
+                    file_name=f"{stem}_idx_{page_idx}.pdf",
+                )
+            )
+        return out, False
+    finally:
+        doc.close()
 
 
 class DocRouterDocumentSplitNode:
@@ -124,70 +181,54 @@ class DocRouterDocumentSplitNode:
 
             for pdf_name, ref in pdf_entries:
                 pdf_bytes = await ad.flows.get_binary_stream(ref, context.analytiq_client)
-                doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-                try:
-                    n_pages = doc.page_count
-                    if n_pages <= 0:
-                        fan_out.append(
-                            ad.flows.FlowItem(
-                                json=dict(it.json),
-                                binary={**passthrough_binary, pdf_name: ref},
-                                meta={
-                                    **dict(it.meta or {}),
-                                    "source_node_id": node["id"],
-                                    "item_index": output_item_index,
-                                },
-                                paired_item=it.paired_item,
-                            )
+                pages, is_empty_pdf = await asyncio.to_thread(
+                    _split_pdf_pages_sync,
+                    pdf_bytes,
+                    start=start,
+                    slice_stop=slice_stop,
+                    step=step,
+                    base_file_name=ref.file_name or "document.pdf",
+                )
+                if is_empty_pdf:
+                    fan_out.append(
+                        ad.flows.FlowItem(
+                            json=dict(it.json),
+                            binary={**passthrough_binary, pdf_name: ref},
+                            meta={
+                                **dict(it.meta or {}),
+                                "source_node_id": node["id"],
+                                "item_index": output_item_index,
+                            },
+                            paired_item=it.paired_item,
                         )
-                        output_item_index += 1
-                        continue
+                    )
+                    output_item_index += 1
+                    continue
 
-                    indices = list(range(n_pages))[start:slice_stop:step]
-                    if not indices:
-                        continue
-
-                    base_file_name = ref.file_name or "document.pdf"
-                    lower = base_file_name.lower()
-                    if lower.endswith(".pdf"):
-                        stem = base_file_name[: -len(".pdf")]
-                    else:
-                        stem = base_file_name
-
-                    for page_idx in indices:
-                        single_doc = fitz.open()
-                        try:
-                            single_doc.insert_pdf(doc, from_page=page_idx, to_page=page_idx)
-                            page_bytes = single_doc.tobytes()
-                        finally:
-                            single_doc.close()
-
-                        new_name = f"{stem}_idx_{page_idx}.pdf"
-                        page_ref = await ad.flows.save_execution_binary_blob(
-                            context.analytiq_client,
-                            execution_id=context.execution_id,
-                            node_id=str(node["id"]),
-                            item_index=output_item_index,
-                            property_name=pdf_name,
-                            blob=page_bytes,
-                            mime_type="application/pdf",
-                            file_name=new_name,
+                for page in pages:
+                    page_ref = await ad.flows.save_execution_binary_blob(
+                        context.analytiq_client,
+                        execution_id=context.execution_id,
+                        node_id=str(node["id"]),
+                        item_index=output_item_index,
+                        property_name=pdf_name,
+                        blob=page.page_bytes,
+                        mime_type="application/pdf",
+                        file_name=page.file_name,
+                    )
+                    fan_out.append(
+                        ad.flows.FlowItem(
+                            json=dict(it.json),
+                            binary={**passthrough_binary, pdf_name: page_ref},
+                            meta={
+                                **dict(it.meta or {}),
+                                "source_node_id": node["id"],
+                                "item_index": output_item_index,
+                            },
+                            paired_item=it.paired_item,
                         )
-                        fan_out.append(
-                            ad.flows.FlowItem(
-                                json=dict(it.json),
-                                binary={**passthrough_binary, pdf_name: page_ref},
-                                meta={
-                                    **dict(it.meta or {}),
-                                    "source_node_id": node["id"],
-                                    "item_index": output_item_index,
-                                },
-                                paired_item=it.paired_item,
-                            )
-                        )
-                        output_item_index += 1
-                finally:
-                    doc.close()
+                    )
+                    output_item_index += 1
 
             if fan_out:
                 out.extend(fan_out)
