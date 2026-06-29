@@ -167,13 +167,7 @@ class AsyncAWSClient:
         self.credential_fetcher = None
         self.botocore_session = None
         self.assume_role_arn = None
-
-        # Initialize with user session credentials
-        self.session = aioboto3.Session(
-            aws_access_key_id=self.aws_access_key_id,
-            aws_secret_access_key=self.aws_secret_access_key,
-            region_name=self.region_name
-        )
+        self.session = None
         self.s3_bucket_name = None
 
         try:
@@ -183,7 +177,11 @@ class AsyncAWSClient:
         except Exception as e:
             logger.error(f"AWS role assumption failed: {e}")
             logger.info("Async AWS client falling back to basic AWS credentials")
-            # Fall back to basic credentials if role assumption fails
+            self.session = aioboto3.Session(
+                aws_access_key_id=self.aws_access_key_id,
+                aws_secret_access_key=self.aws_secret_access_key,
+                region_name=self.region_name,
+            )
             self.s3_bucket_name = await get_s3_bucket_name(self.analytiq_client)
 
     def _setup_assumed_role_session_sync(self) -> None:
@@ -200,29 +198,34 @@ class AsyncAWSClient:
             method="assume-role",
             refresh_using=self.credential_fetcher.fetch_credentials,
         )
-        self._refresh_session()
+        # One aioboto3.Session bound to botocore for the process lifetime — credential
+        # rotation updates botocore only; avoids aiohttp transport churn under concurrency.
+        self.botocore_session.get_credentials().get_frozen_credentials()
+        self.session = aioboto3.Session(botocore_session=self.botocore_session)
 
-    def _refresh_session(self):
-        """Refresh the aioboto3 session with current credentials (sync; use off-loop helper)."""
-        if self.botocore_session and self.botocore_session._credentials:
-            credentials = self.botocore_session.get_credentials()
-            self.session = aioboto3.Session(
-                aws_access_key_id=credentials.access_key,
-                aws_secret_access_key=credentials.secret_key,
-                aws_session_token=credentials.token,
-                region_name=self.region_name,
-            )
-            logger.debug("Refreshed async AWS session with new credentials")
+    def _refresh_credentials_sync(self, *, force: bool = False) -> None:
+        """Refresh assumed-role credentials in botocore (aioboto3 session unchanged)."""
+        if not self.botocore_session:
+            return
+        credentials = self.botocore_session.get_credentials()
+        if credentials is None:
+            return
+        if force:
+            with credentials._refresh_lock:
+                credentials._protected_refresh(is_mandatory=True)
+        else:
+            credentials.get_frozen_credentials()
+        logger.debug("Refreshed async AWS credentials from botocore session")
 
-    async def _refresh_session_off_loop(self) -> None:
-        await asyncio.to_thread(self._refresh_session)
+    async def _refresh_credentials_off_loop(self, *, force: bool = False) -> None:
+        await asyncio.to_thread(self._refresh_credentials_sync, force=force)
 
     async def refresh_credentials(self) -> None:
-        """Refresh the aioboto3 session from assumed-role credentials (if configured)."""
+        """Refresh assumed-role credentials before opening AWS clients (if configured)."""
         if not self.botocore_session:
             return
         async with self._session_lock:
-            await self._refresh_session_off_loop()
+            await self._refresh_credentials_off_loop()
 
     _REFRESHABLE_AUTH_ERROR_CODES = frozenset({
         "ExpiredToken",
@@ -264,7 +267,7 @@ class AsyncAWSClient:
                     "AWS credentials expired during client open, refreshing and retrying"
                 )
                 async with self._session_lock:
-                    await self._refresh_session_off_loop()
+                    await self._refresh_credentials_off_loop(force=True)
                     session = self.session
                 cm = session.client(service_name, config=config)
                 client = await cm.__aenter__()
