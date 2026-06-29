@@ -7,6 +7,10 @@ import { pdfjs, Document, Page } from 'react-pdf';
 import 'react-pdf/dist/esm/Page/TextLayer.css';
 import { DocRouterOrgApi } from '@/utils/api';
 import {
+  fetchDocumentPdfFile,
+  isAbortedDocumentPdfFileError,
+} from '@/utils/documentPdfFileCache';
+import {
   getTextractNormalizedBox,
   isOCRSupported,
   isOcrNotReadyError,
@@ -154,44 +158,63 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     setDocumentState(state);
   }, [revokeCurrentUrl]);
 
-  // Single load: fetch PDF once per document id; create blob URL and pass to Document. Cleanup revokes URL.
+  // Single load: fetch PDF once per document id; create blob URL and pass to Document.
   useEffect(() => {
-    if (loadedIdRef.current === id && fileUrlRef.current) {
+    const loadDocumentId = id;
+
+    if (loadedIdRef.current === loadDocumentId && fileUrlRef.current) {
+      setLoading(false);
       return;
     }
-    revokeCurrentUrl();
-    loadedIdRef.current = id;
-    setLoading(true);
+
+    if (loadedIdRef.current !== null && loadedIdRef.current !== loadDocumentId) {
+      revokeCurrentUrl();
+    }
+
+    loadedIdRef.current = loadDocumentId;
     setFetchError(null);
-    setFileUrl(null);
+    if (!fileUrlRef.current) {
+      setLoading(true);
+      setFileUrl(null);
+    }
+
     let cancelled = false;
+
+    const applyPdfBuffer = (buffer: ArrayBuffer, name: string | null, state: string | null) => {
+      const blob = new Blob([buffer], { type: 'application/pdf' });
+      setUrlFromBlob(blob, name, state);
+      setFileName(name ?? '');
+      setFileSize(blob.size);
+      setLoading(false);
+    };
 
     const load = async () => {
       try {
-        const meta = await docRouterOrgApi.getDocument({ documentId: id, fileType: 'pdf', includeContent: false });
+        const meta = await docRouterOrgApi.getDocument({
+          documentId: loadDocumentId,
+          fileType: 'pdf',
+          includeContent: false,
+        });
         if (cancelled) return;
         const state = meta.state ?? null;
         const name = meta.document_name ?? null;
         setDocumentState(state);
         const stillProcessing = ['ocr_processing', 'llm_processing'].includes(state ?? '');
         try {
-          // PDF is created at upload; show it while OCR/LLM runs instead of an endless spinner.
-          const buffer = await docRouterOrgApi.getDocumentFile({ documentId: id, fileType: 'pdf' });
+          const buffer = await fetchDocumentPdfFile(docRouterOrgApi, organizationId, loadDocumentId);
           if (cancelled) return;
-          const blob = new Blob([buffer], { type: 'application/pdf' });
-          setUrlFromBlob(blob, name, state);
-          setFileName(name ?? '');
-          setFileSize(blob.size);
+          applyPdfBuffer(buffer, name, state);
         } catch (fileErr) {
+          if (isAbortedDocumentPdfFileError(fileErr)) return;
           if (!stillProcessing) {
             throw fileErr;
           }
-        }
-        if (!cancelled) {
-          setLoading(false);
+          if (!cancelled) {
+            setLoading(false);
+          }
         }
       } catch (e) {
-        if (cancelled) return;
+        if (cancelled || isAbortedDocumentPdfFileError(e)) return;
         setFetchError(e instanceof Error ? e.message : 'Failed to load document');
         setDocumentState(null);
         setFileUrl(null);
@@ -202,12 +225,16 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
     };
 
     load();
+
     return () => {
       cancelled = true;
-      revokeCurrentUrl();
-      setFileUrl(null);
+      // Keep blob URL and in-flight download on same-id remount (Strict Mode, layout).
+      if (loadedIdRef.current !== loadDocumentId) {
+        revokeCurrentUrl();
+        setFileUrl(null);
+      }
     };
-  }, [id, docRouterOrgApi, revokeCurrentUrl, setUrlFromBlob]);
+  }, [id, organizationId, docRouterOrgApi, revokeCurrentUrl, setUrlFromBlob]);
 
   // Poll metadata when processing. When completed and we still have no URL, fetch binary and set blob URL.
   useEffect(() => {
@@ -233,7 +260,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
           }
           setDocumentState(meta.state ?? null);
           if (fileUrlRef.current == null) {
-            const buffer = await docRouterOrgApi.getDocumentFile({ documentId: id, fileType: 'pdf' });
+            const buffer = await fetchDocumentPdfFile(docRouterOrgApi, organizationId, id);
             const blob = new Blob([buffer], { type: 'application/pdf' });
             setUrlFromBlob(blob, meta.document_name ?? null, meta.state ?? null);
             setFileName(meta.document_name ?? '');
@@ -252,7 +279,7 @@ const PDFViewer = ({ organizationId, id, highlightInfo, initialShowBoundingBoxes
       }
       completionFetchStartedRef.current = false;
     };
-  }, [documentState, id, docRouterOrgApi, setUrlFromBlob]);
+  }, [documentState, id, organizationId, docRouterOrgApi, setUrlFromBlob]);
 
   // Fetch errors vs react-pdf parse/display errors
   const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);

@@ -285,11 +285,24 @@ export class DocRouterOrg {
     };
   }
 
-  async getDocumentFile(params: { documentId: string; fileType?: string }): Promise<ArrayBuffer> {
-    const { documentId, fileType = 'pdf' } = params;
+  async getDocumentFile(params: {
+    documentId: string;
+    fileType?: string;
+    signal?: AbortSignal;
+  }): Promise<ArrayBuffer> {
+    const { documentId, fileType = 'pdf', signal } = params;
     return this.http.getBinary(
-      `/v0/orgs/${this.organizationId}/documents/${documentId}/file?file_type=${fileType}`
+      `/v0/orgs/${this.organizationId}/documents/${documentId}/file?file_type=${fileType}`,
+      { signal },
     );
+  }
+
+  /** URL for GET /documents/{id}/file (e.g. pdf.js with Authorization header). */
+  getDocumentFileUrl(params: { documentId: string; fileType?: string }): string {
+    const { documentId, fileType = 'pdf' } = params;
+    const base = this.http.getBaseURL().replace(/\/$/, '');
+    const query = new URLSearchParams({ file_type: fileType });
+    return `${base}/v0/orgs/${this.organizationId}/documents/${documentId}/file?${query.toString()}`;
   }
 
   async updateDocument(params: { documentId: string; documentName?: string; tagIds?: string[]; metadata?: Record<string, string>; }) {
