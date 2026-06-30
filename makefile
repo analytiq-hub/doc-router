@@ -165,14 +165,16 @@ deploy-local-dev:
 deploy-compose:
 	$(call merge_env,.env,.env.compose)
 	cd deploy/compose; \
-	docker compose down; \
-	docker compose -f docker-compose.yml --env-file .env up -d --build
+	docker compose -f docker-compose.yml --env-file .env build; \
+	docker compose -f docker-compose.yml down; \
+	docker compose -f docker-compose.yml --env-file .env up -d
 
 deploy-compose-embedded:
 	$(call merge_env,.env,.env.compose.embedded)
 	cd deploy/compose; \
-	docker compose down; \
-	docker compose -f docker-compose.embedded.yml --env-file .env up -d --build
+	docker compose -f docker-compose.embedded.yml --env-file .env build; \
+	docker compose -f docker-compose.embedded.yml down; \
+	docker compose -f docker-compose.embedded.yml --env-file .env up -d
 
 
 down:
