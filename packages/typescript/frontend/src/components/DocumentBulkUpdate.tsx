@@ -1,6 +1,6 @@
 import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { XMarkIcon, BoltIcon, PlusIcon, MinusIcon, DocumentArrowDownIcon, TrashIcon, CpuChipIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, BoltIcon, PlusIcon, MinusIcon, DocumentArrowDownIcon, TrashIcon, CpuChipIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
 import { Document, Tag } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
 
@@ -17,7 +17,16 @@ type LLMOperationData = {
   isAnalyzing?: boolean;
 };
 
-type OperationData = TagsOperationData | MetadataOperationData | MetadataKeysOperationData | LLMOperationData | null;
+type OCROperationData = {
+  selectedTag: Tag | null;
+  executionCount?: number;
+  isCompleted?: boolean;
+  isCancelling?: boolean;
+  isCancelled?: boolean;
+  isAnalyzing?: boolean;
+};
+
+type OperationData = TagsOperationData | MetadataOperationData | MetadataKeysOperationData | LLMOperationData | OCROperationData | null;
 
 type PendingOperation = {
   operation: string;
@@ -28,6 +37,10 @@ type PendingOperation = {
 const isLLMOperationData = (data: OperationData): data is LLMOperationData => {
   return data !== null && typeof data === 'object' && 'selectedTag' in data;
 };
+
+const isOCROperationData = (data: OperationData): data is OCROperationData => {
+  return data !== null && typeof data === 'object' && 'selectedTag' in data;
+};
 import { isColorLight } from '@/utils/colors';
 import { toast } from 'react-hot-toast';
 import { DocumentBulkUpdateTags, DocumentBulkUpdateTagsRef } from './DocumentBulkUpdateTags';
@@ -35,6 +48,7 @@ import { DocumentBulkUpdateMetadata, DocumentBulkUpdateMetadataRef } from './Doc
 import { DocumentBulkDownload, DocumentBulkDownloadRef } from './DocumentBulkDownload';
 import { DocumentBulkDelete, DocumentBulkDeleteRef } from './DocumentBulkDelete';
 import { DocumentBulkRunLLM, DocumentBulkRunLLMRef } from './DocumentBulkRunLLM';
+import { DocumentBulkRunOCR, DocumentBulkRunOCRRef } from './DocumentBulkRunOCR';
 
 interface DocumentBulkUpdateProps {
   isOpen: boolean
@@ -76,6 +90,7 @@ export function DocumentBulkUpdate({
   const downloadRef = useRef<DocumentBulkDownloadRef>(null)
   const deleteRef = useRef<DocumentBulkDeleteRef>(null)
   const runLLMRef = useRef<DocumentBulkRunLLMRef>(null)
+  const runOCRRef = useRef<DocumentBulkRunOCRRef>(null)
 
   // Operation definitions with icons and grouping
   const operationGroups = [
@@ -105,6 +120,12 @@ export function DocumentBulkUpdate({
       title: 'LLM',
       operations: [
         { value: 'runLLMOperations', label: 'Run LLM', icon: CpuChipIcon, description: 'Run all LLM operations for tag' }
+      ]
+    },
+    {
+      title: 'OCR',
+      operations: [
+        { value: 'runOCROperations', label: 'Run OCR', icon: DocumentTextIcon, description: 'Run OCR on matching documents' }
       ]
     }
   ]
@@ -246,6 +267,11 @@ export function DocumentBulkUpdate({
         return;
       }
 
+      if (operation === 'runOCROperations') {
+        await runOCRRef.current?.executeRunOCR();
+        return;
+      }
+
       // This should not happen since all operations are now handled by components
       console.warn('Unknown operation:', operation);
     } catch (error) {
@@ -260,6 +286,18 @@ export function DocumentBulkUpdate({
       const executionCount = (isLLMOperationData(data) ? data.executionCount : 0) || 0;
       if (executionCount === 0) {
         toast('No executions needed - all documents already have the latest prompt results');
+        return;
+      }
+      setTotalDocuments(executionCount);
+      setPendingOperation({ operation, data });
+      setShowConfirmation(true);
+      return;
+    }
+
+    if (operation === 'runOCROperations') {
+      const executionCount = (isOCROperationData(data) ? data.executionCount : 0) || 0;
+      if (executionCount === 0) {
+        toast('No OCR executions needed for the current filters and mode');
         return;
       }
       setTotalDocuments(executionCount);
@@ -320,6 +358,15 @@ export function DocumentBulkUpdate({
         runLLMRef.current?.cancelAnalysis({ notify: false });
       }
     }
+    if (selectedOperation === 'runOCROperations') {
+      const analyzing =
+        isOCROperationData(operationData) && operationData.isAnalyzing === true;
+      if (isOperationLoading && !analyzing) {
+        runOCRRef.current?.cancelRunOCR();
+      } else if (analyzing) {
+        runOCRRef.current?.cancelAnalysis({ notify: false });
+      }
+    }
     onClose();
   }
 
@@ -343,7 +390,9 @@ export function DocumentBulkUpdate({
       case 'deleteDocuments':
         return true; // These operations are always available when there are documents
       case 'runLLMOperations':
-        return isLLMOperationData(operationData) ? operationData.selectedTag !== null : false; // Available when a tag is selected
+        return isLLMOperationData(operationData) ? operationData.selectedTag !== null : false;
+      case 'runOCROperations':
+        return isOCROperationData(operationData) ? (operationData.executionCount ?? 0) > 0 : false;
       default:
         return false;
     }
@@ -589,15 +638,38 @@ export function DocumentBulkUpdate({
                             onDataChange={setOperationData}
                           />
                         )}
+
+                        {selectedOperation === 'runOCROperations' && (
+                          <DocumentBulkRunOCR
+                            ref={runOCRRef}
+                            organizationId={organizationId}
+                            searchParameters={searchParameters}
+                            totalDocuments={totalDocuments}
+                            disabled={isOperationLoading}
+                            onProgress={(processed) => setProcessedDocuments(processed)}
+                            onComplete={() => {
+                              if (onRefresh) {
+                                onRefresh();
+                              }
+                              fetchPreviewDocuments();
+                            }}
+                            availableTags={availableTags}
+                            onDataChange={setOperationData}
+                          />
+                        )}
                       </div>
 
                       {/* Execute Button */}
                       <div className="flex justify-center pt-4">
-                        {selectedOperation === 'runLLMOperations' && isLLMOperationData(operationData) && operationData.isCompleted ? (
+                        {(selectedOperation === 'runLLMOperations' && isLLMOperationData(operationData) && operationData.isCompleted) ||
+                        (selectedOperation === 'runOCROperations' && isOCROperationData(operationData) && operationData.isCompleted) ? (
                           <button
                             onClick={() => {
-                              if (runLLMRef.current) {
+                              if (selectedOperation === 'runLLMOperations' && runLLMRef.current) {
                                 runLLMRef.current.resetRunLLM();
+                              }
+                              if (selectedOperation === 'runOCROperations' && runOCRRef.current) {
+                                runOCRRef.current.resetRunOCR();
                               }
                             }}
                             className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200 text-white bg-green-600 hover:bg-green-700"
@@ -626,6 +698,7 @@ export function DocumentBulkUpdate({
                             {selectedOperation === 'downloadDocuments' && 'Download Documents'}
                             {selectedOperation === 'deleteDocuments' && 'Delete Documents'}
                             {selectedOperation === 'runLLMOperations' && 'Run LLM Operations'}
+                            {selectedOperation === 'runOCROperations' && 'Run OCR'}
                           </button>
                         )}
                       </div>
@@ -671,6 +744,8 @@ export function DocumentBulkUpdate({
                     <p className="text-sm text-gray-500">
                       {pendingOperation?.operation === 'runLLMOperations' ? (
                         <>This will run <strong>{totalDocuments}</strong> LLM execution{totalDocuments !== 1 ? 's' : ''} (document-prompt combinations). This operation cannot be undone.</>
+                      ) : pendingOperation?.operation === 'runOCROperations' ? (
+                        <>This will queue <strong>{totalDocuments}</strong> OCR job{totalDocuments !== 1 ? 's' : ''} on matching documents.</>
                       ) : pendingOperation?.operation === 'downloadDocuments' ? (
                         <>This will download <strong>{totalDocuments}</strong> document{totalDocuments !== 1 ? 's' : ''}.</>
                       ) : pendingOperation?.operation === 'deleteDocuments' ? (
@@ -746,6 +821,14 @@ export function DocumentBulkUpdate({
                           : processedDocuments === totalDocuments && processedDocuments > 0
                           ? 'Finalizing...'
                           : 'Please wait while we run LLM operations'
+                      ) : pendingOperation?.operation === 'runOCROperations' ? (
+                        isOCROperationData(operationData) && operationData.isCancelling
+                          ? 'Cancelling - waiting for running OCR jobs to complete...'
+                          : isOCROperationData(operationData) && operationData.isCancelled
+                          ? 'Cancelled'
+                          : processedDocuments === totalDocuments && processedDocuments > 0
+                          ? 'Finalizing...'
+                          : 'Please wait while we run OCR on documents'
                       ) : (
                         processedDocuments === totalDocuments && processedDocuments > 0
                           ? 'Finalizing...'
@@ -753,15 +836,19 @@ export function DocumentBulkUpdate({
                       )}
                     </p>
                   </div>
-                  {/* Cancel button for LLM operations */}
-                  {pendingOperation?.operation === 'runLLMOperations' && (
+                  {/* Cancel button for LLM / OCR operations */}
+                  {(pendingOperation?.operation === 'runLLMOperations' ||
+                    pendingOperation?.operation === 'runOCROperations') && (
                     <div className="mt-4">
                       <button
                         type="button"
                         className="w-full inline-flex justify-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                         onClick={() => {
-                          if (runLLMRef.current) {
+                          if (pendingOperation?.operation === 'runLLMOperations' && runLLMRef.current) {
                             runLLMRef.current.cancelRunLLM();
+                          }
+                          if (pendingOperation?.operation === 'runOCROperations' && runOCRRef.current) {
+                            runOCRRef.current.cancelRunOCR();
                           }
                         }}
                       >

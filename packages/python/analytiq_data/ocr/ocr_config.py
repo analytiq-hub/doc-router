@@ -6,6 +6,8 @@ embedded text. See :mod:`analytiq_data.ocr.ocr_runners`.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from typing import Any, Literal
 
@@ -347,3 +349,29 @@ async def fetch_org_ocr_config(analytiq_client, org_id: str) -> OrgOcrConfig:
     org = await db.organizations.find_one({"_id": oid})
     raw = (org or {}).get("ocr_config")
     return merge_org_ocr_config(raw if isinstance(raw, dict) else None)
+
+
+def current_ocr_config_fingerprint(cfg: OrgOcrConfig) -> str:
+    """Stable short hash of merged org OCR settings (for bulk ``outdated`` detection)."""
+    canonical = json.dumps(cfg.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16]
+
+
+def is_ocr_config_outdated(stored_metadata: dict[str, Any] | None, cfg: OrgOcrConfig) -> bool:
+    """True when stored OCR was produced under different org OCR settings."""
+    if not stored_metadata:
+        return True
+    stored_fp = stored_metadata.get("ocr_config_fingerprint")
+    if not isinstance(stored_fp, str) or not stored_fp.strip():
+        return True
+    return stored_fp.strip() != current_ocr_config_fingerprint(cfg)
+
+
+def ocr_blob_metadata(cfg: OrgOcrConfig, **extra: Any) -> dict[str, Any]:
+    """GridFS metadata for OCR JSON/text blobs including config fingerprint."""
+    meta: dict[str, Any] = {
+        "ocr_type": cfg.mode,
+        "ocr_config_fingerprint": current_ocr_config_fingerprint(cfg),
+    }
+    meta.update(extra)
+    return meta

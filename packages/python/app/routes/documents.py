@@ -134,6 +134,8 @@ async def _save_single_uploaded_document(
     content: bytes,
     tag_ids: List[str],
     metadata: Optional[Dict[str, str]],
+    *,
+    upload_policy_cache: Optional[Dict[tuple, Any]] = None,
 ) -> Dict[str, Any]:
     """Persist one decoded file (same storage path as JSON upload)."""
     if metadata is None:
@@ -206,7 +208,21 @@ async def _save_single_uploaded_document(
         document_id=document_id,
     )
 
-    await ad.queue.send_msg(analytiq_client, "ocr", msg={"document_id": document_id})
+    policy_cache = upload_policy_cache if upload_policy_cache is not None else {}
+    pipeline = await ad.ocr.resolve_upload_pipeline_policy(
+        analytiq_client,
+        organization_id,
+        tag_ids,
+        name,
+        cache=policy_cache,
+    )
+    if pipeline.needs_ocr:
+        await ad.queue.send_msg(analytiq_client, "ocr", msg={"document_id": document_id})
+    else:
+        if pipeline.needs_llm:
+            await ad.queue.send_msg(analytiq_client, "llm", msg={"document_id": document_id})
+        if pipeline.needs_kb:
+            await ad.queue.send_msg(analytiq_client, "kb_index", msg={"document_id": document_id})
 
     return {
         "document_name": name,
@@ -234,6 +250,7 @@ async def upload_document(
     db = ad.common.get_async_db(analytiq_client)
     await _validate_tag_ids_for_org(organization_id, all_tag_ids, db)
 
+    upload_policy_cache: Dict[tuple, Any] = {}
     for document in documents_upload.documents:
         content = decode_base64_content(document.content)
         documents.append(
@@ -245,6 +262,7 @@ async def upload_document(
                 content,
                 document.tag_ids,
                 document.metadata,
+                upload_policy_cache=upload_policy_cache,
             )
         )
 

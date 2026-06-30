@@ -6,11 +6,11 @@ import gzip
 import json
 import logging
 from typing import Literal, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 # Third-party imports
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, Body
 from fastapi.responses import JSONResponse
 
 # Local imports
@@ -29,6 +29,41 @@ class GetOCRMetadataResponse(BaseModel):
     n_pages: int
     ocr_date: str
     ocr_type: Optional[str] = None
+
+
+class BulkAnalyzeOCRDocumentFilters(BaseModel):
+    name_search: Optional[str] = None
+    tag_ids: Optional[list[str]] = None
+    metadata_search: Optional[dict[str, str]] = None
+    filters: Optional[dict] = Field(
+        default=None,
+        description="MUI DataGrid filterModel (object)",
+    )
+
+
+class BulkAnalyzeOCRRequest(BaseModel):
+    tag_id: Optional[str] = Field(
+        default=None,
+        description="Optional anchor tag added to document tag filter",
+    )
+    mode: Literal["all", "missing", "outdated"] = Field(
+        default="outdated",
+        description="Execution strategy matching bulk OCR UI",
+    )
+    document_filters: BulkAnalyzeOCRDocumentFilters = Field(
+        default_factory=BulkAnalyzeOCRDocumentFilters
+    )
+
+
+class BulkAnalyzeOCRExecutionItem(BaseModel):
+    document_id: str
+    document_name: str
+    reason: Optional[str] = None
+
+
+class BulkAnalyzeOCRResponse(BaseModel):
+    total_executions: int
+    executions: list[BulkAnalyzeOCRExecutionItem]
 
 @ocr_router.post("/v0/orgs/{organization_id}/ocr/run/{document_id}")
 async def run_ocr(
@@ -66,6 +101,36 @@ async def run_ocr(
         analytiq_client, "ocr", msg={"document_id": document_id, "force": force, "ocr_only": ocr_only}
     )
     return {"status": "queued", "document_id": document_id}
+
+
+@ocr_router.post(
+    "/v0/orgs/{organization_id}/ocr/bulk-analyze",
+    response_model=BulkAnalyzeOCRResponse,
+)
+async def bulk_analyze_ocr(
+    organization_id: str,
+    request: BulkAnalyzeOCRRequest = Body(...),
+    current_user: User = Depends(get_org_user),
+):
+    """Analyze which documents need OCR for bulk run."""
+    _ = current_user
+    logger.info(
+        f"bulk_analyze_ocr(): org={organization_id} tag_id={request.tag_id} mode={request.mode}"
+    )
+    analytiq_client = ad.common.get_analytiq_client()
+    filters = request.document_filters
+    result = await ad.ocr.bulk_analyze_ocr_executions(
+        analytiq_client,
+        organization_id,
+        request.mode,
+        tag_id=request.tag_id,
+        tag_ids=filters.tag_ids,
+        name_search=filters.name_search,
+        metadata_search=filters.metadata_search,
+        filter_model=filters.filters,
+    )
+    return BulkAnalyzeOCRResponse(**result)
+
 
 @ocr_router.get("/v0/orgs/{organization_id}/ocr/download/json/{document_id}")
 async def download_ocr_json(

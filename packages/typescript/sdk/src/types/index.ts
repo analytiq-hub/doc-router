@@ -672,6 +672,25 @@ export interface BulkAnalyzeLLMResponse {
   groups: BulkAnalyzePromptGroup[];
 }
 
+export type BulkAnalyzeOCRMode = BulkAnalyzeLLMMode;
+
+export interface BulkAnalyzeOCRParams {
+  tagId?: string;
+  mode: BulkAnalyzeOCRMode;
+  documentFilters?: BulkAnalyzeDocumentFilters;
+}
+
+export interface BulkAnalyzeOCRExecutionItem {
+  document_id: string;
+  document_name: string;
+  reason?: string;
+}
+
+export interface BulkAnalyzeOCRResponse {
+  total_executions: number;
+  executions: BulkAnalyzeOCRExecutionItem[];
+}
+
 // User types
 export interface User {
   id: string;

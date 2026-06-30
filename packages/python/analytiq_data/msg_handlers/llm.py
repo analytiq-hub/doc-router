@@ -57,6 +57,40 @@ async def process_llm_msg(analytiq_client, msg, force: bool = False):
         if default_prompt_enabled:
             prompt_revids.insert(0, "default")
 
+        file_name = doc.get("user_file_name", "")
+        if await ad.ocr.any_selected_prompt_needs_ocr_text(analytiq_client, prompt_revids):
+            if not await ad.ocr.ocr_available_for_document(
+                analytiq_client, document_id, file_name
+            ):
+                err_msg = ad.ocr.OCR_REQUIRED_MESSAGE
+                logger.error(f"{document_id}: {err_msg}")
+                await ad.common.doc.update_doc_state(
+                    analytiq_client,
+                    document_id,
+                    ad.common.doc.DOCUMENT_STATE_LLM_FAILED,
+                )
+                try:
+                    if org_id:
+                        err_payload = {"stage": "llm", "message": err_msg}
+                        await ad.webhooks.enqueue_event(
+                            analytiq_client,
+                            organization_id=org_id,
+                            event_type="llm.error",
+                            document_id=document_id,
+                            error=err_payload,
+                        )
+                        await ad.docrouter_flows.send_docrouter_error_event(
+                            analytiq_client,
+                            organization_id=org_id,
+                            event_type="llm.error",
+                            document_id=document_id,
+                            error=err_payload,
+                        )
+                except Exception:
+                    pass
+                await ad.queue.delete_msg(analytiq_client, "llm", msg_id)
+                return
+
         logger.info(
             f"Running LLM for document {document_id} with prompt id list: {prompt_revids}"
         )

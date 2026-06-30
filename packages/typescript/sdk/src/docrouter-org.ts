@@ -11,6 +11,7 @@ import {
   RunLLMResponse,
   GetLLMResultResponse,
   BulkAnalyzeLLMResponse,
+  BulkAnalyzeOCRResponse,
   FlowDocumentResult,
   ListTagsParams,
   ListTagsResponse,
@@ -447,6 +448,27 @@ export class DocRouterOrg {
       `/v0/orgs/${this.organizationId}/llm/bulk-analyze`,
       {
         tag_id: tagId,
+        mode,
+        document_filters: documentFilters ?? {},
+      }
+    );
+  }
+
+  async bulkAnalyzeOCR(params: {
+    tagId?: string;
+    mode: 'all' | 'missing' | 'outdated';
+    documentFilters?: {
+      name_search?: string;
+      tag_ids?: string[];
+      metadata_search?: Record<string, string>;
+      filters?: Record<string, unknown>;
+    };
+  }): Promise<BulkAnalyzeOCRResponse> {
+    const { tagId, mode, documentFilters } = params;
+    return this.http.post(
+      `/v0/orgs/${this.organizationId}/ocr/bulk-analyze`,
+      {
+        tag_id: tagId ?? null,
         mode,
         document_filters: documentFilters ?? {},
       }

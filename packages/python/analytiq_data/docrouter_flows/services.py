@@ -89,7 +89,7 @@ async def run_ocr(analytiq_client, org_id: str, doc_id: str) -> dict:
         cfg=cfg,
     )
 
-    metadata: dict[str, Any] = {"org_id": org_id, "ocr_type": cfg.mode}
+    metadata = ad.ocr.ocr_blob_metadata(cfg, org_id=org_id)
     await ad.ocr.save_ocr_json(analytiq_client, doc_id, payload, metadata=metadata, encoding="json")
     await ad.ocr.save_ocr_text_from_json(
         analytiq_client,

@@ -775,7 +775,10 @@ async def index_document_in_kb(
     extracted = await get_extracted_indexing_text(
         analytiq_client, document_id, preprocess=prep
     )
+    file_name = doc.get("user_file_name", "")
     if extracted is None or not extracted.text.strip():
+        if ad.common.doc.ocr_supported(file_name):
+            raise ValueError(ad.ocr.OCR_REQUIRED_MESSAGE)
         logger.warning(f"Document {document_id} has no extractable text. Skipping indexing.")
         return {
             "chunk_count": 0,

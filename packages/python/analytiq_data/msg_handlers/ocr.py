@@ -69,6 +69,21 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
             await ad.queue.delete_msg(analytiq_client, "ocr", msg_id_str)
             return
 
+        if not force and not ocr_only and org_id:
+            upload_tags = [str(t) for t in (doc.get("tag_ids") or [])]
+            if not await ad.ocr.document_needs_upload_ocr(
+                analytiq_client,
+                org_id,
+                upload_tags,
+                doc.get("user_file_name", ""),
+                cache={},
+            ):
+                logger.info(
+                    f"OCR not needed for document_id={document_id}; dropping stale queue message"
+                )
+                await ad.queue.delete_msg(analytiq_client, "ocr", msg_id_str)
+                return
+
         # Update state to OCR processing
         await ad.common.doc.update_doc_state(analytiq_client, document_id, ad.common.doc.DOCUMENT_STATE_OCR_PROCESSING)
 
@@ -185,7 +200,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
                 analytiq_client,
                 document_id,
                 ocr_json,
-                metadata={"ocr_type": ocr_cfg.mode},
+                metadata=ad.ocr.ocr_blob_metadata(ocr_cfg),
             )
             logger.info(f"OCR list for {document_id} has been saved.")
 
@@ -198,6 +213,7 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
             force=force,
             org_id=org_id,
             ocr_type=ocr_cfg.mode,
+            ocr_cfg=ocr_cfg,
         )
         logger.info(f"OCR text for {document_id} has been saved.")
         # Update state to OCR completed

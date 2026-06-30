@@ -10,6 +10,8 @@ from typing import Any, Literal, Optional
 
 import analytiq_data as ad
 
+from .ocr_config import ocr_blob_metadata
+
 logger = logging.getLogger(__name__)
 
 OCR_BUCKET = "ocr"
@@ -206,6 +208,7 @@ async def save_ocr_text_from_json(
     force: bool = False,
     org_id: str = None,
     ocr_type: Optional[Literal["textract", "mistral", "llm", "pymupdf"]] = None,
+    ocr_cfg: "ad.ocr.OrgOcrConfig | None" = None,
 ):
     """
     Build and save per-page and full-document plain text from stored OCR JSON.
@@ -245,6 +248,10 @@ async def save_ocr_text_from_json(
         metadata = {}
     metadata["n_pages"] = len(page_text_map)
     metadata["ocr_type"] = ot
+    if ocr_cfg is not None:
+        metadata["ocr_config_fingerprint"] = ocr_blob_metadata(ocr_cfg)[
+            "ocr_config_fingerprint"
+        ]
 
     for page_idx, page_text in sorted(page_text_map.items()):
         await save_ocr_text(analytiq_client, document_id, page_text, page_idx, metadata)
