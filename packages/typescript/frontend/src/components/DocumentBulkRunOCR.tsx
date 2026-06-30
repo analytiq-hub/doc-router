@@ -206,6 +206,8 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
     onDataChangeRef.current = onDataChange;
     const onProgressRef = useRef(onProgress);
     onProgressRef.current = onProgress;
+    const onCompleteRef = useRef(onComplete);
+    onCompleteRef.current = onComplete;
     const completedExecutionsRef = useRef(0);
 
     const notifyExecutionProgress = useCallback((processed: number) => {
@@ -226,6 +228,8 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
     }, []);
 
     useEffect(() => {
+      if (!isMountedRef.current) return;
+
       onDataChangeRef.current?.({
         selectedTag,
         executionCount: totalExecutions,
@@ -235,6 +239,14 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
         isAnalyzing,
       });
     }, [selectedTag, totalExecutions, isCancelling, isCancelled, isCompleted, isAnalyzing]);
+
+    const notifyComplete = useCallback(() => {
+      queueMicrotask(() => {
+        if (isMountedRef.current) {
+          onCompleteRef.current?.();
+        }
+      });
+    }, []);
 
     const handleParallelRunsCommit = useCallback(() => {
       const clamped = clampParallelRuns(parallelRuns);
@@ -275,8 +287,6 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
       analysisAbortController.current?.abort();
       analysisAbortController.current = new AbortController();
       const signal = analysisAbortController.current.signal;
-
-      if (!isMountedRef.current) return;
 
       setIsAnalyzing(true);
       setIsAnalysisCancelled(false);
@@ -321,7 +331,18 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
 
     useEffect(() => {
       void analyzeExecutions();
-    }, [analyzeExecutions]);
+
+      return () => {
+        analysisAbortController.current?.abort();
+      };
+    }, [
+      selectedTag,
+      executionMode,
+      searchParameters.searchTerm,
+      searchParameters.selectedTagFilters,
+      searchParameters.metadataSearch,
+      analyzeExecutions,
+    ]);
 
     const cancelAnalysis = useCallback((options?: { notify?: boolean }) => {
       analysisAbortController.current?.abort();
@@ -368,12 +389,14 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
         documentId: string,
         update: Partial<OcrExecution> & { status: OcrExecution['status'] },
       ) => {
+        if (!isMountedRef.current) return;
         setExecutions((prev) =>
           prev.map((e) => (e.documentId === documentId ? { ...e, ...update } : e)),
         );
       };
 
       const recordProgress = () => {
+        if (!isMountedRef.current) return;
         completedExecutionsRef.current += 1;
         setCompletedExecutions(completedExecutionsRef.current);
         notifyExecutionProgress(completedExecutionsRef.current);
@@ -424,17 +447,19 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
           toast(
             `OCR execution cancelled - completed ${completedExecutionsRef.current} of ${totalExecutions}`,
           );
-        } else {
+        } else if (isMountedRef.current) {
           toast.success(`Completed OCR on ${totalExecutions} document(s)`);
           setIsCompleted(true);
         }
-        onComplete?.();
+        notifyComplete();
       } catch (error) {
         console.error('Error during bulk OCR execution:', error);
         toast.error('Failed to complete bulk OCR execution');
       } finally {
-        setIsExecuting(false);
-        setIsCancelling(false);
+        if (isMountedRef.current) {
+          setIsExecuting(false);
+          setIsCancelling(false);
+        }
       }
     };
 
