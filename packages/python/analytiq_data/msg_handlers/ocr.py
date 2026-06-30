@@ -76,7 +76,6 @@ async def process_ocr_msg(analytiq_client, msg, force:bool=False, ocr_only:bool=
                 org_id,
                 upload_tags,
                 doc.get("user_file_name", ""),
-                cache={},
             ):
                 logger.info(
                     f"OCR not needed for document_id={document_id}; dropping stale queue message"

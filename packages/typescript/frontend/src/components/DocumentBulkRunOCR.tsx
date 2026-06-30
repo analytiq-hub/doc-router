@@ -107,31 +107,73 @@ export interface DocumentBulkRunOCRRef {
   resetRunOCR: () => void;
 }
 
+async function readBaselineOcrDate(
+  api: DocRouterOrgApi,
+  documentId: string,
+): Promise<string | null> {
+  try {
+    const meta = await api.getOCRMetadata({ documentId });
+    return meta.ocr_date ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function isOcrRunComplete(
+  docState: string,
+  sawProcessing: boolean,
+  baselineOcrDate: string | null,
+  currentOcrDate: string | null | undefined,
+): boolean {
+  if (docState !== 'ocr_completed') {
+    return false;
+  }
+  if (sawProcessing) {
+    return true;
+  }
+  // First-time OCR: accept once metadata exists.
+  if (baselineOcrDate === null) {
+    return currentOcrDate != null;
+  }
+  // Force/outdated re-run: stale metadata must not count as done.
+  return currentOcrDate != null && currentOcrDate !== baselineOcrDate;
+}
+
 async function waitForOcrCompletion(
   api: DocRouterOrgApi,
   documentId: string,
   shouldStop: () => boolean,
+  baselineOcrDate: string | null,
 ): Promise<void> {
   const POLL_MS = 1500;
   const MAX_WAIT_MS = 600_000;
   const deadline = Date.now() + MAX_WAIT_MS;
+  let sawProcessing = false;
+
   while (Date.now() < deadline) {
     if (shouldStop()) {
       throw new Error('cancelled');
     }
-    try {
-      await api.getOCRMetadata({ documentId });
-      return;
-    } catch {
-      const doc = await api.getDocument({
-        documentId,
-        fileType: 'pdf',
-        includeContent: false,
-      });
-      if (doc.state === 'ocr_failed') {
-        throw new Error('OCR failed');
+    const doc = await api.getDocument({
+      documentId,
+      fileType: 'pdf',
+      includeContent: false,
+    });
+    if (doc.state === 'ocr_failed') {
+      throw new Error('OCR failed');
+    }
+    if (doc.state === 'ocr_processing') {
+      sawProcessing = true;
+    }
+    if (doc.state === 'ocr_completed') {
+      let currentOcrDate: string | null | undefined;
+      try {
+        const meta = await api.getOCRMetadata({ documentId });
+        currentOcrDate = meta.ocr_date;
+      } catch {
+        currentOcrDate = undefined;
       }
-      if (doc.state === 'ocr_completed') {
+      if (isOcrRunComplete(doc.state, sawProcessing, baselineOcrDate, currentOcrDate)) {
         return;
       }
     }
@@ -350,15 +392,20 @@ export const DocumentBulkRunOCR = forwardRef<DocumentBulkRunOCRRef, DocumentBulk
             markStatus(execution.documentId, { status: 'running' });
 
             try {
+              const baselineOcrDate = await readBaselineOcrDate(
+                docRouterOrgApi,
+                execution.documentId,
+              );
               await docRouterOrgApi.runOCR({
                 documentId: execution.documentId,
-                force: executionMode === 'all',
+                force: executionMode !== 'missing',
                 ocrOnly: true,
               });
               await waitForOcrCompletion(
                 docRouterOrgApi,
                 execution.documentId,
                 () => isCancelledRef.current,
+                baselineOcrDate,
               );
               markStatus(execution.documentId, { status: 'completed' });
               recordProgress();
