@@ -149,7 +149,7 @@ const FlowTabHeader: React.FC<FlowTabHeaderProps> = ({
     <div
       ref={rowRef}
       onClick={onToggle}
-      className="flex w-full min-h-[48px] cursor-pointer items-start justify-between gap-2 bg-gray-100/[0.6] px-4 py-2 transition-colors hover:bg-gray-100/[0.8]"
+      className="flex w-full min-h-[48px] cursor-pointer items-center justify-between gap-2 bg-gray-100/[0.6] px-4 py-2 transition-colors hover:bg-gray-100/[0.8]"
     >
       <span className="text-sm text-gray-900">
         <Link
@@ -164,7 +164,7 @@ const FlowTabHeader: React.FC<FlowTabHeaderProps> = ({
           <span className="text-xs text-gray-500"> (v{tabVersion})</span>
         ) : null}
       </span>
-      <div ref={actionsRef} className="flex shrink-0 items-center gap-2 self-center">
+      <div ref={actionsRef} className="flex shrink-0 items-center gap-2">
         {isActive ? (
           <div
             onClick={(e) => {
