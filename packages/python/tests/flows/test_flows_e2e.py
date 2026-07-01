@@ -191,6 +191,63 @@ async def test_put_flow_unchanged_graph_and_name_does_not_create_revision(test_d
 
 
 @pytest.mark.asyncio
+async def test_put_flow_position_only_change_does_not_create_revision(test_db, mock_auth):
+    """Moving nodes on the canvas must not bump flow_version; layout is patched on the latest revision."""
+
+    r0 = client.post(
+        f"/v0/orgs/{TEST_ORG_ID}/flows",
+        json={"name": "Layout only"},
+        headers=get_auth_headers(),
+    )
+    assert r0.status_code == 200, r0.text
+    flow_id = r0.json()["flow"]["flow_id"]
+
+    nodes = [_std_node("t1", "Start", "flows.trigger.manual", 0)]
+    conns: dict = {}
+    r1 = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        json={
+            "base_flow_revid": "",
+            "name": "Layout only",
+            "nodes": nodes,
+            "connections": conns,
+            "settings": {},
+            "pin_data": None,
+        },
+        headers=get_auth_headers(),
+    )
+    assert r1.status_code == 200, r1.text
+    rev_id = r1.json()["revision"]["flow_revid"]
+    version_before = r1.json()["revision"]["flow_version"]
+
+    moved_nodes = [_std_node("t1", "Start", "flows.trigger.manual", 320)]
+    db = ad.common.get_async_db()
+    count_before = await db.flow_revisions.count_documents({"flow_id": flow_id})
+
+    r2 = client.put(
+        f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}",
+        json={
+            "base_flow_revid": rev_id,
+            "name": "Layout only",
+            "nodes": moved_nodes,
+            "connections": conns,
+            "settings": {},
+            "pin_data": None,
+        },
+        headers=get_auth_headers(),
+    )
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["revision"] is None
+    count_after = await db.flow_revisions.count_documents({"flow_id": flow_id})
+    assert count_after == count_before
+
+    stored = await db.flow_revisions.find_one({"_id": ObjectId(rev_id)})
+    assert stored is not None
+    assert stored["flow_version"] == version_before
+    assert stored["nodes"][0]["position"] == [320, 0]
+
+
+@pytest.mark.asyncio
 async def test_preview_expression_rejects_oversized_run_data_entry(test_db, mock_auth):
     """Per-entry size cap on preview-expression protects the evaluator from huge blobs."""
 

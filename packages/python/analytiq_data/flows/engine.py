@@ -34,12 +34,21 @@ from .triggers.poll_defaults import resolve_poll_times
 logger = logging.getLogger(__name__)
 
 
+def _nodes_for_graph_hash(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Strip canvas-only node fields before hashing (layout must not bump flow version)."""
+    return [{k: v for k, v in n.items() if k != "position"} for n in nodes]
+
+
 def canonical_graph_hash(
     nodes: list[dict[str, Any]], connections: "ad.flows.Connections", settings: dict[str, Any]
 ) -> str:
     """Return a stable SHA-256 hash of the flow graph for dedup/version checks."""
 
-    payload = {"nodes": nodes, "connections": connections, "settings": settings}
+    payload = {
+        "nodes": _nodes_for_graph_hash(nodes),
+        "connections": connections,
+        "settings": settings,
+    }
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 

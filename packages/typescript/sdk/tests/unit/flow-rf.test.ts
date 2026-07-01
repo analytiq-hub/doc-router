@@ -186,6 +186,25 @@ describe('flow-rf', () => {
     expect(fp3).not.toBe(fp1);
   });
 
+  it('fingerprint changes when node canvas position changes', () => {
+    const rev = baseRev([_node('A', 0, 0, 'tests.passthrough', 'A')], {});
+    const atOrigin = revisionToRF(rev, { 'tests.passthrough': simpleNodeType });
+    const moved = {
+      ...atOrigin,
+      nodes: atOrigin.nodes.map((n) => ({
+        ...n,
+        position: { x: 500, y: 200 },
+        data: {
+          ...n.data,
+          flowNode: { ...n.data.flowNode, position: [500, 200] },
+        },
+      })),
+    };
+    const fpOrigin = revisionContentFingerprint('F', atOrigin.nodes, atOrigin.edges, rev);
+    const fpMoved = revisionContentFingerprint('F', moved.nodes, moved.edges, rev);
+    expect(fpMoved).not.toBe(fpOrigin);
+  });
+
   it('round-trips typed docrouter.ocr connection through RF', () => {
     const ocrType: FlowNodeType = {
       key: 'docrouter.ocr',

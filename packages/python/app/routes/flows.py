@@ -1564,12 +1564,38 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
 
     pin_same = latest is not None and _stable_pin_json(latest.get("pin_data")) == _stable_pin_json(pin_data)
 
-    # graph_hash excludes pin_data; require matching pin_data so pin-only edits still persist as a new revision.
-    if latest and latest.get("graph_hash") == ghash and pin_same:
+    def _semantic_graph_unchanged() -> bool:
+        if latest is None:
+            return False
+        if latest.get("graph_hash") == ghash:
+            return True
+        return (
+            ad.flows.canonical_graph_hash(
+                latest.get("nodes") or [],
+                latest.get("connections") or {},
+                latest.get("settings") or {},
+            )
+            == ghash
+        )
+
+    # graph_hash excludes pin_data and node position; require matching pin_data so pin-only edits still persist.
+    if _semantic_graph_unchanged() and pin_same:
+        now = _now()
+        header_updates: dict[str, Any] = {}
         if req.name != h.get("name"):
+            header_updates = {"name": req.name, "updated_at": now, "updated_by": current_user.user_id}
+        stored_nodes = latest.get("nodes") or []
+        if stored_nodes != nodes:
+            await db.flow_revisions.update_one(
+                {"_id": latest["_id"]},
+                {"$set": {"nodes": nodes}},
+            )
+            if not header_updates:
+                header_updates = {"updated_at": now, "updated_by": current_user.user_id}
+        if header_updates:
             await db.flows.update_one(
                 {"_id": ObjectId(flow_id)},
-                {"$set": {"name": req.name, "updated_at": _now(), "updated_by": current_user.user_id}},
+                {"$set": header_updates},
             )
         h2 = await db.flows.find_one({"_id": ObjectId(flow_id)})
         _raw = {k: h2[k] for k in h2 if k != "_id"}

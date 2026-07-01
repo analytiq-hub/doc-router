@@ -411,6 +411,23 @@ def test_validate_revision_rejects_cycle() -> None:
         ad.flows.validate_revision(nodes, connections, settings={}, pin_data=None)
 
 
+def test_canonical_graph_hash_ignores_node_position() -> None:
+    base = [
+        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {}},
+    ]
+    moved = [
+        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [400, 120], "parameters": {}},
+    ]
+    renamed = [
+        {"id": "t1", "name": "Start moved", "type": "flows.trigger.manual", "position": [400, 120], "parameters": {}},
+    ]
+    h1 = ad.flows.canonical_graph_hash(base, {}, {})
+    h2 = ad.flows.canonical_graph_hash(moved, {}, {})
+    h3 = ad.flows.canonical_graph_hash(renamed, {}, {})
+    assert h1 == h2
+    assert h1 != h3
+
+
 def _manual_trig(nid: str, name: str) -> dict[str, Any]:
     return {
         "id": nid,

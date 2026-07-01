@@ -457,9 +457,9 @@ export default function FlowDetailPageClient({
       setFlowName(res.flow.name);
       setFlowActive(Boolean(res.flow.active));
       setActiveFlowRevid(res.flow.active_flow_revid ?? null);
-      // API returns `revision: null` for a name-only save (graph unchanged); the latest revision id
-      // in the database is unchanged — do not clear `latestFlowRevid` or the next save sends an empty
-      // base_flow_revid and the server returns 409.
+      // API returns `revision: null` when the semantic graph is unchanged (name and/or layout
+      // only); the latest revision id in the database is unchanged — do not clear
+      // `latestFlowRevid` or the next save sends an empty base_flow_revid and the server returns 409.
       if (res.revision) {
         setLatestFlowRevid(res.revision.flow_revid);
         setRevision(res.revision);
@@ -467,8 +467,15 @@ export default function FlowDetailPageClient({
           revisionContentFingerprint(res.flow.name, rfNodes as FlowRfNode[], rfEdges as FlowRfEdge[], res.revision),
         );
       } else {
+        const mergedRevision = revision ? { ...revision, nodes: body.nodes } : revision;
+        if (mergedRevision) setRevision(mergedRevision);
         setSavedContentFingerprint(
-          revisionContentFingerprint(res.flow.name, rfNodes as FlowRfNode[], rfEdges as FlowRfEdge[], revision),
+          revisionContentFingerprint(
+            res.flow.name,
+            rfNodes as FlowRfNode[],
+            rfEdges as FlowRfEdge[],
+            mergedRevision ?? revision,
+          ),
         );
       }
     } catch (err: unknown) {
