@@ -1,6 +1,6 @@
 import { Fragment, useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Dialog, Transition } from '@headlessui/react'
-import { XMarkIcon, BoltIcon, PlusIcon, MinusIcon, DocumentArrowDownIcon, TrashIcon, CpuChipIcon, DocumentTextIcon } from '@heroicons/react/24/outline'
+import { XMarkIcon, BoltIcon, PlusIcon, MinusIcon, DocumentArrowDownIcon, TrashIcon, CpuChipIcon, DocumentTextIcon, ArrowPathIcon } from '@heroicons/react/24/outline'
 import { Document, Tag } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
 
@@ -26,7 +26,17 @@ type OCROperationData = {
   isAnalyzing?: boolean;
 };
 
-type OperationData = TagsOperationData | MetadataOperationData | MetadataKeysOperationData | LLMOperationData | OCROperationData | null;
+type FlowsOperationData = {
+  selectedTag: Tag | null;
+  selectedFlowIds: string[];
+  executionCount?: number;
+  isCompleted?: boolean;
+  isCancelling?: boolean;
+  isCancelled?: boolean;
+  isAnalyzing?: boolean;
+};
+
+type OperationData = TagsOperationData | MetadataOperationData | MetadataKeysOperationData | LLMOperationData | OCROperationData | FlowsOperationData | null;
 
 type PendingOperation = {
   operation: string;
@@ -39,7 +49,11 @@ const isLLMOperationData = (data: OperationData): data is LLMOperationData => {
 };
 
 const isOCROperationData = (data: OperationData): data is OCROperationData => {
-  return data !== null && typeof data === 'object' && 'selectedTag' in data;
+  return data !== null && typeof data === 'object' && 'selectedTag' in data && !('selectedFlowIds' in data);
+};
+
+const isFlowsOperationData = (data: OperationData): data is FlowsOperationData => {
+  return data !== null && typeof data === 'object' && 'selectedFlowIds' in data;
 };
 import { isColorLight } from '@/utils/colors';
 import { toast } from 'react-hot-toast';
@@ -49,6 +63,7 @@ import { DocumentBulkDownload, DocumentBulkDownloadRef } from './DocumentBulkDow
 import { DocumentBulkDelete, DocumentBulkDeleteRef } from './DocumentBulkDelete';
 import { DocumentBulkRunLLM, DocumentBulkRunLLMRef } from './DocumentBulkRunLLM';
 import { DocumentBulkRunOCR, DocumentBulkRunOCRRef } from './DocumentBulkRunOCR';
+import { DocumentBulkRunFlows, DocumentBulkRunFlowsRef } from './DocumentBulkRunFlows';
 
 interface DocumentBulkUpdateProps {
   isOpen: boolean
@@ -91,6 +106,7 @@ export function DocumentBulkUpdate({
   const deleteRef = useRef<DocumentBulkDeleteRef>(null)
   const runLLMRef = useRef<DocumentBulkRunLLMRef>(null)
   const runOCRRef = useRef<DocumentBulkRunOCRRef>(null)
+  const runFlowsRef = useRef<DocumentBulkRunFlowsRef>(null)
 
   // Operation definitions with icons and grouping
   const operationGroups = [
@@ -126,6 +142,12 @@ export function DocumentBulkUpdate({
       title: 'OCR',
       operations: [
         { value: 'runOCROperations', label: 'Run OCR', icon: DocumentTextIcon, description: 'Run OCR on matching documents' }
+      ]
+    },
+    {
+      title: 'Flows',
+      operations: [
+        { value: 'runFlowsOperations', label: 'Run Flows', icon: ArrowPathIcon, description: 'Re-run document event flows' }
       ]
     }
   ]
@@ -272,6 +294,11 @@ export function DocumentBulkUpdate({
         return;
       }
 
+      if (operation === 'runFlowsOperations') {
+        await runFlowsRef.current?.executeRunFlows();
+        return;
+      }
+
       // This should not happen since all operations are now handled by components
       console.warn('Unknown operation:', operation);
     } catch (error) {
@@ -298,6 +325,18 @@ export function DocumentBulkUpdate({
       const executionCount = (isOCROperationData(data) ? data.executionCount : 0) || 0;
       if (executionCount === 0) {
         toast('No OCR executions needed for the current filters and mode');
+        return;
+      }
+      setTotalDocuments(executionCount);
+      setPendingOperation({ operation, data });
+      setShowConfirmation(true);
+      return;
+    }
+
+    if (operation === 'runFlowsOperations') {
+      const executionCount = (isFlowsOperationData(data) ? data.executionCount : 0) || 0;
+      if (executionCount === 0) {
+        toast('No flow executions needed for the current selection and mode');
         return;
       }
       setTotalDocuments(executionCount);
@@ -367,6 +406,15 @@ export function DocumentBulkUpdate({
         runOCRRef.current?.cancelAnalysis({ notify: false });
       }
     }
+    if (selectedOperation === 'runFlowsOperations') {
+      const analyzing =
+        isFlowsOperationData(operationData) && operationData.isAnalyzing === true;
+      if (isOperationLoading && !analyzing) {
+        runFlowsRef.current?.cancelRunFlows();
+      } else if (analyzing) {
+        runFlowsRef.current?.cancelAnalysis({ notify: false });
+      }
+    }
     onClose();
   }
 
@@ -393,6 +441,8 @@ export function DocumentBulkUpdate({
         return isLLMOperationData(operationData) ? operationData.selectedTag !== null : false;
       case 'runOCROperations':
         return isOCROperationData(operationData) ? (operationData.executionCount ?? 0) > 0 : false;
+      case 'runFlowsOperations':
+        return isFlowsOperationData(operationData) ? (operationData.executionCount ?? 0) > 0 : false;
       default:
         return false;
     }
@@ -657,12 +707,32 @@ export function DocumentBulkUpdate({
                             onDataChange={setOperationData}
                           />
                         )}
+
+                        {selectedOperation === 'runFlowsOperations' && (
+                          <DocumentBulkRunFlows
+                            ref={runFlowsRef}
+                            organizationId={organizationId}
+                            searchParameters={searchParameters}
+                            totalDocuments={totalDocuments}
+                            disabled={isOperationLoading}
+                            onProgress={(processed) => setProcessedDocuments(processed)}
+                            onComplete={() => {
+                              if (onRefresh) {
+                                onRefresh();
+                              }
+                              fetchPreviewDocuments();
+                            }}
+                            availableTags={availableTags}
+                            onDataChange={setOperationData}
+                          />
+                        )}
                       </div>
 
                       {/* Execute Button */}
                       <div className="flex justify-center pt-4">
                         {(selectedOperation === 'runLLMOperations' && isLLMOperationData(operationData) && operationData.isCompleted) ||
-                        (selectedOperation === 'runOCROperations' && isOCROperationData(operationData) && operationData.isCompleted) ? (
+                        (selectedOperation === 'runOCROperations' && isOCROperationData(operationData) && operationData.isCompleted) ||
+                        (selectedOperation === 'runFlowsOperations' && isFlowsOperationData(operationData) && operationData.isCompleted) ? (
                           <button
                             onClick={() => {
                               if (selectedOperation === 'runLLMOperations' && runLLMRef.current) {
@@ -670,6 +740,9 @@ export function DocumentBulkUpdate({
                               }
                               if (selectedOperation === 'runOCROperations' && runOCRRef.current) {
                                 runOCRRef.current.resetRunOCR();
+                              }
+                              if (selectedOperation === 'runFlowsOperations' && runFlowsRef.current) {
+                                runFlowsRef.current.resetRunFlows();
                               }
                             }}
                             className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-medium rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 transition-colors duration-200 text-white bg-green-600 hover:bg-green-700"
@@ -699,6 +772,7 @@ export function DocumentBulkUpdate({
                             {selectedOperation === 'deleteDocuments' && 'Delete Documents'}
                             {selectedOperation === 'runLLMOperations' && 'Run LLM Operations'}
                             {selectedOperation === 'runOCROperations' && 'Run OCR'}
+                            {selectedOperation === 'runFlowsOperations' && 'Run Flows'}
                           </button>
                         )}
                       </div>
@@ -746,6 +820,8 @@ export function DocumentBulkUpdate({
                         <>This will run <strong>{totalDocuments}</strong> LLM execution{totalDocuments !== 1 ? 's' : ''} (document-prompt combinations). This operation cannot be undone.</>
                       ) : pendingOperation?.operation === 'runOCROperations' ? (
                         <>This will queue <strong>{totalDocuments}</strong> OCR job{totalDocuments !== 1 ? 's' : ''} on matching documents.</>
+                      ) : pendingOperation?.operation === 'runFlowsOperations' ? (
+                        <>This will run <strong>{totalDocuments}</strong> flow execution{totalDocuments !== 1 ? 's' : ''} (document-flow combinations).</>
                       ) : pendingOperation?.operation === 'downloadDocuments' ? (
                         <>This will download <strong>{totalDocuments}</strong> document{totalDocuments !== 1 ? 's' : ''}.</>
                       ) : pendingOperation?.operation === 'deleteDocuments' ? (
@@ -829,6 +905,14 @@ export function DocumentBulkUpdate({
                           : processedDocuments === totalDocuments && processedDocuments > 0
                           ? 'Finalizing...'
                           : 'Please wait while we run OCR on documents'
+                      ) : pendingOperation?.operation === 'runFlowsOperations' ? (
+                        isFlowsOperationData(operationData) && operationData.isCancelling
+                          ? 'Cancelling - waiting for running flow executions to complete...'
+                          : isFlowsOperationData(operationData) && operationData.isCancelled
+                          ? 'Cancelled'
+                          : processedDocuments === totalDocuments && processedDocuments > 0
+                          ? 'Finalizing...'
+                          : 'Please wait while we run flows on documents'
                       ) : (
                         processedDocuments === totalDocuments && processedDocuments > 0
                           ? 'Finalizing...'
@@ -838,7 +922,8 @@ export function DocumentBulkUpdate({
                   </div>
                   {/* Cancel button for LLM / OCR operations */}
                   {(pendingOperation?.operation === 'runLLMOperations' ||
-                    pendingOperation?.operation === 'runOCROperations') && (
+                    pendingOperation?.operation === 'runOCROperations' ||
+                    pendingOperation?.operation === 'runFlowsOperations') && (
                     <div className="mt-4">
                       <button
                         type="button"
@@ -849,6 +934,9 @@ export function DocumentBulkUpdate({
                           }
                           if (pendingOperation?.operation === 'runOCROperations' && runOCRRef.current) {
                             runOCRRef.current.cancelRunOCR();
+                          }
+                          if (pendingOperation?.operation === 'runFlowsOperations' && runFlowsRef.current) {
+                            runFlowsRef.current.cancelRunFlows();
                           }
                         }}
                       >

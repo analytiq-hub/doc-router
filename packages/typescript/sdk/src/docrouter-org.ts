@@ -12,6 +12,7 @@ import {
   GetLLMResultResponse,
   BulkAnalyzeLLMResponse,
   BulkAnalyzeOCRResponse,
+  BulkAnalyzeFlowsResponse,
   FlowDocumentResult,
   ListTagsParams,
   ListTagsResponse,
@@ -469,6 +470,29 @@ export class DocRouterOrg {
       `/v0/orgs/${this.organizationId}/ocr/bulk-analyze`,
       {
         tag_id: tagId ?? null,
+        mode,
+        document_filters: documentFilters ?? {},
+      }
+    );
+  }
+
+  async bulkAnalyzeFlows(params: {
+    tagId?: string;
+    flowIds?: string[];
+    mode: 'all' | 'missing' | 'outdated';
+    documentFilters?: {
+      name_search?: string;
+      tag_ids?: string[];
+      metadata_search?: Record<string, string>;
+      filters?: Record<string, unknown>;
+    };
+  }): Promise<BulkAnalyzeFlowsResponse> {
+    const { tagId, flowIds, mode, documentFilters } = params;
+    return this.http.post(
+      `/v0/orgs/${this.organizationId}/flows/bulk-analyze`,
+      {
+        tag_id: tagId ?? null,
+        flow_ids: flowIds?.length ? flowIds : null,
         mode,
         document_filters: documentFilters ?? {},
       }

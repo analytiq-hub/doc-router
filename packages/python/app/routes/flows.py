@@ -22,6 +22,7 @@ from analytiq_data.docrouter_flows.document_flow_sidebar import (
     list_matching_flows_for_document,
     rerun_flow_for_document,
 )
+from analytiq_data.docrouter_flows.bulk_analyze import bulk_analyze_flow_executions
 
 from app.auth import get_org_user
 from app.models import User
@@ -1121,6 +1122,74 @@ async def get_flow_document_result(
             raise HTTPException(status_code=400, detail=msg)
         raise HTTPException(status_code=400, detail=msg)
     return FlowDocumentResult(**row)
+
+
+class BulkAnalyzeFlowsDocumentFilters(BaseModel):
+    tag_ids: Optional[List[str]] = None
+    name_search: Optional[str] = None
+    metadata_search: Optional[dict[str, str]] = None
+    filters: Optional[dict[str, Any]] = None
+
+
+class BulkAnalyzeFlowsRequest(BaseModel):
+    mode: Literal["all", "missing", "outdated"]
+    tag_id: Optional[str] = None
+    flow_ids: Optional[List[str]] = None
+    document_filters: BulkAnalyzeFlowsDocumentFilters = Field(default_factory=BulkAnalyzeFlowsDocumentFilters)
+
+
+class BulkAnalyzeFlowsExecutionItem(BaseModel):
+    document_id: str
+    document_name: str
+    reason: Optional[Literal["missing", "outdated", "forced"]] = None
+
+
+class BulkAnalyzeFlowsGroup(BaseModel):
+    flow_id: str
+    flow_name: str
+    flow_version: int
+    trigger_type: Literal["docrouter.trigger"] = "docrouter.trigger"
+    event_type: Optional[str] = None
+    executions: List[BulkAnalyzeFlowsExecutionItem]
+
+
+class BulkAnalyzeFlowsResponse(BaseModel):
+    total_executions: int
+    groups: List[BulkAnalyzeFlowsGroup]
+
+
+@flows_router.post(
+    "/v0/orgs/{organization_id}/flows/bulk-analyze",
+    response_model=BulkAnalyzeFlowsResponse,
+)
+async def bulk_analyze_flows(
+    organization_id: str,
+    request: BulkAnalyzeFlowsRequest = Body(...),
+    current_user: User = Depends(get_org_user),
+):
+    """Analyze which document-flow pairs need re-run for bulk Run Flows."""
+    _ = current_user
+    logger.info(
+        f"bulk_analyze_flows(): org={organization_id} tag_id={request.tag_id} mode={request.mode}"
+    )
+    filters = request.document_filters
+    try:
+        result = await bulk_analyze_flow_executions(
+            ad.common.get_analytiq_client(),
+            organization_id,
+            request.mode,
+            tag_id=request.tag_id,
+            flow_ids=request.flow_ids,
+            tag_ids=filters.tag_ids,
+            name_search=filters.name_search,
+            metadata_search=filters.metadata_search,
+            filter_model=filters.filters,
+        )
+    except ValueError as exc:
+        if str(exc) == "tag_id or flow_ids is required":
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return BulkAnalyzeFlowsResponse(**result)
 
 
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/run/{document_id}")

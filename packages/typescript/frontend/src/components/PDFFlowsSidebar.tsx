@@ -10,6 +10,7 @@ import { Menu, MenuItem } from '@mui/material';
 import { styled, alpha } from '@mui/material/styles';
 import type { FlowDocumentResult, FlowListItem } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
+import { pollFlowRerunUntilDone } from '@/utils/flowRerunPoll';
 import { IoViewer } from '@/components/flows/IoViewer';
 
 interface Props {
@@ -37,52 +38,6 @@ function formatTimestamp(iso: string): string {
 function flowResultDownloadFilename(flowName: string, flowId: string): string {
   const slug = flowName.trim().toLowerCase().replace(/\s+/g, '_').replace(/[^\w.-]/g, '') || 'flow';
   return `${slug}_${flowId}_result.json`;
-}
-
-function getStatusFromError(err: unknown): number | undefined {
-  if (err && typeof err === 'object' && 'status' in err && typeof (err as { status: unknown }).status === 'number') {
-    return (err as { status: number }).status;
-  }
-  return undefined;
-}
-
-function sleepMs(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function pollFlowRerunUntilDone(
-  api: DocRouterOrgApi,
-  params: {
-    flowId: string;
-    documentId: string;
-    execId: string;
-    shouldContinue?: () => boolean;
-  },
-): Promise<void> {
-  const POLL_MS = 600;
-  const MAX_WAIT_MS = 180_000;
-  const deadline = Date.now() + MAX_WAIT_MS;
-  const alive = params.shouldContinue ?? (() => true);
-
-  while (Date.now() < deadline) {
-    if (!alive()) return;
-
-    try {
-      const result = await api.getFlowDocumentResult({
-        documentId: params.documentId,
-        flowId: params.flowId,
-      });
-      if (!alive()) return;
-      if (result.execution_id === params.execId) return;
-    } catch (e) {
-      const status = getStatusFromError(e);
-      if (status !== 404) {
-        console.warn('Flow rerun poll: result fetch failed', e);
-      }
-    }
-
-    await sleepMs(POLL_MS);
-  }
 }
 
 /** 0 = show all; 1 = hide Inactive; 2 = hide version too */

@@ -691,6 +691,35 @@ export interface BulkAnalyzeOCRResponse {
   executions: BulkAnalyzeOCRExecutionItem[];
 }
 
+export type BulkAnalyzeFlowsMode = BulkAnalyzeLLMMode;
+
+export interface BulkAnalyzeFlowsParams {
+  tagId?: string;
+  flowIds?: string[];
+  mode: BulkAnalyzeFlowsMode;
+  documentFilters?: BulkAnalyzeDocumentFilters;
+}
+
+export interface BulkAnalyzeFlowsExecutionItem {
+  document_id: string;
+  document_name: string;
+  reason?: 'missing' | 'outdated' | 'forced';
+}
+
+export interface BulkAnalyzeFlowsGroup {
+  flow_id: string;
+  flow_name: string;
+  flow_version: number;
+  trigger_type: 'docrouter.trigger';
+  event_type?: string;
+  executions: BulkAnalyzeFlowsExecutionItem[];
+}
+
+export interface BulkAnalyzeFlowsResponse {
+  total_executions: number;
+  groups: BulkAnalyzeFlowsGroup[];
+}
+
 // User types
 export interface User {
   id: string;
