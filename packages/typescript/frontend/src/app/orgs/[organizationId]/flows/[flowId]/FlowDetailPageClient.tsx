@@ -621,7 +621,6 @@ export default function FlowDetailPageClient({
         if (multi && !st) return;
         const out = await api.runFlow(flowId, {
           flow_revid: rid || undefined,
-          document_id: undefined,
           ...(multi ? { start_trigger_node_id: st } : {}),
           revision_snapshot,
         });
@@ -809,7 +808,6 @@ export default function FlowDetailPageClient({
         const rid = latestFlowRevid?.trim();
         const out = await api.runFlow(flowId, {
           flow_revid: rid || undefined,
-          document_id: undefined,
           target_node_id: targetNodeId,
           run_data: seedRunData,
           revision_snapshot,

@@ -10,7 +10,7 @@ import { Menu, MenuItem } from '@mui/material';
 import { styled, alpha } from '@mui/material/styles';
 import type { FlowDocumentResult, FlowListItem } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
-import { pollFlowRerunUntilDone } from '@/utils/flowRerunPoll';
+import { getStatusFromError, pollFlowRerunUntilDone } from '@/utils/flowRerunPoll';
 import { IoViewer } from '@/components/flows/IoViewer';
 
 interface Props {

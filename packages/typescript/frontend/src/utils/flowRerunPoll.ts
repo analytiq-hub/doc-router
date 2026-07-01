@@ -3,7 +3,7 @@ import type { DocRouterOrgApi } from '@/utils/api';
 export const FLOW_RERUN_POLL_MS = 600;
 export const FLOW_RERUN_MAX_WAIT_MS = 180_000;
 
-function getStatusFromError(err: unknown): number | undefined {
+export function getStatusFromError(err: unknown): number | undefined {
   if (err && typeof err === 'object' && 'status' in err && typeof (err as { status: unknown }).status === 'number') {
     return (err as { status: number }).status;
   }
