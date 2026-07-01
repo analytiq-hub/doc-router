@@ -7,9 +7,5 @@ def test_run_flow_request_field_descriptions() -> None:
     st = RunFlowRequest.model_fields["start_trigger_node_id"].description or ""
     assert "multiple triggers" in st.lower()
 
-    rid = RunFlowRequest.model_fields["document_id"].description or ""
-    assert "document" in rid.lower()
-    assert "multiple triggers" not in rid.lower()
-
     tn = RunFlowRequest.model_fields["target_node_id"].description or ""
     assert "execute" in tn.lower() or "upstream" in tn.lower()

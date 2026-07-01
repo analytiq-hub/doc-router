@@ -733,7 +733,6 @@ class ToolTestRequest(BaseModel):
 
 class RunFlowRequest(BaseModel):
     flow_revid: str | None = Field(None, description="Revision lineage id for the execution; optional when revision_snapshot is supplied.")
-    document_id: str | None = Field(None, description="Optional document id recorded on the manual trigger payload for this run.")
     start_trigger_node_id: str | None = Field(
         None,
         description="When the revision has multiple triggers, which one starts a full run (required in that case). For execute-step runs the engine infers the trigger when omitted if unambiguous.",
@@ -2028,7 +2027,7 @@ async def run_flow(organization_id: str, flow_id: str, req: RunFlowRequest, curr
         "parent_execution_id": None,
         "run_data": {},
         "error": None,
-        "trigger": {"type": "manual", "document_id": req.document_id},
+        "trigger": {"type": "manual"},
         "start_trigger_node_id": (req.start_trigger_node_id or "").strip() or None,
         "target_node_id": req.target_node_id,
         "initial_run_data": seed_filtered or None,

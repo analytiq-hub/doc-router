@@ -15,6 +15,8 @@ import { IoViewer } from '@/components/flows/IoViewer';
 interface Props {
   organizationId: string;
   id: string;
+  /** True when the Flows sidebar tab is the active panel (not Extraction/Forms). */
+  panelActive: boolean;
   onHasFlows?: (hasFlows: boolean) => void;
 }
 
@@ -44,12 +46,73 @@ function getStatusFromError(err: unknown): number | undefined {
   return undefined;
 }
 
-function flowExecutionIsInFlight(status: FlowExecution['status']): boolean {
-  return status === 'queued' || status === 'running';
+function flowExecutionIsTerminal(status: FlowExecution['status'] | undefined): boolean {
+  return (
+    status === 'success' ||
+    status === 'error' ||
+    status === 'stopped' ||
+    status === 'interrupted'
+  );
 }
 
 function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function pollFlowRerunUntilDone(
+  api: DocRouterOrgApi,
+  params: {
+    flowId: string;
+    documentId: string;
+    execId: string;
+  },
+): Promise<void> {
+  const POLL_MS = 600;
+  const MAX_WAIT_MS = 180_000;
+  const CAPTURE_GRACE_MS = 5_000;
+  const deadline = Date.now() + MAX_WAIT_MS;
+
+  const resultCaptured = async (): Promise<boolean> => {
+    try {
+      const result = await api.getFlowDocumentResult({
+        documentId: params.documentId,
+        flowId: params.flowId,
+      });
+      return result.execution_id === params.execId;
+    } catch (e) {
+      const status = getStatusFromError(e);
+      if (status !== 404) {
+        console.warn('Flow rerun poll: result fetch failed', e);
+      }
+      return false;
+    }
+  };
+
+  const waitForCaptureGrace = async (): Promise<void> => {
+    const graceDeadline = Date.now() + CAPTURE_GRACE_MS;
+    while (Date.now() < graceDeadline) {
+      if (await resultCaptured()) return;
+      await sleepMs(200);
+    }
+  };
+
+  while (Date.now() < deadline) {
+    if (await resultCaptured()) {
+      return;
+    }
+
+    try {
+      const ex = await api.getExecution(params.flowId, params.execId);
+      if (flowExecutionIsTerminal(ex.status)) {
+        await waitForCaptureGrace();
+        return;
+      }
+    } catch (e) {
+      console.warn('Flow rerun poll: execution fetch failed', e);
+    }
+
+    await sleepMs(POLL_MS);
+  }
 }
 
 /** 0 = show all; 1 = hide Inactive; 2 = hide version too */
@@ -176,7 +239,7 @@ const FlowTabHeader: React.FC<FlowTabHeaderProps> = ({
   );
 };
 
-const PDFFlowsSidebar = ({ organizationId, id, onHasFlows }: Props) => {
+const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props) => {
   const docRouterOrgApi = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
   const [flows, setFlows] = useState<FlowListItem[]>([]);
   const [flowResults, setFlowResults] = useState<Record<string, FlowDocumentResult>>({});
@@ -187,15 +250,13 @@ const PDFFlowsSidebar = ({ organizationId, id, onHasFlows }: Props) => {
   const [expandedFlowId, setExpandedFlowId] = useState<string | null>(null);
   const [kebabAnchorEl, setKebabAnchorEl] = useState<null | HTMLElement>(null);
   const [kebabFlowId, setKebabFlowId] = useState<string | null>(null);
-  const flowResultsRef = useRef(flowResults);
-  const loadingFlowsRef = useRef(loadingFlows);
   const mountedRef = useRef(true);
 
-  flowResultsRef.current = flowResults;
-  loadingFlowsRef.current = loadingFlows;
-
-  useEffect(() => () => {
-    mountedRef.current = false;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -205,6 +266,7 @@ const PDFFlowsSidebar = ({ organizationId, id, onHasFlows }: Props) => {
     setExpandedFlowId(null);
     setFlowResults({});
     setLoadingFlows(new Set());
+    setRunningFlows(new Set());
 
     void (async () => {
       try {
@@ -213,9 +275,6 @@ const PDFFlowsSidebar = ({ organizationId, id, onHasFlows }: Props) => {
         const items = res.items ?? [];
         setFlows(items);
         onHasFlows?.(items.length > 0);
-        if (items.length > 0) {
-          setExpandedFlowId(items[0]!.flow.flow_id);
-        }
       } catch (e) {
         if (cancelled) return;
         setError(e instanceof Error ? e.message : 'Failed to load flows');
@@ -230,6 +289,13 @@ const PDFFlowsSidebar = ({ organizationId, id, onHasFlows }: Props) => {
       cancelled = true;
     };
   }, [docRouterOrgApi, id, onHasFlows]);
+
+  // Collapse all rows when the Flows panel is opened (mirrors starting collapsed on each visit).
+  useLayoutEffect(() => {
+    if (!panelActive) return;
+    setExpandedFlowId(null);
+    setFlowResults({});
+  }, [panelActive, id]);
 
   const fetchFlowResult = useCallback(
     async (flowId: string) => {
@@ -258,17 +324,34 @@ const PDFFlowsSidebar = ({ organizationId, id, onHasFlows }: Props) => {
     [docRouterOrgApi, id],
   );
 
-  useEffect(() => {
-    if (!expandedFlowId) return;
-    const item = flows.find((f) => f.flow.flow_id === expandedFlowId);
-    if (!item?.has_captured_result) return;
-    if (flowResultsRef.current[expandedFlowId] || loadingFlowsRef.current.has(expandedFlowId)) return;
-    void fetchFlowResult(expandedFlowId);
-  }, [expandedFlowId, fetchFlowResult, flows]);
-
   const handleFlowToggle = (item: FlowListItem) => {
     const flowId = item.flow.flow_id;
-    setExpandedFlowId(expandedFlowId === flowId ? null : flowId);
+    if (expandedFlowId === flowId) {
+      setExpandedFlowId(null);
+      return;
+    }
+
+    setExpandedFlowId(flowId);
+    setFlowResults((prev) => {
+      const next = { ...prev };
+      delete next[flowId];
+      return next;
+    });
+
+    void (async () => {
+      try {
+        const listRes = await docRouterOrgApi.listFlows({ documentId: id, limit: 100 });
+        setFlows(listRes.items ?? []);
+      } catch (e) {
+        console.error('Error refreshing flows list:', e);
+      }
+
+      const data = await fetchFlowResult(flowId);
+      if (!data) return;
+      setFlows((prev) =>
+        prev.map((f) => (f.flow.flow_id === flowId ? { ...f, has_captured_result: true } : f)),
+      );
+    })();
   };
 
   const handleOpenKebabMenu = (e: React.MouseEvent<HTMLElement>, flowId: string) => {
@@ -301,37 +384,30 @@ const PDFFlowsSidebar = ({ organizationId, id, onHasFlows }: Props) => {
     setRunningFlows((prev) => new Set(prev).add(flowId));
     try {
       const { execution_id: execId } = await docRouterOrgApi.rerunFlowForDocument(flowId, id);
-      if (!mountedRef.current) return;
       if (!execId?.trim()) return;
 
-      const POLL_MS = 600;
-      const MAX_WAIT_MS = 180_000;
-      const deadline = Date.now() + MAX_WAIT_MS;
-      while (Date.now() < deadline) {
-        if (!mountedRef.current) return;
-        try {
-          const ex = await docRouterOrgApi.getExecution(flowId, execId);
-          if (!flowExecutionIsInFlight(ex.status)) {
-            break;
-          }
-        } catch {
-          // keep polling
-        }
-        await sleepMs(POLL_MS);
-      }
+      await pollFlowRerunUntilDone(docRouterOrgApi, {
+        flowId,
+        documentId: id,
+        execId,
+      });
 
-      if (!mountedRef.current) return;
-      await fetchFlowResult(flowId);
+      if (mountedRef.current) {
+        const data = await fetchFlowResult(flowId);
+        if (data) {
+          setFlows((prev) =>
+            prev.map((f) => (f.flow.flow_id === flowId ? { ...f, has_captured_result: true } : f)),
+          );
+        }
+      }
     } catch (e) {
       console.error('Error re-running flow:', e);
     } finally {
-      if (mountedRef.current) {
-        setRunningFlows((prev) => {
-          const next = new Set(prev);
-          next.delete(flowId);
-          return next;
-        });
-      }
+      setRunningFlows((prev) => {
+        const next = new Set(prev);
+        next.delete(flowId);
+        return next;
+      });
     }
   };
 
@@ -372,6 +448,7 @@ const PDFFlowsSidebar = ({ organizationId, id, onHasFlows }: Props) => {
         const isRunning = runningFlows.has(flowId);
         const tabVersion = flowTabVersion(item, isExpanded);
         const isActive = Boolean(item.flow.active);
+        const showResult = captured || Boolean(resultRow);
 
         return (
           <div key={flowId} className="border-b border-black/10">
@@ -382,13 +459,14 @@ const PDFFlowsSidebar = ({ organizationId, id, onHasFlows }: Props) => {
               tabVersion={tabVersion}
               isActive={isActive}
               isRunning={isRunning}
-              captured={captured}
+              captured={showResult}
               isExpanded={isExpanded}
               onToggle={() => handleFlowToggle(item)}
               onRerun={() => void handleRerunFlow(flowId)}
               onOpenKebab={(e) => handleOpenKebabMenu(e, flowId)}
             />
             <div className={`transition-all duration-200 ease-in-out ${isExpanded ? '' : 'hidden'}`}>
+              {isExpanded ? (
               <div className="space-y-3 p-4">
                 {resultRow?.updated_at ? (
                   <div>
@@ -404,7 +482,7 @@ const PDFFlowsSidebar = ({ organizationId, id, onHasFlows }: Props) => {
                     )}
                   </div>
                 ) : null}
-                {captured ? (
+                {showResult ? (
                   isLoadingResult ? (
                     <div className="text-sm text-gray-500">Loading result…</div>
                   ) : resultRow ? (
@@ -426,6 +504,7 @@ const PDFFlowsSidebar = ({ organizationId, id, onHasFlows }: Props) => {
                   </div>
                 )}
               </div>
+              ) : null}
             </div>
           </div>
         );

@@ -1158,7 +1158,6 @@ export class DocRouterOrg {
   async runFlow(flowId: string, params?: RunFlowParams): Promise<{ execution_id: string }> {
     return this.http.post<{ execution_id: string }>(`/v0/orgs/${this.organizationId}/flows/${flowId}/run`, {
       flow_revid: params?.flow_revid ?? null,
-      document_id: params?.document_id ?? null,
       start_trigger_node_id: params?.start_trigger_node_id ?? null,
       target_node_id: params?.target_node_id ?? null,
       run_data: params?.run_data ?? null,

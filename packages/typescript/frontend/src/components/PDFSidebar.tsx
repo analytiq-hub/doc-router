@@ -110,6 +110,7 @@ const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight }: Props) => 
         <PDFFlowsSidebar
           organizationId={organizationId}
           id={id}
+          panelActive={activeMode === 'flows'}
           onHasFlows={handleFlowsHasFlows}
         />
       </div>

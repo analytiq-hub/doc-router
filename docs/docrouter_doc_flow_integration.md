@@ -15,9 +15,18 @@ as first-class, configurable flow nodes.
 
 ## 1. Overview
 
-Today flows can reference a document through the `docrouter.trigger.manual` node,
-but there is no automatic bridge between document lifecycle events and flow
-execution.  This plan adds:
+Document-scoped flows use **`docrouter.trigger`** — a configurable event trigger that
+fires on document lifecycle events (`document.uploaded`, `document.error`,
+`llm.completed`, `llm.error`).  Re-running a flow for a real document uses
+`POST …/flows/{flow_id}/run/{document_id}` (`rerun_flow_for_document`), which
+re-dispatches the matching lifecycle event on the active revision.
+
+For **editor testing** without a live document, use **`docrouter.trigger`** with
+**pin data** on the trigger node (JSON fields + `files:` binary refs for PDF /
+original).  The generic **`flows.trigger.manual`** node remains available for
+non-document tool and automation graphs.
+
+This plan adds:
 
 
 | Area         | What we add                                                                                                                                                                                                                                       |
@@ -253,7 +262,7 @@ no binary attachment are skipped (no output item).
 | Topic                   | Detail                                                                                                                                                        |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Provider enum           | `OCR_PROVIDER_CHOICES` in `services.py` is the single source; `parameter_schema` in `ocr_node.py` and `ocr.manifest.json` derive from / must match it.        |
-| OCR job correlation     | `flow_ocr_document_id()` in `services.py` tags provider logs with the item's `document_id` when present; falls back to `execution_id` for pinned/manual PDFs. |
+| OCR job correlation     | `flow_ocr_document_id()` in `services.py` tags provider logs with the item's `document_id` when present; falls back to `execution_id` for pinned PDFs in the editor. |
 | No document store write | `run_flow_ocr_on_pdf` does not persist to the document OCR store — flow-scoped only.                                                                          |
 
 
@@ -550,10 +559,14 @@ The following order minimises dependency risk:
   - Merge node: wired input slots pre-computed by `merge_wired_input_indices` before
   BFS; engine waits for all wired slots, not just `min_inputs`.
   - Tests: `test_docrouter_llm_node.py`.
-7. **Document Flows section** (§2.8) — engine captures last-node output at execution
+7. ✅ **Document Flows section** (§2.8) — engine captures last-node output at execution
   completion when `report_result=true` on the trigger; upsert into `flow_results`
    keyed on `(document_id, flow_id)`; `report_result` stored on `flow_triggers` row at
    activation time; `GET /v0/orgs/{org}/flows?document_id={id}` and
    `GET /v0/orgs/{org}/flows/result/{id}?flow_id=…` REST endpoints;
    Flows tab on document detail page (read-only result viewer).
+8. ✅ **Removed `docrouter.trigger.manual`** — document runs go through event trigger +
+   `POST …/flows/{flow_id}/run/{document_id}` only; editor testing uses
+   `docrouter.trigger` pin data or `flows.trigger.manual` for non-document graphs.
+   `POST …/flows/{flow_id}/run` no longer accepts `document_id`.
 

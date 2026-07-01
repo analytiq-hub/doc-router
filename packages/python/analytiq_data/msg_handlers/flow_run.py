@@ -45,7 +45,7 @@ async def process_flow_run_msg(analytiq_client, msg: dict) -> None:
     flow_revid_payload = payload.get("flow_revid") or ""
     exec_id = payload["execution_id"]
     org_id = payload["organization_id"]
-    trigger = payload.get("trigger") or {"type": "manual", "document_id": None}
+    trigger = payload.get("trigger") or {"type": "manual"}
 
     db = ad.common.get_async_db(analytiq_client)
 

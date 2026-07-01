@@ -11,7 +11,6 @@ _DOCROUTER_ROOT = Path(__file__).resolve().parent
 # Paths relative to ``analytiq_data/docrouter_flows/``. Order is stable for tests and palette listing.
 DOCROUTER_MANIFEST_RELPATHS: tuple[str, ...] = (
     "nodes/event_trigger.manifest.json",
-    "nodes/manual_trigger.manifest.json",
     "nodes/ocr.manifest.json",
     "nodes/llm_run.manifest.json",
     "nodes/document_split.manifest.json",
@@ -19,7 +18,6 @@ DOCROUTER_MANIFEST_RELPATHS: tuple[str, ...] = (
 
 DOCROUTER_NODE_KEYS: tuple[str, ...] = (
     "docrouter.trigger",
-    "docrouter.trigger.manual",
     "docrouter.ocr",
     "docrouter.llm_run",
     "docrouter.document_split",

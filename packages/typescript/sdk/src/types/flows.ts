@@ -255,7 +255,6 @@ export type RevisionSnapshotPayload = Pick<SaveRevisionParams, 'nodes' | 'connec
 
 export interface RunFlowParams {
   flow_revid?: string;
-  document_id?: string;
   /** When the graph has several triggers, selects which one seeds a full manual run. */
   start_trigger_node_id?: string;
   /** Run only upstream subgraph through this node id (execute step). */

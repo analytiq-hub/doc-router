@@ -22,13 +22,6 @@ describe('flowNodeBrand', () => {
         category: 'DocRouter',
       }),
     ).toBe(true);
-    expect(
-      isDocRouterNodeType({
-        key: 'docrouter.trigger.manual',
-        palette_group: 'trigger',
-        category: 'DocRouter',
-      }),
-    ).toBe(true);
   });
 
   it('detects AI / agent graph nodes', () => {

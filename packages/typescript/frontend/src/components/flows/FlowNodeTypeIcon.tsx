@@ -30,7 +30,6 @@ import { MicrosoftOutlookIcon } from './icons/MicrosoftOutlookIcon';
 /** Preset strings returned by `GET .../flows/node-types` for built-in nodes; UI maps to bundled icons. */
 export const FLOW_BUILTIN_ICON_KEYS = [
   'manual_trigger',
-  'manual_trigger_document',
   'document_event_trigger',
   'http_request',
   'webhook',
@@ -79,8 +78,6 @@ export function FlowNodeTypeIcon({
     switch (k) {
       case 'manual_trigger':
         return <CursorArrowRaysIcon className={className} aria-hidden={ariaHidden} />;
-      case 'manual_trigger_document':
-        return <DocumentTextIcon className={className} aria-hidden={ariaHidden} />;
       case 'document_event_trigger':
         return <DocumentTextIcon className={className} aria-hidden={ariaHidden} />;
       case 'http_request':
