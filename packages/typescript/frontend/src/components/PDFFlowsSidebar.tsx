@@ -8,7 +8,7 @@ import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { Menu, MenuItem } from '@mui/material';
 import { styled, alpha } from '@mui/material/styles';
-import type { FlowDocumentResult, FlowExecution, FlowListItem } from '@docrouter/sdk';
+import type { FlowDocumentResult, FlowListItem } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
 import { IoViewer } from '@/components/flows/IoViewer';
 
@@ -46,15 +46,6 @@ function getStatusFromError(err: unknown): number | undefined {
   return undefined;
 }
 
-function flowExecutionIsTerminal(status: FlowExecution['status'] | undefined): boolean {
-  return (
-    status === 'success' ||
-    status === 'error' ||
-    status === 'stopped' ||
-    status === 'interrupted'
-  );
-}
-
 function sleepMs(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -65,50 +56,29 @@ async function pollFlowRerunUntilDone(
     flowId: string;
     documentId: string;
     execId: string;
+    shouldContinue?: () => boolean;
   },
 ): Promise<void> {
   const POLL_MS = 600;
   const MAX_WAIT_MS = 180_000;
-  const CAPTURE_GRACE_MS = 5_000;
   const deadline = Date.now() + MAX_WAIT_MS;
+  const alive = params.shouldContinue ?? (() => true);
 
-  const resultCaptured = async (): Promise<boolean> => {
+  while (Date.now() < deadline) {
+    if (!alive()) return;
+
     try {
       const result = await api.getFlowDocumentResult({
         documentId: params.documentId,
         flowId: params.flowId,
       });
-      return result.execution_id === params.execId;
+      if (!alive()) return;
+      if (result.execution_id === params.execId) return;
     } catch (e) {
       const status = getStatusFromError(e);
       if (status !== 404) {
         console.warn('Flow rerun poll: result fetch failed', e);
       }
-      return false;
-    }
-  };
-
-  const waitForCaptureGrace = async (): Promise<void> => {
-    const graceDeadline = Date.now() + CAPTURE_GRACE_MS;
-    while (Date.now() < graceDeadline) {
-      if (await resultCaptured()) return;
-      await sleepMs(200);
-    }
-  };
-
-  while (Date.now() < deadline) {
-    if (await resultCaptured()) {
-      return;
-    }
-
-    try {
-      const ex = await api.getExecution(params.flowId, params.execId);
-      if (flowExecutionIsTerminal(ex.status)) {
-        await waitForCaptureGrace();
-        return;
-      }
-    } catch (e) {
-      console.warn('Flow rerun poll: execution fetch failed', e);
     }
 
     await sleepMs(POLL_MS);
@@ -251,6 +221,8 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
   const [kebabAnchorEl, setKebabAnchorEl] = useState<null | HTMLElement>(null);
   const [kebabFlowId, setKebabFlowId] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const expandFetchGenRef = useRef(0);
+  const rerunGenRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     mountedRef.current = true;
@@ -287,24 +259,31 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
 
     return () => {
       cancelled = true;
+      expandFetchGenRef.current += 1;
+      rerunGenRef.current = {};
     };
   }, [docRouterOrgApi, id, onHasFlows]);
 
   // Collapse all rows when the Flows panel is opened (mirrors starting collapsed on each visit).
   useLayoutEffect(() => {
     if (!panelActive) return;
+    expandFetchGenRef.current += 1;
     setExpandedFlowId(null);
     setFlowResults({});
   }, [panelActive, id]);
 
   const fetchFlowResult = useCallback(
-    async (flowId: string) => {
+    async (flowId: string, shouldApply?: () => boolean) => {
+      const canApply = () => mountedRef.current && (shouldApply?.() ?? true);
+      if (!canApply()) return null;
+
       setLoadingFlows((prev) => new Set(prev).add(flowId));
       try {
         const data = await docRouterOrgApi.getFlowDocumentResult({
           documentId: id,
           flowId,
         });
+        if (!canApply()) return null;
         setFlowResults((prev) => ({ ...prev, [flowId]: data }));
         return data;
       } catch (e) {
@@ -314,11 +293,13 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
         }
         return null;
       } finally {
-        setLoadingFlows((prev) => {
-          const next = new Set(prev);
-          next.delete(flowId);
-          return next;
-        });
+        if (mountedRef.current) {
+          setLoadingFlows((prev) => {
+            const next = new Set(prev);
+            next.delete(flowId);
+            return next;
+          });
+        }
       }
     },
     [docRouterOrgApi, id],
@@ -327,9 +308,13 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
   const handleFlowToggle = (item: FlowListItem) => {
     const flowId = item.flow.flow_id;
     if (expandedFlowId === flowId) {
+      expandFetchGenRef.current += 1;
       setExpandedFlowId(null);
       return;
     }
+
+    const gen = ++expandFetchGenRef.current;
+    const isCurrentExpandFetch = () => mountedRef.current && expandFetchGenRef.current === gen;
 
     setExpandedFlowId(flowId);
     setFlowResults((prev) => {
@@ -341,13 +326,15 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
     void (async () => {
       try {
         const listRes = await docRouterOrgApi.listFlows({ documentId: id, limit: 100 });
+        if (!isCurrentExpandFetch()) return;
         setFlows(listRes.items ?? []);
       } catch (e) {
+        if (!isCurrentExpandFetch()) return;
         console.error('Error refreshing flows list:', e);
       }
 
-      const data = await fetchFlowResult(flowId);
-      if (!data) return;
+      const data = await fetchFlowResult(flowId, isCurrentExpandFetch);
+      if (!data || !isCurrentExpandFetch()) return;
       setFlows((prev) =>
         prev.map((f) => (f.flow.flow_id === flowId ? { ...f, has_captured_result: true } : f)),
       );
@@ -381,33 +368,40 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
   };
 
   const handleRerunFlow = async (flowId: string) => {
+    const gen = (rerunGenRef.current[flowId] ?? 0) + 1;
+    rerunGenRef.current[flowId] = gen;
+    const isCurrentRerun = () => rerunGenRef.current[flowId] === gen;
+
     setRunningFlows((prev) => new Set(prev).add(flowId));
     try {
       const { execution_id: execId } = await docRouterOrgApi.rerunFlowForDocument(flowId, id);
-      if (!execId?.trim()) return;
+      if (!execId?.trim() || !isCurrentRerun()) return;
 
       await pollFlowRerunUntilDone(docRouterOrgApi, {
         flowId,
         documentId: id,
         execId,
+        shouldContinue: isCurrentRerun,
       });
 
-      if (mountedRef.current) {
-        const data = await fetchFlowResult(flowId);
-        if (data) {
-          setFlows((prev) =>
-            prev.map((f) => (f.flow.flow_id === flowId ? { ...f, has_captured_result: true } : f)),
-          );
-        }
+      if (!isCurrentRerun()) return;
+
+      const data = await fetchFlowResult(flowId, isCurrentRerun);
+      if (data && isCurrentRerun()) {
+        setFlows((prev) =>
+          prev.map((f) => (f.flow.flow_id === flowId ? { ...f, has_captured_result: true } : f)),
+        );
       }
     } catch (e) {
       console.error('Error re-running flow:', e);
     } finally {
-      setRunningFlows((prev) => {
-        const next = new Set(prev);
-        next.delete(flowId);
-        return next;
-      });
+      if (isCurrentRerun()) {
+        setRunningFlows((prev) => {
+          const next = new Set(prev);
+          next.delete(flowId);
+          return next;
+        });
+      }
     }
   };
 
