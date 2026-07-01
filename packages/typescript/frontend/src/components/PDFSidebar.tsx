@@ -1,25 +1,29 @@
-import React, { useCallback, useEffect, useState } from 'react';
+'use client';
+
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
+import Link from 'next/link';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { PDFFormsTabProbe } from './PDFFormsTabProbe';
+import { docPageHrefWithSearch, sidebarTabFromQuery, type DocSidebarTab } from '@/utils/docPageUrl';
+
+import type { HighlightInfo } from '@/types/index';
+import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 const PDFExtractionSidebar = dynamic(() => import('./PDFExtractionSidebar'), {
   ssr: false,
-  loading: () => <div className="h-32 flex items-center justify-center">Loading extraction...</div>
+  loading: () => <div className="h-32 flex items-center justify-center">Loading extraction...</div>,
 });
 
 const PDFFormSidebar = dynamic(() => import('./PDFFormSidebar'), {
   ssr: false,
-  loading: () => <div className="h-32 flex items-center justify-center">Loading forms...</div>
+  loading: () => <div className="h-32 flex items-center justify-center">Loading forms...</div>,
 });
 
 const PDFFlowsSidebar = dynamic(() => import('./PDFFlowsSidebar'), {
   ssr: false,
-  loading: () => <div className="h-32 flex items-center justify-center">Loading flows...</div>
+  loading: () => <div className="h-32 flex items-center justify-center">Loading flows...</div>,
 });
-
-import { PDFFormsTabProbe } from './PDFFormsTabProbe';
-
-import type { HighlightInfo } from '@/types/index';
-import type { PDFDocumentProxy } from 'pdfjs-dist';
 
 interface Props {
   organizationId: string;
@@ -29,36 +33,81 @@ interface Props {
   onHighlight: (highlight: HighlightInfo) => void;
 }
 
-type SidebarMode = 'extraction' | 'forms' | 'flows';
+function resolveSidebarMode(
+  requested: DocSidebarTab,
+  showFlowsTab: boolean,
+  showFormsTab: boolean,
+  flowsTabKnown: boolean,
+  formsTabKnown: boolean,
+): DocSidebarTab {
+  if (requested === 'flows') {
+    if (!flowsTabKnown) return 'extraction';
+    return showFlowsTab ? 'flows' : 'extraction';
+  }
+  if (requested === 'forms') {
+    if (!formsTabKnown) return 'extraction';
+    return showFormsTab ? 'forms' : 'extraction';
+  }
+  return 'extraction';
+}
 
 const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight }: Props) => {
-  const [activeMode, setActiveMode] = useState<SidebarMode>('extraction');
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const requestedTab = sidebarTabFromQuery(searchParams.get('tab'));
+
   const [showFlowsTab, setShowFlowsTab] = useState(false);
   const [showFormsTab, setShowFormsTab] = useState(false);
+  const [flowsTabKnown, setFlowsTabKnown] = useState(false);
+  const [formsTabKnown, setFormsTabKnown] = useState(false);
+
+  const activeMode = useMemo(
+    () => resolveSidebarMode(requestedTab, showFlowsTab, showFormsTab, flowsTabKnown, formsTabKnown),
+    [requestedTab, showFlowsTab, showFormsTab, flowsTabKnown, formsTabKnown],
+  );
 
   const handleFlowsHasFlows = useCallback((hasFlows: boolean) => {
     setShowFlowsTab(hasFlows);
-    setActiveMode((cur) => {
-      if (!hasFlows && cur === 'flows') return 'extraction';
-      return cur;
-    });
+    setFlowsTabKnown(true);
   }, []);
 
   const handleFormsHasForms = useCallback((hasForms: boolean) => {
     setShowFormsTab(hasForms);
-    setActiveMode((cur) => {
-      if (!hasForms && cur === 'forms') return 'extraction';
-      return cur;
-    });
+    setFormsTabKnown(true);
   }, []);
 
   useEffect(() => {
     setShowFlowsTab(false);
     setShowFormsTab(false);
-    setActiveMode((cur) => (cur === 'flows' || cur === 'forms' ? 'extraction' : cur));
+    setFlowsTabKnown(false);
+    setFormsTabKnown(false);
   }, [id]);
 
-  const tabButtonClass = (mode: SidebarMode) =>
+  useEffect(() => {
+    if (requestedTab === 'flows' && flowsTabKnown && !showFlowsTab) {
+      router.replace(docPageHrefWithSearch(pathname, 'extraction', searchParams));
+    }
+    if (requestedTab === 'forms' && formsTabKnown && !showFormsTab) {
+      router.replace(docPageHrefWithSearch(pathname, 'extraction', searchParams));
+    }
+  }, [
+    requestedTab,
+    flowsTabKnown,
+    formsTabKnown,
+    showFlowsTab,
+    showFormsTab,
+    pathname,
+    router,
+    searchParams.toString(),
+  ]);
+
+  const tabHref = useCallback(
+    (mode: DocSidebarTab) => docPageHrefWithSearch(pathname, mode, searchParams),
+    [pathname, searchParams],
+  );
+
+  const tabLinkClass = (mode: DocSidebarTab) =>
     `px-3 py-1 text-sm rounded transition-colors ${
       activeMode === mode
         ? 'bg-white text-gray-900 shadow-sm'
@@ -75,30 +124,18 @@ const PDFSidebar = ({ organizationId, id, pdfDocument, onHighlight }: Props) => 
 
       <div className="h-12 min-h-[48px] flex items-center px-4 bg-gray-100 text-black font-bold border-b border-black/10">
         <div className="flex bg-gray-200 rounded-md p-1">
-          <button
-            type="button"
-            onClick={() => setActiveMode('extraction')}
-            className={tabButtonClass('extraction')}
-          >
+          <Link href={tabHref('extraction')} replace scroll={false} className={tabLinkClass('extraction')}>
             Extraction
-          </button>
+          </Link>
           {showFlowsTab ? (
-            <button
-              type="button"
-              onClick={() => setActiveMode('flows')}
-              className={tabButtonClass('flows')}
-            >
+            <Link href={tabHref('flows')} replace scroll={false} className={tabLinkClass('flows')}>
               Flows
-            </button>
+            </Link>
           ) : null}
           {showFormsTab ? (
-            <button
-              type="button"
-              onClick={() => setActiveMode('forms')}
-              className={tabButtonClass('forms')}
-            >
+            <Link href={tabHref('forms')} replace scroll={false} className={tabLinkClass('forms')}>
               Forms
-            </button>
+            </Link>
           ) : null}
         </div>
       </div>

@@ -15,7 +15,6 @@ export function PDFFormsTabProbe({ organizationId, documentId, onHasForms }: Pro
   const api = useMemo(() => new DocRouterOrgApi(organizationId), [organizationId]);
 
   useEffect(() => {
-    onHasForms(false);
     let cancelled = false;
 
     void (async () => {

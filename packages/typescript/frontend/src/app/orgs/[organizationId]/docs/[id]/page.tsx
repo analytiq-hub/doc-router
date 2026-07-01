@@ -10,13 +10,10 @@ import {
   PanelResizeHandle,
   type ImperativePanelGroupHandle,
 } from 'react-resizable-panels';
-import { useState, useEffect, useLayoutEffect, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, Suspense } from 'react';
+import PDFSidebar from '@/components/PDFSidebar';
 
 const AGENT_PANEL_BREAKPOINT = 640;
-const PDFSidebar = dynamic(() => import('@/components/PDFSidebar'), {
-  ssr: false,
-  loading: () => <div className="h-64 flex items-center justify-center">Loading sidebar...</div>
-});
 const AgentTab = dynamic(() => import('@/components/agent/AgentTab'), {
   ssr: false,
   loading: () => <div className="h-32 flex items-center justify-center">Loading agent...</div>
@@ -135,12 +132,14 @@ const PDFViewerPage = ({ params }: PageProps) => {
               <>
                 <Panel id="doc-sidebar" defaultSize={leftPanelSize!} minSize={15} order={1}>
                   <Box sx={{ height: '100%', overflow: 'auto' }}>
-                    <PDFSidebar 
-                      organizationId={organizationId} 
-                      id={pdfId}
-                      pdfDocument={pdfDocument}
-                      onHighlight={setHighlightInfo}
-                    />
+                    <Suspense fallback={<div className="h-64 flex items-center justify-center">Loading sidebar...</div>}>
+                      <PDFSidebar 
+                        organizationId={organizationId} 
+                        id={pdfId}
+                        pdfDocument={pdfDocument}
+                        onHighlight={setHighlightInfo}
+                      />
+                    </Suspense>
                   </Box>
                 </Panel>
                 <PanelResizeHandle style={{ width: '4px', background: '#e0e0e0', cursor: 'col-resize' }} />
