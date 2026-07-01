@@ -1578,7 +1578,7 @@ async def save_revision(organization_id: str, flow_id: str, req: SaveFlowRequest
             == ghash
         )
 
-    # graph_hash excludes pin_data and node position; require matching pin_data so pin-only edits still persist.
+    # graph_hash excludes pin_data, node position, and display names; require matching pin_data so pin-only edits still persist.
     if _semantic_graph_unchanged() and pin_same:
         now = _now()
         header_updates: dict[str, Any] = {}

@@ -418,14 +418,53 @@ def test_canonical_graph_hash_ignores_node_position() -> None:
     moved = [
         {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [400, 120], "parameters": {}},
     ]
-    renamed = [
-        {"id": "t1", "name": "Start moved", "type": "flows.trigger.manual", "position": [400, 120], "parameters": {}},
-    ]
     h1 = ad.flows.canonical_graph_hash(base, {}, {})
     h2 = ad.flows.canonical_graph_hash(moved, {}, {})
-    h3 = ad.flows.canonical_graph_hash(renamed, {}, {})
     assert h1 == h2
-    assert h1 != h3
+
+
+def test_canonical_graph_hash_ignores_node_rename() -> None:
+    base = [
+        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {}},
+    ]
+    renamed = [
+        {"id": "t1", "name": "Renamed start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {}},
+    ]
+    assert ad.flows.canonical_graph_hash(base, {}, {}) == ad.flows.canonical_graph_hash(renamed, {}, {})
+
+
+def test_canonical_graph_hash_ignores_rename_expression_rewrite() -> None:
+    before = [
+        {"id": "n1", "name": "Foo", "type": "tests.passthrough", "position": [0, 0], "parameters": {}},
+        {
+            "id": "n2",
+            "name": "Next",
+            "type": "tests.passthrough",
+            "position": [200, 0],
+            "parameters": {"value": "=_node['Foo'].json"},
+        },
+    ]
+    after = [
+        {"id": "n1", "name": "Bar", "type": "tests.passthrough", "position": [0, 0], "parameters": {}},
+        {
+            "id": "n2",
+            "name": "Next",
+            "type": "tests.passthrough",
+            "position": [200, 0],
+            "parameters": {"value": '=_node["Bar"].json'},
+        },
+    ]
+    assert ad.flows.canonical_graph_hash(before, {}, {}) == ad.flows.canonical_graph_hash(after, {}, {})
+
+
+def test_canonical_graph_hash_changes_when_parameters_change() -> None:
+    base = [
+        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {}},
+    ]
+    changed = [
+        {"id": "t1", "name": "Start", "type": "flows.trigger.manual", "position": [0, 0], "parameters": {"x": 1}},
+    ]
+    assert ad.flows.canonical_graph_hash(base, {}, {}) != ad.flows.canonical_graph_hash(changed, {}, {})
 
 
 def _manual_trig(nid: str, name: str) -> dict[str, Any]:

@@ -12,6 +12,7 @@ import collections
 import hashlib
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, UTC
@@ -23,6 +24,7 @@ from jsonschema import Draft7Validator
 import analytiq_data as ad
 
 from .errors import FlowValidationError, node_error_envelope
+from .node_name import node_name
 from .flow_settings import validate_flow_settings
 from .node_settings import validate_node_batch_size
 from .port_types import FLOWS_TOOL_CONNECTION_TYPE, input_port_types_for, output_port_types_for
@@ -34,9 +36,56 @@ from .triggers.poll_defaults import resolve_poll_times
 logger = logging.getLogger(__name__)
 
 
+_CANONICAL_NODE_REF_PREFIX = "#id:"
+
+
+def _rewrite_node_primary_refs_in_expression(expr_body: str, old_display: str, new_display: str) -> str:
+    if old_display == new_display:
+        return expr_body
+    escaped = re.escape(old_display)
+    new_key = f"_node[{json.dumps(new_display)}]"
+    pat = re.compile(rf"_node\[(['\"]){escaped}\1\]")
+    return pat.sub(new_key, expr_body)
+
+
+def _normalize_expr_node_refs_to_ids(expr_body: str, nodes: list[dict[str, Any]]) -> str:
+    out = expr_body
+    for n in nodes:
+        nid = n.get("id")
+        if not isinstance(nid, str) or not nid:
+            continue
+        display = node_name(n)
+        canonical = f"{_CANONICAL_NODE_REF_PREFIX}{nid}"
+        out = _rewrite_node_primary_refs_in_expression(out, display, canonical)
+    return out
+
+
+def _normalize_value_for_graph_hash(value: Any, nodes: list[dict[str, Any]]) -> Any:
+    if isinstance(value, str):
+        stripped = value.lstrip()
+        if not stripped.startswith("="):
+            return value
+        lead_len = len(value) - len(stripped)
+        lead = value[:lead_len]
+        body = stripped[1:]
+        return f"{lead}={_normalize_expr_node_refs_to_ids(body, nodes)}"
+    if isinstance(value, list):
+        return [_normalize_value_for_graph_hash(v, nodes) for v in value]
+    if isinstance(value, dict):
+        return {k: _normalize_value_for_graph_hash(v, nodes) for k, v in value.items()}
+    return value
+
+
 def _nodes_for_graph_hash(nodes: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Strip canvas-only node fields before hashing (layout must not bump flow version)."""
-    return [{k: v for k, v in n.items() if k != "position"} for n in nodes]
+    """Strip canvas-only node fields before hashing (layout/labels must not bump flow version)."""
+    out: list[dict[str, Any]] = []
+    for n in nodes:
+        stripped = {k: v for k, v in n.items() if k not in ("position", "name")}
+        params = stripped.get("parameters")
+        if params is not None:
+            stripped = {**stripped, "parameters": _normalize_value_for_graph_hash(params, nodes)}
+        out.append(stripped)
+    return out
 
 
 def canonical_graph_hash(

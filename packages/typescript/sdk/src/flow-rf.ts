@@ -166,8 +166,8 @@ export function rfToRevision(
 /**
  * Stable fingerprint of the editable revision payload (name + graph + settings).
  * Excludes `flow_revid` and version metadata from `current` (only settings/pin_data are pulled).
- * Includes node position so layout-only moves are saveable; the server excludes position from
- * `graph_hash` so those saves do not bump flow version.
+ * Includes node position so layout-only moves are saveable; the server excludes position and
+ * display names from `graph_hash` so those saves do not bump flow version.
  */
 export function revisionContentFingerprint(
   name: string,
