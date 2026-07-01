@@ -70,6 +70,22 @@ const DevelopmentSettingsPage: React.FC = () => {
             </Button>
           </Link>
         </div>
+
+        <Divider />
+
+        <div className="flex justify-between items-center mb-4">
+          <div>
+            <h2 className="text-xl font-semibold">Worker Settings</h2>
+            <p className="text-gray-600 mb-2">
+              Configure deployment-wide OCR concurrency limits for queue workers.
+            </p>
+          </div>
+          <Link href="/settings/account/development/worker-settings" passHref>
+            <Button variant="contained" color="primary">
+              Manage
+            </Button>
+          </Link>
+        </div>
       </div>
     </SettingsLayout>
   );

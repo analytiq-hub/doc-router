@@ -141,7 +141,10 @@ async def test_textract_retries_expired_token_on_put_object(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_textract_concurrency_serializes_when_limit_one(monkeypatch):
-    monkeypatch.setattr(textract_mod, "TEXTRACT_MAX_CONCURRENT", 1)
+    async def _limit_one() -> int:
+        return 1
+
+    monkeypatch.setattr(ad.system.settings, "get_textract_max_concurrent", _limit_one)
     monkeypatch.setattr(textract_mod, "_textract_in_flight", 0)
     monkeypatch.setattr(textract_mod, "_textract_high_waiting", 0)
     monkeypatch.setattr(textract_mod, "_textract_gate", None)
@@ -187,7 +190,10 @@ async def _wait_until(predicate, *, timeout: float = 1.0) -> None:
 
 @pytest.mark.asyncio
 async def test_textract_low_priority_yields_while_high_priority_waiting(monkeypatch):
-    monkeypatch.setattr(textract_mod, "TEXTRACT_MAX_CONCURRENT", 1)
+    async def _limit_one() -> int:
+        return 1
+
+    monkeypatch.setattr(ad.system.settings, "get_textract_max_concurrent", _limit_one)
     monkeypatch.setattr(textract_mod, "_textract_in_flight", 0)
     monkeypatch.setattr(textract_mod, "_textract_high_waiting", 0)
     monkeypatch.setattr(textract_mod, "_textract_gate", None)

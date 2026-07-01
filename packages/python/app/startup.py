@@ -173,5 +173,23 @@ async def setup_api_creds(analytiq_client):
                 "Azure global service principal stored in cloud_config from environment"
             )
 
+        existing_settings = await db.system_settings.find_one(
+            {"_id": ad.system.settings.SYSTEM_SETTINGS_ID}
+        )
+        if not existing_settings:
+            now = datetime.now(UTC)
+            await db.system_settings.update_one(
+                {"_id": ad.system.settings.SYSTEM_SETTINGS_ID},
+                {
+                    "$set": {
+                        "textract_max_concurrent": ad.system.settings.default_textract_max_concurrent(),
+                        "created_at": now,
+                        "updated_at": now,
+                    }
+                },
+                upsert=True,
+            )
+            logger.info("System settings seeded from environment defaults")
+
     except Exception as e:
         logger.error(f"Failed to set up API credentials: {e}")

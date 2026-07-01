@@ -1206,6 +1206,16 @@ export interface AzureServicePrincipalConfig {
   api_base: string;
 }
 
+/** GET/PATCH: deployment-wide worker limits (admin only). */
+export interface SystemSettings {
+  textract_max_concurrent: number;
+  updated_at?: string | null;
+}
+
+export interface SystemSettingsUpdate {
+  textract_max_concurrent: number;
+}
+
 // Knowledge Base types
 export type ChunkerType = "token" | "word" | "sentence" | "recursive";
 export type KBStatus = "indexing" | "active" | "error";

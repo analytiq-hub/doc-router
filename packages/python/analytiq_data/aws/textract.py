@@ -12,6 +12,8 @@ from botocore.exceptions import ClientError
 
 from textractor.entities.document import Document
 
+from analytiq_data.system import settings as system_settings
+
 logger = logging.getLogger(__name__)
 
 TextractPriority = Literal["high", "low"]
@@ -25,10 +27,10 @@ def _get_int_env(name: str, default: int) -> int:
 
 
 OCR_TIMEOUT_SECS = _get_int_env("OCR_TIMEOUT_SECS", 600)  # 10 min
-# Per worker pod: max in-flight Textract jobs. Set to 0 to disable.
-# Priority: document OCR queue workers are ``high``; flow OCR uses ``high`` for the
-# first batch item only and ``low`` for the rest (best effort).
-TEXTRACT_MAX_CONCURRENT = _get_int_env("TEXTRACT_MAX_CONCURRENT", 32)
+# Per worker pod: max in-flight Textract jobs (runtime value from system_settings).
+# Set stored value to 0 to disable. Refreshed from Mongo every 25 gate acquisitions.
+# ``TEXTRACT_MAX_CONCURRENT`` env seeds the default when no system_settings doc exists.
+TEXTRACT_MAX_CONCURRENT = system_settings.default_textract_max_concurrent()
 
 _textract_in_flight = 0
 _textract_high_waiting = 0
@@ -50,7 +52,8 @@ async def _textract_concurrency(priority: TextractPriority = "high") -> AsyncIte
     between two high callers. The slot covers the full job (S3 upload through polling).
     """
     global _textract_in_flight, _textract_high_waiting
-    if TEXTRACT_MAX_CONCURRENT <= 0:
+    max_concurrent = await system_settings.get_textract_max_concurrent()
+    if max_concurrent <= 0:
         yield
         return
 
@@ -59,7 +62,7 @@ async def _textract_concurrency(priority: TextractPriority = "high") -> AsyncIte
         if priority == "high":
             _textract_high_waiting += 1
             try:
-                while _textract_in_flight >= TEXTRACT_MAX_CONCURRENT:
+                while _textract_in_flight >= max_concurrent:
                     await gate.wait()
                 _textract_in_flight += 1
             finally:
@@ -67,7 +70,7 @@ async def _textract_concurrency(priority: TextractPriority = "high") -> AsyncIte
                 gate.notify_all()
         else:
             while (
-                _textract_in_flight >= TEXTRACT_MAX_CONCURRENT
+                _textract_in_flight >= max_concurrent
                 or _textract_high_waiting > 0
             ):
                 await gate.wait()
@@ -193,7 +196,7 @@ async def run_textract(analytiq_client,
     """
     Run textract on a blob and return merged API-shaped results.
 
-    Concurrency is limited per pod by ``TEXTRACT_MAX_CONCURRENT``. Use ``priority="high"``
+    Concurrency is limited per pod by ``system_settings.textract_max_concurrent``. Use ``priority="high"``
     for document OCR workers and the first item in a flow OCR batch; ``priority="low"`` for
     remaining flow batch items (best effort). One cached ``AsyncAWSClient`` per pod.
 

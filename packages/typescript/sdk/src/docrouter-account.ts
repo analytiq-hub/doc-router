@@ -27,6 +27,8 @@ import {
   AWSConfig,
   AzureServicePrincipalConfig,
   GCPConfig,
+  SystemSettings,
+  SystemSettingsUpdate,
   // Invitation types
   InvitationResponse,
   CreateInvitationRequest,
@@ -242,6 +244,15 @@ export class DocRouterAccount {
 
   async deleteAzureConfig(): Promise<void> {
     return this.http.delete('/v0/account/azure_config');
+  }
+
+  // --------------- System settings ---------------
+  async getSystemSettings(): Promise<SystemSettings> {
+    return this.http.get<SystemSettings>('/v0/account/system_settings');
+  }
+
+  async updateSystemSettings(update: SystemSettingsUpdate): Promise<SystemSettings> {
+    return this.http.patch<SystemSettings>('/v0/account/system_settings', update);
   }
 
   // --------------- Invitations ---------------
