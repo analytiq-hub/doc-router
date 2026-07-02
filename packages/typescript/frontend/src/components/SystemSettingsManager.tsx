@@ -151,7 +151,8 @@ const SystemSettingsManager: React.FC = () => {
         <h2 className="text-lg font-medium text-gray-900 mb-2">Queue worker counts</h2>
         <p className="text-sm text-gray-600 mb-4">
           Number of asyncio consumers per queue type in each queue-worker process. Counts resize
-          automatically without a restart. Set all to 0 to stop queue processing on this pod.
+          automatically without a restart. Idle workers are removed immediately; busy workers finish
+          their current job before exiting. Set all to 0 to stop queue processing on this pod.
         </p>
 
         {!loading && (

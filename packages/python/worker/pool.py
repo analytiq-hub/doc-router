@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from dataclasses import dataclass
 from typing import Any
 
 import analytiq_data as ad
 from analytiq_data.system.worker_counts import FIELD_BY_QUEUE_TYPE, WorkerCounts
 
+from worker.slot import WorkerSlot
 from worker.worker import (
     worker_flow_run,
     worker_kb_index,
@@ -27,7 +29,7 @@ WORKER_POOL_RECONCILE_INTERVAL_SECS = float(
     os.getenv("WORKER_POOL_RECONCILE_INTERVAL_SECS", "15")
 )
 
-QueueWorkerFn = Callable[[str], Coroutine[Any, Any, None]]
+QueueWorkerFn = Callable[[str, WorkerSlot | None], Coroutine[Any, Any, None]]
 
 QUEUE_WORKER_FNS: dict[str, QueueWorkerFn] = {
     "ocr": worker_ocr,
@@ -37,10 +39,16 @@ QUEUE_WORKER_FNS: dict[str, QueueWorkerFn] = {
     "flow_run": worker_flow_run,
 }
 
-SINGLETON_WORKERS: dict[str, QueueWorkerFn] = {
+SINGLETON_WORKERS: dict[str, Callable[[str], Coroutine[Any, Any, None]]] = {
     "kb_reconcile": worker_kb_reconcile,
     "flow_cleanup": worker_flow_cleanup,
 }
+
+
+@dataclass
+class WorkerHandle:
+    task: asyncio.Task
+    slot: WorkerSlot
 
 
 class WorkerPool:
@@ -48,7 +56,7 @@ class WorkerPool:
 
     def __init__(self) -> None:
         self._lock = asyncio.Lock()
-        self._queue_tasks: dict[str, dict[int, asyncio.Task]] = {
+        self._queue_tasks: dict[str, dict[int, WorkerHandle]] = {
             queue_type: {} for queue_type in QUEUE_WORKER_FNS
         }
         self._singleton_tasks: dict[str, asyncio.Task] = {}
@@ -77,8 +85,12 @@ class WorkerPool:
             )
 
             if counts.total_queue_workers() <= 0:
-                await self._stop_queue_workers()
+                pending = await self._stop_queue_workers()
                 await self._stop_singleton_workers()
+                if pending:
+                    await asyncio.gather(*pending, return_exceptions=True)
+                for queue_type in self._queue_tasks:
+                    self._queue_tasks[queue_type].clear()
                 self._current_counts = counts
                 logger.info("Worker pool stopped (all queue worker counts are 0)")
                 return
@@ -94,6 +106,11 @@ class WorkerPool:
     async def shutdown(self) -> None:
         async with self._lock:
             await self._stop_queue_workers()
+            pending_queue_tasks = [
+                handle.task
+                for handles in self._queue_tasks.values()
+                for handle in handles.values()
+            ]
             await self._stop_singleton_workers()
             self._current_counts = WorkerCounts(
                 n_ocr_workers=0,
@@ -102,6 +119,11 @@ class WorkerPool:
                 n_webhook_workers=0,
                 n_flow_run_workers=0,
             )
+        if pending_queue_tasks:
+            await asyncio.gather(*pending_queue_tasks, return_exceptions=True)
+        async with self._lock:
+            for queue_type in self._queue_tasks:
+                self._queue_tasks[queue_type].clear()
 
     async def _reconcile_queue(
         self,
@@ -116,15 +138,64 @@ class WorkerPool:
             if index in current_indices:
                 continue
             worker_id = f"{queue_type}_{index}"
-            tasks[index] = asyncio.create_task(worker_fn(worker_id), name=worker_id)
+            slot = WorkerSlot()
+            task = asyncio.create_task(worker_fn(worker_id, slot), name=worker_id)
+            tasks[index] = WorkerHandle(task=task, slot=slot)
+            self._watch_worker_exit(queue_type, index)
             logger.info(f"Started worker task {worker_id}")
 
         for index in sorted(current_indices, reverse=True):
             if index < target:
                 continue
-            task = tasks.pop(index)
-            task.cancel()
-            logger.info(f"Cancelled worker task {task.get_name()}")
+            await self._request_worker_removal(queue_type, index)
+
+        pending_removals = [
+            handle.task
+            for index, handle in tasks.items()
+            if index >= target and not handle.slot.busy
+        ]
+        if pending_removals:
+            await asyncio.gather(*pending_removals, return_exceptions=True)
+            for index in sorted(list(tasks.keys()), reverse=True):
+                if index >= target and index in tasks and tasks[index].task.done():
+                    tasks.pop(index, None)
+
+    def _watch_worker_exit(self, queue_type: str, index: int) -> None:
+        async def _finalize() -> None:
+            handle = self._queue_tasks[queue_type].get(index)
+            if handle is None:
+                return
+            try:
+                await handle.task
+            except asyncio.CancelledError:
+                pass
+            async with self._lock:
+                current = self._queue_tasks[queue_type].get(index)
+                if current is handle:
+                    self._queue_tasks[queue_type].pop(index, None)
+                    logger.info(f"Worker task {handle.task.get_name()} removed from pool")
+
+        asyncio.create_task(_finalize(), name=f"finalize_{queue_type}_{index}")
+
+    async def _request_worker_removal(self, queue_type: str, index: int) -> None:
+        tasks = self._queue_tasks[queue_type]
+        handle = tasks.get(index)
+        if handle is None:
+            return
+
+        if handle.slot.busy:
+            if not handle.slot.draining:
+                handle.slot.draining = True
+                logger.info(
+                    f"Worker task {handle.task.get_name()} marked draining; "
+                    f"will exit after current job completes"
+                )
+            return
+
+        if not handle.slot.draining:
+            handle.slot.draining = True
+            handle.task.cancel()
+            logger.info(f"Cancelled idle worker task {handle.task.get_name()}")
 
     async def _ensure_singleton_workers(self) -> None:
         for name, worker_fn in SINGLETON_WORKERS.items():
@@ -137,18 +208,24 @@ class WorkerPool:
             )
             logger.info(f"Started singleton worker task {worker_id}")
 
-    async def _stop_queue_workers(self) -> None:
-        for queue_type, tasks in self._queue_tasks.items():
-            for index in sorted(list(tasks.keys()), reverse=True):
-                task = tasks.pop(index)
-                task.cancel()
-                logger.info(f"Cancelled worker task {task.get_name()} ({queue_type})")
+    async def _stop_queue_workers(self) -> list[asyncio.Task]:
+        pending: list[asyncio.Task] = []
+        for queue_type in list(self._queue_tasks.keys()):
+            for index in sorted(list(self._queue_tasks[queue_type].keys()), reverse=True):
+                handle = self._queue_tasks[queue_type][index]
+                await self._request_worker_removal(queue_type, index)
+                if not handle.slot.busy:
+                    pending.append(handle.task)
+        return pending
 
     async def _stop_singleton_workers(self) -> None:
-        for name, task in list(self._singleton_tasks.items()):
+        pending = list(self._singleton_tasks.items())
+        for name, task in pending:
             task.cancel()
             logger.info(f"Cancelled singleton worker task {name}")
-            del self._singleton_tasks[name]
+        if pending:
+            await asyncio.gather(*(task for _, task in pending), return_exceptions=True)
+        self._singleton_tasks.clear()
 
 
 async def run_worker_supervisor(pool: WorkerPool) -> None:

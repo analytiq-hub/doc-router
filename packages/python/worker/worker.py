@@ -9,6 +9,8 @@ import logging
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import analytiq_data as ad
 
+from worker.slot import WorkerSlot
+
 # Set up the environment variables. This reads the .env file.
 ad.common.setup()
 
@@ -26,7 +28,7 @@ POLL_MAX_SLEEP = 5.0   # seconds — cap for exponential backoff
 # When any worker on a queue finds a message, all workers on that queue reset to fast polling.
 _queue_idle_sleep: dict[str, float] = {}
 
-async def worker_ocr(worker_id: str) -> None:
+async def worker_ocr(worker_id: str, slot: WorkerSlot | None = None) -> None:
     """
     Worker for OCR jobs
 
@@ -44,6 +46,10 @@ async def worker_ocr(worker_id: str) -> None:
 
     while True:
         try:
+            if slot and slot.should_exit_before_poll():
+                logger.info(f"Worker {worker_id} exiting after drain request")
+                return
+
             # Log heartbeat every 10 minutes
             now = datetime.now(UTC)
             if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
@@ -54,6 +60,8 @@ async def worker_ocr(worker_id: str) -> None:
             if msg:
                 _queue_idle_sleep["ocr"] = POLL_MIN_SLEEP
                 logger.info(f"Worker {worker_id} processing OCR msg: {msg}")
+                if slot:
+                    slot.busy = True
                 try:
                     force = msg.get("msg", {}).get("force", False)
                     ocr_only = msg.get("msg", {}).get("ocr_only", False)
@@ -67,16 +75,30 @@ async def worker_ocr(worker_id: str) -> None:
                 except Exception as e:
                     # The OCR handler is responsible for queue state (retry vs DLQ).
                     logger.error(f"Error processing OCR message {msg.get('_id')}: {str(e)}")
+                finally:
+                    if slot:
+                        slot.busy = False
+                if slot and slot.should_exit_before_poll():
+                    logger.info(f"Worker {worker_id} exiting after drain request")
+                    return
             else:
+                if slot and slot.should_exit_when_idle():
+                    logger.info(f"Worker {worker_id} exiting after drain request")
+                    return
                 sleep = _queue_idle_sleep.get("ocr", POLL_MIN_SLEEP)
                 await asyncio.sleep(sleep)
                 _queue_idle_sleep["ocr"] = min(sleep * 2, POLL_MAX_SLEEP)
 
+        except asyncio.CancelledError:
+            if slot and slot.busy:
+                raise
+            logger.info(f"Worker {worker_id} cancelled while idle")
+            return
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
 
-async def worker_llm(worker_id: str) -> None:
+async def worker_llm(worker_id: str, slot: WorkerSlot | None = None) -> None:
     """
     Worker for LLM jobs
 
@@ -94,6 +116,10 @@ async def worker_llm(worker_id: str) -> None:
 
     while True:
         try:
+            if slot and slot.should_exit_before_poll():
+                logger.info(f"Worker {worker_id} exiting after drain request")
+                return
+
             # Log heartbeat every 10 minutes
             now = datetime.now(UTC)
             if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
@@ -104,6 +130,8 @@ async def worker_llm(worker_id: str) -> None:
             if msg:
                 _queue_idle_sleep["llm"] = POLL_MIN_SLEEP
                 logger.info(f"Worker {worker_id} processing LLM msg: {msg}")
+                if slot:
+                    slot.busy = True
                 try:
                     force = msg.get("msg", {}).get("force", False)
                     await ad.msg_handlers.process_llm_msg(analytiq_client, msg, force=force)
@@ -113,15 +141,29 @@ async def worker_llm(worker_id: str) -> None:
                         f"message will be recovered via visibility timeout"
                     )
                     raise
+                finally:
+                    if slot:
+                        slot.busy = False
+                if slot and slot.should_exit_before_poll():
+                    logger.info(f"Worker {worker_id} exiting after drain request")
+                    return
             else:
+                if slot and slot.should_exit_when_idle():
+                    logger.info(f"Worker {worker_id} exiting after drain request")
+                    return
                 sleep = _queue_idle_sleep.get("llm", POLL_MIN_SLEEP)
                 await asyncio.sleep(sleep)
                 _queue_idle_sleep["llm"] = min(sleep * 2, POLL_MAX_SLEEP)
+        except asyncio.CancelledError:
+            if slot and slot.busy:
+                raise
+            logger.info(f"Worker {worker_id} cancelled while idle")
+            return
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
 
-async def worker_kb_index(worker_id: str) -> None:
+async def worker_kb_index(worker_id: str, slot: WorkerSlot | None = None) -> None:
     """
     Worker for KB indexing jobs
 
@@ -139,6 +181,10 @@ async def worker_kb_index(worker_id: str) -> None:
 
     while True:
         try:
+            if slot and slot.should_exit_before_poll():
+                logger.info(f"Worker {worker_id} exiting after drain request")
+                return
+
             # Log heartbeat every 10 minutes
             now = datetime.now(UTC)
             if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
@@ -149,6 +195,8 @@ async def worker_kb_index(worker_id: str) -> None:
             if msg:
                 _queue_idle_sleep["kb_index"] = POLL_MIN_SLEEP
                 logger.info(f"Worker {worker_id} processing KB index msg: {msg}")
+                if slot:
+                    slot.busy = True
                 try:
                     await ad.msg_handlers.process_kb_index_msg(analytiq_client, msg)
                 except asyncio.CancelledError:
@@ -159,11 +207,25 @@ async def worker_kb_index(worker_id: str) -> None:
                     raise
                 except Exception as e:
                     logger.error(f"Error processing KB index message {msg.get('_id')}: {str(e)}")
+                finally:
+                    if slot:
+                        slot.busy = False
+                if slot and slot.should_exit_before_poll():
+                    logger.info(f"Worker {worker_id} exiting after drain request")
+                    return
             else:
+                if slot and slot.should_exit_when_idle():
+                    logger.info(f"Worker {worker_id} exiting after drain request")
+                    return
                 sleep = _queue_idle_sleep.get("kb_index", POLL_MIN_SLEEP)
                 await asyncio.sleep(sleep)
                 _queue_idle_sleep["kb_index"] = min(sleep * 2, POLL_MAX_SLEEP)
 
+        except asyncio.CancelledError:
+            if slot and slot.busy:
+                raise
+            logger.info(f"Worker {worker_id} cancelled while idle")
+            return
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
@@ -276,7 +338,7 @@ async def worker_kb_reconcile(worker_id: str) -> None:
             logger.error(f"KB reconciliation worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(30)  # Sleep longer on errors
 
-async def worker_webhook(worker_id: str) -> None:
+async def worker_webhook(worker_id: str, slot: WorkerSlot | None = None) -> None:
     """
     Worker for outbound webhook deliveries.
 
@@ -291,6 +353,10 @@ async def worker_webhook(worker_id: str) -> None:
 
     while True:
         try:
+            if slot and slot.should_exit_before_poll():
+                logger.info(f"Worker {worker_id} exiting after drain request")
+                return
+
             now = datetime.now(UTC)
             if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
                 logger.info(f"Worker {worker_id} heartbeat")
@@ -299,33 +365,57 @@ async def worker_webhook(worker_id: str) -> None:
             msg = await ad.queue.recv_msg(analytiq_client, "webhook")
             if msg:
                 _queue_idle_sleep["webhook"] = POLL_MIN_SLEEP
+                if slot:
+                    slot.busy = True
                 try:
                     await ad.msg_handlers.process_webhook_msg(analytiq_client, msg)
                 except asyncio.CancelledError:
                     logger.warning(f"Worker {worker_id} cancelled mid-flight on webhook msg {msg.get('_id')}, marking failed")
                     await ad.queue.move_to_dlq(analytiq_client, "webhook", str(msg["_id"]), "cancelled mid-flight")
                     raise
+                finally:
+                    if slot:
+                        slot.busy = False
+                if slot and slot.should_exit_before_poll():
+                    logger.info(f"Worker {worker_id} exiting after drain request")
+                    return
                 continue
 
             delivery = await ad.webhooks.claim_next_due_delivery(analytiq_client)
             if delivery:
                 _queue_idle_sleep["webhook"] = POLL_MIN_SLEEP
+                if slot:
+                    slot.busy = True
                 try:
                     await ad.webhooks.send_delivery(analytiq_client, delivery)
                 except asyncio.CancelledError:
                     logger.warning(f"Worker {worker_id} cancelled mid-flight on webhook delivery {delivery.get('_id')}")
                     raise
+                finally:
+                    if slot:
+                        slot.busy = False
+                if slot and slot.should_exit_before_poll():
+                    logger.info(f"Worker {worker_id} exiting after drain request")
+                    return
                 continue
 
+            if slot and slot.should_exit_when_idle():
+                logger.info(f"Worker {worker_id} exiting after drain request")
+                return
             sleep = _queue_idle_sleep.get("webhook", POLL_MIN_SLEEP)
             await asyncio.sleep(sleep)
             _queue_idle_sleep["webhook"] = min(sleep * 2, POLL_MAX_SLEEP)
+        except asyncio.CancelledError:
+            if slot and slot.busy:
+                raise
+            logger.info(f"Worker {worker_id} cancelled while idle")
+            return
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
 
 
-async def worker_flow_run(worker_id: str) -> None:
+async def worker_flow_run(worker_id: str, slot: WorkerSlot | None = None) -> None:
     """
     Worker for `flow_run` queue messages (runs flow executions).
     """
@@ -337,6 +427,10 @@ async def worker_flow_run(worker_id: str) -> None:
 
     while True:
         try:
+            if slot and slot.should_exit_before_poll():
+                logger.info(f"Worker {worker_id} exiting after drain request")
+                return
+
             now = datetime.now(UTC)
             if (now - last_heartbeat).total_seconds() >= HEARTBEAT_INTERVAL_SECS:
                 logger.info(f"Worker {worker_id} heartbeat")
@@ -345,6 +439,8 @@ async def worker_flow_run(worker_id: str) -> None:
             msg = await ad.queue.recv_msg(analytiq_client, "flow_run")
             if msg:
                 _queue_idle_sleep["flow_run"] = POLL_MIN_SLEEP
+                if slot:
+                    slot.busy = True
                 try:
                     await ad.msg_handlers.process_flow_run_msg(analytiq_client, msg)
                 except asyncio.CancelledError:
@@ -353,10 +449,24 @@ async def worker_flow_run(worker_id: str) -> None:
                         f"message will be recovered via visibility timeout"
                     )
                     raise
+                finally:
+                    if slot:
+                        slot.busy = False
+                if slot and slot.should_exit_before_poll():
+                    logger.info(f"Worker {worker_id} exiting after drain request")
+                    return
             else:
+                if slot and slot.should_exit_when_idle():
+                    logger.info(f"Worker {worker_id} exiting after drain request")
+                    return
                 sleep = _queue_idle_sleep.get("flow_run", POLL_MIN_SLEEP)
                 await asyncio.sleep(sleep)
                 _queue_idle_sleep["flow_run"] = min(sleep * 2, POLL_MAX_SLEEP)
+        except asyncio.CancelledError:
+            if slot and slot.busy:
+                raise
+            logger.info(f"Worker {worker_id} cancelled while idle")
+            return
         except Exception as e:
             logger.error(f"Worker {worker_id} encountered error: {str(e)}")
             await asyncio.sleep(1)
