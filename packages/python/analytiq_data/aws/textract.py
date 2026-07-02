@@ -27,10 +27,8 @@ def _get_int_env(name: str, default: int) -> int:
 
 
 OCR_TIMEOUT_SECS = _get_int_env("OCR_TIMEOUT_SECS", 600)  # 10 min
-# Per worker pod: max in-flight Textract jobs (runtime value from system_settings).
-# Set stored value to 0 to disable. Refreshed from Mongo every 25 gate acquisitions.
+# Per worker pod: max in-flight Textract jobs come from system_settings (refreshed every 25 gate acquisitions).
 # ``TEXTRACT_MAX_CONCURRENT`` env seeds the default when no system_settings doc exists.
-TEXTRACT_MAX_CONCURRENT = system_settings.default_textract_max_concurrent()
 
 _textract_in_flight = 0
 _textract_high_waiting = 0

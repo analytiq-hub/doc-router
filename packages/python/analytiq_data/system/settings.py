@@ -153,6 +153,16 @@ def invalidate_system_settings_cache() -> None:
     invalidate_worker_counts_cache()
 
 
+def reset_system_settings_cache() -> None:
+    """Clear cached settings (tests and process startup)."""
+    global _cached_textract_max_concurrent, _textract_requests_since_refresh
+    global _cached_worker_counts, _worker_counts_requests_since_refresh
+    _cached_textract_max_concurrent = None
+    _textract_requests_since_refresh = 0
+    _cached_worker_counts = None
+    _worker_counts_requests_since_refresh = 0
+
+
 async def get_system_settings_document() -> dict[str, Any]:
     doc = await _load_settings_document()
     counts = _worker_counts_from_doc(doc)

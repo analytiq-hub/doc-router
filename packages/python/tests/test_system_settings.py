@@ -28,9 +28,7 @@ def test_default_worker_counts_use_legacy_env(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_get_textract_max_concurrent_refreshes_every_25_requests(monkeypatch, test_db):
-    system_settings_mod.invalidate_textract_max_concurrent_cache()
-    system_settings_mod._cached_textract_max_concurrent = None
-    system_settings_mod._textract_requests_since_refresh = 0
+    system_settings_mod.reset_system_settings_cache()
 
     await test_db.system_settings.update_one(
         {"_id": system_settings_mod.SYSTEM_SETTINGS_ID},
@@ -79,22 +77,22 @@ async def test_seed_system_settings_if_missing(test_db):
 
 @pytest.mark.asyncio
 async def test_update_system_settings_invalidates_cache(test_db):
-    system_settings_mod._cached_textract_max_concurrent = 5
-    system_settings_mod._textract_requests_since_refresh = 0
-    system_settings_mod._cached_worker_counts = WorkerCounts()
-    system_settings_mod._worker_counts_requests_since_refresh = 0
+    await test_db.system_settings.update_one(
+        {"_id": system_settings_mod.SYSTEM_SETTINGS_ID},
+        {"$set": {"textract_max_concurrent": 5, "n_ocr_workers": 1}},
+        upsert=True,
+    )
+    system_settings_mod.reset_system_settings_cache()
+    assert await system_settings_mod.get_textract_max_concurrent() == 5
+    assert (await system_settings_mod.get_worker_counts()).n_ocr_workers == 1
 
     await system_settings_mod.update_system_settings(
         textract_max_concurrent=20,
         n_ocr_workers=3,
     )
 
-    assert system_settings_mod._textract_requests_since_refresh == (
-        system_settings_mod.TEXTRACT_MAX_CONCURRENT_REFRESH_EVERY
-    )
-    assert system_settings_mod._worker_counts_requests_since_refresh == (
-        system_settings_mod.WORKER_COUNTS_REFRESH_EVERY
-    )
+    assert await system_settings_mod.get_textract_max_concurrent() == 20
+    assert (await system_settings_mod.get_worker_counts()).n_ocr_workers == 3
 
     doc = await test_db.system_settings.find_one({"_id": system_settings_mod.SYSTEM_SETTINGS_ID})
     assert doc is not None
