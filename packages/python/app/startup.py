@@ -173,15 +173,7 @@ async def setup_api_creds(analytiq_client):
                 "Azure global service principal stored in cloud_config from environment"
             )
 
-        existing_settings = await db.system_settings.find_one(
-            {"_id": ad.system.settings.SYSTEM_SETTINGS_ID}
-        )
-        if not existing_settings:
-            await db.system_settings.update_one(
-                {"_id": ad.system.settings.SYSTEM_SETTINGS_ID},
-                {"$set": ad.system.settings.system_settings_seed_document()},
-                upsert=True,
-            )
+        if await ad.system.settings.seed_system_settings_if_missing():
             logger.info("System settings seeded from environment defaults")
 
     except Exception as e:

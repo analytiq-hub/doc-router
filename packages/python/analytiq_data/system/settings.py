@@ -219,9 +219,13 @@ async def update_system_settings(
     return await get_system_settings_document()
 
 
-def system_settings_seed_document() -> dict[str, Any]:
-    now = datetime.now(UTC)
-    defaults = default_system_settings()
-    defaults["created_at"] = now
-    defaults["updated_at"] = now
-    return defaults
+async def seed_system_settings_if_missing() -> bool:
+    """Insert default deployment settings when the singleton document does not exist."""
+    db = ad.common.get_async_db()
+    if await db.system_settings.find_one({"_id": SYSTEM_SETTINGS_ID}) is not None:
+        return False
+    # Any field triggers insert; missing fields come from default_system_settings().
+    await update_system_settings(
+        textract_max_concurrent=default_textract_max_concurrent(),
+    )
+    return True

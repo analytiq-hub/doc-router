@@ -67,6 +67,17 @@ async def test_get_textract_max_concurrent_refreshes_every_25_requests(monkeypat
 
 
 @pytest.mark.asyncio
+async def test_seed_system_settings_if_missing(test_db):
+    assert await system_settings_mod.seed_system_settings_if_missing() is True
+    doc = await test_db.system_settings.find_one({"_id": system_settings_mod.SYSTEM_SETTINGS_ID})
+    assert doc is not None
+    assert doc["textract_max_concurrent"] == system_settings_mod.default_textract_max_concurrent()
+    assert doc["n_ocr_workers"] == 4
+
+    assert await system_settings_mod.seed_system_settings_if_missing() is False
+
+
+@pytest.mark.asyncio
 async def test_update_system_settings_invalidates_cache(test_db):
     system_settings_mod._cached_textract_max_concurrent = 5
     system_settings_mod._textract_requests_since_refresh = 0
