@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, UTC
+from datetime import UTC, datetime
 from typing import Any
 
 from bson import ObjectId
@@ -15,7 +15,179 @@ import analytiq_data as ad
 logger = logging.getLogger(__name__)
 
 
+FLOW_RUN_QUEUE = "flow_run"
 HEARTBEAT_INTERVAL_SECS = 5
+_ACTIVE_FLOW_EXEC_STATUSES = frozenset({"queued", "running"})
+
+
+def _as_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
+def _flow_run_execution_id(msg_doc: dict[str, Any]) -> str:
+    payload = msg_doc.get("msg") or {}
+    eid = payload.get("execution_id")
+    return eid.strip() if isinstance(eid, str) else ""
+
+
+def should_reclaim_flow_run_message(
+    execution: dict[str, Any] | None,
+    *,
+    lease_cutoff: datetime,
+    processing_started_at: datetime | None,
+) -> bool:
+    """
+    Return True when a stale ``flow_run`` queue message should be reclaimed.
+
+    Heartbeat-aware reclaim leaves messages alone when the linked execution is
+    still alive. Queued executions without a heartbeat yet are treated as alive
+    when ``started_at`` or the message lease is still within the visibility window.
+    """
+    if execution is None:
+        return True
+
+    status = execution.get("status")
+    if status not in _ACTIVE_FLOW_EXEC_STATUSES:
+        return True
+
+    heartbeat = execution.get("last_heartbeat_at")
+    if isinstance(heartbeat, datetime):
+        return _as_utc(heartbeat) <= lease_cutoff
+
+    if status == "queued":
+        started_at = execution.get("started_at")
+        if isinstance(started_at, datetime) and _as_utc(started_at) > lease_cutoff:
+            return False
+        if isinstance(processing_started_at, datetime) and processing_started_at > lease_cutoff:
+            return False
+        return True
+
+    return True
+
+
+async def _load_flow_run_executions_by_id(
+    db,
+    execution_ids: list[str],
+) -> dict[str, dict[str, Any]]:
+    oids: list[ObjectId] = []
+    for eid in execution_ids:
+        if isinstance(eid, str) and ObjectId.is_valid(eid):
+            oids.append(ObjectId(eid))
+    if not oids:
+        return {}
+
+    out: dict[str, dict[str, Any]] = {}
+    cursor = db.flow_executions.find(
+        {"_id": {"$in": oids}},
+        {"status": 1, "last_heartbeat_at": 1, "started_at": 1},
+    )
+    async for doc in cursor:
+        out[str(doc["_id"])] = doc
+    return out
+
+
+async def recv_flow_run_msg(analytiq_client) -> dict[str, Any] | None:
+    """
+    Receive the next ``flow_run`` message, with heartbeat-aware stale reclaim.
+
+    Pending messages are claimed first. Stale ``processing`` rows are only
+    re-claimed when the linked execution is missing, terminal, or has a stale
+    heartbeat.
+    """
+    msg = await ad.queue.recv_pending_msg(analytiq_client, FLOW_RUN_QUEUE)
+    if msg:
+        return msg
+
+    now = datetime.now(UTC)
+    cutoff = ad.queue.lease_cutoff(now)
+    db = ad.common.get_async_db(analytiq_client)
+
+    candidates = await ad.queue.list_stale_processing_messages(
+        analytiq_client,
+        FLOW_RUN_QUEUE,
+        cutoff=cutoff,
+    )
+    if not candidates:
+        return None
+
+    execution_ids = [_flow_run_execution_id(c) for c in candidates]
+    executions = await _load_flow_run_executions_by_id(db, execution_ids)
+
+    for candidate in candidates:
+        execution = executions.get(_flow_run_execution_id(candidate))
+        proc_started = candidate.get("processing_started_at")
+        if isinstance(proc_started, datetime):
+            proc_started = _as_utc(proc_started)
+        if not should_reclaim_flow_run_message(
+            execution,
+            lease_cutoff=cutoff,
+            processing_started_at=proc_started,
+        ):
+            continue
+
+        claimed = await ad.queue.try_reclaim_stale_processing_msg(
+            analytiq_client,
+            FLOW_RUN_QUEUE,
+            candidate["_id"],
+            cutoff=cutoff,
+        )
+        if claimed:
+            return claimed
+
+    return None
+
+
+async def recover_stale_flow_run_messages(analytiq_client) -> int:
+    """
+    Reset stale ``flow_run`` queue messages to ``pending`` when safe to reclaim.
+
+    Messages linked to executions that are still alive (fresh heartbeat) are
+    left alone even when past the queue visibility timeout.
+    """
+    cutoff = ad.queue.lease_cutoff()
+    db = ad.common.get_async_db(analytiq_client)
+
+    candidates = await ad.queue.list_stale_processing_messages(
+        analytiq_client,
+        FLOW_RUN_QUEUE,
+        cutoff=cutoff,
+        limit=None,
+    )
+    if not candidates:
+        return 0
+
+    execution_ids = [_flow_run_execution_id(c) for c in candidates]
+    executions = await _load_flow_run_executions_by_id(db, execution_ids)
+
+    recovered = 0
+    for candidate in candidates:
+        execution = executions.get(_flow_run_execution_id(candidate))
+        proc_started = candidate.get("processing_started_at")
+        if isinstance(proc_started, datetime):
+            proc_started = _as_utc(proc_started)
+        if not should_reclaim_flow_run_message(
+            execution,
+            lease_cutoff=cutoff,
+            processing_started_at=proc_started,
+        ):
+            continue
+
+        if await ad.queue.release_stale_processing_msg(
+            analytiq_client,
+            FLOW_RUN_QUEUE,
+            candidate["_id"],
+            cutoff=cutoff,
+        ):
+            recovered += 1
+
+    if recovered:
+        logger.info(
+            f"Recovered {recovered} stale flow_run messages "
+            f"(visibility_timeout={ad.queue.QUEUE_VISIBILITY_TIMEOUT_SECS}s, heartbeat-aware)"
+        )
+    return recovered
 
 
 async def _heartbeat_loop(db, exec_id: str) -> None:

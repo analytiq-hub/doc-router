@@ -47,6 +47,18 @@ def get_kb_queue_name(kb_id: str) -> str:
     """
     return f"kb_index_{kb_id}"
 
+
+def lease_cutoff(now: datetime | None = None) -> datetime:
+    """Return the ``processing_started_at`` threshold for stale queue claims."""
+    ref = now or datetime.now(UTC)
+    return ref - timedelta(seconds=QUEUE_VISIBILITY_TIMEOUT_SECS)
+
+
+def _queue_collection(analytiq_client, queue_name: str):
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    return db[get_queue_collection_name(queue_name)]
+
+
 async def send_msg(
     analytiq_client,
     queue_name: str,
@@ -64,10 +76,7 @@ async def send_msg(
     Returns:
         str: The ID of the created message
     """
-    db_name = analytiq_client.env
-    db = analytiq_client.mongodb_async[db_name]
-    queue_collection_name = get_queue_collection_name(queue_name)
-    queue_collection = db[queue_collection_name]
+    queue_collection = _queue_collection(analytiq_client, queue_name)
 
     msg_data = {
         "status": "pending",
@@ -86,6 +95,112 @@ async def send_msg(
     logger.info(f"Sent message: {msg_id} to {queue_name}{exec_tail}")
     return msg_id
 
+
+async def recv_pending_msg(analytiq_client, queue_name: str) -> Optional[Dict[str, Any]]:
+    """Claim the oldest pending message, if any."""
+    queue_collection = _queue_collection(analytiq_client, queue_name)
+    now = datetime.now(UTC)
+    query = {"status": "pending", "attempts": {"$lt": MAX_QUEUE_ATTEMPTS}}
+    return await _claim_queue_message(queue_collection, query, now)
+
+
+async def list_stale_processing_messages(
+    analytiq_client,
+    queue_name: str,
+    *,
+    cutoff: datetime | None = None,
+    limit: int | None = 100,
+) -> list[Dict[str, Any]]:
+    """Return ``processing`` messages older than the visibility timeout."""
+    queue_collection = _queue_collection(analytiq_client, queue_name)
+    stale_cutoff = cutoff or lease_cutoff()
+    cursor = queue_collection.find(
+        {
+            "status": "processing",
+            "processing_started_at": {"$lte": stale_cutoff},
+            "attempts": {"$lt": MAX_QUEUE_ATTEMPTS},
+        }
+    ).sort("created_at", 1)
+    if limit is None:
+        return await cursor.to_list(length=None)
+    return await cursor.to_list(length=limit)
+
+
+async def try_reclaim_stale_processing_msg(
+    analytiq_client,
+    queue_name: str,
+    msg_id: ObjectId,
+    *,
+    cutoff: datetime | None = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Atomically re-claim one stale ``processing`` message (extends its lease).
+
+    Used by workers that inspect stale rows before reclaiming.
+    """
+    queue_collection = _queue_collection(analytiq_client, queue_name)
+    now = datetime.now(UTC)
+    stale_cutoff = cutoff or lease_cutoff(now)
+    return await _claim_queue_message(
+        queue_collection,
+        {
+            "_id": msg_id,
+            "status": "processing",
+            "processing_started_at": {"$lte": stale_cutoff},
+            "attempts": {"$lt": MAX_QUEUE_ATTEMPTS},
+        },
+        now,
+    )
+
+
+async def release_stale_processing_msg(
+    analytiq_client,
+    queue_name: str,
+    msg_id: ObjectId,
+    *,
+    cutoff: datetime | None = None,
+) -> bool:
+    """Reset one stale ``processing`` message to ``pending`` and refund one attempt."""
+    queue_collection = _queue_collection(analytiq_client, queue_name)
+    stale_cutoff = cutoff or lease_cutoff()
+    result = await queue_collection.update_one(
+        {
+            "_id": msg_id,
+            "status": "processing",
+            "processing_started_at": {"$lte": stale_cutoff},
+        },
+        _RELEASE_IN_FLIGHT_PIPELINE,
+    )
+    return bool(getattr(result, "modified_count", 0))
+
+
+async def _claim_queue_message(
+    queue_collection,
+    query: dict[str, Any],
+    now: datetime,
+) -> Optional[Dict[str, Any]]:
+    update = {
+        "$set": {
+            "status": "processing",
+            "processing_started_at": now,
+        },
+        "$inc": {"attempts": 1},
+    }
+    return await queue_collection.find_one_and_update(
+        query,
+        update,
+        sort=[("created_at", 1)],
+        return_document=ReturnDocument.AFTER,
+    )
+
+
+def _log_claimed_message(msg_data: dict[str, Any], queue_name: str) -> None:
+    logger.info(
+        f"Claimed message {msg_data.get('_id')} from {queue_name} "
+        f"(attempt {msg_data.get('attempts')}, status={msg_data.get('status')})"
+    )
+
+
 async def recv_msg(analytiq_client, queue_name: str) -> Optional[Dict[str, Any]]:
     """
     Receive and claim the next available message from the queue.
@@ -97,45 +212,26 @@ async def recv_msg(analytiq_client, queue_name: str) -> Optional[Dict[str, Any]]
     Returns:
         Optional[Dict]: The message document if found, None otherwise
     """
-    db_name = analytiq_client.env
-    db = analytiq_client.mongodb_async[db_name]
-    queue_collection_name = get_queue_collection_name(queue_name)
-    queue_collection = db[queue_collection_name]
+    queue_collection = _queue_collection(analytiq_client, queue_name)
 
     now = datetime.now(UTC)
-    lease_cutoff = now - timedelta(seconds=QUEUE_VISIBILITY_TIMEOUT_SECS)
+    stale_cutoff = lease_cutoff(now)
 
     query = {
         "$or": [
             {"status": "pending", "attempts": {"$lt": MAX_QUEUE_ATTEMPTS}},
             {
                 "status": "processing",
-                "processing_started_at": {"$lte": lease_cutoff},
+                "processing_started_at": {"$lte": stale_cutoff},
                 "attempts": {"$lt": MAX_QUEUE_ATTEMPTS},
             },
         ]
     }
 
-    update = {
-        "$set": {
-            "status": "processing",
-            "processing_started_at": now,
-        },
-        "$inc": {"attempts": 1},
-    }
-
-    msg_data = await queue_collection.find_one_and_update(
-        query,
-        update,
-        sort=[("created_at", 1)],
-        return_document=ReturnDocument.AFTER,
-    )
+    msg_data = await _claim_queue_message(queue_collection, query, now)
 
     if msg_data:
-        logger.info(
-            f"Claimed message {msg_data.get('_id')} from {queue_name} "
-            f"(attempt {msg_data.get('attempts')}, status={msg_data.get('status')})"
-        )
+        _log_claimed_message(msg_data, queue_name)
 
     return msg_data
 
@@ -148,10 +244,7 @@ async def delete_msg(analytiq_client, queue_name: str, msg_id: str):
         queue_name: Name of the queue collection
         msg_id: The ID of the message to delete
     """
-    db_name = analytiq_client.env
-    db = analytiq_client.mongodb_async[db_name]
-    queue_collection_name = get_queue_collection_name(queue_name)
-    queue_collection = db[queue_collection_name]
+    queue_collection = _queue_collection(analytiq_client, queue_name)
 
     await queue_collection.delete_one({"_id": ObjectId(msg_id)})
     logger.info(f"Deleted message {msg_id} from {queue_name}") 
@@ -168,8 +261,7 @@ async def report_last_error(
 
     Pass the same string you would surface in logs (e.g. ``str(exc)``).
     """
-    db = analytiq_client.mongodb_async[analytiq_client.env]
-    collection = db[get_queue_collection_name(queue_name)]
+    collection = _queue_collection(analytiq_client, queue_name)
     try:
         await collection.update_one(
             {"_id": ObjectId(msg_id)},
@@ -202,39 +294,16 @@ async def recover_stale_messages(analytiq_client, queue_name: str) -> int:
     so a claim that never finished (e.g. process killed) does not permanently
     consume a retry. Stuck rows with attempts == MAX_QUEUE_ATTEMPTS are included.
     """
-    db_name = analytiq_client.env
-    db = analytiq_client.mongodb_async[db_name]
-    queue_collection_name = get_queue_collection_name(queue_name)
-    queue_collection = db[queue_collection_name]
+    queue_collection = _queue_collection(analytiq_client, queue_name)
 
-    now = datetime.now(UTC)
-    lease_cutoff = now - timedelta(seconds=QUEUE_VISIBILITY_TIMEOUT_SECS)
+    stale_cutoff = lease_cutoff()
 
-    # Aggregation pipeline update: pending + refund one claim + drop lease timestamp
     result = await queue_collection.update_many(
         {
             "status": "processing",
-            "processing_started_at": {"$lte": lease_cutoff},
+            "processing_started_at": {"$lte": stale_cutoff},
         },
-        [
-            {
-                "$set": {
-                    "status": "pending",
-                    "attempts": {
-                        "$max": [
-                            0,
-                            {
-                                "$subtract": [
-                                    {"$ifNull": ["$attempts", 0]},
-                                    1,
-                                ]
-                            },
-                        ]
-                    },
-                }
-            },
-            {"$unset": "processing_started_at"},
-        ],
+        _RELEASE_IN_FLIGHT_PIPELINE,
     )
 
     recovered = getattr(result, "modified_count", 0)
@@ -305,8 +374,7 @@ async def move_to_dlq(analytiq_client, queue_name: str, msg_id: str, error: str)
 
     Dead letter messages should be inspected before reprocessing.
     """
-    db = analytiq_client.mongodb_async[analytiq_client.env]
-    collection = db[get_queue_collection_name(queue_name)]
+    collection = _queue_collection(analytiq_client, queue_name)
 
     await collection.update_one(
         {"_id": ObjectId(msg_id)},

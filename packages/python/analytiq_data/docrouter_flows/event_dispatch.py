@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 import analytiq_data as ad
 
@@ -20,6 +21,12 @@ logger = logging.getLogger(__name__)
 FLOW_TRIGGERS_COLLECTION = "flow_triggers"
 DOCROUTER_TRIGGER_TYPE = "docrouter.trigger"
 DOCROUTER_EVENT_TRIGGER_KIND = "docrouter.event"
+FLOW_EXECUTIONS_ACTIVE_FLOW_DOCUMENT_INDEX = "flow_executions_active_flow_document_unique"
+_ACTIVE_FLOW_DOCUMENT_STATUSES = ("queued", "running")
+_ACTIVE_FLOW_DOCUMENT_DEDUPE_PARTIAL_FILTER = {
+    "status": {"$in": list(_ACTIVE_FLOW_DOCUMENT_STATUSES)},
+    "trigger.document_id": {"$exists": True, "$type": "string", "$gt": ""},
+}
 
 
 def _configured_tag_ids(row: dict[str, Any]) -> list[str]:
@@ -90,6 +97,31 @@ async def ensure_docrouter_flow_trigger_indexes(db) -> None:
     await db[FLOW_TRIGGERS_COLLECTION].create_index(
         [("org_id", 1), ("trigger_type", 1)],
         name="flow_triggers_org_trigger_type",
+    )
+    try:
+        await db.flow_executions.drop_index(FLOW_EXECUTIONS_ACTIVE_FLOW_DOCUMENT_INDEX)
+    except Exception:
+        pass
+    await db.flow_executions.create_index(
+        [("flow_id", 1), ("trigger.document_id", 1)],
+        unique=True,
+        partialFilterExpression=_ACTIVE_FLOW_DOCUMENT_DEDUPE_PARTIAL_FILTER,
+        name=FLOW_EXECUTIONS_ACTIVE_FLOW_DOCUMENT_INDEX,
+    )
+
+
+async def _find_active_flow_document_execution(
+    db,
+    *,
+    flow_id: str,
+    document_id: str,
+) -> dict[str, Any] | None:
+    return await db.flow_executions.find_one(
+        {
+            "flow_id": flow_id,
+            "trigger.document_id": document_id,
+            "status": {"$in": list(_ACTIVE_FLOW_DOCUMENT_STATUSES)},
+        }
     )
 
 
@@ -301,7 +333,23 @@ async def enqueue_docrouter_event_flow_run(
         "resumed_from": None,
         "resumed_by": None,
     }
-    await db.flow_executions.insert_one(exec_doc)
+    document_id = payload.get("document_id")
+    document_id = document_id.strip() if isinstance(document_id, str) else ""
+
+    try:
+        await db.flow_executions.insert_one(exec_doc)
+    except DuplicateKeyError:
+        if not document_id:
+            raise
+        existing = await _find_active_flow_document_execution(
+            db,
+            flow_id=flow_id,
+            document_id=document_id,
+        )
+        if existing:
+            return str(existing["_id"])
+        raise
+
     await ad.queue.send_msg(
         analytiq_client,
         "flow_run",

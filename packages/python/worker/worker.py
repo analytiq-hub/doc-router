@@ -436,7 +436,7 @@ async def worker_flow_run(worker_id: str, slot: WorkerSlot | None = None) -> Non
                 logger.info(f"Worker {worker_id} heartbeat")
                 last_heartbeat = now
 
-            msg = await ad.queue.recv_msg(analytiq_client, "flow_run")
+            msg = await ad.msg_handlers.recv_flow_run_msg(analytiq_client)
             if msg:
                 _queue_idle_sleep["flow_run"] = POLL_MIN_SLEEP
                 if slot:
@@ -547,13 +547,18 @@ async def recover_all_queues(analytiq_client) -> None:
     For each recovered message, ``attempts`` is decremented by 1 (floored at 0)
     so an unfinished claim (e.g. killed worker) does not permanently burn a try.
     """
-    queues = ["ocr", "llm", "kb_index", "webhook", "flow_run"]
+    queues = ["ocr", "llm", "kb_index", "webhook"]
     for queue_name in queues:
         try:
             recovered = await ad.queue.recover_stale_messages(analytiq_client, queue_name)
             logger.info(f"Startup recovery: queue={queue_name} recovered={recovered}")
         except Exception as e:
             logger.error(f"Error recovering queue {queue_name} at startup: {e}")
+    try:
+        recovered = await ad.msg_handlers.recover_stale_flow_run_messages(analytiq_client)
+        logger.info(f"Startup recovery: queue=flow_run recovered={recovered}")
+    except Exception as e:
+        logger.error(f"Error recovering queue flow_run at startup: {e}")
 
 
 async def recover_on_worker_startup(analytiq_client) -> None:
