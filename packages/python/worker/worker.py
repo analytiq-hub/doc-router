@@ -458,35 +458,41 @@ async def recover_on_worker_startup(analytiq_client) -> None:
 
 def start_workers(n_docrouter_workers: int) -> list[asyncio.Task]:
     """
-    Start all worker coroutines as asyncio Tasks within the running event loop.
-    Call from a FastAPI lifespan or any async context. Cancel returned tasks on shutdown.
-    If n_docrouter_workers is 0, returns [] (no queue pollers and no reconcile/cleanup tasks).
+    Deprecated: use ``worker.pool.start_worker_pool`` for hot-resizable per-queue workers.
+
+    Kept for tests that still call this helper with a single count applied to every queue.
     """
     if n_docrouter_workers <= 0:
         logger.info("n_docrouter_workers is %s; not starting worker tasks", n_docrouter_workers)
         return []
     tasks = []
     for i in range(n_docrouter_workers):
-        tasks.append(asyncio.create_task(worker_ocr(f"ocr_{i}"),            name=f"ocr_{i}"))
-        tasks.append(asyncio.create_task(worker_llm(f"llm_{i}"),            name=f"llm_{i}"))
-        tasks.append(asyncio.create_task(worker_kb_index(f"kb_index_{i}"),  name=f"kb_index_{i}"))
-        tasks.append(asyncio.create_task(worker_webhook(f"webhook_{i}"),    name=f"webhook_{i}"))
-        tasks.append(asyncio.create_task(worker_flow_run(f"flow_run_{i}"),  name=f"flow_run_{i}"))
+        tasks.append(asyncio.create_task(worker_ocr(f"ocr_{i}"), name=f"ocr_{i}"))
+        tasks.append(asyncio.create_task(worker_llm(f"llm_{i}"), name=f"llm_{i}"))
+        tasks.append(asyncio.create_task(worker_kb_index(f"kb_index_{i}"), name=f"kb_index_{i}"))
+        tasks.append(asyncio.create_task(worker_webhook(f"webhook_{i}"), name=f"webhook_{i}"))
+        tasks.append(asyncio.create_task(worker_flow_run(f"flow_run_{i}"), name=f"flow_run_{i}"))
     tasks.append(asyncio.create_task(worker_kb_reconcile("kb_reconcile_0"), name="kb_reconcile_0"))
     tasks.append(asyncio.create_task(worker_flow_cleanup("flow_cleanup_0"), name="flow_cleanup_0"))
     logger.info(f"Started {len(tasks)} worker tasks (n_docrouter_workers={n_docrouter_workers})")
     return tasks
 
-async def main():
-    n_docrouter_workers = int(os.getenv("N_DOCROUTER_WORKERS", "1"))
 
+async def main():
     # Run startup recovery once with a dedicated client before starting workers
     ENV = os.getenv("ENV", "dev")
     recovery_client = ad.common.get_analytiq_client(env=ENV, name="startup_recovery")
     await recover_on_worker_startup(recovery_client)
 
-    tasks = start_workers(n_docrouter_workers)
-    await asyncio.gather(*tasks)
+    from worker.pool import start_worker_pool
+
+    pool, supervisor = await start_worker_pool()
+    try:
+        await asyncio.gather(supervisor)
+    finally:
+        supervisor.cancel()
+        await pool.shutdown()
+        await asyncio.gather(supervisor, return_exceptions=True)
 
 if __name__ == "__main__":
     # Configure logging to ensure it's visible

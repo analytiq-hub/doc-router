@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 import analytiq_data as ad
@@ -12,6 +12,12 @@ from app.models import User
 
 system_settings_router = APIRouter(tags=["account/system_settings"])
 
+_worker_count_field = lambda *, default=...: Field(  # noqa: E731
+    default,
+    ge=ad.system.worker_counts.WORKER_COUNT_MIN,
+    le=ad.system.worker_counts.WORKER_COUNT_MAX,
+)
+
 
 class SystemSettingsResponse(BaseModel):
     textract_max_concurrent: int = Field(
@@ -19,14 +25,36 @@ class SystemSettingsResponse(BaseModel):
         ge=ad.system.settings.TEXTRACT_MAX_CONCURRENT_MIN,
         le=ad.system.settings.TEXTRACT_MAX_CONCURRENT_MAX,
     )
+    n_ocr_workers: int = _worker_count_field()
+    n_llm_workers: int = _worker_count_field()
+    n_kb_index_workers: int = _worker_count_field()
+    n_webhook_workers: int = _worker_count_field()
+    n_flow_run_workers: int = _worker_count_field()
     updated_at: Optional[datetime] = None
 
 
 class SystemSettingsUpdate(BaseModel):
-    textract_max_concurrent: int = Field(
-        ...,
+    textract_max_concurrent: Optional[int] = Field(
+        default=None,
         ge=ad.system.settings.TEXTRACT_MAX_CONCURRENT_MIN,
         le=ad.system.settings.TEXTRACT_MAX_CONCURRENT_MAX,
+    )
+    n_ocr_workers: Optional[int] = _worker_count_field(default=None)
+    n_llm_workers: Optional[int] = _worker_count_field(default=None)
+    n_kb_index_workers: Optional[int] = _worker_count_field(default=None)
+    n_webhook_workers: Optional[int] = _worker_count_field(default=None)
+    n_flow_run_workers: Optional[int] = _worker_count_field(default=None)
+
+
+def _response_from_doc(doc: dict) -> SystemSettingsResponse:
+    return SystemSettingsResponse(
+        textract_max_concurrent=int(doc["textract_max_concurrent"]),
+        n_ocr_workers=int(doc["n_ocr_workers"]),
+        n_llm_workers=int(doc["n_llm_workers"]),
+        n_kb_index_workers=int(doc["n_kb_index_workers"]),
+        n_webhook_workers=int(doc["n_webhook_workers"]),
+        n_flow_run_workers=int(doc["n_flow_run_workers"]),
+        updated_at=doc.get("updated_at"),
     )
 
 
@@ -37,12 +65,7 @@ class SystemSettingsUpdate(BaseModel):
 async def get_system_settings(current_user: User = Depends(get_admin_user)):
     """Return deployment-wide worker settings (admin only)."""
     doc = await ad.system.settings.get_system_settings_document()
-    return SystemSettingsResponse(
-        textract_max_concurrent=ad.system.settings.clamp_textract_max_concurrent(
-            int(doc.get("textract_max_concurrent", ad.system.settings.default_textract_max_concurrent()))
-        ),
-        updated_at=doc.get("updated_at"),
-    )
+    return _response_from_doc(doc)
 
 
 @system_settings_router.patch(
@@ -54,10 +77,8 @@ async def update_system_settings(
     current_user: User = Depends(get_admin_user),
 ):
     """Update deployment-wide worker settings (admin only)."""
-    doc = await ad.system.settings.update_system_settings(
-        textract_max_concurrent=body.textract_max_concurrent,
-    )
-    return SystemSettingsResponse(
-        textract_max_concurrent=int(doc["textract_max_concurrent"]),
-        updated_at=doc.get("updated_at"),
-    )
+    payload = body.model_dump(exclude_unset=True)
+    if not payload:
+        raise HTTPException(status_code=400, detail="No settings provided")
+    doc = await ad.system.settings.update_system_settings(**payload)
+    return _response_from_doc(doc)

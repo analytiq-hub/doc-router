@@ -1209,11 +1209,21 @@ export interface AzureServicePrincipalConfig {
 /** GET/PATCH: deployment-wide worker limits (admin only). */
 export interface SystemSettings {
   textract_max_concurrent: number;
+  n_ocr_workers: number;
+  n_llm_workers: number;
+  n_kb_index_workers: number;
+  n_webhook_workers: number;
+  n_flow_run_workers: number;
   updated_at?: string | null;
 }
 
 export interface SystemSettingsUpdate {
-  textract_max_concurrent: number;
+  textract_max_concurrent?: number;
+  n_ocr_workers?: number;
+  n_llm_workers?: number;
+  n_kb_index_workers?: number;
+  n_webhook_workers?: number;
+  n_flow_run_workers?: number;
 }
 
 // Knowledge Base types

@@ -49,7 +49,8 @@ from app.routes.flows import flows_router
 from app.routes.flow_chat import chat_router
 from app.routes.flows_credentials import flow_credentials_router
 import analytiq_data as ad
-from worker.worker import recover_on_worker_startup, start_workers
+from worker.pool import start_worker_pool
+from worker.worker import recover_on_worker_startup
 
 # Set up the environment variables. This reads the .env file.
 ad.common.setup()
@@ -114,15 +115,13 @@ async def lifespan(app):
     # Recover stale queue messages and orphaned flow runs, then start background workers.
     await recover_on_worker_startup(analytiq_client)
 
-    n_docrouter_workers = int(os.getenv("N_DOCROUTER_WORKERS", "1"))
-    worker_tasks = start_workers(n_docrouter_workers)
+    worker_pool, worker_supervisor = await start_worker_pool()
 
     yield
 
-    # Cancel workers on shutdown
-    for task in worker_tasks:
-        task.cancel()
-    await asyncio.gather(*worker_tasks, return_exceptions=True)
+    worker_supervisor.cancel()
+    await worker_pool.shutdown()
+    await asyncio.gather(worker_supervisor, return_exceptions=True)
 
     await ad.flows.stop_flow_trigger_service()
 

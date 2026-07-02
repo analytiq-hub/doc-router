@@ -177,16 +177,9 @@ async def setup_api_creds(analytiq_client):
             {"_id": ad.system.settings.SYSTEM_SETTINGS_ID}
         )
         if not existing_settings:
-            now = datetime.now(UTC)
             await db.system_settings.update_one(
                 {"_id": ad.system.settings.SYSTEM_SETTINGS_ID},
-                {
-                    "$set": {
-                        "textract_max_concurrent": ad.system.settings.default_textract_max_concurrent(),
-                        "created_at": now,
-                        "updated_at": now,
-                    }
-                },
+                {"$set": ad.system.settings.system_settings_seed_document()},
                 upsert=True,
             )
             logger.info("System settings seeded from environment defaults")
