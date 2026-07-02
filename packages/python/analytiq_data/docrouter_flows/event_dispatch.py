@@ -191,7 +191,11 @@ async def sync_docrouter_flow_triggers(
         }
         await db[FLOW_TRIGGERS_COLLECTION].update_one(
             {"flow_id": flow_id, "trigger_node_id": node["id"]},
-            {"$set": doc, "$setOnInsert": {"created_at": now}},
+            {
+                "$set": doc,
+                "$setOnInsert": {"created_at": now},
+                "$unset": {"event_type": "", "tag_id": ""},
+            },
             upsert=True,
         )
 
@@ -402,6 +406,11 @@ async def dispatch_docrouter_event(
     rows = await db[FLOW_TRIGGERS_COLLECTION].find(
         {"org_id": organization_id, "trigger_type": event_type}
     ).to_list(length=None)
+    if not rows:
+        logger.info(
+            f"dispatch_docrouter_event: no flow_triggers rows for org_id={organization_id!r} "
+            f"event_type={event_type!r} document_id={document_id!r}"
+        )
 
     exec_ids: list[str] = []
     for row in rows:

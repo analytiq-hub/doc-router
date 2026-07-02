@@ -3327,6 +3327,78 @@ class AddAccessTokenFingerprint(Migration):
             return False
 
 
+class RenameFlowTriggersEventTypeField(Migration):
+    """Backfill ``flow_triggers.trigger_type`` from legacy ``event_type`` rows."""
+
+    def __init__(self):
+        super().__init__(
+            description="flow_triggers: rename legacy event_type field to trigger_type"
+        )
+
+    async def up(self, db) -> bool:
+        try:
+            rows = await db.flow_triggers.find(
+                {
+                    "event_type": {"$exists": True, "$type": "string", "$gt": ""},
+                    "$or": [
+                        {"trigger_type": {"$exists": False}},
+                        {"trigger_type": None},
+                        {"trigger_type": ""},
+                    ],
+                }
+            ).to_list(length=None)
+            updated = 0
+            for row in rows:
+                event_type = row.get("event_type")
+                if not isinstance(event_type, str) or not event_type.strip():
+                    continue
+                result = await db.flow_triggers.update_one(
+                    {"_id": row["_id"]},
+                    {
+                        "$set": {"trigger_type": event_type.strip()},
+                        "$unset": {"event_type": ""},
+                    },
+                )
+                if result.modified_count:
+                    updated += 1
+            if updated:
+                logger.info(
+                    f"RenameFlowTriggersEventTypeField: backfilled trigger_type on {updated} rows"
+                )
+            return True
+        except Exception as e:
+            logger.error(f"RenameFlowTriggersEventTypeField migration failed: {e}")
+            return False
+
+    async def down(self, db) -> bool:
+        try:
+            rows = await db.flow_triggers.find(
+                {
+                    "trigger_type": {"$exists": True, "$type": "string", "$gt": ""},
+                    "$or": [
+                        {"event_type": {"$exists": False}},
+                        {"event_type": None},
+                        {"event_type": ""},
+                    ],
+                }
+            ).to_list(length=None)
+            for row in rows:
+                trigger_type = row.get("trigger_type")
+                if not isinstance(trigger_type, str) or not trigger_type.strip():
+                    continue
+                await db.flow_triggers.update_one(
+                    {"_id": row["_id"]},
+                    {
+                        "$set": {"event_type": trigger_type.strip()},
+                        "$unset": {"trigger_type": ""},
+                    },
+                )
+            return True
+        except Exception as e:
+            logger.error(f"RenameFlowTriggersEventTypeField revert failed: {e}")
+            return False
+
+
 MIGRATIONS = [
     OcrKeyMigration(),
     LlmResultFieldsMigration(),
@@ -3371,6 +3443,7 @@ MIGRATIONS = [
     AddCredentialsOrgNameUniqueIndex(),
     AddFlowExecutionsFlowsCredentialsListIndexes(),
     AddAccessTokenFingerprint(),
+    RenameFlowTriggersEventTypeField(),
     # Add more migrations here
 ]
 
