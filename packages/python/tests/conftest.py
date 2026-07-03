@@ -71,7 +71,7 @@ def unique_db_name():
     return db_name
 
 @pytest_asyncio.fixture
-async def test_db(unique_db_name):
+async def test_db(unique_db_name, request):
     """Set up and tear down a unique test database per worker/session"""
     # directConnection=True bypasses replica set discovery, preventing PyMongo
     # from resolving internal Docker hostnames in GitHub Actions. However it is
@@ -93,9 +93,13 @@ async def test_db(unique_db_name):
     for collection in collections:
         await db.drop_collection(collection)
     
-    # Initialize payments system for all tests
+    # Initialize payments system for tests that use test_db
     await init_payments(db)
-    
+
+    # Registry indexes (skip test_index_reconcile — those tests manage indexes explicitly)
+    if not (request.node.fspath and "test_index_reconcile.py" in str(request.node.fspath)):
+        await ad.mongodb.ensure_runtime_indexes(db)
+
     # Create a test user in the database
     await db.users.insert_one({
         "_id": ObjectId(TEST_USER_ID),
@@ -133,6 +137,7 @@ async def test_db(unique_db_name):
             # This should never happen, but just in case
             raise ValueError(f"Attempted to clean up non-test database! ENV={os.environ['ENV']}")
         client.close()
+
 
 @pytest_asyncio.fixture
 async def org_and_users(test_db):

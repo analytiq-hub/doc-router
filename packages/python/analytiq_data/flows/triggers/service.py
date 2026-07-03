@@ -173,7 +173,6 @@ async def start_flow_trigger_service(analytiq_client, **kwargs: Any) -> FlowTrig
     global _service
     if _service is not None:
         return _service
-    await ensure_flow_trigger_indexes(analytiq_client)
     _service = FlowTriggerService(analytiq_client, **kwargs)
     await _service.start()
     return _service

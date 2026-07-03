@@ -98,16 +98,11 @@ async def lifespan(app):
     await startup.setup_admin(analytiq_client)
     await startup.setup_api_creds(analytiq_client)
 
-    # Initialize payments
+    # Initialize payments (Stripe sync only; indexes via ensure_runtime_indexes)
     db = ad.common.get_async_db(analytiq_client)
     await init_payments(db)
 
-    # Initialize KB embedding cache index
-    await ad.kb.embedding_cache.ensure_embedding_cache_index(analytiq_client)
-
-    # Ensure credentials indexes (non-migration startup check)
-    await ad.flows.ensure_credentials_indexes(analytiq_client)
-    await ad.flows.ensure_flow_oauth_state_indexes(analytiq_client)
+    await ad.mongodb.ensure_runtime_indexes(db)
 
     if os.getenv("FLOW_SCHEDULER_ENABLED", "1") == "1":
         await ad.flows.start_flow_trigger_service(analytiq_client)

@@ -8,7 +8,11 @@ from typing import Any
 
 from motor.motor_asyncio import AsyncIOMotorDatabase
 
-from .index_registry import DEPRECATED_INDEXES, EXPECTED_INDEXES, IndexSpec
+from .index_registry import (
+    DEPRECATED_INDEXES,
+    all_reconcile_index_specs,
+    IndexSpec,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -108,59 +112,101 @@ def _find_legacy_index_with_same_keys(
     return None
 
 
+async def _reconcile_one_index(
+    db: AsyncIOMotorDatabase,
+    spec: IndexSpec,
+    summary: dict[str, int],
+) -> None:
+    if spec.skip_if_collection_missing:
+        if spec.collection not in await db.list_collection_names():
+            return
+
+    live_by_name = await _list_indexes_by_name(db, spec.collection)
+    live = live_by_name.get(spec.name)
+    collection = db[spec.collection]
+    create_kwargs = _create_index_kwargs(spec)
+
+    if live is None:
+        legacy = _find_legacy_index_with_same_keys(live_by_name, spec)
+        if legacy is not None:
+            legacy_name = legacy["name"]
+            if index_definition_matches(legacy, spec):
+                logger.info(
+                    f"Renaming legacy index {legacy_name} to {spec.name} on {spec.collection}"
+                )
+            else:
+                logger.warning(
+                    f"Replacing legacy index {legacy_name} with {spec.name} "
+                    f"on {spec.collection} (definition differs)"
+                )
+            await collection.drop_index(legacy_name)
+            await collection.create_index(spec.keys, **create_kwargs)
+            summary["updated"] += 1
+            logger.info(f"Ensured index {spec.name} on {spec.collection}")
+            return
+
+        await collection.create_index(spec.keys, **create_kwargs)
+        summary["created"] += 1
+        logger.info(f"Created index {spec.name} on {spec.collection}")
+        return
+
+    if index_spec_matches(live, spec):
+        summary["unchanged"] += 1
+        return
+
+    logger.warning(
+        f"Index {spec.name} on {spec.collection} does not match registry spec; recreating"
+    )
+    await collection.drop_index(spec.name)
+    await collection.create_index(spec.keys, **create_kwargs)
+    summary["updated"] += 1
+    logger.info(f"Recreated index {spec.name} on {spec.collection}")
+
+
+async def ensure_runtime_indexes(db: AsyncIOMotorDatabase) -> None:
+    """
+    Create-only index safety net for FastAPI lifespan and local dev without migrate.
+
+    Uses the same registry as ``reconcile_indexes`` but never drops or recreates indexes.
+    Spec drift and legacy renames are handled by reconcile under the migration lock.
+    """
+    collection_names = set(await db.list_collection_names())
+    specs = all_reconcile_index_specs(collection_names)
+
+    indexes_by_collection: dict[str, dict[str, dict[str, Any]]] = {}
+    for spec in specs:
+        if spec.skip_if_collection_missing and spec.collection not in collection_names:
+            continue
+
+        if spec.collection not in indexes_by_collection:
+            indexes_by_collection[spec.collection] = await _list_indexes_by_name(db, spec.collection)
+
+        live_by_name = indexes_by_collection[spec.collection]
+        if spec.name in live_by_name:
+            continue
+        if _find_legacy_index_with_same_keys(live_by_name, spec) is not None:
+            continue
+
+        await db[spec.collection].create_index(spec.keys, **_create_index_kwargs(spec))
+        logger.debug(f"Ensured runtime index {spec.name} on {spec.collection}")
+
+
 async def reconcile_indexes(db: AsyncIOMotorDatabase) -> dict[str, int]:
     """
     Sync curated indexes under the migration lock.
 
-    Creates missing indexes, drop+recreates on spec mismatch, and drops deprecated names.
-    Does not touch indexes not listed in the registries.
+    Creates missing indexes, drop+recreates on spec mismatch, renames legacy same-key
+    indexes, and drops deprecated names. Does not touch unlisted indexes.
     """
     summary = {"created": 0, "updated": 0, "dropped": 0, "unchanged": 0}
+    collection_names = set(await db.list_collection_names())
 
-    for spec in EXPECTED_INDEXES:
-        live_by_name = await _list_indexes_by_name(db, spec.collection)
-        live = live_by_name.get(spec.name)
-        collection = db[spec.collection]
-        create_kwargs = _create_index_kwargs(spec)
-
-        if live is None:
-            legacy = _find_legacy_index_with_same_keys(live_by_name, spec)
-            if legacy is not None:
-                legacy_name = legacy["name"]
-                if index_definition_matches(legacy, spec):
-                    logger.info(
-                        f"Renaming legacy index {legacy_name} to {spec.name} "
-                        f"on {spec.collection}"
-                    )
-                else:
-                    logger.warning(
-                        f"Replacing legacy index {legacy_name} with {spec.name} "
-                        f"on {spec.collection} (definition differs)"
-                    )
-                await collection.drop_index(legacy_name)
-                await collection.create_index(spec.keys, **create_kwargs)
-                summary["updated"] += 1
-                logger.info(f"Ensured index {spec.name} on {spec.collection}")
-                continue
-
-            await collection.create_index(spec.keys, **create_kwargs)
-            summary["created"] += 1
-            logger.info(f"Created index {spec.name} on {spec.collection}")
-            continue
-
-        if index_spec_matches(live, spec):
-            summary["unchanged"] += 1
-            continue
-
-        logger.warning(
-            f"Index {spec.name} on {spec.collection} does not match registry spec; recreating"
-        )
-        await collection.drop_index(spec.name)
-        await collection.create_index(spec.keys, **create_kwargs)
-        summary["updated"] += 1
-        logger.info(f"Recreated index {spec.name} on {spec.collection}")
+    for spec in all_reconcile_index_specs(collection_names):
+        await _reconcile_one_index(db, spec, summary)
 
     for spec in DEPRECATED_INDEXES:
+        if spec.collection not in collection_names:
+            continue
         live_by_name = await _list_indexes_by_name(db, spec.collection)
         if spec.name not in live_by_name:
             continue

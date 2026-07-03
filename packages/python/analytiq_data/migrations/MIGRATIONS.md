@@ -6,6 +6,16 @@ This document explains how to create and manage database migrations in the Analy
 
 The migration system allows you to make changes to the database schema in a versioned and reversible way. Each migration has an `up()` method to apply changes and a `down()` method to revert them.
 
+## MongoDB indexes
+
+Index creation and updates are **not** managed by adding new versioned migrations for every index change. See [`docs/indexes.md`](../../../docs/indexes.md) for the full policy.
+
+- **Deploy / migrate:** `run_migrations()` runs `reconcile_indexes()` under the migration lock on every deploy (registry in `analytiq_data/mongodb/index_registry.py`).
+- **Backend lifespan:** `ensure_runtime_indexes()` create-only safety net when migrate was skipped (local dev).
+- **New indexes:** add an `IndexSpec` to `EXPECTED_INDEXES` in `index_registry.py` — no schema bump required.
+
+Versioned migrations may still contain historical `create_index` calls from before the registry; steady-state deploys rely on reconcile.
+
 ## Migration System Structure
 
 - `analytiq_data/migrations/migration.py` - Core migration system
