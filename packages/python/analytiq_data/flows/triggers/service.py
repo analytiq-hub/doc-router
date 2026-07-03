@@ -139,10 +139,25 @@ class FlowTriggerService:
 
 async def ensure_flow_trigger_indexes(analytiq_client) -> None:
     db = ad.common.get_async_db(analytiq_client)
-    await db.flow_static_data.create_index([("flow_id", 1), ("node_id", 1)], unique=True)
-    await db.flow_trigger_leases.create_index("expires_at", expireAfterSeconds=0)
-    await db.flow_trigger_registrations.create_index([("flow_id", 1), ("node_id", 1), ("rule_index", 1)], unique=True)
-    await db.flow_trigger_registrations.create_index([("flow_id", 1)])
+    await db.flow_static_data.create_index(
+        [("flow_id", 1), ("node_id", 1)],
+        unique=True,
+        name="flow_static_data_flow_node_unique",
+    )
+    await db.flow_trigger_leases.create_index(
+        "expires_at",
+        expireAfterSeconds=0,
+        name="flow_trigger_leases_expires_at_ttl",
+    )
+    await db.flow_trigger_registrations.create_index(
+        [("flow_id", 1), ("node_id", 1), ("rule_index", 1)],
+        unique=True,
+        name="flow_trigger_registrations_flow_node_rule_unique",
+    )
+    await db.flow_trigger_registrations.create_index(
+        [("flow_id", 1)],
+        name="flow_trigger_registrations_flow_id",
+    )
     await db.flow_executions.create_index(
         "trigger.dedupe_key",
         unique=True,

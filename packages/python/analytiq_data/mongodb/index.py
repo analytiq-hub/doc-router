@@ -13,7 +13,7 @@ async def ensure_index(
     index_spec: List[Tuple[str, int]],
     index_name: str,
     background: bool = True,
-    drop_other_indexes: bool = True
+    drop_other_indexes: bool = False
 ) -> bool:
     """
     Ensure an index exists on a collection, creating it idempotently.

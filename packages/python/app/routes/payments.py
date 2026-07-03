@@ -256,7 +256,8 @@ async def init_payments(db):
     await ensure_index(
         collection=db.payments_usage_records,
         index_spec=[("org_id", 1), ("timestamp", 1)],
-        index_name="org_timestamp_idx"
+        index_name="org_timestamp_idx",
+        drop_other_indexes=False,
     )
 
     await sync_all_customers(db)

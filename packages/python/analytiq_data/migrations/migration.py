@@ -72,6 +72,9 @@ async def run_migrations(analytiq_client, target_version: int = None) -> None:
     After migrations finish (regardless of schema delta), in-flight job queue claims are
     released via ``ad.queue.queue.release_all_in_flight_queue_claims``; that step is not
     a versioned migration and does not advance ``schema_version``.
+
+    Index reconcile (``ad.mongodb.reconcile_indexes``) runs under the migration lock on
+    every invocation, including when the schema version is already current.
     """
     db = analytiq_client.mongodb_async[analytiq_client.env]
 
@@ -79,19 +82,13 @@ async def run_migrations(analytiq_client, target_version: int = None) -> None:
         target_version = len(MIGRATIONS)
 
     # Release any jobs stuck in ``processing`` from a previous deploy, before running
-    # schema migrations or returning. Runs on every deploy regardless of schema delta.
+    # schema migrations or index reconcile. Runs on every deploy regardless of schema delta.
     await ad.queue.release_all_in_flight_queue_claims(db)
-
-    # Fast path: skip lock acquisition if already up-to-date
-    current_version = await get_current_version(db)
-    if current_version >= target_version:
-        logger.info(f"Db already at version {current_version}, no migrations needed.")
-        return
 
     holder = socket.gethostname()
     logger.info(f"Acquiring migration lock (holder={holder})...")
 
-    # Block until we acquire the lock
+    # Block until we acquire the lock (index reconcile runs under lock even when schema is current).
     while True:
         if await _acquire_migration_lock(db, holder):
             break
@@ -104,7 +101,6 @@ async def run_migrations(analytiq_client, target_version: int = None) -> None:
     logger.info(f"Migration lock acquired by {holder}.")
 
     try:
-        # Re-check version: another pod may have finished migrating while we waited
         current_version = await get_current_version(db)
         logger.info(f"Db current version: {current_version}, target version: {target_version}")
 
@@ -144,6 +140,10 @@ async def run_migrations(analytiq_client, target_version: int = None) -> None:
                     )
                 else:
                     raise Exception(f"Migration revert {migration.version} failed")
+        else:
+            logger.info(f"Db already at version {current_version}, no migrations needed.")
+
+        await ad.mongodb.reconcile_indexes(db)
 
     except Exception as e:
         logger.error(f"Migration failed: {e}")

@@ -13,6 +13,11 @@ import analytiq_data as ad
 
 from .document_binary import document_binary_refs, mime_for_storage_key
 from .event_types import DOCROUTER_EVENT_TYPES, DOCROUTER_LLM_EVENT_TYPES
+from analytiq_data.mongodb.index_registry import (
+    ACTIVE_FLOW_DOCUMENT_DEDUPE_PARTIAL_FILTER,
+    ACTIVE_FLOW_DOCUMENT_STATUSES,
+    FLOW_EXECUTIONS_ACTIVE_FLOW_DOCUMENT_INDEX,
+)
 from analytiq_data.flows.triggers.enqueue import serialize_flow_items_for_trigger
 
 
@@ -21,12 +26,6 @@ logger = logging.getLogger(__name__)
 FLOW_TRIGGERS_COLLECTION = "flow_triggers"
 DOCROUTER_TRIGGER_TYPE = "docrouter.trigger"
 DOCROUTER_EVENT_TRIGGER_KIND = "docrouter.event"
-FLOW_EXECUTIONS_ACTIVE_FLOW_DOCUMENT_INDEX = "flow_executions_active_flow_document_unique"
-_ACTIVE_FLOW_DOCUMENT_STATUSES = ("queued", "running")
-_ACTIVE_FLOW_DOCUMENT_DEDUPE_PARTIAL_FILTER = {
-    "status": {"$in": list(_ACTIVE_FLOW_DOCUMENT_STATUSES)},
-    "trigger.document_id": {"$exists": True, "$type": "string", "$gt": ""},
-}
 
 
 def _configured_tag_ids(row: dict[str, Any]) -> list[str]:
@@ -98,14 +97,10 @@ async def ensure_docrouter_flow_trigger_indexes(db) -> None:
         [("org_id", 1), ("trigger_type", 1)],
         name="flow_triggers_org_trigger_type",
     )
-    try:
-        await db.flow_executions.drop_index(FLOW_EXECUTIONS_ACTIVE_FLOW_DOCUMENT_INDEX)
-    except Exception:
-        pass
     await db.flow_executions.create_index(
         [("flow_id", 1), ("trigger.document_id", 1)],
         unique=True,
-        partialFilterExpression=_ACTIVE_FLOW_DOCUMENT_DEDUPE_PARTIAL_FILTER,
+        partialFilterExpression=ACTIVE_FLOW_DOCUMENT_DEDUPE_PARTIAL_FILTER,
         name=FLOW_EXECUTIONS_ACTIVE_FLOW_DOCUMENT_INDEX,
     )
 
@@ -120,7 +115,7 @@ async def _find_active_flow_document_execution(
         {
             "flow_id": flow_id,
             "trigger.document_id": document_id,
-            "status": {"$in": list(_ACTIVE_FLOW_DOCUMENT_STATUSES)},
+            "status": {"$in": list(ACTIVE_FLOW_DOCUMENT_STATUSES)},
         }
     )
 
