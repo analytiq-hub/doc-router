@@ -5,12 +5,12 @@ import uuid
 import warnings
 import pytest_asyncio
 from datetime import datetime, UTC
-import motor.motor_asyncio
 from bson import ObjectId
 from fastapi.testclient import TestClient
 from fastapi.security import HTTPAuthorizationCredentials
 from filelock import FileLock
 from unittest.mock import AsyncMock, patch
+import motor.motor_asyncio
 
 # Set up the path first, before other imports
 cwd = os.path.dirname(os.path.abspath(__file__))
@@ -33,6 +33,14 @@ from tests.conftest_utils import (
     TEST_ORG_ID,
     TEST_USER
 )
+from tests.mongo_test_support import (
+    clear_all_documents,
+    drop_all_collections,
+    ensure_runtime_indexes_for_new_collections,
+    is_index_reconcile_test,
+    mongo_client_kwargs,
+    reset_index_tracking,
+)
 
 # Define pytest configuration
 pytest_plugins = ["pytest_asyncio"]
@@ -42,20 +50,24 @@ def pytest_addoption(parser):
     parser.addini(
         "asyncio_default_fixture_loop_scope",
         help="default scope for asyncio fixtures",
-        default="function",
+        default="session",
     )
 
 
-@pytest_asyncio.fixture(autouse=True)
-async def _close_motor_clients_after_async_test():
-    """Tear down per-loop Motor clients so async tests do not accumulate pools (two loops per test when using TestClient)."""
+@pytest_asyncio.fixture(scope="session", autouse=True)
+async def _close_motor_clients_after_session():
+    """Release shared Motor pools once per worker session (not per test)."""
     yield
     await ad.mongodb.close_shared_async_client()
 
 
-@pytest_asyncio.fixture(scope="function")
-def unique_db_name():
-    # Use xdist worker id if available, else use a UUID
+@pytest.fixture(scope="session")
+def worker_db_name():
+    """
+    One database name per xdist worker (pytest_gw0, …) or per session without xdist.
+
+    Sets ENV for analytiq_client for the whole worker/session.
+    """
     worker_id = os.environ.get("PYTEST_XDIST_WORKER")
     if worker_id:
         db_name = f"pytest_{worker_id}"
@@ -63,44 +75,40 @@ def unique_db_name():
         db_name = f"pytest_{uuid.uuid4()}"
 
     os.environ["ENV"] = db_name
-
-    # Disable Stripe during all unit tests by clearing the secret key
     os.environ["STRIPE_SECRET_KEY"] = ""
     os.environ["STRIPE_WEBHOOK_SECRET"] = ""
+    os.environ["MONGODB_MAX_POOL_SIZE"] = "10"
+    os.environ["MONGODB_MIN_POOL_SIZE"] = "0"
 
     return db_name
 
-@pytest_asyncio.fixture
-async def test_db(unique_db_name, request):
-    """Set up and tear down a unique test database per worker/session"""
-    # directConnection=True bypasses replica set discovery, preventing PyMongo
-    # from resolving internal Docker hostnames in GitHub Actions. However it is
-    # incompatible with mongodb+srv:// URIs (which always resolve to multiple
-    # hosts), so only enable it for plain mongodb:// connections.
+
+@pytest.fixture(scope="session")
+def unique_db_name(worker_db_name):
+    """Alias kept for fixtures/tests that reference unique_db_name."""
+    return worker_db_name
+
+
+@pytest_asyncio.fixture(scope="session")
+async def mongo_test_client(worker_db_name):
+    """Single Motor client per worker/session — avoids connection storms under xdist."""
     mongo_uri = os.environ["MONGODB_URI"]
-    connect_kwargs: dict = {}
-    if not mongo_uri.startswith("mongodb+srv://"):
-        connect_kwargs["directConnection"] = True
-    client = motor.motor_asyncio.AsyncIOMotorClient(mongo_uri, **connect_kwargs)
-    db = client[unique_db_name]
-    
-    # Verify we're using the test database
-    if not os.environ["ENV"].startswith("pytest"):
-        raise ValueError(f"Test is not using the test database! ENV={os.environ['ENV']}")
-    
-    # Clear the database before each test
-    collections = await db.list_collection_names()
-    for collection in collections:
-        await db.drop_collection(collection)
-    
-    # Initialize payments system for tests that use test_db
-    await init_payments(db)
+    client = motor.motor_asyncio.AsyncIOMotorClient(mongo_uri, **mongo_client_kwargs(mongo_uri))
+    try:
+        yield client
+    finally:
+        if worker_db_name.startswith("pytest_"):
+            await client.drop_database(worker_db_name)
+        client.close()
 
-    # Registry indexes (skip test_index_reconcile — those tests manage indexes explicitly)
-    if not (request.node.fspath and "test_index_reconcile.py" in str(request.node.fspath)):
-        await ad.mongodb.ensure_runtime_indexes(db)
 
-    # Create a test user in the database
+@pytest_asyncio.fixture(scope="session")
+async def session_test_db(mongo_test_client, worker_db_name):
+    """Shared database handle for the worker/session (schema persists across tests)."""
+    return mongo_test_client[worker_db_name]
+
+
+async def _seed_default_org_and_user(db) -> None:
     await db.users.insert_one({
         "_id": ObjectId(TEST_USER_ID),
         "email": "test@example.com",
@@ -108,35 +116,48 @@ async def test_db(unique_db_name, request):
         "role": "admin",
         "email_verified": True,
         "has_password": True,
-        "created_at": datetime.now(UTC)
+        "created_at": datetime.now(UTC),
     })
-    
-    # Create a test organization in the database
     await db.organizations.insert_one({
         "_id": ObjectId(TEST_ORG_ID),
         "name": "Test Organization",
         "members": [{
             "user_id": TEST_USER_ID,
-            "role": "admin"
+            "role": "admin",
         }],
         "type": "team",
         "created_at": datetime.now(UTC),
-        "updated_at": datetime.now(UTC)
+        "updated_at": datetime.now(UTC),
     })
-    
-    # Create payment customer for the organization (required for document processing)
     await sync_payments_customer(db, TEST_ORG_ID)
 
-    try:
-        yield db
-    finally:
-        # Ensure DB cleanup and client close to avoid hanging on Ctrl-C
-        if os.environ["ENV"].startswith("pytest"):
-            await client.drop_database(unique_db_name)
-        else:
-            # This should never happen, but just in case
-            raise ValueError(f"Attempted to clean up non-test database! ENV={os.environ['ENV']}")
-        client.close()
+
+@pytest_asyncio.fixture
+async def test_db(session_test_db, worker_db_name, request):
+    """
+    Per-test data reset on a worker-scoped database.
+
+    Normal tests: delete_all documents (indexes preserved), then cheap ensure_runtime_indexes.
+    Index-reconcile tests: drop collections so reconcile tests control schema from scratch.
+    """
+    db = session_test_db
+
+    if not worker_db_name.startswith("pytest_"):
+        raise ValueError(f"Test is not using the test database! ENV={os.environ['ENV']}")
+
+    if is_index_reconcile_test(request.node):
+        await drop_all_collections(db)
+        reset_index_tracking(worker_db_name)
+    else:
+        await clear_all_documents(db)
+
+    await init_payments(db)
+    await _seed_default_org_and_user(db)
+
+    if not is_index_reconcile_test(request.node):
+        await ensure_runtime_indexes_for_new_collections(db, worker_db_name)
+
+    yield db
 
 
 @pytest_asyncio.fixture

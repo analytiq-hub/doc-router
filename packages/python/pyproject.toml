@@ -60,3 +60,5 @@ markers = [
     "doc_retrieval_benchmark: upload/download timing benchmarks (pytest -s ... 2>/dev/null)",
     "real_ssrf: HTTP Request tests that exercise real SSRF validation (no guard bypass)",
 ]
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
