@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from bson import ObjectId
@@ -112,7 +112,11 @@ async def test_buffered_chat_timeout_finalizes_execution(test_db, mock_auth) -> 
     )
     flow_id = r_flow.json()["flow"]["flow_id"]
 
-    with patch("app.routes.flow_chat.asyncio.wait_for", new_callable=AsyncMock, side_effect=asyncio.TimeoutError):
+    async def _wait_for_raises_timeout(coro, *args, **kwargs):
+        coro.close()
+        raise asyncio.TimeoutError
+
+    with patch("app.routes.flow_chat.asyncio.wait_for", side_effect=_wait_for_raises_timeout):
         r = client.post(
             f"/v0/orgs/{TEST_ORG_ID}/flows/{flow_id}/chat/test",
             json={
