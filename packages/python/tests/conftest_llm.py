@@ -211,10 +211,18 @@ class WorkerAppliance:
             mock_llm_completion = self.started_mocks[1]
             mock_llm_completion.return_value = self.mock_llm_response
 
-        # Set environment variable for worker count
-        self.original_n_docrouter_workers = os.environ.get("N_DOCROUTER_WORKERS")
         self.original_env = os.environ.get('ENV')
-        os.environ["N_DOCROUTER_WORKERS"] = str(self.n_docrouter_workers)
+
+        async def _set_worker_counts(n: int) -> None:
+            await ad.system.settings.update_system_settings(
+                n_ocr_workers=n,
+                n_llm_workers=n,
+                n_kb_index_workers=n,
+                n_webhook_workers=n,
+                n_flow_run_workers=n,
+            )
+
+        asyncio.run(_set_worker_counts(self.n_docrouter_workers))
 
         logger.info(f"WorkerAppliance ENV: {os.environ['ENV']}")
 
@@ -263,11 +271,6 @@ class WorkerAppliance:
         self.patches.clear()
 
         # Restore original environment variables
-        if self.original_n_docrouter_workers is not None:
-            os.environ["N_DOCROUTER_WORKERS"] = self.original_n_docrouter_workers
-        elif "N_DOCROUTER_WORKERS" in os.environ:
-            del os.environ["N_DOCROUTER_WORKERS"]
-
         if self.original_env is not None:
             os.environ['ENV'] = self.original_env
         elif 'ENV' in os.environ:

@@ -35,7 +35,7 @@ config:
   nextauthUrl: ""                       # e.g. https://app.example.com
   publicApiUrl: ""                      # required: set by k8s-deploy.sh or override in values overlay
   fastapiRootPath: "/fastapi"           # must match the ingress path prefix
-  nDocrouterWorkers: "4"                 # asyncio queue consumer tasks per process (see N_DOCROUTER_WORKERS)
+  docrouterWorkersEnabled: "1"          # API process runs queue workers (set 0 when using a dedicated worker pod)
   nUvicornWorkers: "1"                   # OS processes for FastAPI (--workers); use 1 with --reload locally
   appBucketName: ""                     # AWS S3 bucket for document storage
   region: ""                            # AWS region

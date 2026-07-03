@@ -186,13 +186,13 @@ The following environment variables are used for various LLM providers:
 
 ## Worker Configuration
 
-### `N_DOCROUTER_WORKERS`
-- **Purpose**: Number of asyncio queue consumer task groups per process (OCR, LLM, KB index, webhook, flow_run, plus shared reconcile/cleanup when greater than zero). Set to `0` in the API process when queue work runs only in `worker/worker.py` (for example Docker Compose `queue-worker`).
-- **Default**: `"1"`
-- **Usage**: `packages/python/worker/worker.py`, `packages/python/app/main.py` lifespan
+### `DOCROUTER_WORKERS_ENABLED`
+- **Purpose**: Whether the FastAPI process starts asyncio queue consumers (OCR, LLM, KB index, webhook, flow_run). Set to `0` or `false` on the API when queue work runs only in `worker/worker.py` (for example Docker Compose `queue-worker`). Unset defaults to enabled for local combined dev (`make deploy`).
+- **Default**: enabled when unset
+- **Usage**: `packages/python/app/main.py` lifespan. Does not affect stored worker counts in `system_settings` (see Worker settings in the admin UI).
 
 ### `N_UVICORN_WORKERS`
-- **Purpose**: Number of Uvicorn OS worker processes (`uvicorn ... --workers`). Each process loads the FastAPI app independently; combine with `N_DOCROUTER_WORKERS` carefully (total queue parallelism multiplies). Not used with `uvicorn --reload` (single process).
+- **Purpose**: Number of Uvicorn OS worker processes (`uvicorn ... --workers`). Each process loads the FastAPI app independently; when `DOCROUTER_WORKERS_ENABLED` is on, queue parallelism multiplies by this count. Not used with `uvicorn --reload` (single process).
 - **Default**: `"1"`
 - **Usage**: Docker Compose and Helm backend command line; set in environment so the shell can expand it in the start command.
 
@@ -426,7 +426,7 @@ ADMIN_EMAIL=admin@yourdomain.com
 ADMIN_PASSWORD=secure-admin-password
 
 # Workers
-N_DOCROUTER_WORKERS=1
+DOCROUTER_WORKERS_ENABLED=1
 N_UVICORN_WORKERS=1
 
 # Logging

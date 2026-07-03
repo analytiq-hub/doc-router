@@ -10,6 +10,8 @@ WORKER_COUNT_DEFAULT = 4
 WORKER_COUNT_MIN = 0
 WORKER_COUNT_MAX = 256
 
+DOCROUTER_WORKERS_ENABLED_ENV = "DOCROUTER_WORKERS_ENABLED"
+
 QUEUE_WORKER_FIELDS: tuple[str, ...] = (
     "n_ocr_workers",
     "n_llm_workers",
@@ -59,14 +61,21 @@ class WorkerCounts:
         return cls(**values)
 
 
-def _read_env_int(name: str) -> int | None:
+def _read_env_bool(name: str, *, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None or not str(raw).strip():
-        return None
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        return None
+        return default
+    value = str(raw).strip().lower()
+    if value in ("0", "false", "no", "off"):
+        return False
+    if value in ("1", "true", "yes", "on"):
+        return True
+    return default
+
+
+def docrouter_queue_workers_enabled_in_process() -> bool:
+    """Whether this process should start asyncio queue consumers (API lifespan)."""
+    return _read_env_bool(DOCROUTER_WORKERS_ENABLED_ENV, default=True)
 
 
 def clamp_worker_count(value: Any) -> int:
@@ -79,20 +88,4 @@ def clamp_worker_count(value: Any) -> int:
 
 def default_worker_counts() -> WorkerCounts:
     """Bootstrap values when no ``system_settings`` document exists."""
-    legacy = _read_env_int("N_DOCROUTER_WORKERS")
-    if legacy is not None:
-        value = clamp_worker_count(legacy)
-        return WorkerCounts(
-            n_ocr_workers=value,
-            n_llm_workers=value,
-            n_kb_index_workers=value,
-            n_webhook_workers=value,
-            n_flow_run_workers=value,
-        )
-
-    per_queue: dict[str, int] = {}
-    for field, queue_type in QUEUE_TYPE_BY_FIELD.items():
-        env_name = f"N_{queue_type.upper()}_WORKERS"
-        env_value = _read_env_int(env_name)
-        per_queue[field] = clamp_worker_count(env_value) if env_value is not None else WORKER_COUNT_DEFAULT
-    return WorkerCounts(**per_queue)
+    return WorkerCounts()

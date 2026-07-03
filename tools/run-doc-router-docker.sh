@@ -121,7 +121,7 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY:-}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
       - SES_FROM_EMAIL=${SES_FROM_EMAIL:-}
-      - N_DOCROUTER_WORKERS=0
+      - DOCROUTER_WORKERS_ENABLED=0
       - N_UVICORN_WORKERS=${N_UVICORN_WORKERS:-1}
       - CORS_ORIGINS_EXTRA=${CORS_ORIGINS_EXTRA:-}
     command: sh -c "cd /app/packages/python && exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${N_UVICORN_WORKERS:-1}"
@@ -160,7 +160,6 @@ services:
       - GROQ_API_KEY=${GROQ_API_KEY:-}
       - MISTRAL_API_KEY=${MISTRAL_API_KEY:-}
       - SES_FROM_EMAIL=${SES_FROM_EMAIL:-}
-      - N_DOCROUTER_WORKERS=${N_DOCROUTER_WORKERS:-1}
       - CORS_ORIGINS_EXTRA=${CORS_ORIGINS_EXTRA:-}
     command: sh -c "cd /app/packages/python && exec python3 worker/worker.py"
     restart: unless-stopped

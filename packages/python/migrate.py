@@ -21,6 +21,8 @@ async def main():
     client = ad.common.get_analytiq_client()
     try:
         await ad.migrations.run_migrations(client)
+        if await ad.system.settings.seed_system_settings_if_missing():
+            print("Seeded default system_settings.")
         print("Migrations complete.")
     finally:
         await ad.mongodb.close_shared_async_client()

@@ -1,43 +1,50 @@
 import pytest
 
 import analytiq_data as ad
-from analytiq_data.system import settings as system_settings_mod
-from analytiq_data.system.worker_counts import WorkerCounts, default_worker_counts
 from tests.conftest_utils import client, get_auth_headers
 
 
 def test_clamp_textract_max_concurrent():
-    assert system_settings_mod.clamp_textract_max_concurrent(32) == 32
-    assert system_settings_mod.clamp_textract_max_concurrent(0) == 0
-    assert system_settings_mod.clamp_textract_max_concurrent(999) == 999
-    assert system_settings_mod.clamp_textract_max_concurrent(2000) == 1024
-    assert system_settings_mod.clamp_textract_max_concurrent(-5) == 0
+    assert ad.system.settings.clamp_textract_max_concurrent(32) == 32
+    assert ad.system.settings.clamp_textract_max_concurrent(0) == 0
+    assert ad.system.settings.clamp_textract_max_concurrent(999) == 999
+    assert ad.system.settings.clamp_textract_max_concurrent(2000) == 1024
+    assert ad.system.settings.clamp_textract_max_concurrent(-5) == 0
 
 
-def test_default_worker_counts_use_legacy_env(monkeypatch):
-    monkeypatch.setenv("N_DOCROUTER_WORKERS", "7")
-    counts = default_worker_counts()
-    assert counts == WorkerCounts(
-        n_ocr_workers=7,
-        n_llm_workers=7,
-        n_kb_index_workers=7,
-        n_webhook_workers=7,
-        n_flow_run_workers=7,
-    )
+def test_default_worker_counts():
+    assert ad.system.worker_counts.default_worker_counts() == ad.system.worker_counts.WorkerCounts()
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, True),
+        ("1", True),
+        ("true", True),
+        ("0", False),
+        ("false", False),
+    ],
+)
+def test_docrouter_queue_workers_enabled_in_process(monkeypatch, value, expected):
+    monkeypatch.delenv("DOCROUTER_WORKERS_ENABLED", raising=False)
+    if value is not None:
+        monkeypatch.setenv("DOCROUTER_WORKERS_ENABLED", value)
+    assert ad.system.workers.docrouter_queue_workers_enabled_in_process() is expected
 
 
 @pytest.mark.asyncio
 async def test_get_textract_max_concurrent_refreshes_every_25_requests(monkeypatch, test_db):
-    system_settings_mod.reset_system_settings_cache()
+    ad.system.settings.reset_system_settings_cache()
 
     await test_db.system_settings.update_one(
-        {"_id": system_settings_mod.SYSTEM_SETTINGS_ID},
+        {"_id": ad.system.settings.SYSTEM_SETTINGS_ID},
         {"$set": {"textract_max_concurrent": 10}},
         upsert=True,
     )
 
     load_calls = 0
-    original_load = system_settings_mod.load_textract_max_concurrent_from_db
+    original_load = ad.system.settings.load_textract_max_concurrent_from_db
 
     async def counting_load():
         nonlocal load_calls
@@ -45,56 +52,56 @@ async def test_get_textract_max_concurrent_refreshes_every_25_requests(monkeypat
         return await original_load()
 
     monkeypatch.setattr(
-        system_settings_mod,
+        ad.system.settings,
         "load_textract_max_concurrent_from_db",
         counting_load,
     )
 
-    value = await system_settings_mod.get_textract_max_concurrent()
+    value = await ad.system.settings.get_textract_max_concurrent()
     assert value == 10
     assert load_calls == 1
 
     for _ in range(25):
-        value = await system_settings_mod.get_textract_max_concurrent()
+        value = await ad.system.settings.get_textract_max_concurrent()
         assert value == 10
     assert load_calls == 1
 
-    value = await system_settings_mod.get_textract_max_concurrent()
+    value = await ad.system.settings.get_textract_max_concurrent()
     assert value == 10
     assert load_calls == 2
 
 
 @pytest.mark.asyncio
 async def test_seed_system_settings_if_missing(test_db):
-    assert await system_settings_mod.seed_system_settings_if_missing() is True
-    doc = await test_db.system_settings.find_one({"_id": system_settings_mod.SYSTEM_SETTINGS_ID})
+    assert await ad.system.settings.seed_system_settings_if_missing() is True
+    doc = await test_db.system_settings.find_one({"_id": ad.system.settings.SYSTEM_SETTINGS_ID})
     assert doc is not None
-    assert doc["textract_max_concurrent"] == system_settings_mod.default_textract_max_concurrent()
+    assert doc["textract_max_concurrent"] == ad.system.settings.default_textract_max_concurrent()
     assert doc["n_ocr_workers"] == 4
 
-    assert await system_settings_mod.seed_system_settings_if_missing() is False
+    assert await ad.system.settings.seed_system_settings_if_missing() is False
 
 
 @pytest.mark.asyncio
 async def test_update_system_settings_invalidates_cache(test_db):
     await test_db.system_settings.update_one(
-        {"_id": system_settings_mod.SYSTEM_SETTINGS_ID},
+        {"_id": ad.system.settings.SYSTEM_SETTINGS_ID},
         {"$set": {"textract_max_concurrent": 5, "n_ocr_workers": 1}},
         upsert=True,
     )
-    system_settings_mod.reset_system_settings_cache()
-    assert await system_settings_mod.get_textract_max_concurrent() == 5
-    assert (await system_settings_mod.get_worker_counts()).n_ocr_workers == 1
+    ad.system.settings.reset_system_settings_cache()
+    assert await ad.system.settings.get_textract_max_concurrent() == 5
+    assert (await ad.system.settings.get_worker_counts()).n_ocr_workers == 1
 
-    await system_settings_mod.update_system_settings(
+    await ad.system.settings.update_system_settings(
         textract_max_concurrent=20,
         n_ocr_workers=3,
     )
 
-    assert await system_settings_mod.get_textract_max_concurrent() == 20
-    assert (await system_settings_mod.get_worker_counts()).n_ocr_workers == 3
+    assert await ad.system.settings.get_textract_max_concurrent() == 20
+    assert (await ad.system.settings.get_worker_counts()).n_ocr_workers == 3
 
-    doc = await test_db.system_settings.find_one({"_id": system_settings_mod.SYSTEM_SETTINGS_ID})
+    doc = await test_db.system_settings.find_one({"_id": ad.system.settings.SYSTEM_SETTINGS_ID})
     assert doc is not None
     assert doc["textract_max_concurrent"] == 20
     assert doc["n_ocr_workers"] == 3
@@ -120,6 +127,6 @@ async def test_system_settings_api_get_and_patch(test_db, mock_auth):
     assert body["textract_max_concurrent"] == 16
     assert body["n_llm_workers"] == 5
 
-    system_settings_mod.invalidate_system_settings_cache()
+    ad.system.settings.invalidate_system_settings_cache()
     counts = await ad.system.settings.get_worker_counts()
     assert counts.n_llm_workers == 5
