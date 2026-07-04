@@ -1,11 +1,12 @@
 import asyncio
 from contextlib import asynccontextmanager
 from datetime import datetime
+import random
 import uuid
 import logging
 import os
 import analytiq_data as ad
-from typing import AsyncIterator, List, Literal, Optional, Union
+from typing import Any, AsyncIterator, Awaitable, Callable, List, Literal, Optional, Union
 
 import stamina
 from botocore.exceptions import ClientError
@@ -27,6 +28,10 @@ def _get_int_env(name: str, default: int) -> int:
 
 
 OCR_TIMEOUT_SECS = _get_int_env("OCR_TIMEOUT_SECS", 600)  # 10 min
+# Phase 1 poll schedule: initial wait + intervals aligned with ~9s median completion (see docs/textract_polling_plan.md).
+TEXTRACT_POLL_INITIAL_WAIT_SECS = 4.0
+TEXTRACT_POLL_INITIAL_JITTER_SECS = 1.0
+TEXTRACT_POLL_SUBSEQUENT_JITTER_SECS = 0.5
 # Per worker pod: max in-flight Textract jobs come from system_settings (refreshed every 25 gate acquisitions).
 # ``TEXTRACT_MAX_CONCURRENT`` env seeds the default when no system_settings doc exists.
 
@@ -110,6 +115,88 @@ def _is_textract_provisioned_throughput_exceeded(exc: BaseException) -> bool:
 )
 async def _call_textract_with_retry(fn, **kwargs):
     return await fn(**kwargs)
+
+
+def _textract_poll_sleep_secs(elapsed_secs: float) -> float:
+    """Seconds to wait before the next status poll given elapsed time since job start."""
+    if elapsed_secs < 14:
+        return 2.0
+    if elapsed_secs < 60:
+        return 4.0
+    return 8.0
+
+
+def _textract_initial_wait_secs() -> float:
+    """Wait before the first ``GetDocumentAnalysis`` / ``GetDocumentTextDetection`` call."""
+    return TEXTRACT_POLL_INITIAL_WAIT_SECS + random.uniform(0, TEXTRACT_POLL_INITIAL_JITTER_SECS)
+
+
+def _textract_poll_sleep_with_jitter(elapsed_secs: float) -> float:
+    base = _textract_poll_sleep_secs(elapsed_secs)
+    jitter = random.uniform(
+        -TEXTRACT_POLL_SUBSEQUENT_JITTER_SECS,
+        TEXTRACT_POLL_SUBSEQUENT_JITTER_SECS,
+    )
+    return max(0.0, base + jitter)
+
+
+async def _fetch_textract_job_results(
+    get_completion_func: Callable[..., Awaitable[dict[str, Any]]],
+    job_id: str,
+    succeeded_response: dict[str, Any],
+    *,
+    log_name: str,
+    log_prefix: str,
+) -> dict[str, Any]:
+    """Collect ``Blocks`` from a completed job, reusing the poll response when possible."""
+    blocks: list[Any] = []
+    document_metadata: Optional[dict] = None
+    analyze_document_model_version: Optional[str] = None
+    detect_document_text_model_version: Optional[str] = None
+
+    has_blocks = "Blocks" in succeeded_response
+    next_token = succeeded_response.get("NextToken")
+    if has_blocks or next_token:
+        response: dict[str, Any] = succeeded_response
+    else:
+        response = await _call_textract_with_retry(get_completion_func, JobId=job_id)
+
+    idx = 0
+    prefix_part = f"{log_prefix}: " if log_prefix else ""
+    while True:
+        if idx == 0:
+            document_metadata = response.get("DocumentMetadata")
+            analyze_document_model_version = response.get("AnalyzeDocumentModelVersion")
+            detect_document_text_model_version = response.get("DetectDocumentTextModelVersion")
+
+        blocks.extend(response.get("Blocks") or [])
+        next_token = response.get("NextToken")
+
+        logger.info(
+            f"{log_name}: {prefix_part}step {idx}: "
+            f"blocks len: {len(blocks)} next_token: {next_token}"
+        )
+        idx += 1
+        if not next_token:
+            break
+        response = await _call_textract_with_retry(
+            get_completion_func,
+            JobId=job_id,
+            NextToken=next_token,
+        )
+
+    if not document_metadata:
+        page_blocks = [b for b in blocks if b.get("BlockType") == "PAGE"]
+        document_metadata = {
+            "Pages": len(page_blocks) if page_blocks else 1,
+        }
+
+    return {
+        "Blocks": blocks,
+        "DocumentMetadata": document_metadata,
+        "AnalyzeDocumentModelVersion": analyze_document_model_version,
+        "DetectDocumentTextModelVersion": detect_document_text_model_version,
+    }
 
 
 def _safe_block_page_int(block: object) -> Optional[int]:
@@ -306,11 +393,14 @@ async def run_textract(analytiq_client,
                                     get_completion_func = textract_client.get_document_text_detection
 
                                 job_id = response["JobId"]
+                                job_start = loop.time()
+                                await asyncio.sleep(_textract_initial_wait_secs())
 
-                                idx = 0
-                                start_time = loop.time()
+                                poll_idx = 0
+                                status_response: dict[str, Any] = {}
+                                status = ""
                                 while True:
-                                    elapsed = loop.time() - start_time
+                                    elapsed = loop.time() - job_start
                                     if elapsed > OCR_TIMEOUT_SECS:
                                         raise asyncio.TimeoutError(
                                             f"Textract job {job_id} timed out after {OCR_TIMEOUT_SECS}s"
@@ -321,72 +411,25 @@ async def run_textract(analytiq_client,
                                     )
                                     status = status_response["JobStatus"]
                                     logger.info(
-                                        f"{analytiq_client.name}: {prefix_part}step {idx}: {status}"
+                                        f"{analytiq_client.name}: {prefix_part}step {poll_idx}: {status}"
                                     )
-                                    idx += 1
+                                    poll_idx += 1
 
                                     if status in ["SUCCEEDED", "FAILED"]:
                                         break
 
-                                    sleep_time = min(2 ** min(idx // 5, 3), 10)
-                                    await asyncio.sleep(sleep_time)
+                                    await asyncio.sleep(
+                                        _textract_poll_sleep_with_jitter(loop.time() - job_start)
+                                    )
 
-                                idx = 0
                                 if status == "SUCCEEDED":
-                                    blocks = []
-                                    document_metadata: Optional[dict] = None
-                                    analyze_document_model_version: Optional[str] = None
-                                    detect_document_text_model_version: Optional[str] = None
-                                    first_result_page = True
-
-                                    next_token = None
-                                    while True:
-                                        if next_token:
-                                            response = await _call_textract_with_retry(
-                                                get_completion_func,
-                                                JobId=job_id,
-                                                NextToken=next_token,
-                                            )
-                                        else:
-                                            response = await _call_textract_with_retry(
-                                                get_completion_func, JobId=job_id
-                                            )
-
-                                        if first_result_page:
-                                            document_metadata = response.get("DocumentMetadata")
-                                            analyze_document_model_version = response.get(
-                                                "AnalyzeDocumentModelVersion"
-                                            )
-                                            detect_document_text_model_version = response.get(
-                                                "DetectDocumentTextModelVersion"
-                                            )
-                                            first_result_page = False
-
-                                        blocks.extend(response["Blocks"])
-                                        next_token = response.get("NextToken", None)
-
-                                        logger.info(
-                                            f"{analytiq_client.name}: {prefix_part}step {idx}: "
-                                            f"blocks len: {len(blocks)} next_token: {next_token}"
-                                        )
-                                        idx += 1
-                                        if not next_token:
-                                            break
-
-                                    if not document_metadata:
-                                        page_blocks = [
-                                            b for b in blocks if b.get("BlockType") == "PAGE"
-                                        ]
-                                        document_metadata = {
-                                            "Pages": len(page_blocks) if page_blocks else 1,
-                                        }
-
-                                    return {
-                                        "Blocks": blocks,
-                                        "DocumentMetadata": document_metadata,
-                                        "AnalyzeDocumentModelVersion": analyze_document_model_version,
-                                        "DetectDocumentTextModelVersion": detect_document_text_model_version,
-                                    }
+                                    return await _fetch_textract_job_results(
+                                        get_completion_func,
+                                        job_id,
+                                        status_response,
+                                        log_name=analytiq_client.name,
+                                        log_prefix=log_prefix,
+                                    )
 
                                 raise Exception(
                                     f"Textract document analysis failed: {status} "

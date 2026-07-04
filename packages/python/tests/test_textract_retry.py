@@ -238,3 +238,173 @@ async def test_textract_low_priority_yields_while_high_priority_waiting(monkeypa
     await high_task
     await low_task
     assert low_started.is_set()
+
+
+def test_textract_poll_sleep_secs():
+    assert textract_mod._textract_poll_sleep_secs(0) == 2.0
+    assert textract_mod._textract_poll_sleep_secs(13.9) == 2.0
+    assert textract_mod._textract_poll_sleep_secs(14) == 4.0
+    assert textract_mod._textract_poll_sleep_secs(59.9) == 4.0
+    assert textract_mod._textract_poll_sleep_secs(60) == 8.0
+
+
+def test_textract_initial_wait_secs(monkeypatch):
+    monkeypatch.setattr(textract_mod.random, "uniform", lambda _a, _b: 0.0)
+    assert textract_mod._textract_initial_wait_secs() == textract_mod.TEXTRACT_POLL_INITIAL_WAIT_SECS
+    monkeypatch.setattr(textract_mod.random, "uniform", lambda _a, _b: 1.0)
+    assert textract_mod._textract_initial_wait_secs() == (
+        textract_mod.TEXTRACT_POLL_INITIAL_WAIT_SECS + textract_mod.TEXTRACT_POLL_INITIAL_JITTER_SECS
+    )
+
+
+def test_textract_poll_sleep_with_jitter_clamps_at_zero(monkeypatch):
+    monkeypatch.setattr(textract_mod.random, "uniform", lambda _a, _b: -10.0)
+    assert textract_mod._textract_poll_sleep_with_jitter(5) == 0.0
+
+
+@pytest.mark.asyncio
+async def test_textract_reuses_succeeded_poll_response(monkeypatch):
+    class FakeCtx:
+        def __init__(self, inner):
+            self._inner = inner
+
+        async def __aenter__(self):
+            return self._inner
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+
+    aws_client = MagicMock()
+    aws_client.s3_bucket_name = "bucket"
+    aws_client.refresh_credentials = AsyncMock()
+    aws_client.is_refreshable_auth_error = AsyncAWSClient.is_refreshable_auth_error
+
+    s3_client = MagicMock()
+    s3_client.put_object = AsyncMock(return_value=None)
+    s3_client.delete_object = AsyncMock(return_value=None)
+
+    textract_client = MagicMock()
+    textract_client.start_document_text_detection = AsyncMock(return_value={"JobId": "job-1"})
+    textract_client.get_document_text_detection = AsyncMock(
+        return_value={
+            "JobStatus": "SUCCEEDED",
+            "Blocks": [{"BlockType": "LINE", "Text": "hello"}],
+            "DocumentMetadata": {"Pages": 1},
+            "DetectDocumentTextModelVersion": "v1",
+        }
+    )
+
+    aws_client.client.side_effect = lambda name: FakeCtx(
+        s3_client if name == "s3" else textract_client
+    )
+    monkeypatch.setattr(ad.aws, "get_aws_client_async", AsyncMock(return_value=aws_client))
+
+    out = await textract_mod.run_textract(MagicMock(name="c"), b"blob")
+
+    assert len(out["Blocks"]) == 1
+    assert textract_client.get_document_text_detection.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_textract_paginates_from_succeeded_poll_without_refetching_page_zero(monkeypatch):
+    class FakeCtx:
+        def __init__(self, inner):
+            self._inner = inner
+
+        async def __aenter__(self):
+            return self._inner
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(asyncio, "sleep", AsyncMock())
+
+    aws_client = MagicMock()
+    aws_client.s3_bucket_name = "bucket"
+    aws_client.refresh_credentials = AsyncMock()
+    aws_client.is_refreshable_auth_error = AsyncAWSClient.is_refreshable_auth_error
+
+    s3_client = MagicMock()
+    s3_client.put_object = AsyncMock(return_value=None)
+    s3_client.delete_object = AsyncMock(return_value=None)
+
+    textract_client = MagicMock()
+    textract_client.start_document_text_detection = AsyncMock(return_value={"JobId": "job-1"})
+    textract_client.get_document_text_detection = AsyncMock(
+        side_effect=[
+            {
+                "JobStatus": "SUCCEEDED",
+                "Blocks": [{"BlockType": "LINE", "Text": "page1"}],
+                "NextToken": "tok-1",
+                "DocumentMetadata": {"Pages": 1},
+                "DetectDocumentTextModelVersion": "v1",
+            },
+            {
+                "Blocks": [{"BlockType": "LINE", "Text": "page2"}],
+            },
+        ]
+    )
+
+    aws_client.client.side_effect = lambda name: FakeCtx(
+        s3_client if name == "s3" else textract_client
+    )
+    monkeypatch.setattr(ad.aws, "get_aws_client_async", AsyncMock(return_value=aws_client))
+
+    out = await textract_mod.run_textract(MagicMock(name="c"), b"blob")
+
+    assert len(out["Blocks"]) == 2
+    assert textract_client.get_document_text_detection.await_count == 2
+    textract_client.get_document_text_detection.assert_any_await(JobId="job-1", NextToken="tok-1")
+
+
+@pytest.mark.asyncio
+async def test_textract_waits_before_first_poll(monkeypatch):
+    class FakeCtx:
+        def __init__(self, inner):
+            self._inner = inner
+
+        async def __aenter__(self):
+            return self._inner
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    sleep_calls: list[float] = []
+
+    async def record_sleep(secs: float) -> None:
+        sleep_calls.append(secs)
+
+    monkeypatch.setattr(asyncio, "sleep", record_sleep)
+    monkeypatch.setattr(textract_mod, "_textract_initial_wait_secs", lambda: 4.25)
+
+    aws_client = MagicMock()
+    aws_client.s3_bucket_name = "bucket"
+    aws_client.refresh_credentials = AsyncMock()
+    aws_client.is_refreshable_auth_error = AsyncAWSClient.is_refreshable_auth_error
+
+    s3_client = MagicMock()
+    s3_client.put_object = AsyncMock(return_value=None)
+    s3_client.delete_object = AsyncMock(return_value=None)
+
+    textract_client = MagicMock()
+    textract_client.start_document_text_detection = AsyncMock(return_value={"JobId": "job-1"})
+    textract_client.get_document_text_detection = AsyncMock(
+        return_value={
+            "JobStatus": "SUCCEEDED",
+            "Blocks": [],
+            "DocumentMetadata": {"Pages": 1},
+            "DetectDocumentTextModelVersion": "v1",
+        }
+    )
+
+    aws_client.client.side_effect = lambda name: FakeCtx(
+        s3_client if name == "s3" else textract_client
+    )
+    monkeypatch.setattr(ad.aws, "get_aws_client_async", AsyncMock(return_value=aws_client))
+
+    await textract_mod.run_textract(MagicMock(name="c"), b"blob")
+
+    assert sleep_calls[0] == 4.25
+    assert len(sleep_calls) == 1
