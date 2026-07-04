@@ -123,6 +123,36 @@ async def enqueue_resume_execution(
     return new_id
 
 
+async def find_resumable_batch_execution(
+    db,
+    *,
+    organization_id: str,
+    flow_id: str,
+    document_id: str,
+) -> dict[str, Any] | None:
+    """Latest terminal execution for a document+flow with resumable partial batch output."""
+
+    from analytiq_data.flows.batch_progress import run_data_has_resumable_batch
+
+    cursor = db.flow_executions.find(
+        {
+            "organization_id": organization_id,
+            "flow_id": flow_id,
+            "trigger.document_id": document_id,
+            "status": {"$in": sorted(TERMINAL_RESUME_SOURCE_STATUSES)},
+            "$or": [{"resumed_by": None}, {"resumed_by": {"$exists": False}}],
+        },
+        sort=[("started_at", -1)],
+        limit=20,
+    )
+    async for doc in cursor:
+        if not list(doc.get("completed_nodes") or []):
+            continue
+        if run_data_has_resumable_batch(doc.get("run_data")):
+            return doc
+    return None
+
+
 async def reset_running_execution_for_scratch_retry(
     db,
     exec_oid: ObjectId,

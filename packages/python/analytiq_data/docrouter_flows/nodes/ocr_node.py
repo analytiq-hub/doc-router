@@ -9,8 +9,14 @@ import analytiq_data as ad
 
 from .. import services as flow_services
 from ..document_binary import resolve_pdf_binary_ref
-from analytiq_data.flows.item_batch import map_flow_items_batch
-from analytiq_data.flows.batch_progress import make_batch_checkpoint_callback
+from analytiq_data.flows.item_batch import FlowBatchItemErrors, map_flow_items_batch
+from analytiq_data.flows.batch_progress import (
+    continue_on_item_error_for_node,
+    load_batch_resume_items,
+    make_batch_checkpoint_callback,
+    make_batch_fatal_error_callback,
+    persist_batch_node_partial,
+)
 from analytiq_data.flows.node_settings import resolve_node_batch_size
 
 
@@ -98,8 +104,13 @@ class DocRouterOcrNode:
                 )
 
         input_items = inputs[0]
+        node_id = str(node.get("id") or "")
+        resume_items = load_batch_resume_items(context.run_data.get(node_id))
+        items_skipped_on_resume = len(resume_items) if resume_items else None
 
         async def _run_item(item_index: int) -> "ad.flows.FlowItem | None":
+            if item_index in resume_items:
+                return resume_items[item_index]
             it = input_items[item_index]
             pdf_ref = resolve_pdf_binary_ref(it.binary)
             if pdf_ref is None:
@@ -154,15 +165,36 @@ class DocRouterOcrNode:
             )
 
         checkpoint_cb = make_batch_checkpoint_callback(context, node, self)
-        item_results = await map_flow_items_batch(
-            len(input_items),
-            _run_item,
-            batch_size=resolve_node_batch_size(node),
-            should_stop=lambda: ad.flows.read_stop(context),
-            on_items_checkpoint=checkpoint_cb,
-            execution_id=context.execution_id,
-            node_id=str(node.get("id") or ""),
-            node_type=str(node.get("type") or ""),
-        )
+        fatal_cb = make_batch_fatal_error_callback(context, node, self)
+        try:
+            item_results = await map_flow_items_batch(
+                len(input_items),
+                _run_item,
+                batch_size=resolve_node_batch_size(node),
+                should_stop=lambda: ad.flows.read_stop(context),
+                on_items_checkpoint=checkpoint_cb,
+                on_fatal_item_error=fatal_cb,
+                continue_on_item_error=continue_on_item_error_for_node(node),
+                execution_id=context.execution_id,
+                node_id=node_id,
+                node_type=str(node.get("type") or ""),
+            )
+        except FlowBatchItemErrors as batch_err:
+            await persist_batch_node_partial(
+                context,
+                node_id,
+                items_total=len(input_items),
+                results=batch_err.results,
+                status="error",
+                items_failed=len(batch_err.errors),
+                error=ad.flows.node_error_envelope(
+                    batch_err.first,
+                    node_id=node_id,
+                    node_name=ad.flows.node_name(node),
+                    include_stack=True,
+                ),
+                items_skipped_on_resume=items_skipped_on_resume,
+            )
+            raise batch_err.first from batch_err
         out = [item for item in item_results if item is not None]
         return [out]

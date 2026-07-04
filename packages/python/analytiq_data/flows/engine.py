@@ -1254,17 +1254,48 @@ async def _execute_loop(
                             ] + _empty_outputs(outputs_count - 1)
                             status = "error"
                         else:
-                            context.run_data[node["id"]] = {
-                                "status": "error",
-                                "start_time": start_datetime.isoformat(),
-                                "execution_time_ms": int((time.time() - start) * 1000),
-                                "execution_index": execution_index,
-                                "data": {"main": []},
-                                "error": error_env,
-                                "source": run_source,
-                                "logs": (context.node_logs.pop(node["id"], None) if hasattr(context, "node_logs") else None),
-                                "trace": pop_node_trace(context, node["id"]),
-                            }
+                            partial = context.run_data.get(node["id"])
+                            partial_main: list[list[Any]] | None = None
+                            partial_meta: dict[str, Any] = {}
+                            if isinstance(partial, dict):
+                                data = partial.get("data")
+                                if isinstance(data, dict):
+                                    main = data.get("main")
+                                    if (
+                                        isinstance(main, list)
+                                        and main
+                                        and isinstance(main[0], list)
+                                        and main[0]
+                                    ):
+                                        partial_main = main
+                                for key in ("items_total", "items_completed", "items_failed", "items_skipped_on_resume"):
+                                    if key in partial:
+                                        partial_meta[key] = partial[key]
+                            if partial_main is not None:
+                                context.run_data[node["id"]] = {
+                                    "status": "error",
+                                    "start_time": start_datetime.isoformat(),
+                                    "execution_time_ms": int((time.time() - start) * 1000),
+                                    "execution_index": execution_index,
+                                    "data": {"main": partial_main},
+                                    "error": error_env,
+                                    "source": run_source,
+                                    "logs": (context.node_logs.pop(node["id"], None) if hasattr(context, "node_logs") else None),
+                                    "trace": pop_node_trace(context, node["id"]),
+                                    **partial_meta,
+                                }
+                            else:
+                                context.run_data[node["id"]] = {
+                                    "status": "error",
+                                    "start_time": start_datetime.isoformat(),
+                                    "execution_time_ms": int((time.time() - start) * 1000),
+                                    "execution_index": execution_index,
+                                    "data": {"main": []},
+                                    "error": error_env,
+                                    "source": run_source,
+                                    "logs": (context.node_logs.pop(node["id"], None) if hasattr(context, "node_logs") else None),
+                                    "trace": pop_node_trace(context, node["id"]),
+                                }
                             await persist_run_data(
                                 context,
                                 context.run_data,
@@ -1273,6 +1304,13 @@ async def _execute_loop(
                             raise
 
             out_lists = _stamp_outputs_producer_meta(out_lists, producer_node_id=node["id"])
+
+            prior_entry = context.run_data.get(node["id"])
+            prior_skipped = (
+                prior_entry.get("items_skipped_on_resume")
+                if isinstance(prior_entry, dict)
+                else None
+            )
 
             context.run_data[node["id"]] = {
                 "status": status,
@@ -1285,6 +1323,8 @@ async def _execute_loop(
                 "logs": (context.node_logs.pop(node["id"], None) if hasattr(context, "node_logs") else None),
                 "trace": pop_node_trace(context, node["id"]),
             }
+            if prior_skipped is not None:
+                context.run_data[node["id"]]["items_skipped_on_resume"] = prior_skipped
             await persist_run_data(
                 context,
                 context.run_data,

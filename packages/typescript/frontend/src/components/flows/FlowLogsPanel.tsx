@@ -28,7 +28,7 @@ import {
   formatUpstreamSummary,
   pairedItemFromRunEntry,
 } from './flowRunLineage';
-import { canResumeExecution } from './flowResume';
+import { canResumeExecution, resumeExecutionLabel } from './flowResume';
 
 function isRunning(e: FlowExecution) {
   return e.status === 'queued' || e.status === 'running';
@@ -477,7 +477,7 @@ const FlowLogsPanel: React.FC<{
                           className={`${flowWorkspaceDropdownItemSimpleClass} w-full ${focus ? 'bg-gray-100' : ''}`}
                           onClick={() => void onResume()}
                         >
-                          {resumeLoading ? 'Resuming…' : 'Resume from checkpoint'}
+                          {resumeLoading ? 'Resuming…' : resumeExecutionLabel(execution)}
                         </button>
                       )}
                     </MenuItem>

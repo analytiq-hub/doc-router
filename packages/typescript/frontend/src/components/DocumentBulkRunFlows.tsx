@@ -18,6 +18,9 @@ const DEFAULT_PARALLEL_RUNS = 2;
 const MIN_PARALLEL_RUNS = 1;
 const MAX_PARALLEL_RUNS = 50;
 const BULK_FLOW_PARALLEL_RUNS_KEY = 'docrouter.bulkFlowParallelRuns';
+const BULK_FLOW_RERUN_MODE_KEY = 'docrouter.bulkFlowRerunMode';
+
+type BulkFlowRerunMode = 'force' | 'incomplete_only';
 
 function clampParallelRuns(value: number): number {
   const n = Math.floor(value);
@@ -33,6 +36,25 @@ function readParallelRunsFromSession(): number {
     return clampParallelRuns(parseInt(raw, 10));
   } catch {
     return DEFAULT_PARALLEL_RUNS;
+  }
+}
+
+function readRerunModeFromSession(): BulkFlowRerunMode {
+  if (typeof window === 'undefined') return 'force';
+  try {
+    const raw = sessionStorage.getItem(BULK_FLOW_RERUN_MODE_KEY);
+    return raw === 'incomplete_only' ? 'incomplete_only' : 'force';
+  } catch {
+    return 'force';
+  }
+}
+
+function persistRerunModeToSession(value: BulkFlowRerunMode): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(BULK_FLOW_RERUN_MODE_KEY, value);
+  } catch {
+    // ignore
   }
 }
 
@@ -133,6 +155,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
     const [orgFlows, setOrgFlows] = useState<FlowListItem[]>([]);
     const [flowsLoading, setFlowsLoading] = useState(false);
     const [executionMode, setExecutionMode] = useState<ExecutionMode>('outdated');
+    const [rerunMode, setRerunMode] = useState<BulkFlowRerunMode>(readRerunModeFromSession);
     const [parallelRuns, setParallelRuns] = useState(readParallelRunsFromSession);
     const [flowGroups, setFlowGroups] = useState<FlowExecutionGroup[]>([]);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -480,6 +503,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
               const { execution_id: execId } = await docRouterOrgApi.rerunFlowForDocument(
                 execution.flowId,
                 execution.documentId,
+                { mode: rerunMode },
               );
               if (!execId?.trim() || isCancelledRef.current) {
                 markExecutionStatus(group, execution.documentId, {
@@ -641,6 +665,51 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
                       value={opt.value}
                       checked={executionMode === opt.value}
                       onChange={(e) => setExecutionMode(e.target.value as ExecutionMode)}
+                      disabled={disabled || isExecuting || isAnalyzing}
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mt-0.5"
+                    />
+                    <label htmlFor={opt.id} className="ml-2 block text-sm text-gray-900">
+                      <span className="font-medium">{opt.title}</span>
+                      <span className="block text-xs text-gray-500 mt-0.5">{opt.hint}</span>
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {hasDiscoveryInput && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-3">Rerun mode</label>
+              <div className="space-y-2">
+                {(
+                  [
+                    {
+                      id: 'flows-rerun-force',
+                      value: 'force' as const,
+                      title: 'Force rerun',
+                      hint: 'Start a new execution from scratch',
+                    },
+                    {
+                      id: 'flows-rerun-incomplete',
+                      value: 'incomplete_only' as const,
+                      title: 'Rerun incomplete only',
+                      hint: 'Resume the latest partial batch run and skip completed items',
+                    },
+                  ] as const
+                ).map((opt) => (
+                  <div key={opt.id} className="flex items-start">
+                    <input
+                      id={opt.id}
+                      name="flowRerunMode"
+                      type="radio"
+                      value={opt.value}
+                      checked={rerunMode === opt.value}
+                      onChange={(e) => {
+                        const next = e.target.value as BulkFlowRerunMode;
+                        setRerunMode(next);
+                        persistRerunModeToSession(next);
+                      }}
                       disabled={disabled || isExecuting || isAnalyzing}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mt-0.5"
                     />

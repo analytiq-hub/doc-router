@@ -297,9 +297,12 @@ async def rerun_flow_for_document(
     org_id: str,
     document_id: str,
     flow_id: str,
+    mode: str = "force",
 ) -> str:
     """
     Re-enqueue a document-event flow for ``document_id`` using the active revision.
+
+    ``mode`` is ``force`` (new run) or ``incomplete_only`` (resume latest partial batch run).
 
     Returns the new ``execution_id``.
     """
@@ -320,6 +323,24 @@ async def rerun_flow_for_document(
     flow_revid = str(hdr.get("active_flow_revid") or "")
     if not flow_revid or not ObjectId.is_valid(flow_revid):
         raise ValueError("Flow has no active revision")
+
+    if mode == "incomplete_only":
+        from analytiq_data.flows.resume import enqueue_resume_execution, find_resumable_batch_execution
+
+        source = await find_resumable_batch_execution(
+            db,
+            organization_id=org_id,
+            flow_id=flow_id,
+            document_id=document_id,
+        )
+        if not source:
+            raise ValueError("No partial execution to resume")
+        if str(source.get("flow_revid") or "") != flow_revid:
+            raise ValueError("Flow revision changed; use force rerun")
+        exec_id = await enqueue_resume_execution(analytiq_client, db, source)
+        if not exec_id:
+            raise ValueError("No partial execution to resume")
+        return exec_id
 
     revision = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
     if not revision:

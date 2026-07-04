@@ -1192,11 +1192,16 @@ async def bulk_analyze_flows(
     return BulkAnalyzeFlowsResponse(**result)
 
 
+class RerunFlowForDocumentRequest(BaseModel):
+    mode: Literal["force", "incomplete_only"] = "force"
+
+
 @flows_router.post("/v0/orgs/{organization_id}/flows/{flow_id}/run/{document_id}")
 async def rerun_flow_for_document_route(
     organization_id: str,
     flow_id: str,
     document_id: str,
+    body: RerunFlowForDocumentRequest = Body(default_factory=RerunFlowForDocumentRequest),
     current_user: User = Depends(get_org_user),
 ):
     """Re-run an active document-event flow for a document (mirrors prompt reload on the Extraction tab)."""
@@ -1207,6 +1212,7 @@ async def rerun_flow_for_document_route(
             org_id=organization_id,
             document_id=document_id,
             flow_id=flow_id,
+            mode=body.mode,
         )
     except ValueError as exc:
         msg = str(exc)
@@ -1214,6 +1220,8 @@ async def rerun_flow_for_document_route(
             raise HTTPException(status_code=404, detail=msg) from exc
         if msg in {"Flow is not active", "Flow has no active revision", "Flow does not match document"}:
             raise HTTPException(status_code=400, detail=msg) from exc
+        if msg in {"No partial execution to resume", "Flow revision changed; use force rerun"}:
+            raise HTTPException(status_code=409, detail=msg) from exc
         raise HTTPException(status_code=400, detail=msg) from exc
     return {"execution_id": execution_id}
 

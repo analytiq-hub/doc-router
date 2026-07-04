@@ -1119,10 +1119,14 @@ export class DocRouterOrg {
     );
   }
 
-  async rerunFlowForDocument(flowId: string, documentId: string): Promise<{ execution_id: string }> {
+  async rerunFlowForDocument(
+    flowId: string,
+    documentId: string,
+    options?: { mode?: 'force' | 'incomplete_only' },
+  ): Promise<{ execution_id: string }> {
     return this.http.post<{ execution_id: string }>(
       `/v0/orgs/${this.organizationId}/flows/${flowId}/run/${documentId}`,
-      {},
+      { mode: options?.mode ?? 'force' },
     );
   }
 

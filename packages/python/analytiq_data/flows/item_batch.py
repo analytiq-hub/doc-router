@@ -14,6 +14,26 @@ logger = logging.getLogger(__name__)
 T = TypeVar("T")
 
 
+class FlowBatchItemErrors(Exception):
+    """One or more batch items failed (see ``errors`` and ``results``)."""
+
+    def __init__(
+        self,
+        errors: list[tuple[int, BaseException]],
+        results: list[object | None],
+    ) -> None:
+        self.errors = errors
+        self.results = results
+        first = errors[0][1] if errors else None
+        super().__init__(str(first) if first else "batch item errors")
+
+    @property
+    def first(self) -> BaseException:
+        if not self.errors:
+            raise RuntimeError("FlowBatchItemErrors has no errors")
+        return self.errors[0][1]
+
+
 async def map_flow_items_batch(
     count: int,
     fn: Callable[[int], Awaitable[T | None]],
@@ -21,6 +41,8 @@ async def map_flow_items_batch(
     batch_size: int = FLOW_NODE_BATCH_SIZE_DEFAULT,
     should_stop: Callable[[], Awaitable[bool]] | None = None,
     on_items_checkpoint: Callable[[int, int, list[T | None]], Awaitable[None]] | None = None,
+    on_fatal_item_error: Callable[[int, int, list[T | None], BaseException], Awaitable[None]] | None = None,
+    continue_on_item_error: bool = False,
     execution_id: str | None = None,
     node_id: str | None = None,
     node_type: str | None = None,
@@ -35,6 +57,14 @@ async def map_flow_items_batch(
     When ``on_items_checkpoint`` is set, it is invoked after every ``batch_size`` completions
     and when all items finish. On cooperative stop, a final checkpoint runs if the last
     completion count is not already on a wave boundary.
+
+    When ``continue_on_item_error`` is true, per-item exceptions are recorded and processing
+    continues; ``FlowBatchItemErrors`` is raised after all in-flight work finishes if any
+    item failed.
+
+    When ``continue_on_item_error`` is false, the first item error stops launching new work,
+    waits for in-flight items, invokes ``on_fatal_item_error`` with completed results, then
+    re-raises the first error.
     """
     if count <= 0:
         return []
@@ -56,6 +86,8 @@ async def map_flow_items_batch(
     next_index = 0
     stop_launching = False
     finished_count = 0
+    item_errors: list[tuple[int, BaseException]] = []
+    fatal_error: BaseException | None = None
     lock = asyncio.Lock()
 
     async def maybe_checkpoint(completed: int) -> None:
@@ -68,18 +100,38 @@ async def map_flow_items_batch(
         await on_items_checkpoint(completed, count, results)
 
     async def worker() -> None:
-        nonlocal next_index, stop_launching, finished_count
+        nonlocal next_index, stop_launching, finished_count, fatal_error
         while True:
             if should_stop is not None and await should_stop():
                 async with lock:
                     stop_launching = True
                 return
             async with lock:
+                if fatal_error is not None:
+                    return
                 if stop_launching or next_index >= count:
                     return
                 idx = next_index
                 next_index += 1
-            results[idx] = await fn(idx)
+            try:
+                results[idx] = await fn(idx)
+            except Exception as e:
+                if continue_on_item_error:
+                    async with lock:
+                        item_errors.append((idx, e))
+                    results[idx] = None
+                else:
+                    async with lock:
+                        if fatal_error is None:
+                            fatal_error = e
+                            stop_launching = True
+                    results[idx] = None
+                    async with lock:
+                        finished_count += 1
+                        completed = finished_count
+                    if on_fatal_item_error is not None:
+                        await on_fatal_item_error(completed, count, results, e)
+                    continue
             async with lock:
                 finished_count += 1
                 completed = finished_count
@@ -95,10 +147,17 @@ async def map_flow_items_batch(
     if (
         on_items_checkpoint is not None
         and stop_launching
+        and not fatal_error
         and finished_count > 0
         and finished_count < count
         and finished_count % limit != 0
     ):
         await on_items_checkpoint(finished_count, count, results)
+
+    if fatal_error is not None:
+        raise fatal_error
+
+    if item_errors:
+        raise FlowBatchItemErrors(item_errors, results)
 
     return results

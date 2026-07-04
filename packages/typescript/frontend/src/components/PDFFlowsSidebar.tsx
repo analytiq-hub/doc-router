@@ -329,7 +329,13 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
 
     setRunningFlows((prev) => new Set(prev).add(flowId));
     try {
-      const { execution_id: execId } = await docRouterOrgApi.rerunFlowForDocument(flowId, id);
+      const { execution_id: execId } = await docRouterOrgApi.rerunFlowForDocument(flowId, id, {
+        mode:
+          typeof window !== 'undefined' &&
+          sessionStorage.getItem('docrouter.bulkFlowRerunMode') === 'incomplete_only'
+            ? 'incomplete_only'
+            : 'force',
+      });
       if (!execId?.trim() || !isCurrentRerun()) return;
 
       await pollFlowRerunUntilDone(docRouterOrgApi, {
