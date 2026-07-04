@@ -253,6 +253,16 @@ const FlowExecutionsView: React.FC<{
     setSelectedId(null);
   }, []);
 
+  const onExecutionPollChange = useCallback(
+    (ex: FlowExecution | null) => {
+      if (!ex || ex.execution_id !== selectedId) return;
+      setDetail(ex);
+      const runData = ex.run_data as Record<string, unknown> | undefined;
+      setViewNodes((prev) => applyExecutionStatusToNodes(prev, runData) as Node<FlowRfNodeData>[]);
+    },
+    [selectedId],
+  );
+
   const onExecutionDeleted = useCallback(
     (executionId: string) => {
       setList((prev) => {
@@ -610,6 +620,7 @@ const FlowExecutionsView: React.FC<{
                   flowId={flowId}
                   focusExecutionId={selectedId}
                   onClearFocus={clearFocus}
+                  onExecutionChange={onExecutionPollChange}
                   onExecutionDeleted={onExecutionDeleted}
                   onExecutionResumed={onExecutionResumed}
                   onEditNode={onEditFlowNode}

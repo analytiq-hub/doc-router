@@ -17,7 +17,7 @@ import { NoSymbolIcon } from '@heroicons/react/24/outline';
 import { inputHandleCount, inputPortTypes, outputPortTypes } from './flowRf';
 import type { FlowConnectionType } from './flowRf';
 import type { FlowRfNodeDataWithRun, NodeRunStatusBadge } from './flowNodeRunStatus';
-import { getNodeRunStatusFromRunData } from './flowNodeRunStatus';
+import { getNodeBatchProgressFromRunData, getNodeRunStatusFromRunData } from './flowNodeRunStatus';
 import type { FlowCanvasActions } from './flowCanvasActionsContext';
 import { useFlowCanvasActions, useFlowExecutionVisual } from './flowCanvasActionsContext';
 import { FlowCanvasAppendPlusButton } from './FlowCanvasAppendPlusButton';
@@ -196,6 +196,16 @@ function ExecutionStatusBadge({ status }: { status: NonNullable<NodeRunStatusBad
       </div>
     );
   }
+  if (status === 'partial') {
+    return (
+      <div
+        className="pointer-events-none absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-white shadow-sm"
+        title="Partial — interrupted before completion"
+      >
+        <ExclamationCircleIcon className="h-5 w-5 text-amber-500" aria-hidden />
+      </div>
+    );
+  }
   if (status === 'stopped') {
     return (
       <div
@@ -212,6 +222,17 @@ function ExecutionStatusBadge({ status }: { status: NonNullable<NodeRunStatusBad
       title="Skipped"
     >
       —
+    </div>
+  );
+}
+
+function BatchProgressPill({ completed, total }: { completed: number; total: number }) {
+  return (
+    <div
+      className="pointer-events-none absolute left-1/2 top-0 z-[10] -translate-x-1/2 -translate-y-1/2 rounded-md border border-sky-200 bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums leading-none text-sky-800 shadow-sm"
+      title={`${completed} of ${total} items completed`}
+    >
+      {completed}/{total}
     </div>
   );
 }
@@ -303,6 +324,13 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
     const rd = execution?.run_data as Record<string, unknown> | undefined;
     return getNodeRunStatusFromRunData(rd, id);
   }, [data.executionNodeStatus, execution, id]);
+
+  const batchProgress = useMemo(() => {
+    if (data.executionBatchProgress != null) return data.executionBatchProgress;
+    if (execution === undefined) return null;
+    const rd = execution?.run_data as Record<string, unknown> | undefined;
+    return getNodeBatchProgressFromRunData(rd, id);
+  }, [data.executionBatchProgress, execution, id]);
 
   const isPinned = Boolean(data.pinned);
 
@@ -591,6 +619,9 @@ const FlowCanvasNode: React.FC<NodeProps<FlowRfNodeDataWithRun>> = ({ id, data, 
             nodeId={id}
           />
           {runSt && <ExecutionStatusBadge status={runSt} />}
+          {batchProgress ? (
+            <BatchProgressPill completed={batchProgress.completed} total={batchProgress.total} />
+          ) : null}
         </div>
         {labelBlock}
       </div>

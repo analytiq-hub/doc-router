@@ -101,6 +101,41 @@ async def test_map_flow_items_batch_skips_parallel_log_when_sequential(caplog: p
     assert not any("in parallel" in r.message for r in caplog.records)
 
 
+@pytest.mark.asyncio
+async def test_map_flow_items_batch_invokes_checkpoint_on_wave_boundary() -> None:
+    calls: list[tuple[int, int, list[int | None]]] = []
+
+    async def fn(i: int) -> int:
+        return i
+
+    async def on_checkpoint(completed: int, total: int, results: list[int | None]) -> None:
+        calls.append((completed, total, list(results)))
+
+    await map_flow_items_batch(10, fn, batch_size=4, on_items_checkpoint=on_checkpoint)
+    assert [c[0] for c in calls] == [4, 8, 10]
+
+
+@pytest.mark.asyncio
+async def test_map_flow_items_batch_checkpoint_on_cooperative_stop() -> None:
+    completed = 0
+    calls: list[int] = []
+
+    async def fn(i: int) -> int:
+        nonlocal completed
+        completed += 1
+        return i
+
+    async def should_stop() -> bool:
+        return completed >= 5
+
+    async def on_checkpoint(done: int, _total: int, _results: list[int | None]) -> None:
+        calls.append(done)
+
+    await map_flow_items_batch(10, fn, batch_size=4, should_stop=should_stop, on_items_checkpoint=on_checkpoint)
+    assert calls[-1] == 5
+    assert 4 in calls
+
+
 def test_resolve_node_batch_size_defaults_and_clamps() -> None:
     assert resolve_node_batch_size({}) == FLOW_NODE_BATCH_SIZE_DEFAULT
     assert resolve_node_batch_size({"batch_size": 3}) == 3

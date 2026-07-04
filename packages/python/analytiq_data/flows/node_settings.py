@@ -25,6 +25,12 @@ def resolve_node_batch_size(node: dict[str, Any] | None) -> int:
     return max(FLOW_NODE_BATCH_SIZE_MIN, min(FLOW_NODE_BATCH_SIZE_MAX, value))
 
 
+def node_uses_batch_partial_persist(node: dict[str, Any] | None, node_type: Any) -> bool:
+    """True when mid-node partial checkpoints should run (batch OCR/LLM with batch_size > 1)."""
+
+    return bool(getattr(node_type, "supports_batch_size", False)) and resolve_node_batch_size(node) > 1
+
+
 def validate_node_batch_size(node: dict[str, Any]) -> list[str]:
     """Validate ``batch_size`` when present on a node."""
 

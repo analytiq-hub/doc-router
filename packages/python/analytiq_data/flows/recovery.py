@@ -45,6 +45,33 @@ def _interrupted_error() -> dict[str, Any]:
     }
 
 
+def _normalize_interrupted_batch_nodes(
+    run_data: dict[str, Any] | None,
+    last_node_executed: str | None,
+) -> dict[str, Any] | None:
+    """Rewrite a mid-batch ``status: running`` node entry to ``partial`` when interrupted."""
+
+    if not run_data or not last_node_executed:
+        return None
+    entry = run_data.get(last_node_executed)
+    if not isinstance(entry, dict) or entry.get("status") != "running":
+        return None
+    data = entry.get("data")
+    if not isinstance(data, dict):
+        return None
+    main = data.get("main")
+    if not isinstance(main, list) or not main:
+        return None
+    first_lane = main[0]
+    if not isinstance(first_lane, list) or not first_lane:
+        return None
+    updated = dict(run_data)
+    updated_entry = dict(entry)
+    updated_entry["status"] = "partial"
+    updated[last_node_executed] = updated_entry
+    return updated
+
+
 async def _maybe_capture_docrouter_result(
     db,
     doc: dict[str, Any],
@@ -95,6 +122,12 @@ async def _finalize_running_execution(
     }
     if status == "interrupted":
         patch["error"] = _interrupted_error()
+        normalized = _normalize_interrupted_batch_nodes(
+            doc.get("run_data"),
+            doc.get("last_node_executed"),
+        )
+        if normalized is not None:
+            patch["run_data"] = normalized
 
     filt: dict[str, Any] = {"_id": exec_oid, "status": "running"}
     if heartbeat_guard is not None:
@@ -204,6 +237,7 @@ async def recover_orphaned_running_flow_executions_at_startup(
             "flow_revid": 1,
             "run_data": 1,
             "completed_nodes": 1,
+            "last_node_executed": 1,
             "trigger": 1,
             "revision_snapshot": 1,
         },
@@ -245,6 +279,7 @@ async def recover_stale_flow_executions(analytiq_client, *, env: str | None = No
             "flow_revid": 1,
             "run_data": 1,
             "completed_nodes": 1,
+            "last_node_executed": 1,
             "trigger": 1,
             "revision_snapshot": 1,
         },

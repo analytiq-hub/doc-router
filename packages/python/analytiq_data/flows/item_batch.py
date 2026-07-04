@@ -20,6 +20,7 @@ async def map_flow_items_batch(
     *,
     batch_size: int = FLOW_NODE_BATCH_SIZE_DEFAULT,
     should_stop: Callable[[], Awaitable[bool]] | None = None,
+    on_items_checkpoint: Callable[[int, int, list[T | None]], Awaitable[None]] | None = None,
     execution_id: str | None = None,
     node_id: str | None = None,
     node_type: str | None = None,
@@ -30,6 +31,10 @@ async def map_flow_items_batch(
 
     When ``should_stop`` returns true after an item finishes, no new items are started;
     in-flight work is allowed to complete first.
+
+    When ``on_items_checkpoint`` is set, it is invoked after every ``batch_size`` completions
+    and when all items finish. On cooperative stop, a final checkpoint runs if the last
+    completion count is not already on a wave boundary.
     """
     if count <= 0:
         return []
@@ -50,10 +55,20 @@ async def map_flow_items_batch(
     results: list[T | None] = [None] * count
     next_index = 0
     stop_launching = False
+    finished_count = 0
     lock = asyncio.Lock()
 
+    async def maybe_checkpoint(completed: int) -> None:
+        if on_items_checkpoint is None:
+            return
+        if completed <= 0:
+            return
+        if completed % limit != 0 and completed != count:
+            return
+        await on_items_checkpoint(completed, count, results)
+
     async def worker() -> None:
-        nonlocal next_index, stop_launching
+        nonlocal next_index, stop_launching, finished_count
         while True:
             if should_stop is not None and await should_stop():
                 async with lock:
@@ -65,6 +80,10 @@ async def map_flow_items_batch(
                 idx = next_index
                 next_index += 1
             results[idx] = await fn(idx)
+            async with lock:
+                finished_count += 1
+                completed = finished_count
+            await maybe_checkpoint(completed)
             if should_stop is not None and await should_stop():
                 async with lock:
                     stop_launching = True
@@ -72,4 +91,14 @@ async def map_flow_items_batch(
 
     workers = [asyncio.create_task(worker()) for _ in range(min(limit, count))]
     await asyncio.gather(*workers)
+
+    if (
+        on_items_checkpoint is not None
+        and stop_launching
+        and finished_count > 0
+        and finished_count < count
+        and finished_count % limit != 0
+    ):
+        await on_items_checkpoint(finished_count, count, results)
+
     return results
