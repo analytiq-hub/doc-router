@@ -24,6 +24,7 @@ from jsonschema import Draft7Validator
 import analytiq_data as ad
 
 from .errors import FlowValidationError, node_error_envelope
+from .batch_meta import batch_output_is_incomplete, merge_batch_meta_for_final_persist
 from .node_name import node_name
 from .flow_settings import validate_flow_settings
 from .node_settings import validate_node_batch_size
@@ -1306,13 +1307,21 @@ async def _execute_loop(
             out_lists = _stamp_outputs_producer_meta(out_lists, producer_node_id=node["id"])
 
             prior_entry = context.run_data.get(node["id"])
-            prior_skipped = (
-                prior_entry.get("items_skipped_on_resume")
-                if isinstance(prior_entry, dict)
-                else None
-            )
 
-            context.run_data[node["id"]] = {
+            try:
+                context.stop_requested = bool(await read_stop(context))
+            except Exception:
+                pass
+
+            stopped_mid_batch = (
+                context.stop_requested
+                and status in ("success", "skipped")
+                and batch_output_is_incomplete(prior_entry, out_lists)
+            )
+            if stopped_mid_batch:
+                status = "partial"
+
+            node_run_entry: dict[str, Any] = {
                 "status": status,
                 "start_time": start_datetime.isoformat(),
                 "execution_time_ms": int((time.time() - start) * 1000),
@@ -1323,8 +1332,8 @@ async def _execute_loop(
                 "logs": (context.node_logs.pop(node["id"], None) if hasattr(context, "node_logs") else None),
                 "trace": pop_node_trace(context, node["id"]),
             }
-            if prior_skipped is not None:
-                context.run_data[node["id"]]["items_skipped_on_resume"] = prior_skipped
+            node_run_entry.update(merge_batch_meta_for_final_persist(prior_entry, out_lists))
+            context.run_data[node["id"]] = node_run_entry
             await persist_run_data(
                 context,
                 context.run_data,
@@ -1332,10 +1341,6 @@ async def _execute_loop(
                 record_checkpoint=(status in ("success", "skipped")),
             )
 
-            try:
-                context.stop_requested = bool(await read_stop(context))
-            except Exception:
-                pass
             if context.stop_requested:
                 return {"status": "stopped"}
 

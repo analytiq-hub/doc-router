@@ -10,6 +10,7 @@ import pytest
 
 import analytiq_data as ad
 from analytiq_data.docrouter_flows.nodes.ocr_node import DocRouterOcrNode
+from analytiq_data.flows.batch_meta import batch_output_is_incomplete, merge_batch_meta_for_final_persist
 from analytiq_data.flows.batch_progress import (
     make_batch_checkpoint_callback,
     persist_batch_node_partial,
@@ -75,3 +76,21 @@ async def test_make_batch_checkpoint_callback_none_for_sequential() -> None:
     ctx = _FakeContext()
     node = {"id": "ocr-1", "batch_size": 1}
     assert make_batch_checkpoint_callback(ctx, node, DocRouterOcrNode()) is None
+
+
+def test_batch_output_is_incomplete_and_merge_meta() -> None:
+    prior = {
+        "items_total": 10,
+        "items_completed": 6,
+        "items_skipped_on_resume": 2,
+    }
+    out_lists = [[object()] * 5]
+    assert batch_output_is_incomplete(prior, out_lists) is True
+    meta = merge_batch_meta_for_final_persist(prior, out_lists)
+    assert meta["items_total"] == 10
+    assert meta["items_completed"] == 6
+    assert meta["items_skipped_on_resume"] == 2
+
+    assert batch_output_is_incomplete(prior, [[object()] * 10]) is False
+    complete_meta = merge_batch_meta_for_final_persist(prior, [[object()] * 10])
+    assert complete_meta["items_completed"] == 10

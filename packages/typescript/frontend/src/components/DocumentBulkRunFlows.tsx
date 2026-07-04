@@ -10,6 +10,11 @@ import {
 import type { BulkAnalyzeFlowsResponse, FlowListItem, Tag } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
 import { pollFlowRerunUntilDone } from '@/utils/flowRerunPoll';
+import {
+  persistBulkFlowRerunModeToSession,
+  readBulkFlowRerunModeFromSession,
+  type BulkFlowRerunMode,
+} from '@/utils/bulkFlowRerunMode';
 import { toast } from 'react-hot-toast';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import SingleTagSelector from './SingleTagSelector';
@@ -18,9 +23,6 @@ const DEFAULT_PARALLEL_RUNS = 2;
 const MIN_PARALLEL_RUNS = 1;
 const MAX_PARALLEL_RUNS = 50;
 const BULK_FLOW_PARALLEL_RUNS_KEY = 'docrouter.bulkFlowParallelRuns';
-const BULK_FLOW_RERUN_MODE_KEY = 'docrouter.bulkFlowRerunMode';
-
-type BulkFlowRerunMode = 'force' | 'incomplete_only';
 
 function clampParallelRuns(value: number): number {
   const n = Math.floor(value);
@@ -40,22 +42,11 @@ function readParallelRunsFromSession(): number {
 }
 
 function readRerunModeFromSession(): BulkFlowRerunMode {
-  if (typeof window === 'undefined') return 'force';
-  try {
-    const raw = sessionStorage.getItem(BULK_FLOW_RERUN_MODE_KEY);
-    return raw === 'incomplete_only' ? 'incomplete_only' : 'force';
-  } catch {
-    return 'force';
-  }
+  return readBulkFlowRerunModeFromSession();
 }
 
 function persistRerunModeToSession(value: BulkFlowRerunMode): void {
-  if (typeof window === 'undefined') return;
-  try {
-    sessionStorage.setItem(BULK_FLOW_RERUN_MODE_KEY, value);
-  } catch {
-    // ignore
-  }
+  persistBulkFlowRerunModeToSession(value);
 }
 
 function persistParallelRunsToSession(value: number): void {
@@ -694,7 +685,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
                       id: 'flows-rerun-incomplete',
                       value: 'incomplete_only' as const,
                       title: 'Rerun incomplete only',
-                      hint: 'Resume the latest partial batch run and skip completed items',
+                      hint: 'Resume the latest partial or stopped batch run and skip completed items',
                     },
                   ] as const
                 ).map((opt) => (

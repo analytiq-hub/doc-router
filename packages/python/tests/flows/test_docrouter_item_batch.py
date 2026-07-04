@@ -145,6 +145,37 @@ def test_resolve_node_batch_size_defaults_and_clamps() -> None:
     assert resolve_node_batch_size({"item_concurrency": 5}) == 5
 
 
+@pytest.mark.asyncio
+async def test_map_flow_items_batch_fatal_error_skips_late_checkpoints() -> None:
+    checkpoint_calls: list[int] = []
+    fatal_calls: list[int] = []
+
+    async def fn(i: int) -> int:
+        if i == 1:
+            raise RuntimeError("fail")
+        await asyncio.sleep(0.03)
+        return i
+
+    async def on_fatal(completed: int, _total: int, _results: list, _exc: BaseException) -> None:
+        fatal_calls.append(completed)
+
+    async def on_checkpoint(completed: int, _total: int, _results: list) -> None:
+        checkpoint_calls.append(completed)
+
+    with pytest.raises(RuntimeError, match="fail"):
+        await map_flow_items_batch(
+            4,
+            fn,
+            batch_size=2,
+            continue_on_item_error=False,
+            on_fatal_item_error=on_fatal,
+            on_items_checkpoint=on_checkpoint,
+        )
+
+    assert fatal_calls == [1]
+    assert checkpoint_calls == []
+
+
 def test_validate_node_batch_size() -> None:
     assert validate_node_batch_size({}) == []
     assert validate_node_batch_size({"batch_size": 4}) == []

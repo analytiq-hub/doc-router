@@ -11,6 +11,7 @@ import { styled, alpha } from '@mui/material/styles';
 import type { FlowDocumentResult, FlowListItem } from '@docrouter/sdk';
 import { DocRouterOrgApi } from '@/utils/api';
 import { getStatusFromError, pollFlowRerunUntilDone } from '@/utils/flowRerunPoll';
+import { readBulkFlowRerunModeFromSession } from '@/utils/bulkFlowRerunMode';
 import { IoViewer } from '@/components/flows/IoViewer';
 
 interface Props {
@@ -330,11 +331,7 @@ const PDFFlowsSidebar = ({ organizationId, id, panelActive, onHasFlows }: Props)
     setRunningFlows((prev) => new Set(prev).add(flowId));
     try {
       const { execution_id: execId } = await docRouterOrgApi.rerunFlowForDocument(flowId, id, {
-        mode:
-          typeof window !== 'undefined' &&
-          sessionStorage.getItem('docrouter.bulkFlowRerunMode') === 'incomplete_only'
-            ? 'incomplete_only'
-            : 'force',
+        mode: readBulkFlowRerunModeFromSession(),
       });
       if (!execId?.trim() || !isCurrentRerun()) return;
 

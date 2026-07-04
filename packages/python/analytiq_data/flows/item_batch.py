@@ -93,6 +93,8 @@ async def map_flow_items_batch(
     async def maybe_checkpoint(completed: int) -> None:
         if on_items_checkpoint is None:
             return
+        if fatal_error is not None:
+            return
         if completed <= 0:
             return
         if completed % limit != 0 and completed != count:

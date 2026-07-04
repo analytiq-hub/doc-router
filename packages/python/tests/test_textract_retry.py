@@ -92,6 +92,11 @@ async def test_textract_retries_expired_token_on_put_object(monkeypatch):
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
+    async def _no_sleep(_t):
+        return None
+
+    monkeypatch.setattr(asyncio, "sleep", _no_sleep)
+
     expired_exc = ClientError(
         error_response={
             "Error": {

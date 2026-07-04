@@ -1,5 +1,9 @@
 import type { Node } from 'reactflow';
 import type { FlowRfNodeData } from './flowRf';
+import {
+  batchItemsCompletedFromEntry,
+  flowRunDataEntry,
+} from './flowRunDataEntry';
 
 /**
  * `run_data[node_id]` as produced by the flow engine (see `analytiq_data/flows/engine.py`).
@@ -13,27 +17,11 @@ export type NodeBatchProgress = {
   total: number;
 };
 
-type RunDataEntry = {
-  status?: EngineNodeRunStatus;
-  items_total?: number;
-  items_completed?: number;
-  data?: { main?: unknown[][] };
-};
-
-function runDataEntry(
-  runData: Record<string, unknown> | null | undefined,
-  nodeId: string,
-): RunDataEntry | undefined {
-  if (!runData) return undefined;
-  const rec = runData[nodeId];
-  return rec && typeof rec === 'object' ? (rec as RunDataEntry) : undefined;
-}
-
 export function getNodeRunStatusFromRunData(
   runData: Record<string, unknown> | null | undefined,
   nodeId: string,
 ): NodeRunStatusBadge {
-  const s = runDataEntry(runData, nodeId)?.status;
+  const s = flowRunDataEntry(runData, nodeId)?.status;
   if (s === 'success') return 'success';
   if (s === 'error') return 'error';
   if (s === 'skipped') return 'skipped';
@@ -47,7 +35,7 @@ export function getNodeBatchProgressFromRunData(
   runData: Record<string, unknown> | null | undefined,
   nodeId: string,
 ): NodeBatchProgress | null {
-  const rec = runDataEntry(runData, nodeId);
+  const rec = flowRunDataEntry(runData, nodeId);
   if (!rec) return null;
 
   const total =
@@ -56,16 +44,10 @@ export function getNodeBatchProgressFromRunData(
       : null;
   if (total == null) return null;
 
-  let completed = typeof rec.items_completed === 'number' ? rec.items_completed : null;
-  if (completed == null) {
-    const lane = rec.data?.main?.[0];
-    if (Array.isArray(lane)) {
-      completed = lane.length;
-    }
-  }
+  const completed = batchItemsCompletedFromEntry(rec);
   if (completed == null) return null;
 
-  const status = rec.status;
+  const status = rec.status as EngineNodeRunStatus | undefined;
   const showWhileRunning = status === 'running' || status === 'partial';
   const incomplete = completed < total;
   if (!showWhileRunning && !incomplete) return null;
