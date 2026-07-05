@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -15,7 +16,10 @@ from analytiq_data.flows.batch_progress import (
     run_data_has_resumable_batch,
 )
 from analytiq_data.flows.item_batch import FlowBatchItemErrors, map_flow_items_batch
-from analytiq_data.flows.resume import find_resumable_batch_execution
+from analytiq_data.flows.resume import (
+    _resume_candidate_scan_pipeline,
+    find_resumable_batch_execution,
+)
 
 from tests.conftest_utils import TEST_ORG_ID
 
@@ -169,3 +173,112 @@ async def test_find_resumable_batch_execution(test_db) -> None:
     )
     assert found is not None
     assert str(found["_id"]) == str(exec_oid)
+
+
+@pytest.mark.asyncio
+async def test_find_resumable_batch_execution_scans_lightweight_then_fetches_full() -> None:
+    """Candidate scan should not load full run_data until a match is found."""
+
+    org_id = TEST_ORG_ID
+    flow_id = str(ObjectId())
+    doc_id = str(ObjectId())
+    match_oid = ObjectId()
+    full_doc = {
+        "_id": match_oid,
+        "organization_id": org_id,
+        "flow_id": flow_id,
+        "flow_revid": str(ObjectId()),
+        "status": "error",
+        "completed_nodes": ["ocr1"],
+        "run_data": {
+            "ocr1": {
+                "status": "error",
+                "items_total": 10,
+                "items_completed": 4,
+                "data": {"main": [[{"json": {"i": 0}}]]},
+            }
+        },
+    }
+
+    class _FakeCursor:
+        def __init__(self, docs):
+            self._docs = list(docs)
+
+        def __aiter__(self):
+            self._iter = iter(self._docs)
+            return self
+
+        async def __anext__(self):
+            try:
+                return next(self._iter)
+            except StopIteration:
+                raise StopAsyncIteration from None
+
+    class _FakeFlowExecutions:
+        def __init__(self):
+            self.aggregate_calls: list[list[dict[str, Any]]] = []
+            self.find_one_calls: list[dict[str, Any]] = []
+
+        def aggregate(self, pipeline):
+            self.aggregate_calls.append(pipeline)
+            return _FakeCursor(
+                [
+                    {
+                        "_id": ObjectId(),
+                        "completed_nodes": ["t1"],
+                        "run_data": {
+                            "ocr1": {
+                                "status": "success",
+                                "items_total": 10,
+                                "items_completed": 10,
+                            }
+                        },
+                    },
+                    {
+                        "_id": match_oid,
+                        "completed_nodes": ["ocr1"],
+                        "run_data": {
+                            "ocr1": {
+                                "status": "error",
+                                "items_total": 10,
+                                "items_completed": 4,
+                            }
+                        },
+                    },
+                ]
+            )
+
+        async def find_one(self, query, *_args, **_kwargs):
+            self.find_one_calls.append(query)
+            if query.get("_id") == match_oid:
+                return dict(full_doc)
+            return None
+
+    class _FakeDb:
+        def __init__(self):
+            self.flow_executions = _FakeFlowExecutions()
+
+    db = _FakeDb()
+    found = await find_resumable_batch_execution(
+        db,
+        organization_id=org_id,
+        flow_id=flow_id,
+        document_id=doc_id,
+    )
+
+    assert found == full_doc
+    assert len(db.flow_executions.aggregate_calls) == 1
+    pipeline = db.flow_executions.aggregate_calls[0]
+    assert pipeline[0]["$match"]["completed_nodes"] == {"$exists": True, "$ne": []}
+    project = pipeline[-1]["$project"]
+    projected_fields = project["run_data"]["$arrayToObject"]["$map"]["in"]["v"]
+    assert set(projected_fields) == {"status", "items_total", "items_completed"}
+    assert db.flow_executions.find_one_calls == [{"_id": match_oid}]
+
+
+def test_resume_candidate_scan_pipeline_projects_batch_counters_only() -> None:
+    pipeline = _resume_candidate_scan_pipeline({"flow_id": "f1"}, limit=5)
+    assert pipeline[1] == {"$sort": {"started_at": -1}}
+    assert pipeline[2] == {"$limit": 5}
+    project = pipeline[3]["$project"]
+    assert set(project) == {"_id", "completed_nodes", "run_data"}

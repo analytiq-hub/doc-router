@@ -13,6 +13,56 @@ logger = logging.getLogger(__name__)
 
 TERMINAL_RESUME_SOURCE_STATUSES = frozenset({"stopped", "error", "interrupted"})
 
+_RESUME_CANDIDATE_SCAN_LIMIT = 20
+
+
+def _resume_candidate_match(
+    *,
+    organization_id: str,
+    flow_id: str,
+    document_id: str,
+) -> dict[str, Any]:
+    return {
+        "organization_id": organization_id,
+        "flow_id": flow_id,
+        "trigger.document_id": document_id,
+        "status": {"$in": sorted(TERMINAL_RESUME_SOURCE_STATUSES)},
+        "completed_nodes": {"$exists": True, "$ne": []},
+        "$or": [{"resumed_by": None}, {"resumed_by": {"$exists": False}}],
+    }
+
+
+def _resume_candidate_scan_pipeline(match: dict[str, Any], *, limit: int) -> list[dict[str, Any]]:
+    """Return only batch-node counters needed for resumability (omit large ``data`` lanes)."""
+
+    return [
+        {"$match": match},
+        {"$sort": {"started_at": -1}},
+        {"$limit": limit},
+        {
+            "$project": {
+                "_id": 1,
+                "completed_nodes": 1,
+                "run_data": {
+                    "$arrayToObject": {
+                        "$map": {
+                            "input": {"$objectToArray": {"$ifNull": ["$run_data", {}]}},
+                            "as": "node",
+                            "in": {
+                                "k": "$$node.k",
+                                "v": {
+                                    "status": "$$node.v.status",
+                                    "items_total": "$$node.v.items_total",
+                                    "items_completed": "$$node.v.items_completed",
+                                },
+                            },
+                        }
+                    }
+                },
+            }
+        },
+    ]
+
 
 def revision_resume_on_restart(revision: dict[str, Any] | None) -> bool:
     if not revision:
@@ -134,22 +184,21 @@ async def find_resumable_batch_execution(
 
     from analytiq_data.flows.batch_progress import run_data_has_resumable_batch
 
-    cursor = db.flow_executions.find(
-        {
-            "organization_id": organization_id,
-            "flow_id": flow_id,
-            "trigger.document_id": document_id,
-            "status": {"$in": sorted(TERMINAL_RESUME_SOURCE_STATUSES)},
-            "$or": [{"resumed_by": None}, {"resumed_by": {"$exists": False}}],
-        },
-        sort=[("started_at", -1)],
-        limit=20,
+    match = _resume_candidate_match(
+        organization_id=organization_id,
+        flow_id=flow_id,
+        document_id=document_id,
     )
-    async for doc in cursor:
+    pipeline = _resume_candidate_scan_pipeline(match, limit=_RESUME_CANDIDATE_SCAN_LIMIT)
+    async for doc in db.flow_executions.aggregate(pipeline):
         if not list(doc.get("completed_nodes") or []):
             continue
-        if run_data_has_resumable_batch(doc.get("run_data")):
-            return doc
+        if not run_data_has_resumable_batch(doc.get("run_data")):
+            continue
+        source_oid = doc.get("_id")
+        if source_oid is None:
+            continue
+        return await db.flow_executions.find_one({"_id": source_oid})
     return None
 
 

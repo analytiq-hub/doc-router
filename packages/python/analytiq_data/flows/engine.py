@@ -954,6 +954,45 @@ def _coerce_main_to_output_slots(main: list[Any], outputs_count: int) -> list[li
     return out
 
 
+async def offload_flow_items_binary_refs(
+    items: list[Any],
+    *,
+    execution_id: str,
+    node_id: str,
+    base_lane_index: int,
+    analytiq_client: Any,
+) -> None:
+    """Upload inline ``BinaryRef.data`` for a contiguous slice of one output lane."""
+
+    for offset, item in enumerate(items):
+        if not isinstance(item, ad.flows.FlowItem):
+            continue
+        lane_index = base_lane_index + offset
+        for prop, ref in (item.binary or {}).items():
+            if not isinstance(ref, ad.flows.BinaryRef):
+                continue
+            if ref.data is not None and ref.storage_id:
+                ref.data = None
+                continue
+            if ref.data is None or ref.storage_id:
+                continue
+            key = f"{execution_id}/{node_id}/{lane_index}/{prop}"
+            ref.file_size = len(ref.data)
+            await ad.mongodb.blob.save_blob_async(
+                analytiq_client,
+                bucket="flow_blobs",
+                key=key,
+                blob=ref.data,
+                metadata={
+                    "mime_type": ref.mime_type,
+                    "file_name": ref.file_name or "",
+                    "file_size": ref.file_size,
+                },
+            )
+            ref.storage_id = f"flow_blobs:{key}"
+            ref.data = None
+
+
 async def _offload_binary_refs(
     run_data: dict[str, Any],
     execution_id: str,
@@ -979,32 +1018,13 @@ async def _offload_binary_refs(
         for slot in main:
             if not isinstance(slot, list):
                 continue
-            for item_idx, item in enumerate(slot):
-                if not isinstance(item, ad.flows.FlowItem):
-                    continue
-                for prop, ref in (item.binary or {}).items():
-                    if not isinstance(ref, ad.flows.BinaryRef):
-                        continue
-                    if ref.data is not None and ref.storage_id:
-                        ref.data = None
-                        continue
-                    if ref.data is None or ref.storage_id:
-                        continue
-                    key = f"{execution_id}/{node_id}/{item_idx}/{prop}"
-                    ref.file_size = len(ref.data)
-                    await ad.mongodb.blob.save_blob_async(
-                        analytiq_client,
-                        bucket="flow_blobs",
-                        key=key,
-                        blob=ref.data,
-                        metadata={
-                            "mime_type": ref.mime_type,
-                            "file_name": ref.file_name or "",
-                            "file_size": ref.file_size,
-                        },
-                    )
-                    ref.storage_id = f"flow_blobs:{key}"
-                    ref.data = None
+            await offload_flow_items_binary_refs(
+                slot,
+                execution_id=execution_id,
+                node_id=str(node_id),
+                base_lane_index=0,
+                analytiq_client=analytiq_client,
+            )
 
 
 async def persist_run_data(

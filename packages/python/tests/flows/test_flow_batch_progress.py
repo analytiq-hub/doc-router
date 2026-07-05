@@ -6,6 +6,8 @@ from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import AsyncMock
 
+from bson import ObjectId
+
 import pytest
 
 import analytiq_data as ad
@@ -53,6 +55,64 @@ async def test_persist_batch_node_partial_writes_full_items(monkeypatch: pytest.
     persist_mock.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_persist_batch_node_partial_checkpoint_appends_mongo_delta(monkeypatch: pytest.MonkeyPatch) -> None:
+    saved: dict[str, Any] = {}
+
+    class _FakeFlowExecutions:
+        async def update_one(self, _filter, update):
+            saved["update"] = update
+
+    class _FakeDb:
+        flow_executions = _FakeFlowExecutions()
+
+    monkeypatch.setattr(ad.common, "get_async_db", lambda _client: _FakeDb())
+    monkeypatch.setattr(
+        "analytiq_data.flows.batch_progress.offload_flow_items_binary_refs",
+        AsyncMock(),
+    )
+
+    ctx = _FakeContext(analytiq_client=object(), execution_id=str(ObjectId()))
+    wave0 = [
+        ad.flows.FlowItem(json={"i": 0}, binary={}, meta={"item_index": 0}),
+        ad.flows.FlowItem(json={"i": 1}, binary={}, meta={"item_index": 1}),
+    ]
+    results: list[Any | None] = list(wave0) + [None, None]
+
+    count0 = await persist_batch_node_partial(
+        ctx,
+        "ocr-1",
+        items_total=4,
+        results=results,
+        mongo_delta_from=0,
+    )
+    assert count0 == 2
+    first_update = saved["update"]
+    assert "$set" in first_update
+    assert "run_data.ocr-1.data" in first_update["$set"]
+    assert "$push" not in first_update
+
+    wave1 = wave0 + [
+        ad.flows.FlowItem(json={"i": 2}, binary={}, meta={"item_index": 2}),
+        ad.flows.FlowItem(json={"i": 3}, binary={}, meta={"item_index": 3}),
+    ]
+    count1 = await persist_batch_node_partial(
+        ctx,
+        "ocr-1",
+        items_total=4,
+        results=wave1,
+        mongo_delta_from=count0,
+    )
+    assert count1 == 4
+    second_update = saved["update"]
+    assert "$push" in second_update
+    pushed = second_update["$push"]["run_data.ocr-1.data.main.0"]["$each"]
+    assert len(pushed) == 2
+    assert pushed[0]["json"]["i"] == 2
+    assert pushed[1]["json"]["i"] == 3
+    assert "run_data.ocr-1.data" not in second_update["$set"]
+
+
 def test_node_uses_batch_partial_persist_gate() -> None:
     ocr = DocRouterOcrNode()
     assert node_uses_batch_partial_persist({"batch_size": 32}, ocr) is True
@@ -71,8 +131,8 @@ def test_continue_on_item_error_for_node_respects_on_error_setting() -> None:
 @pytest.mark.asyncio
 async def test_make_batch_checkpoint_callback_throttles(monkeypatch: pytest.MonkeyPatch) -> None:
     ctx = _FakeContext(analytiq_client=object())
-    persist_mock = AsyncMock()
-    monkeypatch.setattr("analytiq_data.flows.batch_progress.persist_run_data", persist_mock)
+    delta_mock = AsyncMock()
+    monkeypatch.setattr("analytiq_data.flows.batch_progress._persist_batch_node_delta_mongo", delta_mock)
 
     node = {"id": "ocr-1", "batch_size": 4}
     cb = make_batch_checkpoint_callback(ctx, node, DocRouterOcrNode(), min_interval_secs=10.0)
@@ -81,7 +141,7 @@ async def test_make_batch_checkpoint_callback_throttles(monkeypatch: pytest.Monk
     results: list[int | None] = [1, 2, 3, 4]
     await cb(4, 4, results)
     await cb(4, 4, results)
-    persist_mock.assert_awaited_once()
+    delta_mock.assert_awaited_once()
 
 
 @pytest.mark.asyncio

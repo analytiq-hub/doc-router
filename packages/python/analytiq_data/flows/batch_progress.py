@@ -7,9 +7,11 @@ from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Any, TypeVar
 
+from bson import ObjectId
+
 import analytiq_data as ad
 
-from .engine import persist_run_data
+from .engine import _bson_serialize_value, offload_flow_items_binary_refs, persist_run_data
 from .node_settings import node_uses_batch_partial_persist
 
 T = TypeVar("T")
@@ -41,6 +43,17 @@ def _lane_main0(entry: dict[str, Any]) -> list[Any]:
         return []
     lane = main[0]
     return list(lane) if isinstance(lane, list) else []
+
+
+def prior_completed_count_from_entry(entry: Any) -> int:
+    """How many completed items are already stored for a batch node entry."""
+
+    if not isinstance(entry, dict):
+        return 0
+    items_completed = entry.get("items_completed")
+    if isinstance(items_completed, int):
+        return items_completed
+    return len(_lane_main0(entry))
 
 
 def batch_run_entry_is_resumable(entry: Any) -> bool:
@@ -107,28 +120,19 @@ def batch_items_remaining(entry: dict[str, Any]) -> int | None:
     return None
 
 
-async def persist_batch_node_partial(
+def _build_batch_node_entry(
     context: Any,
     node_id: str,
     *,
     items_total: int,
-    results: list[Any | None],
-    status: str = "running",
-    items_failed: int | None = None,
-    error: dict[str, Any] | None = None,
-    items_skipped_on_resume: int | None = None,
-) -> None:
-    """
-    Write partial batch output into ``context.run_data[node_id]`` and persist to Mongo.
-
-    Includes the full list of completed items in ``data.main[0]`` (never counters-only).
-    """
-
-    completed = completed_items_from_results(results)
-    existing = context.run_data.get(node_id)
-    existing_dict = existing if isinstance(existing, dict) else {}
+    completed: list[Any],
+    status: str,
+    existing_dict: dict[str, Any],
+    items_failed: int | None,
+    error: dict[str, Any] | None,
+    items_skipped_on_resume: int | None,
+) -> dict[str, Any]:
     start_time = existing_dict.get("start_time") or datetime.now(UTC).isoformat()
-
     entry: dict[str, Any] = {
         "status": status,
         "start_time": start_time,
@@ -145,14 +149,117 @@ async def persist_batch_node_partial(
         entry["items_failed"] = items_failed
     if items_skipped_on_resume is not None:
         entry["items_skipped_on_resume"] = items_skipped_on_resume
+    return entry
+
+
+async def _persist_batch_node_delta_mongo(
+    context: Any,
+    node_id: str,
+    entry: dict[str, Any],
+    delta_items: list[Any],
+    *,
+    prior_completed_count: int,
+) -> None:
+    """Append only new completed items to Mongo instead of rewriting the full lane."""
+
+    if context.analytiq_client is None:
+        return
+
+    db = ad.common.get_async_db(context.analytiq_client)
+    if delta_items:
+        await offload_flow_items_binary_refs(
+            delta_items,
+            execution_id=context.execution_id,
+            node_id=node_id,
+            base_lane_index=prior_completed_count,
+            analytiq_client=context.analytiq_client,
+        )
+
+    node_path = f"run_data.{node_id}"
+    set_patch: dict[str, Any] = {
+        f"{node_path}.status": entry["status"],
+        f"{node_path}.start_time": entry["start_time"],
+        f"{node_path}.execution_index": entry["execution_index"],
+        f"{node_path}.items_total": entry["items_total"],
+        f"{node_path}.items_completed": entry["items_completed"],
+        "last_heartbeat_at": datetime.now(UTC),
+        "last_node_executed": node_id,
+    }
+    for key in ("error", "source", "logs", "trace", "items_failed", "items_skipped_on_resume"):
+        if key in entry:
+            set_patch[f"{node_path}.{key}"] = entry[key]
+
+    update: dict[str, Any] = {"$set": set_patch}
+    if delta_items:
+        serialized_delta = [_bson_serialize_value(x) for x in delta_items]
+        if prior_completed_count == 0:
+            set_patch[f"{node_path}.data"] = {"main": [serialized_delta]}
+        else:
+            update["$push"] = {f"{node_path}.data.main.0": {"$each": serialized_delta}}
+
+    await db.flow_executions.update_one(
+        {"_id": ObjectId(context.execution_id)},
+        update,
+    )
+
+
+async def persist_batch_node_partial(
+    context: Any,
+    node_id: str,
+    *,
+    items_total: int,
+    results: list[Any | None],
+    status: str = "running",
+    items_failed: int | None = None,
+    error: dict[str, Any] | None = None,
+    items_skipped_on_resume: int | None = None,
+    mongo_delta_from: int | None = None,
+) -> int:
+    """
+    Write partial batch output into ``context.run_data[node_id]`` and persist to Mongo.
+
+    Includes the full list of completed items in ``data.main[0]`` in memory (never counters-only).
+
+    When ``mongo_delta_from`` is set (checkpoint path), only items from that index onward in the
+    completed list are appended to Mongo. Returns ``len(completed)`` so callers can pass it as
+    the next ``mongo_delta_from``.
+    """
+
+    completed = completed_items_from_results(results)
+    existing = context.run_data.get(node_id)
+    existing_dict = existing if isinstance(existing, dict) else {}
+    entry = _build_batch_node_entry(
+        context,
+        node_id,
+        items_total=items_total,
+        completed=completed,
+        status=status,
+        existing_dict=existing_dict,
+        items_failed=items_failed,
+        error=error,
+        items_skipped_on_resume=items_skipped_on_resume,
+    )
 
     context.run_data[node_id] = entry
-    await persist_run_data(
-        context,
-        context.run_data,
-        last_node_executed=node_id,
-        record_checkpoint=False,
-    )
+
+    if mongo_delta_from is not None:
+        delta_items = completed[mongo_delta_from:]
+        await _persist_batch_node_delta_mongo(
+            context,
+            node_id,
+            entry,
+            delta_items,
+            prior_completed_count=mongo_delta_from,
+        )
+    else:
+        await persist_run_data(
+            context,
+            context.run_data,
+            last_node_executed=node_id,
+            record_checkpoint=False,
+        )
+
+    return len(completed)
 
 
 def make_batch_checkpoint_callback(
@@ -172,19 +279,21 @@ def make_batch_checkpoint_callback(
 
     node_id = str(node["id"])
     last_persist_at = 0.0
+    prior_completed = prior_completed_count_from_entry(context.run_data.get(node_id))
 
     async def on_checkpoint(_completed: int, total: int, results: list[T | None]) -> None:
-        nonlocal last_persist_at
+        nonlocal last_persist_at, prior_completed
         now = time.monotonic()
         if last_persist_at and (now - last_persist_at) < min_interval_secs:
             return
         last_persist_at = now
-        await persist_batch_node_partial(
+        prior_completed = await persist_batch_node_partial(
             context,
             node_id,
             items_total=total,
             results=results,
             status="running",
+            mongo_delta_from=prior_completed,
         )
 
     return on_checkpoint
