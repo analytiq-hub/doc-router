@@ -38,6 +38,15 @@ async def get_current_version(db) -> int:
     )
     return migration_doc["version"] if migration_doc else 0
 
+
+async def schema_migrations_pending(db, target_version: int | None = None) -> bool:
+    """True when the database schema version is behind the code target (no lock)."""
+    if target_version is None:
+        target_version = len(MIGRATIONS)
+    current_version = await get_current_version(db)
+    return current_version < target_version
+
+
 async def _acquire_migration_lock(db, holder: str) -> bool:
     """Try once to acquire the distributed migration lock. Returns True on success."""
     now = datetime.now(UTC)

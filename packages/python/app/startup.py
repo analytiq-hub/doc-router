@@ -12,45 +12,55 @@ import analytiq_data as ad
 
 logger = logging.getLogger(__name__)
 
-async def setup_database(analytiq_client):
-    """Set up database and run migrations"""
+
+async def run_pending_schema_migrations_if_needed(analytiq_client) -> None:
+    """
+    Uvicorn bootstrap path: run ``run_migrations`` only when schema is behind.
+
+    Deploy-time reconcile and index housekeeping are owned by ``migrate.py`` /
+    the compose migrate service. This helper avoids migration lock contention
+    across Uvicorn workers when the schema is already current.
+    """
+    db = analytiq_client.mongodb_async[analytiq_client.env]
+    if not await ad.migrations.schema_migrations_pending(db):
+        return
     try:
         await ad.migrations.run_migrations(analytiq_client)
     except Exception as e:
         logger.error(f"Database migration failed: {e}")
         raise
 
+
 async def setup_admin(analytiq_client):
     """
-    Create admin user during application startup if it doesn't exist
+    Create admin user during application startup if it doesn't exist.
+
+    Migrations run here only when the admin user is missing and the schema is
+    behind (local dev / first bootstrap). After bootstrap, use migrate.py or
+    the compose migrate job for deploy-time migrations and index reconcile.
     """
-    # Get environment
     env = analytiq_client.env
 
-    # Get admin email and password from environment variables
     admin_email = os.getenv("ADMIN_EMAIL")
     admin_password = os.getenv("ADMIN_PASSWORD")
-    
+
     if not admin_email or not admin_password:
         return
 
-    # Run migrations
-    await setup_database(analytiq_client)
-
     try:
         db = analytiq_client.mongodb_async[env]
-        
-        # Initialize LLM models
-        await ad.llm.providers.setup_llm_providers(analytiq_client)
-        
         users = db.users
-        
-        # Check if admin already exists
-        existing_admin = await users.find_one({"email": admin_email})
-        if existing_admin:
+
+        if await users.find_one({"email": admin_email}):
             return
-            
-        # Create admin user with bcrypt hash
+
+        await run_pending_schema_migrations_if_needed(analytiq_client)
+
+        if await users.find_one({"email": admin_email}):
+            return
+
+        await ad.llm.providers.setup_llm_providers(analytiq_client)
+
         hashed_password = hashpw(admin_password.encode(), gensalt(12))
         result = await users.insert_one({
             "email": admin_email,
@@ -60,10 +70,9 @@ async def setup_admin(analytiq_client):
             "email_verified": True,
             "created_at": datetime.now(UTC)
         })
-        
+
         admin_id = str(result.inserted_id)
-        
-        # Create organization for admin
+
         await db.organizations.insert_one({
             "_id": ObjectId(admin_id),
             "name": "Admin",
@@ -76,10 +85,11 @@ async def setup_admin(analytiq_client):
             "updated_at": datetime.now(UTC),
             "has_seen_tour": False
         })
-        
+
         logger.info(f"Created default admin user: {admin_email}")
     except Exception as e:
         logger.error(f"Failed to create default admin: {e}")
+
 
 async def setup_api_creds(analytiq_client):
     """
@@ -88,7 +98,7 @@ async def setup_api_creds(analytiq_client):
     try:
         env = analytiq_client.env
         db = analytiq_client.mongodb_async[env]
-        
+
         # Require configured admin email so we only seed after initial admin bootstrap.
         admin_email = os.getenv("ADMIN_EMAIL")
         if not admin_email:

@@ -96,6 +96,15 @@ cleanup_stripe_listen() {
 cleanup_next_server
 cleanup_uvicorn
 cleanup_stripe_listen
+
+# Deploy-time migrations + index reconcile once per dev session (not on uvicorn --reload).
+echo "Running database migrations..."
+(
+  cd "${PROJECT_ROOT}/packages/python" &&
+  source "${VENV_PATH}/bin/activate" &&
+  python3 migrate.py
+) || exit 1
+
 # Run all processes (workers run inside uvicorn via FastAPI lifespan)
 run_with_color "uvicorn app.main:app --reload --host 0.0.0.0 --port 8000" "$RED" "FASTAPI" "packages/python"
 run_with_color "npm run dev" "$MAGENTA" "NEXTJS" "packages/typescript/frontend"
