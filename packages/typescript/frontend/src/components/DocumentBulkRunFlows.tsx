@@ -16,6 +16,7 @@ import {
   type BulkFlowRerunMode,
 } from '@/utils/bulkFlowRerunMode';
 import { toast } from 'react-hot-toast';
+import Link from 'next/link';
 import { ChevronRightIcon } from '@heroicons/react/24/outline';
 import SingleTagSelector from './SingleTagSelector';
 
@@ -826,12 +827,18 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
                         key={`${execution.flowId}-${execution.documentId}`}
                         className="flex items-center justify-between text-xs"
                       >
-                        <span className="text-gray-700 truncate max-w-[200px]">
+                        <Link
+                          href={`/orgs/${organizationId}/docs/${execution.documentId}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="min-w-0 truncate max-w-[200px] text-gray-700 hover:text-blue-700 hover:underline"
+                          title={execution.documentName}
+                        >
                           {execution.documentName}
                           {execution.reason ? (
                             <span className="text-gray-400 ml-1">({execution.reason})</span>
                           ) : null}
-                        </span>
+                        </Link>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           {getStatusIcon(execution.status)}
                           <span
