@@ -99,6 +99,110 @@ async def test_execute_pairs_ocr_pages_by_index() -> None:
 
 
 @pytest.mark.asyncio
+async def test_execute_pairs_ocr_by_meta_item_index_when_lane_is_compacted() -> None:
+    main_items = [
+        ad.flows.FlowItem(json={"i": 0}, binary={}, meta={"item_index": 0}, paired_item=0),
+        ad.flows.FlowItem(json={"i": 1}, binary={}, meta={"item_index": 1}, paired_item=1),
+        ad.flows.FlowItem(json={"i": 2}, binary={}, meta={"item_index": 2}, paired_item=2),
+    ]
+    ocr_items = [
+        ad.flows.FlowItem(
+            json={"ocr_pages": ["pages-0"]},
+            binary={},
+            meta={"item_index": 0},
+            paired_item=0,
+        ),
+        ad.flows.FlowItem(
+            json={"ocr_pages": ["pages-2"]},
+            binary={},
+            meta={"item_index": 2},
+            paired_item=2,
+        ),
+    ]
+    seen: dict[int, list[str] | None] = {}
+
+    async def _record(_client, _org, *, prompt_id, item_json, ocr_pages):
+        seen[int(item_json["i"])] = ocr_pages
+        return {"ok": True}
+
+    with patch(
+        "analytiq_data.docrouter_flows.nodes.llm_node.flow_services.run_flow_llm_run",
+        new=AsyncMock(side_effect=_record),
+    ):
+        node = DocRouterLlmRunNode()
+        await node.execute(
+            _ctx(),
+            {"id": "llm1", "parameters": {"prompt_id": "prompt1"}},
+            [main_items, ocr_items],
+        )
+
+    assert seen[0] == ["pages-0"]
+    assert seen[1] is None
+    assert seen[2] == ["pages-2"]
+
+
+@pytest.mark.asyncio
+async def test_execute_output_item_index_matches_batch_position_for_resume() -> None:
+    main_items = [
+        ad.flows.FlowItem(json={"i": 0}, binary={}, meta={"item_index": 99}, paired_item=None),
+        ad.flows.FlowItem(json={"i": 1}, binary={}, meta={"item_index": 99}, paired_item=None),
+    ]
+
+    with patch(
+        "analytiq_data.docrouter_flows.nodes.llm_node.flow_services.run_flow_llm_run",
+        new=AsyncMock(return_value={"ok": True}),
+    ):
+        node = DocRouterLlmRunNode()
+        out = await node.execute(
+            _ctx(),
+            {"id": "llm1", "parameters": {"prompt_id": "prompt1"}},
+            [main_items, []],
+        )
+
+    assert out[0][0].meta["item_index"] == 0
+    assert out[0][1].meta["item_index"] == 1
+
+
+@pytest.mark.asyncio
+async def test_execute_resume_does_not_substitute_stale_results_by_upstream_meta() -> None:
+    main_items = [
+        ad.flows.FlowItem(json={"i": 0}, binary={}, meta={"item_index": 99}, paired_item=None),
+        ad.flows.FlowItem(json={"i": 1}, binary={}, meta={"item_index": 99}, paired_item=None),
+    ]
+    cached_0 = ad.flows.FlowItem(
+        json={"prompt_id": "prompt1", "llm_result": {"cached": 0}},
+        binary={},
+        meta={"item_index": 0},
+        paired_item=None,
+    )
+    ctx = _ctx()
+    ctx.run_data = {
+        "llm1": {
+            "status": "partial",
+            "items_total": 2,
+            "items_completed": 1,
+            "data": {"main": [[cached_0]]},
+        }
+    }
+
+    with patch(
+        "analytiq_data.docrouter_flows.nodes.llm_node.flow_services.run_flow_llm_run",
+        new=AsyncMock(return_value={"fresh": 1}),
+    ) as mock_run:
+        node = DocRouterLlmRunNode()
+        out = await node.execute(
+            ctx,
+            {"id": "llm1", "parameters": {"prompt_id": "prompt1"}},
+            [main_items, []],
+        )
+
+    mock_run.assert_awaited_once()
+    assert mock_run.await_args.kwargs["item_json"]["i"] == 1
+    assert out[0][0].json["llm_result"] == {"cached": 0}
+    assert out[0][1].json["llm_result"] == {"fresh": 1}
+
+
+@pytest.mark.asyncio
 async def test_run_flow_llm_run_builds_messages_and_records_spu(monkeypatch) -> None:
     from analytiq_data.docrouter_flows import services as flow_services
 

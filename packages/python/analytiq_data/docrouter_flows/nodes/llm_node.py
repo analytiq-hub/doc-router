@@ -73,13 +73,26 @@ class DocRouterLlmRunNode:
         resume_items = load_batch_resume_items(context.run_data.get(node_id))
         items_skipped_on_resume = len(resume_items) if resume_items else None
 
+        ocr_by_index: dict[int, "ad.flows.FlowItem"] = {}
+        for ocr_item in ocr_items:
+            ocr_meta = ocr_item.meta if isinstance(ocr_item.meta, dict) else {}
+            raw_ix = ocr_meta.get("item_index")
+            if isinstance(raw_ix, int):
+                ocr_by_index[raw_ix] = ocr_item
+
         async def _run_item(item_index: int) -> "ad.flows.FlowItem":
             if item_index in resume_items:
                 return resume_items[item_index]
             it = main_items[item_index]
             ocr_pages: list[str] | None = None
-            if item_index < len(ocr_items):
-                ocr_item = ocr_items[item_index]
+            ocr_item = ocr_by_index.get(item_index)
+            if ocr_item is None and item_index < len(ocr_items):
+                candidate = ocr_items[item_index]
+                cand_meta = candidate.meta if isinstance(candidate.meta, dict) else {}
+                cand_ix = cand_meta.get("item_index")
+                if not isinstance(cand_ix, int) or cand_ix == item_index:
+                    ocr_item = candidate
+            if ocr_item is not None:
                 raw_pages = ocr_item.json.get("ocr_pages")
                 if isinstance(raw_pages, list):
                     ocr_pages = [str(page) for page in raw_pages]
@@ -98,8 +111,7 @@ class DocRouterLlmRunNode:
                 binary["pdf"] = pdf_ref
 
             meta = dict(it.meta) if isinstance(it.meta, dict) else {}
-            if "item_index" not in meta:
-                meta["item_index"] = item_index
+            meta["item_index"] = item_index
 
             return ad.flows.FlowItem(
                 json={"prompt_id": prompt_id, "llm_result": llm_result},

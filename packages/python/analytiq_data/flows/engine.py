@@ -24,7 +24,11 @@ from jsonschema import Draft7Validator
 import analytiq_data as ad
 
 from .errors import FlowValidationError, node_error_envelope
-from .batch_meta import batch_output_is_incomplete, merge_batch_meta_for_final_persist
+from .batch_meta import (
+    batch_output_is_incomplete,
+    merge_batch_meta_for_final_persist,
+    partial_main_from_entry,
+)
 from .node_name import node_name
 from .flow_settings import validate_flow_settings
 from .node_settings import validate_node_batch_size
@@ -1250,25 +1254,25 @@ async def _execute_loop(
                             include_stack=include_stack,
                         )
                         if on_error == "continue":
-                            out_lists = [
-                                [_error_item(node["id"], node_label, msg)]
-                            ] + _empty_outputs(outputs_count - 1)
+                            partial_main = partial_main_from_entry(context.run_data.get(node["id"]))
+                            if partial_main is None:
+                                try:
+                                    if any(isinstance(slot, list) and slot for slot in combined):
+                                        partial_main = combined
+                                except NameError:
+                                    pass
+                            if partial_main is not None:
+                                out_lists = _coerce_main_to_output_slots(partial_main, outputs_count)
+                            else:
+                                out_lists = [
+                                    [_error_item(node["id"], node_label, msg)]
+                                ] + _empty_outputs(outputs_count - 1)
                             status = "error"
                         else:
                             partial = context.run_data.get(node["id"])
-                            partial_main: list[list[Any]] | None = None
+                            partial_main = partial_main_from_entry(partial)
                             partial_meta: dict[str, Any] = {}
                             if isinstance(partial, dict):
-                                data = partial.get("data")
-                                if isinstance(data, dict):
-                                    main = data.get("main")
-                                    if (
-                                        isinstance(main, list)
-                                        and main
-                                        and isinstance(main[0], list)
-                                        and main[0]
-                                    ):
-                                        partial_main = main
                                 for key in ("items_total", "items_completed", "items_failed", "items_skipped_on_resume"):
                                     if key in partial:
                                         partial_meta[key] = partial[key]

@@ -7,7 +7,7 @@ import logging
 
 import pytest
 
-from analytiq_data.flows.item_batch import map_flow_items_batch
+from analytiq_data.flows.item_batch import FlowBatchItemErrors, map_flow_items_batch
 from analytiq_data.flows.node_settings import (
     FLOW_NODE_BATCH_SIZE_DEFAULT,
     FLOW_NODE_BATCH_SIZE_MAX,
@@ -174,6 +174,100 @@ async def test_map_flow_items_batch_fatal_error_skips_late_checkpoints() -> None
 
     assert fatal_calls == [1]
     assert checkpoint_calls == []
+
+
+@pytest.mark.asyncio
+async def test_map_flow_items_batch_stop_supersedes_item_errors_on_continue() -> None:
+    """Cooperative stop must not be upgraded to a hard error when items also failed."""
+
+    failed = False
+
+    async def fn(i: int) -> int:
+        nonlocal failed
+        if i == 0:
+            failed = True
+            raise ValueError("boom")
+        return i
+
+    async def should_stop() -> bool:
+        return failed
+
+    with pytest.raises(FlowBatchItemErrors):
+        await map_flow_items_batch(3, fn, batch_size=1, continue_on_item_error=True)
+
+    results = await map_flow_items_batch(
+        3,
+        fn,
+        batch_size=1,
+        should_stop=should_stop,
+        continue_on_item_error=True,
+    )
+
+    assert results == [None, None, None]
+
+
+@pytest.mark.asyncio
+async def test_map_flow_items_batch_checkpoint_error_stops_and_invokes_fatal() -> None:
+    processed: list[int] = []
+    fatal_calls: list[tuple[int, BaseException]] = []
+
+    async def fn(i: int) -> int:
+        processed.append(i)
+        return i
+
+    async def on_checkpoint(_completed: int, _total: int, _results: list) -> None:
+        raise ConnectionError("mongo down")
+
+    async def on_fatal(completed: int, _total: int, _results: list, exc: BaseException) -> None:
+        fatal_calls.append((completed, exc))
+
+    with pytest.raises(ConnectionError, match="mongo down"):
+        await map_flow_items_batch(
+            4,
+            fn,
+            batch_size=1,
+            on_items_checkpoint=on_checkpoint,
+            on_fatal_item_error=on_fatal,
+        )
+
+    assert processed == [0]
+    assert len(fatal_calls) == 1
+    assert fatal_calls[0][0] == 1
+    assert isinstance(fatal_calls[0][1], ConnectionError)
+
+
+@pytest.mark.asyncio
+async def test_map_flow_items_batch_fatal_callback_fires_once_on_parallel_failures() -> None:
+    fatal_calls: list[BaseException] = []
+    barrier = asyncio.Event()
+    started = 0
+    lock = asyncio.Lock()
+
+    async def fn(i: int) -> int:
+        nonlocal started
+        async with lock:
+            started += 1
+            if started == 2:
+                barrier.set()
+        await barrier.wait()
+        if i == 0:
+            raise RuntimeError("first")
+        raise RuntimeError("second")
+
+    async def on_fatal(_completed: int, _total: int, _results: list, exc: BaseException) -> None:
+        fatal_calls.append(exc)
+
+    with pytest.raises(RuntimeError):
+        await map_flow_items_batch(
+            4,
+            fn,
+            batch_size=2,
+            continue_on_item_error=False,
+            on_fatal_item_error=on_fatal,
+        )
+
+    assert len(fatal_calls) == 1
+    assert str(fatal_calls[0]) in ("first", "second")
 
 
 def test_validate_node_batch_size() -> None:

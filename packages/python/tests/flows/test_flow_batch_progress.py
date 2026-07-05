@@ -10,8 +10,13 @@ import pytest
 
 import analytiq_data as ad
 from analytiq_data.docrouter_flows.nodes.ocr_node import DocRouterOcrNode
-from analytiq_data.flows.batch_meta import batch_output_is_incomplete, merge_batch_meta_for_final_persist
+from analytiq_data.flows.batch_meta import (
+    batch_output_is_incomplete,
+    merge_batch_meta_for_final_persist,
+    partial_main_from_entry,
+)
 from analytiq_data.flows.batch_progress import (
+    continue_on_item_error_for_node,
     make_batch_checkpoint_callback,
     persist_batch_node_partial,
 )
@@ -55,6 +60,14 @@ def test_node_uses_batch_partial_persist_gate() -> None:
     assert node_uses_batch_partial_persist({}, ocr) is False
 
 
+def test_continue_on_item_error_for_node_respects_on_error_setting() -> None:
+    assert continue_on_item_error_for_node({"type": "docrouter.ocr", "on_error": "continue"}) is True
+    assert continue_on_item_error_for_node({"type": "docrouter.llm_run", "on_error": "continue"}) is True
+    assert continue_on_item_error_for_node({"type": "docrouter.ocr", "on_error": "stop"}) is False
+    assert continue_on_item_error_for_node({"type": "docrouter.ocr"}) is False
+    assert continue_on_item_error_for_node({"type": "tests.echo_param", "on_error": "continue"}) is False
+
+
 @pytest.mark.asyncio
 async def test_make_batch_checkpoint_callback_throttles(monkeypatch: pytest.MonkeyPatch) -> None:
     ctx = _FakeContext(analytiq_client=object())
@@ -94,3 +107,106 @@ def test_batch_output_is_incomplete_and_merge_meta() -> None:
     assert batch_output_is_incomplete(prior, [[object()] * 10]) is False
     complete_meta = merge_batch_meta_for_final_persist(prior, [[object()] * 10])
     assert complete_meta["items_completed"] == 10
+
+
+def test_partial_main_from_entry() -> None:
+    assert partial_main_from_entry(None) is None
+    assert partial_main_from_entry({"data": {"main": [[]]}}) is None
+    lane = [ad.flows.FlowItem(json={"i": 0}, binary={}, meta={})]
+    assert partial_main_from_entry({"data": {"main": [lane]}}) == [lane]
+
+
+@pytest.mark.asyncio
+async def test_on_error_continue_preserves_batch_partial_results() -> None:
+    """Batch nodes must not discard checkpointed items when on_error=continue."""
+
+    ad.flows.register_builtin_nodes()
+
+    class _BatchPartialFailNode:
+        key = "tests.batch_partial_fail"
+        label = "Batch partial fail"
+        description = "Test batch node that persists partial output then raises."
+        category = "Test"
+        is_trigger = False
+        is_merge = False
+        batch_execute_inputs = True
+        supports_batch_size = True
+        min_inputs = 1
+        max_inputs = 1
+        outputs = 1
+        output_labels = ["main"]
+        icon_key = None
+        parameter_schema = {"type": "object", "properties": {}, "additionalProperties": False}
+
+        def validate_parameters(self, params: dict) -> list[str]:
+            return []
+
+        async def execute(self, context: Any, node: dict[str, Any], inputs: list[list[Any]]) -> list[list[Any]]:
+            completed = [
+                ad.flows.FlowItem(json={"i": i}, binary={}, meta={"item_index": i})
+                for i in range(60)
+            ]
+            results: list[Any | None] = list(completed) + [None] * 40
+            await persist_batch_node_partial(
+                context,
+                node["id"],
+                items_total=100,
+                results=results,
+                status="error",
+                items_failed=1,
+            )
+            raise RuntimeError("item 41 failed")
+
+    ad.flows.register(_BatchPartialFailNode())
+
+    nodes = [
+        {
+            "id": "t1",
+            "name": "Start",
+            "type": "flows.trigger.manual",
+            "position": [0, 0],
+            "parameters": {},
+            "disabled": False,
+            "on_error": "stop",
+        },
+        {
+            "id": "b1",
+            "name": "Batch",
+            "type": "tests.batch_partial_fail",
+            "position": [200, 0],
+            "parameters": {},
+            "disabled": False,
+            "on_error": "continue",
+            "batch_size": 4,
+        },
+    ]
+    connections = {
+        "t1": {"main": [[ad.flows.NodeConnection(dest_node_id="b1", connection_type="main", index=0)]]},
+    }
+    ctx = ad.flows.ExecutionContext(
+        organization_id="org",
+        execution_id="exec",
+        flow_id="flow",
+        flow_revid="rev",
+        mode="manual",
+        trigger_data={},
+        run_data={},
+        analytiq_client=None,
+        stop_requested=False,
+        logger=None,
+    )
+    res = await ad.flows.run_flow(
+        context=ctx,
+        revision={"nodes": nodes, "connections": connections, "settings": {}, "pin_data": None},
+    )
+    assert res["status"] == "success"
+
+    entry = ctx.run_data["b1"]
+    assert entry["status"] == "error"
+    assert entry["items_total"] == 100
+    assert entry["items_completed"] == 60
+    lane = entry["data"]["main"][0]
+    assert len(lane) == 60
+    assert lane[0].json["i"] == 0
+    assert lane[59].json["i"] == 59
+    assert "_error" not in lane[0].json

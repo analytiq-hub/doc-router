@@ -49,7 +49,7 @@ def _normalize_interrupted_batch_nodes(
     run_data: dict[str, Any] | None,
     last_node_executed: str | None,
 ) -> dict[str, Any] | None:
-    """Rewrite a mid-batch ``status: running`` node entry to ``partial`` when interrupted."""
+    """Rewrite a mid-batch ``status: running`` node entry to ``partial`` when finalized."""
 
     if not run_data or not last_node_executed:
         return None
@@ -122,6 +122,7 @@ async def _finalize_running_execution(
     }
     if status == "interrupted":
         patch["error"] = _interrupted_error()
+    if status in ("interrupted", "stopped"):
         normalized = _normalize_interrupted_batch_nodes(
             doc.get("run_data"),
             doc.get("last_node_executed"),

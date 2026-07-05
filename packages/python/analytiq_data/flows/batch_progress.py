@@ -21,7 +21,9 @@ DOCROUTER_BATCH_CONTINUE_ON_ITEM_ERROR_TYPES = frozenset({"docrouter.ocr", "docr
 
 def continue_on_item_error_for_node(node: dict[str, Any]) -> bool:
     node_type_key = str(node.get("type") or "")
-    return node_type_key in DOCROUTER_BATCH_CONTINUE_ON_ITEM_ERROR_TYPES
+    if node_type_key not in DOCROUTER_BATCH_CONTINUE_ON_ITEM_ERROR_TYPES:
+        return False
+    return (node.get("on_error") or "stop") == "continue"
 
 
 def completed_items_from_results(results: list[Any | None]) -> list[Any]:

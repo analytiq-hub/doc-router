@@ -5,6 +5,22 @@ from typing import Any
 BATCH_META_KEYS = ("items_total", "items_completed", "items_failed", "items_skipped_on_resume")
 
 
+def partial_main_from_entry(entry: Any) -> list[Any] | None:
+    """Return ``data.main`` when a run entry holds non-empty partial batch output."""
+
+    if not isinstance(entry, dict):
+        return None
+    data = entry.get("data")
+    if not isinstance(data, dict):
+        return None
+    main = data.get("main")
+    if not isinstance(main, list) or not main:
+        return None
+    if not any(isinstance(lane, list) and lane for lane in main):
+        return None
+    return main
+
+
 def completed_count_from_out_lists(out_lists: list[Any]) -> int:
     if not out_lists:
         return 0

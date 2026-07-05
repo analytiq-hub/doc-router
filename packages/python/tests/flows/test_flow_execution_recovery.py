@@ -292,3 +292,45 @@ async def test_recover_interrupted_normalizes_running_batch_node_to_partial(test
     assert doc["status"] == "interrupted"
     assert doc["run_data"][node_id]["status"] == "partial"
 
+
+@pytest.mark.asyncio
+async def test_recover_stopped_normalizes_running_batch_node_to_partial(test_db):
+    client = ad.common.get_analytiq_client()
+    db = ad.common.get_async_db()
+    exec_oid = ObjectId()
+    stale_hb = datetime.now(UTC) - timedelta(minutes=5)
+    node_id = "ocr-1"
+
+    await db.flow_executions.insert_one(
+        {
+            "_id": exec_oid,
+            "flow_id": str(ObjectId()),
+            "flow_revid": str(ObjectId()),
+            "organization_id": TEST_ORG_ID,
+            "mode": "manual",
+            "status": "running",
+            "started_at": stale_hb,
+            "finished_at": None,
+            "last_heartbeat_at": stale_hb,
+            "stop_requested": True,
+            "last_node_executed": node_id,
+            "run_data": {
+                node_id: {
+                    "status": "running",
+                    "items_total": 10,
+                    "items_completed": 4,
+                    "data": {"main": [[{"json": {"i": 0}}, {"json": {"i": 1}}]]},
+                }
+            },
+            "trigger": {},
+        }
+    )
+
+    recovered = await ad.flows.recover_stale_flow_executions(client)
+    assert recovered == 1
+
+    doc = await db.flow_executions.find_one({"_id": exec_oid})
+    assert doc is not None
+    assert doc["status"] == "stopped"
+    assert doc["run_data"][node_id]["status"] == "partial"
+

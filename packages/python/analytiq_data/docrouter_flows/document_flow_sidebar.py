@@ -2,6 +2,7 @@ from __future__ import annotations
 
 """Document-scoped flow listing and captured result lookup."""
 
+import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -18,6 +19,8 @@ from .event_dispatch import (
 )
 from .event_types import DOCROUTER_LLM_EVENT_TYPES
 from .flow_results import FLOW_RESULTS_COLLECTION
+
+logger = logging.getLogger(__name__)
 
 
 def _normalized_tag_ids(raw: Any) -> list[str]:
@@ -302,7 +305,8 @@ async def rerun_flow_for_document(
     """
     Re-enqueue a document-event flow for ``document_id`` using the active revision.
 
-    ``mode`` is ``force`` (new run) or ``incomplete_only`` (resume latest partial batch run).
+    ``mode`` is ``force`` (new run) or ``incomplete_only`` (resume latest partial batch run
+    when possible on the active revision; otherwise starts a force rerun).
 
     Returns the new ``execution_id``.
     """
@@ -333,14 +337,20 @@ async def rerun_flow_for_document(
             flow_id=flow_id,
             document_id=document_id,
         )
-        if not source:
-            raise ValueError("No partial execution to resume")
-        if str(source.get("flow_revid") or "") != flow_revid:
-            raise ValueError("Flow revision changed; use force rerun")
-        exec_id = await enqueue_resume_execution(analytiq_client, db, source)
-        if not exec_id:
-            raise ValueError("No partial execution to resume")
-        return exec_id
+        if source and str(source.get("flow_revid") or "") == flow_revid:
+            exec_id = await enqueue_resume_execution(analytiq_client, db, source)
+            if exec_id:
+                return exec_id
+        if source is None:
+            resume_reason = "no partial execution"
+        elif str(source.get("flow_revid") or "") != flow_revid:
+            resume_reason = "revision changed"
+        else:
+            resume_reason = "resume enqueue failed"
+        logger.info(
+            f"incomplete_only resume unavailable for flow {flow_id} document {document_id} "
+            f"({resume_reason}), starting force rerun"
+        )
 
     revision = await db.flow_revisions.find_one({"_id": ObjectId(flow_revid), "flow_id": flow_id})
     if not revision:

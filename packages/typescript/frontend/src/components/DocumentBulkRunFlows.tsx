@@ -41,14 +41,6 @@ function readParallelRunsFromSession(): number {
   }
 }
 
-function readRerunModeFromSession(): BulkFlowRerunMode {
-  return readBulkFlowRerunModeFromSession();
-}
-
-function persistRerunModeToSession(value: BulkFlowRerunMode): void {
-  persistBulkFlowRerunModeToSession(value);
-}
-
 function persistParallelRunsToSession(value: number): void {
   if (typeof window === 'undefined') return;
   try {
@@ -146,7 +138,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
     const [orgFlows, setOrgFlows] = useState<FlowListItem[]>([]);
     const [flowsLoading, setFlowsLoading] = useState(false);
     const [executionMode, setExecutionMode] = useState<ExecutionMode>('outdated');
-    const [rerunMode, setRerunMode] = useState<BulkFlowRerunMode>(readRerunModeFromSession);
+    const [rerunMode, setRerunMode] = useState<BulkFlowRerunMode>(readBulkFlowRerunModeFromSession);
     const [parallelRuns, setParallelRuns] = useState(readParallelRunsFromSession);
     const [flowGroups, setFlowGroups] = useState<FlowExecutionGroup[]>([]);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -156,6 +148,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
     const [isCompleted, setIsCompleted] = useState(false);
     const [totalExecutions, setTotalExecutions] = useState(0);
     const [completedExecutions, setCompletedExecutions] = useState(0);
+    const [executionFailureCount, setExecutionFailureCount] = useState(0);
     const [isCancellingAnalysis, setIsCancellingAnalysis] = useState(false);
     const [isAnalysisCancelled, setIsAnalysisCancelled] = useState(false);
 
@@ -420,6 +413,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
       setIsCancelling(false);
       completedExecutionsRef.current = 0;
       setCompletedExecutions(0);
+      setExecutionFailureCount(0);
       setFlowGroups([]);
       setTotalExecutions(0);
       if (hasDiscoveryInput) void analyzeExecutions();
@@ -443,6 +437,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
       setIsCompleted(false);
       completedExecutionsRef.current = 0;
       setCompletedExecutions(0);
+      setExecutionFailureCount(0);
 
       const concurrencyLimit = clampParallelRuns(parallelRuns);
       const work: WorkItem[] = flowGroups.flatMap((group) =>
@@ -477,6 +472,8 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
         setCompletedExecutions(completedExecutionsRef.current);
         notifyExecutionProgress(completedExecutionsRef.current);
       };
+
+      let failureCount = 0;
 
       try {
         await runWithConcurrency(
@@ -516,6 +513,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
               recordProgress();
             } catch (error) {
               const message = error instanceof Error ? error.message : 'Unknown error';
+              failureCount += 1;
               markExecutionStatus(group, execution.documentId, {
                 status: 'error',
                 error: message,
@@ -530,6 +528,12 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
           toast(
             `Flow execution cancelled - completed ${completedExecutionsRef.current} out of ${totalExecutions} executions`,
           );
+        } else if (failureCount > 0) {
+          setExecutionFailureCount(failureCount);
+          toast.error(
+            `Finished with ${failureCount} error${failureCount === 1 ? '' : 's'} — see execution details`,
+          );
+          setIsCompleted(true);
         } else {
           toast.success(`Completed flow execution on ${totalExecutions} document-flow combinations`);
           setIsCompleted(true);
@@ -699,7 +703,7 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
                       onChange={(e) => {
                         const next = e.target.value as BulkFlowRerunMode;
                         setRerunMode(next);
-                        persistRerunModeToSession(next);
+                        persistBulkFlowRerunModeToSession(next);
                       }}
                       disabled={disabled || isExecuting || isAnalyzing}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 mt-0.5"
@@ -764,7 +768,9 @@ export const DocumentBulkRunFlows = forwardRef<DocumentBulkRunFlowsRef, Document
             <div className="flex items-center justify-between">
               <span className="font-medium">
                 {isCompleted
-                  ? 'Run complete'
+                  ? executionFailureCount > 0
+                    ? 'Finished with errors'
+                    : 'Run complete'
                   : selectedFlowIds.length > 0
                     ? `${selectedFlowIds.length} flow(s) selected`
                     : 'Discovering flows from anchor tag'}

@@ -1220,8 +1220,6 @@ async def rerun_flow_for_document_route(
             raise HTTPException(status_code=404, detail=msg) from exc
         if msg in {"Flow is not active", "Flow has no active revision", "Flow does not match document"}:
             raise HTTPException(status_code=400, detail=msg) from exc
-        if msg in {"No partial execution to resume", "Flow revision changed; use force rerun"}:
-            raise HTTPException(status_code=409, detail=msg) from exc
         raise HTTPException(status_code=400, detail=msg) from exc
     return {"execution_id": execution_id}
 
